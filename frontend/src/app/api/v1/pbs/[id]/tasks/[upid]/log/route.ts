@@ -12,6 +12,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string; upid: string }> | { id: string; upid: string } }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -23,6 +24,7 @@ export async function GET(
     if (!upid) return NextResponse.json({ error: "Missing params.upid" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)
@@ -44,11 +46,13 @@ export async function GET(
         `/nodes/localhost/tasks/${encodedUpid}/log?start=${start}&limit=${limit}`
       ).catch((e: any) => {
         console.error("PBS task log fetch error:", e)
-        return [] as Array<{ n: number; t: string }>
+
+return [] as Array<{ n: number; t: string }>
       }),
       pbsFetch<any>(conn, `/nodes/localhost/tasks/${encodedUpid}/status`).catch((e: any) => {
         console.error("PBS task status fetch error:", e)
-        return null
+
+return null
       }),
     ])
 

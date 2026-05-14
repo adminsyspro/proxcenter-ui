@@ -29,6 +29,7 @@ interface Props {
   quota: VdcQuota
   usage: VdcUsage
   requested: VdcRequest
+
   /** Notified whenever the over-limit / approaching state changes — lets the
    *  parent gate Next/Submit on quota validity. */
   onStateChange?: (state: { blocked: boolean; tight: boolean; overCount: number }) => void
@@ -66,6 +67,7 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
 
   const items: QuotaItem[] = (() => {
     const fmtNum = (v: number) => String(v)
+
     const raw = [
       { resource: 'vcpus' as const, icon: 'ri-cpu-line', label: t('inventory.createVm.quotaBanner.labels.vcpus'),
         used: usage.usedVcpus, requested: requested.vcpus, max: quota.maxVcpus, format: fmtNum },
@@ -76,11 +78,15 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
       { resource: 'vms' as const, icon: 'ri-computer-line', label: t('inventory.createVm.quotaBanner.labels.vms'),
         used: usage.usedVms, requested: requested.vms, max: quota.maxVms, format: fmtNum },
     ]
-    return raw.map(i => {
+
+
+return raw.map(i => {
       const projected = i.used + i.requested
       const pct = i.max != null && i.max > 0 ? Math.round((projected / i.max) * 100) : 0
       const over = i.max != null && projected > i.max
-      return { ...i, projected, pct, over }
+
+
+return { ...i, projected, pct, over }
     })
   })()
 
@@ -180,7 +186,9 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
         >
           {overItems.map(item => {
             const overAmount = item.max != null ? item.projected - item.max : 0
-            return (
+
+
+return (
               <Stack key={item.resource} direction="row" alignItems="center" spacing={1.5}>
                 <Box component="i" className={item.icon} sx={{ fontSize: 16, color: 'error.main', width: 16, textAlign: 'center', flexShrink: 0 }} />
                 <Typography variant="body2" sx={{ fontWeight: 500, minWidth: 70 }}>

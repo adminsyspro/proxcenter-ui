@@ -5,6 +5,7 @@ import { isVmConfigNotFoundError } from '@/lib/proxmox/locateVm'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { assertNodeName, assertVmid, InvalidShellArgError } from "@/lib/ssh/validate"
 
 export const runtime = 'nodejs'
 
@@ -37,6 +38,7 @@ async function handleSourceVmCleanupAfterMigration(args: {
 }): Promise<{ message: string | null }> {
   const { connection, connectionId, node, vmid, deleteSource } = args
   let vmConfig: any
+
   try {
     vmConfig = await pveFetch<any>(
       connection,
@@ -47,17 +49,36 @@ async function handleSourceVmCleanupAfterMigration(args: {
       // Intra-cluster qmigrate already cleaned the source up.
       return { message: null }
     }
+
     console.warn(`[task-api] Could not read source VM ${vmid} config:`, err?.message)
-    return { message: null }
+
+return { message: null }
   }
 
   let unlocked = !vmConfig?.lock
+
   if (vmConfig?.lock) {
+    // Re-validate before shelling out: vmid comes from a trusted PVE
+    // response upstream, but the cleanup logic is reused from multiple
+    // call sites and we want to fail closed if anything ever changes.
+    let safeVmid: string
+    let safeNode: string
+
+    try {
+      safeVmid = assertVmid(vmid)
+      safeNode = assertNodeName(node)
+    } catch (e: any) {
+      console.warn(`[task-api] Skipping SSH unlock for invalid vmid/node:`, e?.message)
+
+return { message: null }
+    }
+
     try {
       const { executeSSH } = await import('@/lib/ssh/exec')
       const { getNodeIp } = await import('@/lib/ssh/node-ip')
-      const nodeIp = await getNodeIp(connection, node)
-      const result = await executeSSH(connectionId, nodeIp, `qm unlock ${vmid}`)
+      const nodeIp = await getNodeIp(connection, safeNode)
+      const result = await executeSSH(connectionId, nodeIp, `qm unlock ${safeVmid}`)
+
       if (result.success) {
         console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after cross-cluster migration`)
         unlocked = true
@@ -70,9 +91,11 @@ async function handleSourceVmCleanupAfterMigration(args: {
   }
 
   if (!deleteSource) return { message: null }
+
   if (!unlocked) {
     return { message: 'Migration completed (source VM locked, cannot delete — configure SSH to enable auto-cleanup)' }
   }
+
   try {
     await pveFetch(
       connection,
@@ -80,10 +103,12 @@ async function handleSourceVmCleanupAfterMigration(args: {
       { method: 'DELETE' }
     )
     console.log(`[task-api] Deleted source VM ${vmid} on ${node} after cross-cluster migration`)
-    return { message: 'Migration completed, source VM deleted' }
+
+return { message: 'Migration completed, source VM deleted' }
   } catch (deleteErr: any) {
     console.warn(`[task-api] Could not delete source VM ${vmid}:`, deleteErr?.message)
-    return { message: 'Migration completed (source VM could not be deleted, please remove manually)' }
+
+return { message: 'Migration completed (source VM could not be deleted, please remove manually)' }
   }
 }
 
@@ -131,7 +156,7 @@ function formatDuration(seconds: number): string {
   if (seconds < 0) return '—'
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
-  
+
 return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
@@ -153,7 +178,7 @@ function formatSpeed(bytesPerSec: number): string {
   if (bytesPerSec <= 0) return '—'
   if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KiB/s`
   if (bytesPerSec < 1024 * 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MiB/s`
-  
+
 return `${(bytesPerSec / (1024 * 1024 * 1024)).toFixed(1)} GiB/s`
 }
 
@@ -186,6 +211,7 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
   const liveCompletedRegex = /migration (completed|status: completed)/i
   const mirrorReadyRegex = /all 'mirror' jobs are ready/i
   const switchingRegex = /switching mirror jobs to actively synced mode/i
+
   // Offline cross-cluster (storage_migrate / ZFS replication) patterns.
   // The online NBD path emits "drive-scsiN: transferred X of Y" lines we
   // already match above; the offline path runs `zfs send` into a tunnel and
@@ -335,10 +361,12 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // ── Offline cross-cluster (zfs send / storage_migrate) ──
     // Per-disk total size announced before the transfer kicks off.
     const zfsEstMatch = text.match(zfsEstimatedRegex)
+
     if (zfsEstMatch) {
       const diskName = zfsEstMatch[1]
       const total = parseSize(zfsEstMatch[2], zfsEstMatch[3] || 'b')
       const existing = state.disks.get(diskName)
+
       state.disks.set(diskName, {
         name: diskName,
         totalBytes: total,
@@ -355,15 +383,18 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // Per-second `zfs send -v` progress lines (rare — PVE doesn't always
     // capture stderr to the task log, but parse them when present).
     const zfsTimeMatch = text.match(zfsTimeProgressRegex)
+
     if (zfsTimeMatch) {
       const sent = parseSize(zfsTimeMatch[1], zfsTimeMatch[2] || 'b')
       const diskName = zfsTimeMatch[3]
       const disk = state.disks.get(diskName)
+
       if (disk && sent > disk.transferredBytes) {
         disk.transferredBytes = sent
         state.phase = 'storage'
         state.message = `${diskName}: ${formatSize(sent)} / ${formatSize(disk.totalBytes)}`
       }
+
       continue
     }
 
@@ -373,10 +404,12 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
     // disk still contributes to "N of M completed" math (we'd otherwise
     // ignore it because totalBytes=0).
     const volumeImportedMatch = text.match(volumeImportedRegex)
+
     if (volumeImportedMatch) {
       const diskName = volumeImportedMatch[1]
       const existing = state.disks.get(diskName)
       const totalBytes = existing?.totalBytes || 1
+
       state.disks.set(diskName, {
         name: diskName,
         totalBytes,
@@ -480,6 +513,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   }
 
   let progress = 0
+
   // Default message is empty so the frontend can distinguish "task that
   // reports progress" (message is non-empty) from "task that doesn't"
   // (vncproxy, qmstart, etc.). The previous 'In progress...' default made
@@ -492,6 +526,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
   const progressRegex = /(\d+(?:\.\d+)?)\s*%/
   const transferRegex = /transferred\s+([\d.]+)\s*(\w+)\s+of\s+([\d.]+)\s*(\w+)/i
   const speedRegex = /([\d.]+)\s*(\w+)\/s/
+
   // wget-style: "  5% 2.22M 4m16s" or "12% 15.3M 1m02s"
   const wgetProgressRegex = /(\d+)%\s+([\d.]+)([KMG])\s+(\d+[hm]\d+[ms]|\d+[hms])/
 
@@ -525,6 +560,7 @@ function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message
 
     if (wgetMatch) {
       const unitMap: Record<string, string> = { K: 'KiB/s', M: 'MiB/s', G: 'GiB/s' }
+
       speed = `${wgetMatch[2]} ${unitMap[wgetMatch[3]] || wgetMatch[3] + '/s'}`
       eta = wgetMatch[4]
     }
@@ -543,9 +579,22 @@ export async function GET(
   { params }: { params: Promise<{ connectionId: string; node: string; upid: string }> }
 ) {
   try {
-    const { connectionId, node, upid } = await params
+    const { connectionId, node: rawNode, upid } = await params
+
+    let node: string
+
+    try {
+      node = assertNodeName(rawNode)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -568,7 +617,7 @@ export async function GET(
       )
     } catch (e: any) {
       console.error('Failed to fetch task status:', e)
-      
+
 return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` }, { status: 500 })
     }
 
@@ -604,7 +653,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     const duration = endTime ? endTime - startTime : now - startTime
 
     let progressData: { progress: number; message: string; speed: string; eta: string }
-    
+
     if (status?.status === 'stopped') {
       const exit = status?.exitstatus || ''
       let message: string
@@ -613,10 +662,12 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         message = 'Completed successfully'
         const taskType = status?.type || ''
         const vmid = status?.id || ''
+
         if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
           const cleanup = await handleSourceVmCleanupAfterMigration({
             connection, connectionId, node, vmid, deleteSource,
           })
+
           if (cleanup.message) message = cleanup.message
         }
       } else if (exit.includes('received interrupt') || exit.includes('interrupted by user')) {
@@ -626,14 +677,17 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         // Check if the actual migration completed by looking at logs
         const logText = logs.map(l => l.t).join('\n')
         const migrationActuallyCompleted = logText.includes('migration status: completed') || logText.includes('migration completed')
+
         if (migrationActuallyCompleted) {
           message = 'Migration completed (with cleanup warnings)'
           const taskType = status?.type || ''
           const vmid = status?.id || ''
+
           if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
             const cleanup = await handleSourceVmCleanupAfterMigration({
               connection, connectionId, node, vmid, deleteSource,
             })
+
             if (cleanup.message) message = cleanup.message
           }
         } else {
@@ -662,6 +716,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
     // Send at most 5000 log lines to the frontend to avoid huge payloads
     const MAX_FRONTEND_LOGS = 5000
     const totalLogLines = logs.length
+
     const truncatedLogs = totalLogLines > MAX_FRONTEND_LOGS
       ? logs.slice(totalLogLines - MAX_FRONTEND_LOGS)
       : logs
@@ -705,6 +760,7 @@ export async function DELETE(
     const { connectionId, node, upid } = await params
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const decodedUpid = decodeURIComponent(upid)

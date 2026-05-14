@@ -40,6 +40,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     let resolvedNode = node
     let movedTo: string | null = null
     let statusData: any
+
     try {
       statusData = await pveFetch<any>(
         conn,
@@ -48,6 +49,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     } catch (err: any) {
       if (!isVmConfigNotFoundError(err)) throw err
       const located = await locateVmInCluster(conn, vmid, type as GuestType)
+
       if (!located || located.node === node) throw err
       resolvedNode = located.node
       movedTo = located.node

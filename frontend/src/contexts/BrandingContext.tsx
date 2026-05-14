@@ -68,6 +68,7 @@ const BrandingContext = createContext<BrandingContextValue>({
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING)
   const [loading, setLoading] = useState(true)
+
   // The branding API resolves the tenant from the session JWT
   // (getCurrentTenantId on the server). Tracking session here lets us
   // refetch when login/logout or tenant-switch changes the answer — without
@@ -81,8 +82,10 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const fetchBranding = useCallback(async () => {
     try {
       const res = await fetch(`/api/v1/settings/branding/public?_t=${Date.now()}`)
+
       if (res.ok) {
         const data = await res.json()
+
         setBranding(prev => ({ ...prev, ...data }))
       } else {
         console.warn('[branding] fetch failed:', res.status)
@@ -107,10 +110,12 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (branding.faviconUrl) {
       const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement
+
       if (link) {
         link.href = branding.faviconUrl
       } else {
         const newLink = document.createElement('link')
+
         newLink.rel = 'icon'
         newLink.href = branding.faviconUrl
         document.head.appendChild(newLink)

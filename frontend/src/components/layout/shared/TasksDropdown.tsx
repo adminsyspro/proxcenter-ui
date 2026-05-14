@@ -1,9 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useTranslations } from 'next-intl'
 
 import Link from 'next/link'
+
+import { useRouter } from 'next/navigation'
+
+import { useTranslations } from 'next-intl'
+
 
 import {
   Badge,
@@ -26,7 +30,7 @@ import { useRecentChanges } from '@/hooks/useChanges'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useActiveDeployments } from '@/hooks/useNavbarNotifications'
-import { useRouter } from 'next/navigation'
+
 
 type RunningTask = {
   id: string

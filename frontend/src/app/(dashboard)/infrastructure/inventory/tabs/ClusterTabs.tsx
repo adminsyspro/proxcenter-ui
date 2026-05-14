@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
-import { useTranslations } from 'next-intl'
+
 import { useRouter } from 'next/navigation'
+
+import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 
 import {
@@ -45,6 +47,7 @@ import {
   alpha,
 } from '@mui/material'
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -81,7 +84,9 @@ import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
   const sids = resources.split(',').map(s => s.trim()).filter(Boolean)
-  return (
+
+
+return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
       {sids.map(sid => {
         const parts = sid.split(':')
@@ -90,7 +95,9 @@ function HaResourceChips({ resources, allVms }: { resources: string; allVms: any
         const vm = allVms.find((v: any) => String(v.vmid) === vmid)
         const iconClass = vm?.template ? 'ri-file-copy-fill' : vmType === 'lxc' ? 'ri-instance-fill' : 'ri-computer-fill'
         const dotColor = vm?.template ? 'transparent' : (vm?.status === 'running' ? '#4caf50' : vm?.status === 'paused' ? '#ed6c02' : '#f44336')
-        return (
+
+
+return (
           <Box key={sid} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
               <i className={iconClass} style={{ fontSize: 13, opacity: 0.7 }} />
@@ -108,12 +115,16 @@ function HaNodeChips({ nodes, nodesData, theme }: { nodes: string; nodesData: an
   if (!nodes) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
   const nodeNames = nodes.split(',').map(s => s.split(':')[0].trim()).filter(Boolean)
   const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
-  return (
+
+
+return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
       {nodeNames.map(name => {
         const node = nodesData.find((n: any) => n.node === name)
         const dotColor = node?.status === 'online' ? '#4caf50' : '#f44336'
-        return (
+
+
+return (
           <Box key={name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
               <img src={logoSrc} alt="" width={13} height={13} style={{ opacity: node?.status === 'online' ? 0.8 : 0.4 }} />
@@ -128,6 +139,7 @@ function HaNodeChips({ nodes, nodesData, theme }: { nodes: string; nodesData: an
 }
 
 const HA_STATES = ['started', 'stopped', 'enabled', 'disabled', 'ignored'] as const
+
 const HA_STATE_META: Record<string, { color: string; icon: string; chipColor: string }> = {
   started:  { color: '#22c55e', icon: 'ri-play-circle-line', chipColor: 'success' },
   stopped:  { color: '#9ca3af', icon: 'ri-stop-circle-line', chipColor: 'default' },
@@ -150,6 +162,7 @@ function HaResourceStateCell({ sid, state, group, connId, t }: {
     if (newState === displayState) return
     setDisplayState(newState)
     setSaving(true)
+
     try {
       await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(sid)}`,
@@ -162,6 +175,7 @@ function HaResourceStateCell({ sid, state, group, connId, t }: {
     } catch {
       setDisplayState(state) // revert on error
     }
+
     setSaving(false)
   }
 
@@ -182,7 +196,9 @@ function HaResourceStateCell({ sid, state, group, connId, t }: {
       <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { minWidth: 150 } } }}>
         {HA_STATES.map(s => {
           const m = HA_STATE_META[s]
-          return (
+
+
+return (
             <MenuItem key={s} selected={s === displayState} onClick={() => handleChange(s)} sx={{ fontSize: 13, py: 0.75, gap: 1 }}>
               <i className={m.icon} style={{ fontSize: 16, color: m.color }} />
               <Typography variant="body2" sx={{ fontWeight: s === displayState ? 700 : 400, color: m.color, textTransform: 'capitalize' }}>
@@ -330,11 +346,15 @@ export default function ClusterTabs(props: any) {
   const drsHealth = useMemo(() => {
     if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
     const connId = selection?.type === 'cluster' ? selection.id : ''
+
+
     // Hide DRS status for clusters excluded from DRS
     if ((drsSettings as any)?.excluded_clusters?.includes(connId)) return null
     const clusterMetrics = (metricsData as any)?.[connId]
+
     if (!clusterMetrics?.summary) return null
-    return computeDrsHealthScore(clusterMetrics.summary, clusterMetrics.nodes)
+
+return computeDrsHealthScore(clusterMetrics.summary, clusterMetrics.nodes)
   }, [isEnterprise, drsStatus, drsSettings, metricsData, selection])
 
   const maxPendingRecs = drsSettings?.max_pending_recommendations || 10
@@ -342,7 +362,9 @@ export default function ClusterTabs(props: any) {
   const clusterRecs = useMemo(() => {
     if (!drsRecommendations || !Array.isArray(drsRecommendations)) return []
     const connId = selection?.type === 'cluster' ? selection.id : ''
-    return drsRecommendations
+
+
+return drsRecommendations
       .filter((r: any) => r.connection_id === connId && r.status === 'pending' && !executedRecIds.has(r.id))
       .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
       .slice(0, maxPendingRecs)
@@ -352,30 +374,40 @@ export default function ClusterTabs(props: any) {
   const availableVmsForHa = useMemo(() => {
     const connId = selection?.type === 'cluster' ? selection.id : ''
     const existingSids = new Set((clusterHaResources || []).map((r: any) => r.sid))
-    return (allVms || []).filter((vm: any) => {
+
+
+return (allVms || []).filter((vm: any) => {
       if (vm.connId !== connId) return false
       const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
-      return !existingSids.has(sid)
+
+
+return !existingSids.has(sid)
     })
   }, [allVms, clusterHaResources, selection])
 
   const handleAddHaResource = useCallback(async () => {
     if (!addHaSid) return
     setAddHaSaving(true)
+
     try {
       const connId = selection?.type === 'cluster' ? selection.id : ''
       const body: any = { state: addHaState, max_restart: addHaMaxRestart, max_relocate: addHaMaxRelocate }
+
       if (addHaGroup) body.group = addHaGroup
       if (addHaComment) body.comment = addHaComment
+
       const res = await fetch(`/api/v1/connections/${connId}/ha/${encodeURIComponent(addHaSid)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       })
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err.error || 'Failed to create HA resource')
       }
+
       setAddHaDialogOpen(false)
       setAddHaSid('')
       setAddHaState('started')
@@ -394,8 +426,10 @@ export default function ClusterTabs(props: any) {
 
   const handleEvaluate = useCallback(async () => {
     setEvaluating(true)
+
     try {
       await fetch('/api/v1/orchestrator/drs/evaluate', { method: 'POST' })
+
       // Wait briefly for evaluation to produce results
       setTimeout(() => mutateRecs(), 3000)
     } catch { /* ignore */ } finally {
@@ -405,17 +439,22 @@ export default function ClusterTabs(props: any) {
 
   const handleExecuteRec = useCallback(async (id: string, vmName: string) => {
     setExecutingRecId(id)
+
     try {
       const res = await fetch(`/api/v1/orchestrator/drs/recommendations/${id}/execute`, { method: 'POST' })
+
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+
         throw new Error(data.error || 'Action failed')
       }
+
       setExecutedRecIds(prev => new Set(prev).add(id))
       toast.success(t('inventory.drsExecSuccess', { vm: vmName }))
       setTimeout(() => mutateRecs(), 2000)
     } catch (e: any) {
       const msg = e.message || ''
+
       if (msg.includes('has moved') || msg.includes('stale')) {
         toast.warning(t('inventory.drsRecStale'))
         mutateRecs()
@@ -440,24 +479,30 @@ export default function ClusterTabs(props: any) {
     const recsToExecute = [...clusterRecs]
     let success = 0
     let errors = 0
+
     for (const rec of recsToExecute) {
       try {
         const res = await fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/execute`, { method: 'POST' })
+
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
+
           throw new Error(data.error || 'Action failed')
         }
+
         setExecutedRecIds(prev => new Set(prev).add(rec.id))
         success++
       } catch {
         errors++
       }
     }
+
     if (errors === 0) {
       toast.success(t('inventory.drsExecAllSuccess', { count: success }))
     } else {
       toast.warning(t('inventory.drsExecAllPartial', { success, errors }))
     }
+
     setTimeout(() => mutateRecs(), 2000)
     setExecutingAll(false)
   }, [clusterRecs, mutateRecs, toast, t])
@@ -473,26 +518,33 @@ export default function ClusterTabs(props: any) {
   const loadAutoHaSettings = useCallback(async () => {
     if (!connId) return
     setAutoHaLoading(true)
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`)
       const json = await res.json()
+
       setAutoHaSettings(json.data)
     } catch { /* ignore */ }
+
     setAutoHaLoading(false)
   }, [connId])
 
   const saveAutoHaSettings = useCallback(async (data: any) => {
     if (!connId) return
     setAutoHaSaving(true)
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
+
       const json = await res.json()
+
       setAutoHaSettings(json.data)
     } catch { /* ignore */ }
+
     setAutoHaSaving(false)
   }, [connId])
 
@@ -500,13 +552,16 @@ export default function ClusterTabs(props: any) {
     if (!connId) return
     setAutoHaSyncing(true)
     setAutoHaSyncResult(null)
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/auto-ha/sync`, { method: 'POST' })
       const json = await res.json()
+
       setAutoHaSyncResult(json.data || json.error)
     } catch (e: any) {
       setAutoHaSyncResult({ error: e?.message })
     }
+
     setAutoHaSyncing(false)
   }, [connId])
 
@@ -525,19 +580,24 @@ export default function ClusterTabs(props: any) {
   useEffect(() => {
     if ((clusterTab !== 0 && clusterTab !== 1) || !connId || !data.nodesData?.length) return
     const onlineNodes = (data.nodesData as any[]).filter((n: any) => n.status === 'online')
+
     if (onlineNodes.length === 0) return
 
     let cancelled = false
+
     setClusterNodeRrdLoading(true)
 
     ;(async () => {
       const result: Record<string, any[]> = {}
+
       await Promise.all(onlineNodes.map(async (node: any) => {
         try {
           const raw = await fetchRrd(connId, `/nodes/${node.node}`, clusterNodeRrdTf)
+
           if (!cancelled) result[node.node] = buildSeriesFromRrd(raw)
         } catch { /* ignore */ }
       }))
+
       if (!cancelled) {
         setClusterNodeRrd(result)
         setClusterNodeRrdLoading(false)
@@ -550,15 +610,18 @@ export default function ClusterTabs(props: any) {
   // Merge RRD data into unified series with per-node keys
   const clusterRrdSeries = useMemo(() => {
     const nodeNames = Object.keys(clusterNodeRrd)
+
     if (nodeNames.length === 0) return []
 
     // Collect all timestamps
     const tsMap = new Map<number, any>()
+
     for (const nodeName of nodeNames) {
       for (const point of clusterNodeRrd[nodeName] || []) {
         if (!point.t) continue
         if (!tsMap.has(point.t)) tsMap.set(point.t, { t: point.t })
         const row = tsMap.get(point.t)!
+
         if (point.cpuPct !== undefined) row[`cpu_${nodeName}`] = point.cpuPct
         if (point.ramPct !== undefined) row[`ram_${nodeName}`] = point.ramPct
         if (point.netInBps !== undefined) row[`netIn_${nodeName}`] = point.netInBps
@@ -566,7 +629,9 @@ export default function ClusterTabs(props: any) {
         if (point.loadAvg !== undefined) row[`load_${nodeName}`] = point.loadAvg
       }
     }
-    return Array.from(tsMap.values()).sort((a, b) => a.t - b.t)
+
+
+return Array.from(tsMap.values()).sort((a, b) => a.t - b.t)
   }, [clusterNodeRrd])
 
   const clusterRrdNodeNames = useMemo(() => Object.keys(clusterNodeRrd), [clusterNodeRrd])
@@ -575,27 +640,34 @@ export default function ClusterTabs(props: any) {
   const nodeColors = useMemo(() => {
     const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#8b5cf6', '#14b8a6']
     const map: Record<string, string> = {}
+
     clusterRrdNodeNames.forEach((name, i) => { map[name] = palette[i % palette.length] })
-    return map
+
+return map
   }, [clusterRrdNodeNames])
 
   // Lazy-load subscription status when Nodes tab is opened
   const [nodeSubscriptions, setNodeSubscriptions] = useState<Record<string, string>>({})
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
+
   useEffect(() => {
     if (clusterTab !== 1 || !connId || subscriptionsLoaded || !data.nodesData?.length) return
     setSubscriptionsLoaded(true)
 
     const onlineNodes = (data.nodesData as any[]).filter((n: any) => n.status === 'online')
+
     if (onlineNodes.length === 0) return
 
     ;(async () => {
       const updates: Record<string, string> = {}
+
       await Promise.all(onlineNodes.map(async (node: any) => {
         try {
           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/subscription`, { cache: 'no-store' })
+
           if (res.ok) {
             const json = await res.json()
+
             updates[node.node] = json?.data?.status || 'notfound'
           }
         } catch { /* ignore */ }
@@ -610,12 +682,14 @@ export default function ClusterTabs(props: any) {
   // Load cluster tags from connection
   useEffect(() => {
     const connId = selection?.type === 'cluster' ? selection.id : ''
+
     if (!connId || clusterTagsLoaded === connId) return
     setClusterTagsLoaded(connId)
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         const tags = json?.data?.tags
+
         setClusterTags(tags ? String(tags).split(';').filter(Boolean) : [])
       })
       .catch(() => {})
@@ -624,13 +698,15 @@ export default function ClusterTabs(props: any) {
   // Enrich nodesData with subscription info for NodesTable
   const enrichedNodesData = useMemo(() => {
     if (!data.nodesData || Object.keys(nodeSubscriptions).length === 0) return data.nodesData
-    return (data.nodesData as any[]).map((n: any) => nodeSubscriptions[n.node] ? { ...n, subscription: nodeSubscriptions[n.node] } : n)
+
+return (data.nodesData as any[]).map((n: any) => nodeSubscriptions[n.node] ? { ...n, subscription: nodeSubscriptions[n.node] } : n)
   }, [data.nodesData, nodeSubscriptions])
 
   // Fetch Ceph OSD flags when in summary tab and ceph is available
   useEffect(() => {
     if (clusterTab !== 0 || !['HEALTH_OK', 'HEALTH_WARN', 'HEALTH_ERR'].includes(data.cephHealth) || !connId) return
     let cancelled = false
+
     setCephOsdFlagsLoading(true)
     fetch(`/api/v1/connections/${connId}/ceph/flags`)
       .then(res => res.json())
@@ -639,30 +715,35 @@ export default function ClusterTabs(props: any) {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setCephOsdFlagsLoading(false) })
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [clusterTab, data.cephHealth, connId])
 
   const handleRemoveCephFlag = useCallback(async (flag: string) => {
     if (!connId) return
     setCephFlagToggling(flag)
+
     try {
       const res = await fetch(`/api/v1/connections/${connId}/ceph/flags`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flag }),
       })
+
       if (res.ok) {
         setCephOsdFlags(prev => prev.filter(f => f !== flag))
         toast.success(t('ceph.flagUnset', { flag }))
       }
     } catch { /* ignore */ }
+
     setCephFlagToggling(null)
   }, [connId, toast, t])
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
     if (trend === 'down') return <i className="ri-arrow-down-line" style={{ color: '#f44336', fontSize: 14 }} />
-    return <i className="ri-arrow-right-line" style={{ color: '#9e9e9e', fontSize: 14 }} />
+
+return <i className="ri-arrow-right-line" style={{ color: '#9e9e9e', fontSize: 14 }} />
   }
 
   return (
@@ -838,15 +919,15 @@ export default function ClusterTabs(props: any) {
                   }
                 />
               </Tabs>
-              
+
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
                 {/* Onglet Summary - Index 0 */}
                 {clusterTab === 0 && (
                   <Box sx={{ p: 2, overflow: 'auto' }}>
                     {/* Ligne 1: Health, Guests, Resources */}
-                    <Box sx={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, 
+                    <Box sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
                       gap: 2,
                       mb: 2
                     }}>
@@ -860,13 +941,13 @@ export default function ClusterTabs(props: any) {
                               {/* Status */}
                               <Grid size={4} sx={{ textAlign: 'center' }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>{t('inventory.statusLabel')}</Typography>
-                                <Box sx={{ 
-                                  width: 48, 
-                                  height: 48, 
-                                  borderRadius: '50%', 
-                                  bgcolor: data.status === 'ok' ? 'success.main' : data.status === 'warn' ? 'warning.main' : 'error.main', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
+                                <Box sx={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: '50%',
+                                  bgcolor: data.status === 'ok' ? 'success.main' : data.status === 'warn' ? 'warning.main' : 'error.main',
+                                  display: 'flex',
+                                  alignItems: 'center',
                                   justifyContent: 'center',
                                   mx: 'auto',
                                   mb: 1
@@ -949,7 +1030,9 @@ export default function ClusterTabs(props: any) {
                                   const running = qemuVms.filter((v: any) => v.status === 'running').length
                                   const stopped = qemuVms.filter((v: any) => v.status === 'stopped').length
                                   const templates = qemuVms.filter((v: any) => v.template).length
-                                  return (
+
+
+return (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
@@ -978,7 +1061,9 @@ export default function ClusterTabs(props: any) {
                                   const lxcVms = allVms.filter((v: any) => v.type === 'lxc')
                                   const running = lxcVms.filter((v: any) => v.status === 'running').length
                                   const stopped = lxcVms.filter((v: any) => v.status === 'stopped').length
-                                  return (
+
+
+return (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
@@ -1014,11 +1099,11 @@ export default function ClusterTabs(props: any) {
                                 const storagePercent = data.metrics?.storage?.pct || 0
                                 const usedStorage = data.metrics?.storage?.used || 0
                                 const totalStorage = data.metrics?.storage?.max || 0
-                                
+
                                 // Compter les CPU totaux depuis nodesData
                                 const nodes = (data.nodesData as any[]) || []
                                 const totalCpuCores = nodes.length > 0 ? nodes.length * 8 : 0 // Approximation, ou utiliser les vraies valeurs si disponibles
-                                
+
                                 return (
                                   <>
                                     {/* CPU */}
@@ -1148,7 +1233,9 @@ export default function ClusterTabs(props: any) {
                                   const effectiveMode = (drsSettings as any)?.cluster_modes?.[connId] || (drsSettings as any)?.mode || 'manual'
                                   const modeColor = effectiveMode === 'automatic' ? 'success' : effectiveMode === 'partial' ? 'warning' : 'info'
                                   const modeLabel = effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1)
-                                  return <Chip size="small" label={modeLabel} color={modeColor as any} variant="outlined" />
+
+
+return <Chip size="small" label={modeLabel} color={modeColor as any} variant="outlined" />
                                 })()}
                               </Box>
                               <Typography variant="body2" color="text.secondary" sx={{ fontSize: 11 }}>
@@ -1236,9 +1323,12 @@ export default function ClusterTabs(props: any) {
                                     const pColor = rec.priority === 'critical' || rec.priority === 3 ? 'error'
                                       : rec.priority === 'high' || rec.priority === 2 ? 'warning'
                                       : rec.priority === 'medium' || rec.priority === 1 ? 'info' : 'default'
+
                                     const isExecuting = executingRecId === rec.id
                                     const isExpanded = expandedRecId === rec.id
-                                    return (
+
+
+return (
                                       <Box key={rec.id}>
                                         <Box
                                           sx={{
@@ -1257,14 +1347,18 @@ export default function ClusterTabs(props: any) {
                                             if (isExpanded) {
                                               setExpandedRecId(null)
                                               setRecSeries([])
-                                              return
+
+return
                                             }
+
                                             setExpandedRecId(rec.id)
                                             setRecSeries([])
                                             setRecRrdLoading(true)
+
                                             try {
                                               const guestType = rec.guest_type || 'qemu'
                                               const data = await fetchRrd(rec.connection_id, `/nodes/${rec.source_node}/${guestType}/${rec.vmid}`, 'hour')
+
                                               setRecSeries(buildSeriesFromRrd(data))
                                             } catch {
                                               setRecSeries([])
@@ -1400,7 +1494,9 @@ export default function ClusterTabs(props: any) {
                                 content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
                                   const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                  return (
+
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
@@ -1440,7 +1536,9 @@ export default function ClusterTabs(props: any) {
                                 content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
                                   const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                  return (
+
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
@@ -1480,13 +1578,17 @@ export default function ClusterTabs(props: any) {
                                 content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
                                   const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                  return (
+
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => {
                                         const isOut = String(entry.name).startsWith('netOut_')
                                         const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
-                                        return (
+
+
+return (
                                           <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.1 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
@@ -1527,7 +1629,9 @@ export default function ClusterTabs(props: any) {
                                 content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
                                   const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                                  return (
+
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11 }}>
                                       <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>{new Date(Number(label)).toLocaleString()}</Typography>
                                       {sorted.map(entry => (
@@ -1592,16 +1696,16 @@ export default function ClusterTabs(props: any) {
                         {(data.nodesData as NodeRow[]).map((node) => {
                           const nodeVms = (data.allVms || []).filter((vm: any) => vm.node === node.name)
                           const isExpanded = expandedClusterNodes.has(node.name)
-                          
+
                           return (
                             <Box key={node.id} sx={{ borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
                               {/* Header du node (cliquable pour expand/collapse) */}
-                              <Box 
-                                sx={{ 
-                                  px: 2, 
-                                  py: 1.5, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
+                              <Box
+                                sx={{
+                                  px: 2,
+                                  py: 1.5,
+                                  display: 'flex',
+                                  alignItems: 'center',
                                   justifyContent: 'space-between',
                                   cursor: 'pointer',
                                   '&:hover': { bgcolor: 'action.hover' },
@@ -1610,29 +1714,32 @@ export default function ClusterTabs(props: any) {
                                 onClick={() => {
                                   setExpandedClusterNodes(prev => {
                                     const newSet = new Set(prev)
+
                                     if (newSet.has(node.name)) {
                                       newSet.delete(node.name)
                                     } else {
                                       newSet.add(node.name)
                                     }
-                                    return newSet
+
+
+return newSet
                                   })
                                 }}
                               >
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                                  <i 
-                                    className={isExpanded ? 'ri-subtract-line' : 'ri-add-line'} 
-                                    style={{ fontSize: 18, opacity: 0.7 }} 
+                                  <i
+                                    className={isExpanded ? 'ri-subtract-line' : 'ri-add-line'}
+                                    style={{ fontSize: 18, opacity: 0.7 }}
                                   />
                                   <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                     <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 16, height: 16, opacity: 0.8 }} />
                                     <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
                                   </Box>
                                   <Typography fontWeight={600}>{node.name}</Typography>
-                                  <Chip 
-                                    size="small" 
-                                    label={`${nodeVms.length} VMs`} 
-                                    sx={{ height: 20, fontSize: 11 }} 
+                                  <Chip
+                                    size="small"
+                                    label={`${nodeVms.length} VMs`}
+                                    sx={{ height: 20, fontSize: 11 }}
                                   />
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -1664,7 +1771,7 @@ export default function ClusterTabs(props: any) {
                                   ))}
                                 </Box>
                               </Box>
-                              
+
                               {/* Liste des VMs du node (collapsible) */}
                               {isExpanded && nodeVms.length > 0 && (
                                 <Box sx={{
@@ -1689,7 +1796,7 @@ export default function ClusterTabs(props: any) {
                                   />
                                 </Box>
                               )}
-                              
+
                               {isExpanded && nodeVms.length === 0 && (
                                 <Box sx={{ px: 4, py: 2, bgcolor: 'background.default', opacity: 0.5 }}>
                                   <Typography variant="body2">{t('inventory.noVmsOnNode')}</Typography>
@@ -1840,6 +1947,7 @@ export default function ClusterTabs(props: any) {
                               </Box>
                               {clusterHaStatus.filter((s: any) => s.type === 'quorum' || s.type === 'master' || s.type === 'lrm').map((s: any, idx: number) => {
                                 const statusText = s.status || s.state || '-'
+
                                 // Extract node name from status string like "PVE-3AZ-5-C (active, Thu Apr 2 13:16:56 2026)"
                                 const nodeMatch = statusText.match(/^([^\s(]+)/)
                                 const nodeName = (s.type === 'master' || s.type === 'lrm') ? nodeMatch?.[1] : null
@@ -1881,15 +1989,15 @@ export default function ClusterTabs(props: any) {
                               <AddIcon sx={{ fontSize: 20 }} />
                             </IconButton>
                           </Box>
-                          
+
                           {clusterHaResources.length === 0 ? (
                             <Alert severity="info" sx={{ py: 1 }}>
                               {t('common.noData')}
                             </Alert>
                           ) : (
-                            <Box sx={{ 
-                              border: '1px solid', 
-                              borderColor: 'divider', 
+                            <Box sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
                               borderRadius: 1,
                               overflow: 'hidden'
                             }}>
@@ -1917,9 +2025,9 @@ export default function ClusterTabs(props: any) {
                               </Box>
                               {/* Rows */}
                               {clusterHaResources.map((res: any) => (
-                                <Box 
+                                <Box
                                   key={res.sid}
-                                  sx={{ 
+                                  sx={{
                                     display: 'grid',
                                     gridTemplateColumns: clusterPveMajorVersion >= 9
                                       ? '1fr 100px 150px 100px 100px 200px'
@@ -2004,21 +2112,21 @@ export default function ClusterTabs(props: any) {
                                 <AddIcon sx={{ fontSize: 20 }} />
                               </IconButton>
                             </Box>
-                            
+
                             {clusterHaGroups.length === 0 ? (
                               <Alert severity="info" sx={{ py: 1 }}>
                                 {t('common.noData')}
                               </Alert>
                             ) : (
-                              <Box sx={{ 
-                                border: '1px solid', 
-                                borderColor: 'divider', 
+                              <Box sx={{
+                                border: '1px solid',
+                                borderColor: 'divider',
                                 borderRadius: 1,
                                 overflow: 'hidden'
                               }}>
                                 {/* Header */}
-                                <Box sx={{ 
-                                  display: 'grid', 
+                                <Box sx={{
+                                  display: 'grid',
                                   gridTemplateColumns: '150px 80px 80px 1fr 200px 80px',
                                   gap: 1,
                                   px: 1.5,
@@ -2037,10 +2145,10 @@ export default function ClusterTabs(props: any) {
                                 </Box>
                                 {/* Rows */}
                                 {clusterHaGroups.map((group: any) => (
-                                  <Box 
+                                  <Box
                                     key={group.group}
-                                    sx={{ 
-                                      display: 'grid', 
+                                    sx={{
+                                      display: 'grid',
                                       gridTemplateColumns: '150px 80px 80px 1fr 200px 80px',
                                       gap: 1,
                                       px: 1.5,
@@ -2068,8 +2176,8 @@ export default function ClusterTabs(props: any) {
                                     </Typography>
                                     <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                                       <MuiTooltip title={t('common.edit')}>
-                                        <IconButton 
-                                          size="small" 
+                                        <IconButton
+                                          size="small"
                                           onClick={() => {
                                             setEditingHaGroup(group)
                                             setHaGroupDialogOpen(true)
@@ -2079,8 +2187,8 @@ export default function ClusterTabs(props: any) {
                                         </IconButton>
                                       </MuiTooltip>
                                       <MuiTooltip title={t('common.delete')}>
-                                        <IconButton 
-                                          size="small" 
+                                        <IconButton
+                                          size="small"
                                           color="error"
                                           onClick={() => setDeleteHaGroupDialog(group)}
                                         >
@@ -2109,22 +2217,22 @@ export default function ClusterTabs(props: any) {
                                   <AddIcon sx={{ fontSize: 20 }} />
                                 </IconButton>
                               </Box>
-                              
+
                               {clusterHaRules.filter((r: any) => r.type === 'node-affinity').length === 0 ? (
                                 <Box sx={{ py: 3, textAlign: 'center', opacity: 0.4 }}>
                                   <i className="ri-route-line" style={{ fontSize: 28, display: 'block', marginBottom: 4 }} />
                                   <Typography variant="body2">{t('cluster.noNodeAffinityRules')}</Typography>
                                 </Box>
                               ) : (
-                                <Box sx={{ 
-                                  border: '1px solid', 
-                                  borderColor: 'divider', 
+                                <Box sx={{
+                                  border: '1px solid',
+                                  borderColor: 'divider',
                                   borderRadius: 1,
                                   overflow: 'hidden'
                                 }}>
                                   {/* Header */}
-                                  <Box sx={{ 
-                                    display: 'grid', 
+                                  <Box sx={{
+                                    display: 'grid',
                                     gridTemplateColumns: '60px 60px 50px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
                                     gap: 1,
                                     px: 1.5,
@@ -2143,10 +2251,10 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                   {/* Rows */}
                                   {clusterHaRules.filter((r: any) => r.type === 'node-affinity').map((rule: any) => (
-                                    <Box 
+                                    <Box
                                       key={rule.rule}
-                                      sx={{ 
-                                        display: 'grid', 
+                                      sx={{
+                                        display: 'grid',
                                         gridTemplateColumns: '60px 60px 50px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
                                         gap: 1,
                                         px: 1.5,
@@ -2188,8 +2296,8 @@ export default function ClusterTabs(props: any) {
                                           </IconButton>
                                         </MuiTooltip>
                                         <MuiTooltip title={t('common.delete')}>
-                                          <IconButton 
-                                            size="small" 
+                                          <IconButton
+                                            size="small"
                                             color="error"
                                             onClick={() => setDeleteHaRuleDialog(rule)}
                                           >
@@ -2214,22 +2322,22 @@ export default function ClusterTabs(props: any) {
                                   <AddIcon sx={{ fontSize: 20 }} />
                                 </IconButton>
                               </Box>
-                              
+
                               {clusterHaRules.filter((r: any) => r.type === 'resource-affinity').length === 0 ? (
                                 <Box sx={{ py: 3, textAlign: 'center', opacity: 0.4 }}>
                                   <i className="ri-links-line" style={{ fontSize: 28, display: 'block', marginBottom: 4 }} />
                                   <Typography variant="body2">{t('cluster.noResourceAffinityRules')}</Typography>
                                 </Box>
                               ) : (
-                                <Box sx={{ 
-                                  border: '1px solid', 
-                                  borderColor: 'divider', 
+                                <Box sx={{
+                                  border: '1px solid',
+                                  borderColor: 'divider',
                                   borderRadius: 1,
                                   overflow: 'hidden'
                                 }}>
                                   {/* Header */}
-                                  <Box sx={{ 
-                                    display: 'grid', 
+                                  <Box sx={{
+                                    display: 'grid',
                                     gridTemplateColumns: '60px 60px 60px 1fr 80px', alignItems: 'center', columnGap: 2,
                                     gap: 1,
                                     px: 1.5,
@@ -2247,10 +2355,10 @@ export default function ClusterTabs(props: any) {
                                   </Box>
                                   {/* Rows */}
                                   {clusterHaRules.filter((r: any) => r.type === 'resource-affinity').map((rule: any) => (
-                                    <Box 
+                                    <Box
                                       key={rule.rule}
-                                      sx={{ 
-                                        display: 'grid', 
+                                      sx={{
+                                        display: 'grid',
                                         gridTemplateColumns: '60px 60px 60px 1fr 80px', alignItems: 'center', columnGap: 2,
                                         gap: 1,
                                         px: 1.5,
@@ -2291,8 +2399,8 @@ export default function ClusterTabs(props: any) {
                                           </IconButton>
                                         </MuiTooltip>
                                         <MuiTooltip title={t('common.delete')}>
-                                          <IconButton 
-                                            size="small" 
+                                          <IconButton
+                                            size="small"
                                             color="error"
                                             onClick={() => setDeleteHaRuleDialog(rule)}
                                           >
@@ -2341,7 +2449,7 @@ export default function ClusterTabs(props: any) {
                         {clusterNotesEditMode ? t('common.cancel') : t('common.edit')}
                       </Button>
                     </Box>
-                    
+
                     {clusterNotesLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                         <CircularProgress size={24} />
@@ -2369,19 +2477,19 @@ export default function ClusterTabs(props: any) {
                         </Box>
                       </Box>
                     ) : (
-                      <Box 
-                        sx={{ 
-                          flex: 1, 
-                          p: 2, 
-                          bgcolor: 'background.paper', 
-                          border: '1px solid', 
+                      <Box
+                        sx={{
+                          flex: 1,
+                          p: 2,
+                          bgcolor: 'background.paper',
+                          border: '1px solid',
                           borderColor: 'divider',
                           borderRadius: 1,
                           overflow: 'auto'
                         }}
                       >
                         {clusterNotesContent ? (
-                          <Box 
+                          <Box
                             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parseMarkdown(clusterNotesContent)) }}
                             sx={markdownSx}
                           />
@@ -2415,10 +2523,10 @@ export default function ClusterTabs(props: any) {
                                 {/* Status avec icône */}
                                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 100 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.statusLabel')}</Typography>
-                                  <Box sx={{ 
-                                    width: 56, 
-                                    height: 56, 
-                                    borderRadius: '50%', 
+                                  <Box sx={{
+                                    width: 56,
+                                    height: 56,
+                                    borderRadius: '50%',
                                     bgcolor: clusterCephData.health?.status === 'HEALTH_OK' ? 'success.main' :
                                              clusterCephData.health?.status === 'HEALTH_WARN' ? 'warning.dark' : 'error.main',
                                     display: 'flex',
@@ -2432,7 +2540,7 @@ export default function ClusterTabs(props: any) {
                                     {clusterCephData.health?.status || t('common.unknown')}
                                   </Typography>
                                 </Box>
-                                
+
                                 {/* Summary - Warnings/Errors */}
                                 <Box sx={{ flex: 1, borderLeft: '1px solid', borderColor: 'divider', pl: 2 }}>
                                   <Typography variant="caption" fontWeight={600} sx={{ mb: 1, display: 'block' }}>{t('inventory.tabSummary')}</Typography>
@@ -2440,13 +2548,13 @@ export default function ClusterTabs(props: any) {
                                     <Box sx={{ maxHeight: 120, overflow: 'auto' }}>
                                       {clusterCephData._normalized.healthChecks.map((check: any, idx: number) => (
                                         <Box key={idx} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
-                                          <i 
-                                            className={check.severity === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'} 
-                                            style={{ 
-                                              fontSize: 14, 
+                                          <i
+                                            className={check.severity === 'HEALTH_ERR' ? 'ri-close-circle-fill' : 'ri-alert-fill'}
+                                            style={{
+                                              fontSize: 14,
                                               color: check.severity === 'HEALTH_ERR' ? '#f44336' : '#ff9800',
                                               marginTop: 2
-                                            }} 
+                                            }}
                                           />
                                           <Typography variant="caption" sx={{ lineHeight: 1.3 }}>
                                             {check.summary}
@@ -2461,7 +2569,7 @@ export default function ClusterTabs(props: any) {
                                   )}
                                 </Box>
                               </Box>
-                              
+
                               {/* Ceph Version en bas */}
                               {clusterCephData.version && (
                                 <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -2493,9 +2601,12 @@ export default function ClusterTabs(props: any) {
                                     for (const d of (data?.detail || [])) {
                                       const msg = d?.message || ''
                                       let m
+
                                       osdRe.lastIndex = 0
+
                                       while ((m = osdRe.exec(msg)) !== null) {
                                         const id = Number.parseInt(m[1], 10)
+
                                         if (name === 'OSD_DOWN' || name === 'OSD_FLAGS') downIds.add(id)
                                         else if (name === 'OSD_NEARFULL' || name === 'OSD_BACKFILLFULL') warnIds.add(id)
                                         else if (name === 'OSD_FULL') fullIds.add(id)
@@ -2508,7 +2619,8 @@ export default function ClusterTabs(props: any) {
                                     if (fullIds.has(osdId)) return { color: '#ef4444', label: 'Full', opacity: 1 }
                                     if (warnIds.has(osdId)) return { color: '#ff9800', label: 'Near Full', opacity: 1 }
                                     if (osdId >= numUp) return { color: '#ef4444', label: 'Down', opacity: 1 }
-                                    return { color: '#4caf50', label: 'Up/In', opacity: 0.7 }
+
+return { color: '#4caf50', label: 'Up/In', opacity: 0.7 }
                                   }
 
                                   return (
@@ -2522,7 +2634,9 @@ export default function ClusterTabs(props: any) {
                                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                         {Array.from({ length: numTotal }, (_, i) => {
                                           const state = getOsdState(i)
-                                          return (
+
+
+return (
                                             <MuiTooltip key={i} title={`OSD ${i} - ${state.label}`}>
                                               <i className="ri-hard-drive-3-fill" style={{ fontSize: 14, color: state.color, opacity: state.opacity }} />
                                             </MuiTooltip>
@@ -2542,7 +2656,8 @@ export default function ClusterTabs(props: any) {
                                     if (state.includes('active')) return '#ff9800'
                                     if (state.includes('peering') || state.includes('recovering') || state.includes('remapped') || state.includes('backfill')) return '#ff9800'
                                     if (state.includes('stale') || state.includes('down') || state.includes('incomplete')) return '#ef4444'
-                                    return '#9ca3af'
+
+return '#9ca3af'
                                   }
 
                                   return (
@@ -2607,8 +2722,8 @@ export default function ClusterTabs(props: any) {
                                 <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.monitors')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                   {clusterCephData.monmap?.mons?.map((mon: any) => (
-                                    <MuiTooltip 
-                                      key={mon.name} 
+                                    <MuiTooltip
+                                      key={mon.name}
                                       title={
                                         <Box sx={{ p: 0.5 }}>
                                           <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{t('cluster.monitor')}: {mon.name}</Typography>
@@ -2628,7 +2743,7 @@ export default function ClusterTabs(props: any) {
                                 <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.managers')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                                   {clusterCephData.mgrmap?.active_name && (
-                                    <MuiTooltip 
+                                    <MuiTooltip
                                       title={
                                         <Box sx={{ p: 0.5 }}>
                                           <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{t('cluster.manager')}: {clusterCephData.mgrmap.active_name}</Typography>
@@ -2642,7 +2757,7 @@ export default function ClusterTabs(props: any) {
                                     </MuiTooltip>
                                   )}
                                   {clusterCephData.mgrmap?.standbys?.map((mgr: any) => (
-                                    <MuiTooltip 
+                                    <MuiTooltip
                                       key={mgr.name}
                                       title={
                                         <Box sx={{ p: 0.5 }}>
@@ -2661,11 +2776,11 @@ export default function ClusterTabs(props: any) {
                               <Box>
                                 <Typography variant="caption" sx={{ opacity: 0.7 }}>{t('cluster.metadataServers')}</Typography>
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                                  {(clusterCephData._normalized?.mds?.length > 0 
-                                    ? clusterCephData._normalized.mds 
+                                  {(clusterCephData._normalized?.mds?.length > 0
+                                    ? clusterCephData._normalized.mds
                                     : clusterCephData.fsmap?.by_rank
                                   )?.map((mds: any) => (
-                                    <MuiTooltip 
+                                    <MuiTooltip
                                       key={mds.name}
                                       title={
                                         <Box sx={{ p: 0.5 }}>
@@ -2706,8 +2821,8 @@ export default function ClusterTabs(props: any) {
                                   />
                                   <CircularProgress
                                     variant="determinate"
-                                    value={clusterCephData.pgmap?.bytes_used && clusterCephData.pgmap?.bytes_total 
-                                      ? (clusterCephData.pgmap.bytes_used / clusterCephData.pgmap.bytes_total) * 100 
+                                    value={clusterCephData.pgmap?.bytes_used && clusterCephData.pgmap?.bytes_total
+                                      ? (clusterCephData.pgmap.bytes_used / clusterCephData.pgmap.bytes_total) * 100
                                       : 0}
                                     size={100}
                                     thickness={8}
@@ -2715,8 +2830,8 @@ export default function ClusterTabs(props: any) {
                                   />
                                   <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
                                     <Typography variant="h6" fontWeight={700}>
-                                      {clusterCephData.pgmap?.bytes_used && clusterCephData.pgmap?.bytes_total 
-                                        ? Math.round((clusterCephData.pgmap.bytes_used / clusterCephData.pgmap.bytes_total) * 100) 
+                                      {clusterCephData.pgmap?.bytes_used && clusterCephData.pgmap?.bytes_total
+                                        ? Math.round((clusterCephData.pgmap.bytes_used / clusterCephData.pgmap.bytes_total) * 100)
                                         : 0}%
                                     </Typography>
                                   </Box>
@@ -2734,13 +2849,17 @@ export default function ClusterTabs(props: any) {
                                   <Typography variant="body2" fontWeight={600} sx={{ color: (() => {
                                     const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
                                     const totalBytes = clusterCephData.pgmap?.bytes_total || 0
-                                    return totalBytes > 0 && provBytes > totalBytes ? 'warning.main' : 'text.primary'
+
+
+return totalBytes > 0 && provBytes > totalBytes ? 'warning.main' : 'text.primary'
                                   })() }}>
                                     {(() => {
                                       const provBytes = (allVms || []).reduce((sum: number, vm: any) => sum + (Number(vm.maxdisk) || 0), 0)
                                       const totalBytes = clusterCephData.pgmap?.bytes_total || 0
                                       const pct = totalBytes > 0 ? Math.round((provBytes / totalBytes) * 100) : 0
-                                      return `${formatBytes(provBytes)} (${pct}%)`
+
+
+return `${formatBytes(provBytes)} (${pct}%)`
                                     })()}
                                   </Typography>
                                 </Box>
@@ -2851,7 +2970,9 @@ export default function ClusterTabs(props: any) {
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
                                         const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
-                                        return (
+
+
+return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#3b82f6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                               <i className="ri-speed-line" style={{ fontSize: 13, color: '#3b82f6' }} />
@@ -2909,7 +3030,9 @@ export default function ClusterTabs(props: any) {
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
                                         const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
-                                        return (
+
+
+return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#8b5cf6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                               <i className="ri-speed-line" style={{ fontSize: 13, color: '#8b5cf6' }} />
@@ -2967,7 +3090,9 @@ export default function ClusterTabs(props: any) {
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
                                         const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
-                                        return (
+
+
+return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                               <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#10b981' }} />
@@ -3025,7 +3150,9 @@ export default function ClusterTabs(props: any) {
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
                                         const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
-                                        return (
+
+
+return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                               <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#f59e0b' }} />
@@ -3133,18 +3260,18 @@ export default function ClusterTabs(props: any) {
                                 <TableRow key={storage.storage} hover>
                                   <TableCell sx={{ fontWeight: 600 }}>{storage.storage}</TableCell>
                                   <TableCell>
-                                    <Chip 
-                                      size="small" 
-                                      label={storage.type} 
-                                      sx={{ 
-                                        height: 20, 
+                                    <Chip
+                                      size="small"
+                                      label={storage.type}
+                                      sx={{
+                                        height: 20,
                                         fontSize: 11,
-                                        bgcolor: storage.type === 'rbd' ? 'info.main' : 
+                                        bgcolor: storage.type === 'rbd' ? 'info.main' :
                                                  storage.type === 'cephfs' ? 'secondary.main' :
                                                  storage.type === 'pbs' ? 'warning.main' :
                                                  storage.type === 'dir' ? 'default' : 'action.selected',
                                         color: ['rbd', 'cephfs', 'pbs'].includes(storage.type) ? 'white' : 'inherit'
-                                      }} 
+                                      }}
                                     />
                                   </TableCell>
                                   <TableCell>
@@ -3219,8 +3346,10 @@ export default function ClusterTabs(props: any) {
                           startIcon={refreshingUpdates ? <CircularProgress size={16} /> : <i className="ri-refresh-line" />}
                           onClick={async () => {
                             const cId = selection?.type === 'cluster' ? selection.id : ''
+
                             if (!cId || !data.nodesData?.length) return
                             setRefreshingUpdates(true)
+
                             try {
                               // Trigger apt update on all online nodes (POST = apt update)
                               await Promise.all(
@@ -3230,6 +3359,7 @@ export default function ClusterTabs(props: any) {
                                     fetch(`/api/v1/connections/${encodeURIComponent(cId)}/nodes/${encodeURIComponent(n.node)}/apt`, { method: 'POST' }).catch(() => null)
                                   )
                               )
+
                               // POST now waits for apt update tasks to complete — reload update lists
                               setNodeUpdates({})
                               setNodeLocalVms({})
@@ -3271,15 +3401,18 @@ export default function ClusterTabs(props: any) {
                               <TableBody>
                                 {data.nodesData.map((node: any) => {
                                   const nodeUpdate = nodeUpdates[node.node]
+
+
                                   // Calcul du temps estimé (réaliste pour rolling update)
-                                  const hasKernel = nodeUpdate?.updates?.some((u: any) => 
+                                  const hasKernel = nodeUpdate?.updates?.some((u: any) =>
                                     (u.Package || u.package || '').toLowerCase().includes('kernel') ||
                                     (u.Package || u.package || '').toLowerCase().includes('linux-image') ||
                                     (u.Package || u.package || '').toLowerCase().includes('pve-kernel')
                                   )
+
                                   const pkgCount = nodeUpdate?.count || 0
                                   const vmCount = node.vms || 0
-                                  
+
                                   // Estimation réaliste:
                                   // - Évacuation VMs: 2min + 30s par VM (migration live)
                                   // - Mode maintenance HA + flags Ceph: 2min
@@ -3290,7 +3423,7 @@ export default function ClusterTabs(props: any) {
                                   // - Suppression flags + sortie maintenance: 1min
                                   // - Vérification santé Ceph: 3min
                                   // - Buffer sécurité: 2min
-                                  const estimatedMinutes = pkgCount > 0 
+                                  const estimatedMinutes = pkgCount > 0
                                     ? Math.ceil(
                                         2 + Math.ceil(vmCount * 0.5) +  // Évacuation VMs
                                         2 +                             // Maintenance + flags Ceph
@@ -3303,7 +3436,9 @@ export default function ClusterTabs(props: any) {
                                         2                               // Buffer sécurité
                                       )
                                     : 0
-                                  return (
+
+
+return (
                                     <TableRow key={node.node}>
                                       <TableCell>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -3328,12 +3463,12 @@ export default function ClusterTabs(props: any) {
                                           const localVmData = nodeLocalVms[node.node]
                                           const hasBlockingVms = localVmData && localVmData.blockingMigration > 0
                                           const hasLocalWithReplication = localVmData && localVmData.withReplication > 0
-                                          
+
                                           return (
                                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                                              <Chip 
-                                                size="small" 
-                                                label={node.vms ?? 0} 
+                                              <Chip
+                                                size="small"
+                                                label={node.vms ?? 0}
                                                 sx={{ height: 20, fontSize: 11, minWidth: 32 }}
                                               />
                                               {localVmData?.loading ? (
@@ -3362,9 +3497,9 @@ export default function ClusterTabs(props: any) {
                                                     icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 12 }} />}
                                                     label={localVmData.blockingMigration}
                                                     color="error"
-                                                    sx={{ 
-                                                      height: 20, 
-                                                      fontSize: 10, 
+                                                    sx={{
+                                                      height: 20,
+                                                      fontSize: 10,
                                                       cursor: 'pointer',
                                                       '& .MuiChip-icon': { fontSize: 12, ml: 0.5 }
                                                     }}
@@ -3390,8 +3525,8 @@ export default function ClusterTabs(props: any) {
                                                     icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 12 }} />}
                                                     label={localVmData.total}
                                                     color="warning"
-                                                    sx={{ 
-                                                      height: 20, 
+                                                    sx={{
+                                                      height: 20,
                                                       fontSize: 10,
                                                       cursor: 'pointer',
                                                       '& .MuiChip-icon': { fontSize: 12, ml: 0.5 }
@@ -3413,13 +3548,13 @@ export default function ClusterTabs(props: any) {
                                         ) : node.status !== 'online' ? (
                                           <Typography variant="caption" sx={{ opacity: 0.5 }}>—</Typography>
                                         ) : (
-                                          <Chip 
-                                            size="small" 
+                                          <Chip
+                                            size="small"
                                             label={nodeUpdate?.count ?? 0}
                                             color={nodeUpdate?.count > 0 ? 'warning' : 'success'}
-                                            sx={{ 
-                                              height: 24, 
-                                              fontSize: 11, 
+                                            sx={{
+                                              height: 24,
+                                              fontSize: 11,
                                               minWidth: 40,
                                               cursor: nodeUpdate?.count > 0 ? 'pointer' : 'default',
                                               fontWeight: 600
@@ -3454,17 +3589,17 @@ export default function ClusterTabs(props: any) {
                                       </TableCell>
                                       <TableCell align="center">
                                         {node.status === 'online' ? (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.online')} 
-                                            color="success" 
+                                          <Chip
+                                            size="small"
+                                            label={t('updates.online')}
+                                            color="success"
                                             icon={<i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
                                             sx={{ height: 24 }}
                                           />
                                         ) : (
-                                          <Chip 
-                                            size="small" 
-                                            label={t('updates.offline')} 
+                                          <Chip
+                                            size="small"
+                                            label={t('updates.offline')}
                                             color="error"
                                             icon={<i className="ri-close-circle-fill" style={{ fontSize: 14 }} />}
                                             sx={{ height: 24 }}
@@ -3487,19 +3622,22 @@ export default function ClusterTabs(props: any) {
                           let totalMinutes = 0
                           let nodesWithUpdates = 0
                           let totalReboots = 0
-                          
+
                           data.nodesData?.forEach((node: any) => {
                             const nodeUpdate = nodeUpdates[node.node]
+
                             if (nodeUpdate && nodeUpdate.count > 0) {
                               nodesWithUpdates++
-                              const hasKernel = nodeUpdate.updates?.some((u: any) => 
+
+                              const hasKernel = nodeUpdate.updates?.some((u: any) =>
                                 (u.Package || u.package || '').toLowerCase().includes('kernel') ||
                                 (u.Package || u.package || '').toLowerCase().includes('linux-image') ||
                                 (u.Package || u.package || '').toLowerCase().includes('pve-kernel')
                               )
+
                               if (hasKernel) totalReboots++
                               const vmCount = node.vms || 0
-                              
+
                               // Estimation réaliste par nœud:
                               // - Évacuation VMs: 2min + 30s par VM
                               // - Mode maintenance HA + flags Ceph: 2min
@@ -3523,28 +3661,30 @@ export default function ClusterTabs(props: any) {
                               )
                             }
                           })
-                          
+
                           const totalUpdates = (Object.values(nodeUpdates) as any[]).reduce((sum: number, n: any) => sum + n.count, 0)
                           const hasUpdates = totalUpdates > 0
-                          
+
                           // Formater le temps total
                           const formatTime = (minutes: number) => {
                             if (minutes < 60) return `~${minutes} min`
                             const hours = Math.floor(minutes / 60)
                             const mins = minutes % 60
-                            return mins > 0 ? `~${hours}h ${mins}min` : `~${hours}h`
+
+
+return mins > 0 ? `~${hours}h ${mins}min` : `~${hours}h`
                           }
-                          
+
                           return (
-                            <Alert 
+                            <Alert
                               severity={hasUpdates ? 'warning' : 'success'}
                               icon={hasUpdates ? <i className="ri-error-warning-line" /> : <i className="ri-checkbox-circle-line" />}
                             >
                               <Box>
                                 <Typography variant="body2" fontWeight={600}>
-                                  {t('updates.summaryUpdates', { 
+                                  {t('updates.summaryUpdates', {
                                     count: totalUpdates,
-                                    nodes: nodesWithUpdates 
+                                    nodes: nodesWithUpdates
                                   })}
                                 </Typography>
                                 {hasUpdates && (
@@ -3623,8 +3763,8 @@ export default function ClusterTabs(props: any) {
                     />
 
                     {/* Dialog pour afficher les mises à jour */}
-                    <Dialog 
-                      open={updatesDialogOpen} 
+                    <Dialog
+                      open={updatesDialogOpen}
                       onClose={() => setUpdatesDialogOpen(false)}
                       maxWidth="md"
                       fullWidth
@@ -3639,13 +3779,16 @@ export default function ClusterTabs(props: any) {
                             {/* Résumé avec détection kernel */}
                             {(() => {
                               const updates = nodeUpdates[updatesDialogNode]?.updates || []
-                              const hasKernelUpdate = updates.some((u: any) => 
+
+                              const hasKernelUpdate = updates.some((u: any) =>
                                 (u.Package || u.package || '').toLowerCase().includes('kernel') ||
                                 (u.Package || u.package || '').toLowerCase().includes('linux-image')
                               )
-                              return (
-                                <Alert 
-                                  severity={hasKernelUpdate ? 'warning' : 'info'} 
+
+
+return (
+                                <Alert
+                                  severity={hasKernelUpdate ? 'warning' : 'info'}
                                   sx={{ mb: 2 }}
                                   icon={hasKernelUpdate ? <i className="ri-restart-line" style={{ fontSize: 20 }} /> : <i className="ri-information-line" style={{ fontSize: 20 }} />}
                                 >
@@ -3667,16 +3810,16 @@ export default function ClusterTabs(props: any) {
                             })()}
 
                             {/* Liste des paquets */}
-                            <Box sx={{ 
-                              maxHeight: 350, 
-                              overflow: 'auto', 
-                              border: '1px solid', 
-                              borderColor: 'divider', 
+                            <Box sx={{
+                              maxHeight: 350,
+                              overflow: 'auto',
+                              border: '1px solid',
+                              borderColor: 'divider',
                               borderRadius: 1
                             }}>
                               {/* Header */}
-                              <Box sx={{ 
-                                display: 'grid', 
+                              <Box sx={{
+                                display: 'grid',
                                 gridTemplateColumns: '1fr 140px 140px',
                                 gap: 1,
                                 px: 1.5,
@@ -3696,11 +3839,13 @@ export default function ClusterTabs(props: any) {
                               {nodeUpdates[updatesDialogNode]?.updates.map((upd: any, idx: number) => {
                                 const pkgName = upd.Package || upd.package || ''
                                 const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
-                                return (
-                                  <Box 
+
+
+return (
+                                  <Box
                                     key={idx}
-                                    sx={{ 
-                                      display: 'grid', 
+                                    sx={{
+                                      display: 'grid',
                                       gridTemplateColumns: '1fr 140px 140px',
                                       gap: 1,
                                       px: 1.5,
@@ -3741,8 +3886,8 @@ export default function ClusterTabs(props: any) {
                     </Dialog>
 
                     {/* Dialog pour afficher les VMs avec stockage local */}
-                    <Dialog 
-                      open={localVmsDialogOpen} 
+                    <Dialog
+                      open={localVmsDialogOpen}
                       onClose={() => setLocalVmsDialogOpen(false)}
                       maxWidth="md"
                       fullWidth
@@ -3755,8 +3900,8 @@ export default function ClusterTabs(props: any) {
                         {localVmsDialogNode && nodeLocalVms[localVmsDialogNode]?.vms?.length > 0 ? (
                           <>
                             {/* Résumé */}
-                            <Alert 
-                              severity={nodeLocalVms[localVmsDialogNode]?.canMigrate ? 'warning' : 'error'} 
+                            <Alert
+                              severity={nodeLocalVms[localVmsDialogNode]?.canMigrate ? 'warning' : 'error'}
                               sx={{ mb: 2 }}
                               icon={<i className="ri-error-warning-line" style={{ fontSize: 20 }} />}
                             >
@@ -3797,16 +3942,16 @@ export default function ClusterTabs(props: any) {
                             )}
 
                             {/* Liste des VMs */}
-                            <Box sx={{ 
-                              maxHeight: 300, 
-                              overflow: 'auto', 
-                              border: '1px solid', 
-                              borderColor: 'divider', 
+                            <Box sx={{
+                              maxHeight: 300,
+                              overflow: 'auto',
+                              border: '1px solid',
+                              borderColor: 'divider',
                               borderRadius: 1
                             }}>
                               {/* Header */}
-                              <Box sx={{ 
-                                display: 'grid', 
+                              <Box sx={{
+                                display: 'grid',
                                 gridTemplateColumns: '80px 1fr 1fr 100px',
                                 gap: 1,
                                 px: 1.5,
@@ -3825,10 +3970,10 @@ export default function ClusterTabs(props: any) {
                               </Box>
                               {/* Rows */}
                               {nodeLocalVms[localVmsDialogNode]?.vms.map((vm: any) => (
-                                <Box 
+                                <Box
                                   key={vm.vmid}
-                                  sx={{ 
-                                    display: 'grid', 
+                                  sx={{
+                                    display: 'grid',
                                     gridTemplateColumns: '80px 1fr 1fr 100px',
                                     gap: 1,
                                     px: 1.5,
@@ -3851,26 +3996,26 @@ export default function ClusterTabs(props: any) {
                                   </Typography>
                                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                                     {vm.localDisks?.map((disk: string, idx: number) => (
-                                      <Chip 
+                                      <Chip
                                         key={idx}
-                                        size="small" 
-                                        label={disk} 
+                                        size="small"
+                                        label={disk}
                                         sx={{ height: 18, fontSize: 10 }}
                                       />
                                     ))}
                                   </Box>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                     {vm.status === 'running' ? (
-                                      <Chip 
-                                        size="small" 
+                                      <Chip
+                                        size="small"
                                         label={vm.hasReplication ? t('updates.replicationOk') : t('updates.running')}
                                         color={vm.hasReplication ? 'success' : 'error'}
                                         icon={vm.hasReplication ? <i className="ri-checkbox-circle-fill" style={{ fontSize: 12 }} /> : <i className="ri-error-warning-fill" style={{ fontSize: 12 }} />}
                                         sx={{ height: 20, fontSize: 10 }}
                                       />
                                     ) : (
-                                      <Chip 
-                                        size="small" 
+                                      <Chip
+                                        size="small"
                                         label={t('updates.stopped')}
                                         color="default"
                                         sx={{ height: 20, fontSize: 10 }}
@@ -4126,24 +4271,24 @@ export default function ClusterTabs(props: any) {
                 <Stack spacing={2.5}>
                   <Box>
                     <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.ipAddress')}:</Typography>
-                    <Box sx={{ 
-                      mt: 0.5, 
-                      p: 1.5, 
-                      bgcolor: 'action.hover', 
-                      borderRadius: 1, 
+                    <Box sx={{
+                      mt: 0.5,
+                      p: 1.5,
+                      bgcolor: 'action.hover',
+                      borderRadius: 1,
                       fontFamily: 'monospace',
-                      fontSize: 14 
+                      fontSize: 14
                     }}>
                       {clusterConfig.joinInfo.ipAddress || '—'}
                     </Box>
                   </Box>
                   <Box>
                     <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.fingerprint')}:</Typography>
-                    <Box sx={{ 
-                      mt: 0.5, 
-                      p: 1.5, 
-                      bgcolor: 'action.hover', 
-                      borderRadius: 1, 
+                    <Box sx={{
+                      mt: 0.5,
+                      p: 1.5,
+                      bgcolor: 'action.hover',
+                      borderRadius: 1,
                       fontFamily: 'monospace',
                       fontSize: 12,
                       wordBreak: 'break-all'
@@ -4153,11 +4298,11 @@ export default function ClusterTabs(props: any) {
                   </Box>
                   <Box>
                     <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary' }}>{t('cluster.joinInformation')}:</Typography>
-                    <Box sx={{ 
-                      mt: 0.5, 
-                      p: 1.5, 
-                      bgcolor: 'grey.900', 
-                      borderRadius: 1, 
+                    <Box sx={{
+                      mt: 0.5,
+                      p: 1.5,
+                      bgcolor: 'grey.900',
+                      borderRadius: 1,
                       fontFamily: 'monospace',
                       fontSize: 11,
                       wordBreak: 'break-all',
@@ -4238,8 +4383,8 @@ export default function ClusterTabs(props: any) {
               <Button onClick={() => setCreateClusterDialogOpen(false)} disabled={clusterActionLoading}>
                 {t('common.cancel')}
               </Button>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 onClick={() => handleCreateCluster(selection?.id?.split(':')[0] || '')}
                 disabled={clusterActionLoading || !newClusterName}
               >
@@ -4294,8 +4439,8 @@ export default function ClusterTabs(props: any) {
               <Button onClick={() => setJoinClusterDialogOpen(false)} disabled={clusterActionLoading}>
                 {t('common.cancel')}
               </Button>
-              <Button 
-                variant="contained" 
+              <Button
+                variant="contained"
                 onClick={() => handleJoinCluster(selection?.id?.split(':')[0] || '')}
                 disabled={clusterActionLoading || !joinClusterInfo || !joinClusterPassword}
               >
@@ -4320,7 +4465,9 @@ export default function ClusterTabs(props: any) {
                 >
                   {availableVmsForHa.map((vm: any) => {
                     const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
-                    return (
+
+
+return (
                       <MenuItem key={sid} value={sid}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: vm.status === 'running' ? '#4caf50' : '#9e9e9e', flexShrink: 0 }} />

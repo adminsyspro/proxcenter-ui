@@ -14,7 +14,9 @@ import { syncIpamForVmConfig } from './ipamSync'
 // logic, not PVE I/O. The real scan path is covered in ipamScan.test.ts.
 vi.mock('./ipamScan', async () => {
   const real: any = await vi.importActual('./ipamScan')
-  return {
+
+
+return {
     ...real,
     scanUsedIpsForSubnet: vi.fn(async () => []),
   }
@@ -39,6 +41,7 @@ vi.mock('./vnets', () => ({
         pvePoolName: 'poolA',
       }
     }
+
     if (bridge === 'tenantB') {
       return {
         vdcId: 'vdc-1',
@@ -52,7 +55,9 @@ vi.mock('./vnets', () => ({
         pvePoolName: 'poolA',
       }
     }
-    return null
+
+
+return null
   }),
 }))
 
@@ -72,6 +77,7 @@ beforeEach(async () => {
   __clearScanCacheForTests()
 
   const now = new Date()
+
   await prismaTest.tenant.create({
     data: { id: 'tenant-1', slug: 'tenant-1', name: 'Test', createdAt: now, updatedAt: now },
   })
@@ -118,6 +124,7 @@ describe('syncIpamForVmConfig — no-op paths', () => {
       vmid: 100,
       hostname: 'test',
     })
+
     expect(result.bodyOverrides).toEqual({})
   })
 
@@ -130,6 +137,7 @@ describe('syncIpamForVmConfig — no-op paths', () => {
       vmid: 100,
       hostname: null,
     })
+
     expect(result.bodyOverrides).toEqual({})
   })
 })
@@ -144,7 +152,9 @@ describe('syncIpamForVmConfig — fresh allocation', () => {
       vmid: 100,
       hostname: 'web',
     })
+
     const alloc = await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01')
+
     expect(alloc?.ip).toBe('10.42.0.1')
     expect(result.bodyOverrides.ipconfig0).toBe('ip=10.42.0.1/24,gw=10.42.0.254')
   })
@@ -161,7 +171,9 @@ describe('syncIpamForVmConfig — fresh allocation', () => {
       vmid: 100,
       hostname: null,
     })
+
     const alloc = await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01')
+
     expect(alloc?.ip).toBe('10.42.0.42')
     expect(result.bodyOverrides).toEqual({})
   })

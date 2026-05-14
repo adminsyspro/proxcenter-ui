@@ -1,10 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { useBranding } from '@/contexts/BrandingContext'
-import { useRBAC } from '@/contexts/RBACContext'
-import { useTenant } from '@/contexts/TenantContext'
 
 import {
   Accordion,
@@ -29,9 +27,17 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { lighten } from '@mui/material/styles'
 
 import DOMPurify from 'dompurify'
+
+import { useBranding } from '@/contexts/BrandingContext'
+import { useRBAC } from '@/contexts/RBACContext'
+import { useTenant } from '@/contexts/TenantContext'
+
+
+
 import { formatBytes } from '@/utils/format'
 
 import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
@@ -51,6 +57,7 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
   haState?: string | null
   haGroup?: string | null
   vmInfo?: { connId: string; node: string; type: string; vmid: string } | null
+
   // Tenant admins see HA as informational — they can't change state or
   // group. The chip stays visible (read-only) with an explicit lock icon
   // so the policy is obvious instead of mysteriously non-clickable.
@@ -69,6 +76,7 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
     setDisplayState(newState)
     setSaving(true)
     const haSid = `${vmInfo.type === 'lxc' ? 'ct' : 'vm'}:${vmInfo.vmid}`
+
     try {
       await fetch(
         `/api/v1/connections/${encodeURIComponent(vmInfo.connId)}/ha/${encodeURIComponent(haSid)}`,
@@ -79,6 +87,7 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
         }
       )
     } catch { /* ignore */ }
+
     setSaving(false)
   }
 
@@ -86,7 +95,8 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
     if (s === 'started') return 'success'
     if (s === 'error') return 'error'
     if (s === 'stopped' || s === 'disabled') return 'default'
-    return 'warning'
+
+return 'warning'
   }
 
   // Treat readOnly as "no vmInfo for write": skip menu/click handlers and
@@ -126,8 +136,11 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
                 disabled: { color: '#6b7280', icon: 'ri-forbid-line' },
                 ignored:  { color: '#f59e0b', icon: 'ri-eye-off-line' },
               }
+
               const { color, icon } = meta[s]
-              return (
+
+
+return (
                 <MenuItem
                   key={s}
                   selected={s === displayState}
@@ -169,8 +182,11 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
                 disabled: { color: '#6b7280', icon: 'ri-forbid-line' },
                 ignored:  { color: '#f59e0b', icon: 'ri-eye-off-line' },
               }
+
               const { color, icon } = meta[s]
-              return (
+
+
+return (
                 <MenuItem
                   key={s}
                   onClick={() => handleChange(s)}
@@ -287,6 +303,7 @@ function InventorySummary({
 
   const consoleWidth = { xs: '100%', md: 360 }
   const { isAdmin } = useRBAC()
+
   // HA management is provider-only — tenant admins see HA state but
   // can't change it (cluster-level concern, not vDC-scoped).
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -316,6 +333,7 @@ function InventorySummary({
       await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/subscription`, {
         method: 'POST'
       })
+
       // Callback pour rafraîchir les données
       onRefreshSubscription?.()
     } catch (err) {
@@ -658,6 +676,7 @@ return `${mins}m`
                 }}
               >
                 {hostBlocksCollapsed.updates ? (
+
                   // Mode collapsé vertical - juste une icône cliquable
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, updates: false }))}
@@ -682,6 +701,7 @@ return `${mins}m`
                     <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
                   </Box>
                 ) : (
+
                   // Mode étendu
                   <>
                     <Box
@@ -800,6 +820,7 @@ return `${mins}m`
                 }}
               >
                 {hostBlocksCollapsed.subscription ? (
+
                   // Mode collapsé vertical - juste une icône cliquable
                   <Box
                     onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, subscription: false }))}
@@ -824,6 +845,7 @@ return `${mins}m`
                     <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.5, marginTop: 8 }} />
                   </Box>
                 ) : (
+
                   // Mode étendu
                   <>
                     <Box

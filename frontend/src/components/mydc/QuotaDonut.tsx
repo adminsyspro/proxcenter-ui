@@ -3,26 +3,35 @@
 import { Box, CircularProgress, Stack, Typography } from '@mui/material'
 
 export interface QuotaDonutProps {
+
   /** Label displayed under the donut (e.g., "vCPUs"). Omit for compact in-cell usage. */
   label?: string
+
   /** Current usage (same unit as `max`). */
   used: number
+
   /** Quota ceiling. `null`/`undefined` = unlimited (no fill, no %). */
   max: number | null | undefined
+
   /** Optional unit suffix shown in the caption when `formatValue` is not provided (e.g., "GB"). */
   unit?: string
+
   /** Remix icon class (e.g., "ri-cpu-line") shown inside the ring. */
   icon: string
+
   /** Label shown when `max` is unlimited (fallback `used` value inside). */
   unlimitedLabel: string
+
   /**
    * Pending request to visualise on top of the current usage (shifts the fill
    * to the projected total). Used by the VM create dialog to preview impact.
    * `0` or omitted = show current usage only.
    */
   requested?: number
+
   /** Outer size in px (default 104). */
   size?: number
+
   /**
    * Optional formatter for the numeric labels (used, requested, max). Lets
    * the caller feed raw MB and render "1.8 GB" so the percentage stays
@@ -52,17 +61,23 @@ export default function QuotaDonut({
   const pct = hasQuota ? Math.round((projected / (max as number)) * 100) : 0
   const over = hasQuota && projected > (max as number)
   const clampedPct = Math.min(100, pct)
+
+
   // Red only when strictly over quota; orange from 70 % up (incl. at-limit),
   // blue below — so the user tells "blocked" from "near max" at a glance.
   const color: 'primary' | 'warning' | 'error' =
     over ? 'error' : pct >= 70 ? 'warning' : 'primary'
+
   const thickness = 4
+
   // Compact mode: no icon (cell already labelled by column header), tighter fonts.
   const compact = size < 80
+
   // Scale inner fonts with the donut size so long values like
   // "12.3 GB / 32.0 GB" don't overflow the ring at intermediate sizes (e.g. 88).
   const valueFontRem = Math.min(0.875, Math.max(0.7, size / 110))
   const captionFontRem = Math.min(0.65, Math.max(0.5, size / 150))
+
   // Cap inner-text width so anything still longer than expected gets ellipsised
   // instead of bleeding outside the circle.
   const innerMaxWidth = Math.round(size * 0.82)

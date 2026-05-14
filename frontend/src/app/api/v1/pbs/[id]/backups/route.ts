@@ -6,12 +6,11 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped, getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getSessionPrisma } from "@/lib/tenant"
+import { getSessionPrisma , getCurrentTenantId } from "@/lib/tenant"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { assertVdcPbsAccess, getVdcScope } from "@/lib/vdc/scope"
 import { getDateLocale } from "@/lib/i18n/date"
-import { getCurrentTenantId } from "@/lib/tenant"
 import {
   type CachedBackup,
   getPbsBackupsFromCache,
@@ -36,6 +35,7 @@ async function fetchAllPbsBackups(
 
   const datastorePromises = datastores.map(async (ds) => {
     const storeName = ds.store || ds.name
+
     if (!storeName) return []
 
     try {
@@ -50,6 +50,7 @@ async function fetchAllPbsBackups(
 
         if (Array.isArray(nsData)) {
           const subNs = nsData.map(n => n.ns || '').filter(Boolean)
+
           namespaces = ['', ...subNs]
         }
       } catch {
@@ -59,6 +60,7 @@ async function fetchAllPbsBackups(
       // Fetch snapshots for each namespace in parallel
       const nsPromises = namespaces.map(async (ns) => {
         const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
+
         const snapshots = await pbsFetch<any[]>(
           conn,
           `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`
@@ -108,15 +110,19 @@ async function fetchAllPbsBackups(
       })
 
       const nsResults = await Promise.all(nsPromises)
-      return nsResults.flat()
+
+
+return nsResults.flat()
     } catch (e: any) {
       console.warn(`Failed to get snapshots for datastore ${storeName}:`, e)
       warnings.push(`Failed to fetch datastore '${storeName}': ${e?.message || String(e)}`)
-      return []
+
+return []
     }
   })
 
   const results = await Promise.all(datastorePromises)
+
   results.forEach(backups => allBackups.push(...backups))
 
   // Pre-sort by date (most recent first) so cached data is already sorted
@@ -144,15 +150,18 @@ async function getAllBackups(
   if (cached.status === 'stale') {
     // Serve stale data immediately, refresh in background
     const existing = getInflightPbsFetch(id, tenantId, dateLocale)
+
     if (existing === null) {
       const refreshPromise = fetchAllPbsBackups(conn, dateLocale)
         .then(result => {
           setCachedPbsBackups(id, result.data, result.warnings, tenantId, dateLocale)
-          return result
+
+return result
         })
         .catch(err => {
           console.warn(`Background PBS backup refresh failed for ${id}:`, err)
-          return { data: cached.data, warnings: cached.warnings }
+
+return { data: cached.data, warnings: cached.warnings }
         })
         .finally(() => {
           setInflightPbsFetch(null, id, tenantId, dateLocale)
@@ -166,15 +175,19 @@ async function getAllBackups(
 
   // Cache miss — blocking fetch required (but deduplicate concurrent requests)
   let inflight = getInflightPbsFetch(id, tenantId, dateLocale)
+
   if (inflight !== null) {
     const result = await inflight
-    return { data: result.data, warnings: result.warnings, fromCache: false }
+
+
+return { data: result.data, warnings: result.warnings, fromCache: false }
   }
 
   const fetchPromise = fetchAllPbsBackups(conn, dateLocale)
     .then(result => {
       setCachedPbsBackups(id, result.data, result.warnings, tenantId, dateLocale)
-      return result
+
+return result
     })
     .finally(() => {
       setInflightPbsFetch(null, id, tenantId, dateLocale)
@@ -182,11 +195,14 @@ async function getAllBackups(
 
   setInflightPbsFetch(fetchPromise, id, tenantId, dateLocale)
   const result = await fetchPromise
-  return { data: result.data, warnings: result.warnings, fromCache: false }
+
+
+return { data: result.data, warnings: result.warnings, fromCache: false }
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -196,9 +212,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const cookieStore = await cookies()
@@ -225,12 +243,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (noCache) {
       // Force refresh requested
       const result = await fetchAllPbsBackups(conn, dateLocale)
+
       setCachedPbsBackups(id, result.data, result.warnings, 'default', dateLocale)
       allBackups = result.data
       warnings = result.warnings
       fromCache = false
     } else {
       const result = await getAllBackups(id, conn, 'default', dateLocale)
+
       allBackups = result.data
       warnings = result.warnings
       fromCache = result.fromCache
@@ -239,6 +259,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // Tenant scoping: restrict to the caller's authorised (datastore, namespace) pairs.
     if (access.kind === 'tenant') {
       const allowedSet = new Set(access.allowed.map(p => `${p.datastore}|${p.namespace}`))
+
       allBackups = allBackups.filter(b => allowedSet.has(`${b.datastore}|${b.namespace}`))
     }
 
@@ -251,6 +272,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // Single round-trip per PVE connection (cached implicitly by PVE
     // resource cache), not per backup.
     const blankNames = allBackups.some(b => !b.vmName)
+
     if (blankNames) {
       try {
         const tenantId = await getCurrentTenantId()
@@ -258,20 +280,25 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         const sessionPrisma = await getSessionPrisma()
         const connPrisma = vdcScope ? globalPrisma : sessionPrisma
         const pveWhere: any = { type: 'pve' }
+
         if (vdcScope) pveWhere.id = { in: [...vdcScope.connectionIds] }
+
         const pveConns = await connPrisma.connection.findMany({
           where: pveWhere,
           select: { id: true, tenantId: true },
         })
 
         const vmidToName = new Map<number, string>()
+
         await Promise.all(pveConns.map(async (pc) => {
           try {
             const conn = await getConnectionById(pc.id, pc.tenantId)
             const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+
             for (const r of resources ?? []) {
               const vmidNum = Number(r?.vmid)
               const name = String(r?.name ?? '').trim()
+
               if (Number.isFinite(vmidNum) && name && !vmidToName.has(vmidNum)) {
                 vmidToName.set(vmidNum, name)
               }
@@ -288,7 +315,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
             if (b.vmName) return b
             const vmidNum = Number(b.backupId)
             const resolved = Number.isFinite(vmidNum) ? vmidToName.get(vmidNum) : undefined
-            return resolved ? { ...b, vmName: resolved } : b
+
+
+return resolved ? { ...b, vmName: resolved } : b
           })
         }
       } catch (err: any) {
@@ -298,19 +327,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // Extract available namespaces from all backups (before filtering)
     const namespaceSet = new Set(allBackups.map(b => b.namespace))
+
     const namespaces = Array.from(namespaceSet).sort((a, b) => {
       // Root namespace first, then alphabetical
       if (a === '') return -1
       if (b === '') return 1
-      return a.localeCompare(b)
+
+return a.localeCompare(b)
     })
 
     // Resolve the (datastore, namespace) → vDC mapping so the UI can group
     // namespaces by vDC. For tenant callers we restrict to their own vDCs;
     // super-admins see bindings across every tenant on this PBS connection.
     let bindings: Array<{ datastore: string; namespace: string; vdcId: string; vdcName: string; tenantName?: string }> = []
+
     if (access.kind === 'tenant') {
       const tenantId = await getCurrentTenantId()
+
       const rows = await globalPrisma.vdcPbsNamespace.findMany({
         where: { pbsConnectionId: id, vdc: { tenantId } },
         select: {
@@ -319,6 +352,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           vdc: { select: { id: true, name: true } },
         },
       })
+
       bindings = rows.map(r => ({
         datastore: r.datastore,
         namespace: r.namespace,
@@ -334,6 +368,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           vdc: { select: { id: true, name: true, tenant: { select: { name: true } } } },
         },
       })
+
       bindings = rows.map(r => ({
         datastore: r.datastore,
         namespace: r.namespace,

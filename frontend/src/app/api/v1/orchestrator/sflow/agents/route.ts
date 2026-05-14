@@ -62,8 +62,10 @@ async function probeHost(
     if (!hasBridges) {
       // Fallback: ovs-vsctl may not be in PATH — probe with which
       const whichResult = await executeSSH(connId, ip, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br")
+
       if (whichResult.success && whichResult.output?.trim()) {
         const lines = whichResult.output.trim().split("\n").filter(Boolean)
+
         if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
           hasBridges = true
           nodeStatus.hasOvs = true
@@ -74,6 +76,7 @@ async function probeHost(
 
     if (hasBridges) {
       nodeStatus.hasOvs = true
+
       if (!nodeStatus.bridges.length && bridgesResult.output?.trim()) {
         nodeStatus.bridges = bridgesResult.output.trim().split("\n").filter(Boolean)
       }
@@ -87,14 +90,17 @@ async function probeHost(
 
       if (versionResult.success && versionResult.output?.trim()) {
         const match = versionResult.output.match(/(\d+\.\d+\.\d+)/)
+
         if (match) nodeStatus.ovsVersion = match[1]
       }
 
       if (sflowResult.success && sflowResult.output?.includes("targets")) {
         nodeStatus.sflowConfigured = true
         const targetMatch = sflowResult.output.match(/targets\s*:\s*\["?([^"\]]+)/)
+
         if (targetMatch) nodeStatus.sflowTarget = targetMatch[1]
         const samplingMatch = sflowResult.output.match(/sampling\s*:\s*(\d+)/)
+
         if (samplingMatch) nodeStatus.sflowSampling = Number.parseInt(samplingMatch[1], 10)
       }
 
@@ -118,15 +124,18 @@ async function probeHost(
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
     const cached = agentsCache.get(tenantId)
+
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
       return NextResponse.json({ data: cached.data })
     }
 
     const prisma = await getSessionPrisma()
+
     const connections = await prisma.connection.findMany({
       where: { type: "pve", sshEnabled: true },
       include: { hosts: true },
@@ -136,13 +145,17 @@ export async function GET() {
       connections.map(async (conn): Promise<NodeSFlowStatus[]> => {
         if (!conn.sshKeyEnc && !conn.sshPassEnc) return []
         const targets = conn.hosts.filter((h): h is typeof h & { ip: string } => h.enabled && !!h.ip)
-        return Promise.all(targets.map(host => probeHost(conn.id, conn.name, host.node, host.ip)))
+
+
+return Promise.all(targets.map(host => probeHost(conn.id, conn.name, host.node, host.ip)))
       })
     )
+
     const results: NodeSFlowStatus[] = nested.flat()
 
     agentsCache.set(tenantId, { at: Date.now(), data: results })
-    return NextResponse.json({ data: results })
+
+return NextResponse.json({ data: results })
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to check sFlow agents" },
@@ -155,6 +168,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -163,11 +177,13 @@ export async function POST(request: NextRequest) {
     if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
       return NextResponse.json({ error: "No nodes specified" }, { status: 400 })
     }
+
     if (!collectorTarget) {
       return NextResponse.json({ error: "Collector target is required (ip:port)" }, { status: 400 })
     }
 
     const prisma = await getSessionPrisma()
+
     const connections = await prisma.connection.findMany({
       where: { type: "pve", sshEnabled: true },
       include: { hosts: true },
@@ -178,6 +194,7 @@ export async function POST(request: NextRequest) {
     for (const nodeReq of nodes) {
       const { ip, connectionId } = nodeReq
       const conn = connections.find(c => c.id === connectionId)
+
       if (!conn) {
         results.push({ node: nodeReq.node, ip, success: false, error: "Connection not found" })
         continue

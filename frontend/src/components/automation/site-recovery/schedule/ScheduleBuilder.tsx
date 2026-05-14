@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { Box, MenuItem, Select, Stack, Typography } from '@mui/material'
+
 import ModeToggle from './ModeToggle'
 import FrequencyPicker from './FrequencyPicker'
 import TimezonePicker from './TimezonePicker'
@@ -29,8 +30,10 @@ export default function ScheduleBuilder({ value, onChange, disabled }: Props) {
   const setMode = (mode: 'rpo' | 'scheduled') => {
     if (mode === 'scheduled' && !value.scheduleSpec) {
       onChange({ ...value, mode, scheduleSpec: defaultSchedule(), timezone: value.timezone || defaultTimezone() })
-      return
+
+return
     }
+
     onChange({ ...value, mode })
   }
 

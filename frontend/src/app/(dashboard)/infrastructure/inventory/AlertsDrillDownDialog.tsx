@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -45,7 +46,9 @@ function translateAlertMessage(alert: OrchestratorAlert, t: (key: string, params
       return alert.message || ''
     }
   }
-  return alert.message || ''
+
+
+return alert.message || ''
 }
 
 function resourceLabel(resource: PredictiveAlert['resource'], t: (key: string) => string): string {
@@ -91,13 +94,15 @@ export default function AlertsDrillDownDialog({
   const severityColor = (severity: string) => {
     if (severity === 'critical' || severity === 'high') return theme.palette.error.main
     if (severity === 'warning' || severity === 'medium') return theme.palette.warning.main
-    return theme.palette.info.main
+
+return theme.palette.info.main
   }
 
   const severityLabel = (severity: string) => {
     if (severity === 'critical' || severity === 'high') return t('alerts.critical').toUpperCase()
     if (severity === 'warning' || severity === 'medium') return t('alerts.warning').toUpperCase()
-    return severity.toUpperCase()
+
+return severity.toUpperCase()
   }
 
   const renderActiveAlert = (alert: OrchestratorAlert, idx: number) => {

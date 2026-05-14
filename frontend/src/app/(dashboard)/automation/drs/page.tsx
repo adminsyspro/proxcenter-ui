@@ -1,19 +1,12 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useLocale, useTranslations } from 'next-intl'
-import { formatBytes } from '@/utils/format'
-import { getDateLocale } from '@/lib/i18n/date'
 
-import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
+
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts'
-import ChartContainer from '@/components/ChartContainer'
-
-import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
-import { Features, useLicense } from '@/contexts/LicenseContext'
-
 
 import {
   Alert,
@@ -45,6 +38,19 @@ import {
   useTheme
 } from '@mui/material'
 
+import { formatBytes } from '@/utils/format'
+import { getDateLocale } from '@/lib/i18n/date'
+
+import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
+
+import ChartContainer from '@/components/ChartContainer'
+
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
+import { Features, useLicense } from '@/contexts/LicenseContext'
+
+
+
 // RemixIcon replacements for @mui/icons-material
 const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -75,14 +81,14 @@ import DRSBalancingIllustration from '@/components/illustrations/DRSBalancingIll
 import { CardsSkeleton } from '@/components/skeletons'
 
 // Import des nouveaux composants DRS
-import DRSSettingsPanel, { 
-  defaultDRSSettings, 
-  type DRSSettings, 
-  type ClusterVersionInfo 
+import DRSSettingsPanel, {
+  defaultDRSSettings,
+  type DRSSettings,
+  type ClusterVersionInfo
 } from '@/components/automation/drs/DRSSettingsPanel'
 import AffinityRulesManager, {
-  type AffinityRule, 
-  type VMInfo as AffinityVMInfo 
+  type AffinityRule,
+  type VMInfo as AffinityVMInfo
 } from '@/components/automation/drs/AffinityRulesManager'
 
 // ============================================
@@ -218,12 +224,12 @@ interface TargetStorageInfo {
   used_size: number         // espace utilisé en bytes
   avail_size: number        // espace disponible en bytes
   usage_percent: number     // % utilisé actuel
-  
+
   // Après migration
   used_after: number        // espace utilisé après migration
   avail_after: number       // espace dispo après migration
   usage_after_pct: number   // % utilisé après migration
-  
+
   // Alertes
   will_exceed: boolean      // true si espace insuffisant
   warning_level: 'ok' | 'warning' | 'critical' | 'full'  // niveau d'alerte
@@ -247,12 +253,12 @@ interface MigrationCheckResult {
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
-  
+
 return res.json()
 })
 
 async function apiAction(url: string, method = 'POST', body?: any) {
-  const res = await fetch(url, { 
+  const res = await fetch(url, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined
@@ -264,7 +270,7 @@ async function apiAction(url: string, method = 'POST', body?: any) {
     throw new Error(data.error || 'Action failed')
   }
 
-  
+
 return res.json()
 }
 
@@ -277,20 +283,27 @@ const pct = (v: number) => Math.max(0, Math.min(100, Number(v ?? 0)))
 /** Returns a color from green → yellow → red based on a 0-100 usage percentage */
 const usageColor = (v: number): string => {
   const p = Math.max(0, Math.min(100, v))
+
   if (p <= 50) {
     // green (#4caf50) → yellow (#ff9800)
     const t = p / 50
     const r = Math.round(76 + t * (255 - 76))
     const g = Math.round(175 + t * (152 - 175))
     const b = Math.round(80 + t * (0 - 80))
-    return `rgb(${r},${g},${b})`
+
+
+return `rgb(${r},${g},${b})`
   }
+
+
   // yellow (#ff9800) → red (#f44336)
   const t = (p - 50) / 50
   const r = Math.round(255 + t * (244 - 255))
   const g = Math.round(152 + t * (67 - 152))
   const b = Math.round(0 + t * (54 - 0))
-  return `rgb(${r},${g},${b})`
+
+
+return `rgb(${r},${g},${b})`
 }
 
 const formatDate = (iso: string, locale?: string) => {
@@ -308,7 +321,7 @@ return new Date(iso).toLocaleString(locale, {
 const getPriorityLabel = (priority: number | string): string => {
   const labels: Record<number, string> = { 0: 'low', 1: 'medium', 2: 'high', 3: 'critical' }
 
-  
+
 return typeof priority === 'number' ? labels[priority] || 'low' : priority
 }
 
@@ -322,7 +335,7 @@ const getPriorityColor = (priority: number | string): 'error' | 'warning' | 'inf
     low: 'default'
   }
 
-  
+
 return colors[p] || 'default'
 }
 
@@ -330,7 +343,7 @@ return colors[p] || 'default'
 // Helper pour s'assurer qu'on a un tableau (évite les erreurs .filter is not a function)
 const ensureArray = <T,>(data: T[] | undefined | null | { error?: string }): T[] => {
   if (Array.isArray(data)) return data
-  
+
 return []
 }
 
@@ -339,12 +352,12 @@ return []
 // ============================================
 
 // Gauge component pour visualiser CPU/RAM
-const ResourceGauge = ({ 
-  value, 
-  label, 
+const ResourceGauge = ({
+  value,
+  label,
   size = 60,
   thresholds = { warning: 70, critical: 85 }
-}: { 
+}: {
   value: number
   label: string
   size?: number
@@ -352,10 +365,10 @@ const ResourceGauge = ({
 }) => {
   const theme = useTheme()
 
-  const color = value >= thresholds.critical 
-    ? theme.palette.error.main 
-    : value >= thresholds.warning 
-      ? theme.palette.warning.main 
+  const color = value >= thresholds.critical
+    ? theme.palette.error.main
+    : value >= thresholds.warning
+      ? theme.palette.warning.main
       : theme.palette.success.main
 
   return (
@@ -373,7 +386,7 @@ const ResourceGauge = ({
           value={pct(value)}
           size={size}
           thickness={4}
-          sx={{ 
+          sx={{
             color,
             position: 'absolute',
             left: 0,
@@ -427,7 +440,7 @@ const ClusterCard = ({
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
-  
+
   // Calculer le spread (écart max-min) de mémoire
   const memorySpread = useMemo(() => {
     if (!metrics?.nodes || metrics.nodes.length < 2) return 0
@@ -435,7 +448,7 @@ const ClusterCard = ({
     const max = Math.max(...memValues)
     const min = Math.min(...memValues)
 
-    
+
 return max - min
   }, [metrics.nodes])
 
@@ -446,12 +459,12 @@ return max - min
   const t = useTranslations()
   const healthColor = healthScore >= 85 ? 'success' : healthScore >= 60 ? 'warning' : 'error'
   const healthLabel = healthScore >= 85 ? t('drsPage.balanced') : healthScore >= 60 ? t('drsPage.toOptimize') : t('drsPage.unbalanced')
-  
+
   // Couleur du spread selon le seuil (10% = warning)
   const spreadColor = memorySpread > 10 ? 'error' : memorySpread > 6 ? 'warning' : 'success'
 
   // Trier les nœuds par mémoire décroissante
-  const sortedNodes = useMemo(() => 
+  const sortedNodes = useMemo(() =>
     [...(metrics.nodes || [])].sort((a, b) => b.memory_usage - a.memory_usage),
     [metrics.nodes]
   )
@@ -813,11 +826,11 @@ const ActiveMigrationRow = ({
   const message = progress?.message ?? t('drsPage.loading')
   const isComplete = migration.status === 'completed'
   const isFailed = migration.status === 'failed'
-  
-  const progressColor = isFailed 
-    ? theme.palette.error.main 
-    : isComplete 
-      ? theme.palette.success.main 
+
+  const progressColor = isFailed
+    ? theme.palette.error.main
+    : isComplete
+      ? theme.palette.success.main
       : theme.palette.info.main
 
   return (
@@ -859,26 +872,26 @@ const ActiveMigrationRow = ({
 
         {/* Migration path */}
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip 
-            size="small" 
-            label={migration.source_node} 
-            sx={{ 
+          <Chip
+            size="small"
+            label={migration.source_node}
+            sx={{
               bgcolor: alpha(theme.palette.error.main, 0.1),
               color: 'error.main',
               fontWeight: 500,
               fontSize: '0.75rem'
-            }} 
+            }}
           />
           <Typography sx={{ opacity: 0.4 }}>→</Typography>
-          <Chip 
-            size="small" 
+          <Chip
+            size="small"
             label={migration.target_node}
-            sx={{ 
+            sx={{
               bgcolor: alpha(theme.palette.success.main, 0.1),
               color: 'success.main',
               fontWeight: 500,
               fontSize: '0.75rem'
-            }} 
+            }}
           />
         </Box>
 
@@ -969,26 +982,26 @@ const RecommendationRow = React.memo(({
 
       {/* Migration path */}
       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip 
-          size="small" 
-          label={rec.source_node} 
-          sx={{ 
+        <Chip
+          size="small"
+          label={rec.source_node}
+          sx={{
             bgcolor: alpha(theme.palette.error.main, 0.1),
             color: 'error.main',
             fontWeight: 500,
             fontSize: '0.75rem'
-          }} 
+          }}
         />
         <Typography sx={{ opacity: 0.4 }}>→</Typography>
-        <Chip 
-          size="small" 
+        <Chip
+          size="small"
           label={rec.target_node}
-          sx={{ 
+          sx={{
             bgcolor: alpha(theme.palette.success.main, 0.1),
             color: 'success.main',
             fontWeight: 500,
             fontSize: '0.75rem'
-          }} 
+          }}
         />
       </Box>
 
@@ -1131,14 +1144,14 @@ const StorageWarningPanel = ({
                 <Typography variant="caption" sx={{ fontWeight: 500 }}>
                   {disk.device}
                 </Typography>
-                <Chip 
-                  label={disk.storage} 
-                  size="small" 
-                  sx={{ 
-                    height: 18, 
+                <Chip
+                  label={disk.storage}
+                  size="small"
+                  sx={{
+                    height: 18,
                     fontSize: '0.65rem',
                     bgcolor: alpha(theme.palette.warning.main, 0.2)
-                  }} 
+                  }}
                 />
               </Box>
               <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -1149,10 +1162,10 @@ const StorageWarningPanel = ({
         </Box>
 
         {/* Stats totales */}
-        <Box sx={{ 
-          display: 'flex', 
-          gap: 2, 
-          pt: 1, 
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          pt: 1,
           borderTop: '1px dashed',
           borderColor: alpha(theme.palette.warning.main, 0.3)
         }}>
@@ -1175,7 +1188,7 @@ const StorageWarningPanel = ({
 
       {/* Info stockage cible */}
       {targetStorage && (
-        <Alert 
+        <Alert
           severity={targetStorage.will_exceed ? 'error' : targetStorage.warning_level === 'critical' ? 'error' : targetStorage.warning_level === 'warning' ? 'warning' : 'info'}
           icon={<StorageIcon />}
         >
@@ -1228,9 +1241,9 @@ const StorageWarningPanel = ({
 
           {/* Message de warning/erreur */}
           {targetStorage.will_exceed ? (
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
               gap: 1,
               p: 1,
               bgcolor: alpha(theme.palette.error.main, 0.1),
@@ -1242,9 +1255,9 @@ const StorageWarningPanel = ({
               </Typography>
             </Box>
           ) : targetStorage.warning_level === 'critical' ? (
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
               gap: 1,
               p: 1,
               bgcolor: alpha(theme.palette.error.main, 0.1),
@@ -1256,9 +1269,9 @@ const StorageWarningPanel = ({
               </Typography>
             </Box>
           ) : targetStorage.warning_level === 'warning' ? (
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
               gap: 1,
               p: 1,
               bgcolor: alpha(theme.palette.warning.main, 0.1),
@@ -1314,6 +1327,7 @@ function getHAConflictStatus(
 ): 'none' | 'conflict' {
   if (!haDataMap) return 'none'
   const ha = haDataMap[connectionId]
+
   if (!ha) return 'none'
 
   // VM not HA-managed
@@ -1321,10 +1335,12 @@ function getHAConflictStatus(
 
   // Get the group name assigned to this VM
   const groupName = ha.vmGroupMap.get(vmid)
+
   if (!groupName) return 'none' // no group assigned → default group, no restriction
 
   // Find the group definition
   const group = ha.groups.find((g: any) => g.group === groupName)
+
   if (!group) return 'none'
 
   // Group not restricted → no conflict possible
@@ -1366,11 +1382,11 @@ export default function DRSPage() {
 
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
-  
+
   // État pour la vérification de migration
   const [migrationCheck, setMigrationCheck] = useState<MigrationCheckResult | null>(null)
   const [migrationCheckLoading, setMigrationCheckLoading] = useState(false)
-  
+
   // État pour la progression des migrations actives
   const [migrationsProgress, setMigrationsProgress] = useState<Record<string, MigrationProgress>>({})
 
@@ -1396,7 +1412,9 @@ return () => setPageInfo('', '', '')
   // Recent migrations (completed/failed), sorted by most recent first, limit 5
   const recentMigrations = useMemo(() => {
     const all = ensureArray(allMigrationsRaw as any).filter((m: any) => m != null) as DRSMigration[]
-    return all
+
+
+return all
       .filter(m => m.status === 'completed' || m.status === 'failed')
       .sort((a, b) => new Date(b.completed_at || b.started_at).getTime() - new Date(a.completed_at || a.started_at).getTime())
       .slice(0, 5)
@@ -1411,12 +1429,14 @@ return () => setPageInfo('', '', '')
   const affinityRules: any[] = ensureArray(affinityRulesRaw as any).map((r: any) => {
     // Parse vmids: could be an array, a JSON string (vm_ids_json), or undefined
     let vmids = r.vmids || r.vm_ids || []
+
     if (typeof vmids === 'string') {
       try { vmids = JSON.parse(vmids) } catch { vmids = [] }
     }
 
     // Parse nodes: could be an array, a JSON string (nodes_json), or undefined
     let nodes = r.nodes || []
+
     if (typeof nodes === 'string') {
       try { nodes = JSON.parse(nodes) } catch { nodes = [] }
     }
@@ -1434,7 +1454,7 @@ return () => setPageInfo('', '', '')
   // Récupérer les connexions PVE pour avoir les noms
   const { data: connectionsData } =
     useSWR<{ data: Connection[] }>('/api/v1/connections?type=pve', fetcher)
-  
+
   // Map connectionId -> name
   const connectionNames = useMemo(() => {
     const map: Record<string, string> = {}
@@ -1445,17 +1465,17 @@ return () => setPageInfo('', '', '')
       })
     }
 
-    
+
 return map
   }, [connectionsData])
 
   const { data: allVMsData } =
     useSWR<{ data: { vms: VMFromAPI[] } }>('/api/v1/vms', fetcher)
-  
+
   // Extraire les VMs du format de réponse existant et les convertir pour AffinityRulesManager
   const allVMs: AffinityVMInfo[] = useMemo(() => {
     if (!allVMsData?.data?.vms) return []
-    
+
 return allVMsData.data.vms.map(vm => ({
       vmid: Number.parseInt(vm.vmid, 10) || 0,
       name: vm.name,
@@ -1504,25 +1524,34 @@ return allVMsData.data.vms.map(vm => ({
   useEffect(() => {
     // Group pending recs by cluster
     const byCluster = new Map()
+
     for (const rec of allPendingRecs) {
       const cid = rec.connection_id
+
       if (!byCluster.has(cid)) byCluster.set(cid, [])
       byCluster.get(cid).push(rec)
     }
+
+
     // For each cluster, reject recs beyond maxPending
     const toReject = []
+
     for (const [, clusterRecs] of byCluster) {
       if (clusterRecs.length > maxPending) {
         toReject.push(...clusterRecs.slice(maxPending))
       }
     }
+
     if (toReject.length === 0) return
     toReject.forEach(rec => {
       fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
     })
+
     // Refresh after cleanup
     const timer = setTimeout(() => mutateRecs(), 1000)
-    return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
   }, [allPendingRecs.length, maxPending])
 
   // Auto-reject stale recommendations where the source node is no longer above cluster average
@@ -1530,53 +1559,70 @@ return allVMsData.data.vms.map(vm => ({
   useEffect(() => {
     if (!metricsData || allPendingRecs.length === 0) return
     const staleRecs: DRSRecommendation[] = []
+
     for (const rec of allPendingRecs) {
       const clusterMetrics = (metricsData as any)[rec.connection_id]
+
       if (!clusterMetrics?.nodes || clusterMetrics.nodes.length < 2) continue
       const nodes = clusterMetrics.nodes as { node: string; memory_usage: number }[]
       const avgMem = nodes.reduce((sum, n) => sum + n.memory_usage, 0) / nodes.length
       const sourceNode = nodes.find(n => n.node === rec.source_node)
+
       if (!sourceNode) continue
+
+
       // If source node is now at or below average (+2% tolerance), the recommendation is stale
       if (sourceNode.memory_usage <= avgMem + 2) {
         staleRecs.push(rec)
       }
     }
+
     if (staleRecs.length === 0) return
     console.log(`[DRS] Auto-rejecting ${staleRecs.length} stale recommendation(s) — source node(s) no longer above cluster average`)
     staleRecs.forEach(rec => {
       fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
     })
     const timer = setTimeout(() => mutateRecs(), 1000)
-    return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
   }, [allPendingRecs, metricsData])
 
   const pendingRecs = useMemo(() => {
     // Limit per cluster
     const byCluster = new Map()
+
     for (const rec of allPendingRecs) {
       const cid = rec.connection_id
+
       if (!byCluster.has(cid)) byCluster.set(cid, [])
       const arr = byCluster.get(cid)
+
       if (arr.length < maxPending) arr.push(rec)
     }
-    return Array.from(byCluster.values()).flat()
+
+
+return Array.from(byCluster.values()).flat()
   }, [allPendingRecs, maxPending])
 
   // Group recommendations by cluster for display
   const pendingRecsByCluster = useMemo(() => {
     const grouped = new Map()
+
     for (const rec of pendingRecs) {
       const cid = rec.connection_id
+
       if (!grouped.has(cid)) grouped.set(cid, [])
       grouped.get(cid).push(rec)
     }
-    return Array.from(grouped.entries()) as [string, DRSRecommendation[]][]
+
+
+return Array.from(grouped.entries()) as [string, DRSRecommendation[]][]
   }, [pendingRecs])
 
   const clusters = useMemo(() => {
     if (!metricsData) return []
-    
+
 return Object.entries(metricsData as any)
 
       // Filtrer pour ne garder que les vrais clusters (plus d'un nœud)
@@ -1626,28 +1672,38 @@ return Object.entries(metricsData as any)
         haVmids: Set<number>
         vmGroupMap: Map<number, string>
       }> = {}
+
       await Promise.all(clusters.map(async (c) => {
         try {
           const res = await fetch(`/api/v1/connections/${c.id}/ha`)
+
           if (!res.ok) return
           const { data } = await res.json()
           const groups = data?.groups || []
+
+
           // Count groups that have node restrictions (restricted flag or limited node list)
           const restrictedGroups = groups.filter((g: any) =>
             g.restricted === 1 || (g.nodes && g.nodes.split(',').length > 0 && g.nodes.split(',').length < 99)
           ).length
+
+
           // Build set of HA-managed VMIDs and map VMID -> group name
           const haVmids = new Set<number>()
           const vmGroupMap = new Map<number, string>()
+
           for (const r of (data?.resources || [])) {
             // sid format: "vm:100" or "ct:200"
             const match = r.sid?.match(/^(?:vm|ct):(\d+)$/)
+
             if (match) {
               const vmid = Number.parseInt(match[1], 10)
+
               haVmids.add(vmid)
               if (r.group) vmGroupMap.set(vmid, r.group)
             }
           }
+
           results[c.id] = {
             groups,
             restrictedGroups,
@@ -1658,7 +1714,8 @@ return Object.entries(metricsData as any)
           }
         } catch { /* ignore */ }
       }))
-      return results
+
+return results
     },
     { revalidateOnFocus: false }
   )
@@ -1667,15 +1724,20 @@ return Object.entries(metricsData as any)
   const haWarnings = useMemo(() => {
     if (!haDataMap) return []
     const warnings: { clusterId: string; clusterName: string; majorVersion: number; restrictedGroups: number; rules: number }[] = []
+
     for (const c of clusters) {
       const ha = haDataMap[c.id]
+
       if (!ha) continue
       const hasConflict = (ha.majorVersion >= 9 && ha.rules > 0) || ha.restrictedGroups > 0
+
       if (hasConflict) {
         warnings.push({ clusterId: c.id, clusterName: c.name, majorVersion: ha.majorVersion, restrictedGroups: ha.restrictedGroups, rules: ha.rules })
       }
     }
-    return warnings
+
+
+return warnings
   }, [haDataMap, clusters])
 
   // Récupérer la progression des migrations actives
@@ -1696,15 +1758,18 @@ return Object.entries(metricsData as any)
       // Seulement réinitialiser si l'objet n'est pas déjà vide
       setMigrationsProgress(prev => {
         if (Object.keys(prev).length === 0) return prev
-        return {}
+
+return {}
       })
-      return
+
+return
     }
 
     const migrationIds = activeMigrationIds.split(',')
 
     // Fonction pour récupérer la progression d'une migration
     let needsRefresh = false
+
     const fetchProgress = async (migrationId: string) => {
       try {
         const res = await fetch(`/api/v1/orchestrator/drs/migrations/${migrationId}/progress`)
@@ -1744,14 +1809,14 @@ return Object.entries(metricsData as any)
   const checkMigration = useCallback(async (rec: DRSRecommendation) => {
     setMigrationCheckLoading(true)
     setMigrationCheck(null)
-    
+
     try {
       const guestType = rec.guest_type || 'qemu'
 
       // Inclure le nœud cible pour vérifier l'espace disponible
       const url = `/api/v1/orchestrator/drs/check-migration/${rec.vmid}?connection_id=${rec.connection_id}&node=${rec.source_node}&target_node=${rec.target_node}&type=${guestType}`
       const res = await fetch(url)
-      
+
       if (res.ok) {
         const data = await res.json()
 
@@ -1777,7 +1842,7 @@ return Object.entries(metricsData as any)
         next.add(id)
       }
 
-      
+
 return next
     })
   }
@@ -1803,6 +1868,7 @@ return next
     try {
       setActionLoading('enforce-rules')
       const result = await apiAction(`/api/v1/orchestrator/drs/rules/${ruleId}/enforce`, 'POST')
+
       if (result.violations_found === 0) {
         setSnackbar({ open: true, message: t('drsPage.enforceRulesNoViolation'), severity: 'success' })
       } else {
@@ -1812,6 +1878,7 @@ return next
           severity: result.migrations_started > 0 ? 'warning' : 'success'
         })
       }
+
       await mutateRecs()
     } catch (e) {
       console.error(e)
@@ -1868,15 +1935,16 @@ return next
         // For approve/reject, refresh with validation
         const res = await fetch(`/api/v1/orchestrator/drs/recommendations?validate=true`)
         const validated = await res.json()
+
         mutateRecs(validated, false)
         setDrawerOpen(false)
       }
     } catch (e: any) {
       console.error('Error executing recommendation action:', e)
-      
+
       // Gérer les différents cas d'erreur
       const errorMsg = e.message || ''
-      
+
       if (errorMsg.includes('has moved') || errorMsg.includes('stale') || errorMsg.includes('does not exist') || errorMsg.includes('Configuration file')) {
         // VM a bougé ou n'existe plus sur le nœud source
         setDrawerOpen(false)
@@ -1911,6 +1979,7 @@ return next
 
   const handleExecuteAll = useCallback(async () => {
     setActionLoading('execute-all')
+
     try {
       for (const rec of pendingRecs) {
         try {
@@ -1920,6 +1989,7 @@ return next
           // Skip stale/moved/already-on-target — continue with next
         }
       }
+
       await mutateMigrations()
       await mutateRecs()
     } finally {
@@ -1929,12 +1999,14 @@ return next
 
   const handleClearRecs = useCallback(async () => {
     setActionLoading('clear-recs')
+
     try {
       for (const rec of pendingRecs) {
         try {
           await apiAction(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, 'POST')
         } catch {}
       }
+
       await mutateRecs()
     } finally {
       setActionLoading(null)
@@ -1983,8 +2055,10 @@ return next
     let totalMemSpreadPenalty = 0, totalCpuSpreadPenalty = 0
     let avgMemAll = 0, avgCpuAll = 0, avgImbalanceAll = 0
     let avgMemSpreadAll = 0, avgCpuSpreadAll = 0
+
     for (const c of clusters) {
       const b = computeDrsHealthScore(c.metrics?.summary, c.metrics?.nodes)
+
       healthSum += b.score
       totalMemPenalty += b.memPenalty
       totalCpuPenalty += b.cpuPenalty
@@ -2086,7 +2160,9 @@ return next
               <Stack spacing={0.75} sx={{ width: 160 }}>
                 {clusters.slice(0, 4).map((c, i) => {
                   const avgRam = c.metrics?.summary?.avg_memory_usage ?? 0
-                  return (
+
+
+return (
                     <Tooltip key={c.id} title={`${c.name} — RAM avg: ${avgRam.toFixed(1)}%`} arrow placement="left">
                       <Stack direction="row" alignItems="center" spacing={0.75}>
                         <Typography variant="caption" sx={{ minWidth: 70, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</Typography>
@@ -2120,9 +2196,12 @@ return next
               const scoreColor = globalStats.healthScore >= 85 ? theme.palette.success.main
                 : globalStats.healthScore >= 60 ? theme.palette.warning.main
                 : theme.palette.error.main
+
               const circumference = 2 * Math.PI * 14
               const dashLen = (globalStats.healthScore / 100) * circumference
-              return (
+
+
+return (
                 <Tooltip title={globalStats.breakdown ? (
                   <Box sx={{ fontSize: '0.75rem' }}>
                     <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.scoreCalculation')}</Typography>
@@ -2178,7 +2257,9 @@ return next
                           content={({ active, payload }) => {
                             if (!active || !payload?.[0]) return null
                             const d = payload[0].payload
-                            return (
+
+
+return (
                               <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, px: 1.5, py: 1, fontSize: 11, color: 'text.primary' }}>
                                 <Typography sx={{ fontSize: 10, fontWeight: 600, opacity: 0.5, mb: 0.5 }}>RAM</Typography>
                                 <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -2399,7 +2480,7 @@ return next
               </Select>
             </FormControl>
           )}
-          
+
           <AffinityRulesManager
             rules={affinityRules.filter(r => r.connectionId === selectedCluster)}
             vms={allVMs.filter(v => v.connectionId === selectedCluster)}
@@ -2458,8 +2539,8 @@ return next
             )}
 
             {/* ⚠️ Warning stockage local + vérification stockage cible */}
-            <StorageWarningPanel 
-              migrationCheck={migrationCheck} 
+            <StorageWarningPanel
+              migrationCheck={migrationCheck}
               loading={migrationCheckLoading}
               targetNode={selectedRec.target_node}
             />
@@ -2511,6 +2592,7 @@ return next
             {/* Cluster memory balance — all nodes, highlighting source/target */}
             {(() => {
               const clusterMetrics = (metricsData as any)?.[selectedRec.connection_id]
+
               if (!clusterMetrics?.nodes || clusterMetrics.nodes.length < 2) return null
               const nodes = (clusterMetrics.nodes as NodeMetrics[]).slice().sort((a, b) => b.memory_usage - a.memory_usage)
               const avgMem = nodes.reduce((s, n) => s + n.memory_usage, 0) / nodes.length

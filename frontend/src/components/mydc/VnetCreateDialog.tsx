@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -30,9 +31,11 @@ const NAME_REGEX = /^[a-z][a-z0-9-]{0,19}$/
 
 export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, onCreated }: Props) {
   const t = useTranslations()
+
   const initialVdc = useMemo(() => {
     if (defaultVdcId && vdcs.some(v => v.id === defaultVdcId)) return defaultVdcId
-    return vdcs[0]?.id ?? ''
+
+return vdcs[0]?.id ?? ''
   }, [vdcs, defaultVdcId])
 
   const [vdcId, setVdcId] = useState(initialVdc)
@@ -58,8 +61,10 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   // typed and the gateway field is still empty (don't fight manual edits).
   useEffect(() => {
     if (!cidrInfo) return
+
     if (!gateway) {
       const candidate = intToIp(cidrInfo.firstUsableInt)
+
       if (candidate && ipToInt(candidate) !== null) setGateway(candidate)
     }
   }, [cidrInfo, gateway])
@@ -71,13 +76,18 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const handleSubmit = async () => {
     if (!vdcId) {
       setError(t('myVdc.vnetSelectVdc'))
-      return
+
+return
     }
+
     if (!NAME_REGEX.test(displayName)) {
       setError(t('myVdc.errorInvalidName'))
-      return
+
+return
     }
+
     setSaving(true); setError(null)
+
     try {
       const subnet = {
         cidr,
@@ -86,6 +96,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
           ? dnsServers.split(',').map(s => s.trim()).filter(Boolean)
           : undefined,
       }
+
       const res = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/vnets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,7 +107,9 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
           subnet,
         }),
       })
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       onCreated()
       setDisplayName(''); setDescription(''); setFirewall(true)

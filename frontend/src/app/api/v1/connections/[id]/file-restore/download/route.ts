@@ -31,6 +31,7 @@ export async function GET(
     }
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "connection", pveId)
+
     if (denied) return denied
 
     const url = new URL(req.url)
@@ -124,6 +125,7 @@ export async function GET(
     // Pour les dossiers, PVE retourne une archive .tar.zst
     // Pour les fichiers, on garde le nom original
     let downloadFilename = filename
+
     if (isDirectory) {
       downloadFilename = `${filename}.tar.zst`
     }

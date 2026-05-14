@@ -34,6 +34,7 @@ export const SettingsProvider = props => {
     uiScale: 100, // UI scale percentage: 80-120
     // Data refresh interval (seconds): 5, 10, 30, 60, 300, 0 (off)
     refreshInterval: 30,
+
     // Login page background
     loginBackground: {
       type: 'gradient', // 'gradient' | 'image' | 'particles' | 'animated'

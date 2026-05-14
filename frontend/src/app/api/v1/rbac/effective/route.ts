@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/rbac/effective/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
@@ -14,6 +15,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 // Query params: user_id (optionnel, admin only), resource_type, resource_id
 export async function GET(req: NextRequest) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -59,11 +61,14 @@ export async function GET(req: NextRequest) {
       const allPerms = await prisma.rbacPermission.findMany({
         select: { id: true, name: true, category: true },
       })
+
       const superAdminAssignment = await prisma.rbacUserRole.findFirst({
         where: { userId: targetUserId, roleId: "role_super_admin" },
         select: { role: { select: { id: true, name: true, color: true } } },
       })
-      return NextResponse.json({
+
+
+return NextResponse.json({
         data: {
           user_id: targetUserId,
           is_super_admin: true,
@@ -87,6 +92,7 @@ export async function GET(req: NextRequest) {
             scope_target: null,
           })),
           scope_types: ["global"],
+
           // Super admins never carry widget denylists — they see everything.
           hidden_widgets: [],
         },
@@ -132,10 +138,12 @@ export async function GET(req: NextRequest) {
     // Ajouter les permissions via les rôles
     for (const ur of userRoles) {
       const matches = checkScopeMatch(ur.scopeType, ur.scopeTarget, resourceType, resourceId)
+
       if (!matches) continue
 
       for (const rp of ur.role.permissions) {
         const perm = rp.permission
+
         if (!effectivePermissions.has(perm.name)) {
           effectivePermissions.add(perm.name)
           permissionDetails.push({
@@ -154,6 +162,7 @@ export async function GET(req: NextRequest) {
     // Ajouter les permissions directes
     for (const dp of directPermissions) {
       const matches = checkScopeMatch(dp.scopeType, dp.scopeTarget, resourceType, resourceId)
+
       if (matches && !effectivePermissions.has(dp.permission.name)) {
         effectivePermissions.add(dp.permission.name)
         permissionDetails.push({

@@ -37,6 +37,7 @@ function StorageContentGroup({ group, formatBytes: fmt, onUpload, onDelete, onDo
     if (!deleteTarget || !onDelete) return
     setDeleting(true)
     setDeleteError(null)
+
     try {
       await onDelete(deleteTarget.volid)
       setDeleteTarget(null)
@@ -49,27 +50,36 @@ function StorageContentGroup({ group, formatBytes: fmt, onUpload, onDelete, onDo
 
   const filtered = React.useMemo(() => {
     let items = group.items
+
     if (search.trim()) {
       const q = search.toLowerCase()
+
       items = items.filter((item: any) => {
         const volid = String(item.volid || '').toLowerCase()
         const vmid = item.vmid ? String(item.vmid) : ''
         const vmName = (item.vmid && vmNames?.[String(item.vmid)]) ? vmNames[String(item.vmid)].toLowerCase() : ''
-        return volid.includes(q) || vmid.includes(q) || vmName.includes(q)
+
+
+return volid.includes(q) || vmid.includes(q) || vmName.includes(q)
       })
     }
+
     if (sortDir) {
       items = [...items].sort((a: any, b: any) =>
         sortDir === 'asc' ? (a.size || 0) - (b.size || 0) : (b.size || 0) - (a.size || 0)
       )
     }
-    return items
+
+
+return items
   }, [group.items, search, sortDir])
 
   const getFileName = (volid: string) => {
     const parts = String(volid || '').split(':')
     const volPath = parts.length > 1 ? parts.slice(1).join(':') : volid
-    return volPath?.split('/')?.pop() || volPath
+
+
+return volPath?.split('/')?.pop() || volPath
   }
 
   return (

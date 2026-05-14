@@ -38,14 +38,14 @@ function formatHHMM(tsSec: number) {
   const hh = String(d.getHours()).padStart(2, "0")
   const mm = String(d.getMinutes()).padStart(2, "0")
 
-  
+
 return `${hh}:${mm}`
 }
 
 function rrdHasCpuOrMem(rrd: any[]) {
   const arr = Array.isArray(rrd) ? rrd : []
 
-  
+
 return arr.some(
     p =>
       p &&
@@ -91,7 +91,7 @@ function toTrendPoints(rrd: any[]) {
 function singlePointNow(cpuPct: number, ramPct: number) {
   const now = Math.floor(Date.now() / 1000)
 
-  
+
 return [{ t: formatHHMM(now), cpu: cpuPct, ram: ramPct }]
 }
 
@@ -144,6 +144,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
   if (denied) return denied
 
   const debug = req.headers.get("x-debug") === "1"
@@ -180,7 +181,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
       if (!type || !node || !vmid) {
         entry.steps.push({ step: "validate", ok: false })
-        
+
 return { key, data: [], entry }
       }
 
@@ -208,7 +209,7 @@ return { key, data: [], entry }
           const data = toTrendPoints(rrd)
 
           entry.steps.push({ step: "use_rrd", ok: true, outPoints: data.length })
-          
+
 return { key, data, entry }
         }
 
@@ -223,7 +224,7 @@ return { key, data, entry }
         const data = singlePointNow(cur.cpuPct, cur.ramPct)
 
         entry.steps.push({ step: "status_current", ok: true, cpu: cur.cpuPct, ram: cur.ramPct })
-        
+
 return { key, data, entry }
       } catch (e: any) {
         entry.steps.push({ step: "status_current_error", ok: false, err: String(e?.message ?? e) })
@@ -232,7 +233,7 @@ return { key, data, entry }
       // 3) fallback /guests (interne) - SKIP this as it's very slow
       // Just return empty data instead of calling the slow /guests endpoint
       entry.steps.push({ step: "fallback_skipped", ok: false })
-      
+
 return { key, data: [], entry }
     })
   )
@@ -246,6 +247,6 @@ return { key, data: [], entry }
   }
 
   if (debug) return NextResponse.json({ data: out, debug: { appBaseUrl, items: dbg } })
-  
+
 return NextResponse.json({ data: out })
 }

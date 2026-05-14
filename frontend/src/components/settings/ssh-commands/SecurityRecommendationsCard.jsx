@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import {
@@ -20,7 +21,8 @@ import { buildSudoersTemplate, buildInstallCommand } from './sudoersTemplate'
 
 const fetcher = url => fetch(url).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return r.json()
+
+return r.json()
 })
 
 const SETUP_BASH = `# Run on every PVE node (adapt the public key to yours)
@@ -72,7 +74,8 @@ export default function SecurityRecommendationsCard() {
 
   const { body: templateBody, shellWrappedCount } = useMemo(() => {
     if (!data?.categories) return { body: '', shellWrappedCount: 0 }
-    return buildSudoersTemplate(data.categories)
+
+return buildSudoersTemplate(data.categories)
   }, [data])
 
   const installCommand = useMemo(

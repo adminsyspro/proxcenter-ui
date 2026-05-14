@@ -1,6 +1,7 @@
 'use client'
 
 import { Box, ThemeProvider, createTheme, useTheme } from '@mui/material'
+
 import LoginBackground from '@components/LoginBackground'
 import LoginFormPanel from './LoginFormPanel'
 

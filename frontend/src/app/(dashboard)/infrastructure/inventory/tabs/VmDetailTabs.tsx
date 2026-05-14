@@ -1,10 +1,12 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { useTranslations, useLocale } from 'next-intl'
+
 import dynamic from 'next/dynamic'
+
+import { useTranslations, useLocale } from 'next-intl'
 import DOMPurify from 'dompurify'
-import ExpandableChart from '../components/ExpandableChart'
+
 
 import {
   Alert,
@@ -57,6 +59,8 @@ import {
   useTheme,
 } from '@mui/material'
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
+import ExpandableChart from '../components/ExpandableChart'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -66,6 +70,7 @@ import RestoreVmDialog from '@/components/backup/RestoreVmDialog'
 import ChangeTrackingTab from './ChangeTrackingTab'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useRBAC } from '@/contexts/RBACContext'
+
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
 const AddNetworkDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddNetworkDialog })), { ssr: false })
 const EditDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditDiskDialog })), { ssr: false })
@@ -141,9 +146,11 @@ export default function VmDetailTabs(props: any) {
   const t = useTranslations()
   const locale = useLocale()
   const theme = useTheme()
+
   // Replication and HA are provider-scope operations (cluster-wide resource
   // planning, node failover policies) — hide their tabs from tenants.
   const { isAdmin } = useRBAC()
+
   // Tenant-only: live vDC quota banner on the Hardware tab so the user
   // sees the impact of CPU/RAM tweaks before hitting Save (the server still
   // returns 409 if the projected usage exceeds the quota; this is purely
@@ -162,17 +169,26 @@ export default function VmDetailTabs(props: any) {
   useEffect(() => {
     if (!vmConnId || tenantLoading || isProviderTenant) {
       setVdcQuota(null); setVdcUsage(null)
-      return
+
+return
     }
+
     let cancelled = false
+
     void (async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
-        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
+
+        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ;
+
+return }
+
         const json = await res.json()
         const vdcs: any[] = Array.isArray(json?.data) ? json.data : []
         const match = vdcs.find(v => v.connectionId === vmConnId || v.connection_id === vmConnId)
+
         if (cancelled) return
+
         if (match?.quota) {
           setVdcQuota({
             maxVcpus: match.quota.maxVcpus ?? null,
@@ -193,21 +209,29 @@ export default function VmDetailTabs(props: any) {
         if (!cancelled) { setVdcQuota(null); setVdcUsage(null) }
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [vmConnId, tenantLoading, isProviderTenant])
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const [cpuFlagsOpen, setCpuFlagsOpen] = useState(false)
   const [hwSections, setHwSections] = useState<Set<string>>(new Set(['cpu', 'memory', 'system', 'disks', 'network', 'other']))
+
   const toggleHwSection = (section: string) => setHwSections(prev => {
     const next = new Set(prev)
+
     if (next.has(section)) next.delete(section)
     else next.add(section)
-    return next
+
+return next
   })
+
   const [expandedVmBackupGroups, setExpandedVmBackupGroups] = useState<Set<string>>(new Set())
+
   // Namespace filter for the BACKUP tab. 'all' shows every namespace, otherwise
   // limits the listing to the chosen one. Reset when a different VM is selected.
   const [vmBackupNamespaceFilter, setVmBackupNamespaceFilter] = useState<string>('all')
+
   // Per-backup restore dialog (Backup tab). Null when closed.
   const [restoreDialog, setRestoreDialog] = useState<{ backup: any } | null>(null)
   const [bootOrderOpen, setBootOrderOpen] = useState(false)
@@ -408,8 +432,10 @@ export default function VmDetailTabs(props: any) {
   // root first. Drives the dropdown above the BACKUP list.
   const availableBackupNamespaces = useMemo<string[]>(() => {
     const set = new Set<string>()
+
     for (const b of backups || []) set.add(b.namespace || '')
-    return Array.from(set).sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
+
+return Array.from(set).sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
   }, [backups])
 
   // Reset the filter to 'all' as soon as it points to a namespace that is no
@@ -619,7 +645,8 @@ export default function VmDetailTabs(props: any) {
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={25} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#2196f3', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
@@ -627,7 +654,11 @@ export default function VmDetailTabs(props: any) {
                                         <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
-                                        {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                        {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                                           <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
@@ -657,7 +688,8 @@ export default function VmDetailTabs(props: any) {
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={25} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
@@ -665,7 +697,11 @@ export default function VmDetailTabs(props: any) {
                                         <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
-                                        {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                        {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                                           <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>Memory</Typography>
@@ -699,7 +735,8 @@ export default function VmDetailTabs(props: any) {
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
@@ -742,7 +779,8 @@ export default function VmDetailTabs(props: any) {
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: '#ef4444' }} />
@@ -835,7 +873,9 @@ export default function VmDetailTabs(props: any) {
                         const currentRamMb = (data?.memoryInfo?.memory ?? memory) as number
                         const newRamMb = (memory ?? currentRamMb) as number
                         const ramDelta = Math.max(0, newRamMb - currentRamMb)
-                        return (
+
+
+return (
                           <VdcQuotaBanner
                             quota={vdcQuota}
                             usage={vdcUsage}
@@ -853,8 +893,10 @@ export default function VmDetailTabs(props: any) {
                         // network, disks, etc.) — not just the CPU+memory subset we
                         // were manually tracking before.
                         const revertKeys = data?.pendingKeys as string[] | undefined
+
                         if (!revertKeys || revertKeys.length === 0) return null
-                        return (
+
+return (
                           <Button
                             fullWidth
                             variant="contained"
@@ -862,6 +904,7 @@ export default function VmDetailTabs(props: any) {
                             onClick={async () => {
                               try {
                                 const { connId, node, type, vmid } = parseVmId(selection?.id || '')
+
                                 await fetch(
                                   `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
                                   {
@@ -905,11 +948,11 @@ export default function VmDetailTabs(props: any) {
                           </Box>
                           <Collapse in={hwSections.has('cpu')}>
                           <CardContent>
-                          
+
                           {/* Avertissement si config CPU en attente de reboot */}
                           {data?.cpuInfo?.pending && (
-                            <Alert 
-                              severity="warning" 
+                            <Alert
+                              severity="warning"
                               sx={{ mb: 2 }}
                               icon={<i className="ri-restart-line" style={{ fontSize: 20 }} />}
                             >
@@ -925,14 +968,16 @@ export default function VmDetailTabs(props: any) {
                               </Typography>
                             </Alert>
                           )}
-                          
+
                           {/* Sockets & Cores côte à côte */}
                           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
                             {/* Sockets */}
                             {(() => {
                               const maxSockets = data.nodeCapacity?.hostSockets || 4
                               const marks = Array.from({ length: maxSockets }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
-                              return (
+
+
+return (
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
@@ -975,13 +1020,16 @@ export default function VmDetailTabs(props: any) {
                               {(() => {
                                 const hostCores = data.nodeCapacity?.maxCpu || 32
                                 const sliderMax = Math.min(hostCores, 64)
+
                                 const marks = [
                                   { value: 1, label: '1' },
                                   ...(sliderMax >= 8 ? [{ value: Math.floor(sliderMax / 4), label: String(Math.floor(sliderMax / 4)) }] : []),
                                   ...(sliderMax >= 16 ? [{ value: Math.floor(sliderMax / 2), label: String(Math.floor(sliderMax / 2)) }] : []),
                                   { value: sliderMax, label: String(sliderMax) },
                                 ]
-                                return (
+
+
+return (
                                   <Slider
                                     value={Math.min(cpuCores, sliderMax)}
                                     onChange={(_, val) => setCpuCores(Math.round(val as number))}
@@ -1145,7 +1193,9 @@ export default function VmDetailTabs(props: any) {
                           {/* Extra CPU Flags (collapsible) */}
                           {(() => {
                             const activeCount = Object.keys(cpuFlags).length
-                            return (
+
+
+return (
                             <Box sx={{ mb: 2, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                               <Box
                                 onClick={() => setCpuFlagsOpen(!cpuFlagsOpen)}
@@ -1178,7 +1228,9 @@ export default function VmDetailTabs(props: any) {
                                     { flag: 'aes', desc: t('inventory.cpuFlagDesc.aes') },
                                   ] as const).map(({ flag, desc }) => {
                                     const val = cpuFlags[flag] || 'default'
-                                    return (
+
+
+return (
                                     <MuiTooltip key={flag} title={desc} placement="top" arrow>
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <ToggleButtonGroup
@@ -1189,12 +1241,15 @@ export default function VmDetailTabs(props: any) {
                                             if (!v) return
                                             setCpuFlags((prev: Record<string, '+' | '-'>) => {
                                               const next = { ...prev }
+
                                               if (v === 'default') {
                                                 delete next[flag]
                                               } else {
                                                 next[flag] = v
                                               }
-                                              return next
+
+
+return next
                                             })
                                           }}
                                           sx={{ height: 28 }}
@@ -1271,11 +1326,11 @@ export default function VmDetailTabs(props: any) {
                           </Box>
                           <Collapse in={hwSections.has('memory')}>
                           <CardContent>
-                          
+
                           {/* Avertissement si config RAM en attente de reboot */}
                           {data?.memoryInfo?.pending && (
-                            <Alert 
-                              severity="warning" 
+                            <Alert
+                              severity="warning"
                               sx={{ mb: 2 }}
                               icon={<i className="ri-restart-line" style={{ fontSize: 20 }} />}
                             >
@@ -1289,7 +1344,7 @@ export default function VmDetailTabs(props: any) {
                               </Typography>
                             </Alert>
                           )}
-                          
+
                           {/* RAM Slider */}
                           <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -1318,17 +1373,21 @@ export default function VmDetailTabs(props: any) {
                               const hostMemGb = Math.floor((data.nodeCapacity?.maxMem || 64 * 1024 * 1024 * 1024) / (1024 * 1024 * 1024))
                               const sliderMax = Math.min(hostMemGb, 128)
                               const step = 1
+
                               const marks = [
                                 { value: 1, label: '1' },
                                 ...(sliderMax >= 16 ? [{ value: Math.floor(sliderMax / 4), label: `${Math.floor(sliderMax / 4)}` }] : []),
                                 ...(sliderMax >= 32 ? [{ value: Math.floor(sliderMax / 2), label: `${Math.floor(sliderMax / 2)}` }] : []),
                                 { value: sliderMax, label: `${sliderMax}` },
                               ]
-                              return (
+
+
+return (
                                 <Slider
                                   value={Math.min(memory / 1024, sliderMax)}
                                   onChange={(_, val) => {
                                     const newMem = Math.round(val as number) * 1024
+
                                     setMemory(newMem)
                                     if (balloonEnabled && balloon > newMem) setBalloon(newMem)
                                   }}
@@ -1735,6 +1794,7 @@ export default function VmDetailTabs(props: any) {
                                         rate: net.rate,
                                         mtu: net.mtu,
                                         queues: net.queues,
+
                                         // LXC-only — pre-populate when opening on a container
                                         name: net.name,
                                         ip: net.ip,
@@ -1843,9 +1903,12 @@ export default function VmDetailTabs(props: any) {
                                   audio: 'ri-volume-up-line',
                                   rng: 'ri-shuffle-line',
                                 }
+
+
                                 // efidisk and tpmstate are VM firmware devices — Proxmox does not
                                 // expose an edit UI for them either, so we keep them read-only here.
                                 const isEditable = ['usb', 'pci', 'serial', 'audio', 'rng'].includes(hw.type)
+
                                 const openEdit = () => {
                                   setSelectedOtherHardware({
                                     id: hw.id,
@@ -1855,7 +1918,9 @@ export default function VmDetailTabs(props: any) {
                                   })
                                   setEditOtherHardwareDialogOpen(true)
                                 }
-                                return (
+
+
+return (
                                   <ListItem
                                     key={idx}
                                     onClick={isEditable ? openEdit : undefined}
@@ -1962,18 +2027,22 @@ export default function VmDetailTabs(props: any) {
                                       type: 'vga',
                                       value: (() => {
                                         const vga = data.systemInfo.vga || 'std'
+
                                         const vgaLabels: Record<string, string> = {
                                           std: 'Default (std)', cirrus: 'Cirrus Logic', vmware: 'VMware compatible',
                                           qxl: 'SPICE (qxl)', serial0: 'Serial terminal 0', serial1: 'Serial terminal 1',
                                           serial2: 'Serial terminal 2', serial3: 'Serial terminal 3',
                                           virtio: 'VirtIO-GPU', 'virtio-gl': 'VirtIO-GPU (virgl)', none: 'None',
                                         }
+
                                         const parts = vga.split(',').map((p: string) => p.trim()).filter(Boolean)
                                         const typeKey = parts[0] || 'std'
                                         const label = vgaLabels[typeKey] || typeKey
                                         const memPart = parts.slice(1).find((p: string) => p.startsWith('memory='))
                                         const mem = memPart ? Number.parseInt(memPart.split('=')[1], 10) : Number.NaN
-                                        return Number.isFinite(mem) ? `${label} · ${mem} MB` : label
+
+
+return Number.isFinite(mem) ? `${label} · ${mem} MB` : label
                                       })(),
                                       editValue: data.systemInfo.vga || 'std',
                                       options: [
@@ -1991,12 +2060,15 @@ export default function VmDetailTabs(props: any) {
                                       label: t('inventory.scsiController'),
                                       value: (() => {
                                         const hw = data.systemInfo.scsihw || 'virtio-scsi-single'
+
                                         const labels: Record<string, string> = {
                                           'lsi': 'LSI 53C895A', 'lsi53c810': 'LSI 53C810',
                                           'megasas': 'MegaRAID SAS 8708EM2', 'pvscsi': 'VMware PVSCSI',
                                           'virtio-scsi-pci': 'VirtIO SCSI', 'virtio-scsi-single': 'VirtIO SCSI single',
                                         }
-                                        return labels[hw] || hw
+
+
+return labels[hw] || hw
                                       })(),
                                       editValue: data.systemInfo.scsihw || 'virtio-scsi-single',
                                       options: [
@@ -2059,6 +2131,7 @@ export default function VmDetailTabs(props: any) {
                         onClick={async () => {
                           try {
                             const { connId, node, type, vmid } = parseVmId(selection?.id || '')
+
                             await fetch(
                               `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
                               {
@@ -2081,13 +2154,17 @@ export default function VmDetailTabs(props: any) {
                       // value cell. Defined once here and used by each row below.
                       const pv = data?.optionsInfo?.pendingValues || {}
                       const isPending = (key: string) => pv[key] !== undefined
+
                       const pendingRowStyle = (key: string): React.CSSProperties => isPending(key)
                         ? { borderLeft: '3px solid #ed6c02', backgroundColor: 'rgba(237, 108, 2, 0.06)' }
                         : {}
+
                       const pendingChip = (key: string) => isPending(key)
                         ? <MuiTooltip title={t('inventory.pendingRestart')} arrow placement="top"><span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', alignItems: 'center', cursor: 'default' }}><i className="ri-error-warning-fill" style={{ fontSize: 14, color: '#ed6c02' }}></i></span></MuiTooltip>
                         : null
-                      return (
+
+
+return (
                     <Card variant="outlined" sx={{ borderRadius: 2 }}>
                       <CardContent sx={{ p: 0 }}>
                         <Box sx={{ overflowX: 'auto' }}>
@@ -2153,7 +2230,7 @@ export default function VmDetailTabs(props: any) {
                                       localTags.map(tag => {
                                         const c = getTagColor(tag).bg
 
-                                        
+
 return (
                                           <Chip
                                             key={tag}
@@ -2268,8 +2345,10 @@ return (
                                   {(() => {
                                     const boot = data.optionsInfo?.bootOrder || ''
                                     const match = boot.match(/order=(.+)/)
+
                                     if (!match) return boot || t('common.noData')
-                                    return match[1].split(';').map((d: string, i: number) => (
+
+return match[1].split(';').map((d: string, i: number) => (
                                       <Chip key={d} label={d} size="small" sx={{ mr: 0.5, height: 22, fontSize: '0.75rem', fontFamily: 'monospace' }}
                                         icon={<Typography variant="caption" sx={{ fontWeight: 700, ml: 0.5, minWidth: 14, textAlign: 'center' }}>{i + 1}</Typography>}
                                       />
@@ -2284,12 +2363,16 @@ return (
                                       const boot = data.optionsInfo?.bootOrder || ''
                                       const match = boot.match(/order=(.+)/)
                                       const enabledDevices = match ? match[1].split(';') : []
+
                                       const allDeviceIds = [
                                         ...(data.disksInfo || []).filter((d: any) => !d.isUnused).map((d: any) => d.id),
                                         ...(data.networkInfo || []).map((n: any) => n.id),
                                       ]
+
+
                                       // Enabled devices first (in order), then remaining devices (disabled)
                                       const ordered: Array<{ id: string; enabled: boolean }> = []
+
                                       enabledDevices.forEach(id => {
                                         if (allDeviceIds.includes(id)) ordered.push({ id, enabled: true })
                                       })
@@ -2626,7 +2709,7 @@ return (
                           {t('common.refresh')}
                         </Button>
                       </Box>
-                      
+
                       {/* Loading */}
                       {tasksLoading && tasks.length === 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2774,7 +2857,7 @@ return (
                       </Box>
                     </Box>
                   )}
-                  
+
                   {/* Loading */}
                   {backupsLoading && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -2843,8 +2926,10 @@ return (
 
                     // Group by pbsName/datastore
                     const groupMap = new Map<string, any[]>()
+
                     for (const backup of visibleBackups) {
                       const groupKey = `${backup.pbsName || 'PBS'}/${backup.datastore || 'default'}`
+
                       if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
                       groupMap.get(groupKey)!.push(backup)
                     }
@@ -2873,9 +2958,11 @@ return (
                                   onClick={() => {
                                     setExpandedVmBackupGroups(prev => {
                                       const next = new Set(prev)
+
                                       if (next.has(groupId)) next.delete(groupId)
                                       else next.add(groupId)
-                                      return next
+
+return next
                                     })
                                   }}
                                   sx={{
@@ -3068,8 +3155,8 @@ return (
                           {/* Sélecteur de storage PVE */}
                           {!explorerLoading && !explorerArchive && compatibleStorages.length > 0 && !selectedPveStorage && (
                             <Box sx={{ mb: 2 }}>
-                              <Alert 
-                                severity={compatibleStorages[0]?.matchType === 'exact' ? 'success' : 'info'} 
+                              <Alert
+                                severity={compatibleStorages[0]?.matchType === 'exact' ? 'success' : 'info'}
                                 sx={{ mb: 2 }}
                               >
                                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
@@ -3087,9 +3174,9 @@ return (
                                       sx={{ borderRadius: 1 }}
                                     >
                                       <ListItemIcon sx={{ minWidth: 36 }}>
-                                        <i className="ri-database-2-line" style={{ 
-                                          color: storage.matchType === 'exact' ? '#66BB6A' : '#42A5F5', 
-                                          fontSize: 20 
+                                        <i className="ri-database-2-line" style={{
+                                          color: storage.matchType === 'exact' ? '#66BB6A' : '#42A5F5',
+                                          fontSize: 20
                                         }} />
                                       </ListItemIcon>
                                       <ListItemText
@@ -3242,17 +3329,17 @@ return (
                                   const canDownload = explorerMode === 'pve' && selectedPveStorage
                                   const canPreviewFile = canDownload && !isNavigable && canPreview(file.name)
 
-                                  
+
 return (
-                                    <ListItem 
-                                      key={idx} 
+                                    <ListItem
+                                      key={idx}
                                       disablePadding
                                       secondaryAction={
                                         canDownload && (
                                           <Stack direction="row" spacing={0}>
                                             {canPreviewFile && (
                                               <MuiTooltip title={t('common.view')}>
-                                                <IconButton 
+                                                <IconButton
                                                   size="small"
                                                   onClick={(e) => {
                                                     e.stopPropagation()
@@ -3264,8 +3351,8 @@ return (
                                               </MuiTooltip>
                                             )}
                                             <MuiTooltip title={t('common.download')}>
-                                              <IconButton 
-                                                edge="end" 
+                                              <IconButton
+                                                edge="end"
                                                 size="small"
                                                 onClick={(e) => {
                                                   e.stopPropagation()
@@ -3294,7 +3381,7 @@ return (
                                         <ListItemText
                                           primary={file.name}
                                           secondary={
-                                            file.sizeFormatted && file.sizeFormatted !== '0 B' 
+                                            file.sizeFormatted && file.sizeFormatted !== '0 B'
                                               ? file.sizeFormatted
                                               : isNavigable ? t('inventory.folder') : '-'
                                           }
@@ -3350,8 +3437,8 @@ return (
                           {t('inventory.tabs.snapshots')}
                         </Typography>
                         {snapshots.length > 0 && (
-                          <Chip 
-                            size="small" 
+                          <Chip
+                            size="small"
                             label={`${snapshots.filter(s => s.name !== 'current').length} snapshot${snapshots.filter(s => s.name !== 'current').length > 1 ? 's' : ''}`}
                             sx={{ height: 20, fontSize: '0.7rem' }}
                           />
@@ -3477,22 +3564,22 @@ return (
                       ) : (
                         <Box sx={{ position: 'relative' }}>
                           {/* Ligne de timeline */}
-                          <Box sx={{ 
-                            position: 'absolute', 
-                            left: 19, 
-                            top: 24, 
-                            bottom: 24, 
-                            width: 2, 
+                          <Box sx={{
+                            position: 'absolute',
+                            left: 19,
+                            top: 24,
+                            bottom: 24,
+                            width: 2,
                             bgcolor: 'divider',
                             borderRadius: 1
                           }} />
-                          
+
                           {/* État actuel (current) */}
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 1, position: 'relative' }}>
-                            <Box sx={{ 
-                              width: 40, 
-                              height: 40, 
-                              borderRadius: '50%', 
+                            <Box sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: '50%',
                               bgcolor: 'success.main',
                               display: 'flex',
                               alignItems: 'center',
@@ -3520,24 +3607,24 @@ return (
                             .map((snap, idx, arr) => {
                               const isOldest = idx === arr.length - 1
 
-                              
+
 return (
-                                <Box 
+                                <Box
                                   key={snap.name}
-                                  sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'flex-start', 
-                                    gap: 2, 
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: 2,
                                     mb: 1,
                                     position: 'relative',
                                     '&:hover .snapshot-actions': { opacity: 1 }
                                   }}
                                 >
                                   {/* Point de timeline */}
-                                  <Box sx={{ 
-                                    width: 40, 
-                                    height: 40, 
-                                    borderRadius: '50%', 
+                                  <Box sx={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: '50%',
                                     bgcolor: snap.vmstate ? 'info.main' : 'background.paper',
                                     border: '2px solid',
                                     borderColor: snap.vmstate ? 'info.main' : 'divider',
@@ -3549,12 +3636,12 @@ return (
                                   }}>
                                     <i className={snap.vmstate ? "ri-save-3-fill" : "ri-camera-fill"} style={{ fontSize: 18 }} />
                                   </Box>
-                                  
+
                                   {/* Contenu */}
-                                  <Card 
-                                    variant="outlined" 
-                                    sx={{ 
-                                      flex: 1, 
+                                  <Card
+                                    variant="outlined"
+                                    sx={{
+                                      flex: 1,
                                       bgcolor: 'transparent',
                                       '&:hover': { bgcolor: 'action.hover' }
                                     }}
@@ -3567,24 +3654,24 @@ return (
                                               {snap.name}
                                             </Typography>
                                             {snap.vmstate && (
-                                              <Chip 
-                                                size="small" 
-                                                label="RAM" 
+                                              <Chip
+                                                size="small"
+                                                label="RAM"
                                                 color="info"
                                                 icon={<i className="ri-ram-line" style={{ fontSize: 12 }} />}
-                                                sx={{ height: 20, fontSize: '0.65rem' }} 
+                                                sx={{ height: 20, fontSize: '0.65rem' }}
                                               />
                                             )}
                                             {isOldest && (
-                                              <Chip 
-                                                size="small" 
+                                              <Chip
+                                                size="small"
                                                 label={t('inventory.oldest')}
                                                 variant="outlined"
-                                                sx={{ height: 20, fontSize: '0.65rem' }} 
+                                                sx={{ height: 20, fontSize: '0.65rem' }}
                                               />
                                             )}
                                           </Box>
-                                          
+
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                                             <Typography variant="caption" sx={{ opacity: 0.6, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                               <i className="ri-time-line" style={{ fontSize: 12 }} />
@@ -3600,11 +3687,11 @@ return (
                                             )}
                                           </Box>
                                         </Box>
-                                        
+
                                         {/* Actions */}
-                                        <Stack 
-                                          direction="row" 
-                                          spacing={0.5} 
+                                        <Stack
+                                          direction="row"
+                                          spacing={0.5}
                                           className="snapshot-actions"
                                           sx={{ opacity: { xs: 1, md: 0 }, transition: 'opacity 0.2s' }}
                                         >
@@ -3806,9 +3893,9 @@ return (
                                       </Box>
                                     </TableCell>
                                     <TableCell>
-                                      <Chip 
-                                        size="small" 
-                                        label={job.schedule || '*/15'} 
+                                      <Chip
+                                        size="small"
+                                        label={job.schedule || '*/15'}
                                         sx={{ height: 22, fontSize: 11 }}
                                       />
                                     </TableCell>
@@ -3825,25 +3912,25 @@ return (
                                     <TableCell align="center">
                                       {job.error ? (
                                         <MuiTooltip title={typeof job.error === 'string' ? job.error : JSON.stringify(job.error)}>
-                                          <Chip 
-                                            size="small" 
-                                            label={t('replication.error')} 
+                                          <Chip
+                                            size="small"
+                                            label={t('replication.error')}
                                             color="error"
                                             icon={<i className="ri-error-warning-fill" style={{ fontSize: 14 }} />}
                                             sx={{ height: 22 }}
                                           />
                                         </MuiTooltip>
                                       ) : job.disable ? (
-                                        <Chip 
-                                          size="small" 
-                                          label={t('common.disabled')} 
+                                        <Chip
+                                          size="small"
+                                          label={t('common.disabled')}
                                           color="default"
                                           sx={{ height: 22 }}
                                         />
                                       ) : (
-                                        <Chip 
-                                          size="small" 
-                                          label={t('replication.active')} 
+                                        <Chip
+                                          size="small"
+                                          label={t('replication.active')}
                                           color="success"
                                           icon={<i className="ri-checkbox-circle-fill" style={{ fontSize: 14 }} />}
                                           sx={{ height: 22 }}
@@ -3861,6 +3948,7 @@ return (
                                               setReplicationLogJob(job)
                                               setReplicationLogOpen(true)
                                               setReplicationLogLoading(true)
+
                                               try {
                                                 const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(job.id)}?limit=200`, { cache: 'no-store' })
 
@@ -3886,6 +3974,7 @@ return (
                                             size="small"
                                             onClick={async () => {
                                               const { connId, node } = parseVmId(selection?.id || '')
+
                                               try {
                                                 await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(job.id)}/schedule_now`, {
                                                   method: 'POST'
@@ -3932,8 +4021,8 @@ return (
 
 
                   {/* Dialog Ajouter Réplication ZFS */}
-                  <Dialog 
-                    open={addReplicationDialogOpen} 
+                  <Dialog
+                    open={addReplicationDialogOpen}
                     onClose={() => setAddReplicationDialogOpen(false)}
                     maxWidth="sm"
                     fullWidth
@@ -4021,11 +4110,13 @@ return (
                           if (!selection?.id || !replicationTargetNode) return
                           setSavingReplication(true)
                           const { connId, node, vmid } = parseVmId(selection.id)
+
                           try {
                             const body: any = {
                               target: replicationTargetNode,
                               schedule: replicationSchedule,
                             }
+
                             if (replicationRateLimit) body.rate = replicationRateLimit
                             if (replicationComment) body.comment = replicationComment
 
@@ -4034,7 +4125,7 @@ return (
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ ...body, guest: vmid }),
                             })
-                            
+
                             if (res.ok) {
                               setAddReplicationDialogOpen(false)
                               setReplicationLoaded(false)
@@ -4052,8 +4143,8 @@ return (
                   </Dialog>
 
                   {/* Dialog Confirmer suppression */}
-                  <Dialog 
-                    open={!!deleteReplicationId} 
+                  <Dialog
+                    open={!!deleteReplicationId}
                     onClose={() => setDeleteReplicationId(null)}
                     maxWidth="xs"
                     fullWidth
@@ -4077,6 +4168,7 @@ return (
                         onClick={async () => {
                           if (!selection?.id || !deleteReplicationId) return
                           const { connId, node } = parseVmId(selection.id)
+
                           try {
                             await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(deleteReplicationId)}`, {
                               method: 'DELETE',
@@ -4237,7 +4329,9 @@ return (
                                 .sort(([a], [b]) => {
                                   const na = Number.parseInt(a.replaceAll('ipconfig', ''))
                                   const nb = Number.parseInt(b.replaceAll('ipconfig', ''))
-                                  return na - nb
+
+
+return na - nb
                                 })
                                 .map(([key, val]: [string, any]) => (
                                 <tr key={key}>
@@ -4339,6 +4433,7 @@ return (
                     default: return 'default'
                   }
                 }
+
                 const failbackOn = haConfig && Number(haConfig.failback ?? 1) === 1
 
                 return (
@@ -4658,8 +4753,10 @@ return (
                   setBootDevices(prev => {
                     const next = [...prev]
                     const [moved] = next.splice(dragIdx, 1)
+
                     next.splice(idx, 0, moved)
-                    return next
+
+return next
                   })
                   setDragIdx(null)
                 }}
@@ -4708,18 +4805,23 @@ return (
             onClick={async () => {
               if (!selection) return
               setBootSaving(true)
+
               try {
                 const { connId, node, type, vmid } = parseVmId(selection.id)
                 const enabledIds = bootDevices.filter(d => d.enabled).map(d => d.id)
                 const bootValue = enabledIds.length > 0 ? `order=${enabledIds.join(';')}` : ''
+
                 const res = await fetch(
                   `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
                   { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ boot: bootValue }) }
                 )
+
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}))
+
                   throw new Error(err?.error || `HTTP ${res.status}`)
                 }
+
                 setBootOrderOpen(false)
                 if (refreshData) await refreshData()
               } catch (e: any) {
@@ -4735,7 +4837,9 @@ return (
       </Dialog>
       {restoreDialog && selection?.type === 'vm' && (() => {
         const { connId, node, type, vmid } = parseVmId(selection.id)
-        return (
+
+
+return (
           <RestoreVmDialog
             open
             onClose={() => setRestoreDialog(null)}

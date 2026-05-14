@@ -23,6 +23,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
   if (denied) return denied
 
   const conn = getConnection(id)

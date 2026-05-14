@@ -12,6 +12,7 @@ import {
 import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 import { ComposedChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { NetworkMetrics } from '../types'

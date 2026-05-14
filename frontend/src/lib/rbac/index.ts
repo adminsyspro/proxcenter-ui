@@ -92,22 +92,28 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
   // namespace using the empty string sentinel.
   const map = new Map<string, { scopeType: string; scopeTarget: string | null; permissions: Set<string> }>()
   const keyOf = (st: string, tgt: string | null) => `${st}:${tgt ?? ""}`
+
   const upsert = (scopeType: string, scopeTarget: string | null) => {
     const k = keyOf(scopeType, scopeTarget)
     let entry = map.get(k)
+
     if (!entry) {
       entry = { scopeType, scopeTarget, permissions: new Set<string>() }
       map.set(k, entry)
     }
-    return entry
+
+
+return entry
   }
 
   for (const r of roleGrants) {
     const entry = upsert(r.scopeType, r.scopeTarget)
+
     for (const rp of r.role.permissions) {
       entry.permissions.add(rp.permission.name)
     }
   }
+
   for (const d of directGrants) {
     upsert(d.scopeType, d.scopeTarget).permissions.add(d.permission.name)
   }
@@ -128,13 +134,17 @@ function checkGrants(
   resourceMeta?: { tags?: string[]; pool?: string },
 ): boolean {
   if (grants.superAdmin) return true
+
   for (const g of grants.byScope) {
     if (!g.permissions.has(permission)) continue
+
     if (scopeMatches(g.scopeType, g.scopeTarget, resourceType, resourceId, resourceMeta)) {
       return true
     }
   }
-  return false
+
+
+return false
 }
 
 /**
@@ -147,7 +157,9 @@ export async function isUserSuperAdmin(userId: string): Promise<boolean> {
     where: { userId, roleId: "role_super_admin", ...activeGrantFilter() },
     select: { id: true },
   })
-  return !!row
+
+
+return !!row
 }
 
 /**
@@ -198,7 +210,9 @@ export async function isUserProtected(userId: string): Promise<boolean> {
     },
     select: { id: true },
   })
-  return !!row
+
+
+return !!row
 }
 
 /**
@@ -210,7 +224,9 @@ export async function hasPermission(check: PermissionCheck): Promise<boolean> {
   const { userId, permission, resourceType, resourceId, resourceMeta, tenantId } = check
   const tid = tenantId || DEFAULT_TENANT_ID
   const grants = await loadUserGrants(userId, tid)
-  return checkGrants(grants, permission, resourceType, resourceId, resourceMeta)
+
+
+return checkGrants(grants, permission, resourceType, resourceId, resourceMeta)
 }
 
 /**
@@ -230,15 +246,20 @@ export async function getEffectivePermissions(
   // picked up automatically.
   if (grants.superAdmin) {
     const allPerms = await prisma.rbacPermission.findMany({ select: { name: true } })
-    return allPerms.map(p => p.name)
+
+
+return allPerms.map(p => p.name)
   }
 
   const permissions = new Set<string>()
+
   for (const g of grants.byScope) {
     if (!scopeMatches(g.scopeType, g.scopeTarget, resourceType, resourceId)) continue
     for (const p of g.permissions) permissions.add(p)
   }
-  return Array.from(permissions)
+
+
+return Array.from(permissions)
 }
 
 /**
@@ -253,7 +274,9 @@ export async function hasAllPermissions(
 ): Promise<boolean> {
   const tid = tenantId || DEFAULT_TENANT_ID
   const grants = await loadUserGrants(userId, tid)
-  return permissions.every(p => checkGrants(grants, p, resourceType, resourceId))
+
+
+return permissions.every(p => checkGrants(grants, p, resourceType, resourceId))
 }
 
 /**
@@ -268,7 +291,9 @@ export async function hasAnyPermission(
 ): Promise<boolean> {
   const tid = tenantId || DEFAULT_TENANT_ID
   const grants = await loadUserGrants(userId, tid)
-  return permissions.some(p => checkGrants(grants, p, resourceType, resourceId))
+
+
+return permissions.some(p => checkGrants(grants, p, resourceType, resourceId))
 }
 
 /**
@@ -336,11 +361,13 @@ return false
 
     case "tag":
       if (!resourceMeta?.tags || !scopeTarget) return false
-      return resourceMeta.tags.includes(scopeTarget)
+
+return resourceMeta.tags.includes(scopeTarget)
 
     case "pool":
       if (!resourceMeta?.pool || !scopeTarget) return false
-      return resourceMeta.pool === scopeTarget
+
+return resourceMeta.pool === scopeTarget
 
     default:
       return false
@@ -466,11 +493,14 @@ export async function getRBACContext(): Promise<{ userId: string; isAdmin: boole
 export async function hasTagOrPoolScopes(userId: string, tenantId?: string): Promise<boolean> {
   const tid = tenantId || DEFAULT_TENANT_ID
   const grants = await loadUserGrants(userId, tid)
+
+
   // Super admins don't carry tag/pool scopes — they short-circuit at the
   // top of every permission check, so the second-pass logic that uses this
   // helper has no work to do for them.
   if (grants.superAdmin) return false
-  return grants.byScope.some(g => g.scopeType === "tag" || g.scopeType === "pool")
+
+return grants.byScope.some(g => g.scopeType === "tag" || g.scopeType === "pool")
 }
 
 /**
@@ -503,6 +533,7 @@ export async function checkPermission(
   // Pass 2: if VM resource + user has tag/pool scopes → resolve meta and retry
   if (resourceType === "vm" && resourceId && (await hasTagOrPoolScopes(userId, tenantId))) {
     const meta = resolveVmMeta(resourceId, tenantId)
+
     if (
       meta &&
       (await hasPermission({ userId, permission, resourceType, resourceId, resourceMeta: meta, tenantId }))
@@ -542,18 +573,22 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
 
   // Super admin or any global-scope grant for this permission → return as-is.
   if (grants.superAdmin) return vms
+
   if (grants.byScope.some(g => g.scopeType === "global" && g.permissions.has(permission))) {
     return vms
   }
 
   const result: T[] = []
+
   for (const vm of vms) {
     let resourceId: string
+
     if (vm.id && vm.id.includes(":")) {
       // Wire format coming from the inventory route is "connId:type:node:vmid"
       // (type and node swapped vs the canonical RBAC form). Reorder before
       // matching so node-scoped grants line up.
       const parts = vm.id.split(":")
+
       resourceId = `${parts[0]}:${parts[2]}:${parts[1]}:${parts[3]}`
     } else if (vm.connId && vm.node && vm.type && vm.vmid) {
       resourceId = buildVmResourceId(vm.connId, vm.node, vm.type, vm.vmid)
@@ -564,6 +599,7 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
     // Tags/pool come from the VM payload itself — needed so tag/pool scopes
     // can match on the second pass inside scopeMatches.
     const vmAny = vm as any
+
     const tags = Array.isArray(vmAny.tags)
       ? vmAny.tags
       : typeof vmAny.tags === "string"
@@ -577,7 +613,9 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
       result.push(vm)
     }
   }
-  return result
+
+
+return result
 }
 
 /**
@@ -593,16 +631,21 @@ export async function filterNodesByPermission<T extends { connId: string; node: 
   const grants = await loadUserGrants(userId, tid)
 
   if (grants.superAdmin) return nodes
+
   if (grants.byScope.some(g => g.scopeType === "global" && g.permissions.has(permission))) {
     return nodes
   }
 
   const result: T[] = []
+
   for (const node of nodes) {
     const resourceId = buildNodeResourceId(node.connId, node.node)
+
     if (checkGrants(grants, permission, "node", resourceId)) {
       result.push(node)
     }
   }
-  return result
+
+
+return result
 }

@@ -58,6 +58,7 @@ export function useCephPerf(
 
         if (json.data?.pgmap) {
           const now = Date.now()
+
           const perfData: CephPerfPoint = {
             time: now,
             read_bytes_sec: json.data.pgmap.read_bytes_sec || 0,
@@ -71,7 +72,9 @@ export function useCephPerf(
           setClusterCephPerfHistory(prev => {
             const newHistory = [...prev, perfData]
             const cutoff = now - 3600000
-            return newHistory.filter(p => p.time > cutoff)
+
+
+return newHistory.filter(p => p.time > cutoff)
           })
         }
       } catch (e) {
@@ -84,7 +87,9 @@ export function useCephPerf(
     let interval: ReturnType<typeof setInterval> | null = null
 
     function start() { if (interval !== null) return; interval = setInterval(fetchCephPerf, 2000) }
+
     function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
+
     function onVis() { if (document.visibilityState === 'visible') { fetchCephPerf(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
@@ -124,9 +129,11 @@ export function useCephPerf(
     const getTrend = (r: number, o: number): Trend => {
       if (o === 0) return r > 0 ? 'up' : 'stable'
       const change = ((r - o) / o) * 100
+
       if (change > 10) return 'up'
       if (change < -10) return 'down'
-      return 'stable'
+
+return 'stable'
     }
 
     return {
@@ -141,7 +148,9 @@ export function useCephPerf(
   const clusterCephPerfFiltered = useMemo(() => {
     const now = Date.now()
     const cutoff = now - (clusterCephTimeframe * 1000)
-    return clusterCephPerfHistory.filter(p => p.time > cutoff)
+
+
+return clusterCephPerfHistory.filter(p => p.time > cutoff)
   }, [clusterCephPerfHistory, clusterCephTimeframe])
 
   return { clusterCephPerf, clusterCephPerfFiltered, cephTrends }

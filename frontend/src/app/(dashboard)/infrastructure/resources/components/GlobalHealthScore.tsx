@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import {
   Box,
   Card,
@@ -32,21 +33,24 @@ function getScoreColor(s: number) {
   if (s >= 80) return COLORS.success
   if (s >= 60) return COLORS.warning
   if (s >= 40) return '#f97316'
-  return COLORS.error
+
+return COLORS.error
 }
 
 function getScoreLabelKey(s: number) {
   if (s >= 80) return 'resources.scoreExcellent'
   if (s >= 60) return 'resources.scoreGood'
   if (s >= 40) return 'resources.scoreMonitoring'
-  return 'resources.critical'
+
+return 'resources.critical'
 }
 
 function getScoreIcon(s: number) {
   if (s >= 80) return <ShieldIcon sx={{ fontSize: 32 }} />
   if (s >= 60) return <CheckCircleIcon sx={{ fontSize: 32 }} />
   if (s >= 40) return <WarningAmberIcon sx={{ fontSize: 32 }} />
-  return <ErrorIcon sx={{ fontSize: 32 }} />
+
+return <ErrorIcon sx={{ fontSize: 32 }} />
 }
 
 const BreakdownRow = ({ label, icon, penalty, reason, maxPenalty }: {

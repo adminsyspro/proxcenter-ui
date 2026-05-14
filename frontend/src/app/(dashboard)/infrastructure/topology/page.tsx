@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+
 import { useRouter } from 'next/navigation'
 
 import { Box, Card } from '@mui/material'
@@ -21,12 +22,14 @@ import TopologyGeoView from './components/TopologyGeoView'
 export default function TopologyPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
+
   // Topology view is provider-only — also gated in the menu via
   // requires.isProviderTenant. Redirect tenants who hit the URL directly
   // (bookmark, copy-paste) instead of letting them load a graph that
   // would re-leak node names hidden everywhere else in the tenant view.
   const { currentTenant, loading: tenantLoading } = useTenant()
   const router = useRouter()
+
   useEffect(() => {
     if (!tenantLoading && currentTenant && currentTenant.id !== 'default') {
       router.replace('/')

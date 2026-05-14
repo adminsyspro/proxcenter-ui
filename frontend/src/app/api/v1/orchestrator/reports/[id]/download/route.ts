@@ -17,6 +17,7 @@ export async function GET(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
@@ -27,10 +28,13 @@ export async function GET(
     const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download`
 
     const headers: Record<string, string> = {}
+
     if (ORCHESTRATOR_API_KEY) {
       headers['X-API-Key'] = ORCHESTRATOR_API_KEY
     }
+
     const tid = await getCurrentTenantId()
+
     if (tid && tid !== DEFAULT_TENANT_ID) {
       headers['X-Tenant-ID'] = tid
     }
@@ -42,7 +46,9 @@ export async function GET(
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      return NextResponse.json(
+
+
+return NextResponse.json(
         { error: text || 'Failed to download report' },
         { status: response.status }
       )
@@ -55,9 +61,11 @@ export async function GET(
 
     // Stream the response
     const responseHeaders = new Headers()
+
     responseHeaders.set('Content-Type', contentType)
     responseHeaders.set('Content-Disposition', contentDisposition)
     responseHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+
     if (contentLength) {
       responseHeaders.set('Content-Length', contentLength)
     }
@@ -70,7 +78,9 @@ export async function GET(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to download report:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to download report' },
       { status: 500 }
     )

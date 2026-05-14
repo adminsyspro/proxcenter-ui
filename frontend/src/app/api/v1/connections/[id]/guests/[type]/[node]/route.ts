@@ -24,23 +24,28 @@ function sumNewDiskStorageMb(body: Record<string, any>): number {
   const diskKeyRe = /^(scsi|virtio|ide|sata|efidisk|tpmstate)\d+$|^rootfs$|^mp\d+$/
   const sizeRe = /^[^:]+:(\d+(?:\.\d+)?)$/
   let totalMb = 0
+
   for (const [key, raw] of Object.entries(body || {})) {
     if (!diskKeyRe.test(key)) continue
     if (typeof raw !== 'string') continue
     if (/\bmedia=cdrom\b/.test(raw)) continue
     const [head] = raw.split(',')
     const m = head.match(sizeRe)
+
     if (!m) continue
     const gb = Number.parseFloat(m[1])
+
     if (Number.isFinite(gb) && gb > 0) totalMb += Math.round(gb * 1024)
   }
-  return totalMb
+
+
+return totalMb
 }
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}
 // Create a new VM (qemu) or LXC container
 export async function POST(
-  req: Request, 
+  req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string }> | { id: string; type: string; node: string } }
 ) {
   try {
@@ -56,6 +61,7 @@ export async function POST(
     }
 
     const denied = await checkPermission(PERMISSIONS.VM_CREATE, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -68,6 +74,7 @@ export async function POST(
 
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
@@ -100,15 +107,18 @@ export async function POST(
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
 
     // Phase 4b: Enforce bridge whitelist
     const allowedBridges = await getAllowedBridgesForTenant(tenantId, id)
+
     if (allowedBridges !== null) {
       for (const key of Object.keys(body || {})) {
         if (!/^net\d+$/.test(key)) continue
         const bridge = parseBridgeFromNet(String(body[key] || ""))
+
         if (bridge && !allowedBridges.has(bridge)) {
           return NextResponse.json(
             { error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(allowedBridges).join(", ")}` },
@@ -130,20 +140,26 @@ export async function POST(
     // resolveVdcForTenant + allowed bridges check.
     const allocations: Array<{ subnetId: string; ip: string }> = []
     let injectedDns: string[] = []
+
     if (type === 'qemu') {
       for (const key of Object.keys(body || {})) {
         const m = key.match(/^net(\d+)$/)
+
         if (!m) continue
         const idx = m[1]
         const ipconfigKey = `ipconfig${idx}`
+
         if (typeof body[ipconfigKey] === 'string' && body[ipconfigKey].trim()) {
           // User-provided ipconfigN — respect their choice (manual IP, dhcp, …).
           continue
         }
+
         const netStr = String(body[key] || '')
         const bridge = parseBridgeFromNet(netStr)
+
         if (!bridge) continue
         const subnet = await resolveSubnetForBridge(id, bridge)
+
         if (!subnet) continue
 
         // Make sure netN carries an explicit MAC so our IPAM can key on
@@ -152,20 +168,25 @@ export async function POST(
         // "<model>,bridge=…,macaddr=…" syntaxes; we normalise to the first.
         const existingMacMatch = netStr.match(/(?:^|=)(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}/)
         let mac = existingMacMatch ? existingMacMatch[0].replace(/^=/, '').toUpperCase() : null
+
         if (!mac) {
           mac = generatePveMacAddress()
+
           // Inject the MAC into the model=… part so PVE doesn't roll its
           // own and our IPAM record stays in sync.
           const parts = netStr.split(',')
+
           // Replace first part (model token) — handle "virtio" or "virtio=AA:..".
           const head = parts[0] ?? 'virtio'
           const headModel = head.includes('=') ? head.split('=')[0] : head
+
           parts[0] = `${headModel}=${mac}`
           body[key] = parts.join(',')
         }
 
         try {
           const vmidNum = body.vmid != null ? Number(body.vmid) : null
+
           const allocated = await allocateIp({
             vdcId: subnet.vdcId,
             subnetId: subnet.subnetId,
@@ -175,14 +196,19 @@ export async function POST(
             vmid: Number.isFinite(vmidNum) ? vmidNum : null,
             hostname: body.name || `vm-${body.vmid}`,
           })
+
           const cidrInfo = parseCidr(subnet.cidr)
           const prefix = cidrInfo?.prefix
+
           const ipconfig = [
             `ip=${allocated.ip}${prefix !== undefined ? `/${prefix}` : ''}`,
             `gw=${subnet.gateway}`,
           ].join(',')
+
           body[ipconfigKey] = ipconfig
           allocations.push({ subnetId: subnet.subnetId, ip: allocated.ip })
+
+
           // DNS resolvers live at the VM level in PVE CloudInit (`nameserver`
           // is shared across NICs). Take the first non-empty list we see;
           // if multiple NICs declare different DNS the first one wins —
@@ -196,10 +222,13 @@ export async function POST(
           for (const a of allocations) {
             try { await releaseIp({ subnetId: a.subnetId, ip: a.ip }) } catch { /* tolerate */ }
           }
+
           const msg = e instanceof IpamExhaustedError
             ? `Subnet ${subnet.cidr} is full — no free IP available`
             : `IPAM allocation failed: ${e?.message ?? String(e)}`
-          return NextResponse.json({ error: msg }, { status: 500 })
+
+
+return NextResponse.json({ error: msg }, { status: 500 })
         }
       }
 
@@ -215,6 +244,7 @@ export async function POST(
 
     // Appeler l'API Proxmox pour créer la VM/LXC
     let result: any
+
     try {
       result = await pveFetch<any>(conn, endpoint, {
         method: "POST",
@@ -229,6 +259,7 @@ export async function POST(
       for (const a of allocations) {
         try { await releaseIp({ subnetId: a.subnetId, ip: a.ip }) } catch { /* tolerate */ }
       }
+
       throw err
     }
 

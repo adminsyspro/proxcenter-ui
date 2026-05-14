@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useLocale, useTranslations } from 'next-intl'
 
 import {
@@ -22,6 +23,7 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
@@ -153,9 +155,9 @@ function DetailsCell({ details, errorMessage }) {
       </Tooltip>
     )
   }
-  
+
   if (!details) return <Typography variant='body2' sx={{ opacity: 0.5 }}>—</Typography>
-  
+
   try {
     const parsed = typeof details === 'string' ? JSON.parse(details) : details
 
@@ -163,7 +165,7 @@ function DetailsCell({ details, errorMessage }) {
       .slice(0, 2)
       .map(([k, v]) => `${k}: ${v}`)
       .join(', ')
-    
+
     return (
       <Tooltip title={<pre style={{ margin: 0 }}>{JSON.stringify(parsed, null, 2)}</pre>}>
         <Typography variant='body2' sx={{ opacity: 0.7, cursor: 'help' }}>
@@ -301,12 +303,12 @@ return () => setPageInfo('', '', '')
   const loadLogs = async () => {
     try {
       setLoading(true)
-      
+
       const params = new URLSearchParams({
         limit: String(paginationModel.pageSize),
         offset: String(paginationModel.page * paginationModel.pageSize),
       })
-      
+
       if (search) params.set('search', search)
       if (category !== 'all') params.set('category', category)
       if (status !== 'all') params.set('status', status)
@@ -343,7 +345,7 @@ return
       }
     }, 300)
 
-    
+
 return () => clearTimeout(timer)
   }, [search])
 
@@ -367,7 +369,7 @@ return () => clearTimeout(timer)
       l.status,
       l.ip_address || '—',
     ])
-    
+
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)

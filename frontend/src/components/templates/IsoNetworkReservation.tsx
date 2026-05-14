@@ -29,19 +29,25 @@ interface SubnetInfo {
 }
 
 interface Props {
+
   /** Current static IP value (controlled by parent). */
   ip: string
+
   /** Current static MAC value (controlled by parent). */
   mac: string
+
   /** Subnet metadata for the gateway / DNS / cidr-helper display. */
   subnet: SubnetInfo
+
   /** Loading flag — true while the parent is fetching next-free. */
   loading?: boolean
+
   /** Error message from the last next-free fetch, if any. */
   error?: string | null
 
   onIpChange: (ip: string) => void
   onMacChange: (mac: string) => void
+
   /** Triggered when the user clicks one of the refresh icons. The
    *  parent fetches /ipam/next-free and updates the corresponding
    *  field. `which` says whether to overwrite IP, MAC, or both. */

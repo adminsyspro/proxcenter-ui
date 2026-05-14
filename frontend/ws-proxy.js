@@ -11,11 +11,33 @@
  *   /ws/shell?host=...&port=...&ticket=... - Shell node direct
  */
 
+const fs = require('fs')
+const path = require('path')
+
 const { WebSocket } = require('ws')
 
 // Always use localhost for internal API calls (ws-proxy runs in same container as frontend)
 const APP_PORT = process.env.PORT || 3000
 const INTERNAL_API_URL = `http://localhost:${APP_PORT}`
+
+// Shared secret with /api/internal/console/consume. In production the
+// docker entrypoint exports this before start.js launches. In dev (`npm
+// run dev` spawns ws-proxy as a sibling of `next dev`), we read .env.local
+// so the developer doesn't need to export it in the shell.
+let INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN || ''
+
+if (!INTERNAL_API_TOKEN) {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, '.env.local'), 'utf8')
+    const m = raw.match(/^INTERNAL_API_TOKEN=(.+)$/m)
+
+    if (m) INTERNAL_API_TOKEN = m[1].trim().replace(/^["']|["']$/g, '')
+  } catch {}
+}
+
+if (!INTERNAL_API_TOKEN) {
+  console.error('[ws-proxy] INTERNAL_API_TOKEN not set; console sessions will return 503')
+}
 
 /**
  * Handle an incoming WebSocket connection.
@@ -26,6 +48,7 @@ async function handleWsConnection(clientWs, req) {
 
   // Normalize path: strip /api/internal prefix if present (for direct access without nginx)
   let pathname = url.pathname
+
   if (pathname.startsWith('/api/internal/')) {
     pathname = pathname.replace('/api/internal', '')
   }
@@ -49,7 +72,8 @@ async function handleWsConnection(clientWs, req) {
     if (!host || !port || !ticket) {
       console.error('[WS] Missing shell parameters')
       clientWs.close(4000, 'Missing parameters: host, port, ticket required')
-      return
+
+return
     }
 
     console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}${vmtype ? `, ${vmtype}/${vmid}` : ''})`)
@@ -83,9 +107,11 @@ async function handleWsConnection(clientWs, req) {
 
       pveWs.on('open', () => {
         console.log('[WS] Connected to Proxmox shell, sending auth handshake...')
+
         // Proxmox termproxy expects "user:ticket\n" as the first message
         // The ticket is bound to the full API token identity (user@realm!tokenname)
         const authUser = user || (apiToken ? apiToken.split('!')[0] : 'root@pam')
+
         pveWs.send(`${authUser}:${ticket}\n`)
       })
 
@@ -94,17 +120,22 @@ async function handleWsConnection(clientWs, req) {
           // First message should be "OK" from Proxmox
           const text = Buffer.isBuffer(data) ? data.toString() :
                        data instanceof ArrayBuffer ? Buffer.from(data).toString() : String(data)
+
           if (text.startsWith('OK')) {
             authenticated = true
             console.log('[WS] Shell auth OK, session ready')
-            return
+
+return
           } else {
             console.error('[WS] Shell auth failed:', text)
             clientWs.close(4003, 'Proxmox auth failed')
             pveWs.close()
-            return
+
+return
           }
         }
+
+
         // After auth: relay data to client
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.send(data, { binary: isBinary })
@@ -113,14 +144,17 @@ async function handleWsConnection(clientWs, req) {
 
       pveWs.on('close', (code, reason) => {
         console.log(`[WS] Proxmox shell closed: ${code} ${reason}`)
+
         if (clientWs.readyState === WebSocket.OPEN) {
           const safeCode = (code === 1000 || (code >= 3000 && code <= 4999)) ? code : 1000
+
           clientWs.close(safeCode, reason?.toString() || '')
         }
       })
 
       pveWs.on('error', (err) => {
         console.error('[WS] Proxmox shell error:', err.message)
+
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(4003, 'Proxmox connection error')
         }
@@ -135,6 +169,7 @@ async function handleWsConnection(clientWs, req) {
 
       clientWs.on('close', () => {
         console.log('[WS] Shell client disconnected')
+
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
@@ -142,6 +177,7 @@ async function handleWsConnection(clientWs, req) {
 
       clientWs.on('error', (err) => {
         console.error('[WS] Shell client error:', err.message)
+
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
@@ -165,15 +201,20 @@ async function handleWsConnection(clientWs, req) {
       // Récupérer les infos de session depuis l'API (internal call via localhost)
       const sessionRes = await fetch(`${INTERNAL_API_URL}/api/internal/console/consume`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Caller': 'proxcenter-ws-proxy' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${INTERNAL_API_TOKEN}`,
+        },
         body: JSON.stringify({ sessionId })
       })
 
       if (!sessionRes.ok) {
         const err = await sessionRes.text()
+
         console.error(`[WS] Session not found or expired: ${sessionId}`, err)
         clientWs.close(4001, 'Session not found or expired')
-        return
+
+return
       }
 
       const session = await sessionRes.json()
@@ -182,7 +223,8 @@ async function handleWsConnection(clientWs, req) {
       if (!baseUrl || !port || !ticket) {
         console.error('[WS] Invalid session data:', session)
         clientWs.close(4002, 'Invalid session data')
-        return
+
+return
       }
 
       // Construire l'URL WebSocket vers Proxmox
@@ -221,6 +263,7 @@ async function handleWsConnection(clientWs, req) {
 
       pveWs.on('close', (code, reason) => {
         console.log(`[WS] Proxmox connection closed: ${code} ${reason}`)
+
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close()
         }
@@ -228,6 +271,7 @@ async function handleWsConnection(clientWs, req) {
 
       pveWs.on('error', (err) => {
         console.error('[WS] Proxmox WebSocket error:', err.message)
+
         if (clientWs.readyState === WebSocket.OPEN) {
           clientWs.close(4003, 'Proxmox connection error')
         }
@@ -242,6 +286,7 @@ async function handleWsConnection(clientWs, req) {
 
       clientWs.on('close', () => {
         console.log(`[WS] Client disconnected: ${sessionId}`)
+
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
@@ -249,6 +294,7 @@ async function handleWsConnection(clientWs, req) {
 
       clientWs.on('error', (err) => {
         console.error('[WS] Client WebSocket error:', err.message)
+
         if (pveWs.readyState === WebSocket.OPEN) {
           pveWs.close()
         }
@@ -283,6 +329,7 @@ if (require.main === module) {
   })
 
   const wss = new WebSocketServer({ server })
+
   wss.on('connection', handleWsConnection)
 
   server.listen(PORT, () => {

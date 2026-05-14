@@ -81,6 +81,8 @@ export async function middleware(request: NextRequest) {
   // === DEMO MODE: bypass auth, mock API routes ===
   if (isDemoMode) {
     const { demoResponse } = await import("@/lib/demo/demo-api")
+
+
     // /login and /setup always redirect to /home in demo mode
     if (pathname === '/login' || pathname.startsWith('/login') || pathname === '/setup' || pathname.startsWith('/setup')) {
       return NextResponse.redirect(new URL('/home', request.url))
@@ -98,10 +100,12 @@ export async function middleware(request: NextRequest) {
 
       // For /api/v1/* routes, return mock data directly from the interceptor
       const mockResponse = demoResponse(request)
+
       if (mockResponse) return mockResponse
 
       // For non-v1 API routes, pass through with demo header
       const requestHeaders = new Headers(request.headers)
+
       requestHeaders.set('x-demo-mode', 'true')
 
       return NextResponse.next({

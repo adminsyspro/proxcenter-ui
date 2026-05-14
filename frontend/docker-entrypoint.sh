@@ -57,9 +57,27 @@ if [ -z "$ORCHESTRATOR_API_KEY" ] && [ -f /app/orchestrator_data/.api_key ]; the
   echo "[entrypoint] Loaded ORCHESTRATOR_API_KEY from orchestrator shared volume"
 fi
 
+# Internal API token shared between the ws-proxy and the Next.js console
+# consume endpoint. Generated on first boot if absent; both processes live
+# inside the same start.js Node instance so a process-local env is enough.
+if [ -z "$INTERNAL_API_TOKEN" ]; then
+  INTERNAL_API_TOKEN=$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+  export INTERNAL_API_TOKEN
+  echo "[entrypoint] Generated ephemeral INTERNAL_API_TOKEN"
+fi
+
 # Security checks
+# In production we refuse to boot without NEXTAUTH_SECRET: the auth config
+# falls back to a fixed placeholder so the image can be built, but running
+# with that placeholder would mint forgeable JWTs.
 if [ -z "$NEXTAUTH_SECRET" ]; then
-  echo "[entrypoint] ⚠ WARNING: NEXTAUTH_SECRET is not set. Sessions will use an insecure default key."
+  if [ "$NODE_ENV" = "production" ] && [ "$DEMO_MODE" != "true" ]; then
+    echo "[entrypoint] ERROR: NEXTAUTH_SECRET is not set."
+    echo "[entrypoint]   Generate one with: openssl rand -base64 32"
+    echo "[entrypoint]   Or mount it via NEXTAUTH_SECRET_FILE (Docker secrets)."
+    exit 1
+  fi
+  echo "[entrypoint] WARNING: NEXTAUTH_SECRET is not set. Sessions will use an insecure default key."
   echo "[entrypoint]   Generate one with: openssl rand -base64 32"
 fi
 

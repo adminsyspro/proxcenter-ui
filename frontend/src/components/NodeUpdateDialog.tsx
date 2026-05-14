@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -75,10 +76,12 @@ const CEPH_MAINTENANCE_FLAGS = ['noout', 'norebalance', 'norecover']
  */
 function distributeVms(vms: RunningVmInfo[], nodes: NodeInfo[]): Map<number, string> {
   const result = new Map<number, string>()
+
   if (nodes.length === 0) return result
 
   // Track remaining free memory per node
   const freeMem = new Map<string, number>()
+
   for (const n of nodes) {
     freeMem.set(n.node, (n.maxmem || 0) - (n.mem || 0))
   }
@@ -90,8 +93,10 @@ function distributeVms(vms: RunningVmInfo[], nodes: NodeInfo[]): Map<number, str
     // Pick node with the most free memory
     let bestNode = nodes[0].node
     let bestFree = freeMem.get(bestNode) || 0
+
     for (const n of nodes) {
       const free = freeMem.get(n.node) || 0
+
       if (free > bestFree) {
         bestNode = n.node
         bestFree = free
@@ -119,6 +124,7 @@ export default function NodeUpdateDialog({
 
   // Steps depend on cluster mode
   const clusterMode = isCluster
+
   const steps = clusterMode
     ? [t('updates.stepPreflight'), t('updates.stepConfiguration'), t('updates.stepUpdate'), t('updates.stepPostActions'), t('updates.stepCompleted')]
     : [t('updates.stepConfiguration'), t('updates.stepUpdate'), t('updates.stepCompleted')]
@@ -206,6 +212,7 @@ export default function NodeUpdateDialog({
     if (!open || !connectionId || !nodeName || !clusterMode) return
 
     let cancelled = false
+
     setMaintenanceLoading(true)
     setCephFlagsLoading(hasCeph)
 
@@ -252,6 +259,7 @@ export default function NodeUpdateDialog({
             mem: n.mem,
             maxmem: n.maxmem,
           }))
+
         setClusterNodes(onlineNodes)
 
         // Running VMs on this node (not templates)
@@ -269,6 +277,7 @@ export default function NodeUpdateDialog({
 
         // Build local disks map
         const localDisksMap = new Map<number, string[]>()
+
         for (const v of localVmsList) {
           if (v.localDisks?.length) localDisksMap.set(v.vmid, v.localDisks)
         }
@@ -286,6 +295,7 @@ export default function NodeUpdateDialog({
 
         // Compute VM distribution across cluster nodes
         const shared = vms.filter(vm => !vm.isLocal)
+
         if (onlineNodes.length > 0 && shared.length > 0) {
           setVmDistribution(distributeVms(shared, onlineNodes))
         }
@@ -301,6 +311,7 @@ export default function NodeUpdateDialog({
     if (!open || !connectionId || !nodeName) return
 
     let cancelled = false
+
     setSshNotConfigured(false)
     setRepoChecking(true)
     setRepoIssues([])
@@ -320,6 +331,7 @@ export default function NodeUpdateDialog({
 
         const repos = json.data.standard_repos as Array<{ handle: string; status: boolean | null; name: string }>
         const status: Record<string, boolean | null> = {}
+
         for (const r of repos) {
           status[r.handle] = r.status
         }
@@ -333,6 +345,7 @@ export default function NodeUpdateDialog({
         for (const [handle, s] of Object.entries(status)) {
           if (s === true && handle.endsWith('-enterprise') && handle !== 'enterprise') {
             const base = handle.replace(/-enterprise$/, '')
+
             if (status[`${base}-no-subscription`] !== true) {
               issues.push(`${base} enterprise repository is enabled without a no-subscription alternative.`)
             }
@@ -378,6 +391,7 @@ export default function NodeUpdateDialog({
       if (!res.ok) return
 
       const status = json.status as UpgradeStatus
+
       setUpgradeStatus(status)
       setUpgradeLogs(json.logs || '')
       setRebootRequired(json.reboot_required || false)
@@ -387,7 +401,9 @@ export default function NodeUpdateDialog({
           clearInterval(pollingRef.current)
           pollingRef.current = null
         }
+
         setCompletedAt(new Date())
+
         // Go to post-actions for cluster, completed for standalone
         setActiveStep(clusterMode ? STEP.POST : STEP.COMPLETED)
 
@@ -428,6 +444,7 @@ export default function NodeUpdateDialog({
             })
           }
         }
+
         setCephFlags(prev => [...new Set([...prev, ...CEPH_MAINTENANCE_FLAGS])])
         setDidSetCephFlags(true)
       }
@@ -435,6 +452,7 @@ export default function NodeUpdateDialog({
       // Migrate shared-storage VMs (distributed across nodes)
       const vmsToMigrate = migrateSharedVms && vmDistribution.size > 0 ? sharedVms : []
       const vmsToShutdown = shutdownLocalVms ? localVms : []
+
       const allActions: VmActionResult[] = [
         ...vmsToMigrate.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'migrate' as const, status: 'pending' as const, target: vmDistribution.get(vm.vmid) })),
         ...vmsToShutdown.map(vm => ({ vmid: vm.vmid, name: vm.name, type: vm.type, action: 'shutdown' as const, status: 'pending' as const })),
@@ -446,23 +464,29 @@ export default function NodeUpdateDialog({
 
         // Migrate shared VMs (each to its distributed target)
         const successfulMigrations: VmActionResult[] = []
+
         for (const vm of vmsToMigrate) {
           const target = vmDistribution.get(vm.vmid)
+
           if (!target) continue
 
           setVmActionResults(prev => prev.map(r =>
             r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'running' } : r
           ))
+
           try {
             const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/migrate`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ target, online: true }),
             })
+
             if (!res.ok) {
               const json = await res.json().catch(() => ({}))
+
               throw new Error(json.error || 'Migration failed')
             }
+
             setVmActionResults(prev => prev.map(r =>
               r.vmid === vm.vmid && r.action === 'migrate' ? { ...r, status: 'success' } : r
             ))
@@ -473,6 +497,7 @@ export default function NodeUpdateDialog({
             ))
           }
         }
+
         if (vmsToMigrate.length > 0) {
           setMigratedVms(successfulMigrations)
           setDidMigrateVms(true)
@@ -483,14 +508,18 @@ export default function NodeUpdateDialog({
           setVmActionResults(prev => prev.map(r =>
             r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'running' } : r
           ))
+
           try {
             const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/shutdown`, {
               method: 'POST',
             })
+
             if (!res.ok) {
               const json = await res.json().catch(() => ({}))
+
               throw new Error(json.error || 'Shutdown failed')
             }
+
             setVmActionResults(prev => prev.map(r =>
               r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'success' } : r
             ))
@@ -500,6 +529,7 @@ export default function NodeUpdateDialog({
             ))
           }
         }
+
         if (vmsToShutdown.length > 0) {
           setShutdownVmsList(vmsToShutdown)
           setDidShutdownVms(true)
@@ -540,6 +570,7 @@ export default function NodeUpdateDialog({
       setActiveStep(STEP.UPDATE)
 
       const interval = setInterval(pollStatus, 3000)
+
       pollingRef.current = interval
 
       setTimeout(pollStatus, 1500)
@@ -563,6 +594,7 @@ export default function NodeUpdateDialog({
   // Post-actions: remove ceph flags
   const removeCephMaintenanceFlags = useCallback(async () => {
     setPostCephRemoving(true)
+
     try {
       for (const flag of CEPH_MAINTENANCE_FLAGS) {
         await fetch(cephFlagsUrl, {
@@ -571,26 +603,31 @@ export default function NodeUpdateDialog({
           body: JSON.stringify({ flag }),
         })
       }
+
       setCephFlags(prev => prev.filter(f => !CEPH_MAINTENANCE_FLAGS.includes(f)))
       setPostCephRemoved(true)
     } catch {}
+
     setPostCephRemoving(false)
   }, [cephFlagsUrl])
 
   // Post-actions: exit maintenance
   const exitMaintenance = useCallback(async () => {
     setPostMaintenanceExiting(true)
+
     try {
       await fetch(maintenanceUrl, { method: 'DELETE' })
       setMaintenanceStatus(null)
       setPostMaintenanceExited(true)
     } catch {}
+
     setPostMaintenanceExiting(false)
   }, [maintenanceUrl])
 
   // Post-actions: migrate VMs back (each from its specific target node)
   const migrateVmsBack = useCallback(async () => {
     setMigrateBackInProgress(true)
+
     try {
       for (const vm of migratedVms) {
         if (!vm.target) continue
@@ -600,22 +637,27 @@ export default function NodeUpdateDialog({
           body: JSON.stringify({ target: nodeName, online: true }),
         })
       }
+
       setMigrateBackDone(true)
     } catch {}
+
     setMigrateBackInProgress(false)
   }, [migratedVms, connBaseUrl, nodeName])
 
   // Post-actions: restart shut down VMs
   const restartLocalVmsAction = useCallback(async () => {
     setRestartVmsInProgress(true)
+
     try {
       for (const vm of shutdownVms) {
         await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/start`, {
           method: 'POST',
         })
       }
+
       setRestartVmsDone(true)
     } catch {}
+
     setRestartVmsInProgress(false)
   }, [shutdownVms, connBaseUrl, nodeName])
 
@@ -681,10 +723,13 @@ export default function NodeUpdateDialog({
     if (!startedAt || !completedAt) return null
     const ms = completedAt.getTime() - startedAt.getTime()
     const sec = Math.floor(ms / 1000)
+
     if (sec < 60) return `${sec}s`
     const min = Math.floor(sec / 60)
     const remSec = sec % 60
-    return remSec > 0 ? `${min}min ${remSec}s` : `${min}min`
+
+
+return remSec > 0 ? `${min}min ${remSec}s` : `${min}min`
   }
 
   const logLines = upgradeLogs
@@ -847,6 +892,7 @@ export default function NodeUpdateDialog({
                               </Typography>
                               {clusterNodes.map(node => {
                                 const nodeVms = sharedVms.filter(vm => vmDistribution.get(vm.vmid) === node.node)
+
                                 if (nodeVms.length === 0) return null
                                 const totalRam = nodeVms.reduce((sum, vm) => sum + (vm.maxmem || 0), 0)
                                 const currentMem = node.mem || 0

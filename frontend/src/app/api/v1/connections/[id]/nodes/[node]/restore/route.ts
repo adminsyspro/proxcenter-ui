@@ -25,9 +25,11 @@ export async function POST(
 
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.VM_BACKUP, "node", resourceId)
+
     if (denied) return denied
 
     const body = await req.json()
+
     const {
       vmid,
       archive: archiveDirect,
@@ -56,24 +58,30 @@ export async function POST(
     const tenantId = await getCurrentTenantId()
     const isTenant = tenantId !== DEFAULT_TENANT_ID
     let allowedStorages: Set<string> | null = null
+
     if (isTenant) {
       // Verify the target node is in the tenant's vDC. resolveVdcForTenant
       // throws NODE_NOT_AUTHORIZED when the node is outside the allow list;
       // returning null means the tenant has no vDC on this connection at all,
       // which we deny too — restore is not a free tier here.
       let vdcInfo
+
       try {
         vdcInfo = await resolveVdcForTenant(tenantId, id, node)
       } catch (e: any) {
         if (e?.message === 'NODE_NOT_AUTHORIZED') {
           return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
         }
+
         throw e
       }
+
       if (!vdcInfo) {
         return NextResponse.json({ error: 'No vDC on this connection — restore not allowed' }, { status: 403 })
       }
+
       const scope = await getVdcScope(tenantId)
+
       if (!scope) {
         // Cannot happen for a non-default tenant after the v1.4.0 scope
         // contract fix (scope is always a VdcScope, possibly empty), but
@@ -81,6 +89,7 @@ export async function POST(
         // the leak silently.
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
+
       allowedStorages = scope.storagesByConnection.get(id) ?? new Set<string>()
     }
 
@@ -99,13 +108,17 @@ export async function POST(
     //    look up the PVE storage that targets this (datastore, namespace)
     //    pair, then compose `<storageName>:<backupPath>`.
     let archive: string | null = typeof archiveDirect === 'string' && archiveDirect ? archiveDirect : null
+
     if (!archive && pbsBackup && typeof pbsBackup === 'object') {
       const { pbsId, datastore, namespace, backupPath } = pbsBackup as {
         pbsId?: string; datastore?: string; namespace?: string; backupPath?: string
       }
+
       if (!pbsId || !datastore || !backupPath) {
         return NextResponse.json({ error: "pbsBackup requires pbsId, datastore, and backupPath" }, { status: 400 })
       }
+
+
       // Tenant guard on the PBS source: assertVdcPbsAccess returns admin
       // for the provider, the binding tuples for an authorised tenant,
       // or a 403 Response when the tenant has no vDC on this PBS at all.
@@ -114,15 +127,20 @@ export async function POST(
       // of a foreign vDC's backup must not be able to restore it.
       if (isTenant) {
         const access = await assertVdcPbsAccess(pbsId)
+
         if (access instanceof Response) return access
+
         if (access.kind === 'tenant') {
           const wantedNs = (namespace || '').trim()
           const ok = access.allowed.some(a => a.datastore === datastore && a.namespace === wantedNs)
+
           if (!ok) {
             return NextResponse.json({ error: 'PBS backup source is not authorised for this tenant' }, { status: 403 })
           }
         }
       }
+
+
       // Look up the PBS connection to know which `server` PVE storages
       // need to advertise. We compare lower-cased hostnames so an IP vs
       // FQDN mismatch (e.g. `pbs.lab` vs `10.0.0.5`) doesn't break the
@@ -131,9 +149,11 @@ export async function POST(
         where: { id: pbsId },
         select: { baseUrl: true },
       })
+
       if (!pbsConn?.baseUrl) {
         return NextResponse.json({ error: "PBS connection not found" }, { status: 404 })
       }
+
       const pbsHost = (() => {
         try { return new URL(pbsConn.baseUrl).hostname.toLowerCase() } catch { return '' }
       })()
@@ -150,10 +170,13 @@ export async function POST(
       // doesn't return them, only the names + types.
       const wantedNs = (namespace || '').trim()
       let matchedStorage: string | null = null
+
       for (const s of (nodeStorages || [])) {
         if ((s.type || '').toLowerCase() !== 'pbs') continue
         const storageName: string = String(s.storage || '')
+
         if (!storageName) continue
+
         try {
           const cfg = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storageName)}`)
           const cfgServer = String(cfg?.server || '').toLowerCase()
@@ -162,17 +185,21 @@ export async function POST(
           const sameHost = !!cfgServer && (cfgServer === pbsHost || cfgServer === pbsConn.baseUrl.toLowerCase())
           const sameDs = cfgDatastore === datastore
           const sameNs = cfgNamespace === wantedNs
+
           if (sameHost && sameDs && sameNs) {
             matchedStorage = storageName
             break
           }
         } catch { /* continue probing other candidates */ }
       }
+
       if (!matchedStorage) {
         return NextResponse.json({
           error: `No PVE storage on node "${node}" maps to PBS datastore "${datastore}"${wantedNs ? ` (ns: ${wantedNs})` : ''}. Configure one before restoring.`,
         }, { status: 409 })
       }
+
+
       // backupPath comes from /guests/{vmid}/backups already shaped as
       // `backup/<type>/<id>/<isoTime>` — drop into the volid form.
       archive = `${matchedStorage}:${backupPath}`
@@ -198,12 +225,14 @@ export async function POST(
     // land): it must be one of the tenant's vDC storages.
     if (allowedStorages !== null) {
       const archiveStorage = archive.split(':', 2)[0] ?? ''
+
       if (!archiveStorage || !allowedStorages.has(archiveStorage)) {
         return NextResponse.json(
           { error: `Archive storage "${archiveStorage}" is not authorised for this tenant.` },
           { status: 403 },
         )
       }
+
       if (typeof storage === 'string' && storage.length > 0 && !allowedStorages.has(storage)) {
         return NextResponse.json(
           { error: `Target storage "${storage}" is not authorised for this tenant.` },
@@ -239,6 +268,7 @@ export async function POST(
     if (unique) params.unique = '1'
     if (start) params.start = '1'
     if (live && !isLxc) params['live-restore'] = '1'
+
     // `force=1` lets PVE overwrite an existing VMID — required when the
     // tenant chooses "Restore on top of source VM". Without it PVE
     // refuses with "VM/CT <id> already exists".
@@ -281,6 +311,7 @@ export async function POST(
     // outside any pool — without this placement the restored VM is invisible
     // in the tenant's vDC scope (vDC membership is keyed on PVE pool).
     let targetPool: string | null = null
+
     try {
       if (isTenant) {
         const row = await prisma.vdc.findFirst({
@@ -292,6 +323,7 @@ export async function POST(
           },
           select: { pvePoolName: true },
         })
+
         targetPool = row?.pvePoolName ?? null
       }
     } catch (err: any) {
@@ -301,12 +333,14 @@ export async function POST(
     if (result) {
       const upid = String(result)
       const numericVmid = Number(vmid)
+
       after(async () => {
         try {
           await waitForTask(conn, node, upid)
         } catch (err: any) {
           console.error(`[restore] waitForTask failed for vmid=${safeLog(vmid)}: ${safeLog(err?.message ?? err)}`)
-          return
+
+return
         }
 
         // Pool placement (tenant vDC scope only — provider doesn't auto-pool).
@@ -351,7 +385,9 @@ export async function POST(
           // IP rather than whatever the backup had baked in.
           if (Object.keys(sync.bodyOverrides).length > 0) {
             const patch = new URLSearchParams()
+
             for (const [k, v] of Object.entries(sync.bodyOverrides)) patch.set(k, v)
+
             try {
               await pveFetch<any>(
                 conn,
@@ -370,6 +406,7 @@ export async function POST(
           }
         } catch (err: any) {
           console.error(`[restore-ipam-sync] post-restore IPAM sync failed for vmid=${safeLog(vmid)}: ${safeLog(err?.message ?? err)}`)
+
           // Best-effort cleanup so a failed sync doesn't leak partial
           // allocations. The restored VM stays, data loss > drift.
           try { await releaseAllocationsForVm(id, numericVmid) } catch { /* tolerate */ }
@@ -378,6 +415,7 @@ export async function POST(
     }
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "restore",
       category: "backups",
@@ -393,6 +431,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error('Error restoring backup:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

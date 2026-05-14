@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { parseHostPort, formatFingerprint } from './pbsFingerprint'
 
 describe('pbsFingerprint helpers', () => {
@@ -16,6 +17,7 @@ describe('pbsFingerprint helpers', () => {
   })
   it('formats raw hash as colon-separated uppercase', () => {
     const raw = 'aabbccdd'
+
     expect(formatFingerprint(raw)).toBe('AA:BB:CC:DD')
   })
 })

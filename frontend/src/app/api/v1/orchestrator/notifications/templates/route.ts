@@ -11,6 +11,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const result = await orchestratorFetch('/notifications/templates')
@@ -35,6 +36,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await request.json()

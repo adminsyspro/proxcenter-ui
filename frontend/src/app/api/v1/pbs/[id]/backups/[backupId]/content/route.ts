@@ -18,6 +18,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string; backupId: string }> | { id: string; backupId: string } }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -29,9 +30,11 @@ export async function GET(
     if (!backupId) return NextResponse.json({ error: "Missing params.backupId" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const cookieStore = await cookies()

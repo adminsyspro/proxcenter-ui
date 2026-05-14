@@ -12,6 +12,7 @@ export async function GET(req: Request) {
     // connection.view baseline; results are filtered below by the tenant's
     // connection allowlist so cross-tenant change events never leak.
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
@@ -22,6 +23,7 @@ export async function GET(req: Request) {
     // tenants (who own no connections directly, only vDC bindings) get
     // their changes feed populated.
     const tenantConnectionIds = await getTenantConnectionIds()
+
     // Same multi-tenant tightening as /api/v1/changes — connection-level
     // filter alone leaks neighbour activity on shared clusters.
     const vdcScope = await getVdcScope(await getCurrentTenantId())
@@ -35,10 +37,13 @@ export async function GET(req: Request) {
           if (!tenantConnectionIds.has(c.connectionId)) return false
           if (!vdcScope) return true
           const allowedNodes = vdcScope.nodesByConnection.get(c.connectionId)
+
           if (allowedNodes && c.node && !allowedNodes.has(c.node)) return false
           const allowedPools = vdcScope.poolsByConnection.get(c.connectionId)
+
           if (allowedPools && c.pool && !allowedPools.has(c.pool)) return false
-          return true
+
+return true
         })
         .slice(0, limit)
     }

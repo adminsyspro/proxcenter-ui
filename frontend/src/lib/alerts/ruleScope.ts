@@ -39,8 +39,10 @@ export async function injectVdcNodeScope(
 
   const vdcScope = await getVdcScope(tenantId)
   const allowedNodes = vdcScope?.nodesByConnection.get(body.connection_id)
+
   if (!allowedNodes || allowedNodes.size === 0) return
 
   const escaped = [...allowedNodes].map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+
   body.node_pattern = `^(${escaped.join('|')})$`
 }

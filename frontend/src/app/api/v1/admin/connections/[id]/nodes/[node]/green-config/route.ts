@@ -12,24 +12,30 @@ type RouteContext = { params: Promise<{ id: string; node: string }> | { id: stri
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const node = (params as any)?.node
+
     if (!id || !node) return NextResponse.json({ error: 'Missing connection/node id' }, { status: 400 })
 
     const body = await req.json().catch(() => ({})) as any
+
     const row = await upsertNodeGreenConfig(id, node, {
       datacenterId: body.datacenterId ?? null,
       tdpPerCoreW: body.tdpPerCoreW ?? null,
       wattsPerGbRam: body.wattsPerGbRam ?? null,
       overheadPerNodeW: body.overheadPerNodeW ?? null,
     })
+
     invalidateGreenResolution(id, node)
-    return NextResponse.json({ data: row })
+
+return NextResponse.json({ data: row })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -38,18 +44,22 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const node = (params as any)?.node
+
     if (!id || !node) return NextResponse.json({ error: 'Missing connection/node id' }, { status: 400 })
 
     await deleteNodeGreenConfig(id, node)
     invalidateGreenResolution(id, node)
-    return new NextResponse(null, { status: 204 })
+
+return new NextResponse(null, { status: 204 })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

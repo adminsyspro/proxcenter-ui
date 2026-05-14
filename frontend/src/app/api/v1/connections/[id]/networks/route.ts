@@ -41,9 +41,11 @@ function parseNetString(id: string, raw: string): NetIface {
 
   for (const part of parts) {
     const [key, val] = part.split("=")
+
     if (!val && parts.indexOf(part) === 0) {
       // First part is model=macaddr
       const [model, mac] = part.split("=")
+
       iface.model = model
       iface.macaddr = mac
     } else if (key === "bridge") {
@@ -82,12 +84,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     // RBAC check
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
 
     // Get all VMs/CTs from cluster resources
     const allResources = await pveFetch<any[]>(conn, "/cluster/resources?type=vm")
+
     if (!allResources || !Array.isArray(allResources)) {
       return NextResponse.json({ data: [] })
     }
@@ -99,8 +103,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const tenantId = await getCurrentTenantId()
     const vdcScope = await getVdcScope(tenantId)
     let resources = allResources
+
     if (vdcScope) {
       const allowedPools = vdcScope.poolsByConnection.get(id)
+
       resources = allowedPools
         ? allResources.filter((vm: any) => typeof vm?.pool === 'string' && allowedPools.has(vm.pool))
         : []
@@ -112,6 +118,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     for (let i = 0; i < resources.length; i += CONCURRENCY) {
       const batch = resources.slice(i, i + CONCURRENCY)
+
       const settled = await Promise.allSettled(
         batch.map(async (vm: any) => {
           const vmType = vm.type === "lxc" ? "lxc" : "qemu"
@@ -125,6 +132,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
             )
 
             const nets: NetIface[] = []
+
             if (config) {
               for (const [key, val] of Object.entries(config)) {
                 if (/^net\d+$/.test(key) && typeof val === "string") {
@@ -158,6 +166,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ data: results })
   } catch (e: any) {
     console.error("[networks] Error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

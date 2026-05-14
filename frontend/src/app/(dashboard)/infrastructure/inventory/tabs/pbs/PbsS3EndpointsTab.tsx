@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -35,7 +36,8 @@ type PbsS3Endpoint = {
 function maskKey(key: string): string {
   if (!key) return '—'
   if (key.length <= 6) return '••••'
-  return `${key.slice(0, 4)}${'•'.repeat(Math.max(4, key.length - 6))}${key.slice(-2)}`
+
+return `${key.slice(0, 4)}${'•'.repeat(Math.max(4, key.length - 6))}${key.slice(-2)}`
 }
 
 export default function PbsS3EndpointsTab({ pbsId }: PbsS3EndpointsTabProps) {
@@ -49,13 +51,18 @@ export default function PbsS3EndpointsTab({ pbsId }: PbsS3EndpointsTabProps) {
   const fetchEndpoints = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/s3-endpoints`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
+
       setEndpoints(Array.isArray(body?.data) ? body.data : [])
       setNotSupported(Boolean(body?.notSupported))
     } catch (e: any) {
@@ -170,7 +177,9 @@ export default function PbsS3EndpointsTab({ pbsId }: PbsS3EndpointsTabProps) {
               <TableBody>
                 {endpoints.map((ep, idx) => {
                   const accessKey = String(ep['access-key-id'] || ep['access-key'] || '')
-                  return (
+
+
+return (
                     <TableRow key={ep.name || `s3-${idx}`} hover>
                       <TableCell sx={{ fontSize: 12 }}>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>

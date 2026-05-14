@@ -48,6 +48,7 @@ type TemplateDownloadDialogProps = {
 
 const osIcon = (os: string) => {
   const l = (os || '').toLowerCase()
+
   if (l.includes('debian') || l.includes('devuan')) return '/images/os/debian.svg'
   if (l.includes('ubuntu')) return '/images/os/ubuntu.svg'
   if (l.includes('alpine')) return '/images/os/alpine.svg'
@@ -58,7 +59,8 @@ const osIcon = (os: string) => {
   if (l.includes('opensuse') || l.includes('suse')) return '/images/os/suse.svg'
   if (l.includes('redhat') || l.includes('rhel')) return '/images/os/redhat.svg'
   if (l.includes('freebsd')) return '/images/os/freebsd.svg'
-  return null
+
+return null
 }
 
 export default function TemplateDownloadDialog({ open, onClose, connId, node, storage, onDownloaded }: TemplateDownloadDialogProps) {
@@ -86,16 +88,21 @@ export default function TemplateDownloadDialog({ open, onClose, connId, node, st
 
   const sections = useMemo(() => {
     const s = new Set(templates.map(t => t.section).filter(Boolean))
-    return Array.from(s).sort((a, b) => a.localeCompare(b))
+
+
+return Array.from(s).sort((a, b) => a.localeCompare(b))
   }, [templates])
 
   const filtered = useMemo(() => {
     let items = templates
+
     if (sectionFilter !== 'all') {
       items = items.filter(t => t.section === sectionFilter)
     }
+
     if (search.trim()) {
       const q = search.toLowerCase()
+
       items = items.filter(t =>
         t.package.toLowerCase().includes(q) ||
         t.headline?.toLowerCase().includes(q) ||
@@ -103,12 +110,15 @@ export default function TemplateDownloadDialog({ open, onClose, connId, node, st
         t.description?.toLowerCase().includes(q)
       )
     }
-    return items
+
+
+return items
   }, [templates, search, sectionFilter])
 
   const handleDownload = async (tpl: AplTemplate) => {
     setDownloading(tpl.template)
     setDownloadError(null)
+
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/aplinfo`,
@@ -118,7 +128,9 @@ export default function TemplateDownloadDialog({ open, onClose, connId, node, st
           body: JSON.stringify({ storage, template: tpl.template }),
         }
       )
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       onDownloaded()
       onClose()
@@ -205,7 +217,9 @@ export default function TemplateDownloadDialog({ open, onClose, connId, node, st
                 {filtered.map(tpl => {
                   const icon = osIcon(tpl.os)
                   const isDownloading = downloading === tpl.template
-                  return (
+
+
+return (
                     <TableRow key={tpl.template} hover sx={{ '&:last-child td': { border: 0 } }}>
                       <TableCell sx={{ pr: 0 }}>
                         {icon

@@ -42,12 +42,15 @@ export function buildSudoersTemplate(categories: AllowlistCategoryShape[]): { bo
 
   for (const cat of categories) {
     const byPath = new Map<string, string[]>()
+
     for (const cmd of cat.commands) {
       const path = cmd.executablePath
+
       if (!path) {
         shellWrappedCount++
         continue
       }
+
       if (!byPath.has(path)) byPath.set(path, [])
       byPath.get(path)!.push(cmd.prefix)
     }
@@ -56,6 +59,7 @@ export function buildSudoersTemplate(categories: AllowlistCategoryShape[]): { bo
 
     lines.push(`# ${escapeSudoersLine(cat.label)}`)
     const paths = Array.from(byPath.keys()).sort((a, b) => a.localeCompare(b))
+
     lines.push(`${SUDO_USER} ALL=(ALL) NOPASSWD: ${paths.join(', ')}`)
     lines.push('')
   }

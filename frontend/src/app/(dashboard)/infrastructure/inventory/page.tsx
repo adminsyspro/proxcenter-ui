@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 
-import { Box, Card, CardContent, CircularProgress, Skeleton, Typography, IconButton, Tooltip } from '@mui/material'
 import { useSearchParams } from 'next/navigation'
+
+import { Box, Card, CardContent, CircularProgress, Skeleton, Typography, IconButton, Tooltip } from '@mui/material'
 
 import { useTranslations } from 'next-intl'
 
@@ -65,13 +66,13 @@ export default function InventoryPage() {
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
   const [externalHypervisors, setExternalHypervisors] = useState<any[]>([])
-  
+
   // État pour IP/Snapshots
   const [ipSnapLoading, setIpSnapLoading] = useState(false)
   const [ipSnapLoaded, setIpSnapLoaded] = useState(false)
 
   // Favoris (derived from SWR above)
-  
+
   // État pour collapse la tree
   const [isTreeCollapsed, setIsTreeCollapsed] = useState(false)
 
@@ -80,14 +81,18 @@ export default function InventoryPage() {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('pxc-show-vmid') === 'true'
     }
-    return false
+
+
+return false
   })
 
   const toggleShowVmId = useCallback(() => {
     setShowVmId(prev => {
       const next = !prev
+
       localStorage.setItem('pxc-show-vmid', String(next))
-      return next
+
+return next
     })
   }, [])
 
@@ -152,6 +157,7 @@ export default function InventoryPage() {
     if (rawVms.length === 0) return
 
     const vmid = searchParams.get('vmid')
+
     if (!vmid) return
 
     const connId = searchParams.get('connId')
@@ -170,6 +176,7 @@ export default function InventoryPage() {
     if (found) {
       deepLinkHandled.current = true
       const selectionId = `${found.connId}:${found.node}:${found.type}:${found.vmid}`
+
       setSelection({ type: 'vm', id: selectionId })
       setViewMode('vms')
 
@@ -256,6 +263,7 @@ export default function InventoryPage() {
     )
 
     let hasFinishedInventoryTask = false
+
     for (const prevId of prevInventoryAffectingTaskIdsRef.current) {
       if (!currentInventoryTaskIds.has(prevId)) {
         hasFinishedInventoryTask = true
@@ -285,7 +293,7 @@ export default function InventoryPage() {
   // Page title
   useEffect(() => {
     setPageInfo(t('navigation.inventory'), t('inventory.vms') + ' & ' + t('inventory.containers'), 'ri-database-fill')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
@@ -294,25 +302,25 @@ return () => setPageInfo('', '', '')
     return rawVms.map(vm => {
       const key = `${vm.connId}:${vm.type}:${vm.node}:${vm.vmid}`
       const enriched = enrichedData[key]
-      
+
       // Vérifier si cette VM est en cours de migration
-      const migrating = migratingVms.find(m => 
+      const migrating = migratingVms.find(m =>
         m.connId === vm.connId && m.vmid === vm.vmid
       )
-      
+
       const result: AllVmItem = {
         ...vm,
         isMigrating: !!migrating,
         migrationTarget: migrating?.targetNode
       }
-      
+
       if (enriched) {
         result.ip = enriched.ip ?? vm.ip
         result.snapshots = enriched.snapshots ?? vm.snapshots
         result.uptime = enriched.uptime ?? vm.uptime
         result.osInfo = enriched.osInfo ?? (vm as any).osInfo
       }
-      
+
       return result
     })
   }, [rawVms, enrichedData, migratingVms])
@@ -326,11 +334,19 @@ return () => setPageInfo('', '', '')
   const [pendingActionVmIds, setPendingActionVmIds] = useState<Set<string>>(new Set())
 
   const onVmActionStart = useCallback((connId: string, vmid: string) => {
-    setPendingActionVmIds(prev => { const next = new Set(prev); next.add(`${connId}:${vmid}`); return next })
+    setPendingActionVmIds(prev => { const next = new Set(prev);
+
+ next.add(`${connId}:${vmid}`);
+
+return next })
   }, [])
 
   const onVmActionEnd = useCallback((connId: string, vmid: string) => {
-    setPendingActionVmIds(prev => { const next = new Set(prev); next.delete(`${connId}:${vmid}`); return next })
+    setPendingActionVmIds(prev => { const next = new Set(prev);
+
+ next.delete(`${connId}:${vmid}`);
+
+return next })
   }, [])
 
   const [treeOptimisticVmStatus, setTreeOptimisticVmStatus] = useState<((connId: string, vmid: string, status: string) => void) | null>(null)
@@ -355,7 +371,9 @@ return () => setPageInfo('', '', '')
   // Derive favorites from SWR data
   const favorites = useMemo(() => {
     const favs = favoritesData?.data || []
-    return new Set<string>(favs.map((f: any) => f.vm_key))
+
+
+return new Set<string>(favs.map((f: any) => f.vm_key))
   }, [favoritesData])
 
   // Toggle favori
@@ -366,6 +384,7 @@ return () => setPageInfo('', '', '')
     try {
       if (isFav) {
         const res = await fetch(`/api/v1/favorites?vmKey=${encodeURIComponent(vmKey)}`, { method: 'DELETE' })
+
         if (res.ok) mutateFavorites()
       } else {
         const res = await fetch('/api/v1/favorites', {
@@ -379,6 +398,7 @@ return () => setPageInfo('', '', '')
             vmName: vm.name
           })
         })
+
         if (res.ok) mutateFavorites()
       }
     } catch (e) {
@@ -444,9 +464,9 @@ return () => setPageInfo('', '', '')
   // Charger les IP, Snapshots et Uptime pour toutes les VMs
   const loadIpSnap = useCallback(async () => {
     if (ipSnapLoading || rawVms.length === 0) return
-    
+
     setIpSnapLoading(true)
-    
+
     // Grouper les VMs par connexion
     const byConnection: Record<string, typeof rawVms> = {}
 
@@ -457,11 +477,11 @@ return () => setPageInfo('', '', '')
 
       byConnection[vm.connId].push(vm)
     })
-    
+
     // Charger par connexion en parallèle
     try {
       const newEnrichedData: Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null }> = { ...enrichedData }
-      
+
       await Promise.all(
         Object.entries(byConnection).map(async ([connId, vms]) => {
           const vmsToFetch = vms.map(v => ({
@@ -471,18 +491,18 @@ return () => setPageInfo('', '', '')
             vmid: v.vmid,
             status: v.status
           }))
-          
+
           try {
             const res = await fetch('/api/v1/vms/ips', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ vms: vmsToFetch })
             })
-            
+
             if (!res.ok) return
             const json = await res.json()
             const data = json.data || {}
-            
+
             // Stocker les données enrichies
             for (const [key, value] of Object.entries(data)) {
               newEnrichedData[key] = value as { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }
@@ -492,7 +512,7 @@ return () => setPageInfo('', '', '')
           }
         })
       )
-      
+
       setEnrichedData(newEnrichedData)
     } finally {
       setIpSnapLoading(false)

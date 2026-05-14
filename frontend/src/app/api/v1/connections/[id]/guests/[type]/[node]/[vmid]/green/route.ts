@@ -24,6 +24,7 @@ type RouteContext = {
  */
 export async function GET(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -32,6 +33,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     const url = new URL(req.url)
 
     let days = Number.parseInt(url.searchParams.get("days") || "30", 10)
+
     if (!Number.isFinite(days) || days < 1) days = 30
     if (days > 30) days = 30
 
@@ -41,12 +43,14 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     const vmResourceId = `${id}:${type}:${node}:${vmid}`
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", vmResourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
 
     const rrdPath = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/rrddata?timeframe=month&cf=AVERAGE`
     let raw: any[] = []
+
     try {
       raw = (await pveFetch<any[]>(conn, rrdPath)) || []
     } catch {
@@ -80,9 +84,11 @@ export async function GET(req: Request, ctx: RouteContext) {
       const mem = Number(p.mem) || 0
       const mc = Number(p.maxcpu) || 0
       const mm = Number(p.maxmem) || 0
+
       if (p.time < fromTs) fromTs = p.time
       if (p.time > toTs) toTs = p.time
       const running = cpu > 0 || mem > 0
+
       if (running) {
         runningCount++
         cpuSum += cpu
@@ -97,6 +103,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     const avgMemPct = runningCount > 0 ? memPctSum / runningCount : 0
 
     const resolved = await resolveGreenConfigForNode(id, node)
+
     const config: GreenConfig = {
       tdpPerCore: resolved.tdpPerCore,
       wattsPerGbRam: resolved.wattsPerGbRam,
@@ -163,6 +170,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     })
   } catch (e: any) {
     console.error("[green/vm] Error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

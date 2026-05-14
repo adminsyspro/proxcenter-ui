@@ -5,13 +5,16 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
 function getDatabaseUrl() {
   const url = process.env.DATABASE_URL
+
   if (!url) {
     // Build-time placeholder. The runtime instance gets the real URL from env.
     // An empty / unset URL would have crashed PrismaPg with a confusing
     // libpq parse error, so surface a clearer build-time fallback.
     return "postgres://placeholder@localhost:5432/placeholder?sslmode=disable"
   }
-  return url
+
+
+return url
 }
 
 /**
@@ -25,11 +28,14 @@ function extractSchema(connectionString: string): string {
   try {
     const u = new URL(connectionString)
     const fromQuery = u.searchParams.get("schema")
+
     if (fromQuery && fromQuery.length > 0) return fromQuery
   } catch {
     // fall through
   }
-  return "public"
+
+
+return "public"
 }
 
 const dsn = getDatabaseUrl()

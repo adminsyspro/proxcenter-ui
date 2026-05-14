@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+
 import { useToast } from '@/contexts/ToastContext'
 
 const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
@@ -19,7 +20,8 @@ export function useDemoGuard() {
 
       if (isDemo && method !== 'GET') {
         toast.warning('This action is disabled in demo mode')
-        return new Response(JSON.stringify({ success: false, demo: true, message: 'Action disabled in demo mode' }), {
+
+return new Response(JSON.stringify({ success: false, demo: true, message: 'Action disabled in demo mode' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })

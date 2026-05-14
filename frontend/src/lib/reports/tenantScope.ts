@@ -12,6 +12,7 @@
 // by querying PVE /cluster/resources and filtering by the tenant's pools.
 
 import { NextResponse } from 'next/server'
+
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth/config'
@@ -39,15 +40,19 @@ export const SUPER_ADMIN_ONLY_REPORT_TYPES: ReadonlySet<string> = new Set([
 /** True when the current session belongs to a non-provider (vDC) tenant. */
 export async function isVdcTenant(): Promise<boolean> {
   const tenantId = await getCurrentTenantId()
-  return tenantId !== DEFAULT_TENANT_ID
+
+
+return tenantId !== DEFAULT_TENANT_ID
 }
 
 /** True when the current session belongs to a user holding role_super_admin. */
 export async function isCurrentUserSuperAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
   const userId = (session as any)?.user?.id
+
   if (!userId) return false
-  return await isUserSuperAdmin(userId)
+
+return await isUserSuperAdmin(userId)
 }
 
 /**
@@ -72,7 +77,8 @@ export async function assertReportTypeAllowed(type: string | undefined | null): 
 
   if (!(await isVdcTenant())) return null
   if (VDC_ALLOWED_REPORT_TYPES.has(type)) return null
-  return NextResponse.json(
+
+return NextResponse.json(
     { error: `Report type '${type}' is not available for this tenant` },
     { status: 403 }
   )
@@ -85,13 +91,17 @@ export async function assertReportTypeAllowed(type: string | undefined | null): 
  */
 export async function filterReportTypesForTenant<T extends { type: string }>(types: T[]): Promise<T[]> {
   let result = types
+
   if (!(await isCurrentUserSuperAdmin())) {
     result = result.filter(t => !SUPER_ADMIN_ONLY_REPORT_TYPES.has(t.type))
   }
+
   if (await isVdcTenant()) {
     result = result.filter(t => VDC_ALLOWED_REPORT_TYPES.has(t.type))
   }
-  return result
+
+
+return result
 }
 
 export interface ScopePayload {
@@ -113,8 +123,10 @@ export interface ScopePayload {
 export async function buildScopePayloadForCurrentTenant(): Promise<ScopePayload | null> {
   const tenantId = await getCurrentTenantId()
   const scope = await getVdcScope(tenantId)
+
   if (!scope) return null
-  return buildScopePayloadFromVdc(scope, tenantId)
+
+return buildScopePayloadFromVdc(scope, tenantId)
 }
 
 async function buildScopePayloadFromVdc(scope: VdcScope, tenantId: string): Promise<ScopePayload> {
@@ -124,25 +136,33 @@ async function buildScopePayloadFromVdc(scope: VdcScope, tenantId: string): Prom
 
   for (const connId of scope.connectionIds) {
     const nodes = scope.nodesByConnection.get(connId)
+
     if (nodes && nodes.size > 0) node_filter[connId] = Array.from(nodes)
 
     const storages = scope.storagesByConnection.get(connId)
+
     if (storages && storages.size > 0) storage_filter[connId] = Array.from(storages)
 
     const pools = scope.poolsByConnection.get(connId)
+
     if (pools && pools.size > 0) {
       try {
         const conn = await getConnectionById(connId, tenantId)
         const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+
         if (Array.isArray(resources)) {
           const ids: number[] = []
+
           for (const r of resources) {
             const vmid = Number(r?.vmid)
+
             if (!Number.isFinite(vmid)) continue
+
             if (typeof r?.pool === 'string' && pools.has(r.pool)) {
               ids.push(vmid)
             }
           }
+
           if (ids.length > 0) vmid_filter[connId] = ids
           else vmid_filter[connId] = [-1] // sentinel: pool exists but is empty → block all VMs
         }

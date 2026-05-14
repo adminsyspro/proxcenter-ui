@@ -10,9 +10,12 @@ const OPENAI_EXCLUDED = /embed|tts|whisper|dall-e|moderation|audio|realtime/i
 /** Validate that a user-provided URL is a valid HTTP(S) URL and not a private/internal address */
 function validateAIUrl(input: string): string {
   const parsed = new URL(input)
+
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http and https URLs are allowed')
   }
+
+
   // Return origin + pathname to cut taint flow from user input
   return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
 }
@@ -43,6 +46,7 @@ async function fetchOpenAIModels(key: string, baseUrl?: string): Promise<string[
   const raw = baseUrl || 'https://api.openai.com/v1'
   const validated = validateAIUrl(raw)
   const url = validated.endsWith('/') ? validated.replace(/\/+$/, '') : validated
+
   const res = await fetchWithTimeout(`${url}/models`, {
     headers: { Authorization: `Bearer ${key}` },
   })
@@ -76,6 +80,7 @@ async function fetchAnthropicModels(key: string): Promise<string[]> {
 export async function POST(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await request.json()

@@ -22,6 +22,7 @@ export async function GET(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+
     if (permError) return permError
 
     const silences = await prisma.alertSilence.findMany({
@@ -31,7 +32,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ data: silences })
   } catch (error: any) {
     console.error('[alerts/silence] GET error:', error)
-    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 
@@ -43,6 +45,7 @@ export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (permError) return permError
 
     const rawBody = await req.json()
@@ -81,7 +84,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ data: silence })
   } catch (error: any) {
     console.error('[alerts/silence] POST error:', error)
-    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
 
@@ -93,6 +97,7 @@ export async function DELETE(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
@@ -109,6 +114,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ data: { deleted: result.count } })
   } catch (error: any) {
     console.error('[alerts/silence] DELETE error:', error)
-    return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

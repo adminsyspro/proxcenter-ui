@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+
 import { Box, Button, Typography, useTheme, alpha } from '@mui/material'
 import { useTranslations } from 'next-intl'
+
 import { useBranding } from '@/contexts/BrandingContext'
 
 // Logo SVG ProxCenter

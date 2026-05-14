@@ -16,12 +16,14 @@ export async function GET(
     const { connectionId } = await params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
     const node = searchParams.get('node')
 
     let url = `${ORCHESTRATOR_URL}/api/v1/cve/${encodeURIComponent(connectionId)}`
+
     if (node) {
       url += `?node=${encodeURIComponent(node)}`
     }
@@ -42,7 +44,8 @@ export async function GET(
     return NextResponse.json(data)
   } catch (error: any) {
     console.error('Error fetching CVEs:', error)
-    return NextResponse.json(
+
+return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )
@@ -58,12 +61,14 @@ export async function POST(
     const { connectionId } = await params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
     const node = searchParams.get('node')
 
     let url = `${ORCHESTRATOR_URL}/api/v1/cve/${encodeURIComponent(connectionId)}/scan`
+
     if (node) {
       url += `?node=${encodeURIComponent(node)}`
     }
@@ -85,7 +90,8 @@ export async function POST(
     return NextResponse.json(data)
   } catch (error: any) {
     console.error('Error scanning CVEs:', error)
-    return NextResponse.json(
+
+return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
     )

@@ -333,7 +333,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
 
   const [timeRange, setTimeRange] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('dashboard-timerange') || 'hour'
-    
+
 return 'hour'
   })
 
@@ -456,7 +456,7 @@ return 'hour'
       }
     }
 
-    
+
 return hidden
   }, [layout])
 
@@ -470,7 +470,7 @@ return hidden
   const gridLayout = visibleLayout.map(w => {
     const def = WIDGET_REGISTRY[w.type]
 
-    
+
 return {
       i: w.id,
       x: w.x,
@@ -587,6 +587,7 @@ return {
   // Multi-dashboard: create
   const handleCreateDashboard = async (name) => {
     if (!name) return
+
     try {
       // If this is the first dashboard, persist the current "Default" layout first
       if (dashboards.length === 0) {
@@ -622,6 +623,7 @@ return {
     const name = dashTabTarget
 
     if (!name) return
+
     try {
       await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(name)}`, { method: 'DELETE' })
       setDeleteDashDialog(false)
@@ -637,6 +639,7 @@ return {
     const oldName = dashTabTarget
 
     if (!newName || !oldName || newName === oldName) return
+
     try {
       // Load old, create new with same widgets, delete old
       const res = await fetch(`/api/v1/dashboard/layout?name=${encodeURIComponent(oldName)}`)
@@ -698,7 +701,7 @@ return {
     const handler = () => setFullscreen(!!document.fullscreenElement)
 
     document.addEventListener('fullscreenchange', handler)
-    
+
 return () => document.removeEventListener('fullscreenchange', handler)
   }, [])
 

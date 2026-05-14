@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Button, Card, CardContent, Typography } from '@mui/material'
 
@@ -15,6 +16,7 @@ export default function PbsShellTab({ pbsId }: PbsShellTabProps) {
 
   useEffect(() => {
     let cancelled = false
+
     fetch(`/api/v1/pbs/${pbsId}/info`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then(body => {
@@ -25,7 +27,9 @@ export default function PbsShellTab({ pbsId }: PbsShellTabProps) {
       .catch(() => {
         /* non-fatal */
       })
-    return () => {
+
+
+return () => {
       cancelled = true
     }
   }, [pbsId])

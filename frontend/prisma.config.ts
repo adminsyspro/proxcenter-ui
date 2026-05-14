@@ -4,6 +4,7 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+
     // Idempotent seed used to bootstrap the default tenant, security policy,
     // RBAC permission catalogue and system roles. Safe to re-run; uses upsert
     // semantics so existing rows are reconciled, not duplicated.

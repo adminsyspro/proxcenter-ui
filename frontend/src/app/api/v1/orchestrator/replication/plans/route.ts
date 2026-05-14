@@ -49,6 +49,7 @@ const MOCK_PLANS = [
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -56,6 +57,7 @@ export async function GET() {
     const response = await client.getRecoveryPlans()
 
     const all = Array.isArray(response.data) ? response.data : []
+
     const filtered = all.filter((p: any) =>
       (!p.source_cluster || tenantConnectionIds.has(p.source_cluster)) &&
       (!p.target_cluster || tenantConnectionIds.has(p.target_cluster))
@@ -78,9 +80,11 @@ export async function POST(request: NextRequest) {
 
     // Validate cluster connections belong to current tenant
     const tenantConnectionIds = await getTenantConnectionIds()
+
     if (body.source_cluster && !tenantConnectionIds.has(body.source_cluster)) {
       return NextResponse.json({ error: 'Source cluster not found' }, { status: 404 })
     }
+
     if (body.target_cluster && !tenantConnectionIds.has(body.target_cluster)) {
       return NextResponse.json({ error: 'Target cluster not found' }, { status: 404 })
     }

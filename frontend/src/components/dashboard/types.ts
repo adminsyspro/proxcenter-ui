@@ -56,6 +56,7 @@ export const DEFAULT_LAYOUT: WidgetConfig[] = [
   { id: 'clusters-g', type: 'clusters-gauges', x: 2, y: 1, w: 4, h: 7 },
   { id: 'resources-1', type: 'resources-gauges', x: 6, y: 1, w: 3, h: 7 },
   { id: 'drs-1', type: 'drs-status', x: 9, y: 1, w: 2, h: 7 },
+
   // Section: Cluster / Ceph
   { id: 'sec-2', type: 'section-header', x: 0, y: 18, w: 12, h: 1, settings: { title: 'Cluster / Ceph' } },
   { id: 'ceph-1', type: 'ceph-status', x: 0, y: 8, w: 3, h: 10 },

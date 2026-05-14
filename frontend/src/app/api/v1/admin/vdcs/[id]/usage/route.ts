@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getVdcById, refreshVdcUsage } from "@/lib/vdc"
 import { requireProviderTenant } from "@/lib/tenant"
@@ -16,11 +17,14 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const vdc = await getVdcById(id)
+
     if (!vdc) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
@@ -30,6 +34,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       !vdc.usage?.lastSyncedAt
 
     let usage = vdc.usage
+
     if (shouldRefresh) {
       usage = await refreshVdcUsage(id)
     }

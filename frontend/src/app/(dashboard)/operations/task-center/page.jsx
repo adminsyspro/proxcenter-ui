@@ -32,7 +32,9 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
+
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
@@ -64,7 +66,8 @@ function useTimeAgo(t) {
     if (diff < 60) return t('time.secondsAgo')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+
+return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 }
 
@@ -120,6 +123,7 @@ function TypeChip({ type, t }) {
     migration: 'jobsPage.typeMigration',
     rolling_update: 'jobsPage.typeRollingUpdate'
   }
+
   const label = t && TYPE_LABEL_KEYS[type] ? t(TYPE_LABEL_KEYS[type]) : (TYPE_LABELS[type] || type)
   const icon = TYPE_ICONS[type] || 'ri-file-list-line'
 
@@ -197,11 +201,14 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise, t }) {
     if (!job?.id || !isEnterprise) return
 
     setLoading(true)
+
     try {
       const res = await fetch(`/api/v1/orchestrator/rolling-updates/${job.id}`)
+
       if (res.ok) {
         const data = await res.json()
         const ru = data.data || data
+
         if (ru?.logs) {
           setLogs(ru.logs)
         }
@@ -217,7 +224,9 @@ function JobDetailDialog({ open, onClose, job, onAction, isEnterprise, t }) {
   useEffect(() => {
     if (open && job?.status === 'running' && isEnterprise) {
       const interval = setInterval(fetchJobDetails, 3000)
-      return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
     }
   }, [open, job?.status, isEnterprise])
 
@@ -446,7 +455,8 @@ export default function JobsPage() {
 
   useEffect(() => {
     setPageInfo(t('jobs.title'), t('jobs.title'), 'ri-play-list-2-line')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   // SWR data fetching with conditional refresh interval
@@ -461,7 +471,9 @@ export default function JobsPage() {
   useEffect(() => {
     if (stats.running > 0 && isEnterprise) {
       const interval = setInterval(() => mutate(), 5000)
-      return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
     }
   }, [stats.running, isEnterprise, mutate])
 
@@ -473,10 +485,14 @@ export default function JobsPage() {
       const res = await fetch(`/api/v1/orchestrator/rolling-updates/${jobId}/${action}`, {
         method: 'POST',
       })
+
       if (!res.ok) {
         const data = await res.json()
+
         throw new Error(data.error || `Failed to ${action} job`)
       }
+
+
       // Refresh jobs list
       mutate()
     } catch (e) {
@@ -505,6 +521,7 @@ export default function JobsPage() {
 
       // Handle status filter with aliases
       let matchStatus = statusFilter === 'all'
+
       if (!matchStatus) {
         if (statusFilter === 'success') {
           matchStatus = job.status === 'success' || job.status === 'completed'

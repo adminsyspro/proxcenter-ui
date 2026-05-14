@@ -111,6 +111,7 @@ const OptionMenu = props => {
                           {...(option.href && { className: 'p-0' })}
                           onClick={e => {
                             handleClose(e)
+
                             if (option.menuItemProps?.onClick) {
                               option.menuItemProps.onClick(e)
                             }

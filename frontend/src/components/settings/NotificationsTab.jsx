@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations, useLocale } from 'next-intl'
+
 import dynamic from 'next/dynamic'
+
+import { useTranslations, useLocale } from 'next-intl'
 
 import {
   Alert,
@@ -45,7 +47,7 @@ async function fetchJson(url, init) {
   } catch {}
 
   if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-  
+
 return json
 }
 
@@ -164,23 +166,25 @@ return
       {/* Onglets principaux */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
-          <Tab 
-            icon={<i className="ri-settings-3-line" />} 
-            iconPosition="start" 
-            label={t('notifications.configuration')} 
+          <Tab
+            icon={<i className="ri-settings-3-line" />}
+            iconPosition="start"
+            label={t('notifications.configuration')}
           />
-          <Tab 
-            icon={<i className="ri-palette-line" />} 
-            iconPosition="start" 
-            label={t('notifications.emailTemplates')} 
+          <Tab
+            icon={<i className="ri-palette-line" />}
+            iconPosition="start"
+            label={t('notifications.emailTemplates')}
           />
         </Tabs>
       </Box>
 
       {activeTab === 1 ? (
+
         /* Onglet Templates */
         <EmailTemplateEditor />
       ) : (
+
         /* Onglet Configuration */
         <Box>
       <Typography variant='body2' sx={{ opacity: 0.7, mb: 3 }}>
@@ -216,9 +220,9 @@ return
             />
           </Box>
 
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, 
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
             gap: 2,
             opacity: settings.email?.enabled ? 1 : 0.5,
             pointerEvents: settings.email?.enabled ? 'auto' : 'none'
@@ -313,9 +317,9 @@ return
           <Typography variant='body2' fontWeight={600} sx={{ mb: 1.5 }}>
             {t('notifications.smtp.connectionSecurity')}
           </Typography>
-          <Box sx={{ 
-            display: 'flex', 
-            flexWrap: 'wrap', 
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
             gap: 2,
             opacity: settings.email?.enabled ? 1 : 0.5,
             pointerEvents: settings.email?.enabled ? 'auto' : 'none'
@@ -364,10 +368,10 @@ return
 
           {/* Test de connexion */}
           <Divider sx={{ my: 2 }} />
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'flex-end', 
-            gap: 2, 
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 2,
             flexWrap: 'wrap',
             opacity: settings.email?.enabled ? 1 : 0.5,
             pointerEvents: settings.email?.enabled ? 'auto' : 'none'

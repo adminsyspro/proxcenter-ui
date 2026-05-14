@@ -3,13 +3,63 @@
 
 import { z } from 'zod'
 
+// Hostnames that expose cloud-instance credentials. We block them outright
+// because a tenant with `connection.manage` should never legitimately point
+// a Proxmox/PBS connection at the host VM's own metadata service.
+const CLOUD_METADATA_HOSTS = new Set([
+  '169.254.169.254',
+  'fd00:ec2::254',
+  'metadata.google.internal',
+  'metadata.azure.com',
+  'metadata',
+])
+
+function parseAndValidateBaseUrl(raw: string, ctx: z.RefinementCtx): string {
+  const trimmed = raw.trim()
+  let url: URL
+
+  try {
+    url = new URL(trimmed)
+  } catch {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'baseUrl must be a valid URL (e.g. https://pve.local:8006)' })
+
+return z.NEVER as unknown as string
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'baseUrl must use http:// or https://' })
+
+return z.NEVER as unknown as string
+  }
+
+  if (url.username || url.password) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'baseUrl must not embed credentials in the URL' })
+
+return z.NEVER as unknown as string
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+
+  if (CLOUD_METADATA_HOSTS.has(host)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'baseUrl points to a cloud-metadata endpoint' })
+
+return z.NEVER as unknown as string
+  }
+
+
+return trimmed.replace(/\/+$/, '')
+}
+
+const baseUrlRequired = z.string().min(1, 'baseUrl is required').transform(parseAndValidateBaseUrl)
+const baseUrlOptional = z.string().min(1).transform(parseAndValidateBaseUrl).optional()
+
 // ─── Connections ───────────────────────────────────────────────────────────────
 
 /** POST /api/v1/connections — create a Proxmox connection */
 export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
   type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv', 'nutanix']).default('pve'),
-  baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim().replace(/\/+$/, '')),
+  baseUrl: baseUrlRequired,
   behindProxy: z.boolean().default(false),
   insecureTLS: z.boolean().default(false),
   hasCeph: z.boolean().default(false),
@@ -46,33 +96,43 @@ export const createConnectionSchema = z.object({
       path: ['apiToken'],
     })
   }
+
+
   // VMware requires username + password
   if (data.type === 'vmware') {
     if (!data.vmwareUser) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'vmwareUser is required', path: ['vmwareUser'] })
     }
+
     if (!data.vmwarePassword) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'vmwarePassword is required', path: ['vmwarePassword'] })
     }
   }
+
+
   // Hyper-V requires username + password
   if (data.type === 'hyperv') {
     if (!data.vmwareUser) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hyper-V username is required', path: ['vmwareUser'] })
     }
+
     if (!data.vmwarePassword) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hyper-V password is required', path: ['vmwarePassword'] })
     }
   }
+
+
   // XCP-ng (XO) requires username + password
   if (data.type === 'xcpng') {
     if (!data.vmwareUser) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'XO username is required', path: ['vmwareUser'] })
     }
+
     if (!data.vmwarePassword) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'XO password is required', path: ['vmwarePassword'] })
     }
   }
+
   if (data.sshEnabled) {
     if (!data.sshAuthMethod) {
       ctx.addIssue({
@@ -81,6 +141,7 @@ export const createConnectionSchema = z.object({
         path: ['sshAuthMethod'],
       })
     }
+
     if (data.sshAuthMethod === 'key' && !data.sshKey) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -88,6 +149,7 @@ export const createConnectionSchema = z.object({
         path: ['sshKey'],
       })
     }
+
     if (data.sshAuthMethod === 'password' && !data.sshPassword) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -102,7 +164,7 @@ export const createConnectionSchema = z.object({
 export const updateConnectionSchema = z.object({
   name: z.string().min(1).transform(s => s.trim()).optional(),
   type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv', 'nutanix']).optional(),
-  baseUrl: z.string().min(1).transform(s => s.trim().replace(/\/+$/, '')).optional(),
+  baseUrl: baseUrlOptional,
   behindProxy: z.boolean().optional(),
   insecureTLS: z.boolean().optional(),
   hasCeph: z.boolean().optional(),
@@ -185,6 +247,7 @@ export const syncAlertsSchema = z.object({
 export const cloneVmSchema = z.object({
   newid: z.union([z.number().int().min(100), z.string().min(1)])
     .transform(v => Number(v)),
+
   // All other Proxmox clone params are optional and passed through
   name: z.string().optional(),
   description: z.string().optional(),
@@ -238,6 +301,7 @@ export const createCustomImageSchema = z.object({
   recommendedCores: z.number().int().min(1).max(128).default(2),
   ostype: z.string().max(20).default('l26'),
   tags: z.string().max(200).nullable().optional(),
+
   // Provider-only flag: if true and the caller is on the 'default' tenant,
   // the image becomes part of the shared catalogue visible to every tenant.
   // The route enforces the provider check; here we just accept the input.
@@ -250,6 +314,7 @@ export const createCustomImageSchema = z.object({
       path: ['downloadUrl'],
     })
   }
+
   if (data.sourceType === 'volume' && !data.volumeId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -316,6 +381,7 @@ export const deploySchema = z.object({
   connectionId: z.string().min(1, 'connectionId is required'),
   node: z.string().min(1, 'node is required'),
   storage: z.string().min(1, 'storage is required'),
+
   // ISO-mode only: separate storage that holds the boot ISO. Required when
   // the resolved image is an install-media ISO (image.format === 'iso').
   isoStorage: z.string().optional(),
@@ -335,6 +401,7 @@ export const deploySchema = z.object({
     ostype: z.string().default('l26'),
     agent: z.boolean().default(true),
     cpu: z.string().default('host'),
+
     // ISO-mode toggles. SeaBIOS is fine for everything pre-Win10. UEFI
     // (ovmf + efidisk0 with pre-enrolled-keys=1) is required for Windows
     // 10/11/Server 2025 — otherwise Secure Boot fails the installer.
@@ -348,6 +415,7 @@ export const deploySchema = z.object({
     nameserver: z.string().optional(),
     searchdomain: z.string().optional(),
   }).nullable().optional(),
+
   // ISO-mode network reservation: tenant pre-declares the IP/MAC the OS
   // installer will configure manually (no cloud-init = PVE can't push
   // ipconfigN). When the chosen bridge is an IPAM-managed VNet, both

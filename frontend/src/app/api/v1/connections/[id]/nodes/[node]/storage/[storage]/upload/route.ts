@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server"
 import https from "node:https"
 import http from "node:http"
 import { randomUUID } from "node:crypto"
+
+import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -53,7 +54,8 @@ export async function POST(
 
   if (isChunk) return handleChunk(req, ctx, uploadId)
   if (isFinalize) return handleFinalize(req, ctx, uploadId)
-  return NextResponse.json({ error: "Missing X-Chunk-Index or X-Finalize header" }, { status: 400 })
+
+return NextResponse.json({ error: "Missing X-Chunk-Index or X-Finalize header" }, { status: 400 })
 }
 
 // ── Chunk handler: open connection on first chunk, stream data directly ──
@@ -66,9 +68,11 @@ async function handleChunk(
     const { id, node, storage } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)
+
     if (storageBlock) return storageBlock
 
     const chunkIndex = Number.parseInt(req.headers.get("x-chunk-index") || "0", 10)
@@ -87,6 +91,7 @@ async function handleChunk(
     if (!session) {
       const conn = await getConnectionById(id)
       const baseUrl = conn.baseUrl.replace(/\/+$/, "")
+
       const targetUrl = new URL(
         `${baseUrl}/api2/json/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`
       )
@@ -101,6 +106,7 @@ async function handleChunk(
 
       const isHttps = targetUrl.protocol === "https:"
       const transport = isHttps ? https : http
+
       const agent = isHttps && conn.insecureDev
         ? new https.Agent({ rejectUnauthorized: false })
         : undefined
@@ -109,6 +115,7 @@ async function handleChunk(
 
       let resolveResult: any
       let rejectResult: any
+
       const resultPromise = new Promise<{ statusCode: number; body: string }>((res, rej) => {
         resolveResult = res
         rejectResult = rej
@@ -130,6 +137,7 @@ async function handleChunk(
         },
         (res) => {
           const chunks: Buffer[] = []
+
           res.on("data", (chunk) => chunks.push(chunk))
           res.on("end", () => {
             resolveResult({
@@ -162,9 +170,12 @@ async function handleChunk(
 
     // Stream chunk data directly to the open Proxmox connection
     const reader = req.body.getReader()
+
     while (true) {
       const { done, value } = await reader.read()
+
       if (done) break
+
       if (value) {
         await new Promise<void>((resolve, reject) => {
           session!.proxyReq.write(value, (err: any) => (err ? reject(err) : resolve()))
@@ -181,13 +192,17 @@ async function handleChunk(
     })
   } catch (e: any) {
     console.error("Error streaming chunk:", e)
+
     // Clean up on error
     const session = streamingSessions.get(uploadId)
+
     if (session) {
       session.proxyReq.destroy()
       streamingSessions.delete(uploadId)
     }
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -201,18 +216,22 @@ async function handleFinalize(
     const { id, node, storage } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)
+
     if (storageBlock) return storageBlock
 
     const session = streamingSessions.get(uploadId)
+
     if (!session) {
       return NextResponse.json({ error: "No streaming session found. Send chunks first." }, { status: 400 })
     }
 
     // Write closing boundary
     const closing = `\r\n--${session.boundary}--\r\n`
+
     await new Promise<void>((resolve, reject) => {
       session.proxyReq.write(closing, (err: any) => (err ? reject(err) : resolve()))
     })
@@ -225,23 +244,30 @@ async function handleFinalize(
 
     if (result.statusCode < 200 || result.statusCode >= 300) {
       let errMsg = `Proxmox returned ${result.statusCode}`
+
       try {
         const json = JSON.parse(result.body)
+
         errMsg = json.errors ? JSON.stringify(json.errors) : json.message || errMsg
       } catch { /* use default */ }
+
       setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: session.totalFormLength, status: "error", error: errMsg })
-      return NextResponse.json({ error: errMsg, uploadId }, { status: result.statusCode })
+
+return NextResponse.json({ error: errMsg, uploadId }, { status: result.statusCode })
     }
 
     setProgress(uploadId, { bytesSent: session.bytesSent, totalBytes: session.bytesSent, status: "done" })
 
     let data = null
+
     try {
       const json = JSON.parse(result.body)
+
       data = json.data
     } catch { /* ignore */ }
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update" as any,
       category: "storage",
@@ -254,7 +280,8 @@ async function handleFinalize(
   } catch (e: any) {
     console.error("Error finalizing upload:", e)
     setProgress(uploadId, { bytesSent: 0, totalBytes: 0, status: "error", error: e?.message || String(e) })
-    return NextResponse.json({ error: e?.message || String(e), uploadId }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e), uploadId }, { status: 500 })
   } finally {
     streamingSessions.delete(uploadId)
     setTimeout(() => clearProgress(uploadId), 30_000)

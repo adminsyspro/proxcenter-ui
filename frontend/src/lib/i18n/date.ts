@@ -11,15 +11,21 @@ export function getDateLocale(locale: string): string {
 
 export function formatDateTime(date: Date | number, locale: string, options?: Intl.DateTimeFormatOptions): string {
   const d = typeof date === 'number' ? new Date(date) : date
-  return d.toLocaleString(getDateLocale(locale), options)
+
+
+return d.toLocaleString(getDateLocale(locale), options)
 }
 
 export function formatDate(date: Date | number, locale: string, options?: Intl.DateTimeFormatOptions): string {
   const d = typeof date === 'number' ? new Date(date) : date
-  return d.toLocaleDateString(getDateLocale(locale), options)
+
+
+return d.toLocaleDateString(getDateLocale(locale), options)
 }
 
 export function formatTime(date: Date | number, locale: string, options?: Intl.DateTimeFormatOptions): string {
   const d = typeof date === 'number' ? new Date(date) : date
-  return d.toLocaleTimeString(getDateLocale(locale), options)
+
+
+return d.toLocaleTimeString(getDateLocale(locale), options)
 }

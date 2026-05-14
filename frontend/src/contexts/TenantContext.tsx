@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+
 import { useSession } from 'next-auth/react'
 
 interface TenantInfo {
@@ -35,19 +36,23 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!session?.user?.id) {
       setLoading(false)
-      return
+
+return
     }
 
     fetch('/api/v1/auth/me/tenants')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
+
+return r.json()
       })
       .then(data => {
         const tenants = data.data || []
+
         setAvailableTenants(tenants)
         const currentId = (session.user as any).tenantId || data.currentTenantId || 'default'
         const current = tenants.find((t: TenantInfo) => t.id === currentId) || tenants[0] || null
+
         setCurrentTenant(current)
       })
       .catch((err) => {
@@ -66,6 +71,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err.error || 'Failed to switch tenant')
       }
 

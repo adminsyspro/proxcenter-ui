@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { ensureNamespace, ensureSubToken, setNamespaceAcl, deleteSubToken } from './pbsNamespace'
 
 vi.mock('./pbs-client', () => ({
   pbsFetch: vi.fn(),
 }))
 import { pbsFetch } from './pbs-client'
+
 const mock = pbsFetch as any
 
 const conn = { baseUrl: 'https://pbs.example:8007', apiToken: 'root@pam!x:y', insecureDev: true }
@@ -42,12 +44,14 @@ describe('ensureSubToken', () => {
     mock.mockRejectedValueOnce(new Error('PBS 404 /access/users/root@pam/token/vdc-abc'))
     mock.mockResolvedValueOnce({ tokenid: 'root@pam!vdc-abc', value: 'sekret' })
     const res = await ensureSubToken(conn, 'root@pam', 'vdc-abc')
+
     expect(res).toEqual({ tokenId: 'root@pam!vdc-abc', secret: 'sekret' })
   })
 
   it('reuses an existing token (no secret returned)', async () => {
     mock.mockResolvedValueOnce({ tokenid: 'root@pam!vdc-abc' })
     const res = await ensureSubToken(conn, 'root@pam', 'vdc-abc')
+
     expect(res).toEqual({ tokenId: 'root@pam!vdc-abc', secret: null })
   })
 })

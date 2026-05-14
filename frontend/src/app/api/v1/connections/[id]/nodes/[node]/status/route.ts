@@ -52,6 +52,7 @@ export async function POST(
     // RBAC: node.manage permission required
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", resourceId)
+
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
@@ -79,7 +80,8 @@ export async function POST(
     return NextResponse.json({ data: result })
   } catch (e: any) {
     console.error(`[node-status] POST Error:`, e?.message)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 

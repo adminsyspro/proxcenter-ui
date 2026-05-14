@@ -45,19 +45,24 @@ interface ManualStepStatus {
 }
 
 const locks = new Map<string, Promise<any>>()
+
 async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prev = locks.get(key) ?? Promise.resolve()
   let resolve: () => void = () => {}
   const next = new Promise<void>(r => { resolve = r })
+
   locks.set(key, prev.then(() => next))
+
   try { return await prev.then(fn) }
   finally { resolve(); if (locks.get(key) === next) locks.delete(key) }
 }
 
 function parsePbsUser(apiToken: string): string {
   const m = apiToken.match(/^([^!]+)!/)
+
   if (!m) throw new Error('Unexpected PBS root token format; expected user@realm!tokenid:secret')
-  return m[1]
+
+return m[1]
 }
 
 async function resolvePbsMeta(pbsConnectionId: string): Promise<{
@@ -70,6 +75,7 @@ async function resolvePbsMeta(pbsConnectionId: string): Promise<{
     where: { id: pbsConnectionId },
     select: { baseUrl: true, fingerprint: true, apiTokenEnc: true, insecureTLS: true, type: true },
   })
+
   if (!row || row.type !== 'pbs') throw new Error(`PBS connection not found: ${pbsConnectionId}`)
   if (!row.fingerprint) throw new Error('PBS fingerprint missing — capture it on the connection first')
 
@@ -86,15 +92,20 @@ async function resolvePbsMeta(pbsConnectionId: string): Promise<{
 
 async function readVdcAndTenant(vdcId: string) {
   const vdc = await prisma.vdc.findUnique({ where: { id: vdcId } })
+
   if (!vdc) throw new Error(`vDC not found: ${vdcId}`)
   const tenant = await prisma.tenant.findUnique({ where: { id: vdc.tenantId } })
+
   if (!tenant) throw new Error(`tenant not found: ${vdc.tenantId}`)
-  return { vdc, tenant }
+
+return { vdc, tenant }
 }
 
 async function readVdcNodeNames(vdcId: string): Promise<string[]> {
   const rows = await prisma.vdcNode.findMany({ where: { vdcId }, select: { nodeName: true } })
-  return rows.map(r => r.nodeName)
+
+
+return rows.map(r => r.nodeName)
 }
 
 async function appendVdcStorage(vdcId: string, storageId: string): Promise<void> {
@@ -113,7 +124,9 @@ async function removeVdcStorage(vdcId: string, storageId: string): Promise<void>
 
 export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBindingRow; steps: StepStatus }> {
   const lockKey = `${args.vdcId}|${args.pbsConnectionId}|${args.datastore}|${args.namespace ?? ''}`
-  return withLock(lockKey, async () => {
+
+
+return withLock(lockKey, async () => {
     const { vdc, tenant } = await readVdcAndTenant(args.vdcId)
     const namespace = args.namespace ?? `tenant-${tenant.slug}/vdc-${vdc.slug}`
     const pbs = await resolvePbsMeta(args.pbsConnectionId)
@@ -124,6 +137,7 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
     // PBS. Otherwise ensureSubToken would rotate the PBS secret and leave the DB
     // with the stale one, breaking future auth.
     const existing = await findBindingByTuple(args.pbsConnectionId, args.datastore, namespace)
+
     if (existing) {
       throw new Error(`Binding already exists (${existing.datastore}/${existing.namespace}). Delete it first if you want to recreate.`)
     }
@@ -133,11 +147,13 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
 
     const tokenShortId = `vdc-${args.vdcId.slice(0, 8)}`
     let tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
+
     if (!tokenResult.secret) {
       await deleteSubToken(pbs.conn, pbs.rootUser, tokenShortId)
       tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
       if (!tokenResult.secret) throw new Error('Failed to mint sub-token (no secret)')
     }
+
     steps.token = 'ok'
     const effectiveTokenId = tokenResult.tokenId
     const effectiveSecret = tokenResult.secret
@@ -166,6 +182,7 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
     const pveConn = await getConnectionById(pveConnId, tenant.id)
     const storageName = sanitizeStorageName(tenant.slug, vdc.slug)
     const nodes = await readVdcNodeNames(args.vdcId)
+
     try {
       await createPbsStorage(pveConn, {
         storage: storageName,
@@ -185,20 +202,24 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
     }
 
     clearVdcScopeCache(tenant.id)
-    return { binding, steps }
+
+return { binding, steps }
   })
 }
 
 export async function bindPbsToVdcManual(args: BindManualArgs): Promise<{ binding: PbsBindingRow; steps: ManualStepStatus }> {
   if (!args.namespace) throw new Error('namespace is required in manual mode')
   const lockKey = `${args.vdcId}|${args.pbsConnectionId}|${args.datastore}|${args.namespace}`
-  return withLock(lockKey, async () => {
+
+
+return withLock(lockKey, async () => {
     const { vdc, tenant } = await readVdcAndTenant(args.vdcId)
 
     const row = await prisma.connection.findUnique({
       where: { id: args.pbsConnectionId },
       select: { type: true },
     })
+
     if (!row || row.type !== 'pbs') throw new Error(`PBS connection not found: ${args.pbsConnectionId}`)
 
     const binding = await insertBinding({
@@ -212,8 +233,10 @@ export async function bindPbsToVdcManual(args: BindManualArgs): Promise<{ bindin
     })
 
     const steps: ManualStepStatus = { mode: 'manual', pveStorage: 'skipped' }
+
     if (args.pveStorageName) {
       const pveConnId = args.pveConnectionId ?? vdc.connectionId
+
       await insertPveStorage({
         bindingId: binding.id,
         pveConnectionId: pveConnId,
@@ -225,12 +248,14 @@ export async function bindPbsToVdcManual(args: BindManualArgs): Promise<{ bindin
     }
 
     clearVdcScopeCache(tenant.id)
-    return { binding, steps }
+
+return { binding, steps }
   })
 }
 
 export async function unbindFromVdc(bindingId: string): Promise<void> {
   const row = await prisma.vdcPbsNamespace.findUnique({ where: { id: bindingId } })
+
   if (!row) return
 
   const { tenant } = await readVdcAndTenant(row.vdcId)
@@ -240,9 +265,11 @@ export async function unbindFromVdc(bindingId: string): Promise<void> {
     if (s.managed) {
       try {
         const pveConn = await getConnectionById(s.pveConnectionId, tenant.id)
+
         await deletePbsStorage(pveConn, s.pveStorageName)
       } catch { /* already gone */ }
     }
+
     await removeVdcStorage(row.vdcId, s.pveStorageName)
     await deletePveStorage(s.id)
   }
@@ -251,6 +278,7 @@ export async function unbindFromVdc(bindingId: string): Promise<void> {
     try {
       const pbs = await resolvePbsMeta(row.pbsConnectionId)
       const tokenShortId = String(row.pbsTokenId).split('!')[1] ?? `vdc-${row.vdcId.slice(0, 8)}`
+
       await deleteSubToken(pbs.conn, pbs.rootUser, tokenShortId)
     } catch (e) {
       console.error(`[pbs-unbind] token revoke failed for ${bindingId}:`, e)

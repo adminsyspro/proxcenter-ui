@@ -15,21 +15,28 @@ async function verifyDrsRuleBelongsToTenant(client: any, id: string): Promise<bo
   const rulesRes = await client.getRules()
   const rules = Array.isArray(rulesRes.data) ? rulesRes.data : []
   const rule = rules.find((r: any) => r.id === id)
+
   if (rule?.connection_id) {
     const tenantConnectionIds = await getTenantConnectionIds()
-    return tenantConnectionIds.has(rule.connection_id)
+
+
+return tenantConnectionIds.has(rule.connection_id)
   }
-  return true // no connection_id = global rule
+
+
+return true // no connection_id = global rule
 }
 
 // PUT /api/v1/orchestrator/drs/rules/:id — tenant-scoped
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params
     const client = getOrchestratorClient()
+
     if (!client) return NextResponse.json({ error: 'Orchestrator not configured' }, { status: 503 })
 
     if (!(await verifyDrsRuleBelongsToTenant(client, id))) {
@@ -38,18 +45,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const body = await request.json()
     const rule: any = { ...body }
+
     if (rule.connectionId !== undefined) {
       rule.connection_id = rule.connectionId
       delete rule.connectionId
     }
+
     if (rule.fromTag !== undefined) {
       rule.from_tag = rule.fromTag
       delete rule.fromTag
     }
+
     if (rule.fromPool !== undefined) {
       rule.from_pool = rule.fromPool
       delete rule.fromPool
     }
+
     const response = await client.updateRule(id, rule)
 
     return NextResponse.json(response.data)
@@ -69,10 +80,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params
     const client = getOrchestratorClient()
+
     if (!client) return NextResponse.json({ error: 'Orchestrator not configured' }, { status: 503 })
 
     if (!(await verifyDrsRuleBelongsToTenant(client, id))) {

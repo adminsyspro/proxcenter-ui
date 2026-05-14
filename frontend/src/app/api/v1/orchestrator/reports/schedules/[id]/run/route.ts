@@ -15,6 +15,7 @@ export async function POST(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
@@ -28,7 +29,9 @@ export async function POST(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to run schedule:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to run schedule' },
       { status: 500 }
     )

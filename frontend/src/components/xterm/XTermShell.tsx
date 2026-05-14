@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+
 import { Box, CircularProgress, Typography, Chip, Button } from '@mui/material'
 
 interface XTermShellProps {
@@ -35,7 +36,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       // Import dynamique de xterm (client-side only)
       const { Terminal } = await import('xterm')
       const { FitAddon } = await import('@xterm/addon-fit')
-      
+
       // Importer le CSS
       await import('xterm/css/xterm.css')
 
@@ -74,6 +75,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         })
 
         const fitAddon = new FitAddon()
+
         terminal.loadAddon(fitAddon)
 
         terminal.open(terminalRef.current)
@@ -86,13 +88,17 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         const handleResize = () => {
           if (fitAddonRef.current) {
             fitAddonRef.current.fit()
+
+
             // Envoyer les nouvelles dimensions au serveur Proxmox
             if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
               const dims = `1:${xtermRef.current.cols}:${xtermRef.current.rows}:`
+
               wsRef.current.send(dims)
             }
           }
         }
+
         window.addEventListener('resize', handleResize)
 
         // Input handler - envoyer les données au serveur
@@ -122,16 +128,19 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       if (user) {
         proxyWsUrl += `&user=${encodeURIComponent(user)}`
       }
+
       if (apiToken) {
         proxyWsUrl += `&apiToken=${encodeURIComponent(apiToken)}`
       }
+
       if (vmtype && vmid) {
         proxyWsUrl += `&vmtype=${encodeURIComponent(vmtype)}&vmid=${encodeURIComponent(vmid)}`
       }
-      
+
       console.log('[XTerm] Connecting to proxy:', proxyWsUrl.replace(/ticket=[^&]+/, 'ticket=***').replace(/apiToken=[^&]+/, 'apiToken=***'))
-      
+
       const ws = new WebSocket(proxyWsUrl, ['binary'])
+
       wsRef.current = ws
 
       ws.binaryType = 'arraybuffer'
@@ -146,6 +155,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
           if (fitAddonRef.current && xtermRef.current) {
             fitAddonRef.current.fit()
             const dims = `1:${xtermRef.current.cols}:${xtermRef.current.rows}:`
+
             ws.send(dims)
           }
         }, 100)
@@ -156,6 +166,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
 
         if (event.data instanceof ArrayBuffer) {
           const decoder = new TextDecoder()
+
           xtermRef.current.write(decoder.decode(event.data))
         } else if (typeof event.data === 'string') {
           xtermRef.current.write(event.data)
@@ -169,6 +180,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       ws.onclose = (event) => {
         console.log('[XTerm] WebSocket closed:', event.code, event.reason)
         setStatus('disconnected')
+
         if (event.code !== 1000) {
           setErrorMsg(`Connection closed: ${event.reason || 'Unknown reason'}`)
         }
@@ -208,14 +220,14 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#0c0c0c' }}>
       {/* Status bar */}
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center', 
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        px: 2, 
-        py: 1, 
-        bgcolor: '#1a1a1a', 
-        borderBottom: '1px solid #333' 
+        px: 2,
+        py: 1,
+        bgcolor: '#1a1a1a',
+        borderBottom: '1px solid #333'
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
@@ -223,8 +235,8 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
               width: 8,
               height: 8,
               borderRadius: '50%',
-              bgcolor: status === 'connected' ? '#22c55e' : 
-                       status === 'connecting' ? '#f59e0b' : 
+              bgcolor: status === 'connected' ? '#22c55e' :
+                       status === 'connecting' ? '#f59e0b' :
                        status === 'error' ? '#ef4444' : '#6b7280',
               animation: status === 'connecting' ? 'pulse 1s infinite' : 'none',
               '@keyframes pulse': {
@@ -233,34 +245,34 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
               }
             }}
           />
-          <Chip 
-            label="xterm.js" 
-            size="small" 
-            sx={{ 
-              height: 20, 
-              fontSize: 10, 
-              bgcolor: '#22c55e', 
+          <Chip
+            label="xterm.js"
+            size="small"
+            sx={{
+              height: 20,
+              fontSize: 10,
+              bgcolor: '#22c55e',
               color: '#fff',
               '& .MuiChip-label': { px: 1 }
-            }} 
+            }}
           />
           <Typography sx={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
             {host}:{port}
           </Typography>
           <Typography sx={{ color: '#666', fontSize: 12 }}>
-            • {status === 'connected' ? 'Connected' : 
-               status === 'connecting' ? 'Connecting...' : 
+            • {status === 'connected' ? 'Connected' :
+               status === 'connecting' ? 'Connecting...' :
                status === 'error' ? 'Error' : 'Disconnected'}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           {status !== 'connected' && (
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               variant="outlined"
               onClick={connect}
-              sx={{ 
-                color: '#ccc', 
+              sx={{
+                color: '#ccc',
                 borderColor: '#444',
                 fontSize: 11,
                 py: 0.5,
@@ -271,15 +283,15 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
             </Button>
           )}
           {onDisconnect && (
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               variant="outlined"
               onClick={() => {
                 wsRef.current?.close()
                 onDisconnect()
               }}
-              sx={{ 
-                color: '#888', 
+              sx={{
+                color: '#888',
                 borderColor: '#444',
                 fontSize: 11,
                 py: 0.5,
@@ -303,11 +315,11 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       <Box sx={{ flex: 1, position: 'relative' }}>
         {/* Loading overlay */}
         {status === 'connecting' && (
-          <Box sx={{ 
-            position: 'absolute', 
-            inset: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
+          <Box sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
             bgcolor: 'rgba(0,0,0,0.8)',
             zIndex: 10
@@ -323,11 +335,11 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
 
         {/* Disconnected overlay */}
         {status === 'disconnected' && (
-          <Box sx={{ 
-            position: 'absolute', 
-            inset: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
+          <Box sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
             justifyContent: 'center',
             bgcolor: 'rgba(0,0,0,0.8)',
             zIndex: 10
@@ -337,9 +349,9 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
               <Typography sx={{ mt: 2, color: '#888', fontSize: 13 }}>
                 Disconnected
               </Typography>
-              <Button 
-                variant="contained" 
-                size="small" 
+              <Button
+                variant="contained"
+                size="small"
                 onClick={connect}
                 sx={{ mt: 2 }}
               >
@@ -350,10 +362,10 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         )}
 
         {/* Terminal element */}
-        <Box 
+        <Box
           ref={terminalRef}
-          sx={{ 
-            height: '100%', 
+          sx={{
+            height: '100%',
             width: '100%',
             '& .xterm': {
               height: '100%',

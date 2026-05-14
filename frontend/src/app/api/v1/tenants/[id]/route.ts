@@ -1,10 +1,12 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
+
+import { getServerSession } from "next-auth"
+
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateTenant, deleteTenant, DEFAULT_TENANT_ID, requireProviderTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -12,12 +14,15 @@ type Ctx = { params: Promise<{ id: string }> }
 // GET /api/v1/tenants/:id
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
   const row = await prisma.tenant.findUnique({ where: { id } })
+
   if (!row) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
 
   // Match the legacy SQLite shape: snake_case-ish camelCase aliases the route
@@ -41,8 +46,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 // PUT /api/v1/tenants/:id
 export async function PUT(req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -60,6 +67,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
   try {
     const tenant = await updateTenant(id, body)
+
     if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
 
     await audit({
@@ -83,8 +91,10 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 // DELETE /api/v1/tenants/:id
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -95,6 +105,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   }
 
   const ok = await deleteTenant(id)
+
   if (!ok) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
 
   await audit({

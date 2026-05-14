@@ -21,6 +21,7 @@ export async function GET() {
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -29,7 +30,8 @@ export async function GET() {
     return NextResponse.json({ data: stored ?? DEFAULT_AI_SETTINGS })
   } catch (e: any) {
     console.error('Failed to get AI settings:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -38,15 +40,18 @@ export async function PUT(request: Request) {
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await request.json()
     const tenantId = await getCurrentTenantId()
+
     await setSetting('ai', tenantId, body)
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Failed to save AI settings:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

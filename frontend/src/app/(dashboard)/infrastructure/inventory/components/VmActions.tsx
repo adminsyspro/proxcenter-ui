@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -40,6 +41,7 @@ function VmActions({
   isCluster?: boolean
   isLocked?: boolean
   lockType?: string
+
   // Tenant admins don't manage placement — the provider does. Hide the
   // migrate icon entirely (and its divider when nothing else needs it)
   // rather than disabling, since there's no useful "informational" value
@@ -172,9 +174,9 @@ function VmActions({
             size="small"
             onClick={onDelete}
             disabled={disabled || isRunning}
-            sx={{ 
-              color: isRunning ? 'text.disabled' : 'error.main', 
-              '&:hover': { bgcolor: 'rgba(244,67,54,0.12)' } 
+            sx={{
+              color: isRunning ? 'text.disabled' : 'error.main',
+              '&:hover': { bgcolor: 'rgba(244,67,54,0.12)' }
             }}
           >
             <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />
@@ -192,9 +194,9 @@ function VmActions({
                 size="small"
                 onClick={onUnlock}
                 disabled={disabled}
-                sx={{ 
+                sx={{
                   color: '#f59e0b',
-                  '&:hover': { bgcolor: 'rgba(245,158,11,0.12)' } 
+                  '&:hover': { bgcolor: 'rgba(245,158,11,0.12)' }
                 }}
               >
                 <i className="ri-lock-unlock-line" style={{ fontSize: 18 }} />

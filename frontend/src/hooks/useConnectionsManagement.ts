@@ -13,12 +13,15 @@ async function fetchJson(url: string, init?: RequestInit) {
 
   if (!r.ok) {
     let msg = json?.error || text || `HTTP ${r.status}`
+
     if (json?.details?.fieldErrors) {
       const fields = Object.entries(json.details.fieldErrors)
         .filter(([, v]) => (v as string[])?.length)
         .map(([k, v]) => `${k}: ${(v as string[]).join(', ')}`)
+
       if (fields.length) msg += ' — ' + fields.join('; ')
     }
+
     throw new Error(msg)
   }
 
@@ -62,6 +65,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=pve')
+
       setPveConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setPveError(e?.message || String(e))
@@ -77,6 +81,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=pbs')
+
       setPbsConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setPbsError(e?.message || String(e))
@@ -92,6 +97,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=vmware')
+
       setVmwareConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setVmwareError(e?.message || String(e))
@@ -107,6 +113,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=xcpng')
+
       setXcpngConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setXcpngError(e?.message || String(e))
@@ -122,6 +129,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=nutanix')
+
       setNutanixConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setNutanixError(e?.message || String(e))
@@ -137,6 +145,7 @@ export function useConnectionsManagement() {
 
     try {
       const json = await fetchJson('/api/v1/connections?type=hyperv')
+
       setHypervConnections(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setHypervError(e?.message || String(e))

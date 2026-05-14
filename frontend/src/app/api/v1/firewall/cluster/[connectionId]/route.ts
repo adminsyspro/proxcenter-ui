@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/cluster/[connectionId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,11 @@ export async function GET(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
@@ -28,7 +31,7 @@ export async function GET(
     return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error fetching cluster firewall:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to fetch cluster firewall' },
       { status: 500 }
@@ -44,9 +47,11 @@ export async function PUT(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -57,7 +62,7 @@ export async function PUT(
     return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error updating cluster options:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to update cluster options' },
       { status: 500 }
@@ -73,9 +78,11 @@ export async function POST(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -86,7 +93,7 @@ export async function POST(
     return NextResponse.json(response.data, { status: 201 })
   } catch (error: any) {
     console.error('Error adding cluster rule:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to add cluster rule' },
       { status: 500 }

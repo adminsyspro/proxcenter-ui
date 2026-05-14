@@ -29,6 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     let body: { network_isolated?: boolean } | undefined
+
     try { body = await request.json() } catch { /* empty body is fine */ }
     const response = await client.testFailover(id, body)
 

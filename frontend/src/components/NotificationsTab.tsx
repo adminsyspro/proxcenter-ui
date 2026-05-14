@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -33,6 +34,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { useToast } from '@/contexts/ToastContext'
 
 interface Target {
@@ -96,14 +98,17 @@ export default function NotificationsTab({ connectionId }: Props) {
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [targetsRes, matchersRes] = await Promise.all([
         fetch(`${base}/targets`, { cache: 'no-store' }),
         fetch(`${base}/matchers`, { cache: 'no-store' }),
       ])
+
       if (!targetsRes.ok) throw new Error(`Targets: HTTP ${targetsRes.status}`)
       if (!matchersRes.ok) throw new Error(`Matchers: HTTP ${matchersRes.status}`)
       const [targetsJson, matchersJson] = await Promise.all([targetsRes.json(), matchersRes.json()])
+
       setTargets(targetsJson?.data || [])
       setMatchers(matchersJson?.data || [])
     } catch (e: any) {
@@ -122,6 +127,7 @@ export default function NotificationsTab({ connectionId }: Props) {
     setTargetDialogMode('create')
     setTargetDialogType(type)
     const defaults: Record<string, any> = { disable: 0 }
+
     if (type === 'smtp') { defaults.port = 465; defaults.encryption = 'tls' }
     setTargetData(defaults)
     setTargetDialogOpen(true)
@@ -136,9 +142,11 @@ export default function NotificationsTab({ connectionId }: Props) {
 
   const handleTargetSave = async () => {
     setTargetSaving(true)
+
     try {
       const name = targetData.name
       const type = targetDialogType
+
       if (!name) throw new Error('Name is required')
 
       if (targetDialogMode === 'create') {
@@ -147,18 +155,28 @@ export default function NotificationsTab({ connectionId }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(targetData),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('notifTargetCreated'))
       } else {
         const { name: _, type: __, ...params } = targetData
+
         const res = await fetch(`${base}/endpoints/${encodeURIComponent(type)}/${encodeURIComponent(name)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(params),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('notifTargetUpdated'))
       }
+
       setTargetDialogOpen(false)
       await fetchData()
     } catch (e: any) {
@@ -184,8 +202,10 @@ export default function NotificationsTab({ connectionId }: Props) {
 
   const handleMatcherSave = async () => {
     setMatcherSaving(true)
+
     try {
       const name = matcherData.name
+
       if (!name) throw new Error('Name is required')
 
       if (matcherDialogMode === 'create') {
@@ -194,18 +214,28 @@ export default function NotificationsTab({ connectionId }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(matcherData),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('notifMatcherCreated'))
       } else {
         const { name: _, ...params } = matcherData
+
         const res = await fetch(`${base}/matchers/${encodeURIComponent(name)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(params),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('notifMatcherUpdated'))
       }
+
       setMatcherDialogOpen(false)
       await fetchData()
     } catch (e: any) {
@@ -220,16 +250,24 @@ export default function NotificationsTab({ connectionId }: Props) {
   const handleDelete = async () => {
     if (!deleteDialog) return
     setDeleting(true)
+
     try {
       let url: string
+
       if (deleteDialog.type === 'target') {
         const tgt = deleteDialog.item as Target
+
         url = `${base}/endpoints/${encodeURIComponent(tgt.type)}/${encodeURIComponent(tgt.name)}`
       } else {
         url = `${base}/matchers/${encodeURIComponent(deleteDialog.item.name)}`
       }
+
       const res = await fetch(url, { method: 'DELETE' })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+      if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
       toast.success(deleteDialog.type === 'target' ? t('notifTargetDeleted') : t('notifMatcherDeleted'))
       setDeleteDialog(null)
       await fetchData()

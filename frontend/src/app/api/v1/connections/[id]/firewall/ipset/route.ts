@@ -14,6 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)

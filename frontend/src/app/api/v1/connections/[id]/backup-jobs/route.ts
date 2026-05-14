@@ -15,7 +15,7 @@ type RouteContext = {
 
 /**
  * GET /api/v1/connections/[id]/backup-jobs
- * 
+ *
  * Récupère la liste des backup jobs configurés sur le cluster Proxmox
  * Endpoint Proxmox: GET /cluster/backup
  */
@@ -45,48 +45,50 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     // Récupérer les backup jobs
     let jobs = await pveFetch<any[]>(conn, `/cluster/backup`)
+
     if (allowedPools !== null) {
       // Tenant: only jobs targeting one of their vDC pools. Jobs without
       // a pool (all=1 or vmid-list) belong to the provider/another tenant
       // and are filtered out — see lib/vdc/backupJobs.ts for the reasoning.
       jobs = (jobs || []).filter((j: any) => isJobOwnedByTenantPools(j, allowedPools))
     }
-    
+
     // Récupérer les storages disponibles pour les backups
     const storages = await pveFetch<any[]>(conn, `/storage`)
 
 
     // Filtrer uniquement les storages de type PBS ou qui supportent les backups
-    const backupStorages = (storages || []).filter(s => 
+    const backupStorages = (storages || []).filter(s =>
       s.type === 'pbs' || // Proxmox Backup Server
       (s.content?.includes('backup') && s.type !== 'dir' && s.type !== 'nfs' && s.type !== 'cifs') // Autres storages backup mais pas locaux
     )
 
 
     // Aussi retourner tous les storages backup pour référence
-    const allBackupStorages = (storages || []).filter(s => 
+    const allBackupStorages = (storages || []).filter(s =>
       s.content?.includes('backup')
     )
-    
+
     // Récupérer les nodes du cluster
     const nodes = await pveFetch<any[]>(conn, `/nodes`)
 
     // Récupérer l'usage des storages depuis le premier node online
     const firstOnlineNode = (nodes || []).find((n: any) => n.status === 'online')
     let storageStatus: any[] = []
+
     if (firstOnlineNode) {
       try {
         storageStatus = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(firstOnlineNode.node)}/storage`) || []
       } catch { /* ignore */ }
     }
-    
+
     // Formater les jobs avec plus d'infos
     const formattedJobs = (jobs || []).map((job: any) => {
       // Parser la sélection des VMs
       let selectionMode = 'all'
       let vmids: string[] = []
       let excludedVmids: string[] = []
-      
+
       if (job.all === 1 || job.all === true) {
         selectionMode = 'all'
 
@@ -99,7 +101,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       } else if (job.pool) {
         selectionMode = 'pool'
       }
-      
+
       return {
         id: job.id,
         enabled: job.enabled === 1 || job.enabled === true,
@@ -129,7 +131,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
             if (match) return match[1]
           }
 
-          
+
 return job.namespace || ''
         })(),
 
@@ -153,20 +155,28 @@ return job.namespace || ''
         // Fleecing (PVE 8+) - can be object {enabled:1,storage:"local"}, string "enabled=1,storage=local", or boolean
         fleecing: (() => {
           const f = job.fleecing
+
           if (!f) return false
           if (typeof f === 'object') return f.enabled === 1 || f.enabled === true
           if (typeof f === 'string') return f.includes('enabled=1')
-          return f === 1 || f === true
+
+return f === 1 || f === true
         })(),
         fleecingStorage: (() => {
           const f = job.fleecing
+
           if (!f) return ''
           if (typeof f === 'object') return f.storage || ''
+
           if (typeof f === 'string') {
             const m = f.match(/storage=([^\s,]+)/)
-            return m ? m[1] : ''
+
+
+return m ? m[1] : ''
           }
-          return ''
+
+
+return ''
         })(),
 
         // Performance options
@@ -192,9 +202,13 @@ return job.namespace || ''
     const tenantStorageFilter = (storage: string) => {
       if (!scope) return true
       const allowed = scope.storagesByConnection.get(id) ?? new Set<string>()
-      return allowed.has(storage)
+
+
+return allowed.has(storage)
     }
+
     const visibleStorages = allBackupStorages.filter((s: any) => tenantStorageFilter(s.storage))
+
     const visibleNodes = scope
       ? (nodes || []).filter((n: any) => (scope.nodesByConnection.get(id) ?? new Set()).has(n.node))
       : (nodes || [])
@@ -206,7 +220,9 @@ return job.namespace || ''
         // Tous les storages qui supportent les backups
         storages: visibleStorages.map(s => {
           const status = storageStatus.find((ss: any) => ss.storage === s.storage)
-          return {
+
+
+return {
             id: s.storage,
             name: s.storage,
             type: s.type,
@@ -239,14 +255,14 @@ return job.namespace || ''
     })
   } catch (e: any) {
     console.error("[backup-jobs] GET Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
 /**
  * POST /api/v1/connections/[id]/backup-jobs
- * 
+ *
  * Crée un nouveau backup job
  * Endpoint Proxmox: POST /cluster/backup
  */
@@ -274,11 +290,15 @@ export async function POST(req: Request, ctx: RouteContext) {
     const tenantId = await getCurrentTenantId()
     const scope = await getVdcScope(tenantId)
     const allowedPools = await getAllowedJobPools(tenantId, id)
+
     if (allowedPools !== null && scope !== null) {
       const poolError = validateTenantJobBody(body, allowedPools)
+
       if (poolError) {
         return NextResponse.json({ error: poolError }, { status: 403 })
       }
+
+
       // Tenants must pin a node at create time. validateTenantJobInfra
       // only enforces "non-empty + in vDC" when `node` is in the body;
       // create requests that omit it would otherwise produce a
@@ -289,7 +309,9 @@ export async function POST(req: Request, ctx: RouteContext) {
           { status: 403 },
         )
       }
+
       const infraError = validateTenantJobInfra(body, scope, id)
+
       if (infraError) {
         return NextResponse.json({ error: infraError }, { status: 403 })
       }
@@ -304,27 +326,27 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
 
     params.set('storage', body.storage)
-    
+
     // Schedule
     if (body.schedule) {
       params.set('schedule', body.schedule)
     }
-    
+
     // Node (optionnel - si null, backup sur tous les nodes)
     if (body.node) {
       params.set('node', body.node)
     }
-    
+
     // Mode de sauvegarde
     if (body.mode) {
       params.set('mode', body.mode)
     }
-    
+
     // Compression
     if (body.compress) {
       params.set('compress', body.compress)
     }
-    
+
     // Sélection des VMs
     if (body.selectionMode === 'all') {
       params.set('all', '1')
@@ -337,15 +359,15 @@ export async function POST(req: Request, ctx: RouteContext) {
     } else if (body.selectionMode === 'pool' && body.pool) {
       params.set('pool', body.pool)
     }
-    
+
     // Enabled
     params.set('enabled', body.enabled ? '1' : '0')
-    
+
     // Commentaire
     if (body.comment) {
       params.set('comment', body.comment)
     }
-    
+
     // Mail
     if (body.mailto) {
       params.set('mailto', body.mailto)
@@ -363,12 +385,14 @@ export async function POST(req: Request, ctx: RouteContext) {
     // Retention (prune-backups)
     if (!body.keepAll) {
       const parts: string[] = []
+
       if (body.keepLast) parts.push(`keep-last=${body.keepLast}`)
       if (body.keepHourly) parts.push(`keep-hourly=${body.keepHourly}`)
       if (body.keepDaily) parts.push(`keep-daily=${body.keepDaily}`)
       if (body.keepWeekly) parts.push(`keep-weekly=${body.keepWeekly}`)
       if (body.keepMonthly) parts.push(`keep-monthly=${body.keepMonthly}`)
       if (body.keepYearly) parts.push(`keep-yearly=${body.keepYearly}`)
+
       if (parts.length > 0) {
         params.set('prune-backups', parts.join(','))
       }
@@ -387,12 +411,16 @@ export async function POST(req: Request, ctx: RouteContext) {
     if (body.bwlimit) params.set('bwlimit', body.bwlimit)
     if (body.zstd) params.set('zstd', body.zstd)
     if (body.ioWorkers) params.set('io-workers', body.ioWorkers)
+
     if (body.fleecing) {
       const fleeceParts = ['enabled=1']
+
       if (body.fleecingStorage) fleeceParts.push(`storage=${body.fleecingStorage}`)
       params.set('fleecing', fleeceParts.join(','))
     }
+
     if (body.repeatMissed) params.set('repeat-missed', '1')
+
     if (body.pbsChangeDetectionMode && body.pbsChangeDetectionMode !== 'default') {
       params.set('pbs-change-detection-mode', body.pbsChangeDetectionMode)
     }
@@ -400,6 +428,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     // PBS Namespace
     if (body.namespace) {
       const existingPrune = params.get('prune-backups') || ''
+
       if (existingPrune && !existingPrune.includes('ns=')) {
         params.set('prune-backups', `${existingPrune},ns=${body.namespace}`)
       } else if (!existingPrune) {
@@ -414,13 +443,13 @@ export async function POST(req: Request, ctx: RouteContext) {
       body: params.toString()
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: 'Backup job created successfully'
     })
   } catch (e: any) {
     console.error("[backup-jobs] POST Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

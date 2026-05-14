@@ -9,8 +9,10 @@ export interface ParsedCidr {
   prefix: number
   networkInt: number
   broadcastInt: number
+
   /** First usable host (gateway-eligible). Equals network for /31 + /32. */
   firstUsableInt: number
+
   /** Last usable host. Equals broadcast for /31 + /32. */
   lastUsableInt: number
 }
@@ -22,6 +24,8 @@ export function isValidIpv4(ip: string): boolean {
 export function ipToInt(ip: string): number | null {
   if (!isValidIpv4(ip)) return null
   const parts = ip.split('.').map(p => Number.parseInt(p, 10))
+
+
   // Use unsigned right-shift so bit 31 stays positive (>>> 0).
   return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0
 }
@@ -38,11 +42,14 @@ export function intToIp(n: number): string {
 export function parseCidr(cidr: string): ParsedCidr | null {
   if (typeof cidr !== 'string' || !cidr.includes('/')) return null
   const [ip, prefStr] = cidr.split('/')
+
   if (!isValidIpv4(ip)) return null
   const prefix = Number.parseInt(prefStr, 10)
+
   if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null
 
   const ipInt = ipToInt(ip)!
+
   // Mask = top `prefix` bits. /0 → 0, /32 → 0xffffffff.
   const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
   const networkInt = (ipInt & mask) >>> 0
@@ -52,6 +59,7 @@ export function parseCidr(cidr: string): ParsedCidr | null {
   // /32 is a single-host route — treat the single IP as usable.
   let firstUsableInt: number
   let lastUsableInt: number
+
   if (prefix >= 31) {
     firstUsableInt = networkInt
     lastUsableInt = broadcastInt
@@ -66,19 +74,25 @@ export function parseCidr(cidr: string): ParsedCidr | null {
 /** Number of usable host addresses in a CIDR. /24 → 254, /30 → 2, /31 → 2, /32 → 1, /0 → 4294967294. */
 export function usableHostCount(cidr: string): number {
   const p = parseCidr(cidr)
+
   if (!p) return 0
   if (p.prefix === 32) return 1
   if (p.prefix === 31) return 2
+
   // 2^(32-prefix) - 2
   const total = Math.pow(2, 32 - p.prefix)
-  return Math.max(0, total - 2)
+
+
+return Math.max(0, total - 2)
 }
 
 export function ipInCidrUsable(ip: string, cidr: string): boolean {
   const ipInt = ipToInt(ip)
   const p = parseCidr(cidr)
+
   if (ipInt === null || !p) return false
-  return ipInt >= p.firstUsableInt && ipInt <= p.lastUsableInt
+
+return ipInt >= p.firstUsableInt && ipInt <= p.lastUsableInt
 }
 
 /** Validate a candidate gateway: must be a usable host inside the CIDR. */

@@ -1,7 +1,9 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import { useRouter, usePathname } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 import { Box, Popover, Typography, Chip } from '@mui/material'
 import { useTheme, alpha } from '@mui/material/styles'
@@ -46,7 +48,8 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
       if (entry.requires?.hasVdc === true && !hasVdc) return false
       if (entry.requires?.hasVdc === false && hasVdc) return false
       if (entry.requires?.isProviderTenant === true && !isProviderTenant) return false
-      return true
+
+return true
     }
 
     for (const item of data) {
@@ -71,7 +74,8 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
       const children = (item.children || []).filter(child => {
         if (!passesRequires(child)) return false
         if (child.permissions && !child.permissions.some(p => hasPermission(p))) return false
-        return true
+
+return true
       }).map(child => ({
         label: child.label,
         icon: child.icon,
@@ -135,7 +139,9 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
 
             if (section.standalone) {
               const isActive = pathname === section.href
-              return (
+
+
+return (
                 <Box
                   key={idx}
                   onClick={() => handleNavigate(section.href, section.locked)}
@@ -239,7 +245,9 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
                 <Box sx={{ py: 0.5 }}>
                   {section.children.map((child, cidx) => {
                     const isActive = pathname?.startsWith(child.href)
-                    return (
+
+
+return (
                       <Box
                         key={cidx}
                         onClick={() => handleNavigate(child.href, child.locked)}

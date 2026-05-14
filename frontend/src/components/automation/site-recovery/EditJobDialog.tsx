@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   InputAdornment, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
+
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
@@ -27,9 +29,11 @@ interface Props {
 export default function EditJobDialog({ open, job, onClose, onSubmit, connections }: Props) {
   const t = useTranslations()
   const [name, setName] = useState('')
+
   const [scheduleValue, setScheduleValue] = useState<ScheduleBuilderValue>({
     mode: 'rpo', rpoTargetSeconds: 900, scheduleSpec: null, timezone: defaultTimezone(),
   })
+
   const [rateLimit, setRateLimit] = useState(0)
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -59,12 +63,14 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
     setSubmitting(true)
     setError('')
     setIs409(false)
+
     try {
       const req: UpdateReplicationJobRequest = {
         name: name.trim(),
         rate_limit_mbps: rateLimit,
         bandwidth_windows: bandwidthWindows,
       }
+
       if (scheduleValue.mode === 'scheduled' && scheduleValue.scheduleSpec) {
         req.schedule_spec = scheduleValue.scheduleSpec
         req.timezone = scheduleValue.timezone
@@ -72,10 +78,12 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
         req.clear_schedule_spec = true
         req.rpo_target = scheduleValue.rpoTargetSeconds
       }
+
       await onSubmit(job.id, req)
       onClose()
     } catch (e) {
       const err = e as Error & { status?: number }
+
       if (err.status === 409) setIs409(true)
       else setError(err.message || 'Unknown error')
     } finally {

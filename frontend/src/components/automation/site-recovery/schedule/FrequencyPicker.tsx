@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import {
   Box, Checkbox, FormControlLabel, IconButton, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography
 } from '@mui/material'
+
 import type { ScheduleSpec } from './types'
 
 interface Props {
@@ -98,6 +99,7 @@ export default function FrequencyPicker({ value, onChange, disabled }: Props) {
                     type='time' size='small' value={time}
                     onChange={e => {
                       const times = [...value.times]
+
                       times[i] = e.target.value
                       onChange({ ...value, times })
                     }}
@@ -187,7 +189,9 @@ function WeekdaysSelector({ t, weekdays, onChange, disabled }: WeekdaysSelectorP
   const toggle = (d: number) => {
     onChange(weekdays.includes(d) ? weekdays.filter(x => x !== d) : [...weekdays, d].sort((a, b) => a - b))
   }
-  return (
+
+
+return (
     <Box>
       <Typography variant='caption'>{t('siteRecovery.schedule.onWeekdays')}</Typography>
       <Stack direction='row' spacing={0.5}>

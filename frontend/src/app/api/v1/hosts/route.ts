@@ -15,6 +15,7 @@ function round1(n: number) {
 export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
         // Optimisation: utiliser /cluster/resources qui contient tout en une seule requête
         // au lieu de faire N appels à /nodes/{node}/status
         const resources = await pveFetch<any[]>(connData, "/cluster/resources")
-        
+
         const nodes = resources.filter((r: any) => r?.type === 'node')
         const isCluster = nodes.length > 1
 
@@ -85,7 +86,7 @@ export async function GET(req: Request) {
         return nodeDetails.filter((n): n is NonNullable<typeof n> => n !== null)
       } catch (e) {
         console.error(`[hosts] Error fetching connection ${conn.id}:`, e)
-        
+
 return []
       }
     })
@@ -107,7 +108,7 @@ return []
     })
   } catch (e: any) {
     console.error("[hosts] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

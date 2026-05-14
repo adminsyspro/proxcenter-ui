@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+
 import { useSettings } from '@core/hooks/useSettings'
 
 /**
@@ -14,6 +15,7 @@ import { useSettings } from '@core/hooks/useSettings'
 export function useRefreshInterval(baseMs?: number): number {
   const { settings } = useSettings()
   const globalSeconds: number = settings.refreshInterval ?? 30
+
   const [visible, setVisible] = useState(
     typeof document !== 'undefined' ? document.visibilityState === 'visible' : true
   )

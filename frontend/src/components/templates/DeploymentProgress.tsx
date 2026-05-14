@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -22,10 +23,12 @@ const STEPS = ['pending', 'downloading', 'creating', 'configuring', 'starting', 
 
 function getLogType(text: string) {
   const t = text.toLowerCase()
+
   if (t.includes('error') || t.includes('failed')) return 'error'
   if (t.includes('warning')) return 'warning'
   if (t.includes('%') || t.includes('transferred')) return 'transfer'
-  return 'info'
+
+return 'info'
 }
 
 function getLogColor(type: string) {
@@ -51,6 +54,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
 
   // PVE task detail — active when we have a UPID during downloading or creating
   const isTaskActive = !!taskUpid && ['downloading', 'creating'].includes(status)
+
   const { data: taskData } = useTaskDetail(
     isTaskActive ? connectionId : undefined,
     isTaskActive ? node : undefined,
@@ -62,20 +66,25 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     if (!deploymentId) return
 
     let active = true
+
     const poll = async () => {
       try {
         const url = `/api/v1/templates/deployments/${deploymentId}`
         const res = await fetch(url)
         const text = await res.text()
         let data: any
+
         try {
           data = JSON.parse(text)
         } catch {
           console.warn('[DeploymentProgress] Non-JSON response from', url, '→', text.slice(0, 200))
           if (active) setTimeout(poll, 5000)
-          return
+
+return
         }
+
         const deployment = data.data
+
         if (!active || !deployment) return
 
         setStatus(deployment.status)
@@ -86,11 +95,14 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
 
         if (deployment.status === 'completed') {
           onComplete('completed')
-          return
+
+return
         }
+
         if (deployment.status === 'failed') {
           onComplete('failed', deployment.error)
-          return
+
+return
         }
 
         setTimeout(poll, 2000)
@@ -100,7 +112,8 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     }
 
     poll()
-    return () => { active = false }
+
+return () => { active = false }
   }, [deploymentId, onComplete])
 
   // Auto-scroll logs
@@ -113,6 +126,7 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
   const handleScroll = () => {
     if (!logsContainerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current
+
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
   }
 
@@ -306,7 +320,9 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
                               {pveLogs.map((log: any, idx: number) => {
                                 const logType = getLogType(log.t || '')
                                 const logColor = getLogColor(logType)
-                                return (
+
+
+return (
                                   <Box
                                     key={`${log.n}-${idx}`}
                                     sx={{

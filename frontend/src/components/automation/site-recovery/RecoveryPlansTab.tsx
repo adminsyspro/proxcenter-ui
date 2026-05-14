@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -149,7 +150,9 @@ export default function RecoveryPlansTab({
 
   const connName = useMemo(() => {
     const map = new Map((connections || []).map(c => [c.id, c.name]))
-    return (id: string) => map.get(id) || id
+
+
+return (id: string) => map.get(id) || id
   }, [connections])
 
   const openPlan = (id: string) => {

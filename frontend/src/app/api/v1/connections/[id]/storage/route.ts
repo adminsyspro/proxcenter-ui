@@ -20,13 +20,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // The endpoint already filters results by vDC scope below, so a tenant
     // only sees the storages actually assigned to their vDC.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
 
     // Récupérer les ressources de type storage via /cluster/resources
     const resources = await pveFetch<any[]>(conn, "/cluster/resources")
-    
+
     const storageResources = resources.filter((r) => r?.type === "storage")
 
     // Récupérer aussi la config des storages pour avoir plus d'infos
@@ -57,9 +58,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
       // Déterminer le type de storage
       let storageType = config.type || 'unknown'
-      
+
       // Déterminer si c'est un stockage partagé ou local
-      const isShared = config.shared === 1 || 
+      const isShared = config.shared === 1 ||
                        ['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'].includes(storageType)
 
       // Déterminer les contenus supportés
@@ -74,7 +75,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         enabled: config.disable !== 1,
         shared: isShared,
         content: content,
-        
+
         // Capacité
         used: used,
         total: total,
@@ -90,10 +91,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         export: config.export || null,
         pool: config.pool || null,
         monhost: config.monhost || null,
-        
+
         // Pour Ceph
         fsName: config['fs-name'] || null,
-        
+
         // Pour PBS
         datastore: config.datastore || null,
         fingerprint: config.fingerprint || null,
@@ -102,7 +103,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Agréger les storages partagés (même nom sur plusieurs nodes)
     const aggregatedMap = new Map<string, any>()
-    
+
     for (const s of storages) {
       if (s.shared) {
         // Pour les stockages partagés, on prend une seule entrée par nom de storage
@@ -166,21 +167,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // run the file-restore against.
     const tenantId = await getCurrentTenantId()
     const vdcScope = await getVdcScope(tenantId)
+
     if (vdcScope) {
       const allowedStorages = vdcScope.storagesByConnection.get(id)
       const allowedNodes = vdcScope.nodesByConnection.get(id)
+
       if (allowedStorages && allowedNodes) {
         result = result.filter((s: any) => {
           if (!allowedStorages.has(s.storage)) return false
           if (s.shared && s.type !== 'pbs') return false
+
+
           // PBS rows are aggregated cross-node — their `node` field is
           // arbitrary (first one seen). Match against the full nodes list
           // and require at least one to be in the tenant's vDC, so a PBS
           // mounted on any reachable node passes through.
           if (s.type === 'pbs') {
             const nodes: string[] = Array.isArray(s.nodes) ? s.nodes : (s.node ? [s.node] : [])
-            return nodes.some(n => allowedNodes.has(n))
+
+
+return nodes.some(n => allowedNodes.has(n))
           }
+
+
           // Non-shared storages are per-node — only return rows whose node
           // is actually authorised in the tenant's vDC. Avoids surfacing
           // `local` from sibling nodes the tenant can't reach anyway.
@@ -194,7 +203,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {
       if (a.shared !== b.shared) return a.shared ? -1 : 1
-      
+
 return b.usedPct - a.usedPct
     })
 

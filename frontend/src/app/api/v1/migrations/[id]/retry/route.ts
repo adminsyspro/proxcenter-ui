@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server"
+
 import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
@@ -19,6 +20,7 @@ export async function POST(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
@@ -42,6 +44,29 @@ export async function POST(
     // /api/v1/migrations/route.ts and matches MigrationConfig.
     const config = job.config as unknown as Parameters<typeof runMigrationPipeline>[1]
 
+    // Defensive re-validation: historical rows predate the input grammar
+    // check at create time, so we re-assert before shelling out.
+    const {
+      assertAbsPath,
+      assertBridgeName,
+      assertNodeName,
+      assertStorageName,
+      InvalidShellArgError,
+    } = await import("@/lib/ssh/validate")
+
+    try {
+      assertNodeName(config.targetNode)
+      assertStorageName(config.targetStorage)
+      if (config.networkBridge) assertBridgeName(config.networkBridge)
+      if (config.tempStorage) assertAbsPath(config.tempStorage)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: `Stored migration config has invalid value: ${e.message}` }, { status: 400 })
+      }
+
+      throw e
+    }
+
     // Create a new job for the retry
     const newJob = await prisma.migrationJob.create({
       data: {
@@ -61,6 +86,7 @@ export async function POST(
     })
 
     const tenantId = await getCurrentTenantId()
+
     after(async () => {
       await runMigrationPipeline(newJob.id, config, tenantId)
     })

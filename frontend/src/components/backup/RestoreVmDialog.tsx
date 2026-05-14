@@ -11,6 +11,7 @@
 // and returns the UPID for the caller to track.
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -31,12 +32,14 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useTenant } from '@/contexts/TenantContext'
 
 interface BackupRef {
+
   /** Full PVE volid, e.g. `pbs:backup/vm/100/2025-04-01T10:00:00Z`.
    *  Optional — when absent, pass the PBS-side coordinates instead and
    *  the backend will resolve the matching PVE storage to compose the
    *  volid. The /api/v1/guests/{vmid}/backups endpoint queries PBS
    *  directly so it never produces a volid; that's the common case. */
   volid?: string
+
   /** PBS-side coordinates for the resolution path. */
   pbsId?: string
   datastore?: string
@@ -46,6 +49,7 @@ interface BackupRef {
   format?: string
   size?: number | string
   backupTimeFormatted?: string
+
   /** Friendly VM name from the snapshot's `comment` field (PBS) — used
    *  to label the dialog header instead of leaking the raw backupPath. */
   vmName?: string
@@ -54,18 +58,23 @@ interface BackupRef {
 interface Props {
   open: boolean
   onClose: () => void
+
   /** PVE connection holding the target node (where the restore runs). When
    *  null/undefined the dialog renders a connection picker — used by the
    *  cross-PVE /operations/backups view where the listed backups don't
    *  carry their target cluster context. */
   connectionId?: string | null
+
   /** Node where the restore runs. Same nullable semantics as connectionId. */
   node?: string | null
+
   /** "qemu" or "lxc" — drives endpoint choice + which fields show. */
   type: 'qemu' | 'lxc'
   backup: BackupRef
+
   /** Original VMID — pre-fills the target field but the user can change it. */
   sourceVmid: number
+
   /** Optional callback fired when the restore POST returns a UPID. */
   onStarted?: (upid: string) => void
 }
@@ -76,6 +85,7 @@ export default function RestoreVmDialog({
   open, onClose, connectionId: connectionIdProp, node: nodeProp, type, backup, sourceVmid, onStarted,
 }: Props) {
   const t = useTranslations()
+
   // Tenant mode (vDC) hides every infra picker — VMID, target cluster, node,
   // storage, MAC/start/live/bandwidth flags. The vDC abstraction owns those
   // decisions; a tenant just renames the restored VM. Provider / 'default'
@@ -149,16 +159,21 @@ export default function RestoreVmDialog({
     if (!open || !isVdcTenant) return
     if (callerLocksConn && callerLocksNode) return
     let cancelled = false
+
     ;(async () => {
       try {
         const r = await fetch('/api/v1/vdcs', { cache: 'no-store' })
+
         if (cancelled) return
+
         if (r.ok) {
           const j = await r.json()
           const list: any[] = Array.isArray(j?.data) ? j.data : []
           const first = list.find((v) => v.connectionId)
+
           if (first) {
             if (!callerLocksConn) setPickedConnectionId(first.connectionId)
+
             if (!callerLocksNode && Array.isArray(first.nodes) && first.nodes.length > 0) {
               setPickedNode(first.nodes[0])
             }
@@ -166,76 +181,102 @@ export default function RestoreVmDialog({
         }
       } catch { /* ignore — falls through to the normal pickers, which we hide anyway */ }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, isVdcTenant, callerLocksConn, callerLocksNode])
 
   // Load PVE connections list when the user needs to pick one.
   useEffect(() => {
     if (!open || callerLocksConn) return
     let cancelled = false
+
     ;(async () => {
       try {
         const r = await fetch('/api/v1/connections?type=pve', { cache: 'no-store' })
+
         if (cancelled) return
+
         if (r.ok) {
           const j = await r.json()
+
           setPveConnections(Array.isArray(j?.data) ? j.data : [])
         }
       } catch { /* ignore */ }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, callerLocksConn])
 
   // Load nodes when a connection is known and the caller didn't lock the node.
   useEffect(() => {
     if (!open || callerLocksNode || !connectionId) return
     let cancelled = false
+
     ;(async () => {
       try {
         const r = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`, { cache: 'no-store' })
+
         if (cancelled) return
+
         if (r.ok) {
           const j = await r.json()
           const list = Array.isArray(j) ? j : (j?.data || [])
+
           setNodes(list.filter((n: any) => n.status === 'online'))
         }
       } catch { /* ignore */ }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, callerLocksNode, connectionId])
 
   // Load target storages + used VMIDs when (connectionId, node) become known.
   useEffect(() => {
     if (!open || !connectionId || !node) return
     let cancelled = false
+
     ;(async () => {
       try {
         const contentType = type === 'lxc' ? 'rootdir' : 'images'
+
         const r = await fetch(
           `/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/storages?content=${contentType}`,
           { cache: 'no-store' },
         )
+
         if (cancelled) return
+
         if (r.ok) {
           const j = await r.json()
+
           setStorages(Array.isArray(j?.data) ? j.data : [])
         }
       } catch { /* ignore */ }
+
       try {
         const r = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/resources`, { cache: 'no-store' })
+
         if (cancelled) return
+
         if (r.ok) {
           const j = await r.json()
+
           const ids = new Set<number>(
             (Array.isArray(j?.data) ? j.data : [])
               .map((x: any) => Number(x?.vmid))
               .filter((n: number) => Number.isFinite(n)),
           )
+
           setUsedVmIds(ids)
         }
       } catch { /* ignore */ }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, connectionId, node, type])
 
   // Auto-default unique=1 when the target VMID is already taken (clone-like
@@ -243,6 +284,7 @@ export default function RestoreVmDialog({
   // collide on (subnet, mac) UNIQUE.
   const targetVmidNumber = Number.parseInt(vmid)
   const targetExists = Number.isFinite(targetVmidNumber) && usedVmIds.has(targetVmidNumber)
+
   useEffect(() => {
     if (targetExists && !unique) setUnique(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,6 +293,7 @@ export default function RestoreVmDialog({
   const vmidValid = useMemo(() => {
     if (!Number.isFinite(targetVmidNumber)) return false
     if (targetVmidNumber < 100 || targetVmidNumber > 999999999) return false
+
     // If the target exists and the user hasn't enabled unique, we'll
     // overwrite the running VM — flag it as a soft warning, not a block.
     return true
@@ -271,36 +314,46 @@ export default function RestoreVmDialog({
     // and surfaces a warning Alert; the second proceeds.
     if (isVdcTenant && !restoreAsNew && !awaitingConfirm) {
       setAwaitingConfirm(true)
-      return
+
+return
     }
 
     setSubmitting(true)
     setError(null)
+
     try {
       // Resolve the target VMID. Tenant + restoreAsNew → /cluster/nextid.
       // Tenant + overwrite → reuse source. Provider → use the typed value.
       let effectiveVmid = targetVmidNumber
+
       if (isVdcTenant) {
         if (restoreAsNew) {
           try {
             const r = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/cluster/nextid`, { cache: 'no-store' })
             const j = await r.json()
+
             if (!r.ok) {
               setError(j?.error || `nextid HTTP ${r.status}`)
               setSubmitting(false)
-              return
+
+return
             }
+
             const candidate = Number(j?.data ?? j?.vmid ?? j)
+
             if (!Number.isFinite(candidate)) {
               setError('Could not allocate a fresh VMID')
               setSubmitting(false)
-              return
+
+return
             }
+
             effectiveVmid = candidate
           } catch (e: any) {
             setError(e?.message || 'Failed to allocate VMID')
             setSubmitting(false)
-            return
+
+return
           }
         } else {
           effectiveVmid = sourceVmid
@@ -311,16 +364,22 @@ export default function RestoreVmDialog({
         vmid: effectiveVmid,
         type,
       }
+
+
       // Overwrite branch only — `force=1` lets PVE replace the existing
       // VMID. New-VM branch never sets it (the VMID is fresh).
       if (isVdcTenant && !restoreAsNew) {
         body.force = true
       }
+
+
       // Tenant + new VM → ensure unique MACs to avoid an L2 collision
       // with the still-running source.
       if (isVdcTenant && restoreAsNew) {
         body.unique = true
       }
+
+
       // Caller provided a fully-qualified PVE volid → use it. Otherwise
       // hand the PBS-side coordinates to the backend so it resolves the
       // PVE storage that maps onto this datastore + namespace.
@@ -336,18 +395,23 @@ export default function RestoreVmDialog({
       } else {
         setError('Backup reference incomplete — missing volid or PBS coordinates')
         setSubmitting(false)
-        return
+
+return
       }
+
       if (storage) body.storage = storage
       if (bwlimit) body.bwlimit = Number.parseInt(bwlimit)
       if (unique) body.unique = true
       if (start) body.start = true
       if (live && type === 'qemu') body.live = true
+
+
       // Tenant overwrite path keeps the source name — don't forward
       // the (now hidden) name input. New-VM and provider-override paths
       // honour whatever the user typed.
       const wantName =
         (isVdcTenant && restoreAsNew) || (!isVdcTenant && overrideName)
+
       if (wantName && name) body.name = name
 
       const r = await fetch(
@@ -358,11 +422,15 @@ export default function RestoreVmDialog({
           body: JSON.stringify(body),
         },
       )
+
       const j = await r.json().catch(() => ({}))
+
       if (!r.ok) {
         setError(j?.error || `HTTP ${r.status}`)
-        return
+
+return
       }
+
       if (typeof j?.data === 'string') onStarted?.(j.data)
       onClose()
     } catch (e: any) {
@@ -382,10 +450,13 @@ export default function RestoreVmDialog({
           <Alert severity="info" variant="outlined" sx={{ fontSize: '0.8rem' }} icon={<i className="ri-information-line" style={{ fontSize: 16 }} />}>
             {(() => {
               const label = type === 'lxc' ? 'CT' : 'VM'
+
               const head = backup.vmName
                 ? `${label} ${backup.vmName} (${sourceVmid})`
                 : `${label} ${sourceVmid}`
-              return backup.backupTimeFormatted
+
+
+return backup.backupTimeFormatted
                 ? `${head} · ${backup.backupTimeFormatted}`
                 : head
             })()}

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -50,6 +51,7 @@ type EditNetworkDialogProps = {
     rate?: number
     mtu?: number
     queues?: number
+
     // LXC-only fields
     name?: string
     ip?: string
@@ -69,13 +71,15 @@ type IPv6Mode = 'static' | 'dhcp' | 'auto'
 
 function parseIPv4(ip: string | undefined): { mode: IPv4Mode; cidr: string } {
   if (ip === 'dhcp') return { mode: 'dhcp', cidr: '' }
-  return { mode: 'static', cidr: ip || '' }
+
+return { mode: 'static', cidr: ip || '' }
 }
 
 function parseIPv6(ip6: string | undefined): { mode: IPv6Mode; cidr: string } {
   if (ip6 === 'auto') return { mode: 'auto', cidr: '' }
   if (ip6 === 'dhcp') return { mode: 'dhcp', cidr: '' }
-  return { mode: 'static', cidr: ip6 || '' }
+
+return { mode: 'static', cidr: ip6 || '' }
 }
 
 export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, node, network, vmType = 'qemu' }: EditNetworkDialogProps) {
@@ -101,9 +105,11 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
   const [disconnect, setDisconnect] = useState(false)
   const [rateLimit, setRateLimit] = useState('')
   const [mtu, setMtu] = useState('')
+
   // QEMU-only
   const [model, setModel] = useState('virtio')
   const [multiqueue, setMultiqueue] = useState('')
+
   // LXC-only
   const [ifname, setIfname] = useState('eth0')
   const [ipv4Mode, setIpv4Mode] = useState<IPv4Mode>('static')
@@ -123,9 +129,11 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/network-choices?node=${encodeURIComponent(node)}`
         )
+
         if (res.ok) {
           const json = await res.json()
           const choices = Array.isArray(json.data) ? json.data : []
+
           const bridgeList = choices.map((c: any) => ({
             iface: c.name,
             label: c.kind === 'vnet'
@@ -140,6 +148,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
             { iface: 'vmbr0', label: 'vmbr0', kind: 'bridge' as const },
             { iface: 'vmbr1', label: 'vmbr1', kind: 'bridge' as const },
           ]
+
           setBridges(bridgeList.length > 0 ? bridgeList : fallback)
         } else {
           setBridges([
@@ -164,9 +173,11 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       setBridge(network.bridge || 'vmbr0')
       setModel(network.model || 'virtio')
       setVlanTag(network.vlan ? String(network.vlan) : '')
+
       // QEMU parser stores the MAC in `macaddr`, LXC parser in `macaddr` too,
       // but old callers may still pass `mac`.
       setMacAddress(network.macaddr || network.mac || '')
+
       // PVE convention: missing `firewall=` parameter = firewall OFF.
       // Our parser leaves network.firewall as undefined when the key isn't
       // present in the config, so map undefined to false to match PVE,
@@ -177,13 +188,16 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       setRateLimit(network.rate ? String(network.rate) : '')
       setMtu(network.mtu ? String(network.mtu) : '')
       setMultiqueue(network.queues ? String(network.queues) : '')
+
       // LXC-only
       setIfname(network.name || 'eth0')
       const v4 = parseIPv4(network.ip)
+
       setIpv4Mode(v4.mode)
       setIpv4Cidr(v4.cidr)
       setIpv4Gw(network.gw || '')
       const v6 = parseIPv6(network.ip6)
+
       setIpv6Mode(v6.mode)
       setIpv6Cidr(v6.cidr)
       setIpv6Gw(network.gw6 || '')
@@ -205,17 +219,21 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       const isSdnVnet = selectedBridge?.kind === 'vnet'
 
       let netConfig: string
+
       if (isLxc) {
         // LXC config string format (see PVE Parser.printLxcNetwork):
         //   name=eth0,bridge=vmbr0,hwaddr=...,ip=...,gw=...,ip6=...,gw6=...,
         //   firewall=0|1,link_down=0|1,mtu=...,rate=...,tag=...,host-managed=0|1
         // Empty values are omitted to match PVE's printer (which filters them).
         const parts: string[] = []
+
         if (ifname) parts.push(`name=${ifname}`)
         parts.push(`bridge=${bridge}`)
         if (macAddress) parts.push(`hwaddr=${macAddress}`)
         if (!isSdnVnet && vlanTag) parts.push(`tag=${vlanTag}`)
         parts.push(`firewall=${firewall ? 1 : 0}`)
+
+
         // IPv4
         if (ipv4Mode === 'dhcp') {
           parts.push('ip=dhcp')
@@ -223,6 +241,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
           parts.push(`ip=${ipv4Cidr}`)
           if (ipv4Gw) parts.push(`gw=${ipv4Gw}`)
         }
+
+
         // IPv6
         if (ipv6Mode === 'dhcp') {
           parts.push('ip6=dhcp')
@@ -232,6 +252,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
           parts.push(`ip6=${ipv6Cidr}`)
           if (ipv6Gw) parts.push(`gw6=${ipv6Gw}`)
         }
+
         if (disconnect) parts.push('link_down=1')
         if (mtu) parts.push(`mtu=${mtu}`)
         if (rateLimit) parts.push(`rate=${rateLimit}`)
@@ -354,6 +375,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
           {(() => {
             const selectedBridge = bridges.find(b => b.iface === bridge)
             const isSdnVnet = selectedBridge?.kind === 'vnet'
+
+
             // PVE rejects per-NIC VLAN tags on VXLAN SDN VNets unless the
             // VNet has VLAN aware enabled (which is mutually exclusive with
             // an attached subnet, so almost never the case in our flow).
@@ -372,6 +395,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                 fullWidth={isLxc}
               />
             )
+
             if (isLxc) {
               return isSdnVnet ? (
                 <Tooltip
@@ -385,7 +409,9 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                 tagField
               )
             }
-            return (
+
+
+return (
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 {isSdnVnet ? (
                   <Tooltip

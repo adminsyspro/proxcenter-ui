@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic"
-import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs'
+
+import { NextResponse } from 'next/server'
+
 import { getCurrentTenantId } from '@/lib/tenant'
 
 const BASE_UPLOAD_DIR = path.join(process.cwd(), 'data', 'uploads', 'login-bg')
@@ -25,18 +27,24 @@ export async function GET(
 
     // Resolve tenant (fallback to default for unauthenticated login page)
     let tenantId = 'default'
+
     try { tenantId = await getCurrentTenantId() } catch {}
 
     // Try tenant-specific directory first
     let filePath = path.join(BASE_UPLOAD_DIR, tenantId, sanitized)
+
+
     // Fallback to non-tenant directory (pre-migration files)
     if (!fs.existsSync(filePath)) {
       filePath = path.join(BASE_UPLOAD_DIR, sanitized)
     }
+
+
     // Then legacy public/ location
     if (!fs.existsSync(filePath)) {
       filePath = path.join(LEGACY_DIR, sanitized)
     }
+
     if (!fs.existsSync(filePath)) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }

@@ -21,7 +21,9 @@ function getNodesCache(): Map<string, { data: any; connectedNode: string | null;
   if (!(globalThis as any)[NODES_CACHE_KEY]) {
     ;(globalThis as any)[NODES_CACHE_KEY] = new Map()
   }
-  return (globalThis as any)[NODES_CACHE_KEY]
+
+
+return (globalThis as any)[NODES_CACHE_KEY]
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
@@ -34,6 +36,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // RBAC: Check node.view without resource context so scoped users (node/vm/tag/pool) pass.
   // Actual filtering happens after fetching.
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
+
   if (denied) return denied
 
   // Resolve tenant for vDC-aware caching and filtering
@@ -43,6 +46,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // Check response cache (keyed by tenant to avoid cross-tenant leaks)
   const cache = getNodesCache()
   const cached = cache.get(cacheKey)
+
   if (cached && Date.now() - cached.timestamp < NODES_CACHE_TTL) {
     return NextResponse.json({ data: cached.data, connectedNode: cached.connectedNode })
   }
@@ -57,6 +61,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Build a map of node hastate from cluster resources
   const hastateMap: Record<string, string> = {}
+
   for (const res of (clusterResources || [])) {
     if (res?.node && res?.hastate) {
       hastateMap[res.node] = res.hastate
@@ -88,6 +93,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         if (networks && Array.isArray(networks)) {
           const bridges = networks.filter((iface: any) => iface.type === 'bridge' || iface.type === 'OVSBridge')
           const nativeBridges = bridges.filter((iface: any) => iface.type === 'bridge').map((iface: any) => iface.iface)
+
           const ovsBridges = bridges.filter((iface: any) => iface.type === 'OVSBridge').map((iface: any) => iface.iface)
 
           ;(node as any)._bridges = { native: nativeBridges, ovs: ovsBridges }
@@ -136,6 +142,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     try {
       const port = extractPortFromUrl(conn.baseUrl)
       const protocol = new URL(conn.baseUrl).protocol.replaceAll(":", "")
+
       setNodeIps(id, nodeIps, port, protocol)
     } catch {
       // Invalid baseUrl — skip cache population
@@ -144,13 +151,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Persist node IPs in DB for failover after restart
   const liveNodeNames: string[] = []
+
   try {
     await Promise.all(
       enrichedNodes.map((n: any) => {
         const nodeName = n.node || n.name
+
         if (!nodeName) return Promise.resolve()
         liveNodeNames.push(nodeName)
-        return prisma.managedHost.upsert({
+
+return prisma.managedHost.upsert({
           where: { connectionId_node: { connectionId: id, node: nodeName } },
           update: { ip: n.ip || null },
           create: { connectionId: id, node: nodeName, ip: n.ip || null },
@@ -170,11 +180,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Fetch SSH address overrides from ManagedHost
   let sshOverrides: Record<string, { sshAddress: string | null; hostId: string }> = {}
+
   try {
     const hosts = await prisma.managedHost.findMany({
       where: { connectionId: id },
       select: { id: true, node: true, sshAddress: true },
     })
+
     for (const h of hosts) {
       sshOverrides[h.node] = { sshAddress: h.sshAddress, hostId: h.id }
     }
@@ -188,8 +200,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // vDC filtering: restrict to nodes assigned to the tenant's vDC
   const vdcScope = await getVdcScope(tenantId)
+
   if (vdcScope) {
     const allowedNodes = vdcScope.nodesByConnection.get(id)
+
     if (allowedNodes) {
       nodesWithSsh = nodesWithSsh.filter((n: any) => allowedNodes.has(n.node || n.name))
     } else {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -55,6 +56,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
   const [recommendedCores, setRecommendedCores] = useState(2)
   const [ostype, setOstype] = useState('l26')
   const [tags, setTags] = useState('')
+
   // Provider-only: publish to the shared catalogue (visible to every tenant).
   const [isShared, setIsShared] = useState(false)
 
@@ -123,6 +125,7 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       .then(r => r.json())
       .then(res => {
         const conns = res.data || []
+
         setConnections(conns)
         if (conns.length === 1) setSelectedConn(conns[0].id)
       })
@@ -131,11 +134,15 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
 
   // Fetch nodes
   useEffect(() => {
-    if (!selectedConn) { setNodes([]); setSelectedNode(''); return }
+    if (!selectedConn) { setNodes([]); setSelectedNode('');
+
+return }
+
     fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes`)
       .then(r => r.json())
       .then(res => {
         const nodeList = (res.data || []).filter((n: any) => n.status === 'online')
+
         setNodes(nodeList)
         if (nodeList.length === 1) setSelectedNode(nodeList[0].node)
       })
@@ -144,11 +151,15 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
 
   // Fetch storages
   useEffect(() => {
-    if (!selectedConn || !selectedNode) { setStorages([]); setSelectedStorage(''); return }
+    if (!selectedConn || !selectedNode) { setStorages([]); setSelectedStorage('');
+
+return }
+
     fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes/${encodeURIComponent(selectedNode)}/storages`)
       .then(r => r.json())
       .then(res => {
         const stList = (res.data || []).filter((s: any) => s.enabled !== 0)
+
         setStorages(stList)
       })
       .catch(() => setStorages([]))
@@ -156,7 +167,10 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
 
   // Fetch volumes from storage
   useEffect(() => {
-    if (!selectedConn || !selectedNode || !selectedStorage) { setVolumes([]); return }
+    if (!selectedConn || !selectedNode || !selectedStorage) { setVolumes([]);
+
+return }
+
     setLoadingVolumes(true)
     fetch(`/api/v1/connections/${encodeURIComponent(selectedConn)}/nodes/${encodeURIComponent(selectedNode)}/storage/${encodeURIComponent(selectedStorage)}/content`)
       .then(r => r.json())
@@ -164,8 +178,11 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
         // Filter to importable image files
         const vols = (res.data || []).filter((v: any) => {
           const vol = v.volid || ''
-          return vol.match(/\.(qcow2|raw|vmdk|img|iso)$/i) || v.content === 'import' || v.content === 'images'
+
+
+return vol.match(/\.(qcow2|raw|vmdk|img|iso)$/i) || v.content === 'import' || v.content === 'images'
         })
+
         setVolumes(vols)
         setLoadingVolumes(false)
       })
@@ -190,17 +207,22 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
       const url = isEdit
         ? `/api/v1/templates/custom-images/${editData.id}`
         : '/api/v1/templates/custom-images'
+
       const res = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+
       const data = await res.json()
+
       if (data.error) {
         setError(data.error)
         setSaving(false)
-        return
+
+return
       }
+
       setSaving(false)
       onClose(true)
     } catch (err: any) {

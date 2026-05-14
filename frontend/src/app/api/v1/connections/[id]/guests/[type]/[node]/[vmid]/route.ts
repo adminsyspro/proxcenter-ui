@@ -18,7 +18,7 @@ export async function DELETE(
   try {
     const { id, type, node, vmid } = await ctx.params
     const { searchParams } = new URL(req.url)
-    
+
     if (!ALLOWED_TYPES.has(type)) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 })
     }
@@ -58,7 +58,7 @@ export async function DELETE(
 
     // Construire les paramètres de suppression
     const params = new URLSearchParams()
-    
+
     // Options pour QEMU
     if (type === 'qemu') {
       // purge: Remove vmid from backup cron jobs
@@ -72,7 +72,7 @@ export async function DELETE(
         params.append('destroy-unreferenced-disks', '1')
       }
     }
-    
+
     // Options pour LXC
     if (type === 'lxc') {
       // purge: Remove container from all related configurations
@@ -92,7 +92,7 @@ export async function DELETE(
 
     const queryString = params.toString()
     const url = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}${queryString ? '?' + queryString : ''}`
-    
+
     // Appeler l'API Proxmox pour supprimer la VM
     const result = await pveFetch<string>(
       conn,
@@ -107,6 +107,7 @@ export async function DELETE(
     if (type === 'qemu') {
       try {
         const numericVmid = Number(vmid)
+
         if (Number.isFinite(numericVmid)) {
           await releaseAllocationsForVm(id, numericVmid)
         }

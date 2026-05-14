@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -23,9 +24,11 @@ export async function GET(request: NextRequest) {
 
     // codeql[js/user-controlled-bypass] — connectionId is format-validated and ownership-checked
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error fetching firewall status:', String(error?.message || error).replace(/[\r\n]/g, ''))
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to fetch firewall status' },
       { status: 500 }

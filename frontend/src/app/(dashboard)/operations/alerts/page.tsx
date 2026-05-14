@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -120,6 +121,7 @@ const TASK_TYPES = [
   { id: 'qmrollback', label: 'VM Rollback', group: 'VM' },
   { id: 'qmsnapshot', label: 'VM Snapshot', group: 'VM' },
   { id: 'qmdelsnapshot', label: 'VM Delete Snapshot', group: 'VM' },
+
   // Container (LXC)
   { id: 'vzstart', label: 'CT Start', group: 'Container' },
   { id: 'vzstop', label: 'CT Stop', group: 'Container' },
@@ -130,10 +132,12 @@ const TASK_TYPES = [
   { id: 'vzcreate', label: 'CT Create', group: 'Container' },
   { id: 'vzdestroy', label: 'CT Delete', group: 'Container' },
   { id: 'vzmigrate', label: 'CT Migrate', group: 'Container' },
+
   // Backup
   { id: 'vzdump', label: 'Backup (vzdump)', group: 'Backup' },
   { id: 'imgcopy', label: 'Image Copy', group: 'Backup' },
   { id: 'download', label: 'Download', group: 'Backup' },
+
   // System
   { id: 'vncproxy', label: 'VNC Console', group: 'System' },
   { id: 'vncshell', label: 'Shell Console', group: 'System' },
@@ -144,6 +148,7 @@ const TASK_TYPES = [
   { id: 'migrateall', label: 'Migrate All', group: 'System' },
   { id: 'srvreload', label: 'Service Reload', group: 'System' },
   { id: 'srvrestart', label: 'Service Restart', group: 'System' },
+
   // Ceph
   { id: 'cephcreateosd', label: 'Ceph Create OSD', group: 'Ceph' },
   { id: 'cephdestroyosd', label: 'Ceph Destroy OSD', group: 'Ceph' },
@@ -163,7 +168,8 @@ function useTimeAgo(t: ReturnType<typeof useTranslations>) {
     if (diff < 60) return t('time.justNow')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    return t('time.daysAgo', { count: Math.floor(diff / 86400) })
+
+return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 }
 
@@ -232,6 +238,7 @@ function DonutStatCard({ title, value, total, color }: { title: string; value: n
 
 function DonutTotalCard({ title, value, segments }: { title: string; value: number; segments: { value: number; color: string }[] }) {
   const data = segments.filter(s => s.value > 0)
+
   if (data.length === 0) data.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
 
   return (
@@ -271,14 +278,17 @@ export default function AlertsPage() {
   const { setPageInfo } = usePageTitle()
   const { data: session } = useSession()
   const { isEnterprise } = useLicense()
+
   // Tenant-aware narrowing: vDC tenants only manage VM-scope rules, so the
   // Task Type catalogue hides Container/Backup/System/Ceph entries.
   const { currentTenant } = useTenant()
   const isVdcTenant = !!currentTenant && currentTenant.id !== 'default'
+
   const visibleTaskTypes = useMemo(
     () => isVdcTenant ? TASK_TYPES.filter(tt => tt.group === 'VM') : TASK_TYPES,
     [isVdcTenant],
   )
+
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
 
@@ -358,7 +368,8 @@ return () => setPageInfo('', '', '')
 
   const rules: EventRule[] = useMemo(() => {
     if (!rulesData) return []
-    return Array.isArray(rulesData) ? rulesData : []
+
+return Array.isArray(rulesData) ? rulesData : []
   }, [rulesData])
 
   // Revalidate all SWR caches after mutations
@@ -647,6 +658,7 @@ return true
 
         if (status === 'silenced') {
           const silencedUntil = p.row.silenced_until
+
           const tooltipText = silencedUntil
             ? t('alerts.silencedUntil', { date: new Date(silencedUntil).toLocaleString() })
             : t('alerts.silencedIndefinite')

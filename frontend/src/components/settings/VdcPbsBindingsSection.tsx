@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+
 import {
   Alert, Box, Button, FormControlLabel, IconButton, MenuItem, Stack, Switch, TextField, Typography,
 } from '@mui/material'
@@ -31,6 +32,7 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
   const [bindings, setBindings] = useState<Binding[]>([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
+
   const [form, setForm] = useState({
     mode: 'auto' as 'auto' | 'manual',
     pbsConnectionId: '', datastore: '', namespace: defaultNamespace,
@@ -49,9 +51,11 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
 
   const reload = useCallback(async () => {
     setLoading(true)
+
     try {
       const r = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/pbs-bindings`)
       const j = await r.json()
+
       setBindings(Array.isArray(j.data) ? j.data : [])
     } finally { setLoading(false) }
   }, [vdcId])
@@ -59,11 +63,17 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
   useEffect(() => { void reload() }, [reload])
 
   useEffect(() => {
-    if (!form.pbsConnectionId) { setDatastores([]); return }
-    ;(async () => {
+    if (!form.pbsConnectionId) { setDatastores([]);
+
+return }
+
+    ;
+
+(async () => {
       try {
         const r = await fetch(`/api/v1/admin/pbs-connections/${encodeURIComponent(form.pbsConnectionId)}/datastores`)
         const j = await r.json()
+
         setDatastores(Array.isArray(j.data) ? j.data : [])
       } catch { setDatastores([]) }
     })()
@@ -71,16 +81,27 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
 
   const handleSubmit = async () => {
     setSubmitting(true); setError(null); setStepReport(null)
+
     try {
       const body: any = { mode: form.mode, pbsConnectionId: form.pbsConnectionId, datastore: form.datastore }
-      if (!form.namespace) { setError(t('vdc.pbsNamespaceRequired')); setSubmitting(false); return }
+
+      if (!form.namespace) { setError(t('vdc.pbsNamespaceRequired')); setSubmitting(false);
+
+return }
+
       body.namespace = form.namespace
       if (form.mode === 'manual' && form.pveStorageName) body.pveStorageName = form.pveStorageName
+
       const r = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/pbs-bindings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
+
       const j = await r.json()
-      if (!r.ok) { setError(j.error ?? 'Request failed'); return }
+
+      if (!r.ok) { setError(j.error ?? 'Request failed');
+
+return }
+
       setStepReport(j.steps)
       await reload()
     } finally { setSubmitting(false) }
@@ -89,6 +110,7 @@ export default function VdcPbsBindingsSection({ vdcId, tenantSlug, vdcSlug, pbsC
   const handleDelete = async (bindingId: string) => {
     if (!confirm(t('vdc.pbsRemoveConfirm'))) return
     const r = await fetch(`/api/v1/admin/vdcs/${encodeURIComponent(vdcId)}/pbs-bindings/${encodeURIComponent(bindingId)}`, { method: 'DELETE' })
+
     if (r.ok) void reload()
   }
 

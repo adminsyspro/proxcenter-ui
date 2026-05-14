@@ -11,6 +11,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -52,13 +53,14 @@ export async function POST(req: Request) {
     })
 
     const sshOverrides: Record<string, string> = {}
+
     for (const h of managedHosts) {
       if (h.sshAddress) sshOverrides[h.node] = h.sshAddress
     }
 
     // Build SSH credentials if enabled
     let sshCredentials: any = null
-    
+
     if (connection.sshEnabled) {
       sshCredentials = {
         sshEnabled: connection.sshEnabled,
@@ -80,6 +82,7 @@ export async function POST(req: Request) {
       if (connection.sshPassEnc) {
         try {
           const decrypted = decryptSecret(connection.sshPassEnc)
+
           if (connection.sshAuthMethod === "key") {
             sshCredentials.sshPassphrase = decrypted
           } else {
@@ -125,7 +128,9 @@ export async function POST(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error in rolling update preflight:", error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )

@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box, Card, CardContent, Chip, CircularProgress, IconButton, InputAdornment, LinearProgress, Stack,
   Table, TableBody, TableCell, TableHead, TableRow, TablePagination, TextField, Tooltip, Typography,
   alpha, useTheme,
 } from '@mui/material'
+
 import { StatusIcon } from './components/TreeIcons'
 import VnetEditDialog from '@/components/mydc/VnetEditDialog'
 
@@ -47,6 +49,7 @@ interface IpamSummary {
 }
 
 interface Props {
+
   /** Selection ID format: `tvnet:<vdcId>:<displayName>` (the leading `tvnet:`
    *  is already stripped by `selectionFromItemId`, so we just split on the
    *  first `:`). */
@@ -61,6 +64,7 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [ipam, setIpam] = useState<IpamSummary | null>(null)
   const [ipamLoading, setIpamLoading] = useState(false)
+
   // Client-side vm-info index: vmid → {name, node, status, type}, fetched
   // from /api/v1/connections/{connId}/guests once we know the connection.
   // This is the SAME endpoint the inventory tree consumes (and it's
@@ -68,12 +72,15 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
   // pastille get fresh data even if the server-side IPAM enrichment in
   // /vdcs/.../ipam misses for any reason.
   const [vmIndex, setVmIndex] = useState<Map<number, { name: string; node: string; status: string; type: string }>>(new Map())
+
   // Search + pagination for the IPAM allocations table.
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(10)
+
   // Edit dialog state.
   const [editOpen, setEditOpen] = useState(false)
+
   // Bumped after a successful save so the parent useEffect reloads the
   // VNet payload + IPAM list (we already key off `selectionId`, but
   // editing keeps the same id so we need a separate trigger).
@@ -81,19 +88,27 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
 
   useEffect(() => {
     const colon = selectionId.indexOf(':')
-    if (colon < 0) { setError('invalid selection id'); setLoading(false); return }
+
+    if (colon < 0) { setError('invalid selection id'); setLoading(false);
+
+return }
+
     const vdcId = selectionId.slice(0, colon)
     const displayName = selectionId.slice(colon + 1)
 
     let alive = true
+
     setLoading(true); setError(null); setIpam(null)
     fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/vnets/${encodeURIComponent(displayName)}`)
       .then(async r => {
         if (!r.ok) {
           const j = await r.json().catch(() => ({}))
+
           throw new Error(j?.error || `HTTP ${r.status}`)
         }
-        return r.json()
+
+
+return r.json()
       })
       .then(j => { if (alive) setVnet(j.data) })
       .catch(e => { if (alive) setError(e?.message || String(e)) })
@@ -107,7 +122,9 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
       .then(async r => {
         if (!r.ok) return null
         const j = await r.json().catch(() => null)
-        return j?.data ?? null
+
+
+return j?.data ?? null
       })
       .then(d => { if (alive) setIpam(d) })
       .catch(() => { /* tolerate — panel still useful without IPAM */ })
@@ -124,14 +141,17 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
     if (!ipam?.connectionId) return
     const connId = ipam.connectionId
     let alive = true
+
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests`)
       .then(async (r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return
         const list: any[] = Array.isArray(j?.data) ? j.data : []
         const idx = new Map<number, { name: string; node: string; status: string; type: string }>()
+
         for (const g of list) {
           const vmidNum = Number(g?.vmid)
+
           if (!Number.isFinite(vmidNum)) continue
           idx.set(vmidNum, {
             name: String(g.name ?? `vm-${vmidNum}`),
@@ -140,10 +160,12 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
             type: String(g.type ?? 'qemu'),
           })
         }
+
         setVmIndex(idx)
       })
       .catch(() => { /* tolerate */ })
-    return () => { alive = false }
+
+return () => { alive = false }
   }, [ipam?.connectionId])
 
   // Filter + paginate IPAM allocations. Search matches IP, MAC, vmid,
@@ -154,10 +176,14 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
   const filteredAllocations = useMemo(() => {
     if (!ipam) return []
     const q = search.trim().toLowerCase()
+
     if (!q) return ipam.allocations
-    return ipam.allocations.filter((a) => {
+
+return ipam.allocations.filter((a) => {
       const liveName = (a.vmid != null ? vmIndex.get(a.vmid)?.name : null) ?? a.vm?.name ?? a.hostname ?? ''
-      return (
+
+
+return (
         a.ip.toLowerCase().includes(q) ||
         a.mac.toLowerCase().includes(q) ||
         String(a.vmid ?? '').includes(q) ||
@@ -331,7 +357,9 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
                           // path succeeded.
                           const vm = (a.vmid != null ? vmIndex.get(a.vmid) : null) ?? a.vm
                           const orphaned = a.vmid != null && !vm
-                          return (
+
+
+return (
                             <TableRow key={a.id} sx={{ '&:last-child td': { border: 0 } }}>
                               <TableCell sx={{ fontSize: 12, py: 0.75 }}>
                                 <Stack direction="row" alignItems="center" spacing={1}>

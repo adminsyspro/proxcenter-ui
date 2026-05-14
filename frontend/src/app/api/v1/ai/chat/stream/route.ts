@@ -12,6 +12,7 @@ async function getAISettings() {
   try {
     const tenantId = await getCurrentTenantId()
     const stored = await getSetting<any>('ai', tenantId)
+
     if (stored) return stored
   } catch (e) {
     console.error('Failed to get AI settings:', e)
@@ -29,6 +30,7 @@ async function getAISettings() {
 async function getConnections() {
   try {
     const prisma = await getSessionPrisma()
+
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },
       select: {
@@ -41,11 +43,11 @@ async function getConnections() {
       }
     })
 
-    
+
 return connections
   } catch (e) {
     console.error('Failed to get connections:', e)
-    
+
 return []
   }
 }
@@ -54,6 +56,7 @@ return []
 async function getActiveAlerts() {
   try {
     const prisma = await getSessionPrisma()
+
     const alerts = await prisma.alert.findMany({
       where: { status: 'active' },
       orderBy: { lastSeenAt: 'desc' },
@@ -69,11 +72,11 @@ async function getActiveAlerts() {
       }
     })
 
-    
+
 return alerts
   } catch (e) {
     console.error('Failed to get alerts:', e)
-    
+
 return []
   }
 }
@@ -96,7 +99,7 @@ async function fetchProxmoxData(connections: any[]) {
   for (const conn of connections) {
     try {
       const token = decryptSecret(conn.apiTokenEnc)
-      
+
       const resources = await pveFetch<any[]>(
         {
           baseUrl: conn.baseUrl,
@@ -105,7 +108,7 @@ async function fetchProxmoxData(connections: any[]) {
         },
         '/cluster/resources'
       )
-      
+
       const nodes = resources.filter((r: any) => r.type === 'node')
 
       nodes.forEach((n: any) => {
@@ -121,7 +124,7 @@ async function fetchProxmoxData(connections: any[]) {
         allData.summary.totalNodes++
         if (n.status === 'online') allData.summary.onlineNodes++
       })
-      
+
       const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
 
       vms.forEach((vm: any) => {
@@ -141,7 +144,7 @@ async function fetchProxmoxData(connections: any[]) {
         if (vm.status === 'running') allData.summary.runningVMs++
         else allData.summary.stoppedVMs++
       })
-      
+
       allData.clusters.push({
         name: conn.name,
         nodes: nodes.length,
@@ -151,7 +154,7 @@ async function fetchProxmoxData(connections: any[]) {
       console.error(`Failed to fetch data from ${conn.name}:`, e)
     }
   }
-  
+
   return allData
 }
 
@@ -207,12 +210,14 @@ async function buildSystemPrompt(lang: string = 'en') {
 
   if (runningVMs.length > 0) {
     const vmsToShow = runningVMs.slice(0, 20)
+
     prompt += `\n📋 VMs running (${runningVMs.length}):\n`
     prompt += vmsToShow.map((vm: any) => `- ${vm.name} (${vm.vmid}) ${isFr ? 'sur' : 'on'} ${vm.node}`).join('\n') + '\n'
   }
 
   if (stoppedVMs.length > 0) {
     const byCluster: Record<string, any[]> = {}
+
     stoppedVMs.forEach((vm: any) => {
       if (!byCluster[vm.cluster]) byCluster[vm.cluster] = []
       byCluster[vm.cluster].push(vm)
@@ -235,6 +240,7 @@ async function buildSystemPrompt(lang: string = 'en') {
 export async function POST(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { messages, locale } = await request.json()
@@ -252,6 +258,7 @@ export async function POST(request: Request) {
     const systemPrompt = await buildSystemPrompt(lang)
 
     const lastUserMessage = messages[messages.length - 1]
+
     const contextualizedMessage = `${systemPrompt}
 
 === QUESTION ===
@@ -264,7 +271,7 @@ ${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : '
         ...messages.slice(0, -1),
         { role: 'user', content: contextualizedMessage }
       ]
-      
+
       // Appel Ollama avec streaming
       const response = await fetch(`${settings.ollamaUrl}/api/chat`, {
         method: 'POST',
@@ -279,13 +286,13 @@ ${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : '
           }
         })
       })
-      
+
       if (!response.ok) {
         const text = await response.text()
 
         throw new Error(`Ollama error: ${text}`)
       }
-      
+
       // Créer un ReadableStream pour le streaming
       const encoder = new TextEncoder()
 
@@ -295,21 +302,21 @@ ${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : '
 
           if (!reader) {
             controller.close()
-            
+
 return
           }
-          
+
           const decoder = new TextDecoder()
-          
+
           try {
             while (true) {
               const { done, value } = await reader.read()
 
               if (done) break
-              
+
               const chunk = decoder.decode(value, { stream: true })
               const lines = chunk.split('\n').filter(line => line.trim())
-              
+
               for (const line of lines) {
                 try {
                   const json = JSON.parse(line)
@@ -329,27 +336,27 @@ return
           }
         }
       })
-      
+
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
           'Transfer-Encoding': 'chunked'
         }
       })
-      
+
     } else {
       // Pour OpenAI et Anthropic, on pourrait aussi implémenter le streaming
       // mais pour l'instant on retourne une erreur
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: lang === 'fr'
           ? 'Le streaming n\'est supporté que pour Ollama.'
           : 'Streaming is only supported for Ollama.'
       }, { status: 400 })
     }
-    
+
   } catch (e: any) {
     console.error('AI chat stream failed:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -60,13 +61,17 @@ export default function RuleFormDialog({
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
+
     for (const a of aliases) {
       opts.push({ label: a.name, secondary: a.cidr })
     }
+
     for (const s of ipsets) {
       opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
     }
-    return opts
+
+
+return opts
   }, [aliases, ipsets])
 
   return (

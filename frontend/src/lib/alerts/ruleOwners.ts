@@ -30,7 +30,9 @@ export async function getRuleOwner(ruleId: string): Promise<string | null> {
     where: { ruleId },
     select: { tenantId: true },
   })
-  return row?.tenantId ?? null
+
+
+return row?.tenantId ?? null
 }
 
 /**
@@ -43,6 +45,8 @@ export async function getRuleOwner(ruleId: string): Promise<string | null> {
  */
 export async function ruleVisibleToTenant(ruleId: string, tenantId: string): Promise<boolean> {
   const owner = await getRuleOwner(ruleId)
+
   if (owner === null) return tenantId === DEFAULT_TENANT_ID
-  return owner === tenantId
+
+return owner === tenantId
 }

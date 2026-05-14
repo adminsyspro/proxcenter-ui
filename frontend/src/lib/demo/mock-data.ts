@@ -16,10 +16,13 @@ const jsonPath = path.join(process.cwd(), 'src/lib/demo/mock-data.json')
 const MOCK_DATA: Record<string, any> = (() => {
   try {
     const raw = fs.readFileSync(jsonPath, 'utf-8')
-    return JSON.parse(raw)
+
+
+return JSON.parse(raw)
   } catch {
     console.warn('[demo] Could not load mock-data.json from', jsonPath)
-    return {}
+
+return {}
   }
 })()
 
@@ -27,6 +30,7 @@ const MOCK_DATA: Record<string, any> = (() => {
 // Known connection / node identifiers used in the mock data
 // ---------------------------------------------------------------------------
 const DEMO_CONNECTION_ID = 'demo-pve-cluster-001'
+
 const DEMO_NODE_NAMES = [
   'pve-node-01',
   'pve-node-02',
@@ -178,7 +182,9 @@ const EXTRA_MOCKS: Record<string, any> = {
 /** Strip query string from a URL path */
 function stripQuery(urlPath: string): string {
   const idx = urlPath.indexOf('?')
-  return idx === -1 ? urlPath : urlPath.substring(0, idx)
+
+
+return idx === -1 ? urlPath : urlPath.substring(0, idx)
 }
 
 /**
@@ -231,6 +237,7 @@ export function getDemoResponse(urlPath: string): any | null {
 
   // --- 2. Normalise connection ID and retry ---
   const withDemoConn = normaliseConnectionId(cleanPath)
+
   if (withDemoConn !== cleanPath) {
     if (EXTRA_MOCKS[withDemoConn] !== undefined) return EXTRA_MOCKS[withDemoConn]
     if (MOCK_DATA[withDemoConn] !== undefined) return MOCK_DATA[withDemoConn]
@@ -238,6 +245,7 @@ export function getDemoResponse(urlPath: string): any | null {
 
   // --- 3. Normalise node name and retry ---
   const withDemoNode = normaliseNodeName(withDemoConn)
+
   if (withDemoNode !== withDemoConn) {
     if (EXTRA_MOCKS[withDemoNode] !== undefined) return EXTRA_MOCKS[withDemoNode]
     if (MOCK_DATA[withDemoNode] !== undefined) return MOCK_DATA[withDemoNode]

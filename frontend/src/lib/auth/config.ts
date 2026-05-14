@@ -34,6 +34,7 @@ declare module "next-auth/jwt" {
     id: string
     email: string
     name: string | null
+
     // avatar is NOT stored in JWT to keep cookie size small
     role: UserRole
     authProvider: "credentials" | "ldap" | "oidc"
@@ -144,6 +145,7 @@ export const authOptions: NextAuthOptions = {
 
         // Mettre à jour last_login_at
         const loginNow = new Date()
+
         await prisma.user.update({
           where: { id: user.id },
           data: { lastLoginAt: loginNow },
@@ -170,10 +172,12 @@ export const authOptions: NextAuthOptions = {
             },
             select: { id: true },
           })
+
           if (!isSuperAdmin) {
             await logFailure("No tenant membership")
             throw new Error("Compte sans tenant — contactez votre administrateur")
           }
+
           await prisma.userTenant.upsert({
             where: { userId_tenantId: { userId: user.id, tenantId: "default" } },
             update: {},
@@ -221,15 +225,20 @@ export const authOptions: NextAuthOptions = {
 
         // Check group restriction BEFORE creating/updating user
         const ldapConfigForRestriction = await getLdapConfig()
+
         if (ldapConfigForRestriction?.requireGroup && ldapConfigForRestriction.allowedGroups.length > 0) {
           const userGroups = ldapUser.groups || []
+
           const isAllowed = ldapConfigForRestriction.allowedGroups.some(allowedGroup => {
             return userGroups.some(userGroup => {
               // Exact DN match
               if (userGroup === allowedGroup) return true
+
               // CN extraction for simplified match
               const cnMatch = userGroup.match(/^CN=([^,]+)/i)
-              return cnMatch && cnMatch[1] === allowedGroup
+
+
+return cnMatch && cnMatch[1] === allowedGroup
             })
           })
 
@@ -251,6 +260,7 @@ export const authOptions: NextAuthOptions = {
         if (!user) {
           // Créer l'utilisateur LDAP
           const id = nanoid()
+
           await prisma.user.create({
             data: {
               id,
@@ -307,9 +317,11 @@ export const authOptions: NextAuthOptions = {
               },
               select: { id: true },
             })
+
             if (!isSuperAdmin) {
               throw new Error("Compte sans tenant — contactez votre administrateur")
             }
+
             await prisma.userTenant.upsert({
               where: { userId_tenantId: { userId: user.id, tenantId: "default" } },
               update: {},
@@ -320,6 +332,7 @@ export const authOptions: NextAuthOptions = {
 
         // Sync RBAC role from LDAP groups (Postgres / Prisma).
         const ldapConfig = await getLdapConfig()
+
         if (ldapConfig) {
           const resolvedRoleId = resolveLdapRole(ldapUser.groups, ldapConfig)
 
@@ -336,6 +349,7 @@ export const authOptions: NextAuthOptions = {
               where: { id: resolvedRoleId },
               select: { id: true },
             })
+
             const finalRoleId = roleExists ? resolvedRoleId : "role_viewer"
 
             await prisma.$transaction([
@@ -357,6 +371,7 @@ export const authOptions: NextAuthOptions = {
           } else if (!existingRole) {
             // No group match AND no existing role (first login) — assign default role
             const defaultRoleId = ldapConfig.defaultRole || "role_viewer"
+
             await prisma.rbacUserRole.create({
               data: {
                 id: `ldap_${nanoid(12)}`,
@@ -369,6 +384,7 @@ export const authOptions: NextAuthOptions = {
               },
             })
           }
+
           // If no group match but existing role: preserve manually-assigned role
         }
 
@@ -443,9 +459,11 @@ export const authOptions: NextAuthOptions = {
               },
               select: { id: true },
             })
+
             if (!isSuperAdmin) {
               throw new Error("Compte sans tenant — contactez votre administrateur")
             }
+
             await prisma.userTenant.upsert({
               where: { userId_tenantId: { userId: existing.id, tenantId: "default" } },
               update: {},
@@ -464,6 +482,7 @@ export const authOptions: NextAuthOptions = {
 
           const id = nanoid()
           const resolvedRole = resolveOidcRole(groups, oidcConfig)
+
           // Normalize: support both "role_viewer" (new) and "viewer" (legacy) formats
           const oidcRoleId = resolvedRole.startsWith('role_') ? resolvedRole : `role_${resolvedRole}`
           const role = oidcRoleId.replace(/^role_/, '') // Simple name for users table
@@ -495,6 +514,7 @@ export const authOptions: NextAuthOptions = {
             where: { id: oidcRoleId },
             select: { id: true },
           })
+
           const finalOidcRoleId = oidcRoleExists ? oidcRoleExists.id : "role_viewer"
 
           await prisma.rbacUserRole.create({
@@ -523,6 +543,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.email = user.email
         token.name = user.name
+
         // Don't store avatar in JWT to keep cookie size small
         // Avatar will be fetched from DB in session callback
         token.role = user.role
@@ -533,6 +554,7 @@ export const authOptions: NextAuthOptions = {
       if (token.id) {
         try {
           const { getUserDefaultTenantId } = await import("@/lib/tenant")
+
           token.tenantId = await getUserDefaultTenantId(token.id as string)
         } catch {
           token.tenantId = token.tenantId || 'default'
@@ -544,11 +566,13 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       // Fetch avatar from DB instead of storing in JWT (avoids large cookies)
       let avatar: string | null = null
+
       try {
         const user = await prisma.user.findUnique({
           where: { id: token.id as string },
           select: { avatar: true },
         })
+
         avatar = user?.avatar || null
       } catch (e) {
         // Ignore DB errors for avatar fetch

@@ -12,6 +12,7 @@ import { layoutGraph } from '../lib/layoutGraph'
 
 export function useTopologyData(filters: TopologyFilters, networkMap?: NetworkMap) {
   const refreshInterval = useRefreshInterval(30000)
+
   const { data, isLoading, error } = useSWRFetch<{ data: InventoryData }>('/api/v1/inventory', {
     refreshInterval,
   })

@@ -20,9 +20,12 @@ export function useResourceData(connectionId?: string) {
   // Build SWR key from connectionId + locale (server pre-formats date labels per locale)
   const swrKey = useMemo(() => {
     const params = new URLSearchParams()
+
     if (connectionId) params.set('connectionId', connectionId)
     const qs = params.toString() ? `?${params.toString()}` : ''
-    return `/api/v1/resources/overview${qs}#${locale}`
+
+
+return `/api/v1/resources/overview${qs}#${locale}`
   }, [connectionId, locale])
 
   const { data: json, error: swrError, isLoading, mutate } = useSWRFetch(swrKey, {

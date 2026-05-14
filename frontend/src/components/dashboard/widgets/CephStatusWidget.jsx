@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
@@ -20,7 +21,7 @@ function CircularGauge({ value, label, size = 56, strokeWidth = 4.5, color, subl
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
 
- 
+
 
 return () => clearTimeout(t) }, [])
 
@@ -58,7 +59,7 @@ function ThroughputTooltip({ active, payload, isDark }) {
   const time = formatTime(payload)
   const c = widgetColors(isDark)
 
-  
+
 return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -81,7 +82,7 @@ function IopsTooltip({ active, payload, isDark }) {
   const time = formatTime(payload)
   const c = widgetColors(isDark)
 
-  
+
 return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -103,7 +104,7 @@ return (
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  
+
 return '#4caf50'
 }
 
@@ -113,7 +114,7 @@ function formatBytes(bytes) {
 
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`
   if (gb >= 1) return `${gb.toFixed(1)} GB`
-  
+
 return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
 }
 
@@ -123,7 +124,7 @@ function formatBps(bps) {
   const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
   const i = Math.floor(Math.log(bps) / Math.log(k))
 
-  
+
 return Number.parseFloat((bps / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
@@ -183,29 +184,39 @@ function CephClusterCard({ cluster, isDark, perfData }) {
         const warnIds = new Set()
         const fullIds = new Set()
         const re = /osd\.(\d+)/g
+
         for (const [n, d] of Object.entries(checks)) {
           for (const det of (d?.detail || [])) {
-            let m; re.lastIndex = 0
+            let m;
+
+ re.lastIndex = 0
+
             while ((m = re.exec(det?.message || '')) !== null) {
               const id = Number.parseInt(m[1], 10)
+
               if (n === 'OSD_DOWN' || n === 'OSD_FLAGS') downIds.add(id)
               else if (n === 'OSD_NEARFULL' || n === 'OSD_BACKFILLFULL') warnIds.add(id)
               else if (n === 'OSD_FULL') fullIds.add(id)
             }
           }
         }
-        return (
+
+
+return (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, justifyContent: 'center' }}>
             {Array.from({ length: cluster.osdsTotal }, (_, i) => {
               const isUp = i < cluster.osdsUp
               const isIn = i < (cluster.osdsIn || cluster.osdsUp)
               let color, status, opacity
+
               if (downIds.has(i) || !isUp) { color = '#ef4444'; status = 'Down'; opacity = 1 }
               else if (fullIds.has(i)) { color = '#ef4444'; status = 'Full'; opacity = 1 }
               else if (warnIds.has(i)) { color = '#ff9800'; status = 'Near Full'; opacity = 1 }
               else if (!isIn) { color = '#ff9800'; status = 'Up / Out'; opacity = 1 }
               else { color = '#4caf50'; status = 'Up / In'; opacity = 0.6 }
-              return (
+
+
+return (
                 <span key={i} title={`OSD.${i} - ${status}`}
                   style={{ fontSize: 12, color, opacity, cursor: 'default', lineHeight: 1 }}>
                   <i className="ri-hard-drive-3-fill" />
@@ -346,7 +357,7 @@ function CephStatusWidget({ data, loading }) {
             const pgmap = json?.data?.pgmap
 
             if (!pgmap) return null
-            
+
 return {
               connId: cluster.connId,
               point: {

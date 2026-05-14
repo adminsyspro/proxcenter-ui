@@ -25,9 +25,12 @@ function round1(n: number) {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
+
+
     // 1) Connexions SQLite - uniquement PVE (pas PBS)
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },
@@ -104,7 +107,7 @@ export async function GET() {
           }
         } catch (e: any) {
           console.error(`[clusters] failed for ${c.id}:`, e?.message || e)
-          
+
 return {
             id: c.id,
             name: c.name ?? c.id,

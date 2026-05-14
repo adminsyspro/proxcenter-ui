@@ -16,6 +16,7 @@ beforeEach(async () => {
   await truncate(TABLES)
 
   const now = new Date()
+
   await prismaTest.tenant.createMany({
     data: [
       { id: 'tenant-a', slug: 'tenant-a', name: 'Tenant A', createdAt: now, updatedAt: now },
@@ -43,6 +44,7 @@ interface VdcSeed {
 
 async function seedVdc(opts: VdcSeed): Promise<string> {
   const id = opts.id ?? 'vdc-1'
+
   await prismaTest.vdc.create({
     data: {
       id,
@@ -55,13 +57,15 @@ async function seedVdc(opts: VdcSeed): Promise<string> {
       enabled: opts.enabled ?? true,
     },
   })
-  return id
+
+return id
 }
 
 describe('resolveVdcForVnet', () => {
   it('returns vdc when owned by tenant and enabled', async () => {
     await seedVdc({ tenantId: 'tenant-a', slug: 'acme-prod', sdnZoneName: 'zacmeprod' })
     const vdc = await resolveVdcForVnet('vdc-1', 'tenant-a')
+
     expect(vdc).not.toBeNull()
     expect(vdc?.sdnZoneName).toBe('zacmeprod')
   })

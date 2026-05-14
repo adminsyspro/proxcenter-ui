@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -13,11 +14,13 @@ export async function GET(
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
   if (denied) return denied
   const url = new URL(req.url)
   const guest = url.searchParams.get('guest')
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -30,20 +33,20 @@ export async function GET(
     ) || []
 
     // Filtrer par guest si spécifié
-    const filteredJobs = guest 
+    const filteredJobs = guest
       ? jobs.filter((j: any) => String(j.guest) === String(guest))
       : jobs
 
     // Récupérer la liste des nodes pour le target
     const nodes = await pveFetch<any[]>(conn, '/nodes', { method: "GET" }).catch(() => [])
-    
+
     // Récupérer la liste des VMs/CTs pour le sélecteur
     const vms = await pveFetch<any[]>(
       conn,
       `/nodes/${encodeURIComponent(node)}/qemu`,
       { method: "GET" }
     ).catch(() => [])
-    
+
     const cts = await pveFetch<any[]>(
       conn,
       `/nodes/${encodeURIComponent(node)}/lxc`,
@@ -60,6 +63,7 @@ export async function GET(
       rate: job.rate,
       comment: job.comment,
       enabled: job.disable !== 1,
+
       // Status info
       lastSync: job.last_sync,
       lastTry: job.last_try,
@@ -70,24 +74,24 @@ export async function GET(
       state: job.fail_count > 0 ? 'error' : (job.last_sync ? 'ok' : 'unknown'),
     }))
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         jobs: formattedJobs,
-        nodes: Array.isArray(nodes) ? nodes.map((n: any) => ({ 
-          node: n.node, 
+        nodes: Array.isArray(nodes) ? nodes.map((n: any) => ({
+          node: n.node,
           status: n.status,
           online: n.status === 'online'
         })).filter((n: any) => n.node !== node) : [],
         guests: [
-          ...((Array.isArray(vms) ? vms : []).map((vm: any) => ({ 
-            vmid: vm.vmid, 
-            name: vm.name, 
+          ...((Array.isArray(vms) ? vms : []).map((vm: any) => ({
+            vmid: vm.vmid,
+            name: vm.name,
             type: 'qemu',
             status: vm.status
           }))),
-          ...((Array.isArray(cts) ? cts : []).map((ct: any) => ({ 
-            vmid: ct.vmid, 
-            name: ct.name, 
+          ...((Array.isArray(cts) ? cts : []).map((ct: any) => ({
+            vmid: ct.vmid,
+            name: ct.name,
             type: 'lxc',
             status: ct.status
           })))
@@ -96,7 +100,8 @@ export async function GET(
     })
   } catch (error: any) {
     console.error(`Error fetching replication jobs:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to fetch replication jobs",
       data: { jobs: [], nodes: [], guests: [] }
     }, { status: 500 })
@@ -111,9 +116,11 @@ export async function POST(
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -130,13 +137,18 @@ export async function POST(
     // Format de l'ID: vmid-jobnum (ex: 100-0, 100-1, etc.)
     const existingJobs = await pveFetch<any[]>(conn, '/cluster/replication').catch(() => [])
     let jobNum = 0
+
     if (Array.isArray(existingJobs)) {
       const guestJobs = existingJobs.filter((j: any) => String(j.guest) === String(guest))
+
       if (guestJobs.length > 0) {
         const usedNums = guestJobs.map((j: any) => {
           const parts = String(j.id).split('-')
-          return Number.parseInt(parts[1] || '0')
+
+
+return Number.parseInt(parts[1] || '0')
         })
+
         jobNum = Math.max(...usedNums) + 1
       }
     }
@@ -166,7 +178,8 @@ export async function POST(
     return NextResponse.json({ data: result, success: true })
   } catch (error: any) {
     console.error(`Error creating replication job:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to create replication job"
     }, { status: 500 })
   }
@@ -180,9 +193,11 @@ export async function PUT(
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -197,6 +212,7 @@ export async function PUT(
 
     // Construire les paramètres
     const params: Record<string, string> = {}
+
     if (schedule !== undefined) params.schedule = schedule
     if (rate !== undefined) params.rate = String(rate)
     if (comment !== undefined) params.comment = comment
@@ -215,7 +231,8 @@ export async function PUT(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error(`Error updating replication job:`, String(error?.message || error).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to update replication job"
     }, { status: 500 })
   }
@@ -229,6 +246,7 @@ export async function DELETE(
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const url = new URL(req.url)
@@ -239,6 +257,7 @@ export async function DELETE(
   }
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -253,7 +272,8 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error(`Error deleting replication job:`, String(error?.message || error).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to delete replication job"
     }, { status: 500 })
   }

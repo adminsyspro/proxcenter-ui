@@ -8,7 +8,7 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/connections/{id}/fingerprint
- * 
+ *
  * Récupère le fingerprint TLS du cluster Proxmox.
  * Utilisé pour la migration cross-cluster.
  */
@@ -24,10 +24,11 @@ export async function GET(
     }
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    
+
     let fingerprint = ''
     let source = ''
     let nodeName = ''
@@ -35,7 +36,7 @@ export async function GET(
     // Méthode 1: Essayer /cluster/config/join (cluster)
     try {
       const joinInfo = await pveFetch<any>(conn, "/cluster/config/join")
-      
+
       if (joinInfo?.fingerprint) {
         fingerprint = joinInfo.fingerprint
         source = 'cluster/config/join'
@@ -47,14 +48,16 @@ export async function GET(
     } catch {
       // Pas un cluster ou pas d'accès
     }
-    
+
     // Méthode 2: Essayer /cluster/config/nodes
     if (!fingerprint) {
       try {
         const configNodes = await pveFetch<any[]>(conn, "/cluster/config/nodes")
+
         if (configNodes && configNodes.length > 0) {
           // Prendre le premier node avec un fingerprint
           const nodeWithFp = configNodes.find((n: any) => n.pve_fp)
+
           if (nodeWithFp) {
             fingerprint = nodeWithFp.pve_fp
             nodeName = nodeWithFp.name || ''
@@ -68,7 +71,7 @@ export async function GET(
 
     // Méthode 3: Pour un standalone, essayer de récupérer via pvenode cert info
     // (Note: cela nécessite un accès shell, donc on ne peut pas le faire via API)
-    
+
     if (!fingerprint) {
       // On peut essayer de récupérer le certificat directement via HTTPS
       // Mais c'est compliqué côté serveur Node.js
@@ -88,8 +91,9 @@ export async function GET(
         host,
         port,
         connectionName: conn.name,
+
         // Format prêt à l'emploi pour remote_migrate
-        targetEndpointFormat: fingerprint 
+        targetEndpointFormat: fingerprint
           ? `apitoken=PVEAPIToken=***,host=${host}${port !== '8006' ? `,port=${port}` : ''},fingerprint=${fingerprint}`
           : `apitoken=PVEAPIToken=***,host=${host}${port !== '8006' ? `,port=${port}` : ''}`
       }
@@ -97,6 +101,7 @@ export async function GET(
 
   } catch (e: any) {
     console.error('[fingerprint] Error:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

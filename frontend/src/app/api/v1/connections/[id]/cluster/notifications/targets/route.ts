@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -9,8 +10,10 @@ export const runtime = "nodejs"
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
     const conn = await getConnectionById(id)
 
@@ -23,15 +26,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       const results = await Promise.all(
         types.map(async (t: any) => {
           const typeName = typeof t === 'string' ? t : t?.name || t?.type
+
           if (!typeName) return []
+
           try {
             const endpoints = await pveFetch<any[]>(conn, `/cluster/notifications/endpoints/${typeName}`)
-            return (endpoints || []).map((ep: any) => ({ ...ep, type: typeName }))
+
+
+return (endpoints || []).map((ep: any) => ({ ...ep, type: typeName }))
           } catch {
             return []
           }
         })
       )
+
       for (const r of results) allTargets.push(...r)
     }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import type { useTranslations } from 'next-intl'
 
 import {
@@ -128,13 +129,16 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     showVmId,
     lock,
   } = props
+
   const { getColor, getShape } = useTagColors(connId)
   const shape = getShape(connId)
 
   // Render tags according to PVE shape setting
   const validTags = tags?.filter(t => t && t.trim()) || []
+
   const tagElements = (validTags.length > 0 && shape !== 'none') ? validTags.map(tag => {
     const { bg, fg } = getColor(tag)
+
     if (shape === 'circle') {
       return (
         <Tooltip key={tag} title={tag}>
@@ -142,6 +146,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </Tooltip>
       )
     }
+
     if (shape === 'dense') {
       return (
         <Tooltip key={tag} title={tag}>
@@ -149,6 +154,8 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </Tooltip>
       )
     }
+
+
     // shape === 'full'
     return (
       <Chip
@@ -342,7 +349,9 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </Box>
       </Box>
     )
-    return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
   }
 
   if (variant === 'favorite') {
@@ -391,7 +400,9 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         </Box>
       </Box>
     )
-    return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
   }
 
   const isGrouped = variant === 'grouped'
@@ -479,7 +490,9 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
       )}
     </Box>
   )
-  return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
 }, (prev, next) =>
   prev.vmKey === next.vmKey &&
   prev.isSelected === next.isSelected &&

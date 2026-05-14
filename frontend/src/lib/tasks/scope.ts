@@ -29,12 +29,18 @@
  */
 export function extractTaskVmid(taskId: string | undefined): string | null {
   if (!taskId) return null
+
   // Bare numeric: PVE's standard cluster/tasks shape.
   if (/^\d+$/.test(taskId)) return taskId
+
   // Legacy / nested form.
   const m1 = /^(?:qemu|lxc)\/(\d+)$/.exec(taskId)
+
   if (m1) return m1[1]
+
   // HA service id form (hamigrate / ha-manager); optional `@target` suffix.
   const m2 = /^(?:vm|ct):(\d+)(?:@\S+)?$/.exec(taskId)
-  return m2 ? m2[1] : null
+
+
+return m2 ? m2[1] : null
 }

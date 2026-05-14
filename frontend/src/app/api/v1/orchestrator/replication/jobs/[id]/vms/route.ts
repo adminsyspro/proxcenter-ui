@@ -9,6 +9,7 @@ export const runtime = "nodejs"
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const { id } = await params
@@ -18,6 +19,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const tenantConnectionIds = await getTenantConnectionIds()
     const jobResponse = await client.getReplicationJob(id)
     const job = jobResponse.data
+
     if (
       job &&
       ((job.source_cluster && !tenantConnectionIds.has(job.source_cluster)) ||
@@ -27,11 +29,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }
 
     const response = await client.getReplicationJobVMs(id)
-    return NextResponse.json(response.data || [])
+
+
+return NextResponse.json(response.data || [])
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error fetching replication job VMs:", e)
     }
-    return NextResponse.json([])
+
+
+return NextResponse.json([])
   }
 }

@@ -33,22 +33,28 @@ async function loadGreenSettings(tenantId: string) {
       if (!e?.message?.includes('no such table')) {
         console.warn('Failed to load green settings:', e?.message)
       }
-      return null
+
+
+return null
     }
   }
 
   const own = await tryLoad(tenantId)
+
   if (own) return own
 
   if (tenantId !== 'default') {
     const provider = await tryLoad('default')
+
     if (provider) return provider
   }
 
   try {
     const { ensureDefaultDatacenter } = await import('@/lib/db/datacenters')
     const dc = await ensureDefaultDatacenter()
-    return {
+
+
+return {
       pue: dc.pue,
       electricityPrice: dc.electricityPrice,
       currency: dc.currency,
@@ -62,13 +68,14 @@ async function loadGreenSettings(tenantId: string) {
     }
   } catch (e: any) {
     console.warn('Failed to seed Default datacentre for green fallback:', e?.message)
-    return null
+
+return null
   }
 }
 
 /**
  * GET /api/v1/resources/overview
- * 
+ *
  * Retourne une vue d'ensemble des ressources de l'infrastructure :
  * - KPIs globaux (CPU, RAM, Storage, VMs)
  * - Tendances sur 7 jours (données RRD réelles)
@@ -126,31 +133,31 @@ type DayNodeData = {
 }
 
 function aggregateRrdByDayPerNode(
-  rrdData: RrdPoint[], 
+  rrdData: RrdPoint[],
   nodeName: string,
-  maxCpu: number, 
+  maxCpu: number,
   maxMem: number
 ): Map<string, { cpu: number[], ram: number[] }> {
   const byDay = new Map<string, { cpu: number[], ram: number[] }>()
-  
+
   let validCpuCount = 0
   let validRamCount = 0
   let skippedCpu = 0
   let skippedRam = 0
   let firstValidPoint: RrdPoint | null = null
-  
+
   for (const point of rrdData) {
     if (!point.time) continue
-    
+
     const date = new Date(point.time * 1000)
     const dayKey = date.toISOString().split('T')[0] // YYYY-MM-DD
-    
+
     if (!byDay.has(dayKey)) {
       byDay.set(dayKey, { cpu: [], ram: [] })
     }
-    
+
     const day = byDay.get(dayKey)!
-    
+
     // CPU: Proxmox retourne un ratio 0-1 pour les nodes
     if (point.cpu !== undefined && point.cpu !== null) {
       const cpuVal = Number(point.cpu)
@@ -168,11 +175,11 @@ function aggregateRrdByDayPerNode(
     } else {
       skippedCpu++
     }
-    
+
     // RAM: Proxmox utilise "memused" et "memtotal"
     const memUsed = Number(point.memused ?? point.mem ?? 0)
     const memTotal = Number(point.memtotal ?? point.maxmem ?? maxMem)
-    
+
     if (memUsed > 0 && memTotal > 0 && !Number.isNaN(memUsed) && !Number.isNaN(memTotal)) {
       const ramPct = (memUsed / memTotal) * 100
 
@@ -187,15 +194,15 @@ function aggregateRrdByDayPerNode(
       skippedRam++
     }
   }
-  
+
   // Supprimer les jours sans données valides
   for (const [dayKey, dayData] of byDay) {
     if (dayData.cpu.length === 0 && dayData.ram.length === 0) {
       byDay.delete(dayKey)
     }
   }
-  
-  
+
+
   return byDay
 }
 
@@ -211,8 +218,8 @@ function calculateGlobalAverages(
   allNodesData: Map<string, Map<string, { cpu: number[], ram: number[] }>>,
   nodeCapacities: Map<string, { maxCpu: number, maxMem: number }>
 ): Map<string, { cpu: number, ram: number, nodeCount: number }> {
-  
-  
+
+
   // Collecter tous les jours uniques (seulement ceux avec des données)
   const allDays = new Set<string>()
 
@@ -223,10 +230,10 @@ function calculateGlobalAverages(
       allDays.add(day)
     }
   }
-  
-  
+
+
   const result = new Map<string, { cpu: number, ram: number, nodeCount: number }>()
-  
+
   // Pour le debug, suivre quelques jours
   const sortedDays = Array.from(allDays).sort((a, b) => a.localeCompare(b))
 
@@ -235,10 +242,10 @@ function calculateGlobalAverages(
     sortedDays[Math.floor(sortedDays.length / 2)],  // Milieu
     sortedDays[sortedDays.length - 1]  // Dernier jour
   ])
-  
+
   // Seuil minimum d'utilisation RAM pour inclure un node (évite les clusters vides)
   const MIN_RAM_USAGE = 5 // 5%
-  
+
   for (const day of allDays) {
     let totalCpuWeighted = 0
     let totalCpuCapacity = 0
@@ -247,20 +254,20 @@ function calculateGlobalAverages(
     let nodesWithCpu = 0
     let nodesWithRam = 0
     let nodesSkipped = 0
-    
+
     const isDebugDay = debugDays.has(day)
-    
+
     for (const [nodeName, nodeData] of allNodesData) {
       const dayData = nodeData.get(day)
       const capacity = nodeCapacities.get(nodeName)
-      
+
       if (!dayData || !capacity) continue
-      
+
       // Calculer la RAM moyenne pour ce node ce jour
-      const nodeRamAvg = dayData.ram.length > 0 
-        ? dayData.ram.reduce((a, b) => a + b, 0) / dayData.ram.length 
+      const nodeRamAvg = dayData.ram.length > 0
+        ? dayData.ram.reduce((a, b) => a + b, 0) / dayData.ram.length
         : 0
-      
+
       // Ignorer les nodes avec utilisation RAM < seuil (clusters vides)
       if (nodeRamAvg < MIN_RAM_USAGE && dayData.ram.length > 0) {
         nodesSkipped++
@@ -270,7 +277,7 @@ function calculateGlobalAverages(
 
         continue
       }
-      
+
       // CPU: moyenne pondérée par le nombre de cores
       if (dayData.cpu.length > 0) {
         const nodeCpuAvg = dayData.cpu.reduce((a, b) => a + b, 0) / dayData.cpu.length
@@ -278,31 +285,31 @@ function calculateGlobalAverages(
         totalCpuWeighted += nodeCpuAvg * capacity.maxCpu
         totalCpuCapacity += capacity.maxCpu
         nodesWithCpu++
-        
+
         if (isDebugDay) {
         }
       }
-      
+
       // RAM: moyenne pondérée par la capacité RAM
       if (dayData.ram.length > 0) {
         totalRamWeighted += nodeRamAvg * capacity.maxMem
         totalRamCapacity += capacity.maxMem
         nodesWithRam++
-        
+
         if (isDebugDay) {
         }
       }
     }
-    
+
     // Calculer les moyennes pondérées globales
     // SEULEMENT si on a au moins un node avec des données significatives
     if (totalCpuCapacity > 0 || totalRamCapacity > 0) {
       const globalCpu = totalCpuCapacity > 0 ? totalCpuWeighted / totalCpuCapacity : 0
       const globalRam = totalRamCapacity > 0 ? totalRamWeighted / totalRamCapacity : 0
-      
+
       if (isDebugDay) {
       }
-      
+
       result.set(day, {
         cpu: Math.round(globalCpu * 10) / 10,
         ram: Math.round(globalRam * 10) / 10,
@@ -310,23 +317,23 @@ function calculateGlobalAverages(
       })
     }
   }
-  
-  
+
+
   return result
 }
 
 // Calculer les tendances (variation sur la période)
 function calculateTrend(values: number[]): number {
   if (values.length < 2) return 0
-  
+
   // Comparer la moyenne de la première moitié vs la deuxième moitié
   const mid = Math.floor(values.length / 2)
   const firstHalf = values.slice(0, mid)
   const secondHalf = values.slice(mid)
-  
+
   const avgFirst = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length
   const avgSecond = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length
-  
+
   return Math.round((avgSecond - avgFirst) * 10) / 10
 }
 
@@ -373,7 +380,7 @@ const DEFAULT_GREEN_CONFIG = {
 // Construire la config Green à partir des settings de la DB
 function buildGreenConfig(dbSettings: any) {
   if (!dbSettings) return DEFAULT_GREEN_CONFIG
-  
+
   return {
     tdpPerCore: dbSettings.serverSpecs?.tdpPerCore || DEFAULT_GREEN_CONFIG.tdpPerCore,
     wattsPerGbRam: dbSettings.serverSpecs?.wattsPerGbRam || DEFAULT_GREEN_CONFIG.wattsPerGbRam,
@@ -429,88 +436,88 @@ function calculateGreenMetrics(data: {
 } {
   const { cpuUsedPct, totalCpuCapacity, totalRamCapacity, runningVms, totalVms, efficiency } = data
   const config = greenConfig || DEFAULT_GREEN_CONFIG
-  
+
   // Estimation du nombre de nodes (approximation basée sur les specs moyennes)
   const estimatedNodes = Math.max(1, Math.ceil(totalCpuCapacity / (config.avgCoresPerServer || 64)))
-  
+
   // Calcul de la consommation électrique
   // CPU: TDP × cores × utilisation
   const cpuWatts = config.tdpPerCore * totalCpuCapacity * (cpuUsedPct / 100)
-  
+
   // RAM: Watts par Go
   const ramGb = totalRamCapacity / (1024 * 1024 * 1024)
   const ramWatts = config.wattsPerGbRam * ramGb
-  
+
   // Overhead (disques, réseau, etc.)
   const overheadWatts = config.overheadPerNode * estimatedNodes
-  
+
   // Consommation IT totale
   const itWatts = cpuWatts + ramWatts + overheadWatts
-  
+
   // Avec PUE (inclut refroidissement, etc.)
   const totalWatts = itWatts * config.pue
-  
+
   // Consommation max théorique (100% CPU)
   const maxCpuWatts = config.tdpPerCore * totalCpuCapacity
   const maxWatts = (maxCpuWatts + ramWatts + overheadWatts) * config.pue
-  
+
   // Conversions temporelles
   const wattsToKwhMonth = (w: number) => (w * 24 * 30) / 1000
   const wattsToKwhYear = (w: number) => (w * 24 * 365) / 1000
-  
+
   const monthlyKwh = wattsToKwhMonth(totalWatts)
   const yearlyKwh = wattsToKwhYear(totalWatts)
-  
+
   // Émissions CO₂
   const co2Factor = config.defaultCo2Factor
   const yearlyCo2 = yearlyKwh * co2Factor
   const monthlyCo2 = monthlyKwh * co2Factor
   const dailyCo2 = (totalWatts * 24 / 1000) * co2Factor
   const hourlyCo2 = (totalWatts / 1000) * co2Factor
-  
+
   // Équivalences pédagogiques
   const equivalentKmCar = Math.round(yearlyCo2 / config.equivalences.kmVoiture)
   const equivalentTrees = Math.round(yearlyCo2 / config.equivalences.arbreParAn * 10) / 10
-  
+
   // Coûts électricité
   const pricePerKwh = config.electricityPrice
   const yearlyCost = yearlyKwh * pricePerKwh
   const monthlyCost = monthlyKwh * pricePerKwh
   const dailyCost = (totalWatts * 24 / 1000) * pricePerKwh
   const hourlyCost = (totalWatts / 1000) * pricePerKwh
-  
+
   // Score Green (efficacité énergétique)
   // Basé sur: utilisation des ressources, ratio VMs actives, PUE
   let greenScore = 100
-  
+
   // Pénalité si beaucoup de ressources inutilisées (gaspillage)
   if (cpuUsedPct < 10) greenScore -= 20
   else if (cpuUsedPct < 20) greenScore -= 10
   else if (cpuUsedPct < 30) greenScore -= 5
-  
+
   // Pénalité si trop de VMs arrêtées (ressources réservées mais inutilisées)
   const stoppedRatio = totalVms > 0 ? (totalVms - runningVms) / totalVms : 0
 
   if (stoppedRatio > 0.5) greenScore -= 15
   else if (stoppedRatio > 0.3) greenScore -= 10
   else if (stoppedRatio > 0.2) greenScore -= 5
-  
+
   // Bonus si bonne efficacité d'allocation
   if (efficiency > 70) greenScore += 10
   else if (efficiency > 50) greenScore += 5
-  
+
   // Pénalité si PUE élevé
   if (config.pue > 1.8) greenScore -= 15
   else if (config.pue > 1.5) greenScore -= 10
   else if (config.pue > 1.3) greenScore -= 5
   else if (config.pue <= 1.2) greenScore += 5 // Très bon PUE
-  
+
   greenScore = Math.max(0, Math.min(100, greenScore))
-  
+
   // VMs par kW (indicateur d'efficacité)
   const kwUsed = totalWatts / 1000
   const vmPerKw = kwUsed > 0 ? Math.round((runningVms / kwUsed) * 10) / 10 : 0
-  
+
   return {
     power: {
       current: Math.round(totalWatts),
@@ -556,36 +563,36 @@ function formatTrendsForChartWeighted(
   periodEnd: string | null,
   daysCount: number
 } {
-  
+
   if (globalAverages.size === 0) {
     return { trends: [], periodStart: null, periodEnd: null, daysCount: 0 }
   }
-  
+
   // Trier les jours chronologiquement
   const sortedDays = Array.from(globalAverages.keys()).sort((a, b) => a.localeCompare(b))
-  
-  
+
+
   // Stats sur les nodes pour le debug
   const nodeCounts = sortedDays.map(day => globalAverages.get(day)!.nodeCount)
   const maxNodeCount = Math.max(...nodeCounts)
-  
+
   // Filtrer les jours avec au moins 50% des nodes max pour éviter les données biaisées
   const MIN_NODE_RATIO = 0.5
   const minNodes = Math.max(3, Math.floor(maxNodeCount * MIN_NODE_RATIO))
-  
+
   const validDays = sortedDays.filter(day => {
     const data = globalAverages.get(day)!
 
-    
+
 return data.nodeCount >= minNodes
   })
-  
-  
+
+
   if (validDays.length === 0) {
     // Fallback: prendre tous les jours si le filtre est trop strict
     validDays.push(...sortedDays)
   }
-  
+
   // Prendre les 180 derniers jours (6 mois)
   const MAX_DAYS = 180
   const today = new Date()
@@ -593,20 +600,20 @@ return data.nodeCount >= minNodes
 
   cutoffDate.setDate(cutoffDate.getDate() - MAX_DAYS)
   const cutoffStr = cutoffDate.toISOString().split('T')[0]
-  
+
   // Filtrer les jours dans la plage de temps
   let recentDays = validDays.filter(day => day >= cutoffStr)
-  
+
   if (recentDays.length === 0) {
     // Pas de données récentes, prendre les derniers jours disponibles
     recentDays = validDays.slice(-MAX_DAYS)
   }
-  
-  
+
+
   if (recentDays.length === 0) {
     return { trends: [], periodStart: null, periodEnd: null, daysCount: 0 }
   }
-  
+
   // Créer un index pour accès rapide
   const dataIndex = new Map<string, { cpu: number, ram: number, nodeCount: number }>()
 
@@ -617,19 +624,19 @@ return data.nodeCount >= minNodes
       dataIndex.set(day, data)
     }
   }
-  
+
   const trends: Array<{ t: string, cpu: number, ram: number, storage?: number }> = []
-  
+
   // Trouver la plage de dates à afficher
   const firstDay = new Date(recentDays[0])
   const lastDay = new Date(recentDays[recentDays.length - 1])
-  
+
   // Générer tous les jours entre le premier et le dernier
   const currentDate = new Date(firstDay)
   let lastValidCpu = 0
   let lastValidRam = 0
   let lastValidStorage: number | undefined = undefined
-  
+
   // Trouver la première valeur valide
   const firstData = dataIndex.get(recentDays[0])
 
@@ -637,38 +644,38 @@ return data.nodeCount >= minNodes
     lastValidCpu = firstData.cpu
     lastValidRam = firstData.ram
   }
-  
+
   while (currentDate <= lastDay) {
     const dayKey = currentDate.toISOString().split('T')[0]
     const dayData = dataIndex.get(dayKey)
-    
+
     const label = currentDate.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
-    
+
     if (dayData) {
       // On a des données pour ce jour
       lastValidCpu = dayData.cpu
       lastValidRam = dayData.ram
-      
+
       const storageDay = storageData.get(dayKey)
 
       if (storageDay && storageDay.length > 0) {
         lastValidStorage = Math.round(storageDay.reduce((a, b) => a + b, 0) / storageDay.length * 10) / 10
       }
     }
-    
+
     // Toujours ajouter un point (avec la dernière valeur valide si pas de données)
-    trends.push({ 
-      t: label, 
-      cpu: lastValidCpu, 
-      ram: lastValidRam, 
-      storage: lastValidStorage 
+    trends.push({
+      t: label,
+      cpu: lastValidCpu,
+      ram: lastValidRam,
+      storage: lastValidStorage
     })
-    
+
     // Passer au jour suivant
     currentDate.setDate(currentDate.getDate() + 1)
   }
-  
-  
+
+
   return {
     trends,
     periodStart: recentDays.length > 0 ? recentDays[0] : null,
@@ -688,6 +695,7 @@ async function loadResourceThresholds(tenantId: string) {
   try {
     const { getSetting } = await import('@/lib/db/settings')
     const stored = await getSetting<any>('resource_thresholds', tenantId)
+
     if (stored) return { ...DEFAULT_THRESHOLDS, ...stored }
   } catch (e: any) {
     if (!e?.message?.includes('no such table')) {
@@ -730,6 +738,7 @@ async function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: nu
 async function loadHealthScoreHistory(connectionId: string | undefined, tenantId: string): Promise<Array<{ date: string; score: number; cpu: number; ram: number; storage: number }>> {
   try {
     const cutoff = new Date()
+
     cutoff.setDate(cutoff.getDate() - 90)
     const cutoffStr = cutoff.toISOString().split('T')[0]
 
@@ -758,12 +767,14 @@ async function loadHealthScoreHistory(connectionId: string | undefined, tenantId
 export async function GET(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
     const tenantId = await getCurrentTenantId()
     const cookieStore = await cookies()
     const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
+
     // Parse query params (F4: connectionId filter)
     const { searchParams } = new URL(request.url)
     const filterConnectionId = searchParams.get('connectionId') || undefined
@@ -771,6 +782,7 @@ export async function GET(request: Request) {
     // Check in-memory cache (avoids 26+ RRD calls to Proxmox)
     const cacheKey = `${tenantId}:${filterConnectionId || 'all'}:${dateLocale}`
     const cached = overviewCache.get(cacheKey)
+
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
       return NextResponse.json(cached.data)
     }
@@ -780,6 +792,7 @@ export async function GET(request: Request) {
       loadGreenSettings(tenantId),
       loadResourceThresholds(tenantId),
     ])
+
     const greenConfig = buildGreenConfig(greenSettings)
 
     // Récupérer toutes les connexions PVE
@@ -825,7 +838,7 @@ export async function GET(request: Request) {
     let totalVms = 0
     let runningVms = 0
     let stoppedVms = 0
-    
+
     // Pour les données RRD agrégées par node
     const allNodesRrdData = new Map<string, Map<string, { cpu: number[], ram: number[] }>>()
     const nodeCapacities = new Map<string, { maxCpu: number, maxMem: number }>()
@@ -839,6 +852,7 @@ export async function GET(request: Request) {
 
     // F6: Network metrics tracking (keyed by connId:nodeName to avoid collisions)
     const networkPerNode = new Map<string, { name: string; netin: number; netout: number }>()
+
     // Track per-node-per-day for proper aggregation: day -> nodeKey -> data points
     const networkTrendsByDay = new Map<string, Map<string, { netin: number[]; netout: number[] }>>()
 
@@ -861,7 +875,7 @@ export async function GET(request: Request) {
       connections.map(async (conn) => {
         try {
           const connData = await getConnectionById(conn.id)
-          
+
           // Récupérer nodes et VMs en parallèle (avec timeout per-request)
           const rTimeout = { signal: AbortSignal.timeout(15000) }
 
@@ -870,11 +884,11 @@ export async function GET(request: Request) {
             pveFetch<VmData[]>(connData, '/cluster/resources?type=vm', rTimeout),
             pveFetch<any[]>(connData, '/cluster/resources?type=storage', rTimeout),
           ])
-          
+
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
           const vms = vmsResult.status === 'fulfilled' ? vmsResult.value || [] : []
           const storages = storageResult.status === 'fulfilled' ? storageResult.value || [] : []
-          
+
           // Agréger les nodes (données synchrones) et préparer les requêtes RRD
           const onlineNodes = nodes.filter(node => node.status === 'online')
 
@@ -948,24 +962,30 @@ export async function GET(request: Request) {
 
             if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
               let nodeNetIn = 0, nodeNetOut = 0, netPoints = 0
+
               for (const point of result.value) {
                 if (!point.time) continue
                 const netin = Number(point.netin ?? 0)
                 const netout = Number(point.netout ?? 0)
+
                 if (netin > 0 || netout > 0) {
                   nodeNetIn += netin
                   nodeNetOut += netout
                   netPoints++
 
                   const dayKey = new Date(point.time * 1000).toISOString().split('T')[0]
+
                   if (!networkTrendsByDay.has(dayKey)) networkTrendsByDay.set(dayKey, new Map())
                   const dayNodes = networkTrendsByDay.get(dayKey)!
+
                   if (!dayNodes.has(netNodeKey)) dayNodes.set(netNodeKey, { netin: [], netout: [] })
                   const nodeDay = dayNodes.get(netNodeKey)!
+
                   nodeDay.netin.push(netin)
                   nodeDay.netout.push(netout)
                 }
               }
+
               if (netPoints > 0) {
                 networkPerNode.set(netNodeKey, {
                   name: node.node,
@@ -977,7 +997,7 @@ export async function GET(request: Request) {
               console.warn(`[resources] RRD month error for node ${node.node}:`, result.reason)
             }
           }
-          
+
           // Agréger le stockage (données synchrones) et préparer les requêtes RRD
           const availableStorages = storages.filter(s => s.status === 'available')
 
@@ -988,6 +1008,7 @@ export async function GET(request: Request) {
             // F5: Aggregate by pool name
             if (storage.storage) {
               const poolKey = storage.storage
+
               if (!storagePoolMap.has(poolKey)) {
                 storagePoolMap.set(poolKey, {
                   name: poolKey,
@@ -997,7 +1018,9 @@ export async function GET(request: Request) {
                   nodes: new Set(),
                 })
               }
+
               const pool = storagePoolMap.get(poolKey)!
+
               pool.used += storage.disk || 0
               pool.total += storage.maxdisk || 0
               if (storage.node) pool.nodes.add(storage.node)
@@ -1067,9 +1090,10 @@ export async function GET(request: Request) {
                 }
               }
             }
+
             // Silently ignore rejected - storage RRD might not be available
           }
-          
+
           // Agréger les VMs
           for (const vm of vms) {
             totalVms++
@@ -1081,14 +1105,14 @@ export async function GET(request: Request) {
             } else if (vm.status === 'stopped') {
               stoppedVms++
             }
-            
+
             // Calculer l'utilisation de la VM
             const cpuPct = vm.status === 'running' ? Math.round((vm.cpu || 0) * 100) : 0
 
-            const ramPct = vm.status === 'running' && vm.maxmem 
-              ? Math.round(((vm.mem || 0) / vm.maxmem) * 100) 
+            const ramPct = vm.status === 'running' && vm.maxmem
+              ? Math.round(((vm.mem || 0) / vm.maxmem) * 100)
               : 0
-            
+
             allVms.push({
               id: `${conn.id}:${vm.type}:${vm.node}:${vm.vmid}`,
               name: vm.name || `${vm.type}/${vm.vmid}`,
@@ -1114,8 +1138,10 @@ export async function GET(request: Request) {
     // so dividing by node count gives the real capacity.
     totalStorageUsed = 0
     totalStorageCapacity = 0
+
     for (const pool of storagePoolMap.values()) {
       const nodeCount = pool.nodes.size || 1
+
       totalStorageUsed += pool.used / nodeCount
       totalStorageCapacity += pool.total / nodeCount
     }
@@ -1124,23 +1150,23 @@ export async function GET(request: Request) {
     const cpuUsedPct = totalCpuCapacity > 0 ? (totalCpuUsed / totalCpuCapacity) * 100 : 0
     const ramUsedPct = totalRamCapacity > 0 ? (totalRamUsed / totalRamCapacity) * 100 : 0
     const storageUsedPct = totalStorageCapacity > 0 ? (totalStorageUsed / totalStorageCapacity) * 100 : 0
-    
+
     // Calculer les tendances réelles à partir des données RRD
     const cpuTrend = calculateTrend(allCpuValues)
     const ramTrend = calculateTrend(allRamValues)
     const storageTrend = calculateTrend(allStorageValues)
-    
+
     // Score d'efficacité
-    const cpuEfficiency = totalCpuAllocated > 0 
-      ? Math.min(100, (cpuUsedPct / (totalCpuAllocated / totalCpuCapacity * 100)) * 100) 
+    const cpuEfficiency = totalCpuAllocated > 0
+      ? Math.min(100, (cpuUsedPct / (totalCpuAllocated / totalCpuCapacity * 100)) * 100)
       : 100
 
-    const ramEfficiency = totalRamAllocated > 0 
-      ? Math.min(100, (ramUsedPct / (totalRamAllocated / totalRamCapacity * 100)) * 100) 
+    const ramEfficiency = totalRamAllocated > 0
+      ? Math.min(100, (ramUsedPct / (totalRamAllocated / totalRamCapacity * 100)) * 100)
       : 100
 
     const efficiency = Math.round((cpuEfficiency + ramEfficiency) / 2)
-    
+
     // Top VMs par CPU et RAM (running uniquement)
     const runningVmsList = allVms.filter(vm => vm.status === 'running')
 
@@ -1173,6 +1199,7 @@ export async function GET(request: Request) {
     const perNodeOverprovisioning = Array.from(nodeCapacities.entries()).map(([compositeKey, capacity]) => {
       // compositeKey = "connId:pveNodeName" — extract actual PVE node name
       const actualNodeName = compositeKey.includes(':') ? compositeKey.split(':').slice(1).join(':') : compositeKey
+
       // Calculer les allocations par nœud
       const nodeVms = allVms.filter(vm => vm.node === actualNodeName && vm.status === 'running')
       const nodeCpuAllocated = nodeVms.reduce((sum, vm) => sum + (vm.cpuAllocated || 0), 0)
@@ -1252,16 +1279,16 @@ export async function GET(request: Request) {
       perNode: perNodeOverprovisioning,
       topOverprovisioned
     }
-    
+
     // Calculer les moyennes pondérées globales à partir des données de tous les nodes
     const globalAverages = calculateGlobalAverages(allNodesRrdData, nodeCapacities)
-    
+
     // Générer les tendances formatées pour le graphique
     const trendsResult = formatTrendsForChartWeighted(globalAverages, globalStorageByDay, dateLocale)
     let trends = trendsResult.trends
     let periodStart = trendsResult.periodStart
     let periodEnd = trendsResult.periodEnd
-    
+
     // Si on n'a pas assez de données RRD, compléter avec les valeurs actuelles
     if (trends.length === 0) {
       const today = new Date()
@@ -1271,7 +1298,7 @@ export async function GET(request: Request) {
 
       startDate.setDate(startDate.getDate() - 29)
       periodStart = startDate.toISOString().split('T')[0]
-      
+
       for (let i = 29; i >= 0; i--) {
         const date = new Date(today)
 
@@ -1290,7 +1317,9 @@ export async function GET(request: Request) {
       const nodeCount = pool.nodes.size || 1
       const dedupUsed = pool.used / nodeCount
       const dedupTotal = pool.total / nodeCount
-      return {
+
+
+return {
         name: pool.name,
         type: pool.type,
         used: dedupUsed,
@@ -1306,15 +1335,20 @@ export async function GET(request: Request) {
 
     // F6: Network trends (last 30 days) — sum per-node averages for proper aggregation
     const sortedNetDays = Array.from(networkTrendsByDay.keys()).sort((a, b) => a.localeCompare(b)).slice(-30)
+
     const networkTrends = sortedNetDays.map(day => {
       const dayNodes = networkTrendsByDay.get(day)!
       let dayNetin = 0, dayNetout = 0
+
+
       // For each node on this day, compute the node's average, then sum across nodes
       for (const nodeData of dayNodes.values()) {
         dayNetin += nodeData.netin.reduce((a, b) => a + b, 0) / nodeData.netin.length
         dayNetout += nodeData.netout.reduce((a, b) => a + b, 0) / nodeData.netout.length
       }
-      return {
+
+
+return {
         t: new Date(day).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' }),
         netin: dayNetin,
         netout: dayNetout,
@@ -1343,6 +1377,7 @@ export async function GET(request: Request) {
 
     // Simple health score estimate for snapshot (matches frontend algorithm roughly)
     let snapshotScore = 100
+
     if (healthCpuPct > 90) snapshotScore -= 30
     else if (healthCpuPct > 80) snapshotScore -= 15
     else if (healthCpuPct > 70) snapshotScore -= 5
@@ -1446,6 +1481,8 @@ export async function GET(request: Request) {
 
     // Cache the response for 60s
     overviewCache.set(cacheKey, { data: responseBody, timestamp: Date.now() })
+
+
     // Evict old entries
     for (const [key, val] of overviewCache) {
       if (Date.now() - val.timestamp > CACHE_TTL_MS * 3) overviewCache.delete(key)
@@ -1454,7 +1491,7 @@ export async function GET(request: Request) {
     return NextResponse.json(responseBody)
   } catch (e: any) {
     console.error("[resources/overview] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

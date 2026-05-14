@@ -28,9 +28,11 @@ export function calculatePredictions(
   if (cpuHistory.length < 2) {
     for (let i = cpuHistory.length; i < 2; i++) cpuHistory.unshift(lastCpu)
   }
+
   if (ramHistory.length < 2) {
     for (let i = ramHistory.length; i < 2; i++) ramHistory.unshift(lastRam)
   }
+
   if (storageHistory.length < 2) {
     for (let i = storageHistory.length; i < 2; i++) storageHistory.unshift(lastStorage)
   }
@@ -58,6 +60,7 @@ export function calculatePredictions(
 
   if (projectedTrends.length > 0) {
     const lastIndex = projectedTrends.length - 1
+
     projectedTrends[lastIndex] = {
       ...projectedTrends[lastIndex],
       cpuProjection: lastCpu,
@@ -68,6 +71,7 @@ export function calculatePredictions(
 
   for (let i = 1; i <= projectionDays; i++) {
     const date = new Date(lastDate)
+
     date.setDate(date.getDate() + i)
 
     let projectedCpu = lastCpu + cpuSlope * i

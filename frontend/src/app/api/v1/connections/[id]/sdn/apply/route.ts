@@ -12,12 +12,16 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   let connId: string = ""
+
   try {
     const { id } = await ctx.params
+
     connId = id
     const permError = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
+
     if (permError) return permError
     const conn = await getConnectionById(id)
+
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
     const upid = await pveFetch<string>(conn, "/cluster/sdn", { method: "PUT" })
@@ -39,6 +43,7 @@ export async function POST(
     return NextResponse.json({ data: { upid } })
   } catch (e: any) {
     console.error("Error applying SDN:", e)
+
     if (connId) {
       try {
         await audit({
@@ -51,6 +56,8 @@ export async function POST(
         })
       } catch {}
     }
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

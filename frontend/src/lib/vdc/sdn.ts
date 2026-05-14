@@ -31,7 +31,9 @@ async function isZoneNameTaken(connectionId: string, sdnZoneName: string): Promi
     where: { connectionId, sdnZoneName },
     select: { id: true },
   })
-  return !!row
+
+
+return !!row
 }
 
 export async function generateZoneName(connectionId: string, vdc: ZoneNameInput): Promise<string> {
@@ -51,7 +53,9 @@ export async function generateZoneName(connectionId: string, vdc: ZoneNameInput)
   if (await isZoneNameTaken(connectionId, withSuffix)) {
     throw new Error(`Cannot generate unique SDN zone name for vDC ${vdc.id} (slug=${vdc.slug})`)
   }
-  return withSuffix
+
+
+return withSuffix
 }
 
 
@@ -87,6 +91,7 @@ export async function generatePveVnetId(vdcId: string, displayName: string): Pro
     where: { id: vdcId },
     select: { connectionId: true },
   })
+
   if (!ownerVdc) {
     throw new Error(`generatePveVnetId: vDC not found: ${vdcId}`)
   }
@@ -94,10 +99,12 @@ export async function generatePveVnetId(vdcId: string, displayName: string): Pro
   for (let i = 0; i < 16; i++) {
     const seed = i === 0 ? seedBase : `${seedBase}#${i}`
     const candidate = PVE_VNET_ID_PREFIX + hashVnetSeed(seed)
+
     const collision = await prisma.vdcVnet.findFirst({
       where: { pveName: candidate, vdc: { connectionId: ownerVdc.connectionId } },
       select: { id: true },
     })
+
     if (!collision) return candidate
   }
 
@@ -121,6 +128,7 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
     where: { id: vdcId },
     select: { connectionId: true },
   })
+
   if (!ownerVdc) {
     throw new Error(`allocateVni: vDC not found: ${vdcId}`)
   }
@@ -129,6 +137,7 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
     where: { vdc: { connectionId: ownerVdc.connectionId } },
     _max: { vxlanTag: true },
   })
+
   const dbMax = aggregate._max.vxlanTag
 
   // Our DB only knows the VNets ProxCenter created. PVE can carry tags from
@@ -137,9 +146,11 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   // set from `/cluster/sdn/vnets` when we have a connection so we don't
   // hand back a tag that PVE will reject with HTTP 400.
   let pveMax: number | null = null
+
   if (conn) {
     try {
       const vnets = await listVnetsPve(conn)
+
       for (const v of vnets) {
         if (Number.isFinite(v.tag) && (pveMax === null || v.tag > pveMax)) {
           pveMax = v.tag
@@ -152,8 +163,10 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   }
 
   const candidates = [dbMax, pveMax].filter((n): n is number => typeof n === 'number')
+
   if (candidates.length === 0) return VNI_BASE
-  return Math.max(...candidates) + 1
+
+return Math.max(...candidates) + 1
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +187,9 @@ export async function applySdn(conn: any): Promise<void> {
 
 async function listClusterNodeIps(conn: any): Promise<string[]> {
   const entries = await pveFetch<any[]>(conn, '/cluster/status')
-  return (entries || [])
+
+
+return (entries || [])
     .filter((e: any) => e.type === 'node' && e.ip)
     .map((e: any) => e.ip as string)
 }
@@ -185,6 +200,7 @@ async function listClusterNodeIps(conn: any): Promise<string[]> {
 export async function createZone(conn: any, zoneName: string): Promise<void> {
   const peers = await listClusterNodeIps(conn)
   const params = new URLSearchParams()
+
   params.append('type', 'vxlan')
   params.append('zone', zoneName)
   params.append('peers', peers.join(','))
@@ -193,9 +209,11 @@ export async function createZone(conn: any, zoneName: string): Promise<void> {
     await pveFetch(conn, '/cluster/sdn/zones', { method: 'POST', body: params })
   } catch (err: any) {
     const msg = String(err?.message || '')
+
     if (!msg.includes('already exists')) {
       throw new Error(`Failed to create SDN zone "${zoneName}": ${msg}`)
     }
+
     console.warn(`[vdc-sdn] SDN zone "${zoneName}" already exists, proceeding`)
   }
 }
@@ -209,9 +227,11 @@ export async function deleteZone(conn: any, zoneName: string): Promise<void> {
     await pveFetch(conn, `/cluster/sdn/zones/${encodeURIComponent(zoneName)}`, { method: 'DELETE' })
   } catch (err: any) {
     const msg = String(err?.message || '')
+
     if (!msg.toLowerCase().includes('not found') && !msg.includes('404')) {
       throw new Error(`Failed to delete SDN zone "${zoneName}": ${msg}`)
     }
+
     console.warn(`[vdc-sdn] SDN zone "${zoneName}" not found, skipping`)
   }
 }
@@ -224,6 +244,7 @@ export interface CreateVnetParams {
   pveName: string
   zoneName: string
   tag: number
+
   /** Friendly label shown in the PVE GUI under the hashed pveName — lets a
    *  provider admin debugging Proxmox identify which tenant VNet this is. */
   alias?: string
@@ -236,6 +257,7 @@ export interface CreateVnetParams {
  */
 export async function createVnetPve(conn: any, params: CreateVnetParams): Promise<void> {
   const body = new URLSearchParams()
+
   body.append('vnet', params.pveName)
   body.append('zone', params.zoneName)
   body.append('tag', String(params.tag))
@@ -255,6 +277,7 @@ export async function updateVnetPve(
   patch: { alias?: string }
 ): Promise<void> {
   const body = new URLSearchParams()
+
   if (patch.alias !== undefined) body.append('alias', patch.alias)
   if ([...body.keys()].length === 0) return
 
@@ -270,17 +293,23 @@ export async function updateVnetPve(
  */
 export async function setVnetFirewallEnabled(conn: any, pveName: string, enabled: boolean): Promise<void> {
   const body = new URLSearchParams()
+
   body.append('enable', enabled ? '1' : '0')
+
   try {
     await pveFetch(conn, `/cluster/sdn/vnets/${encodeURIComponent(pveName)}/firewall/options`, { method: 'PUT', body })
   } catch (err: any) {
     const msg = String(err?.message || '')
+
+
     // Not implemented: cluster runs a PVE that doesn't ship SDN VNet firewall.
     if (msg.includes('501') || msg.toLowerCase().includes('not implemented')) {
       throw new Error(
         `VNet firewall is not supported on this Proxmox cluster — upgrade to PVE 8.3+ or leave the toggle off (${pveName}).`
       )
     }
+
+
     // Missing options row is OK when we're turning it off.
     if (!enabled && msg.includes('404')) return
     throw new Error(`Failed to set VNet "${pveName}" firewall to ${enabled}: ${msg}`)
@@ -295,12 +324,15 @@ export async function deleteVnetPve(conn: any, pveName: string): Promise<void> {
   // delete so legacy vDCs can be cleaned up.
   try {
     const subnets = await pveFetch<any[]>(conn, `/cluster/sdn/vnets/${encodeURIComponent(pveName)}/subnets`)
+
     for (const s of subnets || []) {
       // PVE returns the subnet id either in `subnet` (older 8.x) or `cidr`
       // (newer 9.x). Both are accepted by the DELETE route as the path
       // segment after `/subnets/`.
       const subnetId = String(s?.subnet ?? s?.cidr ?? '').trim()
+
       if (!subnetId) continue
+
       try {
         await pveFetch(conn, `/cluster/sdn/vnets/${encodeURIComponent(pveName)}/subnets/${encodeURIComponent(subnetId)}`, { method: 'DELETE' })
       } catch (err: any) {
@@ -320,6 +352,8 @@ export async function deleteVnetPve(conn: any, pveName: string): Promise<void> {
   } catch (err: any) {
     const msg = String(err?.message || '')
     const lower = msg.toLowerCase()
+
+
     // PVE returns 500 with "sdn vnet 'X' does not exist" for SDN objects that
     // were already removed (manual cluster cleanup, drift, etc.). Treat any of
     // these missing-object signals as success so DB-side delete stays
@@ -329,9 +363,11 @@ export async function deleteVnetPve(conn: any, pveName: string): Promise<void> {
       msg.includes('404') ||
       lower.includes('does not exist') ||
       lower.includes("doesn't exist")
+
     if (!isMissing) {
       throw new Error(`Failed to delete SDN VNet "${pveName}": ${msg}`)
     }
+
     console.warn(`[vdc-sdn] SDN VNet "${pveName}" already gone on PVE, proceeding with DB cleanup`)
   }
 }
@@ -362,7 +398,9 @@ export async function deleteVnetPve(conn: any, pveName: string): Promise<void> {
 export function generatePveMacAddress(): string {
   const buf = crypto.randomBytes(3)
   const bytes = ['BC', '24', '11', buf[0].toString(16).padStart(2, '0').toUpperCase(), buf[1].toString(16).padStart(2, '0').toUpperCase(), buf[2].toString(16).padStart(2, '0').toUpperCase()]
-  return bytes.join(':')
+
+
+return bytes.join(':')
 }
 
 // PVE IPAM helpers used to live here (allocateIp / releaseIp calling
@@ -374,7 +412,9 @@ export function generatePveMacAddress(): string {
 
 export async function listVnetsPve(conn: any): Promise<SdnVnet[]> {
   const items = await pveFetch<any[]>(conn, '/cluster/sdn/vnets')
-  return (items || []).map((v: any) => ({
+
+
+return (items || []).map((v: any) => ({
     vnet: v.vnet,
     zone: v.zone,
     tag: Number(v.tag),
@@ -398,14 +438,17 @@ export async function countVnetAttachments(conn: any, pveName: string): Promise<
     const vmid = res.vmid
     const node = res.node
     const type = res.type
+
     if (!vmid || !node || !type) continue
 
     try {
       const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`)
+
       for (const key of Object.keys(config)) {
         if (!/^net\d+$/.test(key)) continue
         const val = String(config[key] || '')
         const m = val.match(/bridge=([^,]+)/)
+
         if (m && m[1] === pveName) count++
       }
     } catch {
@@ -432,12 +475,15 @@ export async function reconcileVnets(vdcId: string, zoneName: string, conn: any)
   })
 
   let pveVnets: SdnVnet[] = []
+
   try {
     const all = await listVnetsPve(conn)
+
     pveVnets = all.filter((v) => v.zone === zoneName)
   } catch (err: any) {
     console.warn(`[vdc-sdn] reconcileVnets: listVnetsPve failed for zone ${zoneName}: ${err?.message}`)
-    return
+
+return
   }
 
   const pveSet = new Set(pveVnets.map((v) => v.vnet))

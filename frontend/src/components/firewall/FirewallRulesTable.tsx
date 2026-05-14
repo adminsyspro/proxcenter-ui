@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -42,6 +43,7 @@ interface FirewallRulesTableProps {
   onDragOver: (e: React.DragEvent, pos: number) => void
   onDragLeave: () => void
   onDrop: (e: React.DragEvent, toPos: number) => void
+
   /** Extra buttons to render in the header next to Add Rule */
   headerExtra?: React.ReactNode
 }

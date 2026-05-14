@@ -29,6 +29,7 @@ export async function POST(
     // the API layer too so the read-only UI can't be bypassed by a
     // crafted POST or by a tenant admin that happens to have VM_MIGRATE.
     const providerOnly = await requireProviderTenant()
+
     if (providerOnly) return providerOnly
 
     const rawBody = await req.json()
@@ -44,15 +45,15 @@ export async function POST(
     const { target, online, targetstorage, withLocalDisks } = parseResult.data
 
     const conn = await getConnectionById(id)
-    
+
     // Déterminer le type de ressource pour l'API Proxmox
     const resourceType = type === 'lxc' ? 'lxc' : 'qemu'
-    
+
     // Construire les paramètres de migration
     const migrateParams: Record<string, any> = {
       target,
     }
-    
+
     // Pour les VMs QEMU
     if (resourceType === 'qemu') {
       migrateParams.online = online ? 1 : 0
@@ -69,17 +70,18 @@ export async function POST(
         migrateParams['with-local-disks'] = 1
       }
     }
-    
+
     // Pour les LXC
     if (resourceType === 'lxc') {
       if (online) {
         migrateParams.restart = 1
       }
+
       if (targetstorage) {
         migrateParams['target-storage'] = targetstorage
       }
     }
-    
+
     // Appeler l'API Proxmox pour la migration
     const result = await pveFetch<string>(
       conn,
@@ -94,7 +96,7 @@ export async function POST(
         },
       }
     )
-    
+
     invalidateInventoryCache()
 
     // Audit

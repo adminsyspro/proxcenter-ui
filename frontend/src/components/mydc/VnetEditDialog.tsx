@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -23,9 +24,11 @@ export default function VnetEditDialog({ vnet, vdcId, onClose, onSaved }: Props)
 
   const [description, setDescription] = useState(vnet.description ?? '')
   const [firewall, setFirewall] = useState(!!vnet.firewall)
+
   const [dnsServers, setDnsServers] = useState<string>(
     Array.isArray(subnet?.dnsServers) ? subnet.dnsServers.join(', ') : '',
   )
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,8 +36,10 @@ export default function VnetEditDialog({ vnet, vdcId, onClose, onSaved }: Props)
 
   const handleSubmit = async () => {
     setSaving(true); setError(null)
+
     try {
       const segment = vnet.displayName ?? vnet.pveName
+
       const subnetPatch = subnet
         ? {
             dnsServers: dnsServers
@@ -43,6 +48,7 @@ export default function VnetEditDialog({ vnet, vdcId, onClose, onSaved }: Props)
               .filter(Boolean),
           }
         : undefined
+
       const res = await fetch(
         `/api/v1/vdcs/${encodeURIComponent(vdcId)}/vnets/${encodeURIComponent(segment)}`,
         {
@@ -51,7 +57,9 @@ export default function VnetEditDialog({ vnet, vdcId, onClose, onSaved }: Props)
           body: JSON.stringify({ description, firewall, subnet: subnetPatch }),
         }
       )
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       onSaved()
     } catch (e: any) {

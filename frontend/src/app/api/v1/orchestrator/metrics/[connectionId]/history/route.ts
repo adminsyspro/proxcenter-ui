@@ -20,10 +20,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const to = searchParams.get('to') || undefined
 
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     // Verify connection belongs to tenant
     const tenantConnectionIds = await getTenantConnectionIds()
+
     if (!tenantConnectionIds.has(connectionId)) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error fetching metrics history:", e)
     }
-    
+
 return NextResponse.json(
       { error: e?.message || "Failed to fetch metrics history" },
       { status: 500 }

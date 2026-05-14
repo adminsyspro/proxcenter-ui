@@ -10,14 +10,17 @@ export const runtime = "nodejs"
 export async function GET(req: Request) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const url = new URL(req.url)
     const typeFilter = url.searchParams.get('type')
 
     const where: any = {}
+
     if (typeFilter) where.type = typeFilter
 
     const connections = await prisma.connection.findMany({

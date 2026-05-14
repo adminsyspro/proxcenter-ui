@@ -29,6 +29,7 @@ import {
   Typography
 } from '@mui/material'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -394,7 +395,9 @@ export default function ChangesPage() {
   const filteredChanges = useMemo(() => {
     if (!search) return changes
     const q = search.toLowerCase()
-    return changes.filter(c =>
+
+
+return changes.filter(c =>
       c.resourceId?.toLowerCase().includes(q) ||
       c.resourceName?.toLowerCase().includes(q) ||
       c.node?.toLowerCase().includes(q) ||
@@ -407,7 +410,9 @@ export default function ChangesPage() {
 
   const paginatedChanges = useMemo(() => {
     const start = page * rowsPerPage
-    return filteredChanges.slice(start, start + rowsPerPage)
+
+
+return filteredChanges.slice(start, start + rowsPerPage)
   }, [filteredChanges, page, rowsPerPage])
 
   // Group paginated results by day

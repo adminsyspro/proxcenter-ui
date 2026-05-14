@@ -37,6 +37,7 @@ afterAll(async () => {
 describe('getVdcScope — provider', () => {
   it('returns null for the default tenant (no filtering)', async () => {
     const scope = await getVdcScope(PROVIDER)
+
     expect(scope).toBeNull()
   })
 })
@@ -59,6 +60,7 @@ describe('getVdcScope — tenant without any vDC', () => {
 
   it('makes downstream Set lookups deny: a random connection id maps to undefined', async () => {
     const scope = await getVdcScope(TENANT_NO_VDC)
+
     expect(scope).not.toBeNull()
 
     // Pattern used by inventory route + applyVdcFilter + assertVdcPbsAccess

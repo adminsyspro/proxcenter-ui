@@ -127,10 +127,10 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
   const cssOverrides = globalTheme.cssOverrides?.[mode] || {}
   const densityValue = densityConfig[themeStyles.density]?.multiplier || 1
   const transitions = transitionConfig[themeStyles.transitions] || transitionConfig.normal
-  
+
   // Use custom border radius if provided, otherwise use theme default
-  const cardRadius = customBorderRadius !== null && customBorderRadius !== undefined 
-    ? customBorderRadius 
+  const cardRadius = customBorderRadius !== null && customBorderRadius !== undefined
+    ? customBorderRadius
     : themeStyles.card.borderRadius
 
   const buttonRadius = customBorderRadius !== null && customBorderRadius !== undefined
@@ -179,14 +179,14 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // Density
       '--proxcenter-density': densityValue,
 
-      // Transitions  
+      // Transitions
       '--proxcenter-transition-duration': transitions.duration,
       '--proxcenter-transition-easing': transitions.easing,
 
       // Card styles
       '--proxcenter-card-radius': `${cardRadius}px`,
-      '--proxcenter-card-shadow': isLightMode 
-        ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)' 
+      '--proxcenter-card-shadow': isLightMode
+        ? '0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)'
         : themeStyles.card.boxShadow,
       '--proxcenter-card-backdrop': effectiveBlur,
       '--proxcenter-card-border': themeStyles.card.border,
@@ -205,24 +205,24 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
       // Theme-specific CSS vars
       ...cssOverrides
     },
-    
+
     // Apply base font size globally
     'html': {
       fontSize: `${baseFontSize}px !important`
     },
-    
+
     // Apply UI scale
     'body': {
       zoom: scale !== 1 ? scale : undefined
     },
-    
+
     // Apply theme font globally
     ...(themeFont && {
       'body, .MuiTypography-root, .MuiButton-root, .MuiInputBase-root, .MuiMenuItem-root': {
         fontFamily: `${themeFont} !important`
       }
     }),
-    
+
     // ============================================================
     // DARK CHROME FIX - For themes with dark header in light mode
     // Forces header icons/text to be white when header is dark
@@ -255,20 +255,20 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         }
       }
     }),
-    
-    
+
+
     // Apply card styles globally - mais PAS aux cartes qui ont un style inline ou une classe spécifique
     '.MuiCard-root:not([style*="background"]):not(.no-theme-override)': {
       borderRadius: 'var(--proxcenter-card-radius) !important',
       boxShadow: 'var(--proxcenter-card-shadow) !important',
-      backdropFilter: !isLightMode && effectiveBlur !== 'none' 
-        ? `${effectiveBlur} !important` 
+      backdropFilter: !isLightMode && effectiveBlur !== 'none'
+        ? `${effectiveBlur} !important`
         : undefined,
-      background: shouldApplyCustomBackground 
-        ? `${themeStyles.card.background} !important` 
+      background: shouldApplyCustomBackground
+        ? `${themeStyles.card.background} !important`
         : undefined,
-      border: themeStyles.card.border !== 'none' 
-        ? `${themeStyles.card.border} !important` 
+      border: themeStyles.card.border !== 'none'
+        ? `${themeStyles.card.border} !important`
         : undefined,
       transition: `all var(--proxcenter-transition-duration) var(--proxcenter-transition-easing) !important`
     },
@@ -316,19 +316,19 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
     // Dialog styles
     '.MuiDialog-paper': {
       borderRadius: 'var(--proxcenter-card-radius) !important',
-      backdropFilter: !isLightMode && effectiveBlur !== 'none' 
-        ? effectiveBlur 
+      backdropFilter: !isLightMode && effectiveBlur !== 'none'
+        ? effectiveBlur
         : undefined,
-      background: shouldApplyCustomBackground 
-        ? themeStyles.card.background 
+      background: shouldApplyCustomBackground
+        ? themeStyles.card.background
         : undefined
     },
 
     // Menu styles
     '.MuiMenu-paper, .MuiPopover-paper': {
       borderRadius: 'var(--proxcenter-card-radius) !important',
-      backdropFilter: !isLightMode && effectiveBlur !== 'none' 
-        ? effectiveBlur 
+      backdropFilter: !isLightMode && effectiveBlur !== 'none'
+        ? effectiveBlur
         : undefined,
       boxShadow: 'var(--proxcenter-card-shadow) !important'
     },
@@ -357,11 +357,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         fontFamily: `${globalTheme.fontOverride.heading} !important`
       }
     }),
-    
+
     // ============================================================
     // THEME-SPECIFIC STYLES - Header, Sidebar, and accent colors
     // ============================================================
-    
+
     // Proxmox Classic Theme
     ...(globalTheme.id === 'proxmoxClassic' && {
       // Header - Proxmox blue-grey
@@ -1277,6 +1277,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accent: '--glass-accent',
         hover: '--glass-hover'
       }),
+
       // Override selectors that need backdrop-filter
       '.MuiCard-root': {
         backgroundColor: 'var(--glass-card) !important',
@@ -1336,6 +1337,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentHover: '--neu-accent-hover',
         hover: '--neu-hover'
       }),
+
       // Override with neumorphic shadows
       '.MuiCard-root': {
         backgroundColor: 'var(--neu-surface) !important',
@@ -1486,6 +1488,7 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accent: '--hc-focus',
         hover: '--hc-hover'
       }),
+
       // Override with thick borders and no shadows
       '.MuiCard-root': {
         backgroundColor: 'var(--hc-surface) !important',
@@ -1623,7 +1626,7 @@ const CustomThemeProvider = props => {
     const fontSize = settings.fontSize
     const uiScale = settings.uiScale
     const baseStyles = getGlobalThemeStyles(globalTheme, currentMode, customBorderRadius, blurIntensity, fontSize, uiScale)
-    
+
     // Add light background overrides if in light mode (for non-neutral tints)
     if (currentMode === 'light' && lightBg.id !== 'neutral') {
       return {
@@ -1815,7 +1818,7 @@ const CustomThemeProvider = props => {
         }
       }
     }
-    
+
     return baseStyles
   }, [globalTheme, currentMode, lightBg, settings.customBorderRadius, settings.blurIntensity, settings.fontSize, settings.uiScale])
 

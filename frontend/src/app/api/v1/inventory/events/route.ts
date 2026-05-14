@@ -28,13 +28,16 @@ export const runtime = "nodejs"
 
 export async function GET(request: NextRequest) {
   const demo = demoResponse(request)
+
   if (demo) return demo
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
   if (denied) return denied
 
   // Resolve tenant connections upfront to filter events
   let tenantConnIds: Set<string>
+
   try {
     tenantConnIds = await getTenantConnectionIds()
   } catch {
@@ -58,6 +61,7 @@ export async function GET(request: NextRequest) {
     start(controller) {
       const send = (event: string, data: any) => {
         if (closed) return
+
         try {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
         } catch {
@@ -78,6 +82,7 @@ export async function GET(request: NextRequest) {
       // for VM events on a vDC-scoped tenant, by allowed pools.
       unsubscribe = subscribe((events: InventoryEvent[]) => {
         if (closed) return
+
         for (const ev of events) {
           if (!tenantConnIds.has(ev.connId)) continue
 
@@ -91,6 +96,8 @@ export async function GET(request: NextRequest) {
           if (vdcScope) {
             const allowedPools = vdcScope.poolsByConnection.get(ev.connId)
             const evPool = (ev as any).pool as string | undefined
+
+
             // No pool on the event = ambient/legacy state; safer to drop than
             // leak across vDCs sharing the same connection.
             if (!evPool || !allowedPools || !allowedPools.has(evPool)) continue

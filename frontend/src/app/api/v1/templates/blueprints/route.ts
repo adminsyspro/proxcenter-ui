@@ -1,5 +1,6 @@
 // src/app/api/v1/templates/blueprints/route.ts
 import { NextResponse } from "next/server"
+
 import { getServerSession } from "next-auth"
 
 import { getSessionPrisma } from "@/lib/tenant"
@@ -13,6 +14,7 @@ export async function GET() {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const blueprints = await prisma.blueprint.findMany({
@@ -29,13 +31,16 @@ export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
     const rawBody = await req.json().catch(() => null)
+
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const parseResult = createBlueprintSchema.safeParse(rawBody)
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parseResult.error.flatten() },
@@ -59,6 +64,7 @@ export async function POST(req: Request) {
     })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "templates",

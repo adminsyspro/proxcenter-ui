@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -33,6 +34,7 @@ import {
   Alert,
   useTheme,
 } from '@mui/material'
+
 // RemixIcon replacements for @mui/icons-material
 const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -51,7 +53,7 @@ type VmConfig = {
   tags?: string
   onboot?: boolean
   protection?: boolean
-  
+
   // CPU
   cores?: number
   sockets?: number
@@ -60,24 +62,24 @@ type VmConfig = {
   cpulimit?: number
   cpuunits?: number
   numa?: boolean
-  
+
   // Memory
   memory?: number // MB
   balloon?: number // MB, 0 = disabled
   shares?: number
-  
+
   // Boot
   boot?: string
   bootdisk?: string
   bios?: string // seabios, ovmf
   machine?: string // pc, q35
-  
+
   // Agent
   agent?: string // "enabled=1,fstrim_cloned_disks=1"
-  
+
   // Network interfaces (net0, net1, etc.)
   [key: `net${number}`]: string | undefined
-  
+
   // Disks (scsi0, virtio0, ide0, etc.)
   [key: string]: any
 }
@@ -260,7 +262,7 @@ function parseNetworkConfig(netStr: string): Partial<NetworkInfo> {
   // Format: "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,firewall=1,tag=100"
   const parts = netStr.split(',')
   const result: Partial<NetworkInfo> = {}
-  
+
   for (const part of parts) {
     const [key, val] = part.split('=')
 
@@ -273,7 +275,7 @@ function parseNetworkConfig(netStr: string): Partial<NetworkInfo> {
       result.macaddr = val
     }
   }
-  
+
   return result
 }
 
@@ -285,7 +287,7 @@ function buildNetworkConfig(net: Partial<NetworkInfo>): string {
   if (net.tag) parts.push(`tag=${net.tag}`)
   if (net.firewall) parts.push('firewall=1')
   if (net.rate) parts.push(`rate=${net.rate}`)
-  
+
 return parts.join(',')
 }
 
@@ -299,7 +301,7 @@ function parseDiskSize(sizeStr: string): number {
 
   if (unit === 'T') return num * 1024
   if (unit === 'M') return num / 1024
-  
+
 return num
 }
 
@@ -325,45 +327,45 @@ export default function VmConfigEditor({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [requiresRestart, setRequiresRestart] = useState(false)
-  
+
   // Original config (for diff)
   const [originalConfig, setOriginalConfig] = useState<VmConfig>({})
-  
+
   // Editable config
   const [config, setConfig] = useState<VmConfig>({})
-  
+
   // Parsed network interfaces
   const [networks, setNetworks] = useState<NetworkInfo[]>([])
-  
+
   // Available options
   const [cpuTypes, setCpuTypes] = useState<string[]>(['host', 'kvm64', 'qemu64', 'max'])
   const [machineTypes, setMachineTypes] = useState<string[]>(['pc', 'q35'])
-  
+
   // Max resources (from node)
   const [maxCores, setMaxCores] = useState(128)
   const [maxMemory, setMaxMemory] = useState(512 * 1024) // 512 GB
-  
+
   /* ------------------------------------------------------------------ */
   /* Fetch config                                                        */
   /* ------------------------------------------------------------------ */
-  
+
   const fetchConfig = useCallback(async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       const res = await fetch(
         `/api/v1/connections/${connId}/guests/${type}/${node}/${vmid}/config`
       )
-      
+
       if (!res.ok) throw new Error(t('errors.httpError', { status: res.status }))
-      
+
       const json = await res.json()
       const data = json.data || json
-      
+
       setOriginalConfig(data)
       setConfig(data)
-      
+
       // Parse network interfaces
       const nets: NetworkInfo[] = []
 
@@ -386,14 +388,14 @@ export default function VmConfigEditor({
       }
 
       setNetworks(nets)
-      
+
     } catch (e: any) {
       setError(e.message || t('errors.loadingError'))
     } finally {
       setLoading(false)
     }
   }, [connId, node, type, vmid])
-  
+
   useEffect(() => {
     if (open) {
       fetchConfig()
@@ -401,39 +403,39 @@ export default function VmConfigEditor({
       setRequiresRestart(false)
     }
   }, [open, fetchConfig])
-  
+
   /* ------------------------------------------------------------------ */
   /* Update config                                                       */
   /* ------------------------------------------------------------------ */
-  
+
   const updateConfig = (key: keyof VmConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }))
-    
+
     // Some changes require restart
     if (['cpu', 'sockets', 'numa', 'machine', 'bios'].includes(String(key))) {
       setRequiresRestart(true)
     }
   }
-  
+
   /* ------------------------------------------------------------------ */
   /* Save config                                                         */
   /* ------------------------------------------------------------------ */
-  
+
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     setSuccess(false)
-    
+
     try {
       // Build diff - only send changed values
       const changes: Record<string, any> = {}
-      
+
       for (const [key, value] of Object.entries(config)) {
         if (JSON.stringify(value) !== JSON.stringify(originalConfig[key as keyof VmConfig])) {
           changes[key] = value
         }
       }
-      
+
       // Update network configs
       networks.forEach((net, idx) => {
         const netKey = `net${idx}`
@@ -443,14 +445,14 @@ export default function VmConfigEditor({
           changes[netKey] = newVal
         }
       })
-      
+
       if (Object.keys(changes).length === 0) {
         setError(t('common.noData'))
         setSaving(false)
 
 return
       }
-      
+
       const res = await fetch(
         `/api/v1/connections/${connId}/guests/${type}/${node}/${vmid}/config`,
         {
@@ -459,39 +461,39 @@ return
           body: JSON.stringify(changes),
         }
       )
-      
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
 
         throw new Error(errData.error || t('errors.httpError', { status: res.status }))
       }
-      
+
       setSuccess(true)
       setOriginalConfig({ ...config })
       onSaved?.()
-      
+
       // Auto-close after success
       setTimeout(() => {
         onClose()
       }, 1500)
-      
+
     } catch (e: any) {
       setError(e.message || t('settings.saveError'))
     } finally {
       setSaving(false)
     }
   }
-  
+
   /* ------------------------------------------------------------------ */
   /* Check if modified                                                   */
   /* ------------------------------------------------------------------ */
-  
+
   const isModified = JSON.stringify(config) !== JSON.stringify(originalConfig)
-  
+
   /* ------------------------------------------------------------------ */
   /* Render                                                              */
   /* ------------------------------------------------------------------ */
-  
+
   return (
     <Dialog
       open={open}
@@ -518,9 +520,9 @@ return
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      
+
       <Divider />
-      
+
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
         <Tabs
@@ -538,7 +540,7 @@ return
           <Tab icon={<i className="ri-tools-line" />} iconPosition="start" label={t('vmConfig.tabs.advanced')} />
         </Tabs>
       </Box>
-      
+
       <DialogContent sx={{ minHeight: 400 }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
@@ -552,19 +554,19 @@ return
                 {error}
               </Alert>
             </Collapse>
-            
+
             <Collapse in={success}>
               <Alert severity="success" sx={{ mb: 2 }}>
                 {t('settings.savedSuccess')}
               </Alert>
             </Collapse>
-            
+
             <Collapse in={requiresRestart && isModified}>
               <Alert severity="warning" sx={{ mb: 2 }} icon={<WarningAmberIcon />}>
                 {t('vmConfig.restartWarning')}
               </Alert>
             </Collapse>
-            
+
             {/* Tab: Général */}
             <TabPanel value={tabIndex} index={0}>
               <Stack spacing={3}>
@@ -575,7 +577,7 @@ return
                   fullWidth
                   helperText={t('vmConfig.nameHelper')}
                 />
-                
+
                 <TextField
                   label={t('vmConfig.description')}
                   value={config.description || ''}
@@ -585,7 +587,7 @@ return
                   rows={3}
                   helperText={t('vmConfig.descriptionHelper')}
                 />
-                
+
                 <TextField
                   label={t('vmConfig.tags')}
                   value={config.tags || ''}
@@ -593,9 +595,9 @@ return
                   fullWidth
                   helperText={t('vmConfig.tagsHelper')}
                 />
-                
+
                 <Divider />
-                
+
                 <FormControlLabel
                   control={
                     <Switch
@@ -605,7 +607,7 @@ return
                   }
                   label={t('vmConfig.startOnBoot')}
                 />
-                
+
                 <FormControlLabel
                   control={
                     <Switch
@@ -617,7 +619,7 @@ return
                 />
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: CPU */}
             <TabPanel value={tabIndex} index={1}>
               <Stack spacing={3}>
@@ -629,7 +631,7 @@ return
                   max={Math.min(maxCores, 128)}
                   helperText={t('vmConfig.cpuCoresHelper')}
                 />
-                
+
                 <SliderWithInput
                   label={t('vmConfig.sockets')}
                   value={config.sockets || 1}
@@ -638,7 +640,7 @@ return
                   max={4}
                   helperText={t('vmConfig.socketsHelper')}
                 />
-                
+
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
                   <i className="ri-cpu-line" style={{ fontSize: 24, opacity: 0.7 }} />
                   <Box>
@@ -650,9 +652,9 @@ return
                     </Typography>
                   </Box>
                 </Box>
-                
+
                 <Divider />
-                
+
                 <FormControl fullWidth>
                   <InputLabel>{t('vmConfig.cpuType')}</InputLabel>
                   <Select
@@ -672,9 +674,9 @@ return
                     {t('vmConfig.cpuTypeHelper')}
                   </FormHelperText>
                 </FormControl>
-                
+
                 <Divider />
-                
+
                 <SliderWithInput
                   label={t('vmConfig.cpuLimit')}
                   value={config.cpulimit || 0}
@@ -684,7 +686,7 @@ return
                   step={0.1}
                   helperText={t('vmConfig.cpuLimitHelper')}
                 />
-                
+
                 <SliderWithInput
                   label={t('vmConfig.cpuUnits')}
                   value={config.cpuunits || 1024}
@@ -694,7 +696,7 @@ return
                   step={1}
                   helperText={t('vmConfig.cpuUnitsHelper')}
                 />
-                
+
                 <FormControlLabel
                   control={
                     <Switch
@@ -706,7 +708,7 @@ return
                 />
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: Mémoire */}
             <TabPanel value={tabIndex} index={2}>
               <Stack spacing={3}>
@@ -720,11 +722,11 @@ return
                   unit=" MB"
                   helperText={t('vmConfig.memoryHelper', { gb: ((config.memory || 512) / 1024).toFixed(1) })}
                 />
-                
+
                 <Divider />
-                
+
                 <SectionHeader icon="ri-swap-line" title={t('vmConfig.ballooning')} />
-                
+
                 <SliderWithInput
                   label={t('vmConfig.balloonMin')}
                   value={config.balloon || 0}
@@ -735,13 +737,13 @@ return
                   unit=" MB"
                   helperText={t('vmConfig.balloonHelper')}
                 />
-                
+
                 {(config.balloon || 0) > 0 && (
                   <Alert severity="info">
                     {t('vmConfig.balloonInfo', { min: config.balloon, max: config.memory })}
                   </Alert>
                 )}
-                
+
                 <SliderWithInput
                   label={t('vmConfig.memoryShares')}
                   value={config.shares || 1000}
@@ -753,7 +755,7 @@ return
                 />
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: Disques */}
             <TabPanel value={tabIndex} index={3}>
               <Alert severity="info" sx={{ mb: 2 }}>
@@ -761,7 +763,7 @@ return
               </Alert>
 
               <SectionHeader icon="ri-hard-drive-2-line" title={t('vmConfig.currentDisks')} />
-              
+
               <Stack spacing={2}>
                 {Object.entries(config)
                   .filter(([key]) => /^(scsi|virtio|ide|sata)\d+$/.test(key))
@@ -791,11 +793,11 @@ return
                   ))}
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: Réseau */}
             <TabPanel value={tabIndex} index={4}>
               <SectionHeader icon="ri-global-line" title={t('vmConfig.networkInterfaces')} />
-              
+
               <Stack spacing={2}>
                 {networks.map((net, idx) => (
                   <Box
@@ -814,7 +816,7 @@ return
                       </Typography>
                       <Chip label={net.model} size="small" variant="outlined" />
                     </Box>
-                    
+
                     <Stack spacing={2}>
                       <Box sx={{ display: 'flex', gap: 2 }}>
                         <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -835,7 +837,7 @@ return
                             <MenuItem value="vmxnet3">VMware vmxnet3</MenuItem>
                           </Select>
                         </FormControl>
-                        
+
                         <TextField
                           size="small"
                           label="Bridge"
@@ -848,7 +850,7 @@ return
                           }}
                           sx={{ width: 120 }}
                         />
-                        
+
                         <TextField
                           size="small"
                           label="VLAN Tag"
@@ -863,7 +865,7 @@ return
                           sx={{ width: 100 }}
                           inputProps={{ min: 1, max: 4094 }}
                         />
-                        
+
                         <TextField
                           size="small"
                           label="Rate Limit"
@@ -881,7 +883,7 @@ return
                           }}
                         />
                       </Box>
-                      
+
                       <Box sx={{ display: 'flex', gap: 2 }}>
                         <TextField
                           size="small"
@@ -896,7 +898,7 @@ return
                           sx={{ flex: 1 }}
                           placeholder="AA:BB:CC:DD:EE:FF"
                         />
-                        
+
                         <FormControlLabel
                           control={
                             <Switch
@@ -916,13 +918,13 @@ return
                     </Stack>
                   </Box>
                 ))}
-                
+
                 {networks.length === 0 && (
                   <Alert severity="info">{t('common.noData')}</Alert>
                 )}
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: Boot */}
             <TabPanel value={tabIndex} index={5}>
               <Stack spacing={3}>
@@ -941,9 +943,9 @@ return
                   fullWidth
                   helperText={t('vmConfig.bootDiskHelper')}
                 />
-                
+
                 <Divider />
-                
+
                 <FormControl fullWidth>
                   <InputLabel>{t('vmConfig.bios')}</InputLabel>
                   <Select
@@ -975,7 +977,7 @@ return
                 </FormControl>
               </Stack>
             </TabPanel>
-            
+
             {/* Tab: Avancé */}
             <TabPanel value={tabIndex} index={6}>
               <Stack spacing={3}>
@@ -999,11 +1001,11 @@ return
                 <Typography variant="caption" color="text.secondary" sx={{ mt: -2 }}>
                   {t('vmConfig.qemuAgentHelper')}
                 </Typography>
-                
+
                 <Divider />
-                
+
                 <SectionHeader icon="ri-shield-check-line" title={t('vmConfig.security')} />
-                
+
                 <FormControlLabel
                   control={
                     <Switch
@@ -1013,9 +1015,9 @@ return
                   }
                   label={t('vmConfig.deleteProtection')}
                 />
-                
+
                 <Divider />
-                
+
                 <SectionHeader icon="ri-code-line" title={t('vmConfig.rawConfig')} />
 
                 <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1036,9 +1038,9 @@ return
           </>
         )}
       </DialogContent>
-      
+
       <Divider />
-      
+
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button
           startIcon={<RefreshIcon />}
@@ -1047,13 +1049,13 @@ return
         >
           {t('common.refresh')}
         </Button>
-        
+
         <Box sx={{ flex: 1 }} />
-        
+
         <Button onClick={onClose} disabled={saving}>
           {t('common.cancel')}
         </Button>
-        
+
         <Button
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}

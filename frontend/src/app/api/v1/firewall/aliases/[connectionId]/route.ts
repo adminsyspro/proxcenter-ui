@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/aliases/[connectionId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,11 @@ export async function GET(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -25,7 +28,7 @@ export async function GET(
     return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error fetching aliases:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to fetch aliases' },
       { status: 500 }
@@ -41,9 +44,11 @@ export async function POST(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -54,7 +59,7 @@ export async function POST(
     return NextResponse.json(response.data, { status: 201 })
   } catch (error: any) {
     console.error('Error creating alias:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to create alias' },
       { status: 500 }

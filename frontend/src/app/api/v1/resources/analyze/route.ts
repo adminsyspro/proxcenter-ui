@@ -7,9 +7,9 @@ export const runtime = "nodejs"
 
 /**
  * POST /api/v1/resources/analyze
- * 
+ *
  * Analyse les ressources avec Ollama local et génère des recommandations
- * 
+ *
  * Variables d'environnement:
  * - OLLAMA_URL: URL du serveur Ollama (ex: http://localhost:11434)
  * - OLLAMA_MODEL: Modèle à utiliser (ex: llama3, mistral, qwen2.5)
@@ -52,7 +52,7 @@ type Recommendation = {
 async function callOllama(prompt: string): Promise<string> {
   const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
   const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.1:8b'
-  
+
   // Essayer d'abord /api/chat (format plus récent)
   try {
     const chatResponse = await fetch(`${ollamaUrl}/api/chat`, {
@@ -68,17 +68,17 @@ async function callOllama(prompt: string): Promise<string> {
         }
       })
     })
-    
+
     if (chatResponse.ok) {
       const data = await chatResponse.json()
 
-      
+
 return data.message?.content || ''
     }
   } catch (e) {
     // /api/chat failed, trying /api/generate
   }
-  
+
   // Fallback sur /api/generate (ancien format)
   const response = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
@@ -93,31 +93,31 @@ return data.message?.content || ''
       }
     })
   })
-  
+
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
 
     console.error(`[resources/analyze] Ollama error ${response.status}: ${errorText}`)
     throw new Error(`Ollama error: ${response.status} - ${errorText || 'Model not found?'}`)
   }
-  
+
   const data = await response.json()
 
-  
+
 return data.response || ''
 }
 
 // Vérifier si Ollama est disponible
 async function isOllamaAvailable(): Promise<boolean> {
   const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434'
-  
+
   try {
     const response = await fetch(`${ollamaUrl}/api/tags`, {
       method: 'GET',
       signal: AbortSignal.timeout(2000) // 2s timeout
     })
 
-    
+
 return response.ok
   } catch {
     return false
@@ -171,6 +171,7 @@ Génère entre 3 et 6 recommandations pertinentes basées sur les données.`
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -187,13 +188,13 @@ export async function POST(req: Request) {
 
     // Construire le prompt
     const prompt = buildPrompt(kpis, topCpuVms || [], topRamVms || [])
-    
+
     // Essayer Ollama, sinon fallback basique
     const ollamaAvailable = await isOllamaAvailable()
-    
+
     let responseText = ''
     let provider = 'basic'
-    
+
     if (ollamaAvailable) {
       // Utiliser Ollama
       try {
@@ -203,7 +204,7 @@ export async function POST(req: Request) {
         console.error('[resources/analyze] Ollama error:', e)
       }
     }
-    
+
     if (!responseText) {
       // Fallback sur recommandations basiques (silencieux - normal sans Ollama)
       const basic = generateBasicRecommendations(kpis, topCpuVms || [], topRamVms || [])
@@ -248,7 +249,7 @@ export async function POST(req: Request) {
     })
   } catch (e: any) {
     console.error("[resources/analyze] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -301,6 +302,7 @@ function generateBasicRecommendations(
 
   // Analyse stockage
   const storagePct = (kpis.storage.used / kpis.storage.total) * 100
+
   if (storagePct > 80) {
     recommendations.push({
       id: 'rec_storage_high',

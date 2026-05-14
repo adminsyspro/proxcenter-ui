@@ -73,13 +73,16 @@ export function formatService(rule: FirewallRule): string {
   if (rule.macro) return rule.macro
   const proto = rule.proto?.toUpperCase() || ''
   const port = rule.dport || ''
+
   if (!proto && !port) return 'any'
   if (proto && port) return `${proto}/${port}`
-  return proto || port
+
+return proto || port
 }
 
 /** Clean source/dest before sending to Proxmox: "any" is not a valid alias */
 export function cleanSourceDest(value: string | undefined): string {
   if (!value || value.trim().toLowerCase() === 'any') return ''
-  return value.trim()
+
+return value.trim()
 }

@@ -9,9 +9,12 @@ export type MyVdc = VdcWithDetails
 
 const fetcher = async (url: string): Promise<MyVdc[]> => {
   const res = await fetch(url)
+
   if (!res.ok) throw new Error(`Failed to fetch vDCs (${res.status})`)
   const json = await res.json()
-  return Array.isArray(json?.data) ? json.data : []
+
+
+return Array.isArray(json?.data) ? json.data : []
 }
 
 /**
@@ -35,7 +38,9 @@ export function useMyVdcs() {
   )
 
   const vdcs = data ?? []
-  return {
+
+
+return {
     vdcs,
     hasVdc: vdcs.length > 0,
     loading: isLoading,

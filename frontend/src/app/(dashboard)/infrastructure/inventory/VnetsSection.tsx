@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -40,20 +41,25 @@ interface VnetRow {
   id: string
   vdcId: string
   vdcName: string
+
   /** Tenant-facing name; what we render in the table and pass as URL segment. */
   displayName: string
+
   /** Hashed 8-char PVE ID; surfaced in a tooltip for provider debugging. */
   pveName: string
   description?: string | null
   vxlanTag?: number | null
   firewall?: boolean
+
   /** L3 / IPAM info attached to the VNet. Always present in the new model. */
   subnet: SubnetView | null
+
   /** IPAM allocation counts (used / usable). Always returned by the API. */
   ipamUsage: IpamUsage
 }
 
 interface Props {
+
   /** Inventory connections in scope; VNets from vDCs whose connectionId is
    *  outside this set are filtered out. Empty set = no filter. */
   connectionIds: string[]
@@ -68,6 +74,7 @@ export default function VnetsSection({ connectionIds }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editVnet, setEditVnet] = useState<{ row: VnetRow } | null>(null)
   const [deleteVnet, setDeleteVnet] = useState<{ row: VnetRow } | null>(null)
+
   // Detail modal: opened by clicking a row. Reuses TenantVnetDetailPanel
   // so we don't duplicate the IPAM table / VM lookup / edit flow.
   const [detailVnet, setDetailVnet] = useState<{ row: VnetRow } | null>(null)
@@ -82,24 +89,31 @@ export default function VnetsSection({ connectionIds }: Props) {
 
   const reload = useCallback(async () => {
     setLoading(true)
+
     try {
       const vdcsRes = await fetch('/api/v1/vdcs')
       const vdcsJson = await vdcsRes.json()
       const allVdcs: Vdc[] = Array.isArray(vdcsJson?.data) ? vdcsJson.data : []
+
       const visibleVdcs = connFilter.size === 0
         ? allVdcs
         : allVdcs.filter(v => !v.connectionId || connFilter.has(v.connectionId))
+
       setVdcs(visibleVdcs)
 
       const all: VnetRow[] = []
+
       await Promise.all(visibleVdcs.map(async (v) => {
         try {
           const r = await fetch(`/api/v1/vdcs/${encodeURIComponent(v.id)}/vnets`)
+
           if (!r.ok) return
           const j = await r.json()
           const list = Array.isArray(j?.data) ? j.data : []
+
           for (const vnet of list) {
             const sn = vnet.subnet
+
             const subnet: SubnetView | null = sn
               ? {
                   cidr: sn.cidr,
@@ -107,10 +121,13 @@ export default function VnetsSection({ connectionIds }: Props) {
                   dnsServers: Array.isArray(sn.dnsServers) ? sn.dnsServers : [],
                 }
               : null
+
             const u = vnet.ipamUsage
+
             const ipamUsage: IpamUsage = u && typeof u === 'object'
               ? { used: Number(u.used) || 0, usable: Number(u.usable) || 0 }
               : { used: 0, usable: 0 }
+
             all.push({
               id: vnet.id,
               vdcId: v.id,
@@ -191,7 +208,9 @@ export default function VnetsSection({ connectionIds }: Props) {
                 <TableBody>
                   {rows.map((r) => {
                     const sn = r.subnet
-                    return (
+
+
+return (
                     <TableRow
                       key={r.id}
                       onClick={() => setDetailVnet({ row: r })}
@@ -216,16 +235,21 @@ export default function VnetsSection({ connectionIds }: Props) {
                       <TableCell align="right" sx={{ py: 1 }}>
                         {(() => {
                           const { used, usable } = r.ipamUsage
+
                           if (usable === 0) {
                             return <span style={{ opacity: 0.45, fontSize: 12 }}>—</span>
                           }
+
                           const pct = Math.min(100, Math.round((used / usable) * 100))
+
                           const barColor = pct >= 90
                             ? theme.palette.error.main
                             : pct >= 70
                               ? theme.palette.warning.main
                               : theme.palette.success.main
-                          return (
+
+
+return (
                             <Tooltip title={t('myVdc.subnetUsageTooltip', { used, usable })} arrow placement="top">
                               <Stack spacing={0.5} alignItems="flex-end" sx={{ minWidth: 64, display: 'inline-flex' }}>
                                 <Typography variant="caption" sx={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.2 }}>

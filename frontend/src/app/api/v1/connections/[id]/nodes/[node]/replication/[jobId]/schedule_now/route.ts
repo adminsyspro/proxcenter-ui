@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -13,9 +14,11 @@ export async function POST(
   const { id, node, jobId } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -31,7 +34,8 @@ export async function POST(
     return NextResponse.json({ data: result, success: true })
   } catch (error: any) {
     console.error(`Error scheduling replication job:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to schedule replication job"
     }, { status: 500 })
   }

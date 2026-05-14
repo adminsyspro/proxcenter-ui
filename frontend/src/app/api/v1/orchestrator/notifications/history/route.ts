@@ -8,6 +8,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 export async function GET(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
 
     // Filter by tenant connections
     const items = Array.isArray(data) ? data : ((data as any)?.data || [])
+
     const filtered = Array.isArray(items)
       ? items.filter((n: any) => !n.connection_id || tenantConnectionIds.has(n.connection_id))
       : items
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to get notification history:', error)
     }
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to get notification history' },
       { status: 500 }

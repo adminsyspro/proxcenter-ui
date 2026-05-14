@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -120,6 +121,7 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
 
           // Also load ISO storages
           const isoStores = json.data.filter((s: Storage) => s.content?.includes('iso'))
+
           setIsoStorages(isoStores)
         }
       } catch (e) {
@@ -136,22 +138,30 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
   useEffect(() => {
     if (!open || !connId || !node || !isoStorage || deviceType !== 'cdrom') {
       setIsoImages([])
-      return
+
+return
     }
+
     const loadIsos = async () => {
       setIsoLoading(true)
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(isoStorage)}/content?content=iso`)
+
         if (res.ok) {
           const json = await res.json()
+
           setIsoImages((json.data || []).map((i: any) => {
             const m = i.volid?.match(/iso\/(.+)$/)
-            return m ? m[1] : i.volid || ''
+
+
+return m ? m[1] : i.volid || ''
           }).filter(Boolean))
         }
       } catch {}
       finally { setIsoLoading(false) }
     }
+
     loadIsos()
   }, [open, connId, node, isoStorage, deviceType])
 
@@ -187,21 +197,30 @@ return match ? Number.parseInt(match[1]) : -1
     try {
       // EFI Disk
       if (deviceType === 'efi') {
-        if (!storage) { setError('Please select a storage'); setSaving(false); return }
+        if (!storage) { setError('Please select a storage'); setSaving(false);
+
+return }
+
         const parts = [`${storage}:1`]
+
         if (efiPreEnrolledKeys) parts.push('pre-enrolled-keys=1')
         parts.push('efitype=4m', 'size=128K')
         await onSave({ efidisk0: parts.join(',') })
         onClose()
-        return
+
+return
       }
 
       // TPM State
       if (deviceType === 'tpm') {
-        if (!storage) { setError('Please select a storage'); setSaving(false); return }
+        if (!storage) { setError('Please select a storage'); setSaving(false);
+
+return }
+
         await onSave({ tpmstate0: `${storage}:1,version=${tpmVersion}` })
         onClose()
-        return
+
+return
       }
 
       const diskId = busType === 'virtio' ? `virtio${busIndex}` : `${busType}${busIndex}`
@@ -209,6 +228,7 @@ return match ? Number.parseInt(match[1]) : -1
       // CDROM device
       if (deviceType === 'cdrom') {
         let value: string
+
         if (cdromMode === 'iso' && isoStorage && isoImage) {
           value = `${isoStorage}:iso/${isoImage},media=cdrom`
         } else if (cdromMode === 'physical') {
@@ -216,16 +236,19 @@ return match ? Number.parseInt(match[1]) : -1
         } else {
           value = 'none,media=cdrom'
         }
+
         await onSave({ [diskId]: value })
         onClose()
-        return
+
+return
       }
 
       // Regular disk
       if (!storage) {
         setError(t('common.select') + ' storage')
         setSaving(false)
-        return
+
+return
       }
 
       const diskConfig: any = {

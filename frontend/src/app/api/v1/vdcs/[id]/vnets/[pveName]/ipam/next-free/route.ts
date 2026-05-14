@@ -24,11 +24,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
+
     if (!vdcId || !displayName) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 })
     }
 
     const denied = await checkPermission("sdn.vnet.view")
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -41,6 +43,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
         vdc: { select: { connectionId: true, pvePoolName: true } },
       },
     })
+
     if (!vnetRow || !vnetRow.subnet) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
 
     const row = {
@@ -54,6 +57,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     }
 
     const parsed = parseCidr(row.cidr)
+
     if (!parsed) return NextResponse.json({ error: "Invalid CIDR" }, { status: 500 })
 
     // Build the union of "taken" IPs: IPAM-tracked rows + IPs deployed
@@ -63,6 +67,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const taken = new Set<number>()
 
     const allocs = await listAllocationsForSubnet(row.subnet_id)
+
     for (const a of allocs) taken.add(a.ipInt)
 
     try {
@@ -70,8 +75,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
         where: { id: row.connection_id },
         select: { tenantId: true },
       })
+
       if (connMeta) {
         const conn = await getConnectionById(row.connection_id, connMeta.tenantId)
+
         const scanned = await scanUsedIpsForSubnet({
           conn,
           vdcPoolName: row.pve_pool_name,
@@ -79,6 +86,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
           subnetId: row.subnet_id,
           connectionId: row.connection_id,
         })
+
         for (const n of scannedToIntSet(scanned)) taken.add(n)
       }
     } catch (err: any) {
@@ -88,9 +96,11 @@ export async function GET(_req: Request, ctx: RouteContext) {
     }
 
     const gatewayInt = ipToInt(row.gateway)
+
     if (gatewayInt !== null) taken.add(gatewayInt)
 
     let firstFree: string | null = null
+
     for (let n = parsed.firstUsableInt; n <= parsed.lastUsableInt; n++) {
       if (!taken.has(n)) { firstFree = intToIp(n); break }
     }

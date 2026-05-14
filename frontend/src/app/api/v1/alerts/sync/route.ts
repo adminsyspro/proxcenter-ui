@@ -17,6 +17,7 @@ export const runtime = 'nodejs'
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -146,7 +147,7 @@ export async function POST(req: Request) {
     })
   } catch (error: any) {
     console.error('[alerts/sync] POST error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

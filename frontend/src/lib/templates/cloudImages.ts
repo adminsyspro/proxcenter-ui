@@ -27,6 +27,7 @@ export const VENDORS = [
   { id: 'alma', name: 'AlmaLinux', icon: 'ri-centos-fill' },
   { id: 'fedora', name: 'Fedora', icon: 'ri-fedora-fill' },
   { id: 'opensuse', name: 'openSUSE', icon: 'ri-suse-fill' },
+
   // The icon strings here are RemixIcon class names used by the vendor
   // filter chips. Distros without a native RemixIcon glyph (Alpine, Arch)
   // get a generic cloud icon — VendorLogo (used elsewhere) loads the real
@@ -81,6 +82,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     version: '13',
     arch: 'amd64',
     format: 'qcow2',
+
     // `/latest/` redirects to the freshest point release (e.g. 13.0,
     // 13.1, …) so the URL stays valid across patch cycles without code
     // changes — same pattern as bookworm/bullseye below.
@@ -128,6 +130,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     minCores: 1,
     recommendedCores: 2,
     ostype: 'l26',
+
     // Bullseye LTS officially ends in August 2026 — keep it for transition
     // workloads but flag it so users notice it's not the right default.
     tags: ['oldoldstable', 'cloud-init', 'eol-soon'],
@@ -140,6 +143,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     version: '10',
     arch: 'x86_64',
     format: 'qcow2',
+
     // `.latest.` is a server-side symlink that always points to the most
     // recent point release (10.0, 10.1…), same convention as Rocky 9.
     downloadUrl: 'https://dl.rockylinux.org/pub/rocky/10/images/x86_64/Rocky-10-GenericCloud.latest.x86_64.qcow2',
@@ -214,6 +218,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     version: '10-stream',
     arch: 'x86_64',
     format: 'qcow2',
+
     // CentOS Stream is the upstream rolling preview of RHEL — Stream 10
     // tracks RHEL 10's development cycle. The `-latest.` segment is a
     // server-side symlink to the freshest build.
@@ -252,6 +257,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     vendor: 'fedora',
     version: '43',
     arch: 'x86_64',
+
     // The minor (build) suffix `-1.1` may need bumping after a respin —
     // Fedora doesn't expose a stable `latest` symlink, unlike Debian /
     // Rocky / Alma. Check the directory listing if download 404s:
@@ -293,11 +299,13 @@ export const CLOUD_IMAGES: CloudImage[] = [
     version: '3.21',
     arch: 'x86_64',
     format: 'qcow2',
+
     // Alpine cloud images live under `/releases/cloud/` — `nocloud_*` is
     // the variant that pulls cloud-init metadata from local NoCloud
     // datasource, which is what Proxmox provides via its CD-ROM drive.
     downloadUrl: 'https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/cloud/nocloud_alpine-3.21.0-x86_64-bios-cloudinit-r0.qcow2',
     checksumUrl: null,
+
     // Alpine is famously minimal — 256 MB is enough for the OS to boot
     // and run a small workload. Disk default also smaller (5 GB).
     defaultDiskSize: '5G',
@@ -316,6 +324,7 @@ export const CLOUD_IMAGES: CloudImage[] = [
     version: 'rolling',
     arch: 'x86_64',
     format: 'qcow2',
+
     // Arch publishes monthly-rebuilt cloud images under `/images/latest/`
     // which is a server-side symlink to the most recent monthly snapshot
     // (e.g. `/images/v20250901/...`). The base URL stays valid forever.

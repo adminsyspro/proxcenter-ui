@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
+
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
@@ -26,6 +27,7 @@ const DEFAULT_BRANDING = {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -35,6 +37,7 @@ export async function GET() {
     // Migrate old static paths to API serving paths
     const fixUrl = (url: string) =>
       url ? url.replace(/^\/uploads\/branding\//, '/api/v1/settings/branding/uploads/') : url
+
     settings.logoUrl = fixUrl(settings.logoUrl)
     settings.faviconUrl = fixUrl(settings.faviconUrl)
     settings.loginLogoUrl = fixUrl(settings.loginLogoUrl)
@@ -48,12 +51,14 @@ export async function GET() {
 export async function PUT(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json()
     const settings = { ...DEFAULT_BRANDING, ...body }
 
     const tenantId = await getCurrentTenantId()
+
     await setSetting('branding', tenantId, settings)
 
     return NextResponse.json({ success: true, ...settings })

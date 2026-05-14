@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { scheduleToCron } from './scheduleToCron'
 import type { ScheduleSpec } from './types'
 

@@ -140,6 +140,7 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
 
   // Get tenant ID for scoping
   let tenantId = "default"
+
   try {
     tenantId = await getCurrentTenantId()
   } catch {
@@ -244,6 +245,7 @@ export async function getAuditLogs(options: {
   const offset = options.offset ?? 0
 
   const where: Prisma.AuditLogWhereInput = { tenantId: options.tenantId }
+
   if (options.category) where.category = options.category
   if (options.action) where.action = options.action
   if (options.userId) where.userId = options.userId
@@ -253,6 +255,7 @@ export async function getAuditLogs(options: {
 
   if (options.startDate || options.endDate) {
     const ts: Prisma.DateTimeFilter = {}
+
     if (options.startDate) ts.gte = new Date(options.startDate)
     if (options.endDate) ts.lte = new Date(options.endDate)
     where.timestamp = ts
@@ -264,6 +267,7 @@ export async function getAuditLogs(options: {
     // to stay byte-for-byte compatible with the SQLite behaviour. Flip the
     // mode flag once the consumer is confirmed insensitive-friendly.
     const term = options.search
+
     where.OR = [
       { userEmail: { contains: term } },
       { resourceName: { contains: term } },

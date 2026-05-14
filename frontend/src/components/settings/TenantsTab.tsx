@@ -499,6 +499,7 @@ export default function TenantsTab() {
                         <ListItem
                           key={user.id}
                           secondaryAction={
+
                             // Super admins are pinned to every tenant by
                             // design (createTenant attaches them and the
                             // backend refuses removeUserFromTenant with

@@ -10,14 +10,17 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     // First-visit migration: seed a "Default" datacentre from the legacy
     // settings.green row so existing installs see something on day one.
     await ensureDefaultDatacenter()
-    return NextResponse.json({ data: await listDatacenters() })
+
+return NextResponse.json({ data: await listDatacenters() })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -26,14 +29,18 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json().catch(() => ({})) as any
+
     if (!body.name || typeof body.name !== 'string') {
       return NextResponse.json({ error: 'Missing name' }, { status: 400 })
     }
+
     const dc = await insertDatacenter({
       name: body.name,
       locationLabel: body.locationLabel ?? null,
@@ -51,8 +58,10 @@ export async function POST(req: NextRequest) {
       comment: body.comment ?? null,
       isDefault: !!body.isDefault,
     })
+
     invalidateGreenResolution()
-    return NextResponse.json({ data: dc })
+
+return NextResponse.json({ data: dc })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

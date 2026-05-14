@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -33,6 +34,7 @@ import {
   useTheme,
   alpha,
 } from '@mui/material'
+
 // RemixIcon replacements for @mui/icons-material
 const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -179,9 +181,11 @@ export default function DRSSettingsPanel({
   useEffect(() => {
     // Clamp legacy sub-1h interval values to 1h
     const normalized = { ...initialSettings }
+
     if (!validIntervalOptions.includes(normalized.rebalance_interval)) {
       normalized.rebalance_interval = '1h'
     }
+
     setSettings(normalized)
     setHasChanges(false)
   }, [initialSettings])
@@ -301,6 +305,7 @@ export default function DRSSettingsPanel({
             onChange={(_, selected) => {
               const selectedIds = selected.map(c => c.id)
               const excluded = clusters.filter(c => !selectedIds.includes(c.id)).map(c => c.id)
+
               handleChange('excluded_clusters', excluded)
             }}
             isOptionEqualToValue={(option, value) => option.id === value.id}
@@ -333,8 +338,10 @@ export default function DRSSettingsPanel({
       {/* Per-cluster mode overrides */}
       {clusters.length > 0 && (() => {
         const activeClusters = clusters.filter(c => !settings.excluded_clusters.includes(c.id))
+
         if (activeClusters.length === 0) return null
-        return (
+
+return (
           <Grid size={{ xs: 12 }}>
             <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
               {t('drsPage.clusterModeOverrides')}
@@ -353,11 +360,13 @@ export default function DRSSettingsPanel({
                       onChange={(e) => {
                         const val = e.target.value as string
                         const newModes = { ...settings.cluster_modes }
+
                         if (val === '') {
                           delete newModes[cluster.id]
                         } else {
                           newModes[cluster.id] = val
                         }
+
                         handleChange('cluster_modes', newModes)
                       }}
                     >
@@ -381,8 +390,10 @@ export default function DRSSettingsPanel({
       {/* Per-cluster excluded nodes */}
       {clusters.length > 0 && (() => {
         const activeClusters = clusters.filter(c => !settings.excluded_clusters.includes(c.id))
+
         if (activeClusters.length === 0) return null
-        return (
+
+return (
           <Grid size={{ xs: 12 }}>
             <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
               {t('drsPage.excludedNodesTitle')}
@@ -393,8 +404,10 @@ export default function DRSSettingsPanel({
             <Stack spacing={1.5}>
               {activeClusters.map(cluster => {
                 const nodesForCluster = clusterNodes[cluster.id] || []
+
                 if (nodesForCluster.length === 0) return null
-                return (
+
+return (
                   <Box key={cluster.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                     <Typography variant="body2" sx={{ minWidth: 140, fontWeight: 500, mt: 1 }}>{cluster.name}</Typography>
                     <Autocomplete
@@ -405,11 +418,13 @@ export default function DRSSettingsPanel({
                       value={settings.excluded_nodes[cluster.id] || []}
                       onChange={(_, selected) => {
                         const newExcluded = { ...settings.excluded_nodes }
+
                         if (selected.length === 0) {
                           delete newExcluded[cluster.id]
                         } else {
                           newExcluded[cluster.id] = selected
                         }
+
                         handleChange('excluded_nodes', newExcluded)
                       }}
                       renderInput={(params) => (
@@ -760,15 +775,18 @@ export default function DRSSettingsPanel({
             <Slider
               value={(() => {
                 const s = settings.migration_cooldown || '5m'
+
                 // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
                 let totalMinutes = 0
                 const hMatch = s.match(/(\d+)h/)
                 const mMatch = s.match(/(\d+)m/)
                 const sMatch = s.match(/^(\d+)s$/)
+
                 if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
                 if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
                 if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
-                return totalMinutes || 5
+
+return totalMinutes || 5
               })()}
               onChange={(_, val) => handleChange('migration_cooldown', `${val as number}m`)}
               min={1}
@@ -957,6 +975,7 @@ export default function DRSSettingsPanel({
           <Box>{renderSection()}</Box>
         </Box>
       ) : (
+
         /* Desktop: side-nav + content */
         <Box sx={{ display: 'flex', gap: 0, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
           {/* Left nav */}

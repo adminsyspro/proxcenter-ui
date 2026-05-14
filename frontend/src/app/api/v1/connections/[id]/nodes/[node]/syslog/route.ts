@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -7,9 +8,9 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/syslog
- * 
+ *
  * Récupère les logs système d'un node
- * 
+ *
  * Query params:
  * - limit: nombre de lignes (default 50)
  * - start: ligne de départ
@@ -25,6 +26,7 @@ export async function GET(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
     if (denied) return denied
 
     const url = new URL(req.url)
@@ -35,12 +37,14 @@ export async function GET(
     const service = url.searchParams.get('service')
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
     // Construire les paramètres de requête
     const params = new URLSearchParams()
+
     params.append('limit', limit)
     if (start) params.append('start', start)
     if (since) params.append('since', since)
@@ -55,18 +59,21 @@ export async function GET(
     // Formater les logs
     const formattedLogs = Array.isArray(logs) ? logs.map((entry: any) => {
       if (typeof entry === 'string') return entry
+
       // Format Proxmox: { t: "timestamp message...", n: number }
       if (entry.t && typeof entry.t === 'string') return entry.t
       if (entry.n !== undefined && entry.t) return entry.t
-      return JSON.stringify(entry)
+
+return JSON.stringify(entry)
     }) : []
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: formattedLogs,
       total: logs?.length || 0
     })
   } catch (e: any) {
     console.error("[syslog/node] Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to fetch syslog" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to fetch syslog" }, { status: 500 })
   }
 }

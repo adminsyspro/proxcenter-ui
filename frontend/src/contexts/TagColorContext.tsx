@@ -16,15 +16,18 @@ export type TagShape = 'circle' | 'dense' | 'full' | 'none'
  */
 export function parseColorMap(colorMap: string): Record<string, TagColorOverride> {
   const result: Record<string, TagColorOverride> = {}
+
   if (!colorMap) return result
 
   colorMap.split(';').forEach(entry => {
     if (!entry) return
     const parts = entry.split(':')
+
     if (parts.length < 2) return
     const tag = parts[0]
     const bgHex = parts[1]
     const fgHex = parts[2]
+
     if (!tag || !bgHex || bgHex.length < 6) return
 
     result[tag] = {
@@ -54,6 +57,7 @@ function extractColorMap(tagStyle: any): string {
   if (typeof tagStyle === 'string') {
     // PVE property format: "key=value,key=value" or "key=value key=value"
     const match = tagStyle.match(/color-map=([^,\s]+)/)
+
     if (match) return match[1]
   }
 
@@ -69,13 +73,16 @@ function extractShape(tagStyle: any): TagShape {
 
   if (typeof tagStyle === 'object' && tagStyle.shape) {
     const s = tagStyle.shape
+
     if (s === 'circle' || s === 'dense' || s === 'full' || s === 'none') return s
   }
 
   if (typeof tagStyle === 'string') {
     const match = tagStyle.match(/shape=(\w+)/)
+
     if (match) {
       const s = match[1]
+
       if (s === 'circle' || s === 'dense' || s === 'full' || s === 'none') return s as TagShape
     }
   }
@@ -90,12 +97,16 @@ function extractShape(tagStyle: any): TagShape {
 type TagColorMap = Record<string, TagColorOverride>
 
 type TagColorContextValue = {
+
   /** Get PVE color override for a tag on a specific connection */
   getOverride: (connId: string, tag: string) => TagColorOverride | undefined
+
   /** Get PVE tag shape for a specific connection */
   getShape: (connId: string) => TagShape
+
   /** Load color map for a connection (idempotent, fetches once) */
   loadConnection: (connId: string) => void
+
   /** Check if a connection's colors have been loaded */
   isLoaded: (connId: string) => boolean
 }
@@ -121,6 +132,7 @@ export function TagColorProvider({ children }: { children: React.ReactNode }) {
       .then(res => res.ok ? res.json() : null)
       .then(json => {
         const data = json?.data
+
         if (!data) return
 
         const tagStyle = data['tag-style']
@@ -130,6 +142,7 @@ export function TagColorProvider({ children }: { children: React.ReactNode }) {
 
         loadedRef.current.add(connId)
         setShapes(prev => ({ ...prev, [connId]: shape }))
+
         if (Object.keys(parsed).length > 0) {
           setColorMaps(prev => ({ ...prev, [connId]: parsed }))
         }
@@ -174,10 +187,14 @@ export function useTagColors(connId?: string) {
 
   const getColor = useCallback((tag: string, overrideConnId?: string): { bg: string; fg: string } => {
     const id = overrideConnId || connId
+
     if (id) {
       const override = ctx.getOverride(id, tag)
+
       if (override) return override
     }
+
+
     // Fallback to hash-based palette
     return { bg: tagColorFallback(tag), fg: '#ffffff' }
   }, [connId, ctx])
@@ -196,11 +213,15 @@ const TAG_PALETTE = [
 
 function hashStringToInt(str: string) {
   let h = 0
+
   for (let i = 0; i < str.length; i++) h = Math.trunc(h * 31 + str.codePointAt(i)!)
-  return Math.abs(h)
+
+return Math.abs(h)
 }
 
 export function tagColorFallback(tag: string): string {
   const idx = hashStringToInt(tag.toLowerCase()) % TAG_PALETTE.length
-  return TAG_PALETTE[idx]
+
+
+return TAG_PALETTE[idx]
 }

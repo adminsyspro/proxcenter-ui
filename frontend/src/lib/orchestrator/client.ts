@@ -39,6 +39,7 @@ export async function orchestratorFetch<T>(
   try {
     const { getCurrentTenantId, DEFAULT_TENANT_ID } = await import('@/lib/tenant')
     const tid = await getCurrentTenantId()
+
     if (tid && tid !== DEFAULT_TENANT_ID) {
       headers['X-Tenant-ID'] = tid
     }
@@ -76,8 +77,10 @@ export async function orchestratorFetch<T>(
 
     // Tag connection errors so API routes can avoid noisy logging
     const isConnError = error?.cause?.code === 'ECONNREFUSED' || error?.cause?.code === 'ENOTFOUND' || error?.message?.includes('fetch failed')
+
     if (isConnError) {
       const err: any = new Error('Orchestrator unavailable')
+
       err.code = 'ORCHESTRATOR_UNAVAILABLE'
       throw err
     }
@@ -232,7 +235,7 @@ class OrchestratorClient {
   async get<T = any>(path: string): Promise<OrchestratorResponse<T>> {
     const data = await orchestratorFetch<T>(path, { method: 'GET' })
 
-    
+
 return { data, status: 200 }
   }
 
@@ -242,7 +245,7 @@ return { data, status: 200 }
   async post<T = any>(path: string, body?: any): Promise<OrchestratorResponse<T>> {
     const data = await orchestratorFetch<T>(path, { method: 'POST', body })
 
-    
+
 return { data, status: 200 }
   }
 
@@ -252,7 +255,7 @@ return { data, status: 200 }
   async put<T = any>(path: string, body?: any): Promise<OrchestratorResponse<T>> {
     const data = await orchestratorFetch<T>(path, { method: 'PUT', body })
 
-    
+
 return { data, status: 200 }
   }
 
@@ -262,7 +265,7 @@ return { data, status: 200 }
   async delete<T = any>(path: string): Promise<OrchestratorResponse<T>> {
     const data = await orchestratorFetch<T>(path, { method: 'DELETE' })
 
-    
+
 return { data, status: 200 }
   }
 
@@ -288,7 +291,7 @@ return { data, status: 200 }
   getRecommendations(validate = false) {
     const query = validate ? '?validate=true' : ''
 
-    
+
 return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
   }
 
@@ -363,7 +366,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     if (to) params.set('to', to)
     const query = params.toString()
 
-    
+
 return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?${query}` : ''}`)
   }
 
@@ -433,7 +436,9 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
 
   getSnapshotUsage(cluster: string, pool: string, image: string, snap: string) {
     const q = new URLSearchParams({ cluster, pool, image, snap }).toString()
-    return this.get<any>(`/replication/snapshots/usage?${q}`)
+
+
+return this.get<any>(`/replication/snapshots/usage?${q}`)
   }
 
   deleteMirrorSnapshots(items: Array<{ cluster_id: string; pool: string; image: string; snapshot: string }>) {
@@ -663,7 +668,7 @@ export const alertsApi = {
     if (params?.offset) searchParams.set('offset', params.offset.toString())
     const query = searchParams.toString()
 
-    
+
 return orchestratorClient.get<AlertsResponse>(`/alerts${query ? `?${query}` : ''}`)
   },
 
@@ -671,7 +676,7 @@ return orchestratorClient.get<AlertsResponse>(`/alerts${query ? `?${query}` : ''
   async getActiveAlerts(connectionId?: string): Promise<OrchestratorResponse<Alert[]>> {
     const query = connectionId ? `?connection_id=${connectionId}` : ''
 
-    
+
 return orchestratorClient.get<Alert[]>(`/alerts/active${query}`)
   },
 
@@ -679,7 +684,7 @@ return orchestratorClient.get<Alert[]>(`/alerts/active${query}`)
   async getSummary(connectionId?: string): Promise<OrchestratorResponse<AlertSummary>> {
     const query = connectionId ? `?connection_id=${connectionId}` : ''
 
-    
+
 return orchestratorClient.get<AlertSummary>(`/alerts/summary${query}`)
   },
 
@@ -707,7 +712,7 @@ return orchestratorClient.get<AlertSummary>(`/alerts/summary${query}`)
   async clearAll(connectionId?: string): Promise<OrchestratorResponse<{ status: string }>> {
     const query = connectionId ? `?connection_id=${connectionId}` : ''
 
-    
+
 return orchestratorClient.delete<{ status: string }>(`/alerts${query}`)
   },
 

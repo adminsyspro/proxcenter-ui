@@ -37,8 +37,10 @@ const ProxCenterTasksContext = createContext<ProxCenterTasksContextValue | null>
 function loadTasks(): PCTask[] {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
+
     if (!raw) return []
-    return JSON.parse(raw) as PCTask[]
+
+return JSON.parse(raw) as PCTask[]
   } catch {
     return []
   }
@@ -60,24 +62,31 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
   // Hydrate from sessionStorage on mount
   useEffect(() => {
     const stored = loadTasks()
+
     if (stored.length > 0) {
       // Mark running tasks: try to resume polling for uploads, otherwise mark interrupted
       const recovered = stored.map(t => {
         if (t.status === 'running') {
           // We'll check server-side progress for uploads
           if (t.type === 'upload') return t // keep as running, will be checked below
-          return { ...t, status: 'error' as PCTaskStatus, error: 'Interrupted by page reload' }
+
+return { ...t, status: 'error' as PCTaskStatus, error: 'Interrupted by page reload' }
         }
-        return t
+
+
+return t
       })
+
       setTasks(recovered)
 
       // For running uploads, poll server to see if phase 2 is still going
       const runningUploads = recovered.filter(t => t.status === 'running' && t.type === 'upload')
+
       for (const task of runningUploads) {
         resumeUploadPolling(task.id)
       }
     }
+
     hydrated.current = true
   }, [])
 
@@ -91,9 +100,11 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
   // Resume polling for a server-side upload transfer
   const resumeUploadPolling = (uploadId: string) => {
     let attempts = 0
+
     const poll = setInterval(async () => {
       try {
         const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
+
         if (!res.ok) {
           // Progress endpoint gone (server restarted or 30s cleanup elapsed)
           clearInterval(poll)
@@ -102,9 +113,12 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
               ? { ...t, status: 'error', error: 'Lost connection after reload' }
               : t
           ))
-          return
+
+return
         }
+
         const data = await res.json()
+
         if (data.status === 'done') {
           clearInterval(poll)
           setTasks(prev => prev.map(t =>
@@ -119,14 +133,18 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
           const pct = data.totalBytes > 0
             ? Math.round((data.bytesSent / data.totalBytes) * 100)
             : 0
+
+
           // Map to 50-100 range (phase 2)
           const taskPct = 50 + Math.round(pct / 2)
+
           setTasks(prev => prev.map(t =>
             t.id === uploadId ? { ...t, progress: taskPct, detail: t.detail?.replace(/^.*→/, `Sending to Proxmox… ${pct}% →`) } : t
           ))
         }
       } catch {
         attempts++
+
         if (attempts > 5) {
           clearInterval(poll)
           setTasks(prev => prev.map(t =>
@@ -155,7 +173,8 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
   const clearDone = useCallback(() => {
     setTasks(prev => {
       prev.forEach(t => { if (t.status !== 'running') restoreCallbacks.current.delete(t.id) })
-      return prev.filter(t => t.status === 'running')
+
+return prev.filter(t => t.status === 'running')
     })
   }, [])
 
@@ -169,6 +188,7 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
 
   const restoreTask = useCallback((id: string) => {
     const cb = restoreCallbacks.current.get(id)
+
     if (cb) cb()
   }, [])
 
@@ -183,6 +203,8 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
 
 export function useProxCenterTasks() {
   const ctx = useContext(ProxCenterTasksContext)
+
   if (!ctx) throw new Error('useProxCenterTasks must be used inside ProxCenterTasksProvider')
-  return ctx
+
+return ctx
 }

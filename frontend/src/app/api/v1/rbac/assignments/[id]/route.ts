@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/rbac/assignments/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
@@ -38,18 +39,22 @@ async function denyIfAssignmentTouchesProtected(
 ): Promise<NextResponse | null> {
   if (!assignment) return null
   if (await isUserSuperAdmin(callerUserId)) return null
+
   if (
     (PROTECTED_ROLE_IDS as readonly string[]).includes(assignment.roleId) ||
     (await isUserProtected(assignment.userId))
   ) {
     return NextResponse.json({ error: "Assignation non trouvée" }, { status: 404 })
   }
-  return null
+
+
+return null
 }
 
 // GET /api/v1/rbac/assignments/[id] - Détails d'une assignation
 export async function GET(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -79,6 +84,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       { roleId: assignment.roleId, userId: assignment.userId },
       session.user.id,
     )
+
     if (superAdminBlock) return superAdminBlock
 
     return NextResponse.json({
@@ -113,6 +119,7 @@ return NextResponse.json(
 // DELETE /api/v1/rbac/assignments/[id] - Supprimer une assignation
 export async function DELETE(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -147,6 +154,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       { roleId: assignment.roleId, userId: assignment.userId },
       session.user.id,
     )
+
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-lockout: nobody may revoke their own role.
@@ -193,6 +201,7 @@ return NextResponse.json(
 // PATCH /api/v1/rbac/assignments/[id] - Modifier une assignation
 export async function PATCH(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -229,6 +238,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       { roleId: assignment.roleId, userId: assignment.userId },
       session.user.id,
     )
+
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-escalation: nobody may change their own role assignment.
@@ -242,6 +252,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // Refuse PATCHes that would promote a regular user to any protected
     // wildcard role (super_admin or provider_admin).
     const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+
     if (
       !callerIsSuperAdmin &&
       role_id &&
@@ -254,6 +265,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // (operator family — automation.view leakage) and protected wildcards
     // (super_admin / provider_admin — provider-scoped by design).
     const tenantForbiddenRoles = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS] as readonly string[]
+
     if (
       role_id &&
       assignment.tenantId !== DEFAULT_TENANT_ID &&
@@ -271,9 +283,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (role_id !== undefined) {
       // Vérifier que le rôle existe
       const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true } })
+
       if (!role) {
         return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
       }
+
       data.roleId = role_id
     }
 

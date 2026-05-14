@@ -17,12 +17,14 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     // CONNECTION_VIEW baseline (same as /alerts) — vDC tenants need to see
     // and manage their own rules but don't carry alerts.view in their role.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -32,6 +34,7 @@ export async function GET(req: Request) {
     // doesn't carry tenant_id on rules, so this local map is the only
     // source of truth for "who created this rule".
     const allRules = Array.isArray(rules) ? rules : ((rules as any)?.data || [])
+
     const filtered = Array.isArray(allRules)
       ? (await Promise.all(allRules.map(async (r: any) => ({ r, visible: await ruleVisibleToTenant(r.id, tenantId) })))).filter(x => x.visible).map(x => x.r)
       : allRules
@@ -41,7 +44,7 @@ export async function GET(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/rules] GET error:', error)
     }
-    
+
     if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout')) {
       return NextResponse.json([])
     }
@@ -59,6 +62,7 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -66,6 +70,7 @@ export async function POST(req: Request) {
     // own scope. The body-level checks below enforce that they cannot
     // create global rules and cannot escape their connection scope.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -80,6 +85,7 @@ export async function POST(req: Request) {
     if (isVdcTenant && !body.connection_id) {
       const vdcScope = await getVdcScope(tenantId)
       const pveIds = vdcScope ? [...vdcScope.connectionIds] : []
+
       if (pveIds.length === 1) {
         body.connection_id = pveIds[0]
       } else if (pveIds.length === 0) {
@@ -132,7 +138,7 @@ export async function POST(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/rules] POST error:', error)
     }
-    
+
 return NextResponse.json(
       { error: error?.message || 'Failed to create rule' },
       { status: 500 }

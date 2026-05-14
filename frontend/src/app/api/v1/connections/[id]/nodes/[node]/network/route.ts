@@ -28,7 +28,8 @@ export async function GET(
     return NextResponse.json({ data: networks || [] })
   } catch (e: any) {
     console.error('Error fetching network interfaces:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -42,12 +43,14 @@ export async function POST(
     const { id, node } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
     const body = await req.json()
 
     const params = new URLSearchParams()
+
     params.append('iface', body.iface)
     params.append('type', body.type)
 
@@ -59,6 +62,7 @@ export async function POST(
       'vlan-id', 'vlan-raw-device',
       'ovs_bridge', 'ovs_options', 'ovs_tag', 'ovs_bonds', 'ovs_ports',
     ]
+
     for (const f of fields) {
       if (body[f] !== undefined && body[f] !== '') {
         params.append(f, String(body[f]))
@@ -73,7 +77,8 @@ export async function POST(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Error creating network interface:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -87,6 +92,7 @@ export async function PUT(
     const { id, node } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -98,7 +104,8 @@ export async function PUT(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Error applying network config:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -112,6 +119,7 @@ export async function DELETE(
     const { id, node } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -123,6 +131,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Error reverting network config:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

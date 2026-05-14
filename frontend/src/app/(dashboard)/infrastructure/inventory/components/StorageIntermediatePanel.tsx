@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -19,6 +20,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { InventorySelection } from '../types'
@@ -46,25 +48,34 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
 
   React.useEffect(() => {
     if (!cs) return
+
     const storages = selection.type === 'storage-node' && nodeName
       ? [...cs.sharedStorages, ...(cs.nodes.find(n => n.node === nodeName)?.storages || [])]
       : [...cs.sharedStorages, ...cs.nodes.flatMap(n => n.storages)]
+
+
     // Deduplicate shared storages (same name across nodes)
     const seen = new Set<string>()
+
     const uniqueStorages = storages.filter(s => {
       const key = `${s.storage}:${s.node}`
+
       if (seen.has(key)) return false
       seen.add(key)
-      return true
+
+return true
     })
 
     let cancelled = false
+
     const loadAll = async () => {
       const results: Record<string, Array<{ time: number; usedPct: number; used: number; total: number }>> = {}
+
       await Promise.all(uniqueStorages.map(async (s) => {
         try {
           const path = `/nodes/${encodeURIComponent(s.node)}/storage/${encodeURIComponent(s.storage)}`
           const raw = await fetchRrd(connId, path, rrdTimeframe)
+
           if (cancelled) return
           results[s.storage] = (Array.isArray(raw) ? raw : [])
             .filter((p: any) => p.time || p.t || p.timestamp)
@@ -72,15 +83,19 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
               const time = Math.round(pickNumber(p, ['time', 't', 'timestamp']) || 0) * 1000
               const total = pickNumber(p, ['total', 'maxdisk']) || 0
               const used = pickNumber(p, ['used', 'disk']) || 0
-              return { time, used, total, usedPct: total > 0 ? Math.round((used / total) * 100) : 0 }
+
+
+return { time, used, total, usedPct: total > 0 ? Math.round((used / total) * 100) : 0 }
             })
             .filter((p: any) => p.time > 0 && p.total > 0)
         } catch { /* skip */ }
       }))
       if (!cancelled) setRrdData(results)
     }
+
     loadAll()
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [cs, connId, nodeName, selection.type, rrdTimeframe])
 
   if (!cs) return <Box sx={{ p: 3, textAlign: 'center' }}><Typography variant="body2" sx={{ opacity: 0.5 }}>No data</Typography></Box>
@@ -116,14 +131,19 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
 
   const renderStorageGraph = (storageName: string, points: Array<{ time: number; usedPct: number; used: number; total: number }>) => {
     if (points.length < 2) return null
+
     const fmtBytes = (bytes: number) => {
       if (!bytes) return '0 B'
       const k = 1024
       const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
       const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
+
+
+return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
     }
-    return (
+
+
+return (
       <Box key={storageName} sx={{ flex: 1, minWidth: 250 }}>
         <ExpandableChart
           title={storageName}
@@ -145,7 +165,8 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
-                  return (
+
+return (
                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(primaryColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: primaryColor }} />
@@ -174,26 +195,33 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
   }
 
   const isCeph = (type: string) => type === 'rbd' || type === 'cephfs'
+
   const storageIcon = (type: string) => {
     if (isCeph(type)) return ''
     if (type === 'nfs' || type === 'cifs') return 'ri-folder-shared-fill'
     if (type === 'zfspool' || type === 'zfs') return 'ri-stack-fill'
     if (type === 'lvm' || type === 'lvmthin') return 'ri-hard-drive-2-fill'
     if (type === 'dir') return 'ri-folder-fill'
-    return 'ri-hard-drive-fill'
+
+return 'ri-hard-drive-fill'
   }
+
   const storageColor = (type: string) => {
     if (type === 'nfs' || type === 'cifs') return '#3498db'
     if (type === 'zfspool' || type === 'zfs') return '#2ecc71'
     if (type === 'lvm' || type === 'lvmthin') return '#e67e22'
-    return '#95a5a6'
+
+return '#95a5a6'
   }
+
   const fmt = (bytes: number) => {
     if (!bytes) return '0 B'
     const k = 1024
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
+
+
+return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
   }
 
   // --- STORAGE-CLUSTER: Connection-level storage overview ---
@@ -204,6 +232,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
     const sharedCount = cs.sharedStorages.length
     const localCount = cs.nodes.reduce((s, n) => s + n.storages.length, 0)
     const typeMap = new Map<string, number>()
+
     for (const s of allStorages) typeMap.set(s.type, (typeMap.get(s.type) || 0) + 1)
 
     return (

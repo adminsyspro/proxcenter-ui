@@ -51,6 +51,7 @@ export async function POST(req: Request) {
           where: { id: "default" },
           select: { bindPasswordEnc: true },
         })
+
         if (config?.bindPasswordEnc) {
           bind_password = decryptSecret(config.bindPasswordEnc)
         }
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
       resourceType: "ldap_config",
       resourceId: "default",
       resourceName: "Configuration LDAP",
-      details: { 
+      details: {
         url,
         base_dn,
         success: result.success,
@@ -87,22 +88,22 @@ export async function POST(req: Request) {
     })
 
     if (result.success) {
-      return NextResponse.json({ 
-        success: true, 
-        message: result.message 
+      return NextResponse.json({
+        success: true,
+        message: result.message
       })
     } else {
-      return NextResponse.json({ 
-        success: false, 
-        error: result.message 
+      return NextResponse.json({
+        success: false,
+        error: result.message
       })
     }
   } catch (error: any) {
     console.error("Erreur test LDAP:", error)
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       success: false,
-      error: error?.message || "Erreur lors du test LDAP" 
+      error: error?.message || "Erreur lors du test LDAP"
     }, { status: 500 })
   }
 }

@@ -8,6 +8,7 @@ import {
   Tooltip, Typography, useTheme,
 } from '@mui/material'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
@@ -26,7 +27,7 @@ function ChartTooltip({ active, payload, label, metric, isDark }) {
   const c = widgetColors(isDark)
   const time = formatTime(payload) || label
 
-  
+
 return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 100, color: c.tooltipText }}>
       <div style={{ background: metric === 'cpu' ? '#f97316' : '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -78,7 +79,7 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
         {connections.map(c => {
           const checked = allSelected || selected.includes(c.id)
 
-          
+
 return (
             <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
@@ -174,7 +175,7 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
             if (!res.ok) return {}
             const json = await res.json()
 
-            
+
 return json.data || {}
           })
         )
@@ -294,7 +295,7 @@ return json.data || {}
               {nodeNames.map((name, i) => {
                 const color = NODE_COLORS[i % NODE_COLORS.length]
 
-                
+
 return (
                   <linearGradient key={name} id={`infra-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={color} stopOpacity={0.25} />
@@ -310,7 +311,7 @@ return (
             {nodeNames.map((name, i) => {
               const color = NODE_COLORS[i % NODE_COLORS.length]
 
-              
+
 return (
                 <Area
                   key={name}

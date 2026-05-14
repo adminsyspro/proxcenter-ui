@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { useSession, signOut } from 'next-auth/react'
-import { useBranding } from '@/contexts/BrandingContext'
+
 import {
   Avatar,
   Badge,
@@ -24,6 +24,8 @@ import {
 
 // i18n
 import { useTranslations } from 'next-intl'
+
+import { useBranding } from '@/contexts/BrandingContext'
 
 import { useLocale } from '@/contexts/LocaleContext'
 import { localeCountryCodes } from '@/i18n/config'
@@ -100,7 +102,7 @@ const getInitials = (name, email) => {
       return (parts[0][0] + parts[1][0]).toUpperCase()
     }
 
-    
+
 return name.substring(0, 2).toUpperCase()
   }
 
@@ -108,7 +110,7 @@ return name.substring(0, 2).toUpperCase()
     return email.substring(0, 2).toUpperCase()
   }
 
-  
+
 return 'U'
 }
 
@@ -122,14 +124,14 @@ const createTimeAgo = (t) => (date) => {
   if (diff < 60) return t('time.justNow')
   if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
   if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-  
+
 return t('time.daysAgo', { count: Math.floor(diff / 86400) })
 }
 
 // Icônes et couleurs selon le type d'alerte
 const getAlertIcon = (alert) => {
   const msg = alert.message?.toLowerCase() || ''
-  
+
   if (msg.includes('offline') || msg.includes('quorum')) {
     return { icon: 'ri-server-line', color: 'error' }
   }
@@ -153,10 +155,10 @@ const getAlertIcon = (alert) => {
   if (msg.includes('stockage') || msg.includes('storage')) {
     return { icon: 'ri-hard-drive-2-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
   }
-  
-  return { 
-    icon: alert.severity === 'crit' ? 'ri-error-warning-line' : 'ri-alarm-warning-line', 
-    color: alert.severity === 'crit' ? 'error' : 'warning' 
+
+  return {
+    icon: alert.severity === 'crit' ? 'ri-error-warning-line' : 'ri-alarm-warning-line',
+    color: alert.severity === 'crit' ? 'error' : 'warning'
   }
 }
 
@@ -169,6 +171,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const { hasFeature, loading: licenseLoading, status: licenseStatus, isEnterprise } = useLicense()
   const { roles: rbacRoles, hasPermission } = useRBAC()
   const { currentTenant, availableTenants, switchTenant, isMultiTenant } = useTenant()
+
   // Provider-only notifications (ProxCenter update, license / node limit
   // warnings, DRS recommendations) are gated on this flag. Tenant admins
   // see only the alerts and changes scoped to their own connections.
@@ -220,6 +223,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   // SWR hooks for notifications — gated by permissions to avoid unnecessary fetches
   const { data: alertsResponse, mutate: mutateAlerts } = useActiveAlerts(isEnterprise && canViewAlerts)
+
   // DRS placement is a provider concern in MSP/vDC mode (tenants don't pick
   // nodes and we just hid the migrate UI for them). Don't fetch DRS recs
   // for tenants — the messages would expose node names and the tenant has
@@ -227,6 +231,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const { data: drsRecsResponse, mutate: mutateDrsRecs } = useDRSRecommendations(isEnterprise && canViewDrs && hasFeature(Features.DRS) && isProviderTenant)
   const { data: drsSettingsData } = useDRSSettings(isEnterprise && canViewDrs && isProviderTenant)
   const maxPendingRecs = drsSettingsData?.max_pending_recommendations || 10
+
   // Version check / GitHub release lookup is provider-only — skip the
   // hourly round-trip for tenants instead of fetching and then hiding.
   const { data: updateInfoData } = useVersionCheck(3600000, isProviderTenant)
@@ -236,7 +241,9 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const notifications = useMemo(() => {
     if (!alertsResponse?.data) return []
     const alerts = alertsResponse.data || []
-    return alerts.map(a => ({
+
+
+return alerts.map(a => ({
       id: a.id,
       message: a.message,
       severity: a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info',
@@ -248,9 +255,12 @@ const NavbarContent = ({ targetLayout } = {}) => {
   }, [alertsResponse])
 
   const notifCount = notifications.length
+
   const notifStats = useMemo(() => {
     const alerts = alertsResponse?.data || []
-    return {
+
+
+return {
       crit: alerts.filter(a => a.severity === 'critical').length,
       warn: alerts.filter(a => a.severity === 'warning').length
     }
@@ -305,13 +315,18 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const drsLimitedRecs = useMemo(() => {
     const pending = drsRecommendations.filter(r => r.status === 'pending').sort((a, b) => (b.score || 0) - (a.score || 0))
     const byCluster = new Map()
+
     for (const rec of pending) {
       const cid = rec.connection_id
+
       if (!byCluster.has(cid)) byCluster.set(cid, [])
       const arr = byCluster.get(cid)
+
       if (arr.length < maxPendingRecs) arr.push(rec)
     }
-    return Array.from(byCluster.values()).flat()
+
+
+return Array.from(byCluster.values()).flat()
   }, [drsRecommendations, maxPendingRecs])
 
   const drsNotifications = drsLimitedRecs
@@ -412,7 +427,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
   // Acquitter toutes les alertes (via orchestrator - une par une)
   const handleAcknowledgeAll = async () => {
     if (notifications.length === 0) return
-    
+
     try {
       const userId = user?.email || user?.name || 'unknown'
 
@@ -455,7 +470,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
     }
 
     window.addEventListener('keydown', onKeyDown)
-    
+
 return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
@@ -491,6 +506,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
       // Database status (orchestrator-native)
       if (components.database) {
         const dbOk = components.database.status === 'ok' || components.database.status === 'connected'
+
         parts.push(dbOk ? t('pxcore.databaseOk') : t('pxcore.databaseError'))
       }
 
@@ -866,7 +882,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
               // Handle license notification specially
               if (notif.isLicenseNotif) {
                 const licenseColor = notif.severity === 'crit' ? 'error' : 'warning'
-                return (
+
+
+return (
                   <Box
                     key={notif.id}
                     sx={{
@@ -1006,7 +1024,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
               if (notif.isDrsNotif) {
                 const drsColor = notif.severity === 'crit' ? 'error' : notif.severity === 'warn' ? 'warning' : 'info'
                 const rec = notif.recommendation
-                return (
+
+
+return (
                   <Box
                     key={notif.id}
                     sx={{
@@ -1167,9 +1187,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
             })}
           </Box>
         )}
-        
+
         <Divider />
-        
+
         {/* Actions globales */}
         {notifications.length > 0 && (
           <Box sx={{ px: 2, py: 1, display: 'flex', gap: 1, justifyContent: 'center' }}>

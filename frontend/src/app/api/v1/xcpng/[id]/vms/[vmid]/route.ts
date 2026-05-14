@@ -12,10 +12,13 @@ async function xoFetch(baseUrl: string, path: string, authHeader: string, insecu
     headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
     signal: AbortSignal.timeout(timeout),
   }
+
   if (insecureTLS) {
     opts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
   }
-  return fetch(`${baseUrl}${path}`, opts)
+
+
+return fetch(`${baseUrl}${path}`, opts)
 }
 
 /**
@@ -29,9 +32,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id, vmid } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
@@ -78,6 +83,7 @@ export async function GET(
 
     // Parse VBDs → disks
     const disks: any[] = []
+
     if (vm.VBDs && Array.isArray(vm.VBDs)) {
       // VBDs are refs, we'd need to fetch each one — for now just count them
       disks.push(...vm.VBDs.filter((vbd: any) => typeof vbd === 'string').map((vbd: string, idx: number) => ({

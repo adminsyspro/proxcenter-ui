@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
+
 import { useSWRFetch } from './useSWRFetch'
 
 export function useConnections(type?: 'pve' | 'pbs') {
   const url = type ? `/api/v1/connections?type=${type}` : '/api/v1/connections'
-  return useSWRFetch(url, { revalidateOnFocus: true })
+
+
+return useSWRFetch(url, { revalidateOnFocus: true })
 }
 
 export function usePVEConnections() {
@@ -25,25 +28,32 @@ export function useClusterConnections() {
   useEffect(() => {
     if (!connectionsData?.data) {
       setFilteredData(undefined)
-      return
+
+return
     }
 
     const connections = connectionsData.data
+
     if (connections.length === 0) {
       setFilteredData({ data: [] })
-      return
+
+return
     }
 
     let cancelled = false
+
     setFilteredData(undefined)
 
     Promise.all(
       connections.map(async (conn: any) => {
         try {
           const res = await fetch(`/api/v1/connections/${conn.id}/nodes`)
+
           if (!res.ok) return null
           const json = await res.json()
-          return (json?.data?.length ?? 0) >= 2 ? conn : null
+
+
+return (json?.data?.length ?? 0) >= 2 ? conn : null
         } catch {
           return null
         }

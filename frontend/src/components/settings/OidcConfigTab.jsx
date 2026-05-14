@@ -71,8 +71,10 @@ export default function OidcConfigTab() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
+
         setError(errData.error || t('oidc.loadError'))
-        return
+
+return
       }
 
       const data = await res.json()
@@ -92,6 +94,7 @@ export default function OidcConfigTab() {
         // Parse group role mapping into array
         try {
           const mapping = JSON.parse(data.data.group_role_mapping || '{}')
+
           setGroupMappings(
             Object.entries(mapping).map(([group, role]) => ({ group, role: normalizeRole(role) }))
           )
@@ -99,11 +102,15 @@ export default function OidcConfigTab() {
           setGroupMappings([])
         }
       }
+
+
       // Fetch available RBAC roles
       try {
         const rolesRes = await fetch('/api/v1/rbac/roles')
+
         if (rolesRes.ok) {
           const rolesData = await rolesRes.json()
+
           setAvailableRoles(rolesData.data || [])
         }
       } catch {}
@@ -124,6 +131,7 @@ export default function OidcConfigTab() {
     try {
       // Build group_role_mapping from array
       const mapping = {}
+
       groupMappings.forEach(({ group, role }) => {
         if (group && role) mapping[group] = role
       })
@@ -141,7 +149,8 @@ export default function OidcConfigTab() {
 
       if (!res.ok) {
         setError(data.error || t('oidc.saveError'))
-        return
+
+return
       }
 
       setSuccess(t('oidc.saveSuccess'))

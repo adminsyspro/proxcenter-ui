@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+
 import { Box, Typography, Button } from '@mui/material'
 
 export default function DashboardError({

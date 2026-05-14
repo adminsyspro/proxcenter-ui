@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+
 import { createPortal } from 'react-dom'
 
 type Severity = 'success' | 'error' | 'warning' | 'info'
@@ -82,6 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((message: string, severity: Severity = 'info', duration = 4000) => {
     const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+
     setToasts(prev => [...prev, { id, message, severity, duration }])
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
@@ -120,8 +122,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast() {
   const context = useContext(ToastContext)
+
   if (!context) {
     throw new Error('useToast must be used within a ToastProvider')
   }
-  return context
+
+
+return context
 }

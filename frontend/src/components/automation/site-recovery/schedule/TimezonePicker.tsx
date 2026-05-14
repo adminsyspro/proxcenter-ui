@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Autocomplete, TextField } from '@mui/material'
 
@@ -12,10 +13,13 @@ interface Props {
 
 export default function TimezonePicker({ value, onChange, disabled }: Props) {
   const t = useTranslations()
+
   const zones = useMemo(() => {
     try {
       const list = (Intl as any).supportedValuesOf?.('timeZone') as string[] | undefined
-      return list?.length ? list : ['UTC', 'Europe/Paris', 'Europe/London', 'America/New_York']
+
+
+return list?.length ? list : ['UTC', 'Europe/Paris', 'Europe/London', 'America/New_York']
     } catch {
       return ['UTC']
     }

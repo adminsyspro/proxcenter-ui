@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -28,6 +29,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 
 interface PbsTasksTabProps {
@@ -71,38 +73,47 @@ function pad2(n: number): string {
 function formatTimestamp(sec?: number): string {
   if (!sec || !Number.isFinite(sec)) return ''
   const d = new Date(sec * 1000)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+
+
+return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
 function isRunningStatus(task: PbsTask): boolean {
   const s = (task.status || '').toLowerCase()
+
   if (s === 'running') return true
   if (!task.endtime || task.endtime === 0) return true
-  return false
+
+return false
 }
 
 type ChipKind = 'ok' | 'running' | 'stopped' | 'error' | 'unknown'
 
 function classifyStatus(task: PbsTask): { kind: ChipKind; text: string } {
   const raw = (task.status || '').trim()
+
   if (!task.endtime || task.endtime === 0 || raw.toLowerCase() === 'running') {
     return { kind: 'running', text: raw || 'running' }
   }
+
   if (raw === 'OK') return { kind: 'ok', text: 'OK' }
   if (raw.toLowerCase() === 'stopped') return { kind: 'stopped', text: raw }
   if (/^ERROR/i.test(raw) || raw.includes(':')) return { kind: 'error', text: raw }
   if (!raw) return { kind: 'unknown', text: '' }
-  return { kind: 'unknown', text: raw }
+
+return { kind: 'unknown', text: raw }
 }
 
 function classifyStatusString(raw: string): ChipKind {
   const r = (raw || '').trim()
+
   if (!r) return 'unknown'
   if (r.toLowerCase() === 'running') return 'running'
   if (r === 'OK') return 'ok'
   if (r.toLowerCase() === 'stopped') return 'stopped'
   if (/^ERROR/i.test(r) || r.includes(':')) return 'error'
-  return 'unknown'
+
+return 'unknown'
 }
 
 export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
@@ -142,6 +153,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
   const fetchTasks = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const qs = new URLSearchParams({
         limit: String(rowsPerPage),
@@ -149,16 +161,21 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
         running: runningOnly ? '1' : '0',
         errors: errorsOnly ? '1' : '0',
       })
+
       if (typeFilter) qs.set('typefilter', typeFilter)
       if (userFilter) qs.set('userfilter', userFilter)
 
       const res = await fetch(`/api/v1/pbs/${pbsId}/tasks?${qs.toString()}`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
       const data: PbsTask[] = Array.isArray(body?.data) ? body.data : []
+
       setTasks(data)
       setLastUpdated(new Date())
     } catch (e: any) {
@@ -174,19 +191,24 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
 
   const sortedTasks = useMemo(() => {
     const arr = [...tasks]
+
     arr.sort((a, b) => {
       const ta = a.starttime || 0
       const tb = b.starttime || 0
+
       if (ta < tb) return order === 'asc' ? -1 : 1
       if (ta > tb) return order === 'asc' ? 1 : -1
-      return 0
+
+return 0
     })
-    return arr
+
+return arr
   }, [tasks, order])
 
   const displayTasks = useMemo(() => {
     if (!runningOnly) return sortedTasks
-    return sortedTasks.filter(isRunningStatus)
+
+return sortedTasks.filter(isRunningStatus)
   }, [sortedTasks, runningOnly])
 
   const handleSortStart = () => {
@@ -239,12 +261,17 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
         `/api/v1/pbs/${pbsId}/tasks/${encodeURIComponent(upid)}/log?start=${start}&limit=${limit}`,
         { cache: 'no-store' }
       )
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
-      return {
+
+
+return {
         log: Array.isArray(body?.data?.log) ? body.data.log : [],
         status: body?.data?.status ?? null,
       }
@@ -266,25 +293,32 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
 
       try {
         const chunk = await fetchLogChunk(task.upid, 0, 1000)
+
         if (!chunk) return
         const { log, status } = chunk
+
         setLogLines(log)
         setLogStatus(status)
         lastLineRef.current = log.length > 0 ? log[log.length - 1].n : 0
 
         const statusStr = (status?.status || '').toLowerCase()
         const stillRunning = statusStr === 'running' || (!status?.endtime && statusStr !== 'stopped')
+
         if (stillRunning) {
           logPollTimerRef.current = setInterval(async () => {
             try {
               const next = await fetchLogChunk(task.upid, lastLineRef.current, 1000)
+
               if (!next) return
+
               if (next.log.length > 0) {
                 setLogLines(prev => [...prev, ...next.log])
                 lastLineRef.current = next.log[next.log.length - 1].n
               }
+
               setLogStatus(next.status)
               const ns = (next.status?.status || '').toLowerCase()
+
               if (ns !== 'running') {
                 stopLogPolling()
               }
@@ -315,6 +349,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
 
   const copyLogs = async () => {
     const text = logLines.map(l => l.t).join('\n')
+
     try {
       await navigator.clipboard.writeText(text)
       setLogCopied(true)
@@ -329,11 +364,13 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
   const renderStatusChip = (task: PbsTask) => {
     const { kind, text } = classifyStatus(task)
     const size: 'small' = 'small'
+
     if (kind === 'ok') {
       return (
         <PbsStatusChip color="success" label={t('inventory.pbsTasksStatus.ok')} sx={{ fontWeight: 600 }} />
       )
     }
+
     if (kind === 'running') {
       return (
         <Chip
@@ -346,6 +383,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
         />
       )
     }
+
     if (kind === 'stopped') {
       return (
         <Chip
@@ -355,24 +393,31 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
         />
       )
     }
+
     if (kind === 'error') {
       const display = text.length > 40 ? `${text.slice(0, 40)}…` : text
-      return (
+
+
+return (
         <Tooltip title={text} placement="top-start">
           <PbsStatusChip color="error" label={display || t('inventory.pbsTasksStatus.error')} sx={{ fontWeight: 600, maxWidth: 260 }} />
         </Tooltip>
       )
     }
-    return <Chip size={size} label={text || '—'} sx={{ fontWeight: 600 }} />
+
+
+return <Chip size={size} label={text || '—'} sx={{ fontWeight: 600 }} />
   }
 
   const renderDialogStatusChip = (status: PbsTaskStatus) => {
     if (!status) return null
     const raw = status.status || ''
     const kind = classifyStatusString(raw)
+
     if (kind === 'ok') {
       return <PbsStatusChip color="success" label={t('inventory.pbsTasksStatus.ok')} />
     }
+
     if (kind === 'running') {
       return (
         <Chip
@@ -384,18 +429,24 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
         />
       )
     }
+
     if (kind === 'stopped') {
       return <Chip size="small" label={t('inventory.pbsTasksStatus.stopped')} />
     }
+
     if (kind === 'error') {
       const display = raw.length > 60 ? `${raw.slice(0, 60)}…` : raw
-      return (
+
+
+return (
         <Tooltip title={raw} placement="top-start">
           <PbsStatusChip color="error" label={display || t('inventory.pbsTasksStatus.error')} />
         </Tooltip>
       )
     }
-    return <Chip size="small" label={raw || '—'} />
+
+
+return <Chip size="small" label={raw || '—'} />
   }
 
   return (
@@ -527,7 +578,9 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
               ) : (
                 displayTasks.map(task => {
                   const endLabel = task.endtime ? formatTimestamp(task.endtime) : '—'
-                  return (
+
+
+return (
                     <TableRow
                       key={task.upid}
                       hover
@@ -555,7 +608,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
                           <Typography
                             variant="caption"
                             sx={{
-                              
+
                               display: 'block',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -647,7 +700,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
               <Typography
                 variant="caption"
                 sx={{
-                  
+
                   opacity: 0.6,
                   wordBreak: 'break-all',
                 }}
@@ -671,7 +724,7 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
                 m: 0,
                 bgcolor: '#1e1e1e',
                 color: '#d4d4d4',
-                
+
                 fontSize: 12,
                 lineHeight: 1.5,
                 overflow: 'auto',

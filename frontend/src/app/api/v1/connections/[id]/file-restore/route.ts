@@ -34,6 +34,7 @@ export async function GET(
     }
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "connection", pveId)
+
     if (denied) return denied
 
     const cookieStore = await cookies()
@@ -112,7 +113,9 @@ export async function GET(
       // Essayer de parser l'erreur JSON
       try {
         const errorJson = JSON.parse(responseText)
-        return NextResponse.json({
+
+
+return NextResponse.json({
           error: errorJson.errors?.volume || errorJson.message || `PVE error: ${pveRes.statusCode}`,
           details: errorJson
         }, { status: pveRes.statusCode })
@@ -138,9 +141,11 @@ export async function GET(
       // PVE peut retourner filepath en base64 pour les backups PBS
       // Préférer text (toujours lisible), sinon décoder filepath si c'est du base64
       let name = entry.text || entry.filepath || entry.filename || ''
+
       if (!entry.text && entry.filepath && /^[A-Za-z0-9+/]+=*$/.test(entry.filepath) && entry.filepath.length >= 8) {
         try {
           const decoded = Buffer.from(entry.filepath, 'base64').toString('utf-8')
+
           if (/^[\x20-\x7E]+$/.test(decoded)) {
             name = decoded.replace(/^\//, '')
           }

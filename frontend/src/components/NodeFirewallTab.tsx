@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -51,31 +52,41 @@ export default function NodeFirewallTab({ connectionId, node }: Props) {
     return {
       getOptions: async () => {
         const res = await fetch(`${base}?type=options`)
-        return res.ok ? res.json() : {}
+
+
+return res.ok ? res.json() : {}
       },
       getRules: async () => {
         const res = await fetch(`${base}?type=rules`)
-        return res.ok ? res.json() : []
+
+
+return res.ok ? res.json() : []
       },
       getGroups: async () => {
         const res = await fetch(`/api/v1/firewall/groups/${connectionId}`)
-        return res.ok ? res.json() : []
+
+
+return res.ok ? res.json() : []
       },
       updateOptions: async (data) => {
         const res = await fetch(base, { method: 'PUT', headers, body: JSON.stringify(data) })
+
         if (!res.ok) throw new Error(t('errors.updateError'))
       },
       addRule: async (data) => {
         const res = await fetch(base, { method: 'POST', headers, body: JSON.stringify(data) })
+
         if (!res.ok) throw new Error(t('errors.addError'))
       },
       updateRule: async (pos, data) => {
         const res = await fetch(`${base}/rules/${pos}`, { method: 'PUT', headers, body: JSON.stringify(data) })
         const json = await res.json()
+
         if (!res.ok) throw new Error(json.error || t('common.error'))
       },
       deleteRule: async (pos) => {
         const res = await fetch(`${base}/rules/${pos}`, { method: 'DELETE' })
+
         if (!res.ok) throw new Error(t('errors.deleteError'))
       },
     }

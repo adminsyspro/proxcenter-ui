@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -7,10 +8,10 @@ export const runtime = "nodejs"
 
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/terminal
- * 
+ *
  * Crée une session terminal (shell) pour un node
  * Proxmox API: POST /nodes/{node}/termproxy
- * 
+ *
  * Retourne les informations nécessaires pour établir une connexion WebSocket
  */
 export async function POST(
@@ -21,9 +22,11 @@ export async function POST(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_CONSOLE, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -31,13 +34,16 @@ export async function POST(
     // Parser le baseUrl pour extraire host et port
     let host = ''
     let port = 8006
+
     try {
       const url = new URL(conn.baseUrl)
+
       host = url.hostname
       port = url.port ? Number.parseInt(url.port) : 8006
     } catch {
       // Si le parsing échoue, essayer de parser manuellement
       const match = conn.baseUrl.match(/https?:\/\/([^:/]+)(?::(\d+))?/)
+
       if (match) {
         host = match[1]
         port = match[2] ? Number.parseInt(match[2]) : 8006
@@ -79,6 +85,7 @@ export async function POST(
     })
   } catch (e: any) {
     console.error("[terminal/node] Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to create terminal session" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to create terminal session" }, { status: 500 })
   }
 }

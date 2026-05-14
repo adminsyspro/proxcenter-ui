@@ -31,6 +31,7 @@ export interface DatacenterRow {
   isDefault: boolean
   createdAt: string
   updatedAt: string
+
   /** Populated by listDatacenters() — counts of clusters/nodes anchored here. */
   clusterCount?: number
   nodeCount?: number
@@ -91,7 +92,9 @@ export async function listDatacenters(tenantId: string = DEFAULT_TENANT_ID): Pro
     },
     orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
   })
-  return rows.map(r => rowToDatacenter(r, {
+
+
+return rows.map(r => rowToDatacenter(r, {
     clusterCount: r._count.connectionGreen,
     nodeCount: r._count.nodeGreen,
   }))
@@ -99,19 +102,24 @@ export async function listDatacenters(tenantId: string = DEFAULT_TENANT_ID): Pro
 
 export async function getDatacenterById(id: string): Promise<DatacenterRow | null> {
   const r = await prisma.datacenter.findUnique({ where: { id } })
-  return r ? rowToDatacenter(r) : null
+
+
+return r ? rowToDatacenter(r) : null
 }
 
 export async function getDefaultDatacenter(tenantId: string = DEFAULT_TENANT_ID): Promise<DatacenterRow | null> {
   const r = await prisma.datacenter.findFirst({
     where: { tenantId, isDefault: true },
   })
-  return r ? rowToDatacenter(r) : null
+
+
+return r ? rowToDatacenter(r) : null
 }
 
 export async function insertDatacenter(input: DatacenterInput, tenantId: string = DEFAULT_TENANT_ID): Promise<DatacenterRow> {
   const id = randomUUID()
   const now = new Date()
+
   await prisma.$transaction(async tx => {
     if (input.isDefault) {
       // Demote any existing default for this tenant.
@@ -120,6 +128,7 @@ export async function insertDatacenter(input: DatacenterInput, tenantId: string 
         data: { isDefault: false },
       })
     }
+
     await tx.datacenter.create({
       data: {
         id,
@@ -144,11 +153,13 @@ export async function insertDatacenter(input: DatacenterInput, tenantId: string 
       },
     })
   })
-  return (await getDatacenterById(id))!
+
+return (await getDatacenterById(id))!
 }
 
 export async function updateDatacenter(id: string, input: Partial<DatacenterInput>): Promise<DatacenterRow> {
   const existing = await getDatacenterById(id)
+
   if (!existing) throw new Error(`Datacenter not found: ${id}`)
 
   await prisma.$transaction(async tx => {
@@ -158,17 +169,20 @@ export async function updateDatacenter(id: string, input: Partial<DatacenterInpu
         data: { isDefault: false },
       })
     }
+
     if (input.isDefault === false && existing.isDefault) {
       // Refuse to demote the only default — keep at least one.
       const others = await tx.datacenter.count({
         where: { tenantId: existing.tenantId, isDefault: true, NOT: { id } },
       })
+
       if (others === 0) {
         throw new Error('Cannot demote the only default datacenter; promote another first.')
       }
     }
 
     const data: Record<string, unknown> = { updatedAt: new Date() }
+
     if (input.name !== undefined) data.name = input.name
     if (input.locationLabel !== undefined) data.locationLabel = input.locationLabel ?? null
     if (input.country !== undefined) data.country = input.country ?? null
@@ -187,11 +201,13 @@ export async function updateDatacenter(id: string, input: Partial<DatacenterInpu
 
     await tx.datacenter.update({ where: { id }, data })
   })
-  return (await getDatacenterById(id))!
+
+return (await getDatacenterById(id))!
 }
 
 export async function deleteDatacenter(id: string): Promise<void> {
   const existing = await getDatacenterById(id)
+
   if (!existing) return
 
   // Don't delete a row still referenced by cluster/node configs — caller should
@@ -201,7 +217,9 @@ export async function deleteDatacenter(id: string): Promise<void> {
     prisma.connectionGreenConfig.count({ where: { datacenterId: id } }),
     prisma.nodeGreenConfig.count({ where: { datacenterId: id } }),
   ])
+
   const refs = clusterRefs + nodeRefs
+
   if (refs > 0) {
     throw new Error(`Datacenter is referenced by ${refs} cluster/node config(s); reassign them first.`)
   }
@@ -210,6 +228,7 @@ export async function deleteDatacenter(id: string): Promise<void> {
     const others = await prisma.datacenter.count({
       where: { tenantId: existing.tenantId, NOT: { id } },
     })
+
     if (others > 0) {
       throw new Error('Cannot delete the default datacenter while others exist; promote another first.')
     }
@@ -226,6 +245,7 @@ export async function deleteDatacenter(id: string): Promise<void> {
  */
 export async function ensureDefaultDatacenter(tenantId: string = DEFAULT_TENANT_ID): Promise<DatacenterRow> {
   const existing = await getDefaultDatacenter(tenantId)
+
   if (existing) return existing
 
   let pue = 1.4
@@ -243,6 +263,7 @@ export async function ensureDefaultDatacenter(tenantId: string = DEFAULT_TENANT_
     // `datacenters` table existed). Best-effort: if the row is missing or
     // unparseable we just fall through to the safe defaults above.
     const parsed = await getSetting<any>('green', tenantId)
+
     if (parsed) {
       if (typeof parsed.pue === 'number') pue = parsed.pue
       if (typeof parsed.electricityPrice === 'number') electricityPrice = parsed.electricityPrice
@@ -250,6 +271,7 @@ export async function ensureDefaultDatacenter(tenantId: string = DEFAULT_TENANT_
       if (typeof parsed.co2Factor === 'number') co2Factor = parsed.co2Factor
       if (typeof parsed.co2Country === 'string') co2CountryPreset = parsed.co2Country
       const specs = parsed.serverSpecs ?? {}
+
       if (typeof specs.tdpPerCore === 'number') tdpPerCoreW = specs.tdpPerCore
       if (typeof specs.wattsPerGbRam === 'number') wattsPerGbRam = specs.wattsPerGbRam
       if (typeof specs.overheadPerServer === 'number') overheadPerNodeW = specs.overheadPerServer

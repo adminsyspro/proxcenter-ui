@@ -114,7 +114,9 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
               {analysis.recommendations.slice(0, 5).map(rec => {
                 const severityColor = getSeverityColor(rec.severity)
                 const resolved = resolveRec(rec)
-                return (
+
+
+return (
                   <Paper key={rec.id} sx={{ p: 2, border: '1px solid', borderColor: alpha(severityColor, 0.25), bgcolor: alpha(severityColor, 0.03), borderRadius: 2, '&:hover': { bgcolor: alpha(severityColor, 0.06), transform: 'translateX(4px)' }, transition: 'all 0.2s' }}>
                     <Stack direction="row" spacing={1.5} alignItems="flex-start">
                       <Typography sx={{ fontSize: 18 }}>{getTypeIcon(rec.type)}</Typography>

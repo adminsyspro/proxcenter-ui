@@ -12,6 +12,9 @@
 
 const path = require('path')
 const http = require('http')
+
+const { getRequestHandlers } = require('next/dist/server/lib/start-server')
+
 const { WebSocketServer } = require('ws')
 
 const dir = path.join(__dirname)
@@ -23,6 +26,7 @@ const PORT = Number.parseInt(process.env.PORT, 10) || 3000
 const hostname = process.env.HOSTNAME || '0.0.0.0'
 
 let keepAliveTimeout = Number.parseInt(process.env.KEEP_ALIVE_TIMEOUT, 10)
+
 if (
   Number.isNaN(keepAliveTimeout) ||
   !Number.isFinite(keepAliveTimeout) ||
@@ -33,10 +37,10 @@ if (
 
 // Load Next.js config from standalone build
 const nextConfig = require('./.next/required-server-files.json').config
+
 process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)
 
 require('next')
-const { getRequestHandlers } = require('next/dist/server/lib/start-server')
 
 // Import ws-proxy handler
 const { handleWsConnection } = require('./ws-proxy')
@@ -91,7 +95,8 @@ async function main() {
       wss.handleUpgrade(req, socket, head, (clientWs) => {
         wss.emit('connection', clientWs, req)
       })
-      return
+
+return
     }
 
     // Everything else (e.g. Next.js HMR) goes to Next.js
@@ -114,6 +119,7 @@ async function main() {
       console.log('[start] Server closed')
       process.exit(0)
     })
+
     // Force exit after 10s
     setTimeout(() => process.exit(1), 10000).unref()
   }
@@ -124,9 +130,11 @@ async function main() {
 
 function printBanner() {
   let appVersion = 'latest'
+
   try { appVersion = require('./package.json').version } catch {}
 
   const gitSha = process.env.GIT_SHA
+
   if (gitSha) appVersion += `-${gitSha.substring(0, 7)}`
 
   const edition = process.env.ORCHESTRATOR_URL ? 'Enterprise' : 'Community'
@@ -136,6 +144,7 @@ function printBanner() {
   // helper degrades gracefully if someone overrides the connection
   // string).
   const dbUrl = process.env.DATABASE_URL || ''
+
   const dbLabel = /^postgres(ql)?:\/\//i.test(dbUrl) ? 'Postgres'
     : /^file:/i.test(dbUrl) ? 'SQLite'
     : dbUrl ? 'Custom'

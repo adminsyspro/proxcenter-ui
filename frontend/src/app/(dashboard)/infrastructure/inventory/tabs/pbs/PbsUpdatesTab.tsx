@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -76,14 +77,19 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
   const fetchUpdates = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/updates`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
       const data: PbsPackage[] = Array.isArray(body?.data) ? body.data : []
+
       setPackages(data)
       setLastUpdated(new Date())
     } catch (e: any) {
@@ -99,14 +105,18 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
 
   const sortedPackages = useMemo(() => {
     const arr = [...packages]
+
     arr.sort((a, b) => {
       const na = (a.Package || '').toLowerCase()
       const nb = (b.Package || '').toLowerCase()
+
       if (na < nb) return order === 'asc' ? -1 : 1
       if (na > nb) return order === 'asc' ? 1 : -1
-      return 0
+
+return 0
     })
-    return arr
+
+return arr
   }, [packages, order])
 
   const handleSortName = () => {
@@ -115,12 +125,16 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
 
   const handleRefreshDb = useCallback(async () => {
     setRefreshingDb(true)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/updates/refresh`, { method: 'POST' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       setSnackbar({
         open: true,
         severity: 'success',
@@ -148,23 +162,30 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
       setChangelogError(null)
       setChangelogForbidden(null)
       setChangelogLoading(true)
+
       try {
         const qs = new URLSearchParams({
           name: pkg.Package || '',
           version: pkg.Version || '',
         })
+
         const res = await fetch(
           `/api/v1/pbs/${pbsId}/updates/changelog?${qs.toString()}`,
           { cache: 'no-store' }
         )
+
         const body = await res.json().catch(() => ({}))
+
         if (res.status === 403 && body?.forbidden) {
           setChangelogForbidden({ requiredPriv: body?.requiredPriv })
-          return
+
+return
         }
+
         if (!res.ok) {
           throw new Error(body?.error || `HTTP ${res.status}`)
         }
+
         setChangelogText(String(body?.data?.changelog || ''))
       } catch (e: any) {
         setChangelogError(e?.message || String(e))
@@ -316,7 +337,9 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
                 const newVer = pkg.Version || '—'
                 const origin = pkg.Origin || '—'
                 const desc = pkg.Title || pkg.Description || ''
-                return (
+
+
+return (
                   <TableRow
                     key={`${pkgName}-${newVer}`}
                     hover
@@ -436,7 +459,7 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
                 m: 0,
                 bgcolor: '#1e1e1e',
                 color: '#d4d4d4',
-                
+
                 fontSize: 12,
                 lineHeight: 1.5,
                 overflow: 'auto',

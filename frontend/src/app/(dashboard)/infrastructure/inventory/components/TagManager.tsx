@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -87,13 +88,13 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
     const sanitized = sanitizeTag(tagToAdd)
 
     if (!sanitized || tags.includes(sanitized)) return
-    
+
     setBusy(true)
 
     try {
       const newTags = [...tags, sanitized]
       const tagsString = newTags.join(';')
-      
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
         {
@@ -102,7 +103,7 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
           body: JSON.stringify({ tags: tagsString })
         }
       )
-      
+
       if (res.ok) {
         onTagsChange(newTags)
         setNewTagInput('')
@@ -124,6 +125,8 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
 
     try {
       const newTags = tags.filter(t => t !== tagToRemove)
+
+
       // Si plus aucun tag, Proxmox requiert `delete=tags` plutôt que `tags=` (chaîne vide ignorée)
       const body = newTags.length > 0
         ? { tags: newTags.join(';') }
@@ -137,7 +140,7 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
           body: JSON.stringify(body)
         }
       )
-      
+
       if (res.ok) {
         onTagsChange(newTags)
       } else {
@@ -161,7 +164,7 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
       {tags.map(t => {
         const c = getColor(t).bg
 
-        
+
 return (
           <Chip
             key={t}
@@ -272,7 +275,7 @@ return (
               {suggestedTags.map(t => {
                 const c = getColor(t).bg
 
-                
+
 return (
                   <Chip
                     key={t}

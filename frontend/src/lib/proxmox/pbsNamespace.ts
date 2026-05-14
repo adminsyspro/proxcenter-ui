@@ -4,8 +4,10 @@ type NsRow = { ns: string }
 
 function splitHeadTail(namespace: string): { head: string; parent: string | null } {
   const idx = namespace.lastIndexOf('/')
+
   if (idx < 0) return { head: namespace, parent: null }
-  return { head: namespace.slice(idx + 1), parent: namespace.slice(0, idx) }
+
+return { head: namespace.slice(idx + 1), parent: namespace.slice(0, idx) }
 }
 
 /**
@@ -21,10 +23,12 @@ export async function ensureNamespace(
 ): Promise<void> {
   const existing = await pbsFetch<NsRow[]>(conn, `/admin/datastore/${encodeURIComponent(datastore)}/namespace`)
   const already = (existing || []).some(r => r.ns === namespace)
+
   if (already) return
 
   const { head } = splitHeadTail(namespace)
   const body: Record<string, any> = { name: head }
+
   if (opts.parent) body.parent = opts.parent
 
   await pbsFetch(conn, `/admin/datastore/${encodeURIComponent(datastore)}/namespace`, {
@@ -41,8 +45,10 @@ export async function ensureNamespacePath(
 ): Promise<void> {
   const parts = fullNamespace.split('/').filter(Boolean)
   let parent: string | null = null
+
   for (const seg of parts) {
     const path = parent ? `${parent}/${seg}` : seg
+
     await ensureNamespace(conn, datastore, path, parent ? { parent } : {})
     parent = path
   }
@@ -54,21 +60,26 @@ export async function ensureSubToken(
   tokenId: string,
 ): Promise<{ tokenId: string; secret: string | null }> {
   const full = `${user}!${tokenId}`
+
   try {
     const existing = await pbsFetch<any>(
       conn,
       `/access/users/${user}/token/${tokenId}`,
     )
+
     if (existing && existing.tokenid) return { tokenId: full, secret: null }
   } catch {
     // fall through — create below
   }
+
   const created = await pbsFetch<any>(
     conn,
     `/access/users/${user}/token/${tokenId}`,
     { method: 'POST', body: {} as any },
   )
-  return { tokenId: created.tokenid ?? full, secret: created.value ?? null }
+
+
+return { tokenId: created.tokenid ?? full, secret: created.value ?? null }
 }
 
 export async function setNamespaceAcl(
@@ -127,26 +138,32 @@ export async function waitForPbsTokenReady(
 ): Promise<void> {
   const timeoutMs = opts.timeoutMs ?? 15_000
   const intervalMs = opts.intervalMs ?? 250
+
   const subConn: PbsClientOptions = {
     baseUrl: rootConn.baseUrl,
     apiToken: `${tokenId}:${secret}`,
     insecureDev: rootConn.insecureDev,
   }
+
   const deadline = Date.now() + timeoutMs
   let lastErr: any = null
   let attempts = 0
   const t0 = Date.now()
+
   while (Date.now() < deadline) {
     attempts++
+
     try {
       await pbsFetch(subConn, `/admin/datastore/${encodeURIComponent(datastore)}/status`)
       console.log(`[pbs-ready] sub-token ${tokenId} ready after ${Date.now() - t0}ms (${attempts} polls)`)
-      return
+
+return
     } catch (e) {
       lastErr = e
       await new Promise(r => setTimeout(r, intervalMs))
     }
   }
+
   throw new Error(
     `PBS sub-token ${tokenId} not ready on /admin/datastore/${datastore}/status after ${timeoutMs}ms (${attempts} polls): ${lastErr?.message ?? 'unknown'}`,
   )
@@ -175,5 +192,7 @@ export async function listSnapshotsInNamespace(
   namespace: string,
 ): Promise<any[]> {
   const qs = `?ns=${encodeURIComponent(namespace)}&max-depth=0`
-  return (await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(datastore)}/snapshots${qs}`)) || []
+
+
+return (await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(datastore)}/snapshots${qs}`)) || []
 }

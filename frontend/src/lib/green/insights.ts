@@ -15,14 +15,19 @@ export type InsightKind =
   | 'efficient_dc'
 
 export interface InsightInput {
+
   /** Average CPU usage across running samples, 0..100. */
   avgCpuPct: number
+
   /** Average RAM usage / maxmem across running samples, 0..100. */
   avgMemPct: number
+
   /** Share of samples where the VM was active, 0..1. */
   runningRatio: number
+
   /** Datacentre PUE applied to this VM. */
   pue: number
+
   /** Current vCPU allocation of the VM. */
   maxcpu: number
 }
@@ -40,7 +45,9 @@ export function detectInsight(input: InsightInput): Insight | null {
 
   if (avgCpuPct < 10 && runningRatio > 0.5) {
     const suggestedVcpus = Math.max(1, Math.ceil(maxcpu * 0.4))
-    return {
+
+
+return {
       kind: 'idle_cpu',
       severity: 'warning',
       titleKey: 'green.insights.idleCpu.title',
@@ -61,7 +68,9 @@ export function detectInsight(input: InsightInput): Insight | null {
 
   if (runningRatio < 0.3) {
     const offPct = Math.round((1 - runningRatio) * 100)
-    return {
+
+
+return {
       kind: 'mostly_stopped',
       severity: 'info',
       titleKey: 'green.insights.mostlyStopped.title',

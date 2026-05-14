@@ -67,14 +67,18 @@ export async function insertBinding(args: {
       pbsTokenSecret: args.pbsTokenSecret ?? null,
     },
   })
-  return rowToBinding(row)
+
+
+return rowToBinding(row)
 }
 
 export async function findBindingByTuple(pbsConnectionId: string, datastore: string, namespace: string): Promise<PbsBindingRow | null> {
   const row = await prisma.vdcPbsNamespace.findUnique({
     where: { pbsConnectionId_datastore_namespace: { pbsConnectionId, datastore, namespace } },
   })
-  return row ? rowToBinding(row) : null
+
+
+return row ? rowToBinding(row) : null
 }
 
 export async function listBindingsForVdc(vdcId: string): Promise<PbsBindingRow[]> {
@@ -82,7 +86,9 @@ export async function listBindingsForVdc(vdcId: string): Promise<PbsBindingRow[]
     where: { vdcId },
     orderBy: { createdAt: 'asc' },
   })
-  return rows.map(rowToBinding)
+
+
+return rows.map(rowToBinding)
 }
 
 export async function listBindingsForTenant(tenantId: string): Promise<PbsBindingRow[]> {
@@ -90,7 +96,9 @@ export async function listBindingsForTenant(tenantId: string): Promise<PbsBindin
     where: { vdc: { tenantId, enabled: true } },
     orderBy: { createdAt: 'asc' },
   })
-  return rows.map(rowToBinding)
+
+
+return rows.map(rowToBinding)
 }
 
 export async function deleteBinding(id: string): Promise<void> {
@@ -110,7 +118,9 @@ export async function insertPveStorage(args: {
       managed: args.managed ?? true,
     },
   })
-  return rowToStorage(row)
+
+
+return rowToStorage(row)
 }
 
 export async function listPveStoragesForBinding(bindingId: string): Promise<PvePbsStorageRow[]> {
@@ -118,7 +128,9 @@ export async function listPveStoragesForBinding(bindingId: string): Promise<PveP
     where: { vdcPbsNamespaceId: bindingId },
     orderBy: { createdAt: 'asc' },
   })
-  return rows.map(rowToStorage)
+
+
+return rows.map(rowToStorage)
 }
 
 export async function deletePveStorage(id: string): Promise<void> {

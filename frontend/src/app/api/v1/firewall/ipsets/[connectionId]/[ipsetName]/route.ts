@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/ipsets/[connectionId]/[ipsetName]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,11 @@ export async function DELETE(
   try {
     const { connectionId, ipsetName } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -26,7 +29,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error deleting IP set:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to delete IP set' },
       { status: 500 }

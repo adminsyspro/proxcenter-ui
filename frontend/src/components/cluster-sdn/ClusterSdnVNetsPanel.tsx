@@ -26,9 +26,11 @@ export default function ClusterSdnVNetsPanel({ connId }: Props) {
   const fetchVNets = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/connections/${connId}/sdn/vnets`, { cache: 'no-store' })
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setVNets(body.data?.vnets ?? [])
     } catch (e: any) {

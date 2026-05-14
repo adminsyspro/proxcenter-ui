@@ -4,10 +4,6 @@ import { useEffect, useState, useCallback } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 
-import { getDateLocale } from '@/lib/i18n/date'
-import { useTenant } from '@/contexts/TenantContext'
-import BackupSchedulePicker from './BackupSchedulePicker'
-
 import {
   Alert,
   Autocomplete,
@@ -40,7 +36,13 @@ import {
   Typography,
   useTheme
 } from '@mui/material'
+
 import { DataGrid } from '@mui/x-data-grid'
+
+import { getDateLocale } from '@/lib/i18n/date'
+import { useTenant } from '@/contexts/TenantContext'
+import BackupSchedulePicker from './BackupSchedulePicker'
+
 
 /* -----------------------------
   Helpers
@@ -68,15 +70,15 @@ const JobTypeChip = ({ type }) => {
     gc: { color: '#9C27B0', label: 'GC', bg: 'rgba(156, 39, 176, 0.15)' },
     tape: { color: '#795548', label: 'Tape', bg: 'rgba(121, 85, 72, 0.15)' }
   }
-  
+
   const config = configs[type] || { color: '#757575', label: type?.toUpperCase() || '?', bg: 'rgba(117, 117, 117, 0.15)' }
-  
+
   return (
-    <Chip 
-      size="small" 
+    <Chip
+      size="small"
       label={config.label}
-      sx={{ 
-        bgcolor: config.bg, 
+      sx={{
+        bgcolor: config.bg,
         color: config.color,
         fontWeight: 600,
         fontSize: '0.7rem',
@@ -123,24 +125,25 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   const [storages, setStorages] = useState([])
   const [nodes, setNodes] = useState([])
   const [vms, setVms] = useState([])
+
   // Tenant mode: list the pools (= one per vDC) the user is allowed to
   // back up. The job-create dialog locks selectionMode='pool' for them
   // and lets them pick from this list.
   const [tenantPools, setTenantPools] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  
+
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState('create')
   const [editingJob, setEditingJob] = useState(null)
   const [saving, setSaving] = useState(false)
-  
+
   // Delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  
+
   // Form state. Tenants always run in pool mode (cf. backend guard in
   // lib/vdc/backupJobs.ts) — the dropdown is hidden and `pool` carries
   // the chosen vDC pool name.
@@ -164,14 +167,14 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
 
   const loadJobs = useCallback(async () => {
     if (!selectedConnection) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs`)
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       } else {
@@ -190,11 +193,11 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
 
   const loadVms = useCallback(async () => {
     if (!selectedConnection) return
-    
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(selectedConnection)}/resources?type=vm`)
       const json = await res.json()
-      
+
       if (!json.error) {
         const allVms = (json.data || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
 
@@ -232,20 +235,29 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   // 1-per-cluster — if we ever see N>1 we log a warning and pick the
   // first deterministically.
   useEffect(() => {
-    if (!isVdcTenant || !selectedConnection) { setTenantPools([]); return }
+    if (!isVdcTenant || !selectedConnection) { setTenantPools([]);
+
+return }
+
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetch('/api/v1/vdcs', { cache: 'no-store' })
+
         if (!res.ok) return
         const json = await res.json()
         const list = Array.isArray(json?.data) ? json.data : []
+
         if (cancelled) return
+
         const onConn = list
           .filter(v => (v.connectionId || v.connection_id) === selectedConnection)
           .map(v => {
             const binding = Array.isArray(v.pbsBindings) ? v.pbsBindings[0] : null
-            return {
+
+
+return {
               vdcId: v.id,
               vdcName: v.name,
               poolName: v.pvePoolName || v.pve_pool_name,
@@ -254,15 +266,19 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
             }
           })
           .filter(p => !!p.poolName)
+
         if (onConn.length > 1) {
           // Defensive: schema allows N vDCs per (tenant, connection),
           // product invariant is 1. Warn but don't fail — pick [0].
           console.warn(`[BackupJobsTabs] tenant has ${onConn.length} vDCs on connection ${selectedConnection}; using "${onConn[0].vdcName}".`)
         }
+
         setTenantPools(onConn)
       } catch { /* ignore */ }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [isVdcTenant, selectedConnection])
 
   const handleCreate = () => {
@@ -320,20 +336,20 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
 
   const handleSave = async () => {
     setSaving(true)
-    
+
     try {
       const url = dialogMode === 'create'
         ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs`
         : `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(editingJob.id)}`
-      
+
       const res = await fetch(url, {
         method: dialogMode === 'create' ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      
+
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       } else {
@@ -389,9 +405,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
           body: JSON.stringify({ enabled: !job.enabled })
         }
       )
-      
+
       const json = await res.json()
-      
+
       if (!json.error) {
         loadJobs()
       }
@@ -406,9 +422,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
         `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(job.id)}?action=run`,
         { method: 'POST' }
       )
-      
+
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       }
@@ -469,7 +485,7 @@ return '—'
       field: 'namespace',
       headerName: 'Namespace',
       width: 110,
-      renderCell: (params) => params.value 
+      renderCell: (params) => params.value
         ? <Chip size="small" label={params.value} variant="outlined" color="info" />
         : <Typography sx={{ opacity: 0.5, fontSize: '0.75rem' }}>—</Typography>
     },
@@ -490,9 +506,9 @@ return '—'
       headerName: 'Mode',
       width: 100,
       renderCell: (params) => (
-        <Chip 
-          size="small" 
-          label={params.value} 
+        <Chip
+          size="small"
+          label={params.value}
           color={params.value === 'snapshot' ? 'success' : params.value === 'suspend' ? 'warning' : 'error'}
           variant="outlined"
         />
@@ -579,10 +595,10 @@ return '—'
           </Tooltip>
         </Box>
       </Box>
-      
+
       {loading && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      
+
       {/* Table */}
       <DataGrid
         rows={jobs}
@@ -896,21 +912,21 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  
+
   const [selectedType, setSelectedType] = useState('all')
-  
+
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState('create')
   const [dialogType, setDialogType] = useState('sync') // sync, verify, prune
   const [editingJob, setEditingJob] = useState(null)
   const [saving, setSaving] = useState(false)
-  
+
   // Delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [jobToDelete, setJobToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  
+
   // Form data for different job types
   const [formData, setFormData] = useState({
     id: '',
@@ -946,14 +962,14 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 
   const loadJobs = useCallback(async () => {
     if (!selectedPbs) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
       const res = await fetch(`/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs`)
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       } else {
@@ -1042,13 +1058,13 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 
   const handleSave = async () => {
     setSaving(true)
-    
+
     try {
-      const endpoint = dialogType === 'sync' ? 'sync' 
-        : dialogType === 'verify' ? 'verify' 
+      const endpoint = dialogType === 'sync' ? 'sync'
+        : dialogType === 'verify' ? 'verify'
         : dialogType === 'tape' ? 'tape'
         : 'prune'
-      
+
       // Pour prune, on a besoin du store dans l'URL
       let url
 
@@ -1063,15 +1079,15 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
           url += `?store=${encodeURIComponent(formData.store)}`
         }
       }
-      
+
       const res = await fetch(url, {
         method: dialogMode === 'create' ? 'POST' : 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      
+
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       } else {
@@ -1130,9 +1146,9 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 
   const handleRunNow = async (job) => {
     try {
-      const endpoint = job.type === 'sync' ? 'sync' 
-        : job.type === 'verify' ? 'verify' 
-        : job.type === 'prune' ? 'prune' 
+      const endpoint = job.type === 'sync' ? 'sync'
+        : job.type === 'verify' ? 'verify'
+        : job.type === 'prune' ? 'prune'
         : job.type === 'tape' ? 'tape'
         : 'gc'
 
@@ -1140,9 +1156,9 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}/${encodeURIComponent(job.id)}/run`,
         { method: 'POST' }
       )
-      
+
       const json = await res.json()
-      
+
       if (json.error) {
         setError(json.error)
       }
@@ -1151,7 +1167,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
     }
   }
 
-  const filteredJobs = jobs 
+  const filteredJobs = jobs
     ? (selectedType === 'all' ? jobs.all : jobs[selectedType] || [])
     : []
 
@@ -1199,7 +1215,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
       width: 100,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          {params.value 
+          {params.value
             ? <Chip size="small" label={params.value} variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
             : <Typography variant="body2" sx={{ opacity: 0.4 }}>—</Typography>
           }
@@ -1359,7 +1375,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
             </Select>
           </FormControl>
         </Box>
-        
+
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           {/* Boutons de création par type */}
           <Tooltip title={t('backups.createSyncJob')}>
@@ -1410,7 +1426,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
           </Tooltip>
         </Box>
       </Box>
-      
+
       {/* Stats */}
       {stats && (
         <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
@@ -1419,10 +1435,10 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
           <Chip size="small" color="warning" label={t('backups.warningsCount', { count: stats.lastRunStates?.warning || 0 })} variant="outlined" />
         </Box>
       )}
-      
+
       {loading && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      
+
       {/* Table */}
       <DataGrid
         rows={filteredJobs}
@@ -1724,6 +1740,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)
   const [expanded, setExpanded] = useState(false)
+
   // Tenant flag: drives the sub-tab UI (hide cluster/server pickers,
   // lock job-create dialog into pool selection, etc.). Provider gets the
   // unrestricted view.

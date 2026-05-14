@@ -14,10 +14,12 @@ export async function POST(
   ctx: { params: Promise<{ profileId: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const { profileId } = await ctx.params
@@ -26,16 +28,20 @@ export async function POST(
     // Special case: deactivate all
     if (profileId === 'none') {
       const body = await req.json().catch(() => ({}))
+
       await deactivateProfiles(body.connection_id, tenantId)
-      return NextResponse.json({ success: true })
+
+return NextResponse.json({ success: true })
     }
 
     const existing = await getProfile(profileId, tenantId)
+
     if (!existing) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
 
     const body = await req.json().catch(() => ({}))
+
     await setActiveProfile(profileId, body.connection_id, tenantId)
 
     return NextResponse.json({ success: true })

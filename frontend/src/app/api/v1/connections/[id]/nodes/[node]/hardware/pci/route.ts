@@ -15,6 +15,7 @@ export async function GET(
 
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)

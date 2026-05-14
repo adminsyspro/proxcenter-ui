@@ -46,11 +46,13 @@ export async function GET(req: Request) {
     if (vdcScope) {
       const pveIds = [...vdcScope.connectionIds]
       const pbsIds = [...vdcScope.pbsConnectionIds]
+
       const allowedIds = typeFilter === 'pbs'
         ? pbsIds
         : typeFilter === 'pve'
           ? pveIds
           : [...pveIds, ...pbsIds]
+
       where.id = { in: allowedIds }
     }
 
@@ -70,12 +72,14 @@ export async function GET(req: Request) {
         locationLabel: true,
         country: true,
         fingerprint: true,
+
         // SSH fields (sans les secrets)
         sshEnabled: true,
         sshPort: true,
         sshUser: true,
         sshAuthMethod: true,
         sshUseSudo: true,
+
         // Inclure les champs chiffrés pour vérifier si configuré (ne pas renvoyer au client)
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -152,14 +156,18 @@ export async function POST(req: Request) {
     if (type === 'vmware' || type === 'xcpng' || type === 'hyperv' || type === 'nutanix') {
       // VMware/XCP-ng/Hyper-V/Nutanix: store "user:password" in apiTokenEnc
       const defaultUser = type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root'
+
       data.apiTokenEnc = encryptSecret(`${vmwareUser || defaultUser}:${vmwarePassword || ''}`)
+
       if (type === 'vmware') {
         data.subType = subType || 'esxi'
         data.vmwareDatacenter = vmwareDatacenter || null
       }
+
       if (type === 'hyperv') {
         data.hypervShareName = hypervShareName || 'VMs'
       }
+
       if (type === 'xcpng' || type === 'hyperv' || type === 'nutanix') {
         data.sshEnabled = false
       }
@@ -178,6 +186,7 @@ export async function POST(req: Request) {
       // Chiffrer les secrets SSH si fournis
       if (sshEnabled && sshAuthMethod === 'key' && sshKey) {
         data.sshKeyEnc = encryptSecret(sshKey)
+
         if (sshPassphrase) {
           data.sshPassEnc = encryptSecret(sshPassphrase)
         }
@@ -208,7 +217,8 @@ export async function POST(req: Request) {
             `/nodes/${encodeURIComponent(onlineNode.node)}/ceph/status`
           ).catch((e: any) => {
             console.log(`[ceph-detect] Ceph probe failed on ${onlineNode.node}: ${e?.message || 'unknown error'}`)
-            return null
+
+return null
           })
 
           data.hasCeph = !!(cephStatus?.health)
@@ -239,16 +249,22 @@ export async function POST(req: Request) {
     if (type === 'vmware') {
       try {
         const esxiUrl = baseUrl.replace(/\/$/, '')
+
         const fetchOpts: any = {
           signal: AbortSignal.timeout(10000),
         }
+
+
         // ESXi almost always uses self-signed certs — use undici Agent to bypass TLS
         if (insecureTLS) {
           fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
         }
+
+
         // Try /sdk/vimServiceVersions.xml first, fallback to / — accept any response (even 4xx) as proof of reachability
         const res = await fetch(`${esxiUrl}/sdk/vimServiceVersions.xml`, fetchOpts).catch(() => null)
           || await fetch(`${esxiUrl}/`, { ...fetchOpts, signal: AbortSignal.timeout(10000) }).catch(() => null)
+
         if (!res) {
           throw new Error('Unable to connect to ESXi host')
         }
@@ -265,24 +281,32 @@ export async function POST(req: Request) {
       try {
         const xoUrl = baseUrl.replace(/\/$/, '')
         const xoAuth = Buffer.from(`${vmwareUser || 'admin@admin.net'}:${vmwarePassword || ''}`).toString('base64')
+
         const fetchOpts: any = {
           headers: { 'Authorization': `Basic ${xoAuth}`, 'Accept': 'application/json' },
           signal: AbortSignal.timeout(15000),
         }
+
         if (insecureTLS) {
           fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
         }
+
         const res = await fetch(`${xoUrl}/rest/v0/hosts`, fetchOpts).catch((err: any) => {
           console.error(`[xcpng] Connection to ${xoUrl}/rest/v0/hosts failed:`, err?.message || err)
-          return null
+
+return null
         })
+
         if (!res) {
           throw new Error('Unable to connect to XO server')
         }
+
         console.log(`[xcpng] XO responded with status ${res.status}`)
+
         if (res.status === 401) {
           throw new Error('Invalid credentials')
         }
+
         if (!res.ok) {
           throw new Error(`XO returned HTTP ${res.status}`)
         }
@@ -310,6 +334,7 @@ export async function POST(req: Request) {
     }
 
     const prisma = await getSessionPrisma()
+
     const created = await prisma.connection.create({
       data,
       select: {
@@ -343,10 +368,10 @@ export async function POST(req: Request) {
       resourceType: "connection",
       resourceId: created.id,
       resourceName: name,
-      details: { 
-        type, 
-        baseUrl, 
-        insecureTLS, 
+      details: {
+        type,
+        baseUrl,
+        insecureTLS,
         hasCeph,
         sshEnabled,
         sshPort: sshEnabled ? sshPort : undefined,

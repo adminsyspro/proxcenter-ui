@@ -55,7 +55,7 @@ const StorageIcon = ({ type, size = 20 }) => {
     'btrfs': 'ri-database-line',
   }
 
-  
+
 return <i className={iconMap[type] || 'ri-hard-drive-line'} style={{ fontSize: size }} />
 }
 
@@ -78,7 +78,7 @@ const getTypeColor = (type) => {
     'btrfs': '#009688',
   }
 
-  
+
 return colorMap[type] || '#9e9e9e'
 }
 
@@ -103,17 +103,17 @@ const StorageTypeChip = ({ type }) => {
     'btrfs': 'Btrfs',
   }
 
-  
+
 return (
-    <Chip 
-      size='small' 
-      label={labels[type] || type || 'Unknown'} 
-      sx={{ 
-        bgcolor: `${color}20`, 
+    <Chip
+      size='small'
+      label={labels[type] || type || 'Unknown'}
+      sx={{
+        bgcolor: `${color}20`,
         color: color,
         fontWeight: 700,
         fontSize: 11,
-      }} 
+      }}
     />
   )
 }
@@ -124,7 +124,7 @@ const ScopeChip = ({ shared, sharedLabel, localLabel }) => {
     return <Chip size='small' label={sharedLabel || 'Shared'} color='primary' variant='outlined' sx={{ fontSize: 11 }} />
   }
 
-  
+
 return <Chip size='small' label={localLabel || 'Local'} variant='outlined' sx={{ fontSize: 11 }} />
 }
 
@@ -139,13 +139,13 @@ const ContentChip = ({ content, t }) => {
     'snippets': t ? t('storage.content.snippets') : 'Snippets',
   }
 
-  
+
 return (
-    <Chip 
-      size='small' 
-      label={labels[content] || content} 
+    <Chip
+      size='small'
+      label={labels[content] || content}
       variant='outlined'
-      sx={{ fontSize: 10, height: 20 }} 
+      sx={{ fontSize: 10, height: 20 }}
     />
   )
 }
@@ -155,10 +155,10 @@ const CapacityBar = ({ usedPct, size = 'medium' }) => {
   const getColor = (pct) => {
     if (pct >= 90) return '#f44336'
     if (pct >= 75) return '#ff9800'
-    
+
 return '#4caf50'
   }
-  
+
   return (
     <LinearProgress
       variant='determinate'
@@ -185,8 +185,8 @@ function KpiCard({ title, value, subtitle, icon, color }) {
     <Card variant='outlined'>
       <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ 
-            width: 48, height: 48, borderRadius: 2, 
+          <Box sx={{
+            width: 48, height: 48, borderRadius: 2,
             bgcolor: color ? `${color}18` : 'action.hover',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
@@ -223,7 +223,7 @@ export default function StorageOverviewPage() {
 
   useEffect(() => {
     setPageInfo(t('navigation.storage'), t('storage.overview'), 'ri-database-2-fill')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
   const primaryColor = theme.palette.primary.main
@@ -255,7 +255,7 @@ return () => setPageInfo('', '', '')
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
-      
+
       setStorages(Array.isArray(json?.data) ? json.data : [])
       setConnections(Array.isArray(json?.connections) ? json.connections : [])
     } catch (e) {
@@ -273,29 +273,29 @@ return () => setPageInfo('', '', '')
   // Filtrage
   const filtered = useMemo(() => {
     let result = storages
-    
+
     // Filtre par connexion
     if (connId !== '*') {
       result = result.filter(s => s.connections?.some(c => c.id === connId) || s.connId === connId)
     }
-    
+
     const qq = q.trim().toLowerCase()
 
-    
+
 return result.filter(s => {
-      const matchQ = !qq || 
-        s.storage?.toLowerCase().includes(qq) || 
+      const matchQ = !qq ||
+        s.storage?.toLowerCase().includes(qq) ||
         s.node?.toLowerCase().includes(qq) ||
         s.type?.toLowerCase().includes(qq) ||
         s.connectionName?.toLowerCase().includes(qq)
 
       const matchType = typeFilter === 'all' || s.type === typeFilter
 
-      const matchScope = scopeFilter === 'all' || 
-        (scopeFilter === 'shared' && s.shared) || 
+      const matchScope = scopeFilter === 'all' ||
+        (scopeFilter === 'shared' && s.shared) ||
         (scopeFilter === 'local' && !s.shared)
 
-      
+
 return matchQ && matchType && matchScope
     })
   }, [storages, q, typeFilter, scopeFilter, connId])
@@ -304,7 +304,7 @@ return matchQ && matchType && matchScope
   const uniqueTypes = useMemo(() => {
     const types = new Set(storages.map(s => s.type).filter(Boolean))
 
-    
+
 return Array.from(types).sort((a, b) => a.localeCompare(b))
   }, [storages])
 
@@ -313,12 +313,12 @@ return Array.from(types).sort((a, b) => a.localeCompare(b))
     // Stats sur tous les storages (pour info)
     const allShared = storages.filter(s => s.shared)
     const allLocal = storages.filter(s => !s.shared)
-    
+
     // Stats sur les filtrés
     const totalUsed = filtered.reduce((acc, s) => acc + (s.used || 0), 0)
     const totalCapacity = filtered.reduce((acc, s) => acc + (s.total || 0), 0)
 
-    const avgUsedPct = filtered.length > 0 
+    const avgUsedPct = filtered.length > 0
       ? Math.round(filtered.reduce((acc, s) => acc + (s.usedPct || 0), 0) / filtered.length)
       : 0
 
@@ -349,8 +349,10 @@ return Array.from(types).sort((a, b) => a.localeCompare(b))
     setSelectedId(id)
     setDrawerOpen(true)
     const s = storages.find(st => st.id === id) || filtered.find(st => st.id === id)
+
     if (s) {
       const firstConn = s.connections?.[0] || {}
+
       setContentConnId(firstConn.id || s.connId || null)
       setContentNode(s.node || (s.allNodes || [])[0] || null)
     }
@@ -366,11 +368,11 @@ return Array.from(types).sort((a, b) => a.localeCompare(b))
       renderCell: params => {
         const nodeCount = params.row.allNodes?.length || params.row.nodes?.length || 1
 
-        
+
 return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, height: '100%' }}>
-            <Box sx={{ 
-              width: 36, height: 36, borderRadius: 1.5, 
+            <Box sx={{
+              width: 36, height: 36, borderRadius: 1.5,
               bgcolor: `${getTypeColor(params.row.type)}18`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: getTypeColor(params.row.type),
@@ -415,7 +417,7 @@ return (
           )
         }
 
-        
+
 return (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
             <Tooltip title={conns.map(c => c.name).join(', ')}>
@@ -647,8 +649,8 @@ return (
             <>
               {/* Header */}
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                <Box sx={{ 
-                  width: 56, height: 56, borderRadius: 2, 
+                <Box sx={{
+                  width: 56, height: 56, borderRadius: 2,
                   bgcolor: `${getTypeColor(selected.type)}18`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: getTypeColor(selected.type)
@@ -809,11 +811,11 @@ return (
                       {selected.connectionDetails
                         .sort((a, b) => (b.usedPct || 0) - (a.usedPct || 0))
                         .map((conn, idx) => (
-                        <Box 
-                          key={conn.id || idx} 
-                          sx={{ 
-                            p: 1.5, 
-                            borderRadius: 1.5, 
+                        <Box
+                          key={conn.id || idx}
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 1.5,
                             bgcolor: 'action.hover',
                             border: '1px solid',
                             borderColor: 'divider'
@@ -864,8 +866,10 @@ return (
                             value={contentConnId}
                             onChange={e => {
                               const newConnId = e.target.value
+
                               setContentConnId(newConnId)
                               const detail = selected.connectionDetails?.find(cd => cd.id === newConnId)
+
                               setContentNode(detail?.nodes?.[0] || (selected.allNodes || [])[0] || null)
                             }}
                             sx={{ fontSize: 12, height: 32, '& .MuiSelect-select': { py: 0.5 } }}

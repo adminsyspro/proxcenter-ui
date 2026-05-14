@@ -1,4 +1,5 @@
 import useSWR from 'swr'
+
 import { useRefreshInterval } from './useRefreshInterval'
 
 const reportsFetcher = async () => {
@@ -16,20 +17,27 @@ const reportsFetcher = async () => {
 
   if (typesRes.ok) {
     const data = await typesRes.json()
+
     reportTypes = Array.isArray(data) ? data : []
   } else if (typesRes.status === 403 || typesRes.status === 401) {
     throw new Error('Session not ready')
   }
+
   if (reportsRes.ok) {
     const data = await reportsRes.json()
+
     reports = data.data || []
   }
+
   if (schedulesRes.ok) {
     const data = await schedulesRes.json()
+
     schedules = Array.isArray(data) ? data : []
   }
+
   if (langsRes.ok) {
     const data = await langsRes.json()
+
     if (Array.isArray(data) && data.length > 0) languages = data
   }
 
@@ -38,7 +46,9 @@ const reportsFetcher = async () => {
 
 export function useReportsData(isEnterprise: boolean) {
   const refreshInterval = useRefreshInterval(30000)
-  return useSWR(
+
+
+return useSWR(
     isEnterprise ? 'reports/data' : null,
     reportsFetcher,
     { refreshInterval, errorRetryInterval: 3000, errorRetryCount: 5 }

@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useRouter, useSearchParams } from 'next/navigation'
+
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress } from '@mui/material'
+
 import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
 
@@ -62,10 +65,12 @@ export default function LoginPage() {
   const handleLogin = useCallback(async () => {
     setLoading(true)
     setError('')
+
     try {
       const result = authMethod === 'local'
         ? await signIn('credentials', { email, password, redirect: false, callbackUrl })
         : await signIn('ldap', { username, password, redirect: false, callbackUrl })
+
       if (result?.error) setError(result.error)
       else if (result?.ok) { router.push(callbackUrl); router.refresh() }
     } catch {

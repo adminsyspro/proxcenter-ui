@@ -16,14 +16,17 @@ beforeEach(() => {
 describe('parseNetLine', () => {
   it('extracts bridge and MAC from a virtio line', () => {
     const r = parseNetLine('virtio=BC:24:11:AA:BB:CC,bridge=znewmspp,firewall=1')
+
     expect(r).toEqual({ bridge: 'znewmspp', mac: 'BC:24:11:AA:BB:CC' })
   })
   it('returns null mac when PVE auto-generates (no =MAC token)', () => {
     const r = parseNetLine('virtio,bridge=vmbr0')
+
     expect(r).toEqual({ bridge: 'vmbr0', mac: null })
   })
   it('uppercases the MAC for idempotency with the IPAM normalisation', () => {
     const r = parseNetLine('e1000=aa:bb:cc:dd:ee:ff,bridge=br0')
+
     expect(r.mac).toBe('AA:BB:CC:DD:EE:FF')
   })
   it('handles e1000 / rtl8139 / vmxnet3 model tokens', () => {
@@ -59,6 +62,7 @@ describe('scannedToIntSet', () => {
       { vmid: 1, mac: null, ip: '10.0.0.1' },
       { vmid: 2, mac: null, ip: 'bogus' },
     ])
+
     expect(set.size).toBe(1)
   })
 })
@@ -91,13 +95,16 @@ describe('scanUsedIpsForSubnet', () => {
           ],
         } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.5/24,gw=10.42.0.1' } as any
       }
+
       if (path === '/nodes/pve1/qemu/101/config') {
         // attached to a DIFFERENT bridge — must be ignored
         return { net0: 'virtio=AA:00:00:00:00:02,bridge=tenantB', ipconfig0: 'ip=10.43.0.5/24' } as any
       }
+
       throw new Error(`unexpected fetch ${path}`)
     })
 
@@ -108,6 +115,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     })
+
     expect(out).toEqual([{ vmid: 100, mac: 'AA:00:00:00:00:01', ip: '10.42.0.5' }])
   })
 
@@ -116,12 +124,15 @@ describe('scanUsedIpsForSubnet', () => {
       if (path === '/pools/poolA') {
         return { members: [{ vmid: 100, node: 'pve1', type: 'qemu' }, { vmid: 101, node: 'pve1', type: 'qemu' }] } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=dhcp' } as any
       }
+
       if (path === '/nodes/pve1/qemu/101/config') {
         return { net0: 'virtio=AA:00:00:00:00:02,bridge=tenantA' /* no ipconfig0 at all */ } as any
       }
+
       throw new Error(`unexpected fetch ${path}`)
     })
 
@@ -132,6 +143,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     })
+
     expect(out).toEqual([])
   })
 
@@ -140,6 +152,7 @@ describe('scanUsedIpsForSubnet', () => {
       if (path === '/pools/poolA') {
         return { members: [{ vmid: 100, node: 'pve1', type: 'qemu' }] } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         return {
           net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA',
@@ -150,6 +163,7 @@ describe('scanUsedIpsForSubnet', () => {
           ipconfig2: 'ip=10.99.0.5/24',
         } as any
       }
+
       throw new Error(`unexpected fetch ${path}`)
     })
 
@@ -160,6 +174,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     })
+
     expect(out.map(r => r.ip).sort((a, b) => a.localeCompare(b))).toEqual(['10.42.0.5', '10.42.0.6'])
   })
 
@@ -168,9 +183,11 @@ describe('scanUsedIpsForSubnet', () => {
       if (path === '/pools/poolA') {
         return { members: [{ vmid: 100, node: 'pve1', type: 'qemu' }] } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.5/24' } as any
       }
+
       throw new Error('unexpected')
     })
 
@@ -181,8 +198,10 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     }
+
     await scanUsedIpsForSubnet(args)
     await scanUsedIpsForSubnet(args)
+
     // 1 pool fetch + 1 config fetch = 2 calls total despite scanning twice.
     expect(vi.mocked(pveFetch)).toHaveBeenCalledTimes(2)
   })
@@ -192,9 +211,11 @@ describe('scanUsedIpsForSubnet', () => {
       if (path === '/pools/poolA') {
         return { members: [{ vmid: 100, node: 'pve1', type: 'qemu' }] } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.5/24' } as any
       }
+
       throw new Error('unexpected')
     })
 
@@ -205,6 +226,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     }
+
     await scanUsedIpsForSubnet(args)
     invalidateScanCache('conn-1', 'subnet-1')
     await scanUsedIpsForSubnet(args)
@@ -213,6 +235,7 @@ describe('scanUsedIpsForSubnet', () => {
 
   it('degrades to an empty scan when /pools fails (e.g. RBAC)', async () => {
     vi.mocked(pveFetch).mockRejectedValueOnce(new Error('403 Forbidden'))
+
     const out = await scanUsedIpsForSubnet({
       conn: fakeConn,
       vdcPoolName: 'poolA',
@@ -220,6 +243,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     })
+
     expect(out).toEqual([])
   })
 
@@ -228,12 +252,15 @@ describe('scanUsedIpsForSubnet', () => {
       if (path === '/pools/poolA') {
         return { members: [{ vmid: 100, node: 'pve1', type: 'qemu' }, { vmid: 101, node: 'pve1', type: 'qemu' }] } as any
       }
+
       if (path === '/nodes/pve1/qemu/100/config') {
         throw new Error('config-not-found')
       }
+
       if (path === '/nodes/pve1/qemu/101/config') {
         return { net0: 'virtio=AA:00:00:00:00:02,bridge=tenantA', ipconfig0: 'ip=10.42.0.6/24' } as any
       }
+
       throw new Error(`unexpected fetch ${path}`)
     })
 
@@ -244,6 +271,7 @@ describe('scanUsedIpsForSubnet', () => {
       subnetId: 'subnet-1',
       connectionId: 'conn-1',
     })
+
     expect(out).toEqual([{ vmid: 101, mac: 'AA:00:00:00:00:02', ip: '10.42.0.6' }])
   })
 })

@@ -11,15 +11,16 @@ function formatSubscriptionData(subscription: any) {
   // checktime est un timestamp unix (nombre de secondes)
   // regdate est une string date comme "2026-02-01 04:50:05"
   let lastCheckedFormatted: string | null = null
-  
+
   if (subscription?.checktime) {
     // C'est un timestamp unix en secondes
     const ts = typeof subscription.checktime === 'number' ? subscription.checktime : Number.parseInt(subscription.checktime)
+
     if (!Number.isNaN(ts)) {
       lastCheckedFormatted = new Date(ts * 1000).toISOString()
     }
   }
-  
+
   return {
     status: subscription?.status || 'unknown',
     type: subscription?.productname || 'Unknown',
@@ -37,7 +38,7 @@ function formatSubscriptionData(subscription: any) {
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/subscription
  * Récupère le statut de la subscription Proxmox pour un node
- * 
+ *
  * Proxmox API: GET /nodes/{node}/subscription
  * Retourne: { status, serverid, sockets, key, regdate, nextduedate, productname, ... }
  */
@@ -72,7 +73,7 @@ export async function GET(
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/subscription
  * Force une vérification de la subscription auprès des serveurs Proxmox
- * 
+ *
  * Proxmox API: POST /nodes/{node}/subscription
  */
 export async function POST(
@@ -95,7 +96,7 @@ export async function POST(
     await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/subscription`,
-      { 
+      {
         method: "POST",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       }
@@ -117,7 +118,7 @@ export async function POST(
 /**
  * PUT /api/v1/connections/[id]/nodes/[node]/subscription
  * Upload/Update une clé de subscription
- * 
+ *
  * Proxmox API: PUT /nodes/{node}/subscription
  * Body: { key: "pve2c-..." }
  */
@@ -146,7 +147,7 @@ export async function PUT(
     await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/subscription`,
-      { 
+      {
         method: "PUT",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `key=${encodeURIComponent(key)}`
@@ -169,7 +170,7 @@ export async function PUT(
 /**
  * DELETE /api/v1/connections/[id]/nodes/[node]/subscription
  * Supprime la subscription
- * 
+ *
  * Proxmox API: DELETE /nodes/{node}/subscription
  */
 export async function DELETE(

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 
@@ -231,22 +232,24 @@ const PREVIEW_DATA = {
 // Function to replace macros with values
 function replaceMacros(template, data) {
   if (!template) return ''
-  
+
   let result = template
-  
+
   // Iterate through all macro categories
   Object.entries(data).forEach(([category, values]) => {
     if (typeof values === 'object') {
       Object.entries(values).forEach(([key, value]) => {
         const macro = `{{${category}.${key}}}`
+
         result = result.replaceAll(macro, value || '')
       })
     } else {
       const macro = `{{${category}}}`
+
       result = result.replaceAll(macro, values || '')
     }
   })
-  
+
   return result
 }
 
@@ -254,7 +257,7 @@ function replaceMacros(template, data) {
 function getSeverityGradientEnd(color) {
   switch (color) {
     case '#dc2626': return '#991b1b' // critical - red
-    case '#f59e0b': return '#d97706' // warning - amber  
+    case '#f59e0b': return '#d97706' // warning - amber
     case '#10b981': return '#059669' // success - green
     default: return '#1d4ed8' // info - blue
   }
@@ -264,16 +267,19 @@ async function fetchJson(url, init) {
   const r = await fetch(url, init)
   const text = await r.text()
   let json = null
+
   try {
     json = text ? JSON.parse(text) : null
   } catch {}
+
   if (!r.ok) throw new Error(json?.error || text || `HTTP ${r.status}`)
-  return json
+
+return json
 }
 
 export default function EmailTemplateEditor() {
   const t = useTranslations()
-  
+
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState(null)
   const [editedTemplate, setEditedTemplate] = useState(null)
@@ -288,8 +294,10 @@ export default function EmailTemplateEditor() {
   // Load templates from API
   const loadTemplates = async () => {
     setLoading(true)
+
     try {
       const data = await fetchJson('/api/v1/orchestrator/notifications/templates')
+
       if (data && data.length > 0) {
         setTemplates(data)
         setSelectedTemplate(data[0])
@@ -301,18 +309,22 @@ export default function EmailTemplateEditor() {
           ...tpl,
           is_default: true
         }))
+
         setTemplates(defaultList)
         setSelectedTemplate(defaultList[0])
         setEditedTemplate({ ...defaultList[0] })
       }
     } catch (err) {
       console.error('Failed to load templates:', err)
+
+
       // Fallback to default templates
       const defaultList = Object.entries(DEFAULT_TEMPLATES).map(([id, tpl]) => ({
         id,
         ...tpl,
         is_default: true
       }))
+
       setTemplates(defaultList)
       setSelectedTemplate(defaultList[0])
       setEditedTemplate({ ...defaultList[0] })
@@ -324,8 +336,9 @@ export default function EmailTemplateEditor() {
   // Save the template
   const saveTemplate = async () => {
     if (!editedTemplate) return
-    
+
     setSaving(true)
+
     try {
       await fetchJson('/api/v1/orchestrator/notifications/templates', {
         method: 'POST',
@@ -363,12 +376,14 @@ export default function EmailTemplateEditor() {
   // HTML preview
   const previewHtml = useMemo(() => {
     if (!editedTemplate) return ''
-    return replaceMacros(editedTemplate.body, previewData)
+
+return replaceMacros(editedTemplate.body, previewData)
   }, [editedTemplate, previewData])
 
   const previewSubject = useMemo(() => {
     if (!editedTemplate) return ''
-    return replaceMacros(editedTemplate.subject, previewData)
+
+return replaceMacros(editedTemplate.subject, previewData)
   }, [editedTemplate, previewData])
 
   useEffect(() => {
@@ -400,7 +415,7 @@ export default function EmailTemplateEditor() {
                 <i className="ri-file-list-3-line" style={{ marginRight: 8 }} />{' '}
                 Templates
               </Typography>
-              
+
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {templates.map((tpl) => (
                   <Button
@@ -452,7 +467,7 @@ export default function EmailTemplateEditor() {
                       size="small"
                       variant="outlined"
                       onClick={() => insertMacro(macro.key)}
-                      sx={{ 
+                      sx={{
                         cursor: 'pointer',
                         justifyContent: 'flex-start',
                         '&:hover': { bgcolor: 'action.hover' }
@@ -486,6 +501,7 @@ export default function EmailTemplateEditor() {
               </Box>
 
               {previewTab === 0 ? (
+
                 /* Edit mode */
                 <Box>
                   <TextField
@@ -515,7 +531,7 @@ export default function EmailTemplateEditor() {
                     rows={16}
                     value={editedTemplate?.body || ''}
                     onChange={(e) => setEditedTemplate(prev => ({ ...prev, body: e.target.value }))}
-                    sx={{ 
+                    sx={{
                       mb: 2,
                       '& .MuiInputBase-input': {
                         fontFamily: 'monospace',
@@ -550,6 +566,7 @@ export default function EmailTemplateEditor() {
                   </Box>
                 </Box>
               ) : (
+
                 /* Preview mode */
                 <Box>
                   {/* Subject preview */}
@@ -563,10 +580,10 @@ export default function EmailTemplateEditor() {
                   </Paper>
 
                   {/* Email Preview Container */}
-                  <Paper 
-                    variant="outlined" 
-                    sx={{ 
-                      p: 4, 
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 4,
                       overflow: 'hidden',
                       background: 'linear-gradient(135deg, #1e1e2d 0%, #2d2d3f 100%)',
                       minHeight: 500,
@@ -574,8 +591,8 @@ export default function EmailTemplateEditor() {
                     }}
                   >
                     {/* Email Card */}
-                    <Box sx={{ 
-                      maxWidth: 600, 
+                    <Box sx={{
+                      maxWidth: 600,
                       mx: 'auto',
                       bgcolor: '#ffffff',
                       borderRadius: 3,
@@ -583,15 +600,15 @@ export default function EmailTemplateEditor() {
                       boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
                     }}>
                       {/* ProxCenter header with logo */}
-                      <Box sx={{ 
-                        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', 
-                        p: 3, 
-                        display: 'flex', 
+                      <Box sx={{
+                        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                        p: 3,
+                        display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
                         gap: 1.5
                       }}>
-                        <Box 
+                        <Box
                           component="img"
                           src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjIwIiBoZWlnaHQ9IjE3MCIgdmlld0JveD0iMCAwIDIyMCAxNzAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHBhdGggZD0iTSAxNzQuMzAgMTU4LjkxIEMxNjAuOTksMTQwLjM0IDE1NS44MSwxMzMuMTggMTUxLjUyLDEyNy40MiBDMTQ5LjA0LDEyNC4wOCAxNDcuMDAsMTIwLjc4IDE0Ny4wMCwxMjAuMTAgQzE0Ny4wMCwxMTkuNDIgMTQ4LjkxLDExNi40NyAxNTEuMjUsMTEzLjU1IEMxNTMuNTksMTEwLjYzIDE1Ny40NCwxMDUuNzEgMTU5LjgxLDEwMi42MiBDMTYyLjE4LDk5LjUzIDE2NC43MSw5Ny4wMCAxNjUuNDQsOTcuMDAgQzE2Ni41OCw5Ny4wMCAxODIuOTMsMTE5LjA5IDIwMC43OSwxNDQuNzcgQzIwMy43MSwxNDguOTUgMjA4LjMyLDE1NS4zOCAyMTEuMDQsMTU5LjA2IEMyMTMuNzcsMTYyLjc0IDIxNi4wMCwxNjYuMDMgMjE2LjAwLDE2Ni4zNyBDMjE2LjAwLDE2Ni43MiAyMDcuOTIsMTY3LjAwIDE5OC4wNSwxNjcuMDAgTCAxODAuMTAgMTY3LjAwIFogTSAxNjQuMTEgNjkuNjIgQzE2MS44Nyw2Ny4yNCAxNTkuMjIsNjMuNjEgMTUxLjQ0LDUyLjI5IEwgMTQ3Ljg1IDQ3LjA3IEwgMTUzLjc5IDM5LjI5IEMxNTcuMDUsMzUuMDAgMTYxLjI1LDI5LjYyIDE2My4xMSwyNy4zMiBDMTY0Ljk4LDI1LjAyIDE2OS42NSwxOS4wOCAxNzMuNTAsMTQuMTEgTCAxODAuNTAgNS4wOCBMIDE5OS4yNSA1LjA0IEMyMDkuNTYsNS4wMiAyMTguMDAsNS4yMyAyMTguMDAsNS41MSBDMjE4LjAwLDUuNzkgMjE0LjUxLDEwLjQyIDIxMC4yNSwxNS44MSBDMjA1Ljk5LDIxLjE5IDE5OS44MCwyOS4xMSAxOTYuNTAsMzMuNDEgQzE5My4yMCwzNy43MSAxODkuMTUsNDIuOTIgMTg3LjUwLDQ0Ljk4IEMxODMuMTgsNTAuMzkgMTY5LjMyLDY4LjE4IDE2Ny43Niw3MC4zMCBDMTY2LjUyLDcyLjAxIDE2Ni4zMyw3MS45OCAxNjQuMTEsNjkuNjIgWiIgZmlsbD0iI0YyOTIyMSIvPgogIDxwYXRoIGQ9Ik0gMC4wMyAxNjQuNzUgQzAuMDUsMTYyLjE4IDIuMDAsMTU5LjA0IDkuMjgsMTQ5LjgzIEMxOS45MiwxMzYuMzcgNDUuNTYsMTAzLjQzIDU0Ljg0LDkxLjMyIEwgNjEuMTcgODMuMDUgTCA1OC44NyA3OS43NyBDNDkuMzIsNjYuMTggMTEuMTAsMTIuNzcgOC44Myw5Ljg2IEM3LjI4LDcuODUgNi4wMCw1Ljk0IDYuMDAsNS42MSBDNi4wMCw1LjI3IDE0LjIxLDUuMDEgMjQuMjUsNS4wMyBMIDQyLjUwIDUuMDYgTCA1My41MCAyMC42MyBDNTkuNTUsMjkuMjAgNjUuNDQsMzcuNDAgNjYuNTgsMzguODUgQzcyLjE2LDQ1Ljk3IDk3LjMzLDgxLjY5IDk3LjcwLDgzLjAyIEM5OC4xMyw4NC41OSA5NS40MCw4OC4yNyA2My41MCwxMjkuMDYgQzUzLjA1LDE0Mi40MiA0Mi43NywxNTUuNjQgNDAuNjYsMTU4LjQzIEMzMi44NCwxNjguNzYgMzQuNzcsMTY4LjAwIDE2LjMzLDE2OC4wMCBMIDAuMDAgMTY4LjAwIEwgMC4wMyAxNjQuNzUgWiBNIDU1LjU2IDE2Ny4wOSBDNTUuMjUsMTY2LjU5IDU2Ljk1LDE2My43OCA1OS4zMywxNjAuODQgQzYxLjcxLDE1Ny45MCA2Ni4xMCwxNTIuMzMgNjkuMDgsMTQ4LjQ2IEM3Mi4wNiwxNDQuNTkgODEuNDcsMTMyLjUwIDkwLjAwLDEyMS42MCBDOTguNTMsMTEwLjY5IDEwNi4zOCwxMDAuNTggMTA3LjQ2LDk5LjEzIEMxMDguNTQsOTcuNjkgMTExLjgxLDkzLjQ5IDExNC43Miw4OS44MCBMIDEyMC4wMCA4My4xMCBMIDExNS4yNSA3Ni40NyBDMTEyLjY0LDcyLjgyIDEwOS44Miw2OC44MyAxMDkuMDAsNjcuNjEgQzEwOC4xOCw2Ni4zOCAxMDUuNzMsNjIuOTMgMTAzLjU3LDU5Ljk0IEMxMDEuNDEsNTYuOTUgOTYuODgsNTAuNjcgOTMuNTEsNDYuMDAgQzc3LjE1LDIzLjM2IDY1LjAwLDYuMTIgNjUuMDAsNS41NyBDNjUuMDAsNS4yMyA3My4yMSw1LjA4IDgzLjI0LDUuMjMgTCAxMDEuNDkgNS41MCBMIDEyNC43NyAzOC4wMCBDMTM3LjU4LDU1Ljg4IDE1MC4wOSw3My4zNyAxNTIuNTgsNzYuODggQzE1NS4wOCw4MC4zOSAxNTYuOTEsODMuNzkgMTU2LjY2LDg0LjQ0IEMxNTYuNDEsODUuMDkgMTUzLjU1LDg4Ljk3IDE1MC4zMCw5My4wNiBDMTQ3LjA2LDk3LjE1IDEzNy45MywxMDguODIgMTMwLjAyLDExOS4wMCBDMTIyLjEyLDEyOS4xOCAxMTAuMjksMTQ0LjM2IDEwMy43NSwxNTIuNzUgTCA5MS44NSAxNjguMDAgTCA3My45OCAxNjguMDAgQzY0LjE2LDE2OC4wMCA1NS44NywxNjcuNTkgNTUuNTYsMTY3LjA5IFoiIGZpbGw9IiNGQ0ZDRkMiLz4KPC9zdmc+Cg=="
                           alt="ProxCenter"
@@ -606,7 +623,7 @@ export default function EmailTemplateEditor() {
                       </Box>
 
                       {/* Severity Banner */}
-                      <Box sx={{ 
+                      <Box sx={{
                         background: `linear-gradient(90deg, ${previewData.alert.severity_color} 0%, ${getSeverityGradientEnd(previewData.alert.severity_color)} 100%)`,
                         p: 2,
                         px: 3,
@@ -614,10 +631,10 @@ export default function EmailTemplateEditor() {
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}>
-                        <Typography sx={{ 
-                          color: '#fff', 
-                          fontWeight: 600, 
-                          fontSize: 14, 
+                        <Typography sx={{
+                          color: '#fff',
+                          fontWeight: 600,
+                          fontSize: 14,
                           textTransform: 'uppercase',
                           letterSpacing: 1,
                           display: 'flex',
@@ -712,12 +729,14 @@ export default function EmailTemplateEditor() {
                             label={t('emailTemplate.severity')}
                             onChange={(e) => {
                               const severity = e.target.value
+
                               const colors = {
                                 info: { icon: 'ℹ️', color: '#3b82f6' },
                                 success: { icon: '✅', color: '#10b981' },
                                 warning: { icon: '⚠️', color: '#f59e0b' },
                                 critical: { icon: '🚨', color: '#dc2626' }
                               }
+
                               setPreviewData(prev => ({
                                 ...prev,
                                 alert: {

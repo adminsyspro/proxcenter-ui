@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -55,13 +56,17 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
 
   const fetchCves = async () => {
     setLoading(true)
+
     try {
       const url = node
         ? `/api/v1/cve/${connectionId}?node=${encodeURIComponent(node)}`
         : `/api/v1/cve/${connectionId}`
+
       const res = await fetch(url)
+
       if (res.ok) {
         const data = await res.json()
+
         setCves(data.vulnerabilities || [])
         setLastScan(data.lastScan || null)
       }
@@ -82,13 +87,17 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
 
   const handleScan = async () => {
     setScanning(true)
+
     try {
       const url = node
         ? `/api/v1/cve/${connectionId}?node=${encodeURIComponent(node)}`
         : `/api/v1/cve/${connectionId}`
+
       const res = await fetch(url, { method: 'POST' })
+
       if (res.ok) {
         const data = await res.json()
+
         setCves(data.vulnerabilities || [])
         setLastScan(data.lastScan || null)
       }
@@ -102,21 +111,27 @@ export default function CveTab({ connectionId, node, available }: CveTabProps) {
   const toggleFilter = (severity: string) => {
     setActiveFilters(prev => {
       const next = new Set(prev)
+
       if (next.has(severity)) {
         next.delete(severity)
       } else {
         next.add(severity)
       }
-      return next
+
+
+return next
     })
   }
 
   const counts = useMemo(() => {
     const c = { critical: 0, high: 0, medium: 0, low: 0 }
+
     for (const cve of cves) {
       c[cve.severity]++
     }
-    return c
+
+
+return c
   }, [cves])
 
   const filteredCves = useMemo(() => {

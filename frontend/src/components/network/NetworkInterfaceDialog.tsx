@@ -57,8 +57,10 @@ type NetworkInterfaceDialogProps = {
   onSave: (data: any) => Promise<void>
   onDelete?: (iface: string) => Promise<void>
   mode: 'create' | 'edit' | 'view'
+
   /** The interface data when editing/viewing. null for create. */
   iface: any | null
+
   /** Available physical interfaces for bridge_ports/slaves selection */
   allInterfaces?: any[]
 }
@@ -116,6 +118,7 @@ export default function NetworkInterfaceDialog({
           'vlan-id': iface.vlan_id || '',
           'vlan-raw-device': iface.vlan_raw_device || '',
         })
+
         // Physical interfaces (eth) open in view mode; others open directly in edit mode
         setEditing(mode === 'edit' && !isPhysicalIface)
       }
@@ -133,6 +136,7 @@ export default function NetworkInterfaceDialog({
   const handleSave = async () => {
     setError('')
     setSaving(true)
+
     try {
       await onSave(form)
       onClose()
@@ -146,10 +150,13 @@ export default function NetworkInterfaceDialog({
   const handleDelete = async () => {
     if (!confirmDelete) {
       setConfirmDelete(true)
-      return
+
+return
     }
+
     setError('')
     setDeleting(true)
+
     try {
       await onDelete?.(form.iface)
       onClose()

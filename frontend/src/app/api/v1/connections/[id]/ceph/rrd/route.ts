@@ -19,6 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const cookieStore = await cookies()
@@ -43,11 +44,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // Récupérer les données RRD pour Ceph
     // Proxmox stocke les données Ceph dans les RRD du node
     let rrdData: any[] = []
-    
+
     try {
       // Essayer d'abord les RRD spécifiques à Ceph si disponibles
       rrdData = await pveFetch<any[]>(
-        conn, 
+        conn,
         `/nodes/${encodeURIComponent(nodeName)}/rrddata?timeframe=${timeframe}`
       )
     } catch (e) {
@@ -61,7 +62,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       .map(d => {
         const time = new Date(d.time * 1000)
 
-        
+
 return {
           time: d.time,
           timeFormatted: time.toLocaleTimeString(dateLocale, {
@@ -140,10 +141,10 @@ return {
 
     try {
       const osds = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/osd`)
-      
+
       // Les OSDs peuvent être dans différents formats selon la version de Proxmox
       const osdArray = Array.isArray(osds) ? osds : (osds as any)?.root?.children || []
-      
+
       // Fonction récursive pour extraire tous les OSDs de l'arbre
       const extractOsds = (items: any[]): any[] => {
         let result: any[] = []
@@ -158,12 +159,12 @@ return {
           }
         }
 
-        
+
 return result
       }
-      
+
       const flatOsds = extractOsds(osdArray)
-      
+
       osdMetrics = flatOsds
         .filter(osd => osd.id !== undefined || osd.osd !== undefined)
         .map(osd => ({
@@ -184,11 +185,11 @@ return result
     }
 
     // Calculer les moyennes de latence
-    const avgCommitLatency = osdMetrics.length > 0 
+    const avgCommitLatency = osdMetrics.length > 0
       ? Math.round(osdMetrics.reduce((acc, o) => acc + (o.commitLatencyMs || 0), 0) / osdMetrics.length * 10) / 10
       : 0
 
-    const avgApplyLatency = osdMetrics.length > 0 
+    const avgApplyLatency = osdMetrics.length > 0
       ? Math.round(osdMetrics.reduce((acc, o) => acc + (o.applyLatencyMs || 0), 0) / osdMetrics.length * 10) / 10
       : 0
 

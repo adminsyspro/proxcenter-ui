@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -8,9 +9,11 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json().catch(() => null)
+
     if (!body?.license) {
       return NextResponse.json(
         { success: false, error: "License key is required" },
@@ -40,6 +43,7 @@ export async function POST(req: Request) {
     console.error("License activation failed:", e?.message)
 
     const msg = e?.message || ""
+
     if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
       return NextResponse.json(
         {

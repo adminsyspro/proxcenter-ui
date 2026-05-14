@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { listVdcs, refreshVdcUsage } from '@/lib/vdc'
@@ -16,17 +17,22 @@ const USAGE_FRESHNESS_MS = 15_000
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
     let vdcs = await listVdcs(tenantId)
 
     const now = Date.now()
+
     const stale = vdcs.filter((v) => {
       const sync = v.usage?.lastSyncedAt
+
       if (!sync) return true
       const age = now - new Date(sync).getTime()
-      return !Number.isFinite(age) || age > USAGE_FRESHNESS_MS
+
+
+return !Number.isFinite(age) || age > USAGE_FRESHNESS_MS
     })
 
     if (stale.length > 0) {

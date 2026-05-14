@@ -27,6 +27,7 @@ export async function DELETE(
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const rawBackupId = (params as any)?.backupId
+
     if (!id || !rawBackupId) {
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
@@ -35,16 +36,20 @@ export async function DELETE(
     // BACKUP_DELETE permission key in the RBAC enum. A future split
     // can refine this without changing the route shape.
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const decoded = decodeURIComponent(rawBackupId)
     const parts = decoded.split('/')
+
     if (parts.length < 4) {
       return NextResponse.json({ error: 'Invalid backupId format' }, { status: 400 })
     }
+
     const datastore = parts[0]
     const timestamp = parts[parts.length - 1]
     const vmid = parts[parts.length - 2]
@@ -67,6 +72,7 @@ export async function DELETE(
       'backup-id': vmid,
       'backup-time': String(Number(timestamp)),
     })
+
     if (ns) qs.set('ns', ns)
 
     await pbsFetch<unknown>(
@@ -84,6 +90,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('PBS snapshot delete error:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

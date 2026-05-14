@@ -20,8 +20,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const rows = await prisma.vdcSharedBridge.findMany({
@@ -40,7 +42,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ data })
   } catch (e: any) {
     console.error("[shared-bridges] GET error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -54,16 +57,20 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
+
     const incoming: Array<{ bridge?: unknown; label?: unknown }> = Array.isArray(body?.bridges)
       ? body.bridges
       : []
 
     const cleaned: Array<{ bridge: string; label: string | null }> = []
+
     for (const item of incoming) {
       if (typeof item?.bridge !== "string" || !item.bridge.trim()) continue
       cleaned.push({
@@ -73,16 +80,20 @@ export async function PUT(req: Request, ctx: RouteContext) {
     }
 
     const seen = new Set<string>()
+
     const unique = cleaned.filter((c) => {
       if (seen.has(c.bridge)) return false
       seen.add(c.bridge)
-      return true
+
+return true
     })
 
     const vdc = await prisma.vdc.findUnique({ where: { id }, select: { tenantId: true } })
+
     if (!vdc) return NextResponse.json({ error: "vDC not found" }, { status: 404 })
 
     const now = new Date()
+
     await prisma.$transaction([
       prisma.vdcSharedBridge.deleteMany({ where: { vdcId: id } }),
       ...(unique.length > 0
@@ -105,6 +116,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
     return NextResponse.json({ success: true, count: unique.length })
   } catch (e: any) {
     console.error("[shared-bridges] PUT error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

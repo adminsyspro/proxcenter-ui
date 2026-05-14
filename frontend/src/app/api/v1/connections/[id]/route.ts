@@ -43,9 +43,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const ownsConnection = (connection as any).tenantId === tenantId
+
     const allowedByVdc = !!vdcScope && (
       vdcScope.connectionIds.has(id) || vdcScope.pbsConnectionIds.has(id)
     )
+
     if (!ownsConnection && !allowedByVdc) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -120,20 +122,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         where: { id },
         select: { apiTokenEnc: true },
       })
+
       let currentUser = 'root'
       let currentPass = ''
+
       if (current?.apiTokenEnc) {
         try {
           const creds = decryptSecret(current.apiTokenEnc)
           const colonIdx = creds.indexOf(':')
+
           if (colonIdx > 0) {
             currentUser = creds.substring(0, colonIdx)
             currentPass = creds.substring(colonIdx + 1)
           }
         } catch { /* ignore */ }
       }
+
       const newUser = body.vmwareUser || currentUser
       const newPass = body.vmwarePassword || currentPass
+
       data.apiTokenEnc = encryptSecret(`${newUser}:${newPass}`)
     }
 
@@ -152,6 +159,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.sshPort !== undefined) data.sshPort = body.sshPort
     if (body.sshUser !== undefined) data.sshUser = body.sshUser || 'root'
     if (body.sshUseSudo !== undefined) data.sshUseSudo = body.sshUseSudo
+
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null
 
@@ -250,7 +258,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       changes.sshPassChanged = true
       delete changes.sshPassEnc
     }
-    
+
     await audit({
       action: "update",
       category: "connections",

@@ -130,16 +130,20 @@ function scopeStorageDataForTenant(
   if (!scope) return data
   const allowedNodes = scope.nodesByConnection.get(data.connId)
   const allowedStorages = scope.storagesByConnection.get(data.connId)
+
   if (!allowedNodes || !allowedStorages || allowedNodes.size === 0 || allowedStorages.size === 0) {
     return null
   }
+
   const nodes = data.nodes
     .filter(n => allowedNodes.has(n.node))
     .map(n => ({
       ...n,
       storages: n.storages.filter(s => !s.shared && allowedStorages.has(s.storage)),
     }))
-  return { ...data, nodes, sharedStorages: [] }
+
+
+return { ...data, nodes, sharedStorages: [] }
 }
 
 /**
@@ -153,15 +157,19 @@ async function scopePbsDataForTenant(
 ): Promise<PbsServerData | null> {
   if (!scope) return data
   const allowed = scope.pbsNamespacesByConnection.get(data.id)
+
   if (!allowed || allowed.length === 0) return null
 
   const { listSnapshotsInNamespace } = await import('@/lib/proxmox/pbsNamespace')
   const conn = await getPbsConnectionByIdUnscoped(data.id).catch(() => null)
+
   if (!conn) return null
 
   const byStore = new Map<string, string[]>()
+
   for (const { datastore, namespace } of allowed) {
     const list = byStore.get(datastore) ?? []
+
     list.push(namespace)
     byStore.set(datastore, list)
   }
@@ -171,20 +179,25 @@ async function scopePbsDataForTenant(
 
   for (const ds of data.datastores) {
     const namespaces = byStore.get(ds.name)
+
     if (!namespaces) continue
     let dsVm = 0, dsCt = 0, dsHost = 0, dsBackup = 0
+
     for (const ns of namespaces) {
       try {
         const snapshots = await listSnapshotsInNamespace(conn, ds.name, ns)
+
         for (const s of snapshots) {
           dsBackup++
           const t = s['backup-type']
+
           if (t === 'vm') dsVm++
           else if (t === 'ct') dsCt++
           else if (t === 'host') dsHost++
         }
       } catch { /* ignore per-namespace failure */ }
     }
+
     datastores.push({ ...ds, backupCount: dsBackup, vmCount: dsVm, ctCount: dsCt, hostCount: dsHost })
     vmCount += dsVm; ctCount += dsCt; hostCount += dsHost; backupCount += dsBackup
   }
@@ -249,6 +262,7 @@ async function fetchOneCluster(conn: {
     // Call /nodes FIRST to establish failover cache if the primary is down.
     // This prevents the race condition where parallel calls fail before failover activates.
     let nodes: NodeData[] = []
+
     try {
       nodes = await pveFetch<NodeData[]>(connConfig, '/nodes') || []
     } catch {
@@ -272,13 +286,16 @@ async function fetchOneCluster(conn: {
     const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
 
     const nodeHastateMap = new Map<string, string>()
+
     for (const nr of nodeResources) {
       if (nr?.node && nr?.hastate) nodeHastateMap.set(nr.node, nr.hastate)
     }
 
     let cephHealth: string | undefined
+
     if (cephResult.status === 'fulfilled' && cephResult.value) {
       const cephData = cephResult.value
+
       if (typeof cephData.health === 'string') {
         cephHealth = cephData.health
       } else if (cephData.health?.status) {
@@ -310,21 +327,25 @@ async function fetchOneCluster(conn: {
 
     const nodeEnrichData = await Promise.all(nodeEnrichPromises)
     const nodeIpMap = new Map<string, { ip?: string; mem?: number; maxmem?: number }>()
+
     for (const { node, ip, mem, maxmem } of nodeEnrichData) {
       if (node) nodeIpMap.set(node, { ip, mem, maxmem })
     }
 
     const haMap = new Map<string, HaResource>()
+
     for (const ha of haResources) {
       if (ha.sid) haMap.set(ha.sid, ha)
     }
 
     const nodeMap = new Map<string, NodeData & { guests: GuestData[] }>()
+
     for (const n of nodes) {
       if (!n?.node) continue
       const extra = nodeIpMap.get(n.node)
       const hastate = nodeHastateMap.get(n.node)
       const maintenance = hastate === 'maintenance' ? 'maintenance' : undefined
+
       nodeMap.set(n.node, {
         ...n,
         ...(extra?.mem !== undefined ? { mem: extra.mem } : {}),
@@ -337,9 +358,11 @@ async function fetchOneCluster(conn: {
 
     for (const g of guests) {
       if (!g?.node) continue
+
       if (!nodeMap.has(g.node)) {
         nodeMap.set(g.node, { node: g.node, status: 'unknown', guests: [] })
       }
+
       nodeMap.get(g.node)!.guests.push({
         vmid: g.vmid,
         name: g.name || `${g.type}/${g.vmid}`,
@@ -353,11 +376,15 @@ async function fetchOneCluster(conn: {
         template: g.template === 1 || g.template === true,
         hastate: (() => {
           const haSid = `${g.type === 'lxc' ? 'ct' : 'vm'}:${g.vmid}`
-          return haMap.get(haSid)?.state
+
+
+return haMap.get(haSid)?.state
         })(),
         hagroup: (() => {
           const haSid = `${g.type === 'lxc' ? 'ct' : 'vm'}:${g.vmid}`
-          return haMap.get(haSid)?.group
+
+
+return haMap.get(haSid)?.group
         })(),
       })
     }
@@ -366,7 +393,9 @@ async function fetchOneCluster(conn: {
       nodeData.guests.sort((a, b) => {
         const aId = Number.parseInt(String(a.vmid), 10) || 0
         const bId = Number.parseInt(String(b.vmid), 10) || 0
-        return aId - bId
+
+
+return aId - bId
       })
     }
 
@@ -375,6 +404,7 @@ async function fetchOneCluster(conn: {
     const totalNodes = nodesArray.length
 
     let status: 'online' | 'degraded' | 'offline' = 'offline'
+
     if (onlineNodes === totalNodes && totalNodes > 0) status = 'online'
     else if (onlineNodes > 0) status = 'degraded'
 
@@ -393,7 +423,8 @@ async function fetchOneCluster(conn: {
     }
   } catch (e: any) {
     console.error(`[inventory-stream] Failed to load ${conn.name}:`, e?.message)
-    return {
+
+return {
       id: conn.id,
       name: conn.name,
       type: conn.type,
@@ -425,12 +456,14 @@ async function fetchStoragesForCluster(conn: {
 
     // Build config lookup map
     const configMap = new Map<string, any>()
+
     for (const cfg of configs) {
       if (cfg?.storage) configMap.set(cfg.storage, cfg)
     }
 
     // Build storage items from resources (these have per-node usage data)
     const allItems: StorageItem[] = []
+
     for (const r of resources) {
       if (!r?.storage || !r?.node) continue
       const cfg = configMap.get(r.storage)
@@ -466,6 +499,7 @@ async function fetchStoragesForCluster(conn: {
         } else {
           // Keep max usage info
           const existing = sharedSet.get(item.storage)!
+
           existing.used = Math.max(existing.used, item.used)
           existing.total = Math.max(existing.total, item.total)
           existing.usedPct = existing.total > 0 ? Math.round(existing.used / existing.total * 100) : 0
@@ -492,7 +526,8 @@ async function fetchStoragesForCluster(conn: {
     }
   } catch (e: any) {
     console.error(`[inventory-stream] Failed to load storages for ${conn.name}:`, e?.message)
-    return {
+
+return {
       connId: conn.id,
       connName: conn.name,
       isCluster: false,
@@ -516,6 +551,7 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
 
     const datastoreDetailsPromises = datastores.map(async (ds): Promise<PbsDatastoreData> => {
       const storeName = ds.store || ds.name
+
       if (!storeName) {
         return { name: 'unknown', total: 0, used: 0, available: 0, usagePercent: 0, backupCount: 0, vmCount: 0, ctCount: 0, hostCount: 0 }
       }
@@ -534,8 +570,10 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
         const available = dsStatus?.avail || (total - used)
 
         let vmCount = 0, ctCount = 0, hostCount = 0
+
         for (const snap of snapshots) {
           const backupType = snap['backup-type']
+
           if (backupType === 'vm') vmCount++
           else if (backupType === 'ct') ctCount++
           else if (backupType === 'host') hostCount++
@@ -558,6 +596,7 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
 
     const datastoreDetails = await Promise.all(datastoreDetailsPromises)
     let totalSize = 0, totalUsed = 0, totalBackups = 0
+
     for (const ds of datastoreDetails) {
       totalSize += ds.total; totalUsed += ds.used; totalBackups += ds.backupCount
     }
@@ -574,7 +613,8 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
     }
   } catch (e: any) {
     console.error(`[inventory-stream] Failed to load PBS ${conn.name}:`, e?.message)
-    return {
+
+return {
       id: conn.id,
       name: conn.name,
       type: 'pbs',
@@ -591,6 +631,7 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
 
 async function applyRbacToCluster(cluster: ClusterData, rbacCtx: any): Promise<ClusterData> {
   if (!rbacCtx || rbacCtx.isAdmin) return cluster
+
   const filteredNodes = await Promise.all(
     cluster.nodes.map(async node => ({
       ...node,
@@ -607,7 +648,9 @@ async function applyRbacToCluster(cluster: ClusterData, rbacCtx: any): Promise<C
       )
     }))
   )
-  return {
+
+
+return {
     ...cluster,
     nodes: filteredNodes,
   }
@@ -619,9 +662,11 @@ async function applyRbacToCluster(cluster: ClusterData, rbacCtx: any): Promise<C
 
 export async function GET(request: NextRequest) {
   const demo = demoResponse(request)
+
   if (demo) return demo
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
   if (denied) return denied
 
   const prisma = await getSessionPrisma()
@@ -661,22 +706,29 @@ export async function GET(request: NextRequest) {
           for (const cluster of visibleClusters) {
             send('cluster', applyVdcFilter(await applyRbacToCluster(cluster, rbacCtx), vdcScope))
           }
+
           for (const pbs of cached.pbsServers) {
             const scoped = await scopePbsDataForTenant(pbs, vdcScope)
+
             if (scoped) send('pbs', scoped)
           }
+
           if (cached.storages) {
             const visibleStorages = vdcScope
               ? cached.storages.filter((s: any) => vdcScope.connectionIds.has(s.connId))
               : cached.storages
+
             for (const storage of visibleStorages) {
               const scoped = scopeStorageDataForTenant(storage, vdcScope)
+
               if (scoped) send('storage', scoped)
             }
           }
+
           if (cached.externalHypervisors.length > 0) {
             send('external', cached.externalHypervisors)
           }
+
           send('done', { stats: cached.stats })
         } finally {
           controller.close()
@@ -777,27 +829,34 @@ export async function GET(request: NextRequest) {
 
         const clusterPromises = pveConnections.map(async (conn) => {
           const cluster = await fetchOneCluster(conn)
+
           allClusters.push(cluster)
 
           // Only stream clusters visible to this tenant's vDC scope
           const isVisible = !visiblePveConnectionIds || visiblePveConnectionIds.has(conn.id)
+
           if (isVisible) {
             send('cluster', applyVdcFilter(await applyRbacToCluster(cluster, rbacCtx), vdcScope))
           }
 
           // Fetch storage data for this cluster and emit immediately (only if visible)
           const storageData = await fetchStoragesForCluster(conn, cluster)
+
           allStorages.push(storageData)
+
           if (isVisible) {
             const scoped = scopeStorageDataForTenant(storageData, vdcScope)
+
             if (scoped) send('storage', scoped)
           }
         })
 
         const pbsPromises = pbsConnections.map(async (conn) => {
           const pbs = await fetchOnePbs(conn)
+
           allPbsServers.push(pbs)
           const scoped = await scopePbsDataForTenant(pbs, vdcScope)
+
           if (scoped) send('pbs', scoped)
         })
 
@@ -806,10 +865,12 @@ export async function GET(request: NextRequest) {
 
         // Compute stats
         let totalNodes = 0, onlineNodes = 0, totalGuests = 0, runningGuests = 0
+
         for (const cluster of allClusters) {
           for (const node of cluster.nodes) {
             totalNodes++
             if (node.status === 'online') onlineNodes++
+
             for (const guest of node.guests) {
               totalGuests++
               if (guest.status === 'running') runningGuests++
@@ -818,6 +879,7 @@ export async function GET(request: NextRequest) {
         }
 
         let totalDatastores = 0, totalBackups = 0
+
         for (const pbs of allPbsServers) {
           totalDatastores += pbs.stats.datastoreCount
           totalBackups += pbs.stats.backupCount

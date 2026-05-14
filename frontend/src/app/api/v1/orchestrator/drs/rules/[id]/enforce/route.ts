@@ -13,6 +13,7 @@ export async function POST(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE, "global", "*")
+
     if (denied) return denied
 
     const { id } = await params
@@ -22,8 +23,10 @@ export async function POST(
     const rulesRes = await client.getRules()
     const rules = Array.isArray(rulesRes.data) ? rulesRes.data : []
     const rule = rules.find((r: any) => r.id === id)
+
     if (rule?.connection_id) {
       const tenantConnectionIds = await getTenantConnectionIds()
+
       if (!tenantConnectionIds.has(rule.connection_id)) {
         return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
       }

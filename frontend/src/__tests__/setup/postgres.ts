@@ -26,6 +26,7 @@ const TEST_DSN_FILE = path.resolve(__dirname, '..', '..', '..', '.test-dsn')
 
 function readBaseUrl(): string {
   const base = process.env.POSTGRES_TEST_URL_BASE
+
   if (!base) {
     throw new Error(
       '[test/setup/postgres] POSTGRES_TEST_URL_BASE is not set. Point it at a writable\n' +
@@ -33,13 +34,16 @@ function readBaseUrl(): string {
       '  before running `npm test`. CI sets this from a service container.',
     )
   }
-  return base
+
+
+return base
 }
 
 let testSchema = ''
 
 export async function setup(): Promise<void> {
   const base = readBaseUrl()
+
   testSchema = `test_${Date.now()}_${randomBytes(3).toString('hex')}`
 
   // execFileSync (not execSync) so the schema name + DSN never reach a
@@ -47,6 +51,7 @@ export async function setup(): Promise<void> {
   execFileSync('psql', [base, '-c', `CREATE SCHEMA "${testSchema}"`], { stdio: 'inherit' })
 
   const dsn = `${base}${base.includes('?') ? '&' : '?'}schema=${testSchema}`
+
   process.env.DATABASE_URL = dsn
 
   // Hand the DSN to test workers via a tmp file — vitest globalSetup
@@ -62,11 +67,13 @@ export async function setup(): Promise<void> {
 export async function teardown(): Promise<void> {
   if (!testSchema) return
   const base = readBaseUrl()
+
   try {
     execFileSync('psql', [base, '-c', `DROP SCHEMA "${testSchema}" CASCADE`], { stdio: 'inherit' })
   } catch {
     // best-effort — leftover schemas are harmless and easy to spot.
   }
+
   try {
     unlinkSync(TEST_DSN_FILE)
   } catch {}

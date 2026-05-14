@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
     }
 
     const image = getImageBySlug(imageSlug)
+
     if (!image) {
       return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
     }
@@ -46,7 +48,9 @@ export async function GET(req: Request) {
     // Check if any file matches the image filename
     const found = storageContent.find((item: any) => {
       const volName = item.volid?.split("/").pop() || ""
-      return volName === urlFilename || volName.includes(image.slug)
+
+
+return volName === urlFilename || volName.includes(image.slug)
     })
 
     return NextResponse.json({

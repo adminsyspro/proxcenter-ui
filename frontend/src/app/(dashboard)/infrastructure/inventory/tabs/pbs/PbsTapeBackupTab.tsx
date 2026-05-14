@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -21,6 +22,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 
 interface PbsTapeBackupTabProps {
@@ -77,7 +79,9 @@ type FetchResult<T> = {
 function formatDate(value: number | string | undefined): string {
   if (value === undefined || value === null || value === '') return '—'
   const n = typeof value === 'string' ? Number(value) : value
+
   if (!Number.isFinite(n) || (n as number) <= 0) return String(value)
+
   try {
     return new Date((n as number) * 1000).toLocaleString()
   } catch {
@@ -89,7 +93,8 @@ function isEnabled(value: boolean | number | string | undefined): boolean {
   if (value === true) return true
   if (value === 1) return true
   if (typeof value === 'string' && (value === '1' || value.toLowerCase() === 'true')) return true
-  return false
+
+return false
 }
 
 export default function PbsTapeBackupTab({ pbsId }: PbsTapeBackupTabProps) {
@@ -109,6 +114,7 @@ export default function PbsTapeBackupTab({ pbsId }: PbsTapeBackupTabProps) {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [dRes, cRes, pRes, jRes, mRes] = await Promise.all([
         fetch(`/api/v1/pbs/${pbsId}/tape/drives`, { cache: 'no-store' }),
@@ -121,6 +127,7 @@ export default function PbsTapeBackupTab({ pbsId }: PbsTapeBackupTabProps) {
       for (const r of [dRes, cRes, pRes, jRes, mRes]) {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
+
           throw new Error(body?.error || `HTTP ${r.status}`)
         }
       }
@@ -578,7 +585,9 @@ export default function PbsTapeBackupTab({ pbsId }: PbsTapeBackupTabProps) {
                 {media.data.map((m, idx) => {
                   const label = m['label-text'] || m.label || '—'
                   const expire = m['expire-date'] || m['expired-at'] || m.expires
-                  return (
+
+
+return (
                     <TableRow key={`${label}-${idx}`} hover>
                       <TableCell sx={{ fontSize: 12 }}>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>

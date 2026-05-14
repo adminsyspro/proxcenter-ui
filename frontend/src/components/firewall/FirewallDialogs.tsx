@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -32,6 +33,7 @@ interface AutocompleteOption {
 }
 
 interface FirewallDialogsProps {
+
   // Add Rule dialog
   addRuleOpen: boolean
   setAddRuleOpen: (open: boolean) => void

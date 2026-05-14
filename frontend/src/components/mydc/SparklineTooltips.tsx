@@ -8,7 +8,8 @@ function formatRate(bytes: number | undefined | null): string {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
+
+return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
 interface TooltipProps {

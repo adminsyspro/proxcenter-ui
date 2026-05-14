@@ -13,15 +13,20 @@ export const runtime = 'nodejs'
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const data = await orchestratorFetch('/reports/schedules')
-    return NextResponse.json(data)
+
+
+return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to get schedules:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to get schedules' },
       { status: 500 }
     )
@@ -32,20 +37,24 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const body = await request.json()
 
     const typeDenied = await assertReportTypeAllowed(body?.type)
+
     if (typeDenied) return typeDenied
 
     // Pin schedule to the current tenant's connections so it cannot reach
     // out to another tenant's data when it fires.
     const tenantConnectionIds = await getTenantConnectionIds()
+
     body.connection_ids = Array.from(tenantConnectionIds)
 
     // Persist the vDC scope on the schedule (orchestrator replays it on fire).
     const scope = await buildScopePayloadForCurrentTenant()
+
     if (scope) {
       body.node_filter = scope.node_filter
       body.vmid_filter = scope.vmid_filter
@@ -62,7 +71,9 @@ export async function POST(request: NextRequest) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to create schedule:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to create schedule' },
       { status: 500 }
     )

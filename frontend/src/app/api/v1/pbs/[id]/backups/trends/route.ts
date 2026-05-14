@@ -14,6 +14,7 @@ export const runtime = "nodejs"
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -23,9 +24,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const url = new URL(req.url)
@@ -42,16 +45,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const allowedNsByStore = access.kind === 'tenant'
       ? access.allowed.reduce((acc, a) => {
           const set = acc.get(a.datastore) ?? new Set<string>()
+
           set.add(a.namespace)
           acc.set(a.datastore, set)
-          return acc
+
+return acc
         }, new Map<string, Set<string>>())
       : null
 
     const visibleDatastores = (datastores || []).filter((ds: any) => {
       if (!allowedNsByStore) return true
       const name = ds.store || ds.name
-      return name && allowedNsByStore.has(name)
+
+
+return name && allowedNsByStore.has(name)
     })
 
     // Fetch all snapshots from all datastores
@@ -59,12 +66,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     const dsPromises = visibleDatastores.map(async (ds) => {
       const storeName = ds.store || ds.name
+
       if (!storeName) return []
 
       try {
         let namespaces: string[] = ['']
+
         try {
           const nsData = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(storeName)}/namespace`)
+
           if (Array.isArray(nsData)) {
             namespaces = ['', ...nsData.map(n => n.ns || '').filter(Boolean)]
           }
@@ -72,6 +82,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
         // Restrict namespaces to the ones the tenant is bound to.
         const allowedSet = allowedNsByStore?.get(storeName)
+
         if (allowedSet) {
           namespaces = namespaces.filter(ns => allowedSet.has(ns))
         }
@@ -79,7 +90,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         const nsPromises = namespaces.map(async (ns) => {
           const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
           const snapshots = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`)
-          return (snapshots || []).map(snap => ({
+
+
+return (snapshots || []).map(snap => ({
             backupTime: snap['backup-time'] || 0,
             backupType: snap['backup-type'] || 'unknown',
             size: snap.size || 0,
@@ -94,11 +107,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     })
 
     const results = await Promise.all(dsPromises)
+
     results.forEach(backups => allBackups.push(...backups))
 
     // Build daily aggregation for the last N days
     const now = new Date()
     const cutoff = new Date(now)
+
     cutoff.setDate(cutoff.getDate() - days)
     cutoff.setHours(0, 0, 0, 0)
     const cutoffTs = Math.floor(cutoff.getTime() / 1000)
@@ -117,8 +132,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     for (let d = 0; d < days; d++) {
       const date = new Date(now)
+
       date.setDate(date.getDate() - d)
       const key = date.toISOString().slice(0, 10)
+
       dailyMap.set(key, { date: key, total: 0, vm: 0, ct: 0, host: 0, verified: 0, unverified: 0, size: 0 })
     }
 
@@ -128,6 +145,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
       const date = new Date(b.backupTime * 1000).toISOString().slice(0, 10)
       const entry = dailyMap.get(date)
+
       if (!entry) continue
 
       entry.total++
@@ -161,6 +179,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     })
   } catch (e: any) {
     console.error("PBS backup trends error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

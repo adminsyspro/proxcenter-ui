@@ -10,11 +10,13 @@ export async function GET(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
     const limit = Math.min(Number.parseInt(searchParams.get("limit") || "50"), 200)
     const status = searchParams.get("status")
+
     // Convenience flag for the navbar TasksDropdown: surface every
     // deployment that is still progressing (anything that's not a terminal
     // completed/failed state). Mutually exclusive with the explicit
@@ -22,6 +24,7 @@ export async function GET(req: Request) {
     const activeOnly = searchParams.get("activeOnly") === "true"
 
     const where: any = {}
+
     if (status) {
       where.status = status
     } else if (activeOnly) {

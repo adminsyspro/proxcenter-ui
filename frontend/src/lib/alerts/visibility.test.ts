@@ -25,6 +25,7 @@ const CONN_SHARED = 'conn-shared'
 
 beforeEach(async () => {
   await truncate(['alert_rule_owners'])
+
   // Seed rule ownership: ruleA is owned by tenant A, ruleB by tenant B.
   // ruleBuiltin has no row, which is the "provider-only" sentinel.
   await prismaTest.alertRuleOwner.createMany({
@@ -166,6 +167,7 @@ describe('isAlertVisibleToTenant — tenant isolation contract', () => {
       { connection_id: CONN_SHARED, resource_type: 'qemu', resource_id: 100, node: 'pve1' },
       ctx(PROVIDER, { vdcScope: null }),
     )
+
     expect(typeof result).toBe('boolean')
   })
 })

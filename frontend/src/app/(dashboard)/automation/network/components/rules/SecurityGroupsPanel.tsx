@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -34,7 +35,9 @@ interface SecurityGroupsPanelProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
+
+
+return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -42,18 +45,24 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   if (rule.macro) return rule.macro
   const proto = rule.proto?.toUpperCase() || ''
   const port = rule.dport || ''
+
   if (!proto && !port) return 'any'
   if (proto && port) return `${proto}/${port}`
-  return proto || port
+
+return proto || port
 }
 
 function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { vmid: number; name: string; node: string }[] {
   const vms: { vmid: number; name: string; node: string }[] = []
+
   for (const vm of vmFirewallData) {
     const hasRef = vm.rules.some(r => r.type === 'group' && r.action === sgName)
+
     if (hasRef) vms.push({ vmid: vm.vmid, name: vm.name, node: vm.node })
   }
-  return vms
+
+
+return vms
 }
 
 // ── Column header style ──
@@ -94,7 +103,9 @@ export default function SecurityGroupsPanel({
   const sections: PolicySection[] = useMemo(() => {
     return securityGroups.map(sg => {
       const rules = sg.rules || []
-      return {
+
+
+return {
         id: sg.group,
         type: 'security-group' as const,
         name: sg.group,
@@ -111,7 +122,9 @@ export default function SecurityGroupsPanel({
   const filteredSections = useMemo(() => {
     if (!search.trim()) return sections
     const q = search.toLowerCase()
-    return sections.filter(s =>
+
+
+return sections.filter(s =>
       s.name.toLowerCase().includes(q) ||
       s.comment?.toLowerCase().includes(q) ||
       s.rules.some(r => r.comment?.toLowerCase().includes(q) || r.source?.toLowerCase().includes(q) || r.dest?.toLowerCase().includes(q))
@@ -122,11 +135,14 @@ export default function SecurityGroupsPanel({
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev)
+
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      return next
+
+return next
     })
   }
+
   const expandAll = () => setExpandedSections(new Set(filteredSections.map(s => s.id)))
   const collapseAll = () => setExpandedSections(new Set())
 
@@ -156,12 +172,14 @@ export default function SecurityGroupsPanel({
   const handleRuleSubmit = async () => {
     if (!selectedConnection) return
     const sgName = ruleDialogScope.name!
+
     try {
       if (ruleDialogIsNew) {
         await firewallAPI.addSecurityGroupRule(selectedConnection, sgName, ruleForm)
       } else if (ruleDialogEditPos !== null) {
         await firewallAPI.updateSecurityGroupRule(selectedConnection, sgName, ruleDialogEditPos, ruleForm)
       }
+
       showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleUpdated'), 'success')
       setRuleDialogOpen(false)
       reload()
@@ -174,6 +192,7 @@ export default function SecurityGroupsPanel({
   const handleToggleEnable = async (section: PolicySection, rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
     const newEnable = rule.enable === 1 ? 0 : 1
+
     try {
       await firewallAPI.updateSecurityGroupRule(selectedConnection, section.id, rule.pos, { ...rule, enable: newEnable })
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
@@ -186,6 +205,7 @@ export default function SecurityGroupsPanel({
   // ── Delete rule ──
   const handleDeleteRule = async () => {
     if (!deleteConfirm || !selectedConnection) return
+
     try {
       await firewallAPI.deleteSecurityGroupRule(selectedConnection, deleteConfirm.groupName, deleteConfirm.pos)
       showToast(t('network.ruleDeleted'), 'success')
@@ -199,6 +219,7 @@ export default function SecurityGroupsPanel({
   // ── Delete SG ──
   const handleDeleteGroup = async (name: string) => {
     if (!confirm(t('networkPage.deleteSgConfirm', { name }))) return
+
     try {
       await firewallAPI.deleteSecurityGroup(selectedConnection, name)
       showToast(t('networkPage.securityGroupDeleted'), 'success')
@@ -228,23 +249,30 @@ export default function SecurityGroupsPanel({
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
+
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
     setDragState({ sectionId: '', draggedPos: null, dragOverPos: null })
   }
+
   const handleDragOver = (e: React.DragEvent, sectionId: string, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
     if (dragState.sectionId === sectionId && dragState.draggedPos !== null && dragState.draggedPos !== pos) {
       setDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
+
   const handleDragLeave = () => setDragState(prev => ({ ...prev, dragOverPos: null }))
+
   const handleDrop = async (e: React.DragEvent, section: PolicySection, toPos: number) => {
     e.preventDefault()
     const fromPos = dragState.draggedPos
+
     setDragState({ sectionId: '', draggedPos: null, dragOverPos: null })
     if (fromPos === null || fromPos === toPos || dragState.sectionId !== section.id) return
+
     try {
       await firewallAPI.updateSecurityGroupRule(selectedConnection, section.id, fromPos, { moveto: toPos })
       showToast(t('network.ruleMoved'), 'success')

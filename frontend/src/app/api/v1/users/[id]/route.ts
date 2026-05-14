@@ -3,11 +3,12 @@ import { NextResponse } from "next/server"
 
 import { getServerSession } from "next-auth"
 
+import { nanoid } from "nanoid"
+
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
-import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
 
 /**
@@ -21,7 +22,8 @@ async function denyIfTargetIsProtectedAndCallerIsNot(
 ): Promise<NextResponse | null> {
   if (!(await isUserProtected(targetUserId))) return null
   if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+
+return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
 }
 
 /**
@@ -35,7 +37,9 @@ async function findUserInTenant(userId: string, tenantId: string) {
     where: { userId_tenantId: { userId, tenantId } },
     include: { user: true },
   })
-  return membership?.user ?? null
+
+
+return membership?.user ?? null
 }
 
 export const runtime = "nodejs"
@@ -45,11 +49,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+
     if (denied) return denied
 
     const { id } = await params
     const session = await getServerSession(authOptions)
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const tenantId = await getCurrentTenantId()
@@ -83,7 +89,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
   } catch (error: any) {
     console.error("Erreur GET user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
 
@@ -103,6 +110,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Admin fields (enabled, role, etc.) or editing another user requires admin.users
     if (!isSelf || hasAdminFields) {
       const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+
       if (denied) return denied
     }
 
@@ -116,6 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const tenantId = await getCurrentTenantId()
@@ -127,14 +136,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const user = isProviderView
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
+
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
 
     // Build the Prisma update payload from whitelisted fields only.
     const data: Record<string, unknown> = {}
+
     if (name !== undefined) data.name = name
     if (enabled !== undefined) data.enabled = !!enabled
+
     if (password) {
       if (password.length < 8) {
         return NextResponse.json(
@@ -142,6 +154,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 400 }
         )
       }
+
       data.password = await hashPassword(password)
     }
 
@@ -151,6 +164,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Uses the shared addUserToTenant / removeUserFromTenant helpers so
     // the SUPER_ADMIN_PROTECTED and LAST_TENANT guards still apply.
     let tenantsChanged: { added: string[]; removed: string[] } | null = null
+
     if (Array.isArray(tenantIds)) {
       if (!isProviderView) {
         return NextResponse.json(
@@ -158,10 +172,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 403 }
         )
       }
+
       const requested = new Set(tenantIds.filter((x: unknown) => typeof x === "string" && x.length > 0) as string[])
+
       const current = new Set(
         (await prisma.userTenant.findMany({ where: { userId: id }, select: { tenantId: true } })).map(r => r.tenantId)
       )
+
       const toAdd = [...requested].filter(t => !current.has(t))
       const toRemove = [...current].filter(t => !requested.has(t))
 
@@ -171,10 +188,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } catch (e) {
         if (e instanceof TenantMembershipError) {
           const status = e.code === "LAST_TENANT" ? 409 : e.code === "SUPER_ADMIN_PROTECTED" ? 403 : 404
-          return NextResponse.json({ error: e.message, code: e.code }, { status })
+
+
+return NextResponse.json({ error: e.message, code: e.code }, { status })
         }
+
         throw e
       }
+
       tenantsChanged = { added: toAdd, removed: toRemove }
     }
 
@@ -193,6 +214,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     //                            role IDs entirely; they're managed via
     //                            /api/v1/rbac/assignments only)
     let rolesChanged: { applied: string | null; tenantCount: number } | null = null
+
     if (roleId !== undefined) {
       if (!isProviderView) {
         return NextResponse.json(
@@ -200,14 +222,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 403 }
         )
       }
+
       if (typeof roleId === "string" && roleId.length > 0 && (PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) {
         return NextResponse.json(
           { error: "Protected roles can't be assigned through this endpoint" },
           { status: 403 }
         )
       }
+
       if (typeof roleId === "string" && roleId.length > 0) {
         const exists = await prisma.rbacRole.findUnique({ where: { id: roleId }, select: { id: true } })
+
         if (!exists) {
           return NextResponse.json({ error: `Unknown role: ${roleId}` }, { status: 400 })
         }
@@ -237,6 +262,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           { status: 400 }
         )
       }
+
       const grantedById = session?.user?.id || null
       const now = new Date()
 
@@ -250,6 +276,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             roleId: { notIn: [...PROTECTED_ROLE_IDS] },
           },
         })
+
         if (typeof roleId === "string" && roleId.length > 0) {
           for (const m of memberships) {
             await tx.rbacUserRole.create({
@@ -285,12 +312,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Audit
     const { audit } = await import("@/lib/audit")
     const changes: Record<string, any> = {}
+
     if (name !== undefined) changes.name = name
     if (enabled !== undefined) changes.enabled = enabled
     if (password) changes.passwordChanged = true
+
     if (tenantsChanged && (tenantsChanged.added.length > 0 || tenantsChanged.removed.length > 0)) {
       changes.tenants = tenantsChanged
     }
+
     if (rolesChanged) {
       changes.role = rolesChanged
     }
@@ -321,7 +351,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
   } catch (error: any) {
     console.error("Erreur PATCH user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
 
@@ -330,11 +361,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
     const { id } = await params
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const tenantId = await getCurrentTenantId()
@@ -347,6 +380,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const user = isProviderView
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
+
     if (!user) {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
@@ -400,6 +434,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     // Audit
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "delete",
       category: "users",
@@ -413,6 +448,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Erreur DELETE user:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }

@@ -42,6 +42,7 @@ interface MigrationConfig {
   targetNode: string
   targetStorage: string
   networkBridge: string
+
   /**
    * Optional 802.1Q VLAN tag (1-4094) appended to net0 as `tag=N`. Empty/undefined
    * means access port on the bridge's native VLAN. XCP-ng VIF VLAN is not
@@ -50,10 +51,12 @@ interface MigrationConfig {
   vlanTag?: number
   startAfterMigration: boolean
   migrationType?: "cold" | "live"
+
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
   // the target storage's images dir (file-based) or /var/lib/vz/tmp (block).
   tempStorage?: string
+
   // User-supplied target VMID. When set, used directly instead of
   // `/cluster/nextid`; PVE rejects the create call if it's already taken.
   targetVmid?: number
@@ -78,12 +81,14 @@ export function cancelXcpngMigrationJob(jobId: string) {
 
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
   const prisma = getPrismaForJob(id)
+
   const data: any = {
     status,
     currentStep: status,
     ...(status === "completed" ? { completedAt: new Date() } : {}),
     ...extra,
   }
+
   await prisma.migrationJob.update({ where: { id }, data })
 }
 
@@ -91,6 +96,7 @@ async function appendLog(id: string, msg: string, level: LogEntry["level"] = "in
   const prisma = getPrismaForJob(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
+
   logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
   await prisma.migrationJob.update({ where: { id }, data: { logs } })
 }
@@ -107,17 +113,21 @@ async function waitForPveTask(
   timeoutMs = 300000
 ): Promise<void> {
   const start = Date.now()
+
   while (Date.now() - start < timeoutMs) {
     const status = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`
     )
+
     if (status?.status === "stopped") {
       if (status.exitstatus === "OK") return
       throw new Error(`PVE task failed: ${status.exitstatus || "unknown error"}`)
     }
+
     await new Promise(r => setTimeout(r, 3000))
   }
+
   throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
 }
 
@@ -129,12 +139,15 @@ async function getNodeIp(db: any, connectionId: string, nodeName: string, baseUr
     where: { connectionId, node: nodeName, enabled: true },
     select: { ip: true, sshAddress: true },
   })
+
   if (host?.sshAddress) return host.sshAddress
   if (host?.ip) return host.ip
 
   try {
     const url = new URL(baseUrl)
-    return url.hostname
+
+
+return url.hostname
   } catch {
     throw new Error(`Cannot determine IP for node ${nodeName}`)
   }
@@ -171,6 +184,7 @@ async function executeSSHWithTimeout(
   let passphrase: string | undefined
 
   const authMethod = connection.sshAuthMethod || (connection.sshKeyEnc ? "key" : "password")
+
   if (authMethod === "key" && connection.sshKeyEnc) {
     key = decryptSecret(connection.sshKeyEnc)
     if (connection.sshPassEnc) try { passphrase = decryptSecret(connection.sshPassEnc) } catch {}
@@ -182,6 +196,7 @@ async function executeSSHWithTimeout(
 
   return new Promise((resolve) => {
     const conn = new Client()
+
     const timeout = setTimeout(() => {
       conn.end()
       resolve({ success: false, error: `SSH timeout after ${timeoutMs / 1000}s` })
@@ -189,15 +204,19 @@ async function executeSSHWithTimeout(
 
     conn.on("ready", () => {
       conn.exec(finalCommand, (err, stream) => {
-        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message }); return }
+        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message });
+
+return }
 
         let stdout = ""
         let stderr = ""
+
         stream.on("data", (data: Buffer) => { stdout += data.toString() })
         stream.stderr.on("data", (data: Buffer) => { stderr += data.toString() })
         stream.on("close", (code: number) => {
           clearTimeout(timeout)
           conn.end()
+
           if (code === 0 || code === null) {
             resolve({ success: true, output: stdout.trim() })
           } else {
@@ -213,6 +232,7 @@ async function executeSSHWithTimeout(
       host: nodeIp, port, username: user, readyTimeout: 30_000,
       keepaliveInterval: 10000, keepaliveCountMax: 999,
     }
+
     if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }
     else if (password) { connectConfig.password = password }
 
@@ -225,6 +245,7 @@ async function executeSSHWithTimeout(
  */
 export async function runXcpngMigrationPipeline(jobId: string, config: MigrationConfig, tenantId = 'default'): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
+
   jobPrisma.set(jobId, prisma)
 
   let targetVmid: number | null = null
@@ -237,6 +258,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Get XO connection info
     const xo = await getXoConnectionInfo(config.sourceConnectionId)
+
     await appendLog(jobId, `Connecting to Xen Orchestra at ${xo.baseUrl}...`)
 
     // Get XO connection name
@@ -247,6 +269,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
+
     await appendLog(jobId, "XO and PVE connections verified", "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -296,11 +319,14 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Verify PVE SSH connectivity
     const nodeIp = await getNodeIp(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+
     await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${nodeIp})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
+
     if (!sshTest.success) {
       throw new Error(`SSH to Proxmox node failed: ${sshTest.error}`)
     }
+
     await appendLog(jobId, "SSH connectivity OK", "success")
 
     // Check target storage space
@@ -308,8 +334,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(config.targetStorage)}/status`
     )
+
     const freeBytes = storageStatus?.avail || 0
+
     await appendLog(jobId, `Target storage "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(totalDiskBytes / 1073741824).toFixed(1)} GB`)
+
     if (freeBytes < totalDiskBytes * 1.1) {
       throw new Error(`Insufficient disk space on "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(totalDiskBytes / 1073741824).toFixed(1)} GB`)
     }
@@ -318,6 +347,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // ── STEP 2: Allocate VMID & Create VM shell on Proxmox ──
     await updateJob(jobId, "creating_vm")
+
     if (config.targetVmid !== undefined) {
       targetVmid = config.targetVmid
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
@@ -326,9 +356,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
+
     await updateJob(jobId, "creating_vm", { targetVmid })
 
     const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
+
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     const createBody = new URLSearchParams({
@@ -346,6 +378,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       agent: pveParams.agent,
       serial0: "socket",
     })
+
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }
@@ -355,9 +388,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu`,
       { method: "POST", body: createBody }
     )
+
     if (createResult) {
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
+
     await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -378,14 +413,17 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Block fallback: use /var/lib/vz/tmp (VHD is converted directly to the
     // block device, then the scratch file is removed).
     const userTempStorage = config.tempStorage?.trim().replace(/\/+$/, '') || ''
+
     if (userTempStorage) {
       storageTempDir = `${userTempStorage}/proxcenter-xcpng-migration/${targetVmid}`
     } else if (isFileBased) {
       const storagePath = storageConfig?.path || '/var/lib/vz'
+
       storageTempDir = `${storagePath}/images/${targetVmid}`
     } else {
       storageTempDir = `/var/lib/vz/tmp`
     }
+
     await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
     await appendLog(jobId, `Temp directory: ${storageTempDir}`)
 
@@ -396,16 +434,21 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string, rbdMapped?: boolean }> {
       const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
       let maxDiskNum = -1
+
       for (const val of Object.values(vmConf || {})) {
         if (typeof val === 'string') {
           const m = (val as string).match(/vm-\d+-disk-(\d+)/)
+
           if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
         }
       }
+
       for (const av of allocatedVolumes) {
         const m = av.volumeId.match(/disk-(\d+)/)
+
         if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
       }
+
       const diskNum = maxDiskNum + 1
       const sizeKB = Math.ceil(sizeBytes / 1024)
       const volName = `vm-${targetVmid}-disk-${diskNum}`
@@ -416,6 +459,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         config.targetConnectionId, nodeIp,
         config.targetStorage, targetVmid, volName, sizeKB,
       )
+
       const volumeId = alloc.volumeId
       let devicePath = alloc.devicePath
 
@@ -424,40 +468,52 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
       let rbdMapped = false
       const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
+
       if (devicePath.startsWith('rbd:')) {
         const rbdSpec = devicePath.split(':')[1]
+
         if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
+
         const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
           `rbd map "${rbdSpec}" 2>&1`)
+
         if (!mapResult.success || !mapResult.output?.trim()) {
           throw new Error(`Failed to rbd map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
         }
+
         devicePath = mapResult.output.trim()
         rbdMapped = true
         await appendLog(jobId, `RBD mapped ${rbdSpec} → ${devicePath}`)
       } else if (krbdMatch) {
         const [, pool, image] = krbdMatch
         const rbdSpec = `${pool}/${image}`
+
         const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
           `rbd device map "${rbdSpec}" 2>&1`)
+
         if (!mapResult.success) {
           throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
         }
+
+
         // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
         rbdMapped = true
         await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
       }
 
       const result = { volumeId, devicePath, rbdMapped }
+
       allocatedVolumes.push(result)
       await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
-      return result
+
+return result
     }
 
     // Attach a pre-allocated block volume to a SCSI slot
     async function attachBlockDisk(i: number, volumeId: string) {
       const scsiSlot = `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+
       try {
         await pveFetch<any>(
           pveConn,
@@ -473,6 +529,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Convert VHD directly to a pre-allocated block device (no qm disk import needed)
     async function convertToBlockDevice(i: number, devicePath: string) {
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD directly to block device...`)
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
 
@@ -481,16 +538,20 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         `qemu-img convert -f vpc -O raw "${tmpFile}.vhd" "${devicePath}" 2>&1 && echo CONVERT_OK`,
         14400000
       )
+
+
       // Clean up VHD regardless of result
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
 
       if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
         throw new Error(`Conversion to block device failed: ${convertResult.error || convertResult.output}`)
       }
+
       await appendLog(jobId, `Conversion to block device complete`, "success")
 
       // Unmap RBD if needed
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
+
       if (allocVol?.rbdMapped) {
         await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
       }
@@ -503,11 +564,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         select: { apiTokenEnc: true },
       }))!.apiTokenEnc
     )
+
     const curlAuth = Buffer.from(xoCreds).toString("base64")
 
     // Helper: download a single VDI from XO via curl on PVE node
     async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)...`)
 
       const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
@@ -522,14 +585,18 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
+
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
         `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
       )
+
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start download: ${startDl.error}`)
       }
+
       const curlPid = startDl.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
 
       let downloadedBytes = 0
@@ -550,10 +617,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
         const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
+
         downloadedBytes = currentSize
 
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+
         downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
         const diskProgress = disk.sizeBytes > 0 ? Math.min(Math.round((currentSize / disk.sizeBytes) * 100), 99) : 0
@@ -572,9 +641,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
           const curlStats = statsContent.output?.match(/\{[^}]+\}/)
           let httpCode = 0
+
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
+
               downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
@@ -587,17 +658,21 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
             const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
+
             throw new Error(`Download failed with exit code ${exitCode}${httpInfo}. Check XO connectivity and credentials.`)
           }
 
           // Validate that the downloaded file is not empty
           const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
           const actualFileSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10) || 0
+
           if (actualFileSize === 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
             const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
+
             throw new Error(`Downloaded VHD is empty (0 bytes)${httpInfo}. The XO REST API may have returned an error or the VDI is not accessible.`)
           }
+
           downloadedBytes = actualFileSize
 
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
@@ -625,10 +700,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         `qemu-img convert -f vpc -O ${importFormat} "${tmpFile}.vhd" "${tmpFile}.${importFormat}" 2>&1 && echo CONVERT_OK`,
         14400000
       )
+
       if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${tmpFile}.${importFormat}"`)
         throw new Error(`Conversion failed: ${convertResult.error || convertResult.output}`)
       }
+
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
 
@@ -636,6 +713,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       // Import disk into Proxmox storage
       const importFile = `${tmpFile}.${importFormat}`
+
       await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
@@ -644,6 +722,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         `qm disk import ${targetVmid} "${importFile}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
+
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${importFile}"`)
 
       if (!importResult.success) {
@@ -655,20 +734,24 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const importOutput = importResult.output || ""
       const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
       const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
+
       if (importMatch?.[1]) {
         diskVolume = importMatch[1]
       } else if (altMatch?.[1]) {
         diskVolume = altMatch[1]
       } else {
         await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
+
         try {
           const vmConf = await pveFetch<Record<string, any>>(
             pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
           )
+
           const unusedKeys = Object.keys(vmConf)
             .filter(k => k.startsWith("unused"))
             .sort((a, b) => a.localeCompare(b))
+
           if (unusedKeys.length > 0) {
             diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
             await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
@@ -676,6 +759,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         } catch (e: any) {
           await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
         }
+
         if (!diskVolume) {
           diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
           await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
@@ -686,6 +770,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const attachBody = new URLSearchParams({
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
+
       try {
         await pveFetch<any>(
           pveConn,
@@ -703,9 +788,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       let snapshotUuid: string | null = null
 
       let downloadSucceeded = false
+
       try {
         // Phase 1: Create snapshot (VM keeps running — no downtime)
         const snapName = `proxcenter-mig-${jobId.substring(0, 8)}`
+
         await appendLog(jobId, "Creating XO snapshot for consistent disk download (VM stays running)...")
         snapshotUuid = await xoCreateSnapshot(xo, config.sourceVmId, snapName)
         await appendLog(jobId, `Snapshot created: ${snapshotUuid}`, "success")
@@ -744,7 +831,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       // Phase 4: Shut down source VM via XO (downtime starts here)
       const downtimeStart = Date.now()
+
       await appendLog(jobId, "Shutting down source VM for cutover (downtime starts now)...", "warn")
+
       try {
         const xoFetchInternal = async (path: string, opts: RequestInit = {}) => {
           const fetchOpts: any = {
@@ -752,15 +841,20 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
             headers: { Authorization: xo.authHeader, "Content-Type": "application/json", ...opts.headers },
             signal: AbortSignal.timeout(30000),
           }
+
           if (xo.insecureTLS) {
             fetchOpts.dispatcher = new (await import("undici")).Agent({ connect: { rejectUnauthorized: false } })
           }
-          return fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
+
+
+return fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
         }
 
         const shutRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/clean_shutdown`, { method: "POST" })
+
         if (!shutRes.ok) {
           const hardRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/hard_shutdown`, { method: "POST" })
+
           if (!hardRes.ok) {
             await appendLog(jobId, "Cannot shut down VM via XO API. Please shut down the VM manually now.", "warn")
           }
@@ -768,10 +862,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
         // Wait for VM to be halted (poll every 5s, max 120s)
         let halted = false
+
         for (let attempt = 0; attempt < 24; attempt++) {
           await new Promise(r => setTimeout(r, 5000))
+
           try {
             const refreshed = await xoGetVmConfig(xo, config.sourceVmId)
+
             if (refreshed.powerState === "Halted" || refreshed.powerState === "halted") {
               halted = true
               break
@@ -791,18 +888,23 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       // Phase 5: Convert and import all disks (downtime continues)
       if (isFileBased) {
         await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
+
         for (let i = 0; i < vmConfig.disks.length; i++) {
           const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+
           await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
           await convertAndImportDisk(i)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
         }
       } else {
         await appendLog(jobId, "Converting VHDs to block storage (downtime phase)...")
+
         for (let i = 0; i < vmConfig.disks.length; i++) {
           const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+
           await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
           const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+
           await convertToBlockDevice(i, vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
@@ -812,6 +914,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
       const downtimeMin = Math.floor(downtimeSec / 60)
       const downtimeRemSec = downtimeSec % 60
+
       await appendLog(jobId, `Downtime duration: ${downtimeMin > 0 ? `${downtimeMin}m ${downtimeRemSec}s` : `${downtimeSec}s`}`, "info")
     } else {
       // ── Cold mode: sequential download → convert → import per disk ──
@@ -825,10 +928,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         } else {
           // Block storage: allocate volume, convert VHD directly to device
           const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+
           await convertToBlockDevice(i, vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
         }
+
         await updateJob(jobId, "transferring", {
           currentDisk: i + 1,
           progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
@@ -874,6 +979,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success")
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "migration",
@@ -888,6 +994,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     })
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
+
     await updateJob(jobId, "failed", { error: errorMsg })
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
 
@@ -895,6 +1002,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     try {
       const nodeIp = await getNodeIp(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
+
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,
           `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
@@ -907,6 +1015,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
+
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}`,

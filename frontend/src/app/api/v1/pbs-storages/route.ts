@@ -9,12 +9,12 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/pbs-storages
- * 
+ *
  * Retourne la liste des storages PBS configurés sur les PVE, avec le mapping
  * vers les connexions PBS de ProxCenter.
- * 
+ *
  * Cela permet de savoir quel PVE peut accéder à quel PBS, et avec quel nom de storage.
- * 
+ *
  * Réponse:
  * {
  *   data: [
@@ -35,9 +35,12 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
+
+
     // Récupérer toutes les connexions PVE et PBS
     const connections = await prisma.connection.findMany({
       select: {
@@ -131,7 +134,7 @@ export async function GET() {
     return NextResponse.json({ data: result })
   } catch (e: any) {
     console.error("PBS storages mapping error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -141,7 +144,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  */
 function normalizeUrl(url: string): string {
   if (!url) return ''
-  
+
   return url
     .replace(/^https?:\/\//, '')
     .replace(/\/$/, '')

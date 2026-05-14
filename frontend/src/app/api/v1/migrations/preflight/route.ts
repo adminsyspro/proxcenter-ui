@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
+
   if (denied) return denied
 
   let body: {
@@ -37,17 +38,23 @@ export async function POST(req: Request) {
   try {
     if (action === "install") {
       const result = await installV2vPackages(targetConnectionId, targetNode)
-      return NextResponse.json(result)
+
+
+return NextResponse.json(result)
     }
 
     if (action === "install-virtio-win") {
       const result = await startVirtioWinDownload(targetConnectionId, targetNode)
-      return NextResponse.json(result)
+
+
+return NextResponse.json(result)
     }
 
     if (action === "check-virtio-win") {
       const result = await checkVirtioWinProgress(targetConnectionId, targetNode)
-      return NextResponse.json(result)
+
+
+return NextResponse.json(result)
     }
 
     const result = await runV2vPreflight(
@@ -57,10 +64,14 @@ export async function POST(req: Request) {
       vmName,
       sourceType
     )
-    return NextResponse.json(result)
+
+
+return NextResponse.json(result)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error"
+
     console.error("[migrations/preflight] Error:", safeLog(message))
-    return NextResponse.json({ error: message }, { status: 500 })
+
+return NextResponse.json({ error: message }, { status: 500 })
   }
 }

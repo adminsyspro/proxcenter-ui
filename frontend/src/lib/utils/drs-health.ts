@@ -37,8 +37,10 @@ export function computeDrsHealthScore(
   let cpuSpreadPenalty = 0
 
   const onlineNodes = nodes?.filter(n => !n.status || n.status === 'online') ?? []
+
   if (onlineNodes.length >= 2) {
     const memValues = onlineNodes.map(n => n.memory_usage)
+
     memSpread = Math.max(...memValues) - Math.min(...memValues)
 
     if (memSpread > 30) memSpreadPenalty = -35
@@ -47,6 +49,7 @@ export function computeDrsHealthScore(
     else if (memSpread > 5) memSpreadPenalty = -5
 
     const cpuValues = onlineNodes.map(n => n.cpu_usage)
+
     cpuSpread = Math.max(...cpuValues) - Math.min(...cpuValues)
 
     if (cpuSpread > 40) cpuSpreadPenalty = -15
@@ -58,17 +61,20 @@ export function computeDrsHealthScore(
 
   // --- Resource pressure penalties (secondary) ---
   let memPenalty = 0
+
   if (avgMem > 85) memPenalty = -10
   else if (avgMem > 75) memPenalty = -5
   score += memPenalty
 
   let cpuPenalty = 0
+
   if (avgCpu > 80) cpuPenalty = -5
   else if (avgCpu > 65) cpuPenalty = -3
   score += cpuPenalty
 
   // --- CV imbalance penalty (minor tiebreaker) ---
   let imbalancePenalty = 0
+
   if (imbalance > 10) imbalancePenalty = -5
   else if (imbalance > 5) imbalancePenalty = -3
   score += imbalancePenalty

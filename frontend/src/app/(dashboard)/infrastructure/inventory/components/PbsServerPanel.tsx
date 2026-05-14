@@ -1,12 +1,8 @@
 'use client'
 
 import React, { useCallback, useEffect, useImperativeHandle, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
 
-import { formatBytes } from '@/utils/format'
-import { getDateLocale } from '@/lib/i18n/date'
-import { useToast } from '@/contexts/ToastContext'
-import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Accordion,
@@ -45,8 +41,17 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { lighten, alpha } from '@mui/material/styles'
+
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
+import { formatBytes } from '@/utils/format'
+import { getDateLocale } from '@/lib/i18n/date'
+import { useToast } from '@/contexts/ToastContext'
+import { useTaskTracker } from '@/hooks/useTaskTracker'
+
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { InventorySelection, DetailsPayload } from '../types'
@@ -65,6 +70,7 @@ interface PbsServerPanelProps {
   selection: InventorySelection | null
   data: DetailsPayload | null
   onSelect?: (sel: InventorySelection) => void
+
   // From useHardwareHandlers
   pbsTab: number
   setPbsTab: (v: number) => void
@@ -115,6 +121,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     backup: any
     storageType: 'qemu' | 'lxc'
   }>({ open: false, backup: null, storageType: 'qemu' })
+
   const [pbsRestoreStorage, setPbsRestoreStorage] = useState('')
   const [pbsRestoreVmId, setPbsRestoreVmId] = useState('')
   const [pbsRestoreBwLimit, setPbsRestoreBwLimit] = useState('')
@@ -138,6 +145,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const [pbsFileLoading, setPbsFileLoading] = useState(false)
   const [pbsFileError, setPbsFileError] = useState<string | null>(null)
   const [pbsFilePveStorage, setPbsFilePveStorage] = useState<any>(null)
+
   // Tree state: each node has { name, type, size, mtime, browsable, isRawDiskImage, children?: [], expanded?, loaded?, loading? }
   const [pbsFileTree, setPbsFileTree] = useState<any[]>([])
   const [pbsFileExpandedPaths, setPbsFileExpandedPaths] = useState<Set<string>>(new Set())
@@ -147,6 +155,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   // PBS storage: open restore dialog
   const openPbsRestoreDialog = useCallback(async (backup: any, si: any) => {
     const vmType = backup.format === 'pbs-ct' ? 'lxc' : 'qemu'
+
     setPbsRestoreDialog({ open: true, backup, storageType: vmType })
     setPbsRestoreVmId('')
     setPbsRestoreVmIdError(null)
@@ -168,29 +177,38 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     // Load nodes and storages for restore target
     try {
       const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/nodes`, { cache: 'no-store' })
+
       if (nodesR.ok) {
         const json = await nodesR.json()
         const nodes = Array.isArray(json) ? json : (json?.data || [])
+
         setPbsRestoreNodes(nodes.filter((n: any) => n.status === 'online'))
       }
     } catch {}
 
     // Load storages + used VM IDs on the target node
     const node = si.node || ''
+
     if (node) {
       try {
         const storR = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/nodes/${encodeURIComponent(node)}/storages?content=${vmType === 'lxc' ? 'rootdir' : 'images'}`, { cache: 'no-store' })
+
         if (storR.ok) {
           const json = await storR.json()
+
           setPbsRestoreStorages(json?.data || [])
         }
       } catch {}
     }
+
+
     // Load used VM IDs for validation
     try {
       const resR = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/resources`, { cache: 'no-store' })
+
       if (resR.ok) {
         const json = await resR.json()
+
         setPbsRestoreUsedVmIds(new Set((json.data || []).map((r: any) => Number(r.vmid))))
       }
     } catch {}
@@ -202,10 +220,13 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     setPbsRestoreStorage('')
     setPbsRestoreStorages([])
     if (!node) return
+
     try {
       const storR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storages?content=${vmType === 'lxc' ? 'rootdir' : 'images'}`, { cache: 'no-store' })
+
       if (storR.ok) {
         const json = await storR.json()
+
         setPbsRestoreStorages(json?.data || [])
       }
     } catch {}
@@ -217,6 +238,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     const backup = pbsRestoreDialog.backup
     let connId: string
     let node: string
+
     if (data?.storageInfo) {
       connId = data.storageInfo.connId
       node = pbsRestoreNode || data.storageInfo.node || ''
@@ -224,22 +246,27 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       // Datastore context: pbsRestoreNode is "connId:nodeName"
       connId = pbsRestoreConnId
       const sepIdx = pbsRestoreNode.indexOf(':')
+
       node = sepIdx >= 0 ? pbsRestoreNode.substring(sepIdx + 1) : pbsRestoreNode
     }
+
     if (!connId || !node) return
 
     setPbsRestoring(true)
+
     try {
       const body: Record<string, any> = {
         vmid: Number.parseInt(pbsRestoreVmId) || backup.vmid,
         archive: backup.volid,
         type: pbsRestoreDialog.storageType,
       }
+
       if (pbsRestoreStorage) body.storage = pbsRestoreStorage
       if (pbsRestoreBwLimit) body.bwlimit = Number.parseInt(pbsRestoreBwLimit)
       if (pbsRestoreUnique) body.unique = true
       if (pbsRestoreStart) body.start = true
       if (pbsRestoreLive) body.live = true
+
       if (pbsRestoreOverride) {
         if (pbsRestoreName) body.name = pbsRestoreName
         if (pbsRestoreMemory) body.memory = Number.parseInt(pbsRestoreMemory)
@@ -255,7 +282,9 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
           body: JSON.stringify(body),
         }
       )
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
 
       if (json.data) trackTask({ upid: json.data, connId, node, description: `Restore ${pbsRestoreDialog.storageType === 'lxc' ? 'CT' : 'VM'} ${pbsRestoreVmId}` })
@@ -273,11 +302,14 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     return files.map((f: any) => {
       const fileName = (f.name || '').replace(/^\//, '')
       const isBrowsable = f.browsable || f.type === 'virtual' || f.type === 'directory' || f.leaf === 0 || f.leaf === false
+
       const isRawDiskImage = !isBrowsable && fileName && (
         fileName.endsWith('.img.fidx') || fileName.endsWith('.img.didx') ||
         fileName.endsWith('.raw.fidx') || fileName.endsWith('.raw.didx')
       )
-      return { ...f, isRawDiskImage, browsable: isBrowsable, children: isBrowsable ? [] : undefined, loaded: false, loading: false }
+
+
+return { ...f, isRawDiskImage, browsable: isBrowsable, children: isBrowsable ? [] : undefined, loaded: false, loading: false }
     })
   }, [])
 
@@ -295,6 +327,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       const params = new URLSearchParams({ storage: si.storage, volume: backup.volid, filepath: '/' })
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/file-restore?${params}`)
       const json = await res.json()
+
       if (json.error && !json.data?.files?.length) {
         setPbsFileError(json.error)
       } else {
@@ -311,19 +344,26 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   // PBS file restore: toggle expand a tree node (load children on first expand)
   const pbsToggleTreeNode = useCallback(async (treePath: string) => {
     const dialog = pbsFileRestoreDialog
+
     if (!dialog.backup || !data?.storageInfo) return
     const si = data.storageInfo
 
     // If already expanded, just collapse
     if (pbsFileExpandedPaths.has(treePath)) {
-      setPbsFileExpandedPaths(prev => { const next = new Set(prev); next.delete(treePath); return next })
-      return
+      setPbsFileExpandedPaths(prev => { const next = new Set(prev);
+
+ next.delete(treePath);
+
+return next })
+
+return
     }
 
     // Find the node in the tree and check if already loaded
     const pathParts = treePath.split('/').filter(Boolean)
     let nodes = pbsFileTree
     let targetNode: any = null
+
     for (const part of pathParts) {
       targetNode = nodes.find((n: any) => n.name === part)
       if (!targetNode) return
@@ -331,7 +371,11 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
     }
 
     // Expand it
-    setPbsFileExpandedPaths(prev => { const next = new Set(prev); next.add(treePath); return next })
+    setPbsFileExpandedPaths(prev => { const next = new Set(prev);
+
+ next.add(treePath);
+
+return next })
 
     // If children already loaded, done
     if (targetNode.loaded) return
@@ -341,9 +385,12 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       return tree.map(n => {
         if (n.name === parts[0]) {
           if (parts.length === 1) return updater(n)
-          return { ...n, children: updateNodeInTree(n.children || [], parts.slice(1), updater) }
+
+return { ...n, children: updateNodeInTree(n.children || [], parts.slice(1), updater) }
         }
-        return n
+
+
+return n
       })
     }
 
@@ -355,6 +402,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
         volume: dialog.backup.volid,
         filepath: `/${treePath}`,
       })
+
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(si.connId)}/file-restore?${params}`)
       const json = await res.json()
       const children = parsePbsFiles(json.data?.files || [])
@@ -372,22 +420,28 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
   const pbsDownloadFile = useCallback(async (treePath: string, isDirectory = false) => {
     if (!pbsFileRestoreDialog.backup) return
     const si = data?.storageInfo || pbsFilePveStorage
+
     if (!si) return
+
     const params = new URLSearchParams({
       storage: si.storage,
       volume: pbsFileRestoreDialog.backup.volid,
       filepath: `/${treePath}`,
     })
+
     if (isDirectory) params.set('directory', '1')
     const url = `/api/v1/connections/${encodeURIComponent(si.connId)}/file-restore/download?${params}`
 
     setPbsFileDownloading(treePath)
+
     try {
       const res = await fetch(url)
+
       if (!res.ok) throw new Error(`Download failed: ${res.status}`)
       const blob = await res.blob()
       const fileName = treePath.split('/').pop() || 'download'
       const a = document.createElement('a')
+
       a.href = URL.createObjectURL(blob)
       a.download = isDirectory ? `${fileName}.tar.zst` : fileName
       document.body.appendChild(a)
@@ -418,8 +472,10 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       if (selection.type === 'pbs') {
         try {
           const rrdR = await fetch(`/api/v1/pbs/${encodeURIComponent(selection.id)}/rrd?timeframe=${pbsTimeframe}`, { cache: 'no-store' })
+
           if (rrdR.ok && alive) {
             const json = await rrdR.json()
+
             setPbsRrdData(json?.data || [])
           }
         } catch (e) {
@@ -430,13 +486,16 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
       // Pour un datastore
       if (selection.type === 'datastore') {
         const [pbsId, datastoreName] = selection.id.split(':')
+
         try {
           const rrdR = await fetch(
             `/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores/${encodeURIComponent(datastoreName)}/rrd?timeframe=${pbsTimeframe}`,
             { cache: 'no-store' }
           )
+
           if (rrdR.ok && alive) {
             const json = await rrdR.json()
+
             setDatastoreRrdData(json?.data || [])
           }
         } catch (e) {
@@ -601,7 +660,9 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                   {/* Graphiques RRD du datastore - 3 graphiques comme Proxmox */}
                   {(() => {
                     const dsRrdData = datastoreRrdData.length > 0 ? datastoreRrdData : (data.datastoreInfo?.rrdData || [])
-                    return dsRrdData.length > 0 && (
+
+
+return dsRrdData.length > 0 && (
                     <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                         <Typography variant="subtitle2" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -650,7 +711,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                   content={({ active, payload, label }) => {
                                     if (!active || !payload?.length) return null
-                                    return (
+
+return (
                                       <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                                         <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#3b82f6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                           <i className="ri-database-2-line" style={{ fontSize: 13, color: '#3b82f6' }} />
@@ -691,7 +753,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                   content={({ active, payload, label }) => {
                                     if (!active || !payload?.length) return null
-                                    return (
+
+return (
                                       <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                                         <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                           <i className="ri-speed-line" style={{ fontSize: 13, color: '#10b981' }} />
@@ -732,7 +795,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                   wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                   content={({ active, payload, label }) => {
                                     if (!active || !payload?.length) return null
-                                    return (
+
+return (
                                       <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                                         <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                           <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#f59e0b' }} />
@@ -845,9 +909,11 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
 
                   for (const backup of (data.datastoreInfo.backups || [])) {
                     const groupKey = backup.backupId
+
                     if (!backupGroups.has(groupKey)) {
                       backupGroups.set(groupKey, [])
                     }
+
                     backupGroups.get(groupKey)!.push(backup)
                   }
 
@@ -863,9 +929,12 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                   // Filtrer par recherche
                   if (pbsBackupSearch.trim()) {
                     const search = pbsBackupSearch.toLowerCase()
+
                     sortedGroups = sortedGroups.filter(([groupId, groupBackups]) => {
                       const latestBackup = groupBackups[0]
-                      return groupId.toLowerCase().includes(search) ||
+
+
+return groupId.toLowerCase().includes(search) ||
                              (latestBackup?.vmName || '').toLowerCase().includes(search) ||
                              (latestBackup?.backupType || '').toLowerCase().includes(search)
                     })
@@ -902,9 +971,11 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                             onClick={() => {
                               setExpandedBackupGroups(prev => {
                                 const next = new Set(prev)
+
                                 if (next.has(groupId)) next.delete(groupId)
                                 else next.add(groupId)
-                                return next
+
+return next
                               })
                             }}
                             sx={{
@@ -1001,6 +1072,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                       <IconButton size="small" sx={{ p: 0.15 }} onClick={async () => {
                                         // Build a pseudo storageInfo-like item for the restore dialog
                                         const vmType = backup.backupType === 'ct' ? 'lxc' : 'qemu'
+
                                         setPbsRestoreDialog({ open: true, backup: { ...backup, format: backup.backupType === 'ct' ? 'pbs-ct' : 'pbs-vm', vmid: backup.backupId }, storageType: vmType })
                                         setPbsRestoreVmId('')
                                         setPbsRestoreVmIdError(null)
@@ -1019,19 +1091,25 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                         setPbsRestoreConnId('')
                                         setPbsRestoreNodes([])
                                         setPbsRestoreStorages([])
+
+
                                         // Load all PVE connections + their nodes for a flat node selector
                                         try {
                                           const r = await fetch('/api/v1/connections')
                                           const d = await r.json()
                                           const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
+
                                           setPbsRestoreConnections(pveConns)
                                           const allNodes: any[] = []
+
                                           await Promise.all(pveConns.map(async (c: any) => {
                                             try {
                                               const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(c.id)}/nodes`, { cache: 'no-store' })
+
                                               if (nodesR.ok) {
                                                 const json = await nodesR.json()
                                                 const nodes = Array.isArray(json) ? json : (json?.data || [])
+
                                                 nodes.filter((n: any) => n.status === 'online').forEach((n: any) => {
                                                   allNodes.push({ ...n, connId: c.id, connName: c.name || c.id, isCluster: (c.hosts?.length || 0) > 1 })
                                                 })
@@ -1136,6 +1214,8 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                 label="Node"
                 onChange={e => {
                   const nodeVal = e.target.value
+
+
                   // Reset VM ID validation on node change
                   setPbsRestoreVmId('')
                   setPbsRestoreVmIdError(null)
@@ -1145,10 +1225,12 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                     const sepIdx = nodeVal.indexOf(':')
                     const connId = nodeVal.substring(0, sepIdx)
                     const nodeName = nodeVal.substring(sepIdx + 1)
+
                     setPbsRestoreConnId(connId)
                     setPbsRestoreNode(nodeVal)
                     setPbsRestoreStorage('')
                     setPbsRestoreStorages([])
+
                     // Load storages + used VM IDs in parallel
                     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/storages?content=${pbsRestoreDialog.storageType === 'lxc' ? 'rootdir' : 'images'}`, { cache: 'no-store' })
                       .then(r => r.ok ? r.json() : null)
@@ -1162,7 +1244,9 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                       .catch(() => {})
                   } else {
                     const connId = data.storageInfo.connId
+
                     loadPbsRestoreStoragesForNode(nodeVal, connId, pbsRestoreDialog.storageType)
+
                     // Load used VM IDs
                     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
                       .then(r => r.ok ? r.json() : null)
@@ -1174,12 +1258,16 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                 }}
               >
                 {!data?.storageInfo ? (
+
                   // Datastore context: flat list of all nodes across all PVE connections, grouped by connection
                   pbsRestoreConnections.map((c: any) => {
                     const connNodes = pbsRestoreNodes.filter((n: any) => n.connId === c.id)
+
                     if (connNodes.length === 0) return null
                     const isCluster = (c.hosts?.length || 0) > 1
-                    return [
+
+
+return [
                       <MenuItem key={`header-${c.id}`} disabled sx={{ opacity: '0.7 !important', py: 0.5, minHeight: 32 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {isCluster
@@ -1229,7 +1317,9 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
               value={pbsRestoreVmId}
               onChange={e => {
                 const val = e.target.value.replace(/\D/g, '')
+
                 setPbsRestoreVmId(val)
+
                 if (val && pbsRestoreUsedVmIds.has(Number(val))) {
                   setPbsRestoreVmIdError(t('inventory.createVm.vmIdInUse', { id: val }))
                 } else {
@@ -1423,22 +1513,28 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                     // Collect all matching nodes from expanded tree (recursive search)
                     const collectMatches = (nodes: any[], parentPath: string): Array<{ node: any; nodePath: string; depth: number }> => {
                       const results: Array<{ node: any; nodePath: string; depth: number }> = []
+
                       const walk = (ns: any[], pp: string, d: number) => {
                         for (const n of ns) {
                           const np = pp ? `${pp}/${n.name}` : n.name
+
                           if (n.name.toLowerCase().includes(searchQ)) {
                             results.push({ node: n, nodePath: np, depth: 0 })
                           }
+
                           if (n.children?.length) walk(n.children, np, d + 1)
                         }
                       }
+
                       walk(nodes, parentPath, 0)
-                      return results
+
+return results
                     }
 
                     // If searching, show flat filtered results
                     if (searchQ) {
                       const matches = collectMatches(pbsFileTree, '')
+
                       if (matches.length === 0) {
                         return (
                           <TableRow>
@@ -1450,9 +1546,13 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                           </TableRow>
                         )
                       }
-                      return matches.map(({ node, nodePath }) => {
+
+
+return matches.map(({ node, nodePath }) => {
                         const isDir = node.browsable
-                        return (
+
+
+return (
                           <TableRow key={nodePath} hover sx={{ '& td': { py: 0.25 } }}>
                             <TableCell>
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -1496,6 +1596,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
 
                     // Normal tree rendering
                     const rows: React.ReactNode[] = []
+
                     const renderNodes = (nodes: any[], parentPath: string, depth: number) => {
                       for (const node of nodes) {
                         const nodePath = parentPath ? `${parentPath}/${node.name}` : node.name
@@ -1575,8 +1676,10 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                         }
                       }
                     }
+
                     renderNodes(pbsFileTree, '', 0)
-                    return rows
+
+return rows
                   })()}
                 </TableBody>
               </Table>

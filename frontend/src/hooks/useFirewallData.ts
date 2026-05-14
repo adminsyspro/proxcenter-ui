@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+
 import * as firewallAPI from '@/lib/api/firewall'
 
 export interface Connection {

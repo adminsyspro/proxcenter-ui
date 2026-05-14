@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations, useLocale } from 'next-intl'
-import { getDateLocale } from '@/lib/i18n/date'
+
 
 import {
   Box,
@@ -20,6 +21,8 @@ import {
   useTheme
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
+
+import { getDateLocale } from '@/lib/i18n/date'
 
 import { useTaskEvents } from '@/hooks/useTaskEvents'
 import { useProxCenterTasks, type PCTask } from '@/contexts/ProxCenterTasksContext'
@@ -99,7 +102,9 @@ function formatTime(dateStr: string | null, dateLocale: string): string {
 
   try {
     const date = new Date(dateStr)
-    return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+
+return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   } catch {
     return dateStr
   }
@@ -145,14 +150,17 @@ export default function TasksFooter({
   // Helper functions that use translations
   const formatTaskType = (type: string): string => {
     const key = TASK_TYPE_KEYS[type]
-    return key ? t(key) : type
+
+
+return key ? t(key) : type
   }
 
   const getStatusLabel = (status: string): string => {
     if (!status || status === 'running') return t('tasks.status.running')
     if (status === 'OK') return t('tasks.status.ok')
     if (status === 'stopped') return t('tasks.status.stopped')
-    return status
+
+return status
   }
 
   const [activeTab, setActiveTab] = useState<'proxmox' | 'proxcenter'>('proxmox')
@@ -210,11 +218,15 @@ export default function TasksFooter({
     if (!isHydrated) return
     const headerHeight = 36
     let height = 0
+
     if (!hidden) {
       height = expanded ? headerHeight + maxHeight : headerHeight
     }
+
     document.documentElement.style.setProperty('--taskbar-height', `${height}px`)
-    return () => {
+
+
+return () => {
       document.documentElement.style.setProperty('--taskbar-height', '0px')
     }
   }, [hidden, expanded, maxHeight, isHydrated])
@@ -696,7 +708,9 @@ export default function TasksFooter({
                 rows={[...tasks].sort((a, b) => {
                   const aRunning = a.status === 'running' ? 0 : 1
                   const bRunning = b.status === 'running' ? 0 : 1
-                  return aRunning - bRunning
+
+
+return aRunning - bRunning
                 })}
                 columns={columns}
                 density="compact"

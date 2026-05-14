@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server"
+
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
+import { assertNodeName, InvalidShellArgError } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -13,23 +15,39 @@ type Ctx = { params: Promise<{ id: string; node: string }> }
  * The command runs in background (nohup) so the HTTP request returns immediately.
  */
 export async function POST(req: Request, ctx: Ctx) {
-  const { id, node } = await ctx.params
+  const { id, node: rawNode } = await ctx.params
+
+  let node: string
+
+  try {
+    node = assertNodeName(rawNode)
+  } catch (e) {
+    if (e instanceof InvalidShellArgError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+
+    throw e
+  }
 
   const denied = await checkPermission(
     PERMISSIONS.NODE_MANAGE,
     "node",
     buildNodeResourceId(id, node)
   )
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
   let autoReboot = false
+
   try {
     const body = await req.json()
+
     autoReboot = !!body.auto_reboot
   } catch {
     // no body is fine
@@ -68,16 +86,30 @@ ${rebootCmd}
  * GET — Poll the upgrade status + logs from the node.
  */
 export async function GET(_req: Request, ctx: Ctx) {
-  const { id, node } = await ctx.params
+  const { id, node: rawNode } = await ctx.params
+
+  let node: string
+
+  try {
+    node = assertNodeName(rawNode)
+  } catch (e) {
+    if (e instanceof InvalidShellArgError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+
+    throw e
+  }
 
   const denied = await checkPermission(
     PERMISSIONS.NODE_VIEW,
     "node",
     buildNodeResourceId(id, node)
   )
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }

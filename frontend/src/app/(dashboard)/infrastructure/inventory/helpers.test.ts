@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import {
   TAG_PALETTE,
   hashStringToInt,
@@ -81,11 +82,13 @@ describe('safeJson', () => {
 
   it('returns array as-is (no "data" key)', () => {
     const arr = [1, 2, 3]
+
     expect(safeJson(arr)).toEqual(arr)
   })
 
   it('returns object without data key as-is', () => {
     const obj = { name: 'test', value: 1 }
+
     expect(safeJson(obj)).toEqual(obj)
   })
 })
@@ -300,6 +303,7 @@ describe('parseMarkdown', () => {
 
   it('converts links', () => {
     const result = parseMarkdown('[text](https://example.com)')
+
     expect(result).toContain('<a href="https://example.com"')
     expect(result).toContain('target="_blank"')
     expect(result).toContain('>text</a>')
@@ -321,11 +325,13 @@ describe('parseMarkdown', () => {
 
   it('escapes HTML inside code blocks', () => {
     const result = parseMarkdown('```\n<script>alert("xss")</script>\n```')
+
     expect(result).toContain('&lt;script&gt;')
   })
 
   it('converts code blocks', () => {
     const result = parseMarkdown('```js\nconsole.log("hi")\n```')
+
     expect(result).toContain('<pre><code>')
     expect(result).toContain('console.log')
   })
@@ -337,6 +343,7 @@ describe('parseMarkdown', () => {
   it('converts markdown tables', () => {
     const table = '| Field | Value |\n|-------|-------|\n| **Name** | Test |\n| Role | DB |'
     const result = parseMarkdown(table)
+
     expect(result).toContain('<table>')
     expect(result).toContain('<th>Field</th>')
     expect(result).toContain('<th>Value</th>')
@@ -348,6 +355,7 @@ describe('parseMarkdown', () => {
   it('converts tables with links inside cells', () => {
     const table = '| Link |\n|------|\n| [View](https://example.com) |'
     const result = parseMarkdown(table)
+
     expect(result).toContain('<table>')
     expect(result).toContain('<a href="https://example.com"')
   })
@@ -480,32 +488,38 @@ describe('buildSeriesFromRrd', () => {
 
   it('extracts timestamp and converts to ms', () => {
     const result = buildSeriesFromRrd([{ time: 1700000000, cpu: 0.5 }])
+
     expect(result).toHaveLength(1)
     expect(result[0].t).toBe(1700000000000)
   })
 
   it('converts CPU fraction to percentage', () => {
     const result = buildSeriesFromRrd([{ time: 1, cpu: 0.75 }])
+
     expect(result[0].cpuPct).toBe(75)
   })
 
   it('clamps CPU percentage to 0-100', () => {
     const result = buildSeriesFromRrd([{ time: 1, cpu: -0.1 }])
+
     expect(result[0].cpuPct).toBe(0)
   })
 
   it('handles mem as fraction', () => {
     const result = buildSeriesFromRrd([{ time: 1, mem: 0.8 }])
+
     expect(result[0].ramPct).toBe(80)
   })
 
   it('handles mem as absolute with maxmem', () => {
     const result = buildSeriesFromRrd([{ time: 1, mem: 4096, maxmem: 8192 }])
+
     expect(result[0].ramPct).toBe(50)
   })
 
   it('uses provided maxMem parameter', () => {
     const result = buildSeriesFromRrd([{ time: 1, mem: 2048 }], 4096)
+
     expect(result[0].ramPct).toBe(50)
   })
 
@@ -515,11 +529,13 @@ describe('buildSeriesFromRrd', () => {
       { time: 1, cpu: 0.2 },
       { time: 2, cpu: 0.3 },
     ])
+
     expect(result.map(p => p.t)).toEqual([1000, 2000, 3000])
   })
 
   it('extracts network and disk metrics', () => {
     const result = buildSeriesFromRrd([{ time: 1, netin: 1000, netout: 2000, diskread: 500, diskwrite: 300 }])
+
     expect(result[0].netInBps).toBe(1000)
     expect(result[0].netOutBps).toBe(2000)
     expect(result[0].diskReadBps).toBe(500)
@@ -528,6 +544,7 @@ describe('buildSeriesFromRrd', () => {
 
   it('extracts loadavg', () => {
     const result = buildSeriesFromRrd([{ time: 1, loadavg: 2.5 }])
+
     expect(result[0].loadAvg).toBe(2.5)
   })
 })

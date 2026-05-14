@@ -11,12 +11,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const deployment = await prisma.deployment.findUnique({ where: { id } })
+
     if (!deployment) return NextResponse.json({ error: "Deployment not found" }, { status: 404 })
 
     return NextResponse.json({ data: deployment })
@@ -30,9 +33,11 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     await prisma.deployment.delete({ where: { id } }).catch(() => {})

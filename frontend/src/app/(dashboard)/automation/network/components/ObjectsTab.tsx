@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -56,6 +57,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   const handleUpdateAlias = async () => {
     if (!editingAlias) return
+
     try {
       await firewallAPI.updateAlias(selectedConnection, editingAlias.name, {
         cidr: editingAlias.cidr,
@@ -71,6 +73,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   const handleDeleteAlias = async (name: string) => {
     if (!confirm(t('networkPage.deleteAliasConfirm', { name }))) return
+
     try {
       await firewallAPI.deleteAlias(selectedConnection, name)
       showToast(t('networkPage.aliasDeleted'), 'success')
@@ -95,6 +98,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   const handleUpdateIPSet = async () => {
     if (!editingIPSet) return
+
     try {
       showToast(t('networkPage.ipSetUpdated'), 'success')
       setEditingIPSet(null)
@@ -106,6 +110,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   const handleDeleteIPSet = async (name: string) => {
     if (!confirm(t('networkPage.deleteIpSetConfirm', { name }))) return
+
     try {
       await firewallAPI.deleteIPSet(selectedConnection, name)
       showToast(t('networkPage.ipSetDeleted'), 'success')
@@ -117,6 +122,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   const handleAddIPSetEntry = async () => {
     if (!ipsetEntryDialog.ipsetName) return
+
     try {
       await firewallAPI.addIPSetEntry(selectedConnection, ipsetEntryDialog.ipsetName, newIPSetEntry)
       showToast(t('networkPage.entryAdded'), 'success')

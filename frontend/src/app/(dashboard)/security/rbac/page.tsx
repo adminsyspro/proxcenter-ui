@@ -129,7 +129,7 @@ return n })
 
   const togglePerm = (id) => setSelectedPerms(p => { const n = new Set(p);
 
- n.has(id) ? n.delete(id) : n.add(id); 
+ n.has(id) ? n.delete(id) : n.add(id);
 
 return n })
 
@@ -142,7 +142,7 @@ return n })
 
     setSelectedPerms(p => { const n = new Set(p);
 
- ids.forEach(id => all ? n.delete(id) : n.add(id)); 
+ ids.forEach(id => all ? n.delete(id) : n.add(id));
 
 return n })
   }
@@ -157,6 +157,7 @@ return }
     // System roles only accept widget_overrides edits — the backend rejects
     // any other field change. For custom roles we send the full payload.
     const widgetOverrides = hiddenWidgets.size > 0 ? { hidden: Array.from(hiddenWidgets) } : null
+
     const payload = role?.is_system
       ? { widget_overrides: widgetOverrides }
       : { name: name.trim(), description: description.trim() || null, color, permissions: Array.from(selectedPerms), widget_overrides: widgetOverrides }
@@ -196,12 +197,12 @@ return }
             const sel = ids.filter(id => selectedPerms.has(id)).length
             const isExp = expanded.has(cat.id)
 
-            
+
 return (
               <Box key={cat.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: 'action.hover', cursor: 'pointer' }} onClick={() => setExpanded(p => { const n = new Set(p);
 
- n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id); 
+ n.has(cat.id) ? n.delete(cat.id) : n.add(cat.id);
 
 return n })}>
                   <IconButton size='small'><i className={isExp ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} /></IconButton>
@@ -296,6 +297,7 @@ return n })}>
 function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenants = [], enableTenantMgmt = false, currentTenantId = 'default', onSave, t }) {
   const [user, setUser] = useState(null)
   const [roleId, setRoleId] = useState('')
+
   // Provider view: tenant defaults to the session tenant ('default'), but the
   // operator can pick any enabled tenant — the POST body's tenant_id field is
   // honored only when the session is in the provider tenant (server check).
@@ -306,7 +308,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
-  
+
   // Inventory data
   const [inventory, setInventory] = useState<any>(null)
   const [loadingInventory, setLoadingInventory] = useState(false)
@@ -343,6 +345,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
   // selected. Resetting forces a re-pick from the filtered list.
   useEffect(() => {
     if (!roleId) return
+
     if (tenantId !== 'default' && TENANT_FORBIDDEN_ROLE_IDS.has(roleId)) {
       setRoleId('')
     }
@@ -414,6 +417,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
               const tags = typeof g.tags === 'string'
                 ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
                 : []
+
               tags.forEach((tag: string) => {
                 tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
               })
@@ -472,11 +476,13 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
     if (!user?.id || !roleId || !tenantId) {
       return { existingDifferentRole: null as any, globalAlreadyExists: false, duplicateTargets: new Set<string>() }
     }
+
     const userInTenant = assignments.filter((a: any) => a.user.id === user.id && (a.tenant_id || 'default') === tenantId)
     const otherRole = userInTenant.find((a: any) => a.role.id !== roleId)
     const sameRole = userInTenant.filter((a: any) => a.role.id === roleId)
     const dupTargets = new Set<string>()
     let globalDup = false
+
     for (const a of sameRole) {
       if (a.scope_type === 'global') {
         if (scopeType === 'global') globalDup = true
@@ -484,7 +490,9 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
         dupTargets.add(a.scope_target)
       }
     }
-    return { existingDifferentRole: otherRole || null, globalAlreadyExists: globalDup, duplicateTargets: dupTargets }
+
+
+return { existingDifferentRole: otherRole || null, globalAlreadyExists: globalDup, duplicateTargets: dupTargets }
   }, [assignments, user, roleId, tenantId, scopeType])
 
   // Toggle sélection d'un élément (les cibles déjà assignées sont neutralisées
@@ -499,6 +507,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
   // Sélectionner/Désélectionner tout (ignore les cibles déjà assignées).
   const toggleAll = () => {
     const selectable = scopeOptions.filter((o: any) => !conflict.duplicateTargets.has(o.id))
+
     if (selectedTargets.length === selectable.length) {
       setSelectedTargets([])
     } else {
@@ -523,13 +532,13 @@ return scopeOptions.filter((o: any) =>
   const handleSave = async () => {
     if (!user || !roleId) {
       setError(t('common.error'))
-      
+
 return
     }
 
     if (scopeType !== 'global' && selectedTargets.length === 0) {
       setError(t('common.error'))
-      
+
 return
     }
 
@@ -550,6 +559,7 @@ return
             role_id: roleId,
             scope_type: scopeType,
             scope_target: target,
+
             // tenant_id is honored server-side only when the caller is in the
             // provider tenant. Sending it from any other context is harmless
             // — the route ignores it and falls back to the session tenant.
@@ -779,7 +789,9 @@ return
                 <List dense disablePadding>
                   {filteredOptions.map((option: any) => {
                     const alreadyAssigned = conflict.duplicateTargets.has(option.id)
-                    return (
+
+
+return (
                     <ListItem
                       key={option.id}
                       sx={{
@@ -905,7 +917,7 @@ function RolesTab({ roles, categories, onRefresh, t }) {
       const res = await fetch(`/api/v1/rbac/roles/${toDelete.id}`, { method: 'DELETE' })
       const data = await res.json()
 
-      if (!res.ok) { setError(data.error); 
+      if (!res.ok) { setError(data.error);
 
 return }
 
@@ -1042,8 +1054,8 @@ return groupedAssignments.filter(a =>
 
       setDeleteOpen(false)
       onRefresh()
-    } finally { 
-      setDeleting(false) 
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -1135,6 +1147,7 @@ return (
     { field: 'role', headerName: t('rbac.title'), width: 130, renderCell: (p: any) => (
       <Chip label={p.row.role.is_system ? t(`rbac.roles.${p.row.role.id}`, { defaultValue: p.row.role.name }) : p.row.role.name} size='small' sx={{ bgcolor: alpha(p.row.role.color, 0.15), color: p.row.role.color, fontWeight: 500, height: 24 }} />
     )},
+
     // Tenant column (Enterprise + provider view only). Mirrors the column
     // added to /security/users so the same operator sees the same per-tenant
     // breakdown across the two pages without losing the row-per-tenant grain.
@@ -1146,7 +1159,9 @@ return (
       renderCell: (p: any) => {
         const name = p.row.tenant_name || p.row.tenant_id
         const isProviderTenant = p.row.tenant_id === 'default'
-        return (
+
+
+return (
           <Chip
             size='small'
             label={name}
@@ -1174,7 +1189,8 @@ return (
       // Hide edit/delete for your own assignment — the backend refuses
       // self-modification (see /rbac/assignments routes).
       if (p.row.user.id === currentUserId) return null
-      return (
+
+return (
         <Box sx={{ display: 'flex', gap: 0 }}>
           <Tooltip title={t('common.edit')}>
             <IconButton size='small' onClick={() => { setToEdit(p.row); setEditDialogOpen(true) }}>
@@ -1200,18 +1216,18 @@ return (
         </Button>
       </Box>
       <Box sx={{ flex: 1, minHeight: 300 }}>
-        <DataGrid 
-          rows={filtered} 
-          columns={columns} 
-          pageSizeOptions={[10, 25, 50]} 
-          disableRowSelectionOnClick 
+        <DataGrid
+          rows={filtered}
+          columns={columns}
+          pageSizeOptions={[10, 25, 50]}
+          disableRowSelectionOnClick
           rowHeight={44}
           columnHeaderHeight={40}
           density='compact'
-          sx={{ 
+          sx={{
             border: 'none',
-            '& .MuiDataGrid-cell': { 
-              display: 'flex', 
+            '& .MuiDataGrid-cell': {
+              display: 'flex',
               alignItems: 'center',
               py: 0.5
             },
@@ -1219,7 +1235,7 @@ return (
               bgcolor: 'action.hover',
               borderRadius: 1
             }
-          }} 
+          }}
         />
       </Box>
       <AssignmentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} roles={roles} users={availableUsers} assignments={assignments} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} onSave={onRefresh} t={t} />
@@ -1245,7 +1261,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
-  
+
   // Inventory data
   const [inventory, setInventory] = useState<any>(null)
   const [loadingInventory, setLoadingInventory] = useState(false)
@@ -1339,6 +1355,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
               const tags = typeof g.tags === 'string'
                 ? g.tags.split(/[;,]/).map((t: string) => t.trim()).filter(Boolean)
                 : []
+
               tags.forEach((tag: string) => {
                 tagMap.set(tag, (tagMap.get(tag) || 0) + 1)
               })
@@ -1405,9 +1422,9 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
     if (!searchFilter.trim()) return scopeOptions
     const search = searchFilter.toLowerCase()
 
-    
-return scopeOptions.filter((o: any) => 
-      o.label.toLowerCase().includes(search) || 
+
+return scopeOptions.filter((o: any) =>
+      o.label.toLowerCase().includes(search) ||
       o.sublabel?.toLowerCase().includes(search) ||
       o.id.toLowerCase().includes(search)
     )
@@ -1441,12 +1458,12 @@ return
     try {
       const originalTargets = new Set<string>(assignmentGroup.scope_targets || [])
       const newTargets = scopeType === 'global' ? new Set<string>() : new Set(selectedTargets)
-      
+
       // Calculer les différences
       const toAdd = [...newTargets].filter(t => !originalTargets.has(t))
       const toRemove = [...originalTargets].filter(t => !newTargets.has(t))
       const toKeep = [...originalTargets].filter(t => newTargets.has(t))
-      
+
       let errors: string[] = []
 
       // Supprimer les assignations qui ne sont plus sélectionnées
@@ -1711,7 +1728,7 @@ return
                 startAdornment: <i className='ri-search-line' style={{ marginRight: 8, opacity: 0.5 }} />
               }}
             />
-            
+
             {loadingInventory ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('rbacPage.loadingInventory')}</Typography>
@@ -1724,10 +1741,10 @@ return
               <Paper variant='outlined' sx={{ maxHeight: 250, overflow: 'auto' }}>
                 <List dense disablePadding>
                   {filteredOptions.map((option: any) => (
-                    <ListItem 
-                      key={option.id} 
-                      sx={{ 
-                        borderBottom: '1px solid', 
+                    <ListItem
+                      key={option.id}
+                      sx={{
+                        borderBottom: '1px solid',
                         borderColor: 'divider',
                         cursor: 'pointer',
                         '&:hover': { bgcolor: 'action.hover' }
@@ -1735,8 +1752,8 @@ return
                       onClick={() => toggleTarget(option.id)}
                     >
                       <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Checkbox 
-                          checked={selectedTargets.includes(option.id)} 
+                        <Checkbox
+                          checked={selectedTargets.includes(option.id)}
                           size='small'
                           onClick={e => e.stopPropagation()}
                           onChange={() => toggleTarget(option.id)}
@@ -1840,6 +1857,7 @@ return () => setPageInfo('', '', '')
         fetch('/api/v1/rbac/assignments'),
         fetch('/api/v1/users'),
       ]
+
       if (enableTenantMgmt) requests.push(fetch('/api/v1/tenants'))
 
       const responses = await Promise.all(requests)

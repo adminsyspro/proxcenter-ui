@@ -15,6 +15,7 @@ export function useLicenseManagement() {
 
       if (res.ok) {
         const data = await res.json()
+
         setLicenseStatus(data)
       }
     } catch (e) {
@@ -30,6 +31,7 @@ export function useLicenseManagement() {
 
       if (res.ok) {
         const data = await res.json()
+
         setFeatures(data.features || [])
       }
     } catch (e) {

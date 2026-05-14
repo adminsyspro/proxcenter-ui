@@ -18,8 +18,10 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing connection ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     // Optional ?vdcId=… so the create/edit modal can keep the current
@@ -30,12 +32,14 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     // Admin endpoint: resolve connection's tenantId to bypass session tenant filter
     const connMeta = await prisma.connection.findUnique({ where: { id }, select: { tenantId: true } })
+
     if (!connMeta) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
     const conn = await getConnectionById(id, connMeta.tenantId)
 
     // Fetch nodes
     const nodesRaw = await pveFetch<any[]>(conn, "/nodes") || []
+
     const nodes = nodesRaw.map((n: any) => ({
       name: n.node,
       status: n.status,
@@ -47,10 +51,13 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     // Fetch storages: definition from /storage + per-node usage from /cluster/resources
     const storagesRaw = await pveFetch<any[]>(conn, "/storage") || []
+
     // Per-node usage: { "local": [{ node: "PVE-1", disk: X, maxdisk: Y }, ...], "ceph-pool": [{ node: "PVE-1", ... }] }
     const storageNodeUsage: Record<string, { node: string; disk: number; maxdisk: number }[]> = {}
+
     try {
       const resources = await pveFetch<any[]>(conn, "/cluster/resources?type=storage") || []
+
       for (const r of resources) {
         if (!r.storage) continue
         if (!storageNodeUsage[r.storage]) storageNodeUsage[r.storage] = []
@@ -68,6 +75,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       where: { pveConnectionId: id },
       select: { pveStorageName: true, vdcPbsNamespace: { select: { vdcId: true } } },
     })
+
     const hiddenPbsStorages = new Set(
       pbsRows
         .filter(r => !excludeForVdcId || r.vdcPbsNamespace.vdcId !== excludeForVdcId)
@@ -82,7 +90,9 @@ export async function GET(req: Request, ctx: RouteContext) {
     // are removed earlier in the chain (hiddenPbsStorages).
     const isImagesContent = (content: any) => {
       const tokens = String(content || '').split(',').map((t: string) => t.trim())
-      return tokens.includes('images') || tokens.includes('rootdir')
+
+
+return tokens.includes('images') || tokens.includes('rootdir')
     }
 
     const storages = storagesRaw
@@ -90,6 +100,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       .filter((s: any) => !!s.shared && isImagesContent(s.content) && s.enabled !== 0)
       .map((s: any) => {
         const nodeEntries = storageNodeUsage[s.storage] || []
+
         // Shared storage: all nodes report identical usage, take first.
         const disk = nodeEntries[0]?.disk || 0
         const maxdisk = nodeEntries[0]?.maxdisk || 0
@@ -107,8 +118,10 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     // Fetch existing PVE pools (to show what's taken)
     let pools: string[] = []
+
     try {
       const poolsRaw = await pveFetch<any[]>(conn, "/pools") || []
+
       pools = poolsRaw.map((p: any) => p.poolid)
     } catch {
       // Pools API may not be available

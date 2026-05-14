@@ -13,6 +13,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> | { id: string } }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -22,6 +23,7 @@ export async function GET(
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const url = new URL(req.url)
@@ -53,6 +55,7 @@ export async function GET(
           { status: 403 }
         )
       }
+
       throw e
     }
   } catch (e: any) {

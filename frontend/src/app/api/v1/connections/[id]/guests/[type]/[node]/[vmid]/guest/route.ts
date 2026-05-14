@@ -13,22 +13,22 @@ type RouteContext = {
 // Déterminer le type d'OS à partir des infos du guest agent
 function getOsType(osInfo: any): 'linux' | 'windows' | 'other' {
   if (!osInfo) return 'other'
-  
+
   const id = (osInfo.id || '').toLowerCase()
   const name = (osInfo.name || '').toLowerCase()
-  
+
   // Windows
   if (id === 'mswindows' || name.includes('windows')) {
     return 'windows'
   }
-  
+
   // Linux distributions
   const linuxDistros = ['debian', 'ubuntu', 'centos', 'rhel', 'fedora', 'alpine', 'arch', 'opensuse', 'suse', 'mint', 'manjaro', 'rocky', 'alma', 'oracle', 'gentoo', 'slackware', 'nixos']
 
   if (linuxDistros.some(d => id.includes(d) || name.includes(d)) || name.includes('linux')) {
     return 'linux'
   }
-  
+
   return 'other'
 }
 
@@ -60,7 +60,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    
+
     // Récupérer le status actuel (contient uptime, pid)
     let uptime: number | undefined
     let status: string | undefined
@@ -78,12 +78,12 @@ export async function GET(_req: Request, ctx: RouteContext) {
     } catch (e) {
       console.error("[guest] Error fetching status:", e)
     }
-    
+
     // Récupérer les interfaces réseau et infos OS via QEMU Guest Agent (seulement pour qemu, pas lxc)
     let ip: string | undefined
     let osInfo: OsInfo | undefined
     let diskUsage: { used: number; total: number } | undefined
-    
+
     if (type === 'qemu' && status === 'running') {
       // Récupérer IP et OS info en parallèle
       const [ipResult, osInfoResult, fsInfoResult] = await Promise.allSettled([
@@ -94,7 +94,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
               conn,
               `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/network-get-interfaces`
             )
-            
+
             // Chercher la première IP IPv4 non-loopback
             if (agentData?.result) {
               for (const iface of agentData.result) {
@@ -132,7 +132,7 @@ return undefined
               conn,
               `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/get-osinfo`
             )
-            
+
             const result = osData?.result || osData
 
             if (result && (result.id || result.name || result['pretty-name'])) {
@@ -147,7 +147,7 @@ return undefined
             // Guest agent osinfo non disponible
           }
 
-          
+
 return undefined
         })(),
 
@@ -158,6 +158,7 @@ return undefined
               conn,
               `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/get-fsinfo`
             )
+
             const filesystems = fsData?.result || []
 
             // Virtual/network filesystem types to exclude -- these are not
@@ -178,12 +179,16 @@ return undefined
             const localFs = filesystems.filter((fs: any) => {
               if (!fs['total-bytes'] || fs['total-bytes'] <= 0) return false
               const fsType = (fs.type || '').toLowerCase()
+
               if (virtualFsTypes.has(fsType)) return false
+
               // Require at least one disk device entry
               if (Array.isArray(fs.disk) && fs.disk.length > 0) return true
+
               // Windows: guest agent may omit disk array but type is reliable
               if (['ntfs', 'refs', 'fat32', 'fat16', 'exfat', 'fat'].includes(fsType)) return true
-              return false
+
+return false
             })
 
             // Fallback: if filtering excluded everything but raw data exists,
@@ -194,20 +199,26 @@ return undefined
               : filesystems.filter((fs: any) => {
                   if (!fs['total-bytes'] || fs['total-bytes'] <= 0) return false
                   const fsType = (fs.type || '').toLowerCase()
-                  return !virtualFsTypes.has(fsType)
+
+
+return !virtualFsTypes.has(fsType)
                 })
 
             let totalBytes = 0
             let usedBytes = 0
+
             for (const fs of effective) {
               totalBytes += Number(fs['total-bytes'])
               usedBytes += Number(fs['used-bytes'] || 0)
             }
+
             if (totalBytes > 0) return { used: usedBytes, total: totalBytes }
           } catch {
             // Guest agent fsinfo not available
           }
-          return undefined
+
+
+return undefined
         })()
       ])
 
@@ -215,7 +226,7 @@ return undefined
       if (osInfoResult.status === 'fulfilled') osInfo = osInfoResult.value
       diskUsage = fsInfoResult.status === 'fulfilled' ? fsInfoResult.value : undefined
     }
-    
+
     // Pour LXC, récupérer l'IP et l'OS depuis la config
     if (type === 'lxc') {
       try {
@@ -223,7 +234,7 @@ return undefined
           conn,
           `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/config`
         )
-        
+
         // Récupérer l'IP - d'abord via les interfaces runtime (supporte DHCP), sinon fallback config statique
         if (status === 'running') {
           // Essayer l'endpoint interfaces pour obtenir l'IP réelle (DHCP inclus)
@@ -263,7 +274,7 @@ return undefined
             }
           }
         }
-        
+
         // Récupérer le type d'OS depuis ostype
         const ostype = configData?.ostype || ''
 
@@ -294,7 +305,7 @@ return undefined
     })
   } catch (e: any) {
     console.error("[guest] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

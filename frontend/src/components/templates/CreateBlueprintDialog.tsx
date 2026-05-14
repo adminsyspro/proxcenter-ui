@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -82,18 +83,22 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   // Reset form on open / populate from editing blueprint
   useEffect(() => {
     if (!open) return
+
     if (blueprint) {
       setName(blueprint.name)
       setDescription(blueprint.description || '')
       setImageSlug(blueprint.imageSlug)
       setTags(blueprint.tags || '')
       setIsPublic(blueprint.isPublic)
+
+
       // hardware/cloudInit are JSONB on the API since step 2.5; the API
       // returns them as parsed objects. Tolerate the legacy string shape
       // for any cached client that hasn't reloaded yet.
       const hw = typeof blueprint.hardware === 'string'
         ? safeJsonParse(blueprint.hardware)
         : blueprint.hardware
+
       setHardware({ ...defaultHardware, ...(hw || {}) })
 
       const ci = blueprint.cloudInit == null
@@ -101,6 +106,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
         : typeof blueprint.cloudInit === 'string'
           ? safeJsonParse(blueprint.cloudInit)
           : blueprint.cloudInit
+
       setCloudInit(ci ? { ...defaultCloudInit, ...ci } : { ...defaultCloudInit })
     } else {
       setName('')
@@ -140,6 +146,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err.error || 'Save failed')
       }
 

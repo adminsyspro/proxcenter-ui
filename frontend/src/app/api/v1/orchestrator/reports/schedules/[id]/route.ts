@@ -20,16 +20,21 @@ export async function GET(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const data = await orchestratorFetch(`/reports/schedules/${id}`)
-    return NextResponse.json(data)
+
+
+return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to get schedule:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to get schedule' },
       { status: 500 }
     )
@@ -43,12 +48,14 @@ export async function PUT(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const body = await request.json()
 
     const typeDenied = await assertReportTypeAllowed(body?.type)
+
     if (typeDenied) return typeDenied
 
     // Force connection_ids + vDC scope to the current tenant's slice on every
@@ -56,9 +63,11 @@ export async function PUT(
     // connections or widen its scope. Backend additionally checks tenant_id
     // ownership via the X-Tenant-ID header.
     const tenantConnectionIds = await getTenantConnectionIds()
+
     body.connection_ids = Array.from(tenantConnectionIds)
 
     const scope = await buildScopePayloadForCurrentTenant()
+
     if (scope) {
       body.node_filter = scope.node_filter
       body.vmid_filter = scope.vmid_filter
@@ -75,7 +84,9 @@ export async function PUT(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to update schedule:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to update schedule' },
       { status: 500 }
     )
@@ -89,9 +100,11 @@ export async function DELETE(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const data = await orchestratorFetch(`/reports/schedules/${id}`, {
       method: 'DELETE'
     })
@@ -101,7 +114,9 @@ export async function DELETE(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to delete schedule:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to delete schedule' },
       { status: 500 }
     )

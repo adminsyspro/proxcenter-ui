@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -12,9 +13,11 @@ export async function GET(
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -42,7 +45,8 @@ export async function GET(
     })
   } catch (error: any) {
     console.error(`Error fetching updates for node ${node}:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to fetch updates",
       data: { updates: [], count: 0, version: null, release: null }
     }, { status: 500 })

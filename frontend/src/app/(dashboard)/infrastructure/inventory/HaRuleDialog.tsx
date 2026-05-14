@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -99,19 +100,19 @@ function HaRuleDialog({ open, onClose, rule, ruleType, connId, availableNodes, a
   const handleSave = async () => {
     if (!name.trim() && !rule) {
       setError(t('inventoryPage.ruleNameRequired'))
-      
+
 return
     }
 
     if (ruleType === 'node-affinity' && selectedNodes.length === 0) {
       setError(t('inventoryPage.selectAtLeastOneNode'))
-      
+
 return
     }
 
     if (selectedResources.length === 0) {
       setError(t('inventoryPage.selectAtLeastOneResource'))
-      
+
 return
     }
 
@@ -121,24 +122,24 @@ return
     try {
       const nodesString = selectedNodes.join(',')
       const resourcesString = selectedResources.join(',')
-      
+
       const url = rule
         ? `/api/v1/connections/${encodeURIComponent(connId)}/ha/affinity-rules/${encodeURIComponent(rule.rule)}`
         : `/api/v1/connections/${encodeURIComponent(connId)}/ha/affinity-rules`
-      
+
       const method = rule ? 'PUT' : 'POST'
-      
+
       const body: any = {
         resources: resourcesString,
         disable: !enabled,
         comment: comment || undefined
       }
-      
+
       if (!rule) {
         body.type = ruleType
         body.rule = name.trim()
       }
-      
+
       if (ruleType === 'node-affinity') {
         body.nodes = nodesString
         body.strict = strict
@@ -156,7 +157,7 @@ return
         const err = await res.json()
 
         setError(err.error || t('errors.updateError'))
-        
+
 return
       }
 
@@ -181,12 +182,14 @@ return
     const vmType = parts[0] === 'ct' ? 'lxc' : 'qemu'
     const vmid = parts[1]
     const vm = (allVms || []).find((v: any) => String(v.vmid) === vmid)
-    return { vmType, vmid, name: vm?.name, status: vm?.status || 'unknown', template: vm?.template }
+
+
+return { vmType, vmid, name: vm?.name, status: vm?.status || 'unknown', template: vm?.template }
   }
 
   const toggleResource = (resource: string) => {
-    setSelectedResources(prev => 
-      prev.includes(resource) 
+    setSelectedResources(prev =>
+      prev.includes(resource)
         ? prev.filter(r => r !== resource)
         : [...prev, resource]
     )
@@ -236,8 +239,8 @@ return
           {ruleType === 'node-affinity' && (
             <FormControlLabel
               control={
-                <Switch 
-                  checked={strict} 
+                <Switch
+                  checked={strict}
                   onChange={(e) => setStrict(e.target.checked)}
                   disabled={saving}
                 />
@@ -252,7 +255,7 @@ return
               }
             />
           )}
-          
+
           {ruleType === 'resource-affinity' && (
             <FormControl size="small" fullWidth>
               <InputLabel>Affinity</InputLabel>
@@ -316,7 +319,9 @@ return
                 .filter((res: any) => {
                   if (!resourceSearch.trim()) return true
                   const q = resourceSearch.toLowerCase()
-                  return (res._info.name || '').toLowerCase().includes(q) || res.sid.toLowerCase().includes(q)
+
+
+return (res._info.name || '').toLowerCase().includes(q) || res.sid.toLowerCase().includes(q)
                 })
                 .map((res: any) => {
                 const info = res._info
@@ -362,12 +367,12 @@ return
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Nodes ({selectedNodes.length}/{availableNodes.length})
             </Typography>
-            
-            <Box sx={{ 
-              border: '1px solid', 
-              borderColor: 'divider', 
-              borderRadius: 1, 
-              maxHeight: 150, 
+
+            <Box sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              maxHeight: 150,
               overflow: 'auto',
               mb: 2
             }}>

@@ -18,9 +18,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, subType: true, vmwareDatacenter: true },
@@ -38,12 +40,15 @@ export async function GET(
 
     // Login via shared SOAP client (auto-discovers MORs for ESXi or vCenter)
     let session
+
     try {
       session = await soapLogin(vmwareUrl, username, password, conn.insecureTLS)
     } catch (e: any) {
       if (e?.message?.includes('login failed')) {
         return NextResponse.json({ data: { status: 'auth_error', host: vmwareUrl, warning: 'Invalid credentials' } })
       }
+
+
       // Host unreachable or other connectivity issue
       return NextResponse.json({ error: e?.message || "VMware host unreachable" }, { status: 502 })
     }
@@ -52,9 +57,11 @@ export async function GET(
       // Fetch license info using discovered PropertyCollector MOR
       let licenseEdition = 'unknown'
       let licenseFull = false
+
       try {
         // Use dynamic MOR names from session (works on both ESXi and vCenter)
         const licManagerMor = session.isVcenter ? 'LicenseManager' : 'ha-license-manager'
+
         const licBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -67,13 +74,16 @@ export async function GET(
     </urn:RetrieveProperties>
   </soapenv:Body>
 </soapenv:Envelope>`
+
         const licResult = await soapRequest(session.baseUrl, licBody, session.cookie, session.insecureTLS, 10000)
         const licText = licResult.text
         const editionMatch = licText.match(/<editionKey>([^<]+)<\/editionKey>/)
+
         if (editionMatch) licenseEdition = editionMatch[1]
         const freeEditions = ['esxiFree', 'esx.hypervisor.cpuPackageCoreLimited', 'esx.hypervisor']
         const isFree = freeEditions.some(e => licText.includes(e))
         const isEval = licenseEdition.toLowerCase().includes('eval') || licText.includes('>Evaluation<')
+
         licenseFull = !isFree || isEval
       } catch {
         // License check failed - assume free to be safe
@@ -83,6 +93,7 @@ export async function GET(
       // but we can use RetrieveServiceContent which was already done during soapLogin.
       // For version, we do a lightweight ServiceContent query.
       let version: string | undefined
+
       try {
         const scBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
@@ -92,7 +103,9 @@ export async function GET(
     </urn:RetrieveServiceContent>
   </soapenv:Body>
 </soapenv:Envelope>`
+
         const scResult = await soapRequest(session.baseUrl, scBody, session.cookie, session.insecureTLS, 10000)
+
         version = scResult.text.match(/<fullName>([^<]*)<\/fullName>/)?.[1]
       } catch {
         // Version check failed - not critical
@@ -116,6 +129,8 @@ export async function GET(
     if (e.name === 'AbortError') {
       return NextResponse.json({ error: "Connection timeout" }, { status: 504 })
     }
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

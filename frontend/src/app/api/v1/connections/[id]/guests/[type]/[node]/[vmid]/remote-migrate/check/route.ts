@@ -15,10 +15,10 @@ type ValidationIssue = {
 
 /**
  * POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/check
- * 
+ *
  * Valide la compatibilité d'une VM pour une migration cross-cluster AVANT de lancer la migration.
  * Retourne une liste de problèmes potentiels (erreurs bloquantes et avertissements).
- * 
+ *
  * Body params:
  * - targetConnectionId: string - ID de la connexion cible
  * - targetNode: string - Nom du nœud cible
@@ -41,12 +41,14 @@ export async function POST(
         message: 'Cross-cluster migration is only supported for QEMU VMs',
         details: 'LXC containers cannot be migrated using remote_migrate API'
       })
-      return NextResponse.json({ valid: false, issues })
+
+return NextResponse.json({ valid: false, issues })
     }
 
     // RBAC
     const resourceId = buildVmResourceId(id, node, type, vmid)
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -61,9 +63,10 @@ export async function POST(
     const targetConn = await getConnectionById(targetConnectionId)
 
     // ========== VÉRIFICATIONS SOURCE ==========
-    
+
     // 1. Récupérer la config de la VM source
     let vmConfig: any = {}
+
     try {
       vmConfig = await pveFetch<any>(sourceConn, `/nodes/${node}/qemu/${vmid}/config`)
     } catch (e: any) {
@@ -73,7 +76,8 @@ export async function POST(
         message: 'Cannot retrieve source VM configuration',
         details: e.message
       })
-      return NextResponse.json({ valid: false, issues })
+
+return NextResponse.json({ valid: false, issues })
     }
 
     // 2. Vérifier HA
@@ -81,6 +85,7 @@ export async function POST(
       const haResources = await pveFetch<any[]>(sourceConn, '/cluster/ha/resources')
       const vmSid = `vm:${vmid}`
       const haResource = haResources?.find((r: any) => r.sid === vmSid)
+
       if (haResource) {
         issues.push({
           type: 'error',
@@ -95,10 +100,12 @@ export async function POST(
 
     // 3. Extraire les infos réseau de la VM source
     const vmNetworks: { id: string; bridge: string; mtu?: number }[] = []
+
     for (const [key, value] of Object.entries(vmConfig)) {
       if (/^net\d+$/.test(key) && typeof value === 'string') {
         const bridgeMatch = value.match(/bridge=([^,]+)/)
         const mtuMatch = value.match(/mtu=(\d+)/)
+
         if (bridgeMatch) {
           vmNetworks.push({
             id: key,
@@ -128,17 +135,22 @@ export async function POST(
     // sur la cible (même symptôme qu'un vMotion sans EVC). La seule vraie parade
     // est un cputype nommé portable (ex: x86-64-v3).
     const cpuTypeRaw = (vmConfig.cpu ? String(vmConfig.cpu).split(',')[0] : '').trim().toLowerCase()
+
     if (cpuTypeRaw === 'host' || cpuTypeRaw === 'max') {
       let sourceCpuModel: string | undefined
       let targetCpuModel: string | undefined
+
       try {
         const srcStatus = await pveFetch<any>(sourceConn, `/nodes/${node}/status`)
+
         sourceCpuModel = srcStatus?.cpuinfo?.model?.trim()
       } catch {
         // can't read source status — degrade to a warning below
       }
+
       try {
         const tgtStatus = await pveFetch<any>(targetConn, `/nodes/${targetNode}/status`)
+
         targetCpuModel = tgtStatus?.cpuinfo?.model?.trim()
       } catch {
         // can't read target status — degrade to a warning below
@@ -155,6 +167,7 @@ export async function POST(
         const matchDetail = sourceCpuModel && targetCpuModel
           ? `Source and target CPUs match (${sourceCpuModel}), so live migration should work — but any difference in microcode, flags or errata between the two hosts can still crash the guest at handover.`
           : `Could not verify source or target CPU model to compare them. Live migration will crash the VM if the physical CPUs differ.`
+
         issues.push({
           type: 'warning',
           code: 'CPU_HOST',
@@ -170,6 +183,7 @@ export async function POST(
     try {
       const targetNodes = await pveFetch<any[]>(targetConn, '/nodes')
       const targetNodeInfo = targetNodes?.find((n: any) => n.node === targetNode)
+
       if (!targetNodeInfo) {
         issues.push({
           type: 'error',
@@ -192,13 +206,15 @@ export async function POST(
         message: 'Cannot connect to target cluster',
         details: e.message
       })
-      return NextResponse.json({ valid: false, issues })
+
+return NextResponse.json({ valid: false, issues })
     }
 
     // 7. Vérifier le stockage cible
     try {
       const targetStorages = await pveFetch<any[]>(targetConn, `/nodes/${targetNode}/storage`)
       const storageInfo = targetStorages?.find((s: any) => s.storage === targetStorage)
+
       if (!storageInfo) {
         issues.push({
           type: 'error',
@@ -216,6 +232,8 @@ export async function POST(
             details: `Content types: ${storageInfo.content}`
           })
         }
+
+
         // Vérifier l'espace disponible
         if (storageInfo.avail !== undefined && storageInfo.avail < 1024 * 1024 * 1024) { // < 1GB
           issues.push({
@@ -239,7 +257,7 @@ export async function POST(
     try {
       const targetNetwork = await pveFetch<any[]>(targetConn, `/nodes/${targetNode}/network`)
       const bridgeInfo = targetNetwork?.find((n: any) => n.iface === targetBridge)
-      
+
       if (!bridgeInfo) {
         issues.push({
           type: 'error',
@@ -260,8 +278,10 @@ export async function POST(
 
         // Vérifier MTU
         const targetMtu = bridgeInfo.mtu || 1500
+
         for (const net of vmNetworks) {
           const vmMtu = net.mtu || 1500
+
           if (vmMtu > targetMtu) {
             issues.push({
               type: 'error',
@@ -285,6 +305,7 @@ export async function POST(
     try {
       const targetVms = await pveFetch<any[]>(targetConn, '/cluster/resources?type=vm')
       const existingVm = targetVms?.find((v: any) => v.vmid === Number.parseInt(vmid))
+
       if (existingVm) {
         issues.push({
           type: 'warning',
@@ -306,6 +327,7 @@ export async function POST(
 
       // Vérifier CPU
       const targetMaxCpu = targetNodeStatus.cpuinfo?.cpus || 0
+
       if (vmCores * vmSockets > targetMaxCpu) {
         issues.push({
           type: 'warning',
@@ -317,6 +339,7 @@ export async function POST(
 
       // Vérifier RAM disponible
       const targetFreeMemory = (targetNodeStatus.memory?.free || 0) / (1024 * 1024) // En MB
+
       if (vmMemory > targetFreeMemory) {
         issues.push({
           type: 'warning',
@@ -343,6 +366,7 @@ export async function POST(
 
   } catch (e: any) {
     console.error('[remote-migrate/check] Error:', String(e?.message || e).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -25,19 +25,26 @@ function formatTimestamp(d: Date, timeframe: string) {
   if (timeframe === "week") {
     const dd = String(d.getDate()).padStart(2, "0")
     const mo = String(d.getMonth() + 1).padStart(2, "0")
-    return `${dd}/${mo} ${hh}:${mm}`
+
+
+return `${dd}/${mo} ${hh}:${mm}`
   }
-  return `${hh}:${mm}`
+
+
+return `${hh}:${mm}`
 }
 
 function downsample(points: any[], maxLen: number) {
   if (points.length <= maxLen) return points
   const step = points.length / maxLen
   const result = []
+
   for (let i = 0; i < maxLen; i++) {
     result.push(points[Math.floor(i * step)])
   }
-  return result
+
+
+return result
 }
 
 function toTrendPoints(rrd: any[], timeframe: string) {
@@ -63,6 +70,7 @@ function toTrendPoints(rrd: any[], timeframe: string) {
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   const params = await Promise.resolve(ctx.params)
@@ -71,6 +79,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
@@ -99,7 +108,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           { method: "GET" }
         )
 
-        
+
 return { key, data: toTrendPoints(rrd, timeframe) }
       } catch {
         return { key, data: [] }

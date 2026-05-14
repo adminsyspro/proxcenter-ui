@@ -18,6 +18,7 @@ export async function POST(req: Request) {
   try {
     // Vérifier s'il y a déjà des utilisateurs
     const userCount = await prisma.user.count()
+
     if (userCount > 0) {
       return NextResponse.json(
         { error: "Le setup initial a déjà été effectué" },
@@ -123,7 +124,9 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     const userCount = await prisma.user.count()
-    return NextResponse.json({
+
+
+return NextResponse.json({
       setupRequired: userCount === 0,
       userCount,
     })

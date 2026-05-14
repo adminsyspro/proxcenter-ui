@@ -73,6 +73,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Feature check error:", e?.message)
-    return NextResponse.json({ data: { hasFeature: false } })
+
+return NextResponse.json({ data: { hasFeature: false } })
   }
 }

@@ -411,6 +411,7 @@ export function getWidgetsByCategory(category, opts = {}) {
 
   return Object.values(WIDGET_REGISTRY).filter(w => {
     if (w.category !== category) return false
+
     // Section headers are structural primitives added via a dedicated toolbar
     // button, not browsed by category in the picker.
     if (w.isSection) return false

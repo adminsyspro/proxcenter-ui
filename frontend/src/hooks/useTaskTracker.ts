@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef } from 'react'
+
 import { useToast } from '@/contexts/ToastContext'
 
 interface TaskInfo {
@@ -46,10 +47,13 @@ export function useTaskTracker() {
     queryParams?: Record<string, string>
   ): Promise<TaskStatus> => {
     let url = `/api/v1/tasks/${encodeURIComponent(connId)}/${encodeURIComponent(node)}/${encodeURIComponent(upid)}`
+
     if (queryParams) {
       const params = new URLSearchParams(queryParams).toString()
+
       if (params) url += `?${params}`
     }
+
     const res = await fetch(url)
 
     if (!res.ok) {
@@ -57,7 +61,9 @@ export function useTaskTracker() {
     }
 
     const json = await res.json()
-    return json
+
+
+return json
   }, [])
 
   const trackTask = useCallback(async (taskInfo: TaskInfo) => {
@@ -91,6 +97,7 @@ export function useTaskTracker() {
             onSuccess?.()
           } else {
             const errorMsg = status.exitstatus || 'Erreur inconnue'
+
             toast.error(`${description} - Échec: ${errorMsg}`)
             onError?.(errorMsg)
           }

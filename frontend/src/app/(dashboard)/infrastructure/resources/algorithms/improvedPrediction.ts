@@ -6,10 +6,13 @@ import { linearRegression, calculateStdDev, findThresholdDayLinear } from './lin
 function ewma(data: number[], alpha: number = 0.3): number[] {
   if (data.length === 0) return []
   const result = [data[0]]
+
   for (let i = 1; i < data.length; i++) {
     result.push(alpha * data[i] + (1 - alpha) * result[i - 1])
   }
-  return result
+
+
+return result
 }
 
 // Detect weekly seasonality (variance by day of week)
@@ -31,6 +34,7 @@ function detectSeasonality(data: number[]): number[] | null {
 
   // Only use seasonality if variance is significant
   const maxFactor = Math.max(...seasonalFactors.map(Math.abs))
+
   if (maxFactor < 1) return null
 
   return seasonalFactors
@@ -96,15 +100,20 @@ export function calculateImprovedPredictions(
       const stdDev = calculateStdDev(smoothed, reg.predict)
 
       let slope = reg.slope
+
       if (slope < minGrowthPerDay && minGrowthPerDay > 0) slope = minGrowthPerDay
 
       const predict = (day: number) => {
         let val = lastVal + slope * day
+
         if (seasonality) {
           const dow = (new Date().getDay() + day) % 7
+
           val += seasonality[dow] * 0.5 // Dampen seasonal effect
         }
-        return Math.max(0, Math.min(100, val))
+
+
+return Math.max(0, Math.min(100, val))
       }
 
       const trendType = Math.abs(slope) < 0.05 ? 'stable' as const : 'linear' as const
@@ -115,6 +124,7 @@ export function calculateImprovedPredictions(
       const reg = linearRegression(history)
       const stdDev = calculateStdDev(history, reg.predict)
       let slope = reg.slope
+
       if (slope < minGrowthPerDay && minGrowthPerDay > 0) slope = minGrowthPerDay
 
       const predict = (day: number) => Math.max(0, Math.min(100, lastVal + slope * day))
@@ -131,6 +141,7 @@ export function calculateImprovedPredictions(
   // Add projection start point
   if (projectedTrends.length > 0) {
     const lastIndex = projectedTrends.length - 1
+
     projectedTrends[lastIndex] = {
       ...projectedTrends[lastIndex],
       cpuProjection: lastCpu,
@@ -143,6 +154,7 @@ export function calculateImprovedPredictions(
 
   for (let i = 1; i <= projectionDays; i++) {
     const date = new Date(lastDate)
+
     date.setDate(date.getDate() + i)
 
     const confidenceFactor = 1 + (i / projectionDays) * 1.5

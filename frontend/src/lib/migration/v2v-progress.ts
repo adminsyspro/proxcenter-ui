@@ -26,12 +26,16 @@
  */
 
 export interface V2vProgress {
+
   /** Approximate overall percent (0-100), derived from phase. */
   percent: number
+
   /** 1-indexed; only meaningful during "Copying disk N/M". */
   currentDisk: number
+
   /** Total disk count; only meaningful during "Copying disk N/M". */
   totalDisks: number
+
   /** Human-readable phase name, surface this in the UI. */
   step: string
 }
@@ -79,6 +83,7 @@ const V2V_JSON_PROGRESS_RE = /"offset"\s*:\s*(\d+)\s*,\s*"total"\s*:\s*(\d+)/
 const V2V_HUMAN_LINE_RE = /^\[\s*[\d.]+\]\s+(.+)$/
 const V2V_OLD_PROGRESS_RE = /\(([\d.]+)\/100%\)/
 const V2V_DISK_RE = /Copying disk (\d+)\/(\d+)/
+
 // virt-v2v delegates the actual bytes-to-bytes copy to nbdcopy, which prints its
 // own progress bar on stderr in the format:
 //   ▗  43% [******************----------------------]
@@ -101,6 +106,7 @@ const V2V_NBDCOPY_RE = /(\d+(?:\.\d+)?)\s*%\s*\[[*\- ]+\]/
  */
 export function parseV2vLine(line: string): V2vProgress | null {
   const trimmed = line.trim()
+
   if (!trimmed) return null
 
   // State carried across lines: remember the last "Copying disk N/M" message
@@ -111,27 +117,33 @@ export function parseV2vLine(line: string): V2vProgress | null {
 
   // 1. JSON progress event (newer virt-v2v)
   const jsonProg = trimmed.match(V2V_JSON_PROGRESS_RE)
+
   if (jsonProg) {
     const offset = Number.parseInt(jsonProg[1], 10)
     const total = Number.parseInt(jsonProg[2], 10)
     const pct = total > 0 ? (offset / total) * 100 : 0
-    return { percent: pct, currentDisk: 1, totalDisks: 1, step: "Copying disk" }
+
+
+return { percent: pct, currentDisk: 1, totalDisks: 1, step: "Copying disk" }
   }
 
   // 2. JSON message event — use phase map for percent
   const jsonMsg = trimmed.match(V2V_JSON_MESSAGE_RE)
+
   if (jsonMsg) {
     return progressFromStep(jsonMsg[1].trim())
   }
 
   // 3. Human-readable bracketed line
   const humanMatch = trimmed.match(V2V_HUMAN_LINE_RE)
+
   if (humanMatch) {
     return progressFromStep(humanMatch[1].trim())
   }
 
   // 4. Legacy percent format during disk copy
   const oldProg = trimmed.match(V2V_OLD_PROGRESS_RE)
+
   if (oldProg) {
     return { percent: Number.parseFloat(oldProg[1]), currentDisk: 1, totalDisks: 1, step: "Copying disk" }
   }
@@ -139,6 +151,7 @@ export function parseV2vLine(line: string): V2vProgress | null {
   // 5. nbdcopy progress bar (during "Copying disk" phase on modern virt-v2v
   //    where disk transfer is delegated to nbdcopy instead of v2v's own loop).
   const nbdProg = trimmed.match(V2V_NBDCOPY_RE)
+
   if (nbdProg) {
     return { percent: Number.parseFloat(nbdProg[1]), currentDisk: 1, totalDisks: 1, step: "Copying disk" }
   }
@@ -150,11 +163,13 @@ function progressFromStep(step: string): V2vProgress | null {
   // Skip virt-v2v's informational lines that aren't phase transitions.
   // We only care about lines that look like progress markers.
   const skipPrefixes = ["virt-v2v: ", "This guest has", "The QEMU", "could not "]
+
   if (skipPrefixes.some(p => step.startsWith(p))) return null
 
   let currentDisk = 1
   let totalDisks = 1
   const diskMatch = step.match(V2V_DISK_RE)
+
   if (diskMatch) {
     currentDisk = Number.parseInt(diskMatch[1], 10)
     totalDisks = Number.parseInt(diskMatch[2], 10)
@@ -189,6 +204,8 @@ export function calculateOverallProgress(v2v: V2vProgress): number {
   if (!v2v.step.startsWith("Copying disk")) {
     return Math.min(100, Math.round(v2v.percent * 10) / 10)
   }
+
+
   // Disk copy: map to the 40..85 band, split across disks.
   const COPY_BAND_START = 40
   const COPY_BAND_END = 85
@@ -196,7 +213,9 @@ export function calculateOverallProgress(v2v: V2vProgress): number {
   const weightPerDisk = band / Math.max(1, v2v.totalDisks)
   const completedDisks = Math.max(0, v2v.currentDisk - 1)
   const overall = COPY_BAND_START + completedDisks * weightPerDisk + (v2v.percent / 100) * weightPerDisk
-  return Math.min(100, Math.round(overall * 10) / 10)
+
+
+return Math.min(100, Math.round(overall * 10) / 10)
 }
 
 const PV_RE = /^([\d.]+\s*\S+)\s+\d+:\d+:\d+\s+\[\s*([\d.]+\s*\S+)\]\s+\[.*?\]\s+(\d+)%\s+ETA\s+(\S+)/

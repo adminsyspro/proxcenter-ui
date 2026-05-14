@@ -22,9 +22,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -33,12 +35,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     if (vmidParam) {
       const requested = Number(vmidParam)
+
       if (!Number.isInteger(requested) || requested < 100 || requested > 999999999) {
         return NextResponse.json({ data: requested, available: false, error: "VMID must be an integer between 100 and 999999999" })
       }
+
       try {
         const checked = await pveFetch<number | string>(conn, `/cluster/nextid?vmid=${encodeURIComponent(String(requested))}`)
-        return NextResponse.json({ data: Number(checked) || requested, available: true })
+
+
+return NextResponse.json({ data: Number(checked) || requested, available: true })
       } catch (e: any) {
         // PVE 400 = "VM <n> already exists" or "invalid format". Treat as
         // "not available" so the UI can show inline feedback without burning
@@ -48,7 +54,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     }
 
     const nextid = await pveFetch<number | string>(conn, "/cluster/nextid")
-    return NextResponse.json({ data: Number(nextid), available: true })
+
+
+return NextResponse.json({ data: Number(nextid), available: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

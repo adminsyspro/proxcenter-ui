@@ -8,6 +8,7 @@ const primaryColorConfig = [
     main: '#E57000',
     dark: '#B85A00'
   },
+
   // ── Warm tones ──
   {
     name: 'primary-4',
@@ -21,6 +22,7 @@ const primaryColorConfig = [
     main: '#F59E0B',
     dark: '#D97706'
   },
+
   // ── Red / Pink ──
   {
     name: 'primary-8',
@@ -34,6 +36,7 @@ const primaryColorConfig = [
     main: '#EB3D63',
     dark: '#AC2D48'
   },
+
   // ── Purple / Violet ──
   {
     name: 'primary-6',
@@ -47,6 +50,7 @@ const primaryColorConfig = [
     main: '#7C3AED',
     dark: '#5B21B6'
   },
+
   // ── Blue / Cyan ──
   {
     name: 'primary-5',
@@ -60,6 +64,7 @@ const primaryColorConfig = [
     main: '#06B6D4',
     dark: '#0891B2'
   },
+
   // ── Teal / Green ──
   {
     name: 'primary-2',

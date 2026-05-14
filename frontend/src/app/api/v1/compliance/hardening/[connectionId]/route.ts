@@ -10,12 +10,11 @@ import {
   type HardeningData, type CheckConfig,
 } from '@/lib/compliance/hardening'
 import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
-import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
+import { getCurrentTenantId, verifyConnectionOwnership , getSessionPrisma } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { buildSSHAuditCommand, parseSSHAuditOutput, type SSHNodeData, type SSHHardeningData } from '@/lib/compliance/ssh-checks'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
-import { getSessionPrisma } from "@/lib/tenant"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,6 +24,7 @@ const VM_CONCURRENCY = 10
 async function runWithConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency)
+
     await Promise.all(batch.map(fn))
   }
 }
@@ -34,17 +34,20 @@ export async function GET(
   ctx: { params: Promise<{ connectionId: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const { connectionId } = await ctx.params
 
     // Verify connection belongs to current tenant
     const ownershipError = await verifyConnectionOwnership(connectionId)
+
     if (ownershipError) return ownershipError
 
     const conn = await getConnectionById(connectionId)
@@ -67,16 +70,22 @@ export async function GET(
     ])
 
     const allNodes: Array<{ node: string; status?: string }> = Array.isArray(nodesRaw) ? nodesRaw : []
+
+
     // When filtering by node, only keep that specific node
     const nodes = nodeFilter
       ? allNodes.filter(n => n.node === nodeFilter)
       : allNodes
+
     const users = Array.isArray(usersRaw) ? usersRaw : []
     const allResources = Array.isArray(resourcesRaw) ? resourcesRaw : []
+
+
     // When filtering by node, only keep resources on that node
     const resources = nodeFilter
       ? allResources.filter((r: any) => r.node === nodeFilter)
       : allResources
+
     const backupJobs = Array.isArray(backupJobsRaw) ? backupJobsRaw : []
     const haResources = Array.isArray(haResourcesRaw) ? haResourcesRaw : []
     const replicationJobs = Array.isArray(replicationRaw) ? replicationRaw : []
@@ -84,8 +93,10 @@ export async function GET(
 
     // TFA info
     let tfa: any[] = []
+
     try {
       const tfaRaw = await pveFetch<any>(conn, '/access/tfa')
+
       tfa = Array.isArray(tfaRaw) ? tfaRaw : []
     } catch {
       // PVE < 7.x may not have this endpoint
@@ -93,25 +104,30 @@ export async function GET(
 
     // Per-node details in parallel
     const nodeDetails: Record<string, any> = {}
+
     await Promise.all(nodes.map(async (n) => {
       const nodeName = encodeURIComponent(n.node)
+
       const [subscription, aptRepos, certificates, nodeFirewall] = await Promise.all([
         pveFetch<any>(conn, `/nodes/${nodeName}/subscription`).catch(() => ({})),
         pveFetch<any>(conn, `/nodes/${nodeName}/apt/repositories`).catch(() => ({})),
         pveFetch<any>(conn, `/nodes/${nodeName}/certificates/info`).catch(() => []),
         pveFetch<any>(conn, `/nodes/${nodeName}/firewall/options`).catch(() => ({})),
       ])
+
       nodeDetails[n.node] = { subscription, aptRepos, certificates: Array.isArray(certificates) ? certificates : [], firewall: nodeFirewall }
     }))
 
     // SSH-based CIS checks: run in parallel with VM data gathering
     let sshData: SSHHardeningData | undefined
+
     const sshPromise = (async () => {
       try {
         const connection = await prisma.connection.findUnique({
           where: { id: connectionId },
           select: { sshEnabled: true },
         })
+
         if (!connection?.sshEnabled) return
 
         const sshCommand = buildSSHAuditCommand()
@@ -122,6 +138,7 @@ export async function GET(
           try {
             const nodeIp = await getNodeIp(conn, n.node)
             const result = await executeSSH(connectionId, nodeIp, sshCommand)
+
             if (result.success && result.output) {
               sshNodes.push({
                 node: n.node,
@@ -165,6 +182,7 @@ export async function GET(
       vmFirewalls[key] = fwOpts || {}
 
       const rulesList = Array.isArray(rules) ? rules : []
+
       vmSecurityGroups[key] = rulesList.some((r: any) => r.type === 'group')
 
       if (config) vmConfigs[key] = config
@@ -202,8 +220,10 @@ export async function GET(
 
     if (profileId) {
       const profile = await getProfile(profileId, tenantId)
+
       if (profile) {
         const profileChecks = await getProfileChecks(profileId, tenantId)
+
         checkConfig = profileChecks.map(pc => ({
           checkId: pc.check_id,
           enabled: pc.enabled === 1,
@@ -216,6 +236,7 @@ export async function GET(
     } else {
       // Check for active profile
       const active = await getActiveProfile(connectionId, tenantId)
+
       if (active) {
         checkConfig = active.checks.map(pc => ({
           checkId: pc.check_id,
@@ -230,6 +251,7 @@ export async function GET(
 
     // Categories to keep when filtering by node (exclude cluster-wide and access checks)
     const nodeCategories = ['node', 'vm', 'os', 'ssh', 'network', 'services', 'filesystem', 'logging']
+
     const filterForNode = (checks: any[]) =>
       nodeFilter ? checks.filter((c: any) => nodeCategories.includes(c.category)) : checks
 
@@ -239,6 +261,7 @@ export async function GET(
       const filteredConfig = nodeFilter
         ? checkConfig.filter(c => !c.category || nodeCategories.includes(c.category))
         : checkConfig
+
       const weightedChecks = filterForNode(runChecksWithProfile(hardeningData, filteredConfig))
       const summary = computeWeightedScore(weightedChecks)
 
@@ -272,6 +295,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error('Error running hardening checks:', e)
-    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }

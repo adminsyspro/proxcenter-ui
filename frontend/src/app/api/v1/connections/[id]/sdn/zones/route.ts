@@ -16,9 +16,11 @@ export async function GET(
     const { id } = await ctx.params
 
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (permError) return permError
 
     const conn = await getConnectionById(id)
+
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
     const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones?pending=1")
@@ -26,6 +28,7 @@ export async function GET(
     return NextResponse.json({ data: { zones: zones ?? [] } })
   } catch (e: any) {
     console.error("Error fetching SDN zones:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

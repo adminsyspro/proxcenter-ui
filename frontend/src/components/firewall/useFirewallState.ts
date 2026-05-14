@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import type { FirewallRule, FirewallOptions, SecurityGroup, FirewallAPIAdapter, SnackbarState } from './types'
@@ -73,6 +74,7 @@ export function useFirewallState(api: FirewallAPIAdapter) {
   const loadRulesOnly = useCallback(async () => {
     try {
       const rulesData = await api.getRules()
+
       setRules(normalizeRules(rulesData))
     } catch (err) {
       // Silently fail, user can refresh manually

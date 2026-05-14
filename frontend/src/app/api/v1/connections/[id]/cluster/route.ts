@@ -19,6 +19,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -87,7 +88,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
         try {
           const st = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(nodeName)}/status`)
-          
+
           // Ajouter les détails du node
           nodeDetails.push({
             name: nodeName,
@@ -105,7 +106,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             kernelVersion: st?.kversion || null,
             supportLevel: n.level || 'Community',
           })
-          
+
           return st
         } catch {
           nodeDetails.push({
@@ -114,26 +115,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             cpuPct: 0,
             memPct: 0,
           })
-          
+
 return null
         }
       })
     )
 
     const okStatuses = statuses.filter(Boolean) as any[]
-    
+
     // CPU: moyenne
     const cpuAvgPct =
       okStatuses.length > 0
         ? round1((okStatuses.reduce((acc, s) => acc + Number(s?.cpu || 0), 0) / okStatuses.length) * 100)
         : 0
-    
+
     // Total CPU cores
     const totalCpuCores = okStatuses.reduce((acc, s) => {
       const cores = Number(s?.cpuinfo?.cores || 0)
       const sockets = Number(s?.cpuinfo?.sockets || 1)
 
-      
+
 return acc + (cores * sockets)
     }, 0)
 
@@ -149,7 +150,7 @@ return acc + (cores * sockets)
 
     // 4) Guests - utiliser plusieurs méthodes pour récupérer les infos
     let guests = { vms: { total: 0, running: 0, stopped: 0, templates: 0 }, lxc: { total: 0, running: 0, stopped: 0 } }
-    
+
     // Méthode 1: /cluster/resources (plus fiable pour les clusters)
     let guestsFound = false
 
@@ -159,7 +160,7 @@ return acc + (cores * sockets)
       if (Array.isArray(resources) && resources.length > 0) {
         const vms = resources.filter((r) => r.type === "qemu")
         const lxcs = resources.filter((r) => r.type === "lxc")
-        
+
         if (vms.length > 0 || lxcs.length > 0) {
           guests = {
             vms: {
@@ -180,19 +181,19 @@ return acc + (cores * sockets)
     } catch (e) {
       // /cluster/resources failed, trying fallback
     }
-    
+
     // Méthode 2: Fallback - récupérer depuis chaque node individuellement
     if (!guestsFound) {
       try {
         const allVms: any[] = []
         const allLxcs: any[] = []
-        
+
         await Promise.all(
           nodes.map(async (n) => {
             const nodeName = n.node
 
             if (!nodeName) return
-            
+
             try {
               const nodeVms = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/qemu`)
 
@@ -200,7 +201,7 @@ return acc + (cores * sockets)
                 allVms.push(...nodeVms)
               }
             } catch {}
-            
+
             try {
               const nodeLxcs = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/lxc`)
 
@@ -210,7 +211,7 @@ return acc + (cores * sockets)
             } catch {}
           })
         )
-        
+
         guests = {
           vms: {
             total: allVms.length,
@@ -241,8 +242,8 @@ return acc + (cores * sockets)
         name: clusterName,
         health,
         cephHealth,
-        nodes: { 
-          total: totalNodes, 
+        nodes: {
+          total: totalNodes,
           online: onlineNodes,
           details: nodeDetails.sort((a, b) => a.name.localeCompare(b.name)),
         },

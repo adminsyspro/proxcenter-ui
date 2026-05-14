@@ -44,15 +44,19 @@ export async function isLdapEnabled(): Promise<boolean> {
     where: { id: "default" },
     select: { enabled: true },
   })
-  return row?.enabled === true
+
+
+return row?.enabled === true
 }
 
 /** Reads the full LDAP config + decrypts the bind password. */
 export async function getLdapConfig(): Promise<LdapConfig | null> {
   const row = await prisma.ldapConfig.findUnique({ where: { id: "default" } })
+
   if (!row) return null
 
   let bindPassword: string | null = null
+
   if (row.bindPasswordEnc) {
     try {
       bindPassword = decryptSecret(row.bindPasswordEnc)
@@ -108,6 +112,7 @@ export async function authenticateLdap(
   }
 
   const config = await getLdapConfig()
+
   if (!config || !config.enabled) {
     return null
   }
@@ -116,6 +121,7 @@ export async function authenticateLdap(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     }
+
     if (ORCHESTRATOR_API_KEY) {
       headers["X-API-Key"] = ORCHESTRATOR_API_KEY
     }
@@ -143,11 +149,14 @@ export async function authenticateLdap(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "")
+
       console.error(`Orchestrator LDAP auth failed: ${res.status} ${text}`)
-      return null
+
+return null
     }
 
     const data = await res.json()
+
     if (!data.success || !data.user) {
       return null
     }
@@ -180,9 +189,12 @@ export function resolveLdapRole(groups: string[], config: LdapConfig): string | 
     if (config.groupRoleMapping[group]) {
       return config.groupRoleMapping[group]
     }
+
     const cnMatch = group.match(/^CN=([^,]+)/i)
+
     if (cnMatch) {
       const cn = cnMatch[1]
+
       if (config.groupRoleMapping[cn]) {
         return config.groupRoleMapping[cn]
       }

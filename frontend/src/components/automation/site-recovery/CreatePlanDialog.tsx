@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -38,31 +39,39 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
   // Build connection name map
   const connMap = useMemo(() => {
     const m: Record<string, string> = {}
+
     for (const c of connections) m[c.id] = c.name
-    return m
+
+return m
   }, [connections])
 
   // Group VMs by cluster pair from replication jobs
   const vmsByPair = useMemo(() => {
     const groups: Record<string, { source: string; target: string; vms: { vm_id: number; vm_name: string }[] }> = {}
+
     for (const j of (jobs || [])) {
       const key = `${j.source_cluster}→${j.target_cluster}`
+
       if (!groups[key]) groups[key] = { source: j.source_cluster, target: j.target_cluster, vms: [] }
       const ids = j.vm_ids || []
       const names = j.vm_names || []
+
       for (let k = 0; k < ids.length; k++) {
         if (!groups[key].vms.find(v => v.vm_id === ids[k])) {
           groups[key].vms.push({ vm_id: ids[k], vm_name: names[k] || `VM ${ids[k]}` })
         }
       }
     }
-    return groups
+
+
+return groups
   }, [jobs])
 
   // Determine which cluster pair is locked (from first assigned VM)
   const lockedPair = useMemo(() => {
     if (vmAssignments.length === 0) return null
-    return { source: vmAssignments[0].source_cluster, target: vmAssignments[0].target_cluster }
+
+return { source: vmAssignments[0].source_cluster, target: vmAssignments[0].target_cluster }
   }, [vmAssignments])
 
   const toggleVM = (vm: { vm_id: number; vm_name: string }, source: string, target: string) => {
@@ -150,7 +159,9 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
 
             {pairEntries.map(([key, group]) => {
               const pairDisabled = lockedPair !== null && (lockedPair.source !== group.source || lockedPair.target !== group.target)
-              return (
+
+
+return (
                 <Box key={key} sx={{ mb: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
                     <i className='ri-arrow-left-right-line' style={{ fontSize: 14, color: pairDisabled ? '#a1a1aa' : '#3b82f6' }} />
@@ -161,7 +172,9 @@ export default function CreatePlanDialog({ open, onClose, onSubmit, connections,
                   <Stack spacing={0.5}>
                     {group.vms.map(vm => {
                       const selected = !!vmAssignments.find(v => v.vm_id === vm.vm_id)
-                      return (
+
+
+return (
                         <Box
                           key={vm.vm_id}
                           onClick={() => !pairDisabled && toggleVM(vm, group.source, group.target)}

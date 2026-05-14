@@ -1,27 +1,35 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
+
+import { getServerSession } from "next-auth"
+
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 
 // GET /api/v1/tenants — list all tenants (admin only)
 export async function GET() {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const tenants = await listTenants()
-  return NextResponse.json({ data: tenants })
+
+
+return NextResponse.json({ data: tenants })
 }
 
 // POST /api/v1/tenants — create a new tenant
 export async function POST(req: NextRequest) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const session = await getServerSession(authOptions)
@@ -60,6 +68,8 @@ export async function POST(req: NextRequest) {
     if (e.message?.includes("UNIQUE constraint")) {
       return NextResponse.json({ error: "A tenant with this slug already exists" }, { status: 409 })
     }
-    return NextResponse.json({ error: e.message }, { status: 500 })
+
+
+return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

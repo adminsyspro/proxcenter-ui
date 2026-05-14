@@ -3,7 +3,9 @@ import { useRefreshInterval } from './useRefreshInterval'
 
 export function useOrchestratorAlerts(enabled: boolean) {
   const refreshInterval = useRefreshInterval(30000)
-  return useSWRFetch(
+
+
+return useSWRFetch(
     enabled ? '/api/v1/orchestrator/alerts?limit=200' : null,
     { refreshInterval }
   )
@@ -11,7 +13,9 @@ export function useOrchestratorAlerts(enabled: boolean) {
 
 export function useAlertsSummary(enabled: boolean) {
   const refreshInterval = useRefreshInterval(30000)
-  return useSWRFetch(
+
+
+return useSWRFetch(
     enabled ? '/api/v1/orchestrator/alerts/summary' : null,
     { refreshInterval }
   )
@@ -19,7 +23,9 @@ export function useAlertsSummary(enabled: boolean) {
 
 export function useAlertRules(enabled: boolean) {
   const refreshInterval = useRefreshInterval(30000)
-  return useSWRFetch(
+
+
+return useSWRFetch(
     enabled ? '/api/v1/orchestrator/alerts/rules' : null,
     { refreshInterval }
   )

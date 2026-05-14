@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 export async function GET() {
   // Notification settings are global (orchestrator not tenant-aware) — restrict to admins
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
   if (denied) return denied
 
   try {
@@ -29,6 +30,7 @@ return NextResponse.json(
 export async function PUT(request: NextRequest) {
   // Notification settings are global (orchestrator not tenant-aware) — restrict to admins
   const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
   if (denied) return denied
 
   try {

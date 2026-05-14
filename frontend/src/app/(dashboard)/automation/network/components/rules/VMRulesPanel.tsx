@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -30,7 +31,9 @@ interface VMRulesPanelProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
+
+
+return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -38,9 +41,11 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   if (rule.macro) return rule.macro
   const proto = rule.proto?.toUpperCase() || ''
   const port = rule.dport || ''
+
   if (!proto && !port) return 'any'
   if (proto && port) return `${proto}/${port}`
-  return proto || port
+
+return proto || port
 }
 
 const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
@@ -48,9 +53,11 @@ const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as co
 const LOG_LEVELS = ['nolog', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'] as const
 
 const VLAN_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#e11d48']
+
 function getVlanColor(vlanKey: string, index: number): string {
   if (vlanKey === '__untagged__') return '#94a3b8'
-  return VLAN_COLORS[index % VLAN_COLORS.length]
+
+return VLAN_COLORS[index % VLAN_COLORS.length]
 }
 
 // ── Main Component ──
@@ -81,30 +88,38 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   // Group VMs by primary VLAN (first tag from net0)
   const vlanGroups = useMemo(() => {
     const map = new Map<string, VMFirewallInfo[]>()
+
     for (const vm of filteredVMData) {
       const key = vm.vlans.length > 0 ? String(vm.vlans[0]) : '__untagged__'
+
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(vm)
     }
+
+
     // Sort: numbered VLANs ascending, then untagged last
     return Array.from(map.entries()).sort((a, b) => {
       if (a[0] === '__untagged__') return 1
       if (b[0] === '__untagged__') return -1
-      return Number.parseInt(a[0]) - Number.parseInt(b[0])
+
+return Number.parseInt(a[0]) - Number.parseInt(b[0])
     })
   }, [filteredVMData])
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
+
     for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
     for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    return opts
+
+return opts
   }, [aliases, ipsets])
 
   // ── Toggle VM firewall (modifies NIC config firewall=0/1) ──
   const handleToggleVMFirewall = async (vm: VMFirewallInfo) => {
     if (!selectedConnection) return
     const newEnable = !vm.firewallEnabled
+
     try {
       await firewallAPI.toggleVMNICFirewall(selectedConnection, vm.node, vm.type, vm.vmid, newEnable)
       showToast(newEnable ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
@@ -117,6 +132,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   // ── Change VM policy (policy_in / policy_out) ──
   const handleVMPolicyChange = async (vm: VMFirewallInfo, field: 'policy_in' | 'policy_out', value: string) => {
     if (!selectedConnection) return
+
     try {
       await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
       showToast(t('networkPage.policyUpdated'), 'success')
@@ -135,8 +151,10 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
 
   const fetchLogs = useCallback(async (vm: VMFirewallInfo) => {
     if (!selectedConnection) return
+
     try {
       const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
+
       setLogEntries(logs)
     } catch { /* silently fail on auto-refresh */ }
   }, [selectedConnection])
@@ -145,8 +163,10 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     setLogDialog({ open: true, vm })
     setLogEntries([])
     setLoadingLogs(true)
+
     try {
       const logs = await firewallAPI.getVMFirewallLog(selectedConnection, vm.node, vm.type, vm.vmid, 200)
+
       setLogEntries(logs)
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -165,7 +185,8 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   useEffect(() => {
     if (logDialog.open && logDialog.vm) {
       logIntervalRef.current = setInterval(() => fetchLogs(logDialog.vm!), 5000)
-      return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current) }
+
+return () => { if (logIntervalRef.current) clearInterval(logIntervalRef.current) }
     }
   }, [logDialog.open, logDialog.vm, fetchLogs])
 
@@ -177,6 +198,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   // ── Log level change ──
   const handleVMLogLevelChange = async (vm: VMFirewallInfo, field: 'log_level_in' | 'log_level_out', value: string) => {
     if (!selectedConnection) return
+
     try {
       await firewallAPI.updateVMOptions(selectedConnection, vm.node, vm.type, vm.vmid, { [field]: value })
       showToast(t('networkPage.policyUpdated'), 'success')
@@ -189,6 +211,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   // ── CRUD handlers ──
   const openVMRuleDialog = (vm: VMFirewallInfo, rule: firewallAPI.FirewallRule | null = null) => {
     setEditingVMRule({ vm, rule, isNew: !rule })
+
     if (rule) {
       setNewVMRule({
         type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
@@ -199,12 +222,14 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     } else {
       setNewVMRule({ ...DEFAULT_RULE })
     }
+
     setVmRuleDialogOpen(true)
   }
 
   const handleSaveVMRule = async () => {
     if (!editingVMRule || !selectedConnection) return
     const { vm, rule, isNew } = editingVMRule
+
     try {
       if (isNew) {
         await firewallAPI.addVMRule(selectedConnection, vm.node, vm.type, vm.vmid, newVMRule)
@@ -213,6 +238,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
         await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, rule.pos, newVMRule)
         showToast(t('network.ruleUpdated'), 'success')
       }
+
       setVmRuleDialogOpen(false)
       setEditingVMRule(null)
       reloadVMFirewallRules(vm)
@@ -224,6 +250,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
   const handleDeleteVMRule = async () => {
     if (!deleteVMRuleConfirm) return
     const { vm, pos } = deleteVMRuleConfirm
+
     try {
       await firewallAPI.deleteVMRule(selectedConnection, vm.node, vm.type, vm.vmid, pos)
       showToast(t('network.ruleDeleted'), 'success')
@@ -251,22 +278,29 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
+
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
     setVmDragState({ vmid: 0, draggedPos: null, dragOverPos: null })
   }
+
   const handleDragOver = (e: React.DragEvent, vmid: number, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
     if (vmDragState.vmid === vmid && vmDragState.draggedPos !== null && vmDragState.draggedPos !== pos) {
       setVmDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
+
   const handleDragLeave = () => setVmDragState(prev => ({ ...prev, dragOverPos: null }))
+
   const handleDrop = async (e: React.DragEvent, vm: VMFirewallInfo, toPos: number) => {
     e.preventDefault()
     const fromPos = vmDragState.draggedPos
+
     setVmDragState({ vmid: 0, draggedPos: null, dragOverPos: null })
+
     if (fromPos !== null && fromPos !== toPos && vmDragState.vmid === vm.vmid) {
       try {
         await fetch(`/api/v1/firewall/vms/${selectedConnection}/${vm.node}/${vm.type}/${vm.vmid}/rules/${fromPos}`, {
@@ -351,7 +385,11 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                         cursor: 'pointer',
                         '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.2)}` }
                       }}
-                      onClick={() => setExpandedVlans(prev => { const n = new Set(prev); if (n.has(vlanKey)) n.delete(vlanKey); else n.add(vlanKey); return n })}
+                      onClick={() => setExpandedVlans(prev => { const n = new Set(prev);
+
+ if (n.has(vlanKey)) n.delete(vlanKey); else n.add(vlanKey);
+
+return n })}
                     >
                       <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -381,7 +419,11 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                               cursor: 'pointer',
                               '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
                             }}
-                            onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
+                            onClick={() => setExpandedVMs(prev => { const n = new Set(prev);
+
+ if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid);
+
+return n })}
                           >
                             <TableCell colSpan={10} sx={{ py: 1, px: 2, pl: 5 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

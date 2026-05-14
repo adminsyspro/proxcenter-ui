@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { extractHostFromUrl, replaceHostInUrl, extractPortFromUrl } from './urlUtils'
 
 describe('extractHostFromUrl', () => {
@@ -50,6 +51,7 @@ describe('replaceHostInUrl', () => {
 
   it('preserves path', () => {
     const result = replaceHostInUrl('https://old.host:8006/api/v1', 'new.host')
+
     expect(result).toBe('https://new.host:8006/api/v1')
   })
 
@@ -59,6 +61,7 @@ describe('replaceHostInUrl', () => {
 
   it('strips trailing slash', () => {
     const result = replaceHostInUrl('https://old.host:8006', 'new.host')
+
     expect(result).not.toMatch(/\/$/)
   })
 })

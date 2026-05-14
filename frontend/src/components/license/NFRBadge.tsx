@@ -1,12 +1,15 @@
 'use client'
 
 import Chip from '@mui/material/Chip'
+
 import { useLicense } from '@/contexts/LicenseContext'
 
 export default function NFRBadge() {
   const { isNFR } = useLicense()
+
   if (!isNFR) return null
-  return (
+
+return (
     <Chip
       size="small"
       color="warning"

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -30,6 +31,7 @@ export function DeleteUnusedDiskDialog({ open, diskId, volume, onClose, onConfir
   const handleConfirm = async () => {
     setWorking(true)
     setError(null)
+
     try {
       await onConfirm()
       onClose()

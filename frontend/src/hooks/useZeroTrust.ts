@@ -1,4 +1,5 @@
 import useSWR from 'swr'
+
 import { useSWRFetch } from './useSWRFetch'
 import { useRefreshInterval } from './useRefreshInterval'
 
@@ -7,17 +8,23 @@ const clusterFirewallFetcher = async (url: string) => {
   const connRes = await fetch('/api/v1/connections')
   const connJson = await connRes.json()
   const pveConn = connJson.data?.find((c: any) => c.type === 'pve')
+
   if (!pveConn) return null
 
   const fwRes = await fetch(`/api/v1/firewall/cluster/${pveConn.id}?type=options`)
+
   if (!fwRes.ok) return null
   const fwData = await fwRes.json()
-  return { ...fwData, connectionId: pveConn.id, connectionName: pveConn.name }
+
+
+return { ...fwData, connectionId: pveConn.id, connectionName: pveConn.name }
 }
 
 export function useClusterFirewallOptions() {
   const refreshInterval = useRefreshInterval(120000)
-  return useSWR('zero-trust/firewall-options', clusterFirewallFetcher, { refreshInterval })
+
+
+return useSWR('zero-trust/firewall-options', clusterFirewallFetcher, { refreshInterval })
 }
 
 // Fetcher for firewall scores across all PVE clusters
@@ -25,6 +32,7 @@ const firewallScoresFetcher = async () => {
   const connRes = await fetch('/api/v1/connections')
   const connJson = await connRes.json()
   const pveConns = (connJson.data || []).filter((c: any) => c.type === 'pve')
+
   if (pveConns.length === 0) return []
 
   return Promise.all(
@@ -32,12 +40,14 @@ const firewallScoresFetcher = async () => {
       try {
         const fwRes = await fetch(`/api/v1/firewall/cluster/${conn.id}?type=options`)
         let fwData = null
+
         if (fwRes?.ok) fwData = await fwRes.json()
 
         let score = 0
         const enabled = fwData?.enable === 1
         const policyIn = fwData?.policy_in || 'ACCEPT'
         const policyOut = fwData?.policy_out || 'ACCEPT'
+
         if (enabled) score += 40
         if (policyIn === 'DROP') score += 30
         if (policyOut === 'DROP') score += 30
@@ -52,7 +62,9 @@ const firewallScoresFetcher = async () => {
 
 export function useFirewallScores() {
   const refreshInterval = useRefreshInterval(60000)
-  return useSWR('zero-trust/firewall-scores', firewallScoresFetcher, { refreshInterval })
+
+
+return useSWR('zero-trust/firewall-scores', firewallScoresFetcher, { refreshInterval })
 }
 
 // Fetcher for security groups across all PVE clusters
@@ -60,6 +72,7 @@ const securityGroupsFetcher = async () => {
   const connRes = await fetch('/api/v1/connections')
   const connJson = await connRes.json()
   const pveConns = (connJson.data || []).filter((c: any) => c.type === 'pve')
+
   if (pveConns.length === 0) return []
 
   return Promise.all(
@@ -67,11 +80,15 @@ const securityGroupsFetcher = async () => {
       try {
         const sgRes = await fetch(`/api/v1/firewall/groups/${conn.id}`)
         let groups: any[] = []
+
         if (sgRes?.ok) {
           const sgJson = await sgRes.json()
+
           groups = Array.isArray(sgJson) ? sgJson : []
         }
-        return { id: conn.id, name: conn.name, groups: groups.slice(0, 10) }
+
+
+return { id: conn.id, name: conn.name, groups: groups.slice(0, 10) }
       } catch {
         return { id: conn.id, name: conn.name, groups: [] }
       }
@@ -81,7 +98,9 @@ const securityGroupsFetcher = async () => {
 
 export function useClusterSecurityGroups() {
   const refreshInterval = useRefreshInterval(60000)
-  return useSWR('zero-trust/security-groups', securityGroupsFetcher, { refreshInterval })
+
+
+return useSWR('zero-trust/security-groups', securityGroupsFetcher, { refreshInterval })
 }
 
 // Fetcher for VM firewall coverage (Enterprise only)
@@ -89,9 +108,11 @@ const vmFirewallCoverageFetcher = async () => {
   const connRes = await fetch('/api/v1/connections')
   const connJson = await connRes.json()
   const pveConn = connJson.data?.find((c: any) => c.type === 'pve')
+
   if (!pveConn) return []
 
   const vmsRes = await fetch(`/api/v1/vms?connId=${pveConn.id}`)
+
   if (!vmsRes?.ok) return []
   const vmsJson = await vmsRes.json()
   const guests = vmsJson?.data?.vms || []
@@ -105,11 +126,14 @@ const vmFirewallCoverageFetcher = async () => {
         ])
 
         let firewallEnabled = false
+
         if (configRes.ok) {
           const configJson = await configRes.json()
           const config = configJson?.data || {}
+
           for (let i = 0; i < 10; i++) {
             const netConfig = config[`net${i}`]
+
             if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
               firewallEnabled = true
               break
@@ -119,6 +143,7 @@ const vmFirewallCoverageFetcher = async () => {
 
         let rules: any[] = []
         let hasSG = false
+
         if (rulesRes?.ok) {
           rules = await rulesRes.json()
           if (Array.isArray(rules)) hasSG = rules.some((r: any) => r.type === 'group')
@@ -134,7 +159,9 @@ const vmFirewallCoverageFetcher = async () => {
 
 export function useVMFirewallCoverage(isEnterprise: boolean) {
   const refreshInterval = useRefreshInterval(60000)
-  return useSWR(
+
+
+return useSWR(
     isEnterprise ? 'zero-trust/vm-coverage' : null,
     vmFirewallCoverageFetcher,
     { refreshInterval }

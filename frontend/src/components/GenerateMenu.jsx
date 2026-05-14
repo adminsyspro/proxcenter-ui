@@ -42,7 +42,8 @@ export const GenerateVerticalMenu = ({ menuData }) => {
   const hasRequiredFeature = (item) => {
     if (licenseLoading) return true // Afficher pendant le chargement
     if (!item.requiredFeature) return true // Pas de feature requise
-    return hasFeature(item.requiredFeature)
+
+return hasFeature(item.requiredFeature)
   }
 
   // Fonction pour filtrer les enfants accessibles (RBAC + licence)
@@ -160,7 +161,8 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
   const hasRequiredFeature = (item) => {
     if (licenseLoading) return true
     if (!item.requiredFeature) return true
-    return hasFeature(item.requiredFeature)
+
+return hasFeature(item.requiredFeature)
   }
 
   const filterChildren = (children) => {

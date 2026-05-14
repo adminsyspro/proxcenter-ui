@@ -9,7 +9,7 @@ export const runtime = "nodejs"
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/apt/upgrade
  * Lance un apt dist-upgrade sur le node
- * 
+ *
  * Proxmox API: POST /nodes/{node}/apt/update (pour refresh) puis apt dist-upgrade via shell
  * Retourne un UPID pour suivre la tâche
  */
@@ -36,25 +36,26 @@ export async function POST(
     // Note: Proxmox n'a pas d'API directe pour apt upgrade
     // On utilise POST /nodes/{node}/apt/versions pour vérifier les versions
     // puis on lance une commande via le shell ou on utilise l'interface VNC/xterm
-    
+
     // Pour l'instant, on retourne juste les infos pour ouvrir une console
     // L'utilisateur devra lancer apt dist-upgrade manuellement dans la console
-    
+
     // Alternative: utiliser POST /nodes/{node}/termproxy pour créer un terminal
     const termResult = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/termproxy`,
-      { 
+      {
         method: "POST",
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       }
     )
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: {
         ...termResult,
         consoleType,
         node,
+
         // URL pour accéder à la console
         consoleUrl: `/api/v1/connections/${id}/nodes/${node}/console?type=${consoleType}`
       }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+
 import { parseNodeId } from '../helpers'
 
 /**
@@ -25,8 +26,10 @@ function useLivePolling(
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
         })
+
         if (res.ok) {
           const json = await res.json()
+
           onData(json)
         }
       } catch (e) {
@@ -39,7 +42,9 @@ function useLivePolling(
     let interval: ReturnType<typeof setInterval> | null = null
 
     function start() { if (interval !== null) return; interval = setInterval(fetchLogs, 2000) }
+
     function stop() { if (interval !== null) { clearInterval(interval); interval = null } }
+
     function onVis() { if (document.visibilityState === 'visible') { fetchLogs(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)

@@ -7,6 +7,7 @@ export interface Vdc {
   description: string | null
   pvePoolName: string
   sdnZoneName: string | null
+
   /** Single shared storage backing this vDC's VM disks. Null on legacy
    *  vDCs created before the migration; the admin must re-pick a shared
    *  storage before tenants can deploy. New vDCs are validated to point
@@ -72,13 +73,16 @@ export interface VdcSharedBridge {
 export interface VdcVnet {
   id: string
   vdcId: string
+
   /** Hash-based 8-char ID sent to PVE (always unique cluster-wide). */
   pveName: string
+
   /** Friendly name shown to the tenant (free-form, unique per vDC). */
   displayName: string
   description: string | null
   vxlanTag: number
   firewall: boolean
+
   /** L3 / IPAM config attached to the VNet. Always present — the VNet is
    *  unusable without a subnet (the IPAM is the only mechanism to allocate
    *  IPs on VXLAN, where PVE-native DHCP/IPAM is broken on PVE 9.x). */
@@ -118,6 +122,7 @@ export interface CreateVdcInput {
   slug: string
   description?: string
   nodes: string[]
+
   /** Single shared storage. Validated against the connection's storage
    *  list (must be `shared=true` and advertise `content=images`). */
   primaryStorage: string

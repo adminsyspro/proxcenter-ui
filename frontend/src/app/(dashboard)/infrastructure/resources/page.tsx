@@ -3,10 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
-import { getDateLocale } from '@/lib/i18n/date'
-import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
-import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
-import { Features } from '@/contexts/LicenseContext'
+
 import {
   Alert,
   Box,
@@ -15,6 +12,11 @@ import {
   Grid,
   Stack,
 } from '@mui/material'
+
+import { getDateLocale } from '@/lib/i18n/date'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
+import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
+import { Features } from '@/contexts/LicenseContext'
 
 import { PageSkeleton } from '@/components/skeletons'
 
@@ -54,7 +56,8 @@ export default function ResourcesPage() {
 
   useEffect(() => {
     setPageInfo(t('navigation.resources'), t('dashboard.widgets.resources'), 'ri-pie-chart-fill')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   // Auto-trigger AI analysis on first load
@@ -65,13 +68,16 @@ export default function ResourcesPage() {
   // Improved predictions with EWMA (F3)
   const { projectedTrends, alerts } = useMemo(() => {
     if (!kpis || trends.length === 0) return { projectedTrends: [], alerts: [] }
-    return calculateImprovedPredictions(kpis, trends, undefined, undefined, dateLocale)
+
+return calculateImprovedPredictions(kpis, trends, undefined, undefined, dateLocale)
   }, [kpis, trends, dateLocale])
 
   const { healthScore, healthBreakdown } = useMemo(() => {
     if (!kpis) return { healthScore: 0, healthBreakdown: null }
     const result = calculateHealthScoreWithDetails(kpis, alerts)
-    return { healthScore: result.score, healthBreakdown: result.breakdown }
+
+
+return { healthScore: result.score, healthBreakdown: result.breakdown }
   }, [kpis, alerts])
 
   const handleRefresh = () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
@@ -67,15 +68,19 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
     const hasActive = deployments.some(d =>
       !['completed', 'failed'].includes(d.status)
     )
+
     if (!hasActive) return
 
     const interval = setInterval(fetchDeployments, 5000)
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [deployments, fetchDeployments])
 
   const handleDelete = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/templates/deployments/${id}`, { method: 'DELETE' })
+
       if (!res.ok) throw new Error()
       fetchDeployments()
     } catch {

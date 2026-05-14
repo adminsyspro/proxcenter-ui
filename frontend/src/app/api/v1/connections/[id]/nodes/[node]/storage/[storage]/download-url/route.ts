@@ -17,15 +17,18 @@ export async function POST(
     const { id, node, storage } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)
+
     if (storageBlock) return storageBlock
 
     const conn = await getConnectionById(id)
     const body = await req.json()
 
     const { url, content, filename } = body
+
     if (!url || !content || !filename) {
       return NextResponse.json(
         { error: "url, content and filename are required" },
@@ -53,6 +56,7 @@ export async function POST(
     )
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update" as any,
       category: "storage",
@@ -64,6 +68,7 @@ export async function POST(
     return NextResponse.json({ success: true, data: result })
   } catch (e: any) {
     console.error("Error downloading URL to storage:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

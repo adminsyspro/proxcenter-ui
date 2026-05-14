@@ -13,6 +13,7 @@ export async function DELETE(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (permError) return permError
 
     const body = await req.json()
@@ -34,7 +35,7 @@ export async function DELETE(req: Request) {
     })
   } catch (error: any) {
     console.error('[alerts/batch] DELETE error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

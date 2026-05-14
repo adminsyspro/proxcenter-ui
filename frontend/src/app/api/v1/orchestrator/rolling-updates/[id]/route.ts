@@ -14,6 +14,7 @@ export async function GET(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW)
+
     if (denied) return denied
 
     const { id } = await ctx.params
@@ -33,8 +34,10 @@ export async function GET(
 
     // Verify rolling update belongs to tenant
     const ru = data?.data || data
+
     if (ru?.connection_id) {
       const tenantConnectionIds = await getTenantConnectionIds()
+
       if (!tenantConnectionIds.has(ru.connection_id)) {
         return NextResponse.json({ error: 'Rolling update not found' }, { status: 404 })
       }
@@ -45,7 +48,9 @@ export async function GET(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error getting rolling update:", error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )

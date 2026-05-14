@@ -44,7 +44,9 @@ function buildPinHtml(dc: DcEntry): string {
   const color = STATUS_COLORS[dc.status]
   const stoppedCount = dc.vmCount - dc.runningVmCount
   const flagUrl = countryFlagUrl(dc.country, 20)
-  return `
+
+
+return `
     <div style="position: relative; display: flex; flex-direction: column; align-items: center; pointer-events: auto;">
       <div style="
         background: rgba(15, 23, 42, 0.92);
@@ -86,16 +88,22 @@ function buildPinHtml(dc: DcEntry): string {
 
 function FitBounds({ positions }: { positions: [number, number][] }) {
   const map = useMap()
+
   useEffect(() => {
     if (positions.length === 0) return
+
     if (positions.length === 1) {
       map.setView(positions[0], 5)
-      return
+
+return
     }
+
     const bounds = L.latLngBounds(positions)
+
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 })
   }, [map, positions])
-  return null
+
+return null
 }
 
 interface Props {
@@ -105,9 +113,11 @@ interface Props {
 export default function MyDatacentersMapInner({ datacenters }: Props) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+
   const tileUrl = isDark
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+
   const tileAttribution = '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
 
   const positions: [number, number][] = datacenters
@@ -131,6 +141,7 @@ export default function MyDatacentersMapInner({ datacenters }: Props) {
         height: 320,
         borderRadius: 1,
         overflow: 'hidden',
+
         // Theme-aware Leaflet popup. Default styling uses pure white which
         // looks broken in dark mode. We retarget the global Leaflet classes
         // here (their CSS is loaded via leaflet.css) so they pick up the

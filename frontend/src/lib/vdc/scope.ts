@@ -12,22 +12,31 @@ import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 // ---------------------------------------------------------------------------
 
 export interface VdcScope {
+
   /** PVE connection IDs referenced by the tenant's vDCs */
   connectionIds: Set<string>
+
   /** PBS connection IDs the tenant has at least one vDC binding on */
   pbsConnectionIds: Set<string>
+
   /** Per-connection: allowed node names */
   nodesByConnection: Map<string, Set<string>>
+
   /** Per-connection: allowed storage IDs */
   storagesByConnection: Map<string, Set<string>>
+
   /** Per-connection: PVE pool names (VMs must be in one of these pools) */
   poolsByConnection: Map<string, Set<string>>
+
   /** Per-connection: allowed SDN VNet names */
   vnetsByConnection: Map<string, Set<string>>
+
   /** Per-connection: allowed shared bridge names */
   sharedBridgesByConnection: Map<string, Set<string>>
+
   /** Per-PBS-connection: list of { datastore, namespace } the tenant is authorised on. */
   pbsNamespacesByConnection: Map<string, Array<{ datastore: string; namespace: string }>>
+
   /**
    * Per-PVE-connection: PBS namespaces reachable from a vDC anchored on
    * that PVE cluster (across every PBS binding of every vDC the tenant
@@ -135,10 +144,12 @@ async function buildVdcScope(tenantId: string): Promise<VdcScope> {
 
   for (const row of vdcRows) {
     const connId = row.connectionId
+
     connectionIds.add(connId)
 
     // Nodes: merge across multiple vDCs on the same connection
     if (!nodesByConnection.has(connId)) nodesByConnection.set(connId, new Set())
+
     for (const nr of row.nodes) {
       nodesByConnection.get(connId)!.add(nr.nodeName)
     }
@@ -150,6 +161,7 @@ async function buildVdcScope(tenantId: string): Promise<VdcScope> {
     // visible storage scope for inventory and deploy paths.
     if (!storagesByConnection.has(connId)) storagesByConnection.set(connId, new Set())
     if (row.primaryStorage) storagesByConnection.get(connId)!.add(row.primaryStorage)
+
     for (const sr of row.storages) {
       storagesByConnection.get(connId)!.add(sr.storageId)
     }
@@ -160,12 +172,14 @@ async function buildVdcScope(tenantId: string): Promise<VdcScope> {
 
     // VNets: merge across multiple vDCs on the same connection
     if (!vnetsByConnection.has(connId)) vnetsByConnection.set(connId, new Set())
+
     for (const vr of row.vnets) {
       vnetsByConnection.get(connId)!.add(vr.pveName)
     }
 
     // Shared bridges: merge across multiple vDCs on the same connection
     if (!sharedBridgesByConnection.has(connId)) sharedBridgesByConnection.set(connId, new Set())
+
     for (const sb of row.sharedBridges) {
       sharedBridgesByConnection.get(connId)!.add(sb.bridge)
     }
@@ -177,11 +191,13 @@ async function buildVdcScope(tenantId: string): Promise<VdcScope> {
     // namespace ever bound to a vDC on this cluster?".
     for (const pr of row.pbsNamespaces) {
       const list = pbsNamespacesByConnection.get(pr.pbsConnectionId) ?? []
+
       list.push({ datastore: pr.datastore, namespace: pr.namespace })
       pbsNamespacesByConnection.set(pr.pbsConnectionId, list)
       pbsConnectionIds.add(pr.pbsConnectionId)
 
       const pveSet = pbsNamespacesByPveConnection.get(connId) ?? new Set<string>()
+
       pveSet.add(pr.namespace)
       pbsNamespacesByPveConnection.set(connId, pveSet)
     }
@@ -239,6 +255,7 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
       const filteredGuests = (node.guests ?? []).filter((guest: any) => {
         // VMs without a pool are hidden for vDC-scoped tenants
         const pool = guest.pool
+
         if (!pool || pool === '') return false
 
         return allowedPools.has(pool)
@@ -271,16 +288,20 @@ export async function guardTenantStorageWrite(
   const { pveFetch } = await import('@/lib/proxmox/client')
 
   const scope = await getVdcScope(await getCurrentTenantId())
+
   if (!scope) return null
 
   const allowed = scope.storagesByConnection.get(connId)
+
   if (!allowed || !allowed.has(storage)) {
     return NextResponse.json({ error: 'Storage not accessible' }, { status: 403 })
   }
 
   const conn = await getConnectionById(connId)
+
   try {
     const config = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storage)}`)
+
     if (config?.shared === 1 || config?.shared === true) {
       return NextResponse.json(
         { error: 'Shared storages are not writable from a tenant' },
@@ -319,9 +340,11 @@ export async function assertVdcPbsAccess(connId: string): Promise<VdcPbsAccess |
   const { NextResponse } = await import('next/server')
 
   const scope = await getVdcScope(await getCurrentTenantId())
+
   if (!scope) return { kind: 'admin' }
 
   const allowed = scope.pbsNamespacesByConnection.get(connId)
+
   if (!allowed || allowed.length === 0) {
     return NextResponse.json({ error: 'PBS not accessible for this tenant' }, { status: 403 })
   }

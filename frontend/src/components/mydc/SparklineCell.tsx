@@ -6,8 +6,10 @@ import { Box } from '@mui/material'
 
 interface Props {
   height?: number
+
   /** Render a chart with the measured width. Receives the integer pixel width. */
   children: (width: number) => ReactNode
+
   /** Fallback when no series data is available. */
   fallback?: ReactNode
   hasData: boolean
@@ -25,14 +27,19 @@ export default function SparklineCell({ height = 24, children, fallback, hasData
 
   useEffect(() => {
     const node = ref.current
+
     if (!node) return
+
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width ?? 0
       const rounded = Math.max(0, Math.round(w))
+
       setWidth((prev) => (prev === rounded ? prev : rounded))
     })
+
     ro.observe(node)
-    return () => ro.disconnect()
+
+return () => ro.disconnect()
   }, [])
 
   return (

@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import {
   Dialog,
@@ -25,6 +25,9 @@ import {
   Chip,
   useTheme,
 } from '@mui/material'
+
+import { isSharedStorage } from '@/lib/proxmox/storage'
+
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
@@ -73,6 +76,7 @@ const CPU_MODEL_GENERATIONS: Record<string, string> = {
   'Cascadelake': 'x86-64-v3',
   'Icelake': 'x86-64-v4',
   'Sapphirerapids': 'x86-64-v4',
+
   // AMD
   'Opteron': 'x86-64-v2',
   'EPYC': 'x86-64-v3',
@@ -192,10 +196,13 @@ return
 
         // Load source node storages to determine which are local (not shared)
         const sharedStorages = new Set<string>()
+
         try {
           const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(currentNode)}/storages`)
+
           if (storagesRes.ok) {
             const storagesJson = await storagesRes.json()
+
             for (const s of (storagesJson.data || [])) {
               if (isSharedStorage(s)) sharedStorages.add(s.storage)
             }
@@ -282,6 +289,7 @@ return
           // Extraire le type CPU - format: "cpu: host" ou "cpu: x86-64-v2-AES,flags=+aes"
           const cpuConfig = config.cpu || ''
           const cpuTypeMatch = cpuConfig.match(/^([^,]+)/)
+
           if (cpuTypeMatch) {
             setVmCpuType(cpuTypeMatch[1])
           } else if (vmType === 'lxc') {
@@ -412,8 +420,10 @@ return
   // Vérifier si tous les nodes ont le même CPU (pour adapter les messages)
   const allNodesSameCpu = useMemo(() => {
     const cpuModels = Object.values(nodesCpuInfo).map(n => n.cpuModel)
+
     if (cpuModels.length === 0) return false
-    return cpuModels.every(m => m === cpuModels[0])
+
+return cpuModels.every(m => m === cpuModels[0])
   }, [nodesCpuInfo])
 
   // Charger les storages disponibles sur le node sélectionné

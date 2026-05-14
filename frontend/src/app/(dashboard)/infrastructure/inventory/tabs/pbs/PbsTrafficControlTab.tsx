@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -37,34 +38,46 @@ type PbsTcRule = {
 
 function toArray(value: string[] | string | undefined): string[] {
   if (Array.isArray(value)) return value.filter(v => typeof v === 'string' && v.length > 0)
+
   if (typeof value === 'string' && value.length > 0) {
     return value
       .split(/[,;\s]+/)
       .map(s => s.trim())
       .filter(Boolean)
   }
-  return []
+
+
+return []
 }
 
 function toNumber(value: number | string | undefined): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
+
   if (typeof value === 'string' && value.length > 0) {
     const n = Number(value)
-    return Number.isFinite(n) ? n : 0
+
+
+return Number.isFinite(n) ? n : 0
   }
-  return 0
+
+
+return 0
 }
 
 function formatRate(value: number | string | undefined): string | null {
   const n = toNumber(value)
+
   if (!n) return null
-  return `${formatBytes(n)}/s`
+
+return `${formatBytes(n)}/s`
 }
 
 function formatBurst(value: number | string | undefined): string | null {
   const n = toNumber(value)
+
   if (!n) return null
-  return formatBytes(n)
+
+return formatBytes(n)
 }
 
 export default function PbsTrafficControlTab({ pbsId }: PbsTrafficControlTabProps) {
@@ -81,20 +94,26 @@ export default function PbsTrafficControlTab({ pbsId }: PbsTrafficControlTabProp
     setError(null)
     setForbidden(null)
     setNotSupported(false)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/traffic-control`, { cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
+
       if (res.status === 403 && body?.forbidden) {
         setForbidden({ requiredPriv: body?.requiredPriv })
         setRules([])
-        return
+
+return
       }
+
       if (!res.ok) {
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       if (body?.notSupported) {
         setNotSupported(true)
       }
+
       setRules(Array.isArray(body?.data) ? body.data : [])
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -208,7 +227,9 @@ export default function PbsTrafficControlTab({ pbsId }: PbsTrafficControlTabProp
               {rules.map((r, idx) => {
                 const networks = toArray(r.network)
                 const timeframes = toArray(r.timeframe)
-                return (
+
+
+return (
                   <TableRow key={r.name || `tc-${idx}`} hover>
                     <TableCell sx={{ fontSize: 12 }}>
                       <Typography variant="caption" sx={{ fontWeight: 600 }}>

@@ -110,6 +110,7 @@ const CommandPalette = ({ open, onClose }) => {
           .then(json => {
             if (!json) return setVms([])
             const vmList = json?.data?.vms || json?.data || []
+
             vmsCacheRef.current = { data: Array.isArray(vmList) ? vmList : [], timestamp: Date.now() }
             setVms(Array.isArray(vmList) ? vmList : [])
           })
@@ -189,7 +190,8 @@ const CommandPalette = ({ open, onClose }) => {
     const sectionAllowed = (section) => {
       if (rbacLoading) return true
       if (section.permissions && section.permissions.length > 0 && !hasAnyPermission(section.permissions)) return false
-      return true
+
+return true
     }
 
     for (const entry of data) {
@@ -319,9 +321,11 @@ const CommandPalette = ({ open, onClose }) => {
       const node = item.node || ''
       const vmType = item.type === 'vm' ? 'qemu' : (item.type || 'qemu')
       const params = new URLSearchParams({ vmid: String(item.vmid), connId, node, type: vmType })
+
       router.push(`/infrastructure/inventory?${params.toString()}`)
     } else if (item._type === 'node') {
       const selectId = `${item.connId}:${item.node}`
+
       router.push(`/infrastructure/inventory?selectType=node&selectId=${encodeURIComponent(selectId)}`)
     } else if (item._type === 'pbs') {
       router.push(`/infrastructure/inventory?selectType=pbs&selectId=${encodeURIComponent(item.id)}`)
@@ -340,6 +344,7 @@ const CommandPalette = ({ open, onClose }) => {
       e.preventDefault()
       setActiveIndex(prev => {
         const next = prev + 1 >= flatResults.length ? 0 : prev + 1
+
         itemRefs.current[next]?.scrollIntoView({ block: 'nearest' })
 
         return next
@@ -348,6 +353,7 @@ const CommandPalette = ({ open, onClose }) => {
       e.preventDefault()
       setActiveIndex(prev => {
         const next = prev - 1 < 0 ? flatResults.length - 1 : prev - 1
+
         itemRefs.current[next]?.scrollIntoView({ block: 'nearest' })
 
         return next

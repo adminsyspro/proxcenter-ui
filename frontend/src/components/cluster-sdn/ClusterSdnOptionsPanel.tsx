@@ -29,19 +29,23 @@ interface OptionsState {
 
 export default function ClusterSdnOptionsPanel({ connId }: Props) {
   const t = useTranslations()
+
   const [state, setState] = useState<OptionsState>({
     controllers: [], ipams: [], dns: [], loading: true, error: null,
   })
 
   const fetchAll = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }))
+
     try {
       const [cRes, iRes, dRes] = await Promise.all([
         fetch(`/api/v1/connections/${connId}/sdn/controllers`, { cache: 'no-store' }),
         fetch(`/api/v1/connections/${connId}/sdn/ipams`, { cache: 'no-store' }),
         fetch(`/api/v1/connections/${connId}/sdn/dns`, { cache: 'no-store' }),
       ])
+
       const [cBody, iBody, dBody] = await Promise.all([cRes.json(), iRes.json(), dRes.json()])
+
       if (!cRes.ok) throw new Error(cBody?.error || `controllers HTTP ${cRes.status}`)
       if (!iRes.ok) throw new Error(iBody?.error || `ipams HTTP ${iRes.status}`)
       if (!dRes.ok) throw new Error(dBody?.error || `dns HTTP ${dRes.status}`)
@@ -66,10 +70,12 @@ export default function ClusterSdnOptionsPanel({ connId }: Props) {
     { field: 'type', headerName: t('sdn.options.controllers.columns.type'), width: 120 },
     { field: 'nodes', headerName: t('sdn.options.controllers.columns.nodes'), flex: 1, minWidth: 140, valueGetter: (v) => v ?? '—' },
   ]
+
   const ipamCols: GridColDef<SdnIpam>[] = [
     { field: 'ipam', headerName: t('sdn.options.ipam.columns.id'), flex: 1, minWidth: 140 },
     { field: 'type', headerName: t('sdn.options.ipam.columns.type'), width: 160 },
   ]
+
   const dnsCols: GridColDef<SdnDns>[] = [
     { field: 'dns', headerName: t('sdn.options.dns.columns.id'), flex: 1, minWidth: 140 },
     { field: 'type', headerName: t('sdn.options.dns.columns.type'), width: 160 },

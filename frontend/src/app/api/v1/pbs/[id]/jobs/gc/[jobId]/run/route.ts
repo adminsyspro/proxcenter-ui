@@ -18,6 +18,7 @@ type RouteContext = {
  */
 export async function POST(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -40,13 +41,13 @@ export async function POST(req: Request, ctx: RouteContext) {
       method: 'POST'
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: 'Garbage collection started'
     })
   } catch (e: any) {
     console.error("[pbs-gc-jobs] RUN Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -17,10 +17,12 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -35,16 +37,19 @@ export async function GET(req: Request) {
     const resData = response.data as any
     const alerts = Array.isArray(resData) ? resData : (resData?.data || [])
     const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids }
+
     // isAlertVisibleToTenant is async (Postgres cutover made the rule
     // ownership lookup a Prisma query). Array.filter doesn't await its
     // predicate — it'd see a Promise, which is truthy, and let every
     // alert through. Resolve visibility for each alert up-front, then
     // filter on the boolean array.
     let filtered = alerts
+
     if (Array.isArray(alerts)) {
       const visible = await Promise.all(
         alerts.map((a: any) => isAlertVisibleToTenant(a, visibilityCtx)),
       )
+
       filtered = alerts.filter((_: any, i: number) => visible[i])
     }
 

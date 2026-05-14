@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const GITHUB_API = 'https://api.github.com'
+
 const HEADERS = {
   Accept: 'application/vnd.github.v3+json',
   'User-Agent': 'ProxCenter'
@@ -24,11 +25,14 @@ interface VersionCheckResponse {
 function semverCompare(a: string, b: string): number {
   const pa = a.split('.').map(Number)
   const pb = b.split('.').map(Number)
+
   for (let i = 0; i < 3; i++) {
     if ((pa[i] || 0) > (pb[i] || 0)) return 1
     if ((pa[i] || 0) < (pb[i] || 0)) return -1
   }
-  return 0
+
+
+return 0
 }
 
 export async function GET() {

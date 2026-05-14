@@ -53,7 +53,9 @@ function getCacheStore(): Map<string, CacheEntry> {
   if (!(globalThis as any)[CACHE_KEY]) {
     ;(globalThis as any)[CACHE_KEY] = new Map<string, CacheEntry>()
   }
-  return (globalThis as any)[CACHE_KEY]
+
+
+return (globalThis as any)[CACHE_KEY]
 }
 
 // Lock to prevent concurrent fetches per tenant (thundering herd)
@@ -63,7 +65,9 @@ function getInflightStore(): Map<string, Promise<CachedInventory>> {
   if (!(globalThis as any)[INFLIGHT_KEY]) {
     ;(globalThis as any)[INFLIGHT_KEY] = new Map<string, Promise<CachedInventory>>()
   }
-  return (globalThis as any)[INFLIGHT_KEY]
+
+
+return (globalThis as any)[INFLIGHT_KEY]
 }
 
 type CacheResult =
@@ -80,6 +84,7 @@ type CacheResult =
 export function getInventoryFromCache(tenantId = 'default'): CacheResult {
   const store = getCacheStore()
   const entry = store.get(tenantId)
+
   if (!entry) return { status: 'miss' }
 
   // Invalidate cache entries missing required fields (e.g. storages added later)
@@ -100,11 +105,13 @@ export function getInventoryFromCache(tenantId = 'default'): CacheResult {
 
 export function setCachedInventory(data: CachedInventory, tenantId = 'default'): void {
   const store = getCacheStore()
+
   store.set(tenantId, { data, timestamp: Date.now() })
 }
 
 export function invalidateInventoryCache(tenantId?: string): void {
   const store = getCacheStore()
+
   if (tenantId) {
     store.delete(tenantId)
   } else {
@@ -123,6 +130,7 @@ export function getInflightFetch(tenantId = 'default'): Promise<CachedInventory>
 
 export function setInflightFetch(p: Promise<CachedInventory> | null, tenantId = 'default'): void {
   const store = getInflightStore()
+
   if (p !== null) {
     store.set(tenantId, p)
   } else {

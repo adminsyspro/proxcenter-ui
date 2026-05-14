@@ -4,6 +4,7 @@ import {
   Alert, Box, Divider, Fade, Link, Typography, useTheme,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
+
 import { LogoIcon } from '@components/layout/shared/Logo'
 import LoginAuthTabs from './LoginAuthTabs'
 import LoginCredentialsForm from './LoginCredentialsForm'
@@ -37,6 +38,7 @@ export default function LoginFormPanel({
 
   const appName = branding.appName || 'ProxCenter'
   const isCustomBrand = branding.enabled && branding.appName && branding.appName !== 'ProxCenter'
+
   const tagline = branding.loginTagline
     ? branding.loginTagline
     : isCustomBrand

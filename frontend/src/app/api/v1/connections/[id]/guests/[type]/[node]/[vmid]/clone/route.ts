@@ -55,6 +55,7 @@ export async function POST(
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
     let vdcPoolName: string | null = null
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
@@ -64,6 +65,7 @@ export async function POST(
           conn,
           `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
         )
+
         const vcpus = (vmConfig?.cores || 1) * (vmConfig?.sockets || 1)
         const ramMb = vmConfig?.memory || 512
 
@@ -89,15 +91,18 @@ export async function POST(
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
 
     // Phase 4b: Enforce bridge whitelist
     const allowedBridges = await getAllowedBridgesForTenant(tenantId, id)
+
     if (allowedBridges !== null) {
       for (const key of Object.keys(body || {})) {
         if (!/^net\d+$/.test(key)) continue
         const bridge = parseBridgeFromNet(String(body[key] || ""))
+
         if (bridge && !allowedBridges.has(bridge)) {
           return NextResponse.json(
             { error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(allowedBridges).join(", ")}` },
@@ -115,15 +120,18 @@ export async function POST(
     // every MAC. The post-clone sync below then allocates fresh IPs for
     // those new MACs.
     let cloneTouchesIpam = false
+
     if (type === 'qemu') {
       try {
         const sourceConfig = await pveFetch<any>(
           conn,
           `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`
         )
+
         for (const k of Object.keys(sourceConfig || {})) {
           if (!/^net\d+$/.test(k)) continue
           const bridge = parseBridgeFromNet(String(sourceConfig[k] || ''))
+
           if (bridge && await resolveSubnetForBridge(id, bridge)) {
             cloneTouchesIpam = true
             break
@@ -182,6 +190,7 @@ export async function POST(
       after(async () => {
         try {
           if (upid) await waitForTask(conn, cloneNode, upid)
+
           const cloneConfig = await pveFetch<any>(
             conn,
             `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(newVmid))}/config`
@@ -201,7 +210,9 @@ export async function POST(
           // boot with the source's ip baked in and collide on the wire.
           if (Object.keys(sync.bodyOverrides).length > 0) {
             const patch = new URLSearchParams()
+
             for (const [k, v] of Object.entries(sync.bodyOverrides)) patch.set(k, v)
+
             try {
               await pveFetch<any>(
                 conn,
@@ -220,6 +231,7 @@ export async function POST(
           }
         } catch (err: any) {
           console.error(`[clone-ipam-sync] post-clone IPAM sync failed for vmid=${body.newid}: ${err?.message ?? err}`)
+
           // Best-effort cleanup so a failed sync doesn't leak partial
           // allocations. The clone itself stays, data loss > drift.
           try { await releaseAllocationsForVm(id, newVmid) } catch { /* tolerate */ }

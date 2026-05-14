@@ -25,6 +25,7 @@ import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+
 // SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
 // has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
 // vSAN because vSAN VMDK descriptors reference vsan:// URIs that only ESXi's
@@ -59,6 +60,7 @@ export interface V2vMigrationConfig {
   targetNode: string
   targetStorage: string
   networkBridge: string
+
   /**
    * Optional 802.1Q VLAN tag (1-4094) appended to every NIC in the created
    * PVE VM as `tag=N`. When unset the NIC is untagged (access on the bridge's
@@ -67,14 +69,17 @@ export interface V2vMigrationConfig {
    */
   vlanTag?: number
   startAfterMigration: boolean
+
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
   vcenterDatacenter?: string
+
   /**
    * vCenter cluster name when the source ESXi host is part of a ClusterComputeResource.
    * When set, the libvirt vpx URI becomes vpx://VC/DC/host/{cluster}/{host}, which is
    * required for vSAN clusters and any other clustered ESXi setup. Omit for standalone hosts.
    */
   vcenterCluster?: string
+
   /** ESXi host name as registered in vCenter (FQDN or short name). Required for vcenter source. */
   vcenterHost?: string
   diskPaths?: string[]  // For Nutanix/Hyper-V disk-based mode
@@ -88,6 +93,7 @@ export interface V2vMigrationConfig {
    *   Only supported for vcenter source; hyperv/nutanix ignore this field.
    */
   migrationType?: "cold" | "live"
+
   /**
    * POSIX VMX path on the source ESXi host for sourceType="esxi-direct".
    * Example: "/vmfs/volumes/Datastore/MyVM/MyVM.vmx".
@@ -95,12 +101,14 @@ export interface V2vMigrationConfig {
    * (format: "[Datastore] MyVM/MyVM.vmx") before dispatching to this pipeline.
    */
   vmxPath?: string
+
   /**
    * ESXi host (FQDN or IP) for the ssh:// input URI used in esxi-direct mode.
    * Parsed from the source connection's baseUrl. virt-v2v connects with
    * `-i vmx -it ssh ssh://<user>@<host>/<vmxPath>`.
    */
   esxiHost?: string
+
   /**
    * User-supplied target VMID. When set, used directly instead of
    * `/cluster/nextid`; PVE rejects the create call if it's already taken.
@@ -130,12 +138,14 @@ export function cancelV2vMigrationJob(jobId: string) {
 
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
   const prisma = getPrismaForJob(id)
+
   const data: any = {
     status,
     currentStep: status,
     ...(status === "completed" ? { completedAt: new Date() } : {}),
     ...extra,
   }
+
   await prisma.migrationJob.update({ where: { id }, data })
 }
 
@@ -143,6 +153,7 @@ async function appendLog(id: string, msg: string, level: LogEntry["level"] = "in
   const prisma = getPrismaForJob(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
+
   logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
   await prisma.migrationJob.update({ where: { id }, data: { logs } })
 }
@@ -159,17 +170,21 @@ async function waitForPveTask(
   timeoutMs = 300000
 ): Promise<void> {
   const start = Date.now()
+
   while (Date.now() - start < timeoutMs) {
     const status = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`
     )
+
     if (status?.status === "stopped") {
       if (status.exitstatus === "OK") return
       throw new Error(`PVE task failed: ${status.exitstatus || "unknown error"}`)
     }
+
     await new Promise(r => setTimeout(r, 3000))
   }
+
   throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
 }
 
@@ -199,6 +214,7 @@ async function downloadDiskViaNfc(
   progressScale: number,
 ): Promise<void> {
   const sizeGB = device.fileSize > 0 ? (device.fileSize / 1073741824).toFixed(1) : "?"
+
   await appendLog(jobId, `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloading ${device.targetId || device.key} (${sizeGB} GB)...`)
 
   // vSphere's Set-Cookie usually returns the session id WITH surrounding double
@@ -223,6 +239,7 @@ async function downloadDiskViaNfc(
   // body). These end up in statsFile and are surfaced in error messages when
   // validation fails.
   const curlCfg = `${ctrlPrefix}.curlcfg`
+
   const cfgContent = [
     `header = "Cookie: ${cookieEsc}"`,
     `output = "${localPath}"`,
@@ -239,6 +256,7 @@ async function downloadDiskViaNfc(
     nodeIp,
     `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`,
   )
+
   if (!writeCfg.success) {
     throw new Error(`Failed to write NFC curl config: ${writeCfg.error}`)
   }
@@ -249,12 +267,16 @@ async function downloadDiskViaNfc(
     `echo \\$? > ${shellEscape(exitFile)}; ` +
     `rm -f ${shellEscape(curlCfg)}" ` +
     `> /dev/null 2>&1 & echo $!`
+
   const launch = await executeSSH(targetConnectionId, nodeIp, launchCmd)
+
   if (!launch.success || !launch.output?.trim()) {
     await executeSSH(targetConnectionId, nodeIp, `rm -f ${shellEscape(curlCfg)}`).catch(() => {})
     throw new Error(`Failed to start NFC download: ${launch.error}`)
   }
+
   const pid = launch.output.trim()
+
   await executeSSH(targetConnectionId, nodeIp, `echo ${pid} > ${shellEscape(pidFile)}`)
 
   // Poll loop: track size + send NFC keep-alive every 30s + abort on cancel.
@@ -272,6 +294,7 @@ async function downloadDiskViaNfc(
       await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(curlCfg)} ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)} ${shellEscape(statsFile)}`).catch(() => {})
       throw new Error("Migration cancelled")
     }
+
     await new Promise(r => setTimeout(r, stallCheckIntervalMs))
 
     // Has curl exited?
@@ -280,12 +303,15 @@ async function downloadDiskViaNfc(
 
     if (exitOut !== "RUNNING") {
       const exitCode = Number.parseInt(exitOut, 10)
+
+
       // Read curl diagnostic files BEFORE any cleanup: both the success and
       // failure paths may need them to build actionable error messages.
       const [errCapture, statsCapture] = await Promise.all([
         executeSSH(targetConnectionId, nodeIp, `tail -c 1000 ${shellEscape(errFile)} 2>/dev/null`),
         executeSSH(targetConnectionId, nodeIp, `cat ${shellEscape(statsFile)} 2>/dev/null`),
       ])
+
       const curlStderr = (errCapture.output || "").trim()
       const curlStats = (statsCapture.output || "").trim()
 
@@ -301,12 +327,17 @@ async function downloadDiskViaNfc(
           `or vCenter NFC service unhealthy.`,
         )
       }
+
+
       // Surface the curl stats on success so users can see HTTP code + actual
       // byte count + transfer time in the job logs for diagnosis.
       if (curlStats) {
         const statsLine = curlStats.replaceAll("\n", " ")
+
         await appendLog(jobId, `[NFC disk ${diskIndex + 1}/${totalDisks}] curl: ${statsLine}`, "info")
       }
+
+
       // Defer the control-file cleanup until after validation so the rest of
       // this block can attach curl diagnostics to validation error messages.
       const cleanupCtrl = async () => {
@@ -325,7 +356,10 @@ async function downloadDiskViaNfc(
         nodeIp,
         `stat -c '%s' ${shellEscape(localPath)} 2>/dev/null || echo 0`,
       )
+
       const got = Number.parseInt(statRes.output?.trim() || "0", 10)
+
+
       // Common diagnostic suffix for validation errors: curl stats + stderr
       // give the user actionable context (was it HTTP 200 with 0 bytes? a
       // specific error from vCenter? a connection reset?). We format them
@@ -340,12 +374,15 @@ async function downloadDiskViaNfc(
           `vCenter likely terminated the NFC lease prematurely; retry the migration.${diagSuffix}`,
         )
       }
+
       const magicRes = await executeSSH(
         targetConnectionId,
         nodeIp,
         `head -c 4 ${shellEscape(localPath)} 2>/dev/null | od -An -c | tr -d ' \\n\\t' || echo missing`,
       )
+
       const magicDump = (magicRes.output || "").trim()
+
       if (!/K[^K]{0,10}D[^D]{0,10}M[^M]{0,10}V/.test(magicDump)) {
         await cleanupCtrl()
         throw new Error(
@@ -354,6 +391,8 @@ async function downloadDiskViaNfc(
           `vCenter likely returned an error body instead of the disk stream.${diagSuffix}`,
         )
       }
+
+
       // Size-ratio warning only (NOT a hard reject): thin-provisioned disks
       // with little or no committed data legitimately stream down to a few
       // tens of KB (VMDK sparse header + empty grain directory + footer for
@@ -365,9 +404,11 @@ async function downloadDiskViaNfc(
       if (device.fileSize > 0 && got < device.fileSize * 0.9) {
         const ratio = got / device.fileSize
         const suspicious = device.fileSize > 1073741824 && ratio < 0.005
+
         const hint = suspicious
           ? " (very small relative to capacity: either a legitimate empty data disk or a silent NFC truncation. virt-v2v will reject the stream if it is malformed)"
           : ""
+
         await appendLog(
           jobId,
           `[NFC disk ${diskIndex + 1}/${totalDisks}] Downloaded ${(got / 1073741824).toFixed(2)} GB (expected ~${sizeGB} GB, ` +
@@ -378,12 +419,14 @@ async function downloadDiskViaNfc(
 
       await cleanupCtrl()
       const elapsed = (Date.now() - startedAt) / 1000
+
       await appendLog(
         jobId,
         `[NFC disk ${diskIndex + 1}/${totalDisks}] Download complete in ${elapsed.toFixed(0)}s`,
         "success",
       )
-      return
+
+return
     }
 
     // Track size growth for stall detection + progress.
@@ -392,6 +435,7 @@ async function downloadDiskViaNfc(
 
     if (currentSize === lastSize) {
       stallCounter++
+
       if (stallCounter >= maxStallChecks) {
         await executeSSH(targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f ${shellEscape(localPath)} ${shellEscape(pidFile)} ${shellEscape(exitFile)} ${shellEscape(errFile)}`).catch(() => {})
         throw new Error(
@@ -406,6 +450,7 @@ async function downloadDiskViaNfc(
 
     // Per-disk + global progress.
     const diskPct = device.fileSize > 0 ? Math.min(99, Math.round((currentSize / device.fileSize) * 100)) : 0
+
     if (diskPct > lastProgressLog + 9) {
       await appendLog(
         jobId,
@@ -413,8 +458,10 @@ async function downloadDiskViaNfc(
       )
       lastProgressLog = diskPct
     }
+
     const perDiskWeight = progressScale / Math.max(1, totalDisks)
     const globalPct = Math.round(progressOffset + diskIndex * perDiskWeight + (diskPct / 100) * perDiskWeight)
+
     await updateJob(jobId, "transferring", { progress: Math.min(globalPct, 100) })
 
     // Keep the NFC lease alive so vCenter doesn't tear it down on us mid-download.
@@ -441,6 +488,7 @@ async function runVcenterNfcExport(
   nodeIp: string,
   vmwareSession: SoapSession,
   outputDir: string,
+
   /**
    * Parsed source VM config from vCenter SOAP. Used to backfill fileSize on NFC
    * device URLs when vCenter reports 0 (common for thin-provisioned vSAN VMs):
@@ -448,6 +496,7 @@ async function runVcenterNfcExport(
    * and the stall detector can't distinguish a slow-start from a dead transfer.
    */
   sourceVmwareConfig: EsxiVmConfig | null,
+
   /**
    * Snapshot MOR when we're in live mode. If set, we export from the snapshot
    * via ExportSnapshot (the only path that works on running VMs — ExportVm
@@ -480,22 +529,29 @@ async function runVcenterNfcExport(
   await appendLog(jobId, `Initiating NFC export lease via vCenter ${snapshotMor ? "ExportSnapshot" : "ExportVm"}...`)
   const probeLease = await openLease()
   let diskCount: number
+
   try {
     await appendLog(jobId, `NFC lease ${probeLease} created, waiting for ready state...`)
     const probeDevices = await soapWaitForNfcLease(vmwareSession, probeLease)
+
     diskCount = probeDevices.filter(d => d.disk).length
+
     if (diskCount === 0) {
       throw new Error("NFC lease returned no disk device URLs (VM has no disks?)")
     }
+
     await appendLog(jobId, `NFC lease ready: ${diskCount} disk URL(s) to download`, "success")
   } catch (err) {
     await soapNfcLeaseAbort(vmwareSession, probeLease, (err as Error)?.message || "ProxCenter probe error").catch(() => {})
     throw err
   }
+
+
   // Release the probe lease straight away; it has done its job.
   await soapNfcLeaseComplete(vmwareSession, probeLease).catch(() => {})
 
   const downloadedPaths: string[] = []
+
   try {
     for (let i = 0; i < diskCount; i++) {
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -509,13 +565,16 @@ async function runVcenterNfcExport(
       await appendLog(jobId, `[NFC disk ${i + 1}/${diskCount}] Opening fresh NFC lease...`, "info")
       const leaseMor = await openLease()
       let leaseFinalised = false
+
       try {
         const allDevices = await soapWaitForNfcLease(vmwareSession, leaseMor)
         const diskDevices = allDevices.filter(d => d.disk)
         const dev = diskDevices[i]
+
         if (!dev) {
           throw new Error(`NFC lease returned ${diskDevices.length} disk URL(s) but disk index ${i} is missing`)
         }
+
         await appendLog(
           jobId,
           `[NFC disk ${i + 1}/${diskCount}] Fresh lease ${leaseMor} ready, ${diskDevices.length} device URL(s) available, targeting index ${i}`,
@@ -560,12 +619,14 @@ async function runVcenterNfcExport(
         if (!leaseFinalised) {
           await soapNfcLeaseAbort(vmwareSession, leaseMor, (err as Error)?.message || "ProxCenter migration error").catch(() => {})
         }
+
         throw err
       }
     }
 
     await appendLog(jobId, "NFC lease completed successfully", "success")
-    return downloadedPaths
+
+return downloadedPaths
   } catch (err) {
     // Clean up partial downloads across any disks that succeeded before the
     // failing one. The per-disk lease that failed has already been aborted in
@@ -573,6 +634,7 @@ async function runVcenterNfcExport(
     for (const p of downloadedPaths) {
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
     }
+
     throw err
   }
 }
@@ -616,12 +678,16 @@ function buildSynthesizedLibvirtXml(
   diskFilePaths: string[],
 ): string {
   const nameEsc = xmlEscape(vmName || "proxcenter-v2v-vm")
+
   // target dev letters sda, sdb, sdc, ..., sdz — beyond 26 disks we'd need
   // sdaa/sdab but no real VM ever has that many. Cap defensively.
   const maxDisks = Math.min(diskFilePaths.length, 26)
+
   const diskNodes = diskFilePaths.slice(0, maxDisks).map((p, i) => {
     const dev = `sd${String.fromCodePoint(0x61 + i)}` // 0x61 = 'a'
-    return (
+
+
+return (
       `    <disk type='file' device='disk'>\n` +
       `      <driver name='qemu' type='vmdk'/>\n` +
       `      <source file='${xmlEscape(p)}'/>\n` +
@@ -695,6 +761,7 @@ async function runVirtV2vWithProgress(
     nodeIp,
     `mkdir -p ${shellEscape(outputDir)}`,
   )
+
   if (!mkdirResult.success) {
     return { success: false, output: "", error: `Failed to create output dir: ${mkdirResult.error}` }
   }
@@ -714,10 +781,13 @@ async function runVirtV2vWithProgress(
   const innerCmd = `stdbuf -oL ${v2vCommand} > ${shellEscape(logFile)} 2>&1; echo $? > ${shellEscape(exitFile)}`
   const launchCmd = `nohup bash -c ${shellEscape(innerCmd)} > /dev/null 2>&1 & echo $!`
   const launch = await executeSSH(config.targetConnectionId, nodeIp, launchCmd)
+
   if (!launch.success || !launch.output?.trim()) {
     return { success: false, output: "", error: `Failed to launch virt-v2v: ${launch.error}` }
   }
+
   const pid = launch.output.trim()
+
   await appendLog(jobId, `virt-v2v launched in background (PID ${pid}), streaming progress...`, "info")
 
   // 3. Poll loop: tail log for progress + check exit marker. We tail a small
@@ -744,13 +814,16 @@ async function runVirtV2vWithProgress(
       await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null`).catch(() => {})
       throw new Error("Migration cancelled")
     }
+
     await new Promise(r => setTimeout(r, pollIntervalMs))
 
     // Global timeout: cap how long any single v2v run can occupy the pipeline.
     if (Date.now() - startedAt > globalTimeoutMs) {
       await executeSSH(config.targetConnectionId, nodeIp, `kill -9 ${pid} 2>/dev/null; pkill -9 -P ${pid} 2>/dev/null || true`).catch(() => {})
       const elapsedH = ((Date.now() - startedAt) / 3600000).toFixed(1)
-      return {
+
+
+return {
         success: false,
         output: "",
         error: `virt-v2v exceeded global timeout (${elapsedH}h). Killed. Override via V2V_GLOBAL_TIMEOUT_MS env var if your VMs legitimately need more time.`,
@@ -763,6 +836,7 @@ async function runVirtV2vWithProgress(
       nodeIp,
       `cat ${shellEscape(exitFile)} 2>/dev/null || echo RUNNING`,
     )
+
     const exitOut = exitCheck.output?.trim() || "RUNNING"
 
     // Tail the log for incremental progress, regardless of exit state.
@@ -771,6 +845,7 @@ async function runVirtV2vWithProgress(
       nodeIp,
       `tail -c 4000 ${shellEscape(logFile)} 2>/dev/null`,
     )
+
     if (tailResult.success && tailResult.output) {
       // processV2vOutput parses each line and updates migrationJob.progress
       // via updateJob(). Running it every poll with the latest tail surfaces
@@ -780,6 +855,8 @@ async function runVirtV2vWithProgress(
 
     if (exitOut !== "RUNNING") {
       const exitCode = Number.parseInt(exitOut, 10)
+
+
       // Grab the full log for both the success path (passed to
       // processV2vOutput one last time so nothing is missed) and the failure
       // path (needs the tail for error diagnostics).
@@ -788,7 +865,10 @@ async function runVirtV2vWithProgress(
         nodeIp,
         `cat ${shellEscape(logFile)} 2>/dev/null`,
       )
+
       const output = fullLog.output || ""
+
+
       // Clean up the control files. We leave the outputDir itself for the
       // subsequent import phases — it holds the converted disks + XML.
       await executeSSH(
@@ -798,15 +878,21 @@ async function runVirtV2vWithProgress(
       ).catch(() => {})
 
       const elapsed = (Date.now() - startedAt) / 1000
+
       if (exitCode === 0) {
         await appendLog(jobId, `virt-v2v completed in ${elapsed.toFixed(0)}s`, "success")
-        return { success: true, output }
+
+return { success: true, output }
       }
+
+
       // Non-zero exit: surface the tail of the log as the error message so
       // the caller can show something actionable without scrolling through
       // a 4000-char log.
       const errTail = output.trim().split("\n").slice(-20).join("\n")
-      return {
+
+
+return {
         success: false,
         output,
         error: `virt-v2v exited ${exitCode} after ${elapsed.toFixed(0)}s. Last lines:\n${errTail}`,
@@ -826,8 +912,10 @@ async function runVirtV2vWithProgress(
       nodeIp,
       `du -sb ${shellEscape(outputDir)} 2>/dev/null | awk '{print $1}'`,
     )
+
     const bytesRaw = (duResult.output || "").trim()
     const bytes = Number.parseInt(bytesRaw, 10)
+
     const sizeSuffix = (Number.isFinite(bytes) && bytes > 0)
       ? `, output dir now ${(bytes / 1073741824).toFixed(2)} GB`
       : ""
@@ -839,20 +927,26 @@ async function runVirtV2vWithProgress(
     // long silent phases followed by progress don't trigger false positives.
     const tailSig = (tailResult.output || "").trim().slice(-200)
     const activitySignature = `${bytesRaw}|${tailSig}`
+
     if (activitySignature !== lastActivitySignature) {
       lastActivitySignature = activitySignature
       lastActivitySignatureAt = Date.now()
     } else if (Date.now() - lastActivitySignatureAt > stallTimeoutMs) {
       await executeSSH(config.targetConnectionId, nodeIp, `kill -9 ${pid} 2>/dev/null; pkill -9 -P ${pid} 2>/dev/null || true`).catch(() => {})
       const stallMin = Math.round(stallTimeoutMs / 60000)
+
+
       // Surface a df snapshot so the user can tell whether /tmp is the culprit.
       const dfRes = await executeSSH(
         config.targetConnectionId,
         nodeIp,
         `df -h ${shellEscape(outputDir)} 2>/dev/null | tail -n 1`,
       ).catch(() => ({ output: "" }))
+
       const dfLine = (dfRes.output || "").trim()
-      return {
+
+
+return {
         success: false,
         output: "",
         error:
@@ -866,6 +960,7 @@ async function runVirtV2vWithProgress(
     if (Date.now() - loggedNoProgressAt > 60_000) {
       loggedNoProgressAt = Date.now()
       const elapsed = (Date.now() - startedAt) / 1000
+
       await appendLog(
         jobId,
         `virt-v2v still running (${elapsed.toFixed(0)}s elapsed${sizeSuffix}). ` +
@@ -886,6 +981,7 @@ function buildV2vCommand(
   username: string,
   host: string,
   supportsBlockDriver: boolean,
+
   /**
    * If set, virt-v2v reads the listed VMDK files from the local FS instead of
    * connecting to the source hypervisor. Used by the NFC transport path: the
@@ -894,6 +990,7 @@ function buildV2vCommand(
    * 2+ we use `-i libvirtxml` pointing at `libvirtXmlPath` (caller-written).
    */
   preDownloadedDiskPaths?: string[],
+
   /**
    * Path (on the target node) to a synthesized libvirt domain XML that
    * references every entry in preDownloadedDiskPaths as a <disk> element.
@@ -907,6 +1004,7 @@ function buildV2vCommand(
   const vmNameEsc = shellEscape(config.sourceVmName)
 
   let v2vCmd: string
+
   // --block-driver landed in libguestfs/virt-v2v but is not present in every
   // 2.x build (Debian 12 Bookworm's 2.0.x, plus some 2.2.0 packages that predate
   // the flag). Without it virt-v2v defaults to virtio-blk driver injection for
@@ -914,6 +1012,7 @@ function buildV2vCommand(
   // path are attached on virtio0 instead of scsi0 (see `useVirtioBlk` at the
   // disk-attach loop) so the injected viostor.sys matches the actual bus.
   const blockDriverOpt = supportsBlockDriver ? '--block-driver virtio-scsi ' : ''
+
   // NOTE: no trailing `2>&1`. The caller (runVirtV2vWithProgress) wraps the
   // whole command in a nohup + file redirect (`> log 2>&1`) so the streams
   // are merged into a log file, then polled for progress. Putting a `2>&1`
@@ -929,9 +1028,13 @@ function buildV2vCommand(
       // without any extra metadata file. Simpler and battle-tested.
       const diskArg = shellEscape(preDownloadedDiskPaths[0])
       const cmd = `virt-v2v -i disk ${diskArg} ${v2vOpts}`
+
+
       // Caller (runVirtV2vWithProgress) ensures outputDir exists before launching.
     return cmd
     }
+
+
     // Multi-disk path: virt-v2v's -i disk only takes one disk, so we use
     // -i libvirtxml with a synthesized domain XML referencing every downloaded
     // VMDK. The caller (runV2vMigrationPipeline) is responsible for writing the
@@ -946,7 +1049,10 @@ function buildV2vCommand(
         `not a user-facing error.`,
       )
     }
+
     const cmd = `virt-v2v -i libvirtxml ${shellEscape(libvirtXmlPath)} ${v2vOpts}`
+
+
     // Caller (runVirtV2vWithProgress) ensures outputDir exists before launching.
     return cmd
   }
@@ -965,6 +1071,7 @@ function buildV2vCommand(
         // discovery silently failed (both empty), or only one field arrived (likely
         // a stale frontend cache that sent the legacy payload before re-listing VMs).
         const missing: string[] = []
+
         if (!config.vcenterDatacenter) missing.push("vcenterDatacenter")
         if (!config.vcenterHost) missing.push("vcenterHost")
         throw new Error(
@@ -976,42 +1083,55 @@ function buildV2vCommand(
           `only N/M ESXi host inventory paths" warnings.`,
         )
       }
+
       const userEnc = encodeURIComponent(username)
       const hostEnc = encodeURIComponent(host)
       const dcEnc = encodeURIComponent(config.vcenterDatacenter)
       const esxiEnc = encodeURIComponent(config.vcenterHost)
+
+
       // Cluster segment is optional. When the ESXi host is part of a vSphere cluster
       // (vSAN, DRS, HA, etc.) libvirt requires the cluster name in the inventory path;
       // omitting it would cause "Could not find domain at host" from the vpx driver.
       const clusterSegment = config.vcenterCluster
         ? `${encodeURIComponent(config.vcenterCluster)}/`
         : ""
+
       const uri = `vpx://${userEnc}@${hostEnc}/${dcEnc}/host/${clusterSegment}${esxiEnc}?no_verify=1`
+
       v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
       break
     }
+
     case "hyperv": {
       if (config.diskPaths && config.diskPaths.length > 0) {
         // Disk-based mode: no credentials needed
         const diskArgs = config.diskPaths.map(p => shellEscape(p)).join(" ")
+
         v2vCmd = `virt-v2v -i disk ${diskArgs} ${v2vOpts}`
       } else {
         // Network mode: connect to Hyper-V host. Same percent-encode rule as vpx above.
         const userEnc = encodeURIComponent(username)
         const hostEnc = encodeURIComponent(host)
         const uri = `hyperv://${userEnc}@${hostEnc}`
+
         v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
       }
+
       break
     }
+
     case "nutanix": {
       if (!config.diskPaths || config.diskPaths.length === 0) {
         throw new Error("Nutanix migrations require diskPaths to be specified")
       }
+
       const diskArgs = config.diskPaths.map(p => shellEscape(p)).join(" ")
+
       v2vCmd = `virt-v2v -i disk ${diskArgs} ${v2vOpts}`
       break
     }
+
     case "esxi-direct": {
       // Direct ESXi migration without vCenter. virt-v2v reads the .vmx over SSH and
       // pulls each referenced VMDK through the same channel. Requires SSH enabled
@@ -1022,14 +1142,18 @@ function buildV2vCommand(
       if (!config.vmxPath || !config.esxiHost) {
         throw new Error("esxi-direct source requires vmxPath and esxiHost in the config")
       }
+
       const userEnc = encodeURIComponent(username)
       const hostEnc = encodeURIComponent(config.esxiHost)
+
       // Encode each path segment (datastore names can contain spaces/parens like
       // "Datastore (1)"). Leading slashes preserved so URL stays absolute.
       const vmxEncoded = config.vmxPath.split('/').map(s => s ? encodeURIComponent(s) : s).join('/')
       const sshUrl = `ssh://${userEnc}@${hostEnc}${vmxEncoded}`
       const homeDir = `${tempBase}/v2v-home-${jobId}`
       const agentSock = `${tempBase}/v2v-agent-${jobId}.sock`
+
+
       // Prefix with `env HOME=... SSH_AUTH_SOCK=...` rather than bare assignments
       // because the outer wrapper (runVirtV2vWithProgress) prepends `stdbuf -oL`
       // to the command — and `stdbuf HOME=...` would try to exec the literal
@@ -1040,6 +1164,7 @@ function buildV2vCommand(
       v2vCmd = `env HOME=${shellEscape(homeDir)} SSH_AUTH_SOCK=${shellEscape(agentSock)} virt-v2v -v -x -i vmx -it ssh ${shellEscape(sshUrl)} ${v2vOpts}`
       break
     }
+
     default:
       throw new Error(`Unsupported source type: ${config.sourceType}`)
   }
@@ -1055,11 +1180,14 @@ async function processV2vOutput(jobId: string, output: string, progressOffset: n
   const lines = output.split("\n")
   let maxProgress = -1
   let lastStep = ""
+
   for (const line of lines) {
     const trimmed = line.trim()
+
     if (!trimmed) continue
 
     const progress = parseV2vLine(trimmed)
+
     if (!progress) continue
 
     // Track the latest phase name and the max progress seen in this batch.
@@ -1067,18 +1195,25 @@ async function processV2vOutput(jobId: string, output: string, progressOffset: n
     // disk transitions) and legacy percent lines reset to 0 at the start of
     // each disk — we don't want the UI progress bar to bounce backwards.
     if (progress.step) lastStep = progress.step
+
     if (progress.percent > 0) {
       const v2vPct = calculateOverallProgress(progress)
+
       if (v2vPct > maxProgress) maxProgress = v2vPct
     }
   }
+
+
   // Single updateJob call per batch (instead of one per line) to avoid
   // hammering the DB during the polling loop which runs every 5s.
   const patch: Record<string, any> = {}
+
   if (maxProgress >= 0) {
     const globalPct = Math.round(progressOffset + (maxProgress / 100) * progressScale)
+
     patch.progress = Math.min(globalPct, 100)
   }
+
   if (lastStep) {
     // currentStep is surfaced in the UI under each migration job card.
     // Showing "Copying disk 1/2" / "Inspecting the source" etc. is more
@@ -1086,6 +1221,7 @@ async function processV2vOutput(jobId: string, output: string, progressOffset: n
     // creating_vm) while virt-v2v runs.
     patch.currentStep = lastStep
   }
+
   if (Object.keys(patch).length > 0) {
     await updateJob(jobId, "transferring", patch)
   }
@@ -1101,6 +1237,7 @@ export async function runV2vMigrationPipeline(
 ): Promise<void> {
   // Register tenant-scoped prisma for this job
   const prisma = getTenantPrisma(tenantId)
+
   jobPrisma.set(jobId, prisma)
 
   let targetVmid: number | null = null
@@ -1114,25 +1251,30 @@ export async function runV2vMigrationPipeline(
   // we record the pubkey + ESXi auth details so cleanup can sed it out of the
   // remote authorized_keys files and not leave the key persisted after the job.
   let esxiTempKeyBootstrap: { pubKey: string; esxiHost: string; esxiUser: string; esxiPort: number; esxiPass: string } | null = null
+
   // When we had to seed /root/.ssh/known_hosts for libssh (used by nbdkit-ssh, which
   // ignores $HOME and reads the system user's homedir via getpwuid), record the host
   // so cleanup removes our entry via ssh-keygen -R and doesn't leave trust pinned.
   let esxiKnownHostsSeeded: { esxiHost: string; esxiPort: number } | null = null
+
   // Per-job ssh-agent spawned to hold the job's private key so nbdkit-ssh/libssh can
   // authenticate without relying on /root/.ssh/id_* (which we don't want to clobber).
   // We record the sock + pid paths for cleanup; virt-v2v gets SSH_AUTH_SOCK via env.
   let esxiSshAgent: { sockPath: string; pidPath: string } | null = null
+
   // NFC transport state (used when source = vCenter and any disk is on vSAN).
   // We open a long-lived SOAP session for the duration of the NFC export and
   // logout in cleanup; the downloaded disks must also be removed in both
   // success and failure paths so we don't leak temp space on the PVE node.
   let vmwareSession: SoapSession | null = null
   let nfcDownloadedDisks: string[] = []
+
   // When NFC export ran, virt-v2v's -i disk mode loses the source VM metadata
   // (CPU, RAM, NIC model/MAC) because those live in the VMX/OVF, not in the disk.
   // We capture the parsed source config at vSAN detection time and use it later
   // in Phase 5 to override the sparse defaults virt-v2v would otherwise emit.
   let sourceVmwareConfig: EsxiVmConfig | null = null
+
   // Live migration state. When migrationType=="live" and the source VM is
   // powered on, we snapshot before the NFC export so transfer happens while
   // the VM keeps serving traffic, then power off + remove the snapshot right
@@ -1149,13 +1291,16 @@ export async function runV2vMigrationPipeline(
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
     const nodeIp = await getNodeIp(pveConn, config.targetNode)
+
     await appendLog(jobId, `Target node: ${config.targetNode} (${nodeIp})`)
 
     // Verify virt-v2v is installed
     const v2vCheck = await executeSSH(config.targetConnectionId, nodeIp, "which virt-v2v")
+
     if (!v2vCheck.success || !v2vCheck.output?.trim()) {
       throw new Error("virt-v2v is not installed on the target node. Install it with: apt-get install virt-v2v")
     }
+
     await appendLog(jobId, "virt-v2v is available on target node", "success")
 
     // Probe virt-v2v capability for --block-driver (introduced in 2.2.0).
@@ -1165,7 +1310,9 @@ export async function runV2vMigrationPipeline(
       nodeIp,
       "virt-v2v --help 2>&1 | grep -q -- '--block-driver' && echo yes || echo no",
     )
+
     const supportsBlockDriver = blockDriverProbe.output?.trim() === "yes"
+
     if (!supportsBlockDriver) {
       await appendLog(
         jobId,
@@ -1182,6 +1329,7 @@ export async function runV2vMigrationPipeline(
         where: { id: config.sourceConnectionId },
         select: { baseUrl: true, apiTokenEnc: true, hypervShareName: true },
       })
+
       if (sourceConn?.apiTokenEnc) {
         const creds = decryptSecret(sourceConn.apiTokenEnc)
         const colonIdx = creds.indexOf(":")
@@ -1192,11 +1340,13 @@ export async function runV2vMigrationPipeline(
 
         // Check if already mounted
         const mountCheck = await executeSSH(config.targetConnectionId, nodeIp, "mountpoint -q /mnt/hyperv && echo mounted || echo not_mounted")
+
         if (mountCheck.output?.trim() !== "mounted") {
           await appendLog(jobId, `Mounting Hyper-V SMB share //${smbHost}/${shareName}...`)
 
           // Ensure cifs-utils is installed
           const cifsCheck = await executeSSH(config.targetConnectionId, nodeIp, "which mount.cifs")
+
           if (!cifsCheck.success || !cifsCheck.output?.trim()) {
             await appendLog(jobId, "Installing cifs-utils...")
             await executeSSH(config.targetConnectionId, nodeIp, "apt-get update -qq && apt-get install -y cifs-utils")
@@ -1205,9 +1355,11 @@ export async function runV2vMigrationPipeline(
           // Mount the share
           const mountCmd = `mkdir -p /mnt/hyperv && mount -t cifs //${shellEscape(smbHost)}/${shellEscape(shareName)} /mnt/hyperv -o username=${shellEscape(smbUser)},password=${shellEscape(smbPass)},file_mode=0777,dir_mode=0777`
           const mountResult = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
+
           if (!mountResult.success) {
             throw new Error(`Failed to mount Hyper-V share: ${mountResult.error || mountResult.output}`)
           }
+
           hypervMounted = true
           await appendLog(jobId, "Hyper-V SMB share mounted at /mnt/hyperv", "success")
         } else {
@@ -1217,9 +1369,12 @@ export async function runV2vMigrationPipeline(
         // Auto-detect disk paths if not provided
         if (!config.diskPaths || config.diskPaths.length === 0) {
           const vmName = config.sourceVmName.replaceAll(/[^a-zA-Z0-9._-]/g, "*")
+
           const findResult = await executeSSH(config.targetConnectionId, nodeIp,
             `find /mnt/hyperv -iname "*${vmName}*" \\( -iname "*.vhdx" -o -iname "*.vhd" \\) 2>/dev/null || true`)
+
           const detected = (findResult.output || "").split("\n").map(l => l.trim()).filter(l => l && l.startsWith("/"))
+
           if (detected.length > 0) {
             config.diskPaths = detected
             await appendLog(jobId, `Auto-detected ${detected.length} disk(s): ${detected.join(", ")}`)
@@ -1246,18 +1401,21 @@ export async function runV2vMigrationPipeline(
         where: { id: config.sourceConnectionId },
         select: { baseUrl: true, apiTokenEnc: true },
       })
+
       if (!sourceConn?.apiTokenEnc) {
         throw new Error("Source connection credentials not found")
       }
 
       const creds = decryptSecret(sourceConn.apiTokenEnc)
       const colonIdx = creds.indexOf(":")
+
       username = colonIdx > 0 ? creds.substring(0, colonIdx) : "root"
       const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
 
       // Extract host from baseUrl (strip protocol and port)
       try {
         const url = new URL(sourceConn.baseUrl)
+
         host = url.hostname
       } catch {
         // Fallback: strip protocol manually
@@ -1270,9 +1428,11 @@ export async function runV2vMigrationPipeline(
       // Write password file on the target node
       const writeCmd = `printf '%s' ${shellEscape(password)} > ${shellEscape(pwFile)} && chmod 600 ${shellEscape(pwFile)}`
       const writeResult = await executeSSH(config.targetConnectionId, nodeIp, writeCmd)
+
       if (!writeResult.success) {
         throw new Error(`Failed to write password file: ${writeResult.error}`)
       }
+
       await appendLog(jobId, "Credentials prepared on target node", "success")
     }
 
@@ -1289,24 +1449,31 @@ export async function runV2vMigrationPipeline(
     // from ESXi at job end (see cleanup section).
     if (config.sourceType === "esxi-direct") {
       await appendLog(jobId, "Preparing ESXi SSH credentials for virt-v2v...")
+
       const sourceConn = await prisma.connection.findUnique({
         where: { id: config.sourceConnectionId },
         select: { baseUrl: true, sshUser: true, sshPort: true, sshEnabled: true, sshKeyEnc: true, sshPassEnc: true, sshAuthMethod: true },
       })
+
       if (!sourceConn?.sshEnabled) {
         throw new Error("ESXi-direct migration via virt-v2v requires SSH enabled on the source ESXi connection.")
       }
+
       const hasStoredKey = !!sourceConn.sshKeyEnc
       const hasStoredPass = !!sourceConn.sshPassEnc
+
       if (!hasStoredKey && !hasStoredPass) {
         throw new Error("ESXi-direct migration via virt-v2v requires either an SSH key or a password on the source ESXi connection.")
       }
+
       username = sourceConn.sshUser || "root"
+
       try {
         host = new URL(sourceConn.baseUrl).hostname
       } catch {
         host = sourceConn.baseUrl.replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
       }
+
       const esxiSshPort = sourceConn.sshPort || 22
 
       const homeDir = `${tempBase}/v2v-home-${jobId}`
@@ -1317,14 +1484,17 @@ export async function runV2vMigrationPipeline(
       // mkdir + chmod the per-job .ssh directory
       const mkResult = await executeSSH(config.targetConnectionId, nodeIp,
         `mkdir -p ${shellEscape(sshDir)} && chmod 700 ${shellEscape(sshDir)}`)
+
       if (!mkResult.success) throw new Error(`Failed to create ssh dir: ${mkResult.error || mkResult.output}`)
 
       if (hasStoredKey) {
         // Path A: admin configured a private key → use it as-is.
         const esxiKey = decryptSecret(sourceConn.sshKeyEnc!)
         const keyEscaped = esxiKey.replaceAll("'", "'\\''")
+
         const keyWrite = await executeSSH(config.targetConnectionId, nodeIp,
           `printf '%s' '${keyEscaped}' > ${shellEscape(keyPath)} && chmod 600 ${shellEscape(keyPath)}`)
+
         if (!keyWrite.success) throw new Error(`Failed to write SSH key: ${keyWrite.error || keyWrite.output}`)
         await appendLog(jobId, "Using stored ESXi SSH key for virt-v2v", "info")
       } else {
@@ -1333,13 +1503,17 @@ export async function runV2vMigrationPipeline(
         // private key. Matches the SSHFS Boot bootstrap in pipeline.ts so admins who
         // configured password SSH don't need to switch to key auth just for v2v.
         await appendLog(jobId, "No SSH key stored — generating a one-shot keypair and deploying to ESXi...", "info")
+
         const genResult = await executeSSH(config.targetConnectionId, nodeIp,
           `ssh-keygen -t rsa -b 4096 -f ${shellEscape(keyPath)} -N '' -q -C ${shellEscape(`proxcenter-v2v-${jobId}`)} 2>&1 && echo KEYGEN_OK`)
+
         if (!genResult.success || !genResult.output?.includes("KEYGEN_OK")) {
           throw new Error(`Failed to generate temp SSH key: ${genResult.error || genResult.output}`)
         }
+
         const pubKeyResult = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(keyPath + ".pub")}`)
         const pubKey = pubKeyResult.output?.trim()
+
         if (!pubKey) throw new Error("Failed to read generated public key")
 
         const esxiPass = decryptSecret(sourceConn.sshPassEnc!)
@@ -1352,11 +1526,14 @@ export async function runV2vMigrationPipeline(
         const deployCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p /etc/ssh/keys-${username} 2>/dev/null; echo '${pubKey}' >> /etc/ssh/keys-${username}/authorized_keys; echo DEPLOYED" 2>&1`
         const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
         let deployed = !!deployResult.output?.includes("DEPLOYED")
+
         if (!deployed) {
           const deployCmd2 = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p ~/.ssh 2>/dev/null; chmod 700 ~/.ssh; echo '${pubKey}' >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo DEPLOYED" 2>&1`
           const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
+
           deployed = !!deployResult2.output?.includes("DEPLOYED")
         }
+
         if (!deployed) {
           throw new Error(`Failed to deploy temp SSH key to ESXi. Check that the ESXi SSH user (${username}) is allowed to write to /etc/ssh/keys-${username}/authorized_keys or ~/.ssh/authorized_keys.`)
         }
@@ -1364,9 +1541,12 @@ export async function runV2vMigrationPipeline(
         // Verify the new key actually logs in before we hand off to virt-v2v.
         const verifyResult = await executeSSH(config.targetConnectionId, nodeIp,
           `ssh -i ${shellEscape(keyPath)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519 -p ${esxiSshPort} ${username}@${host} 'echo KEYOK' 2>&1`)
+
         if (!verifyResult.output?.includes("KEYOK")) {
           throw new Error(`Deployed temp SSH key did not authenticate: ${verifyResult.output?.substring(0, 200) || verifyResult.error}`)
         }
+
+
         // Record what we pushed so cleanup can remove it from ESXi authorized_keys.
         esxiTempKeyBootstrap = { pubKey, esxiHost: host, esxiUser: username, esxiPort: esxiSshPort, esxiPass }
         await appendLog(jobId, "Temp SSH key deployed and verified on ESXi", "success")
@@ -1386,9 +1566,12 @@ export async function runV2vMigrationPipeline(
         `    KexAlgorithms +diffie-hellman-group14-sha1,diffie-hellman-group14-sha256`,
         `    PubkeyAcceptedAlgorithms +ssh-rsa,ssh-ed25519`,
       ].join('\n')
+
       const configEscaped = sshConfig.replaceAll("'", "'\\''")
+
       const configWrite = await executeSSH(config.targetConnectionId, nodeIp,
         `printf '%s' '${configEscaped}' > ${shellEscape(configPath)} && chmod 600 ${shellEscape(configPath)}`)
+
       if (!configWrite.success) throw new Error(`Failed to write ssh config: ${configWrite.error || configWrite.output}`)
 
       // virt-v2v reads the VMDK disks through `nbdkit ssh` which uses libssh, NOT the
@@ -1404,19 +1587,24 @@ export async function runV2vMigrationPipeline(
       // matches a prefix in the orchestrator SSH allowlist (ssh_allowlist.go). Long
       // `;`-chained one-liners get 403'd when the first non-matching prefix hits.
       const perJobKnownHosts = `${sshDir}/known_hosts`
+
       const keyscanPerJob = await executeSSH(config.targetConnectionId, nodeIp,
         `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} > ${shellEscape(perJobKnownHosts)} && chmod 600 ${shellEscape(perJobKnownHosts)}`)
+
       if (!keyscanPerJob.success) {
         throw new Error(`Failed to fetch ESXi host key via ssh-keyscan: ${keyscanPerJob.error || keyscanPerJob.output?.substring(0, 200)}`)
       }
 
       // Seed /root/.ssh/known_hosts with the same data for libssh/nbdkit.
       await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p /root/.ssh && chmod 700 /root/.ssh`)
+
       const seedRoot = await executeSSH(config.targetConnectionId, nodeIp,
         `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} >> /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts`)
+
       if (!seedRoot.success) {
         throw new Error(`Failed to seed /root/.ssh/known_hosts: ${seedRoot.error || seedRoot.output?.substring(0, 200)}. Required for nbdkit (virt-v2v's SSH disk transport) to verify the remote host.`)
       }
+
       esxiKnownHostsSeeded = { esxiHost: host, esxiPort: esxiSshPort }
 
       // Start a per-job ssh-agent holding the key. libssh (used by nbdkit-ssh)
@@ -1428,24 +1616,32 @@ export async function runV2vMigrationPipeline(
       // stdout and persist it to a pidfile for kill-on-cleanup.
       const agentSock = `${tempBase}/v2v-agent-${jobId}.sock`
       const agentPidFile = `${tempBase}/v2v-agent-${jobId}.pid`
+
       const agentStart = await executeSSH(config.targetConnectionId, nodeIp,
         `ssh-agent -a ${shellEscape(agentSock)}`)
+
       if (!agentStart.success) {
         throw new Error(`Failed to start ssh-agent: ${agentStart.error || agentStart.output?.substring(0, 200)}`)
       }
+
       const agentPidMatch = (agentStart.output || "").match(/SSH_AGENT_PID=(\d+)/)
+
       if (!agentPidMatch) {
         throw new Error(`ssh-agent did not report a PID in stdout: ${agentStart.output?.substring(0, 200)}`)
       }
+
       const agentPid = agentPidMatch[1]
+
       await executeSSH(config.targetConnectionId, nodeIp,
         `printf '%s' ${shellEscape(agentPid)} > ${shellEscape(agentPidFile)}`)
 
       const addKey = await executeSSH(config.targetConnectionId, nodeIp,
         `SSH_AUTH_SOCK=${shellEscape(agentSock)} ssh-add ${shellEscape(keyPath)}`)
+
       if (!addKey.success) {
         throw new Error(`Failed to load key into ssh-agent: ${addKey.error || addKey.output?.substring(0, 200)}`)
       }
+
       esxiSshAgent = { sockPath: agentSock, pidPath: agentPidFile }
 
       await appendLog(jobId, `ESXi SSH identity loaded in per-job ssh-agent (for nbdkit/libssh)`, "success")
@@ -1462,6 +1658,7 @@ export async function runV2vMigrationPipeline(
         where: { id: config.sourceConnectionId },
         select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
       })
+
       if (!sourceConn?.apiTokenEnc) {
         throw new Error("Nutanix source connection credentials not found")
       }
@@ -1472,6 +1669,7 @@ export async function runV2vMigrationPipeline(
       const ntxPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
 
       const { NutanixClient } = await import("@/lib/nutanix/client")
+
       const ntxClient = new NutanixClient({
         baseUrl: sourceConn.baseUrl,
         username: ntxUser,
@@ -1481,22 +1679,27 @@ export async function runV2vMigrationPipeline(
 
       // List disks for this VM
       const disks = await ntxClient.listDisks(config.sourceVmId)
+
       if (disks.length === 0) {
         throw new Error("No disks found on Nutanix VM")
       }
+
       await appendLog(jobId, `Found ${disks.length} disk(s) to download: ${disks.map(d => `${d.uuid} (${d.volumeGroupUuid ? 'VG' : 'direct'}, ${(d.sizeBytes / 1073741824).toFixed(1)} GB)`).join(', ')}`)
 
       // Prepare download directory on target node
       const downloadDir = `${tempBase}/nutanix-${jobId}`
+
       await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(downloadDir)}`)
 
       const diskPaths: string[] = []
 
       for (let i = 0; i < disks.length; i++) {
         const disk = disks[i]
+
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
         const imageName = `proxcenter-mig-${jobId}-disk${i}`
+
         await appendLog(jobId, `Creating image from disk ${i} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Create image from disk via Prism API
@@ -1506,6 +1709,7 @@ export async function runV2vMigrationPipeline(
           imageName,
           !!disk.volumeGroupUuid
         )
+
         nutanixImageUuids.push(imageUuid)
 
         // Wait for image creation task to complete
@@ -1513,6 +1717,7 @@ export async function runV2vMigrationPipeline(
           await appendLog(jobId, `Waiting for image creation task ${taskUuid}...`)
           await ntxClient.waitForTask(taskUuid)
         }
+
         await appendLog(jobId, `Image created: ${imageUuid}`, "success")
 
         // Download the image to the target Proxmox node via curl
@@ -1525,12 +1730,15 @@ export async function runV2vMigrationPipeline(
         // Credentials stored in a curl config file (chmod 600), deleted after download
         const pidFile = `${downloadDir}/curl-${i}.pid`
         const curlCfg = `${downloadDir}/.curlcfg-${i}`
+
         await appendLog(jobId, `Downloading disk ${i} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Write curl config file with auth header (restricted permissions)
         const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${sourceConn.insecureTLS ? "insecure" : ""}`
+
         const writeCfg = await executeSSH(config.targetConnectionId, nodeIp,
           `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`)
+
         if (!writeCfg.success) {
           throw new Error(`Failed to write curl config: ${writeCfg.error}`)
         }
@@ -1538,6 +1746,7 @@ export async function runV2vMigrationPipeline(
         // Launch curl in background, delete config file after completion
         const launchResult = await executeSSH(config.targetConnectionId, nodeIp,
           `nohup bash -c "curl -K ${shellEscape(curlCfg)} && rm -f ${shellEscape(curlCfg)} && echo done > ${shellEscape(diskPath)}.complete" > /dev/null 2>&1 & echo $! > ${shellEscape(pidFile)}`)
+
         if (!launchResult.success) {
           throw new Error(`Failed to start disk ${i} download: ${launchResult.error}`)
         }
@@ -1548,6 +1757,7 @@ export async function runV2vMigrationPipeline(
         let lastSize = 0
         let stallCount = 0
         const maxStallChecks = 60 // 60 * 5s = 5 minutes without progress = stalled
+
         while (true) {
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await new Promise(r => setTimeout(r, 5000))
@@ -1555,16 +1765,19 @@ export async function runV2vMigrationPipeline(
           // Check if download completed
           const completeCheck = await executeSSH(config.targetConnectionId, nodeIp,
             `test -f ${shellEscape(diskPath)}.complete && echo yes || echo no`)
+
           if (completeCheck.output?.trim() === "yes") break
 
           // Check file size progress
           const statResult = await executeSSH(config.targetConnectionId, nodeIp,
             `stat -c '%s' ${shellEscape(diskPath)} 2>/dev/null || echo 0`)
+
           const currentSize = Number(statResult.output?.trim() || "0")
 
           // Detect stalled download
           if (currentSize === lastSize) {
             stallCount++
+
             if (stallCount >= maxStallChecks) {
               throw new Error(`Disk ${i} download stalled: no progress for 5 minutes at ${(currentSize / 1073741824).toFixed(1)} GB`)
             }
@@ -1577,23 +1790,29 @@ export async function runV2vMigrationPipeline(
           // Download phase = first 50% of total progress, split across disks
           if (expectedSize > 0) {
             const diskPct = Math.round((currentSize / expectedSize) * 100)
+
             if (diskPct > lastLoggedPct + 9) {
               await appendLog(jobId, `Disk ${i} download: ${diskPct}% (${(currentSize / 1073741824).toFixed(1)} GB)`)
               lastLoggedPct = diskPct
             }
+
             const totalDisks = disks.length
             const perDiskWeight = 50 / totalDisks
             const globalPct = Math.round((i * perDiskWeight) + (diskPct / 100) * perDiskWeight)
+
             await prisma.migrationJob.update({ where: { id: jobId }, data: { progress: globalPct } })
           }
         }
 
         // Verify file size
         const statResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c '%s' ${shellEscape(diskPath)}`)
+
         if (!statResult.success || !statResult.output?.trim() || statResult.output.trim() === "0") {
           throw new Error(`Downloaded disk file is empty or missing: ${diskPath}`)
         }
+
         const fileSize = Number(statResult.output.trim())
+
         await appendLog(jobId, `Disk ${i} downloaded: ${(fileSize / 1073741824).toFixed(1)} GB`, "success")
 
         // pid and complete files cleaned up with the nutanix download dir at end of pipeline
@@ -1626,9 +1845,11 @@ export async function runV2vMigrationPipeline(
         where: { id: config.sourceConnectionId },
         select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
       })
+
       if (!sourceConn?.apiTokenEnc) {
         throw new Error("vCenter source connection credentials not found")
       }
+
       const sourceCreds = decryptSecret(sourceConn.apiTokenEnc)
       const credColon = sourceCreds.indexOf(":")
       const soapUser = credColon > 0 ? sourceCreds.substring(0, credColon) : "root"
@@ -1639,8 +1860,10 @@ export async function runV2vMigrationPipeline(
       vmwareSession = await soapLogin(soapBaseUrl, soapUser, soapPass, sourceConn.insecureTLS)
 
       const vmConfigXml = await soapGetVmConfig(vmwareSession, config.sourceVmId)
+
       sourceVmwareConfig = parseVmConfig(vmConfigXml)
       const datastoreNames = sourceVmwareConfig.disks.map(d => d.datastoreName).filter(Boolean)
+
       await appendLog(
         jobId,
         `Source VM has ${sourceVmwareConfig.disks.length} disk(s) on datastores: ` +
@@ -1658,23 +1881,27 @@ export async function runV2vMigrationPipeline(
         nodeIp,
         "which nbdkit >/dev/null 2>&1 && which nbdcopy >/dev/null 2>&1 && echo ok || echo missing",
       )
+
       if (depsCheck.output?.trim() !== "ok") {
         await appendLog(
           jobId,
           "nbdkit or libnbd-bin missing on target node; auto-installing (required for virt-v2v NFC path)...",
           "warn",
         )
+
         const install = await executeSSH(
           config.targetConnectionId,
           nodeIp,
           "apt-get update -qq && apt-get install -y nbdkit libnbd-bin",
         )
+
         if (!install.success) {
           throw new Error(
             `Failed to auto-install nbdkit + libnbd-bin: ${install.error || install.output?.substring(0, 300)}. ` +
             `Install manually on the Proxmox node: apt install nbdkit libnbd-bin`,
           )
         }
+
         await appendLog(jobId, "nbdkit + libnbd-bin installed successfully", "success")
       }
 
@@ -1684,6 +1911,7 @@ export async function runV2vMigrationPipeline(
       // transfer accumulate in the delta and are discarded when we power off
       // + remove the snapshot right before virt-v2v runs.
       const isLive = config.migrationType === "live" && config.sourceType === "vcenter"
+
       if (isLive && sourceVmwareConfig.powerState === "poweredOn") {
         const snapName = `proxcenter-live-${jobId.slice(-12)}`
         const guestNameLower = (sourceVmwareConfig.guestOS || sourceVmwareConfig.guestId || "").toLowerCase()
@@ -1698,6 +1926,7 @@ export async function runV2vMigrationPipeline(
         if (isWindowsGuest) {
           const toolsRunning = sourceVmwareConfig.toolsRunningStatus === "guestToolsRunning"
           const toolsInstalled = sourceVmwareConfig.toolsStatus && sourceVmwareConfig.toolsStatus !== "toolsNotInstalled"
+
           if (!toolsRunning || !toolsInstalled) {
             throw new Error(
               `Live migration of a Windows guest requires VMware Tools to be installed AND running ` +
@@ -1715,10 +1944,12 @@ export async function runV2vMigrationPipeline(
         // are noisier than a crash-consistent snapshot. For Windows it's
         // mandatory because the NTFS dirty flag blocks virt-v2v otherwise.
         const wantsQuiesce = isWindowsGuest
+
         await appendLog(
           jobId,
           `Live migration: creating snapshot "${snapName}" on source VM (VM stays running${wantsQuiesce ? ", quiescing via VMware Tools" : ""})...`,
         )
+
         try {
           liveSnapshotMor = await soapCreateSnapshot(
             vmwareSession,
@@ -1728,6 +1959,8 @@ export async function runV2vMigrationPipeline(
             wantsQuiesce,
           )
           await appendLog(jobId, `Snapshot created (mor: ${liveSnapshotMor})`, "success")
+
+
           // Verify VSS actually quiesced the snapshot when we asked for it.
           // vCenter silently falls back to a crash-consistent snapshot when
           // VSS fails (Tools unresponsive, VSS writers broken, etc.) and the
@@ -1735,6 +1968,7 @@ export async function runV2vMigrationPipeline(
           // the snapshot MOR is the only reliable way to detect the fallback.
           if (wantsQuiesce) {
             const actuallyQuiesced = await soapGetSnapshotQuiesced(vmwareSession, liveSnapshotMor)
+
             if (!actuallyQuiesced) {
               await appendLog(
                 jobId,
@@ -1752,6 +1986,8 @@ export async function runV2vMigrationPipeline(
           }
         } catch (snapErr: any) {
           const errMsg = snapErr?.message || String(snapErr)
+
+
           // If quiesce failed (VMware Tools not installed / not responding),
           // fall back to an un-quiesced snapshot. Log a clear warn so the
           // user knows the resulting VMDKs may still have the dirty flag
@@ -1763,6 +1999,7 @@ export async function runV2vMigrationPipeline(
               `NTFS may be dirty and require ntfsfix during conversion.`,
               "warn",
             )
+
             try {
               liveSnapshotMor = await soapCreateSnapshot(
                 vmwareSession,
@@ -1814,7 +2051,9 @@ export async function runV2vMigrationPipeline(
       // is expected migration semantics.
       if (liveSnapshotMor) {
         const downtimeStart = Date.now()
+
         await appendLog(jobId, "Live cutover: all disks transferred, powering off source VM (downtime starts now)...", "warn")
+
         try {
           await soapPowerOffVm(vmwareSession, config.sourceVmId)
           livePoweredOff = true
@@ -1828,6 +2067,7 @@ export async function runV2vMigrationPipeline(
             `the VM is powered off.`,
           )
         }
+
         try {
           await soapRemoveSnapshot(vmwareSession, liveSnapshotMor)
           await appendLog(jobId, "Source snapshot removed", "success")
@@ -1856,6 +2096,7 @@ export async function runV2vMigrationPipeline(
 
     // ── PHASE 3: Create VM shell ──
     await updateJob(jobId, "creating_vm")
+
     if (config.targetVmid !== undefined) {
       targetVmid = config.targetVmid
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
@@ -1864,6 +2105,7 @@ export async function runV2vMigrationPipeline(
       targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
+
     await updateJob(jobId, "creating_vm", { targetVmid })
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -1871,9 +2113,11 @@ export async function runV2vMigrationPipeline(
     // ── PHASE 4: Execute virt-v2v ──
     // Don't reset progress for Nutanix or vSAN-NFC (download phase already at 50%).
     const hasDownloadPhase = config.sourceType === "nutanix" || nfcDownloadedDisks.length > 0
+
     if (!hasDownloadPhase) {
       await updateJob(jobId, "transferring", { progress: 0 })
     }
+
     await appendLog(jobId, `Starting virt-v2v conversion (source: ${config.sourceType}, VM: "${config.sourceVmName}"${nfcDownloadedDisks.length > 0 ? ", transport: NFC" : ""})...`)
 
     // Multi-disk NFC path: synthesize a libvirt domain XML before we ask
@@ -1881,20 +2125,25 @@ export async function runV2vMigrationPipeline(
     // ingest one disk, so for 2+ disks we switch to -i libvirtxml pointing at
     // an XML we write ourselves using the source VM's metadata from SOAP.
     let libvirtXmlPath: string | undefined
+
     if (nfcDownloadedDisks.length > 1) {
       libvirtXmlPath = `${outputDir}/vm.xml`
+
       const xml = buildSynthesizedLibvirtXml(
         config.sourceVmName,
         sourceVmwareConfig?.memoryMB || 1024,
         sourceVmwareConfig?.numCPU || 1,
         nfcDownloadedDisks,
       )
+
       await appendLog(jobId, `Multi-disk NFC path: writing synthesized libvirt domain XML for ${nfcDownloadedDisks.length} disks to ${libvirtXmlPath}`, "info")
+
       const writeXml = await executeSSH(
         config.targetConnectionId,
         nodeIp,
         `printf '%s' ${shellEscape(xml)} > ${shellEscape(libvirtXmlPath)}`,
       )
+
       if (!writeXml.success) {
         throw new Error(`Failed to write synthesized libvirt XML on target node: ${writeXml.error || writeXml.output}`)
       }
@@ -1906,12 +2155,14 @@ export async function runV2vMigrationPipeline(
       username,
       host,
       supportsBlockDriver,
+
       // When NFC export ran, virt-v2v consumes the local VMDK files instead of
       // talking to vCenter. Empty array (the default) keeps the legacy vpx://
       // path for non-vSAN vCenter VMs and for hyperv/nutanix sources.
       nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : undefined,
       libvirtXmlPath,
     )
+
     await appendLog(jobId, `Running virt-v2v on ${config.targetNode}...`)
 
     // virt-v2v is launched in the background via runVirtV2vWithProgress so we
@@ -1956,6 +2207,7 @@ export async function runV2vMigrationPipeline(
     if (!v2vResult.success) {
       const rawError = v2vResult.error || v2vResult.output?.substring(0, 500) || ""
       const fullOutput = v2vResult.output || ""
+
       // Source-VM errors virt-v2v cannot work around: the package database is
       // corrupted (typically because the guest filesystem is mounted read-only
       // or crashed mid-install). virt-v2v needs dpkg/rpm to inject virtio
@@ -1964,6 +2216,7 @@ export async function runV2vMigrationPipeline(
       const hasDpkgCorruption = /dpkg:\s+unrecoverable fatal error/i.test(fullOutput)
       const hasRpmCorruption = /rpm:\s+error:\s+rpmdb|error:\s+rpmdbNextIterator/i.test(fullOutput)
       let hint = ""
+
       if (hasDpkgCorruption || hasRpmCorruption) {
         hint = "\n\nHint: the source VM's package database appears corrupted (often caused by a read-only root filesystem or a crash during a package install). Boot the VM at the source, repair the dpkg/rpm state (e.g. fsck the root FS, fix any truncated files under /var/lib/dpkg/info/, or run 'rpm --rebuilddb'), then retry the migration."
       } else if (isNtfsError) {
@@ -1973,8 +2226,10 @@ export async function runV2vMigrationPipeline(
           "  • OFFLINE migration: Windows was shut down with Fast Startup enabled (default on Windows 10/11/Server 2022+), which is really a hybrid hibernation. Inside the guest run `powercfg /h off` then `shutdown /s /f /t 0` for a full cold shutdown, then retry.\n" +
           "  • LIVE migration: VSS quiesce did not actually run in the guest (VMware Tools absent, stopped, or VSS writers broken), so the snapshot is crash-consistent with Windows mid-write. Install / repair VMware Tools in the guest (Tools must be in the guestToolsRunning state) and retry, or fall back to Offline with the clean shutdown above."
       }
+
       throw new Error(`virt-v2v failed: ${rawError}${hint}`)
     }
+
     await appendLog(jobId, "virt-v2v conversion completed", "success")
 
     // Cleanup the NFC-downloaded source VMDKs now that virt-v2v has produced
@@ -1989,10 +2244,14 @@ export async function runV2vMigrationPipeline(
       for (const p of nfcDownloadedDisks) {
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
       }
+
       await appendLog(jobId, `Cleaned up ${nfcDownloadedDisks.length} NFC source VMDK(s) from ${outputDir}`, "info")
+
       // Clear the array so the finally-block doesn't try to rm them again.
       nfcDownloadedDisks = []
     }
+
+
     // Same treatment for our synthesized input XML in multi-disk mode: Phase 5
     // does `cat ${outputDir}/*.xml` and would concat our input XML with the
     // output domain XML that virt-v2v wrote — leading to a duplicated disk list
@@ -2014,6 +2273,7 @@ export async function runV2vMigrationPipeline(
       // Find the converted disk (the main -sda file)
       const findDiskResult = await executeSSH(config.targetConnectionId, nodeIp,
         `find ${shellEscape(outputDir)} -name "*-sda" -type f | head -1`)
+
       const convertedDisk = findDiskResult.output?.trim()
 
       if (convertedDisk) {
@@ -2026,11 +2286,14 @@ export async function runV2vMigrationPipeline(
 
           // Mount ISO, extract guest tools, inject with virt-customize
           const mountDir = `${tempBase}/virtio-mount-${jobId}`
+
           const injectCmd = [
             `mkdir -p ${shellEscape(mountDir)}`,
             `mount -o loop,ro /usr/share/virtio-win/virtio-win.iso ${shellEscape(mountDir)}`,
+
             // Check if guest tools exe exists on the ISO
             `test -f ${shellEscape(mountDir)}/virtio-win-guest-tools.exe`,
+
             // Inject the exe into the disk and schedule silent install at firstboot
             `virt-customize -a ${shellEscape(convertedDisk)}` +
               ` --copy-in ${shellEscape(mountDir)}/virtio-win-guest-tools.exe:/Windows/Temp/` +
@@ -2040,6 +2303,7 @@ export async function runV2vMigrationPipeline(
           ].join(" && ")
 
           const injectResult = await executeSSH(config.targetConnectionId, nodeIp, injectCmd)
+
           if (injectResult.success) {
             await appendLog(jobId, "Guest tools injected (will install silently on first boot)", "success")
           } else {
@@ -2091,6 +2355,8 @@ export async function runV2vMigrationPipeline(
     // the same workaround most commercial migration tools apply.
     if (vmConfig && vmConfig.firmware === "efi" && vmConfig.ostype.startsWith("win")) {
       await appendLog(jobId, "Windows UEFI guest detected: applying EFI boot fallback fix on converted disks...")
+
+
       // Check guestfish availability once upfront; skip quietly if unavailable
       // (virt-customize is pulled in by virt-v2v's deps but guestfish may be
       // packaged separately in some distros). Worst case the user sees PXE at
@@ -2100,6 +2366,7 @@ export async function runV2vMigrationPipeline(
         nodeIp,
         "which guestfish >/dev/null 2>&1 && which virt-filesystems >/dev/null 2>&1 && echo ok || echo missing",
       )
+
       if (gfCheck.output?.trim() !== "ok") {
         await appendLog(
           jobId,
@@ -2142,13 +2409,17 @@ export async function runV2vMigrationPipeline(
           config.targetConnectionId,
           nodeIp,
           `bash -c ${shellEscape(fixScript)}`,
+
           // guestfish spin-up + copy is fast but can take up to ~30s per
           // partition checked on slow storage; give it 3 min headroom.
           180_000,
         )
+
         const fixOut = (fixResult.output || "").trim()
+
         if (fixOut.includes("EFI_FALLBACK_FIXED:")) {
           const match = fixOut.match(/EFI_FALLBACK_FIXED:([^:]+):(.+)/)
+
           await appendLog(
             jobId,
             `EFI fallback fix applied: bootmgfw.efi copied to \\EFI\\Boot\\BOOTX64.EFI on ${match?.[2] || "ESP partition"}`,
@@ -2189,6 +2460,7 @@ export async function runV2vMigrationPipeline(
         const realSockets = sourceVmwareConfig.sockets || vmConfig.sockets
         const realMemMB = sourceVmwareConfig.memoryMB || vmConfig.memory
         const realFirmware: 'bios' | 'efi' = sourceVmwareConfig.firmware === "efi" ? "efi" : "bios"
+
         // Map VMware's guestOS / guestId strings to a Proxmox ostype. parseV2vXml
         // sometimes returns "l26" for Windows guests when the virt-v2v output XML
         // lacks obvious "windows" substrings (happens for some vmx/ova inputs).
@@ -2199,6 +2471,7 @@ export async function runV2vMigrationPipeline(
         // etc.) even when virt-v2v itself injected the right VirtIO drivers.
         const guestText = ((sourceVmwareConfig.guestOS || "") + " " + (sourceVmwareConfig.guestId || "")).toLowerCase()
         let realOstype: string = vmConfig.ostype
+
         if (/win(dows)?\s*(11|server\s*202[25])|win.?11|winserver20[2][25]|windows11srv/.test(guestText)) realOstype = 'win11'
         else if (/win(dows)?\s*(10|server\s*20(16|19))|win.?10|winserver201[69]|windows9srv|windows10srv|win2k1[69]/.test(guestText)) realOstype = 'win10'
         else if (/win(dows)?\s*8|win.?8/.test(guestText)) realOstype = 'win8'
@@ -2240,6 +2513,7 @@ export async function runV2vMigrationPipeline(
         typeof config.vlanTag === "number" && Number.isInteger(config.vlanTag) && config.vlanTag >= 1 && config.vlanTag <= 4094
           ? `,tag=${config.vlanTag}`
           : ""
+
       createParams = {
         vmid: targetVmid,
         name: config.sourceVmName.replaceAll(/[^a-zA-Z0-9.\-]/g, "-").substring(0, 63) || "vm",
@@ -2268,10 +2542,13 @@ export async function runV2vMigrationPipeline(
 
     const buildCreateBody = (vmid: number) => {
       const body = new URLSearchParams()
+
       for (const [key, value] of Object.entries({ ...createParams, vmid })) {
         body.set(key, String(value))
       }
+
       body.set("serial0", "socket")
+
       if (isEfi) {
         // pre-enrolled-keys=1 mirrors the Proxmox GUI default for UEFI
         // VMs: OVMF ships with the standard Microsoft Secure Boot keys
@@ -2280,7 +2557,9 @@ export async function runV2vMigrationPipeline(
         // boot failures when the source VM had Secure Boot enabled.
         body.set("efidisk0", `${config.targetStorage}:1,efitype=4m,pre-enrolled-keys=1`)
       }
-      return body
+
+
+return body
     }
 
     // Race-tolerant create loop: PVE's /cluster/nextid is NOT atomic — concurrent
@@ -2296,6 +2575,7 @@ export async function runV2vMigrationPipeline(
     const userPickedVmid = config.targetVmid !== undefined
     const MAX_VMID_RETRIES = userPickedVmid ? 1 : 5
     let createdVmid = targetVmid
+
     for (let attempt = 0; attempt < MAX_VMID_RETRIES; attempt++) {
       try {
         const createResult = await pveFetch<any>(
@@ -2303,10 +2583,13 @@ export async function runV2vMigrationPipeline(
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu`,
           { method: "POST", body: buildCreateBody(createdVmid) },
         )
+
         if (createResult) {
           await waitForPveTask(pveConn, config.targetNode, String(createResult))
         }
+
         targetVmid = createdVmid
+
         // Make sure the cleanup paths use the actually-created id, not the
         // initially-allocated one we may have moved past.
         await updateJob(jobId, "creating_vm", { targetVmid })
@@ -2315,10 +2598,13 @@ export async function runV2vMigrationPipeline(
       } catch (err: any) {
         const errMsg = err?.message || String(err)
         const isConflict = /already exists on node/i.test(errMsg) || /VM \d+ already exists/i.test(errMsg)
+
         if (!isConflict || attempt === MAX_VMID_RETRIES - 1) {
           throw err
         }
+
         const freshId = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
+
         await appendLog(
           jobId,
           `VMID ${createdVmid} taken (race with concurrent migration), retrying with fresh id ${freshId}`,
@@ -2361,6 +2647,7 @@ export async function runV2vMigrationPipeline(
       pveConn,
       `/storage/${encodeURIComponent(config.targetStorage)}`
     )
+
     const storageType = storageConfig?.type || "dir"
     const isFileBased = isFileBasedStorage(storageType)
 
@@ -2373,6 +2660,7 @@ export async function runV2vMigrationPipeline(
     // first boot because vioscsi.sys isn't registered as critical. Attach on
     // virtio0 instead so the injected viostor matches the bus.
     const useVirtioBlk = isWindowsVm && !supportsBlockDriver
+
     // For Windows guests (any firmware), route the boot disk through SATA. Even when
     // --block-driver is available, virt-v2v's viostor registry injection is fragile on
     // modern Windows (Fast Startup residue, pending updates, tiered registry
@@ -2390,6 +2678,8 @@ export async function runV2vMigrationPipeline(
     for (let i = 0; i < diskFiles.length; i++) {
       const diskFile = diskFiles[i]
       const diskPath = `${outputDir}/${diskFile}`
+
+
       // Boot disk of a Windows guest → sata0 (see useWinSataBoot rationale above).
       // Data disks shift down to scsi0, scsi1... since the boot disk no longer
       // occupies scsi0.
@@ -2409,6 +2699,7 @@ export async function runV2vMigrationPipeline(
         // PVE storage and routinely runs for 5-30 min on multi-GB disks. Use a
         // 4h cap so SSH doesn't kill the import mid-stream.
         const FOUR_HOURS_MS = 14_400_000
+
         const importResult = await executeSSH(
           config.targetConnectionId, nodeIp,
           `qm disk import ${targetVmid} ${shellEscape(diskPath)} ${shellEscape(config.targetStorage)} --format qcow2 2>&1`,
@@ -2432,14 +2723,17 @@ export async function runV2vMigrationPipeline(
         } else {
           // Fallback: read VM config to find unused disk
           await appendLog(jobId, `Parsing import output failed, reading VM config to find unused disk...`, "info")
+
           try {
             const vmConf = await pveFetch<Record<string, any>>(
               pveConn,
               `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
             )
+
             const unusedKeys = Object.keys(vmConf)
               .filter(k => k.startsWith("unused"))
               .sort((a, b) => a.localeCompare(b))
+
             if (unusedKeys.length > 0) {
               diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
               await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
@@ -2447,6 +2741,7 @@ export async function runV2vMigrationPipeline(
           } catch (e: any) {
             await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
           }
+
           if (!diskVolume) {
             diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${nextDiskNum}`
             await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
@@ -2457,6 +2752,7 @@ export async function runV2vMigrationPipeline(
         const attachBody = new URLSearchParams({
           [diskSlot]: `${diskVolume},discard=on`,
         })
+
         try {
           await pveFetch<any>(
             pveConn,
@@ -2473,13 +2769,17 @@ export async function runV2vMigrationPipeline(
           config.targetConnectionId, nodeIp,
           `stat -c %s ${shellEscape(diskPath)}`
         )
+
         if (!statResult.success || !statResult.output?.trim()) {
           throw new Error(`Failed to get file size for ${diskFile}: ${statResult.error}`)
         }
+
         const sizeBytes = Number.parseInt(statResult.output.trim(), 10)
+
         if (Number.isNaN(sizeBytes) || sizeBytes <= 0) {
           throw new Error(`Invalid file size for ${diskFile}: ${statResult.output}`)
         }
+
         const sizeKB = Math.ceil(sizeBytes / 1024)
 
         // Find next available disk number
@@ -2487,7 +2787,9 @@ export async function runV2vMigrationPipeline(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
         )
+
         const existingNums = Object.keys(vmConf)
+
           // efidisk/tpmstate also consume vm-<vmid>-disk-N slots — miss them and we
           // collide on "dataset already exists" when PVE auto-allocates the efidisk
           // as disk-0 on OVMF VMs.
@@ -2495,9 +2797,12 @@ export async function runV2vMigrationPipeline(
           .map(k => {
             const val = String(vmConf[k])
             const m = val.match(/vm-\d+-disk-(\d+)/)
-            return m ? Number.parseInt(m[1], 10) : -1
+
+
+return m ? Number.parseInt(m[1], 10) : -1
           })
           .filter(n => n >= 0)
+
         const maxDiskNum = existingNums.length > 0 ? Math.max(...existingNums) : -1
         const diskNum = maxDiskNum + 1
         const volName = `vm-${targetVmid}-disk-${diskNum}`
@@ -2509,6 +2814,7 @@ export async function runV2vMigrationPipeline(
           config.targetConnectionId, nodeIp,
           config.targetStorage, targetVmid, volName, sizeKB,
         )
+
         const volumeId = alloc.volumeId
         let devicePath = alloc.devicePath
 
@@ -2517,28 +2823,37 @@ export async function runV2vMigrationPipeline(
         //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
         let rbdMapped = false
         const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
+
         if (devicePath.startsWith("rbd:")) {
           const rbdSpec = devicePath.split(":")[1]
+
           if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
+
           const mapResult = await executeSSH(
             config.targetConnectionId, nodeIp,
             `rbd map ${shellEscape(rbdSpec)} 2>&1`
           )
+
           if (!mapResult.success || !mapResult.output?.trim()) {
             throw new Error(`Failed to map RBD device: ${mapResult.error}`)
           }
+
           devicePath = mapResult.output.trim()
           rbdMapped = true
         } else if (krbdMatch) {
           const [, pool, image] = krbdMatch
           const rbdSpec = `${pool}/${image}`
+
           const mapResult = await executeSSH(
             config.targetConnectionId, nodeIp,
             `rbd device map ${shellEscape(rbdSpec)} 2>&1`
           )
+
           if (!mapResult.success) {
             throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
           }
+
+
           // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
           rbdMapped = true
         }
@@ -2574,11 +2889,13 @@ export async function runV2vMigrationPipeline(
         // data disks on slow storage.
         await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Importing to block device ${devicePath} (sparse-aware)...`)
         const FOUR_HOURS_MS = 14_400_000
+
         const importResult = await executeSSH(
           config.targetConnectionId, nodeIp,
           `qemu-img convert -n -p -S 4K -O raw ${shellEscape(diskPath)} ${shellEscape(devicePath)} 2>&1`,
           FOUR_HOURS_MS,
         )
+
         if (!importResult.success) {
           throw new Error(`Block write failed for ${diskFile}: ${importResult.error || importResult.output}`)
         }
@@ -2592,6 +2909,7 @@ export async function runV2vMigrationPipeline(
         const attachBody = new URLSearchParams({
           [diskSlot]: volumeId,
         })
+
         try {
           await pveFetch<any>(
             pveConn,
@@ -2613,6 +2931,7 @@ export async function runV2vMigrationPipeline(
     //   - Windows-without-block-driver → virtio0 (viostor/virtio-blk fallback)
     //   - Everything else (Linux, etc.) → scsi0
     const bootSlot = useWinSataBoot ? "sata0" : (useVirtioBlk ? "virtio0" : "scsi0")
+
     await pveFetch<any>(
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
@@ -2646,6 +2965,7 @@ export async function runV2vMigrationPipeline(
     await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success")
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "migration",
@@ -2667,32 +2987,40 @@ export async function runV2vMigrationPipeline(
           where: { id: config.sourceConnectionId },
           select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
         })
+
         if (sourceConn?.apiTokenEnc) {
           const creds = decryptSecret(sourceConn.apiTokenEnc)
           const colonIdx = creds.indexOf(":")
           const { NutanixClient } = await import("@/lib/nutanix/client")
+
           const ntxClient = new NutanixClient({
             baseUrl: sourceConn.baseUrl,
             username: colonIdx > 0 ? creds.substring(0, colonIdx) : "admin",
             password: colonIdx > 0 ? creds.substring(colonIdx + 1) : creds,
             insecureTLS: sourceConn.insecureTLS,
           })
+
           for (const imageUuid of nutanixImageUuids) {
             await ntxClient.deleteImage(imageUuid).catch(() => {})
           }
+
           await appendLog(jobId, `Cleaned up ${nutanixImageUuids.length} Nutanix image(s)`, "info")
         }
       } catch { /* best effort */ }
     }
+
+
     // Clean up downloaded disk files
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
+
       await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`).catch(() => {})
     } catch { /* best effort */ }
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
+
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
     await updateJob(jobId, "failed", { error: errorMsg })
 
@@ -2712,6 +3040,7 @@ export async function runV2vMigrationPipeline(
           "warn",
         )
       }
+
       liveSnapshotMor = null
     }
 
@@ -2723,71 +3052,96 @@ export async function runV2vMigrationPipeline(
     // migration hit "no space left on device" mid-run.
     const CLEANUP_TIMEOUT_MS = 120_000
     const failedCleanups: string[] = []
+
     try {
       const pveConn = await getConnectionById(config.targetConnectionId)
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
       const rmOutput = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`, CLEANUP_TIMEOUT_MS)
+
       if (!rmOutput.success) failedCleanups.push(`${outputDir}: ${rmOutput.error || "unknown"}`)
       const rmPw = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`, CLEANUP_TIMEOUT_MS)
+
       if (!rmPw.success) failedCleanups.push(`${pwFile}: ${rmPw.error || "unknown"}`)
+
+
       // If we bootstrapped a one-shot ESXi key (password-auth source), remove the
       // corresponding line from ESXi's authorized_keys before we nuke the home dir —
       // otherwise the key stays accepted on ESXi forever. We try both default
       // locations since the deploy step also tried both.
       if (esxiTempKeyBootstrap) {
         const { pubKey, esxiHost: ehost, esxiUser: euser, esxiPort: eport, esxiPass } = esxiTempKeyBootstrap
+
         // sed pattern: match on the first 40 chars of the base64 body, which is unique
         // enough to not collide with other keys but short enough to escape safely.
         const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
+
         if (pubFingerprint) {
           const safePub = pubFingerprint.replaceAll(/[/\\&.]/g, '\\$&')
           const safeEsxiPass = esxiPass.replaceAll("'", "'\\''")
           const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
           const revokeCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${eport} ${euser}@${ehost} "sed -i '/${safePub}/d' /etc/ssh/keys-${euser}/authorized_keys ~/.ssh/authorized_keys 2>/dev/null; echo REVOKED" 2>&1`
           const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS)
+
           if (!revokeResult.output?.includes("REVOKED")) {
             failedCleanups.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)
           }
         }
       }
+
+
       // esxi-direct staged its SSH key under a per-job HOME; remove it whether we
       // took that branch or not — rm -rf on a non-existent path succeeds silently.
       const esxiHomeDir = `${tempBase}/v2v-home-${jobId}`
       const rmHome = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(esxiHomeDir)}`, CLEANUP_TIMEOUT_MS)
+
       if (!rmHome.success) failedCleanups.push(`${esxiHomeDir}: ${rmHome.error || "unknown"}`)
+
+
       // Kill the per-job ssh-agent and remove its socket/pidfile. Each step is a
       // single-prefix executeSSH call (cat ', kill , rm -f 'v2v-agent-...') so it
       // matches the orchestrator SSH allowlist without needing a shell wrapper.
       if (esxiSshAgent) {
         const readPid = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
         const rawPid = readPid.output?.trim() || ""
+
         if (/^\d+$/.test(rawPid)) {
           const killRes = await executeSSH(config.targetConnectionId, nodeIp, `kill ${rawPid}`, CLEANUP_TIMEOUT_MS)
+
           if (!killRes.success) failedCleanups.push(`kill ssh-agent ${rawPid}: ${killRes.error || killRes.output?.substring(0, 150) || "unknown"}`)
         }
+
         const rmSock = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(esxiSshAgent.sockPath)} ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
+
         if (!rmSock.success) failedCleanups.push(`ssh-agent files: ${rmSock.error || rmSock.output?.substring(0, 150) || "unknown"}`)
       }
+
+
       // If we seeded /root/.ssh/known_hosts for libssh, strip the entries we added.
       // Two separate calls because ssh-keygen -R only removes one host form per run
       // and the allowlist prefers simple single-prefix commands over `;`-chained ones.
       if (esxiKnownHostsSeeded) {
         const hostBracket = `[${esxiKnownHostsSeeded.esxiHost}]:${esxiKnownHostsSeeded.esxiPort}`
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `ssh-keygen -R ${shellEscape(hostBracket)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
         await executeSSH(config.targetConnectionId, nodeIp,
           `ssh-keygen -R ${shellEscape(esxiKnownHostsSeeded.esxiHost)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
       }
+
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       const rmNut = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`, CLEANUP_TIMEOUT_MS)
+
       if (!rmNut.success) failedCleanups.push(`${nutanixDownloadDir}: ${rmNut.error || "unknown"}`)
+
       if (hypervMounted) {
         const umountRes = await executeSSH(config.targetConnectionId, nodeIp, "umount /mnt/hyperv", CLEANUP_TIMEOUT_MS)
+
         if (!umountRes.success) failedCleanups.push(`umount /mnt/hyperv: ${umountRes.error || "unknown"}`)
       }
     } catch (cleanupErr: any) {
       failedCleanups.push(`cleanup setup: ${cleanupErr?.message || String(cleanupErr)}`)
     }
+
     if (failedCleanups.length > 0) {
       await appendLog(
         jobId,
@@ -2803,19 +3157,23 @@ export async function runV2vMigrationPipeline(
           where: { id: config.sourceConnectionId },
           select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
         })
+
         if (sourceConn?.apiTokenEnc) {
           const creds = decryptSecret(sourceConn.apiTokenEnc)
           const colonIdx = creds.indexOf(":")
           const { NutanixClient } = await import("@/lib/nutanix/client")
+
           const ntxClient = new NutanixClient({
             baseUrl: sourceConn.baseUrl,
             username: colonIdx > 0 ? creds.substring(0, colonIdx) : "admin",
             password: colonIdx > 0 ? creds.substring(colonIdx + 1) : creds,
             insecureTLS: sourceConn.insecureTLS,
           })
+
           for (const imageUuid of nutanixImageUuids) {
             await ntxClient.deleteImage(imageUuid).catch(() => {})
           }
+
           await appendLog(jobId, `Cleaned up ${nutanixImageUuids.length} Nutanix image(s)`, "info")
         }
       } catch {
@@ -2831,6 +3189,7 @@ export async function runV2vMigrationPipeline(
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
+
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}`,
@@ -2854,6 +3213,8 @@ export async function runV2vMigrationPipeline(
       await soapLogout(vmwareSession).catch(() => {})
       vmwareSession = null
     }
+
+
     // Remove NFC-downloaded VMDK files. virt-v2v has already consumed them on
     // the success path; on failure the partials are useless and will accumulate
     // on the PVE node's temp storage if not cleaned. The runVcenterNfcExport
@@ -2861,16 +3222,20 @@ export async function runV2vMigrationPipeline(
     // safety net for failures further down the pipeline (after NFC succeeded).
     if (nfcDownloadedDisks.length > 0) {
       const nfcFailed: string[] = []
+
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
         const nodeIp = await getNodeIp(pveConn, config.targetNode)
+
         for (const p of nfcDownloadedDisks) {
           const rmRes = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`, 120_000)
+
           if (!rmRes.success) nfcFailed.push(`${p}: ${rmRes.error || "unknown"}`)
         }
       } catch (e: any) {
         nfcFailed.push(`connection lookup: ${e?.message || String(e)}`)
       }
+
       if (nfcFailed.length > 0) {
         await appendLog(
           jobId,
@@ -2879,6 +3244,7 @@ export async function runV2vMigrationPipeline(
         ).catch(() => {})
       }
     }
+
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -50,6 +51,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
+
   // Tenant admins get a single-field "name only" form. Placement,
   // storage, VMID and pool are auto-resolved server-side (clone route
   // already calls resolveVdcForTenant + forces pool to vDC pool), so
@@ -207,6 +209,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   useEffect(() => {
     if (open) {
       setTargetNode(currentNode)
+
       // Tenant: prefill VMID with the cluster's next free id (passed in by
       // the caller via /cluster/nextid). The form input is hidden so the
       // user never sees it, but handleClone needs a valid number to send.
@@ -230,18 +233,22 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   useEffect(() => {
     if (!open || isProviderTenant || !connId) return
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/nextid`)
         const json = await res.json()
         const id = Number(json?.data) || 0
+
         if (!cancelled && id >= 100) setNewVmid(id)
         else if (!cancelled && nextVmid) setNewVmid(nextVmid)
       } catch {
         if (!cancelled && nextVmid) setNewVmid(nextVmid)
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, isProviderTenant, connId, nextVmid])
 
   const getRecommendedNodeLocal = (nodeList: NodeInfo[]): NodeInfo | null => {
@@ -259,7 +266,8 @@ return currentScore > bestScore ? current : best
   const handleClone = async () => {
     if (newVmid === '' || vmidError) {
       setError(vmidError || t('hardware.vmIdRequired'))
-      return
+
+return
     }
 
     setCloning(true)

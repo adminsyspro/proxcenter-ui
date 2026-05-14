@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import { useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
-import { formatBytes } from '@/utils/format'
+
 import {
   Box,
   Card,
@@ -14,6 +16,8 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
+import { formatBytes } from '@/utils/format'
 
 /* -----------------------------
   Types
@@ -79,6 +83,7 @@ const getStatusColor = (status: string, template: boolean | undefined, theme: an
 
 const getStatusLabel = (status: string, template: boolean | undefined): string => {
   if (template) return 'Template'
+
   switch (status) {
     case 'running': return 'Running'
     case 'paused': return 'Paused'
@@ -228,7 +233,9 @@ function ClusterWaffle({
 
       const orderA = statusOrder[a.status] ?? 3
       const orderB = statusOrder[b.status] ?? 3
-      return orderA - orderB
+
+
+return orderA - orderB
     })
   }, [cluster.vms])
 
@@ -242,6 +249,7 @@ function ClusterWaffle({
               const uniqueNodes = new Set(cluster.vms.map(v => v.node))
               const isCluster = uniqueNodes.size > 1
               const dotColor = cluster.stats.running > 0 ? '#4caf50' : '#f44336'
+
               if (isCluster) {
                 return (
                   <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, flexShrink: 0 }}>
@@ -250,7 +258,9 @@ function ClusterWaffle({
                   </Box>
                 )
               }
-              return (
+
+
+return (
                 <Box sx={{ position: 'relative', display: 'inline-flex', width: 18, height: 18, flexShrink: 0 }}>
                   <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={18} height={18} style={{ opacity: 0.8 }} />
                   <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: dotColor, border: '1.5px solid', borderColor: 'background.paper' }} />
@@ -388,6 +398,7 @@ export default function VmWaffleChart({
       }
 
       const group = map.get(vm.connId)!
+
       group.vms.push(vm)
       group.stats.total++
 

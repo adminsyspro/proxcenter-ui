@@ -24,6 +24,7 @@ export async function POST(
   }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -46,6 +47,7 @@ export async function POST(
     }
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)

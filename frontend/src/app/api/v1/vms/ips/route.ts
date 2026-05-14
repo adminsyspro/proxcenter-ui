@@ -8,10 +8,10 @@ export const runtime = "nodejs"
 
 /**
  * POST /api/v1/vms/ips
- * 
+ *
  * Récupère les IPs, snapshots, uptime et infos OS pour une liste de VMs.
  * Appelé à la demande via le bouton "Charger IPs".
- * 
+ *
  * Body: { vms: [{ connId, type, node, vmid, status }] }
  * Response: { data: { "connId:type:node:vmid": { ip, snapshots, uptime, osInfo }, ... } }
  */
@@ -24,34 +24,34 @@ function secondsToUptime(seconds: number) {
 
   if (d > 0) return `${d}j ${h}h`
   if (h > 0) return `${h}h ${m}m`
-  
+
 return `${m}m`
 }
 
 // Déterminer le type d'OS à partir des infos du guest agent
 function getOsType(osInfo: any): 'linux' | 'windows' | 'other' {
   if (!osInfo) return 'other'
-  
+
   const id = (osInfo.id || '').toLowerCase()
   const name = (osInfo.name || '').toLowerCase()
-  
+
   // Windows
   if (id === 'mswindows' || name.includes('windows')) {
     return 'windows'
   }
-  
+
   // Linux distributions
   const linuxDistros = ['debian', 'ubuntu', 'centos', 'rhel', 'fedora', 'alpine', 'arch', 'opensuse', 'suse', 'mint', 'manjaro', 'rocky', 'alma', 'oracle', 'gentoo', 'slackware', 'nixos']
 
   if (linuxDistros.some(d => id.includes(d) || name.includes(d)) || name.includes('linux')) {
     return 'linux'
   }
-  
+
   // FreeBSD, etc.
   if (id.includes('freebsd') || id.includes('openbsd') || id.includes('netbsd')) {
     return 'other'
   }
-  
+
   return 'other'
 }
 
@@ -68,13 +68,13 @@ async function getVmDetails(connData: any, vm: { type: string, node: string, vmi
   let snapshots = 0
   let uptime: string | null = null
   let osInfo: OsInfo | null = null
-  
+
   // Récupérer IP, snapshots, status (pour uptime) et OS info en parallèle
   const [ipResult, snapshotsResult, statusResult, osInfoResult] = await Promise.allSettled([
     // IP
     (async () => {
       if (status !== 'running') return null
-      
+
       if (type === 'qemu') {
         // Essayer le guest-agent
         try {
@@ -82,7 +82,7 @@ async function getVmDetails(connData: any, vm: { type: string, node: string, vmi
             connData,
             `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/network-get-interfaces`
           )
-          
+
           const result = interfaces?.result || interfaces || []
 
           for (const iface of result) {
@@ -148,10 +148,10 @@ async function getVmDetails(connData: any, vm: { type: string, node: string, vmi
         } catch {}
       }
 
-      
+
 return null
     })(),
-    
+
     // Snapshots
     (async () => {
       try {
@@ -162,14 +162,14 @@ return null
 
 
         // Le snapshot "current" n'est pas un vrai snapshot
-        return Array.isArray(snapshotList) 
-          ? snapshotList.filter(s => s.name !== 'current').length 
+        return Array.isArray(snapshotList)
+          ? snapshotList.filter(s => s.name !== 'current').length
           : 0
       } catch {
         return 0
       }
     })(),
-    
+
     // Status (pour uptime)
     (async () => {
       if (status !== 'running') return null
@@ -180,24 +180,24 @@ return null
           `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/status/current`
         )
 
-        
+
 return vmStatus?.uptime ? secondsToUptime(vmStatus.uptime) : null
       } catch {
         return null
       }
     })(),
-    
+
     // OS Info via guest agent
     (async (): Promise<OsInfo | null> => {
       if (status !== 'running') return null
-      
+
       if (type === 'qemu') {
         try {
           const osData = await pveFetch<any>(
             connData,
             `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/get-osinfo`
           )
-          
+
           const result = osData?.result || osData
 
           if (result && (result.id || result.name || result['pretty-name'])) {
@@ -225,7 +225,7 @@ return vmStatus?.uptime ? secondsToUptime(vmStatus.uptime) : null
             // ostype peut être: debian, ubuntu, centos, fedora, archlinux, alpine, gentoo, nixos, opensuse, unmanaged
             const isLinux = ['debian', 'ubuntu', 'centos', 'fedora', 'archlinux', 'alpine', 'gentoo', 'nixos', 'opensuse'].includes(ostype)
 
-            
+
 return {
               type: isLinux ? 'linux' : 'other',
               name: ostype.charAt(0).toUpperCase() + ostype.slice(1),
@@ -236,27 +236,28 @@ return {
         } catch {}
       }
 
-      
+
 return null
     })()
   ])
-  
+
   if (ipResult.status === 'fulfilled') ip = ipResult.value
   if (snapshotsResult.status === 'fulfilled') snapshots = snapshotsResult.value
   if (statusResult.status === 'fulfilled') uptime = statusResult.value
   if (osInfoResult.status === 'fulfilled') osInfo = osInfoResult.value
-  
+
   return { ip, snapshots, uptime, osInfo }
 }
 
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const body = await req.json()
     const vms = body.vms || []
-    
+
     if (!Array.isArray(vms) || vms.length === 0) {
       return NextResponse.json({ data: {} })
     }
@@ -281,22 +282,22 @@ export async function POST(req: Request) {
       Array.from(byConnection.entries()).map(async ([connId, connVms]) => {
         try {
           const connData = await getConnectionById(connId)
-          
+
           // Récupérer les détails en parallèle
           const results = await Promise.allSettled(
             connVms.map(async (vm) => {
               const details = await getVmDetails(connData, vm)
               const key = `${connId}:${vm.type}:${vm.node}:${vm.vmid}`
 
-              
+
 return { key, ...details }
             })
           )
-          
+
           for (const result of results) {
             if (result.status === 'fulfilled') {
-              data[result.value.key] = { 
-                ip: result.value.ip, 
+              data[result.value.key] = {
+                ip: result.value.ip,
                 snapshots: result.value.snapshots,
                 uptime: result.value.uptime,
                 osInfo: result.value.osInfo
@@ -312,7 +313,7 @@ return { key, ...details }
     return NextResponse.json({ data })
   } catch (e: any) {
     console.error("[vms/ips] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

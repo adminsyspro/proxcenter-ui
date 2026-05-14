@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { Box, IconButton, InputBase, Typography, useTheme } from '@mui/material'
 
 function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
@@ -24,6 +25,7 @@ function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
 
   const handleSave = () => {
     setEditing(false)
+
     if (editValue.trim() && editValue !== title) {
       if (onUpdateSettings) onUpdateSettings({ title: editValue.trim() })
     }

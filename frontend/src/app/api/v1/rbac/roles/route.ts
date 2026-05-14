@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/rbac/roles/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
@@ -26,6 +27,7 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
   if (typeof raw !== "object") return null
 
   const hidden = (raw as any).hidden
+
   if (!Array.isArray(hidden)) return null
 
   const clean = Array.from(new Set(
@@ -41,6 +43,7 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
 // GET /api/v1/rbac/roles - Liste tous les rôles
 export async function GET(req: NextRequest) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -65,6 +68,7 @@ export async function GET(req: NextRequest) {
         { tenantId },
       ],
     }
+
     const protectedFilter = callerIsSuperAdmin ? {} : { id: { notIn: [...PROTECTED_ROLE_IDS] } }
 
     const roles = await prisma.rbacRole.findMany({
@@ -133,6 +137,7 @@ return NextResponse.json(
 // POST /api/v1/rbac/roles - Créer un nouveau rôle
 export async function POST(req: NextRequest) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -186,6 +191,7 @@ export async function POST(req: NextRequest) {
           description: description || null,
           isSystem: false,
           color: color || "#6366f1",
+
           // Prisma Json? requires DbNull (not JS null) to write SQL NULL.
           // undefined = field omitted on create, which is fine for "no override".
           widgetOverrides:

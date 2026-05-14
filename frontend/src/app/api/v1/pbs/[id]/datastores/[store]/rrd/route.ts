@@ -10,7 +10,7 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/pbs/[id]/datastores/[store]/rrd
- * 
+ *
  * Récupère les données RRD (graphiques) d'un datastore PBS
  * Query params:
  *   - timeframe: hour | day | week | month | year (default: hour)
@@ -21,6 +21,7 @@ export async function GET(
   ctx: { params: Promise<{ id: string; store: string }> | { id: string; store: string } }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -32,9 +33,11 @@ export async function GET(
     if (!store) return NextResponse.json({ error: "Missing params.store" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     if (access.kind === 'tenant' && !access.allowed.some(a => a.datastore === store)) {
@@ -62,14 +65,17 @@ export async function GET(
     // Transformer les données pour le frontend
     const series = (rrdData || []).map((point: any) => ({
       time: point.time,
+
       // Storage usage
       total: point.total || 0,
       used: point.used || 0,
       available: point.avail || (point.total || 0) - (point.used || 0),
       usedPercent: point.total > 0 ? Math.round((point.used / point.total) * 100 * 100) / 100 : 0,
+
       // Transfer Rate - PBS peut utiliser read_bytes/write_bytes ou read/write
       read: point.read_bytes || point.read || 0,
       write: point.write_bytes || point.write || 0,
+
       // IOPS - PBS peut utiliser read_ios/write_ios ou io-read/io-write
       readIops: point.read_ios || point['io-read'] || point.io_read || 0,
       writeIops: point.write_ios || point['io-write'] || point.io_write || 0,
@@ -83,6 +89,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("PBS Datastore RRD error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

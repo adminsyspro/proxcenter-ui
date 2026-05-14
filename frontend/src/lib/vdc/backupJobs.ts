@@ -36,8 +36,10 @@ import { getVdcScope, type VdcScope } from './scope'
  */
 export async function getAllowedJobPools(tenantId: string, connectionId: string): Promise<Set<string> | null> {
   const scope = await getVdcScope(tenantId)
+
   if (!scope) return null
-  return scope.poolsByConnection.get(connectionId) ?? new Set<string>()
+
+return scope.poolsByConnection.get(connectionId) ?? new Set<string>()
 }
 
 /**
@@ -67,13 +69,17 @@ export function validateTenantJobBody(
   if (body.selectionMode !== 'pool') {
     return 'Tenant backup jobs must use selectionMode="pool" — pick a vDC pool to back up.'
   }
+
   if (!body.pool) {
     return 'Tenant backup jobs require a pool.'
   }
+
   if (!allowedPools.has(body.pool)) {
     return `Pool "${body.pool}" is not authorised for this tenant.`
   }
-  return null
+
+
+return null
 }
 
 /**
@@ -100,6 +106,7 @@ export function validateTenantJobInfra(
 ): string | null {
   const allowedNodes = scope.nodesByConnection.get(connectionId) ?? new Set<string>()
   const allowedStorages = scope.storagesByConnection.get(connectionId) ?? new Set<string>()
+
   // pbsNamespacesByPveConnection is the right index here: the route
   // gives us the PVE connection id, and we want the union of namespaces
   // the tenant is allowed to address from any vDC anchored on that PVE
@@ -122,9 +129,11 @@ export function validateTenantJobInfra(
   // node presence at create time.
   if ('node' in body) {
     const v = body.node
+
     if (typeof v !== 'string' || v.length === 0) {
       return 'Tenants must keep the backup job pinned to a vDC node.'
     }
+
     if (!allowedNodes.has(v)) {
       return `Node "${v}" is not authorised for this tenant.`
     }
@@ -138,6 +147,7 @@ export function validateTenantJobInfra(
 
   if (typeof body.namespace === 'string' && body.namespace.length > 0) {
     const ns = body.namespace
+
     if (!allowedNamespaces.has(ns)) {
       return `PBS namespace "${ns}" is not authorised for this tenant on this connection.`
     }

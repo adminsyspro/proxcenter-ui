@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+
 import {
   Alert,
   Autocomplete,
@@ -33,6 +34,7 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { useTranslations, useLocale } from 'next-intl'
+
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 
@@ -63,11 +65,14 @@ interface BackupJobsPanelProps {
 
 function parsePruneBackups(raw: string | null | undefined) {
   const result = { keepLast: '', keepHourly: '', keepDaily: '', keepWeekly: '', keepMonthly: '', keepYearly: '' }
+
   if (!raw) return result
   const str = typeof raw === 'string' ? raw : ''
   const pairs = str.split(',').map(s => s.trim())
+
   for (const pair of pairs) {
     const [k, v] = pair.split('=')
+
     if (k === 'keep-last') result.keepLast = v || ''
     if (k === 'keep-hourly') result.keepHourly = v || ''
     if (k === 'keep-daily') result.keepDaily = v || ''
@@ -75,7 +80,9 @@ function parsePruneBackups(raw: string | null | undefined) {
     if (k === 'keep-monthly') result.keepMonthly = v || ''
     if (k === 'keep-yearly') result.keepYearly = v || ''
   }
-  return result
+
+
+return result
 }
 
 export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPanelProps) {
@@ -119,10 +126,12 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     vmids: [] as number[],
     excludedVmids: [] as number[],
     comment: '',
+
     // Notifications
     notificationMode: 'notification-system' as string,
     mailto: '',
     mailnotification: 'always',
+
     // Retention
     keepAll: true,
     keepLast: '',
@@ -131,8 +140,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     keepWeekly: '',
     keepMonthly: '',
     keepYearly: '',
+
     // Note Template
     notesTemplate: '',
+
     // Advanced
     namespace: '',
     bwlimit: '',
@@ -173,6 +184,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       }
     } catch (e: any) {
       const msg = e?.message || t('inventory.failedToLoadBackupJobs')
+
       setError(msg)
       onError?.(msg)
     } finally {
@@ -190,6 +202,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
       if (!json.error) {
         const allVms = (json.data || []).filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
+
         setVms(allVms.map((vm: any) => ({
           vmid: vm.vmid,
           name: vm.name,
@@ -399,7 +412,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       if (job.excludedVmids?.length > 0) {
         return t('inventory.allExceptCount', { count: job.excludedVmids.length })
       }
-      return t('inventory.allVms')
+
+
+return t('inventory.allVms')
     }
 
     if (job.selectionMode === 'include') {
@@ -412,22 +427,23 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   // Calculer le prochain run
   const getNextRun = (schedule: string) => {
     if (!schedule) return '—'
-    
+
     const now = new Date()
     const [hours, minutes] = schedule.split(':').map(Number)
     const next = new Date(now)
+
     next.setHours(hours, minutes, 0, 0)
-    
+
     if (next <= now) {
       next.setDate(next.getDate() + 1)
     }
-    
+
     return next.toLocaleString(dateLocale, {
-      day: '2-digit', 
-      month: '2-digit', 
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit' 
+      hour: '2-digit',
+      minute: '2-digit'
     })
   }
 
@@ -656,7 +672,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   >
                     {storages.map(s => {
                       const usedPct = s.total > 0 ? Math.round((s.used / s.total) * 100) : 0
-                      return (
+
+
+return (
                         <MenuItem key={s.id || s.storage} value={s.id || s.storage}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                             <i className={s.isPbs ? 'ri-shield-check-line' : 'ri-hard-drive-2-line'} style={{ fontSize: 14, opacity: 0.6 }} />
@@ -711,6 +729,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   value={formData.schedule as any}
                   onChange={(_, newValue) => {
                     const val = typeof newValue === 'string' ? newValue : newValue?.value || ''
+
                     setFormData(prev => ({ ...prev, schedule: val }))
                   }}
                   onInputChange={(_, newInput, reason) => {
@@ -759,9 +778,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   renderInput={(params) => <TextField {...params} label={t('inventory.selectVms')} />}
                   renderOption={(props, option) => (
                     <li {...props}>
-                      <Chip 
-                        size="small" 
-                        label={option.type === 'qemu' ? 'VM' : 'CT'} 
+                      <Chip
+                        size="small"
+                        label={option.type === 'qemu' ? 'VM' : 'CT'}
                         sx={{ mr: 1, fontSize: 10 }}
                         color={option.type === 'qemu' ? 'primary' : 'secondary'}
                       />
@@ -782,9 +801,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   renderInput={(params) => <TextField {...params} label={t('inventory.excludeVms')} />}
                   renderOption={(props, option) => (
                     <li {...props}>
-                      <Chip 
-                        size="small" 
-                        label={option.type === 'qemu' ? 'VM' : 'CT'} 
+                      <Chip
+                        size="small"
+                        label={option.type === 'qemu' ? 'VM' : 'CT'}
                         sx={{ mr: 1, fontSize: 10 }}
                         color={option.type === 'qemu' ? 'primary' : 'secondary'}
                       />
@@ -1065,6 +1084,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
         {detailJob && (() => {
           const prune = parsePruneBackups((detailJob as any).pruneBackups)
           const hasKeepValues = Object.values(prune).some(v => v !== '')
+
           const notifLabel = (detailJob as any).notificationMode === 'notification-system'
             ? t('backup.useGlobalNotifications')
             : (detailJob as any).notificationMode === 'legacy-sendmail'
@@ -1075,6 +1095,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           const jobVmids: number[] = (detailJob as any).vmids || []
           const jobExcludedVmids: number[] = (detailJob as any).excludedVmids || []
           const isAllMode = (detailJob as any).selectionMode === 'all'
+
           const includedVms = isAllMode
             ? vms.filter(vm => !jobExcludedVmids.includes(vm.vmid))
             : vms.filter(vm => jobVmids.includes(vm.vmid))

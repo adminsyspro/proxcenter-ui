@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import { assertNodeName, InvalidShellArgError } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -21,9 +23,11 @@ export async function GET(
 
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -35,7 +39,8 @@ export async function GET(
     return NextResponse.json({ data: { maintenance } })
   } catch (e: any) {
     console.error("[maintenance] GET Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })
   }
 }
 
@@ -49,13 +54,27 @@ export async function POST(
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
   try {
-    const { id, node } = await ctx.params
+    const { id, node: rawNode } = await ctx.params
+
+    let node: string
+
+    try {
+      node = assertNodeName(rawNode)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
 
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -76,7 +95,8 @@ export async function POST(
     }
   } catch (e: any) {
     console.error("[maintenance] POST Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to enter maintenance mode" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to enter maintenance mode" }, { status: 500 })
   }
 }
 
@@ -90,13 +110,27 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
   try {
-    const { id, node } = await ctx.params
+    const { id, node: rawNode } = await ctx.params
+
+    let node: string
+
+    try {
+      node = assertNodeName(rawNode)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
 
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -117,6 +151,7 @@ export async function DELETE(
     }
   } catch (e: any) {
     console.error("[maintenance] DELETE Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to exit maintenance mode" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to exit maintenance mode" }, { status: 500 })
   }
 }

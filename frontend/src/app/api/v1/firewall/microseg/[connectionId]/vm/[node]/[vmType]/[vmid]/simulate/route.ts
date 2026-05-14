@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/microseg/[connectionId]/vm/[node]/[vmType]/[vmid]/simulate/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,9 +16,11 @@ export async function GET(
   try {
     const { connectionId, node, vmType, vmid } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -26,11 +29,11 @@ export async function GET(
       `/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}/simulate`
     )
 
-    
+
 return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error simulating isolation:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to simulate' },
       { status: 500 }

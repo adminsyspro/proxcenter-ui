@@ -274,6 +274,7 @@ interface ChangeTrackingTabProps {
 
 export default function ChangeTrackingTab({ connectionId, resourceType, resourceId, node }: ChangeTrackingTabProps) {
   const t = useTranslations()
+
   const { data, isLoading } = useChanges({
     limit: 100,
     connectionId,

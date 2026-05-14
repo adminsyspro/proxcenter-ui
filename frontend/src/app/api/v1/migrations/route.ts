@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server"
+
 import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, getTenantPrisma } from "@/lib/tenant"
@@ -9,6 +10,13 @@ import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
 import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
+import {
+  assertAbsPath,
+  assertBridgeName,
+  assertNodeName,
+  assertStorageName,
+  InvalidShellArgError,
+} from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -20,10 +28,12 @@ export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
     const body = await req.json().catch(() => null)
+
     if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const {
@@ -43,17 +53,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
+    // targetNode, targetStorage, networkBridge and tempStorage all flow
+    // into shell commands run on the target Proxmox node via SSH. Validate
+    // them against strict grammars before they leave the API boundary so a
+    // malicious body can't smuggle metacharacters into qm/pvesm/sshfs.
+    try {
+      assertNodeName(targetNode)
+      assertStorageName(targetStorage)
+      assertBridgeName(networkBridge)
+
+      if (body.tempStorage !== undefined && body.tempStorage !== null && body.tempStorage !== "") {
+        assertAbsPath(body.tempStorage)
+      }
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
+
     // Optional caller-supplied target VMID. When omitted, the pipeline falls
     // back to `/cluster/nextid`. When set, validate the range here so we
     // reject bad input early; final availability is also re-checked by PVE
     // at create time, so we don't pre-check here (the value may have been
     // taken between this request and the actual allocation step).
     let targetVmid: number | undefined
+
     if (targetVmidRaw !== undefined && targetVmidRaw !== null && targetVmidRaw !== '') {
       const n = Number(targetVmidRaw)
+
       if (!Number.isInteger(n) || n < 100 || n > 999999999) {
         return NextResponse.json({ error: "targetVmid must be an integer between 100 and 999999999" }, { status: 400 })
       }
+
       targetVmid = n
     }
 
@@ -62,11 +95,14 @@ export async function POST(req: Request) {
     // range here so misconfigured payloads don't reach the pipeline; undefined
     // means "no tag" (access port on the bridge's native VLAN).
     let vlanTag: number | undefined
+
     if (body.vlanTag !== undefined && body.vlanTag !== null && body.vlanTag !== "") {
       const n = typeof body.vlanTag === "number" ? body.vlanTag : Number.parseInt(String(body.vlanTag), 10)
+
       if (!Number.isInteger(n) || n < 1 || n > 4094) {
         return NextResponse.json({ error: "vlanTag must be an integer between 1 and 4094" }, { status: 400 })
       }
+
       vlanTag = n
     }
 
@@ -77,15 +113,18 @@ export async function POST(req: Request) {
     ])
 
     const validSourceTypes = ["vmware", "xcpng", "hyperv", "nutanix"]
+
     if (!sourceConn || !validSourceTypes.includes(sourceConn.type)) {
       return NextResponse.json({ error: "Source hypervisor connection not found (must be vmware, xcpng, hyperv, or nutanix)" }, { status: 404 })
     }
+
     if (!pveConn || pveConn.type !== "pve") {
       return NextResponse.json({ error: "Proxmox connection not found" }, { status: 404 })
     }
 
     // Detect effective source type: vmware with subType "vcenter" routes to v2v pipeline
     let effectiveSourceType: string = sourceConn.type
+
     if (sourceConn.type === "vmware" && sourceConn.subType === "vcenter") {
       effectiveSourceType = "vcenter"
     }
@@ -100,6 +139,7 @@ export async function POST(req: Request) {
         targetConnectionId,
         targetNode,
         targetStorage,
+
         // targetVmid stored in config so the pipeline can read it back; the
         // top-level `targetVmid` Prisma column gets set by the pipeline once
         // the actual VM is created (next-free fallback path).
@@ -122,6 +162,7 @@ export async function POST(req: Request) {
       startAfterMigration,
       migrationType: migrationType as "cold" | "live" | "sshfs_boot",
       transferMode: transferMode as "https" | "sshfs",
+
       // Pass through the user-selected Temporary Storage so the direct-ESXi pipeline
       // keeps SSHFS mounts + VMDK dumps + clone targets off /tmp when the user has picked
       // a proper filesystem in the dialog.
@@ -131,14 +172,18 @@ export async function POST(req: Request) {
 
     // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)
     const tenantId = await getCurrentTenantId()
+
     after(async () => {
       if (effectiveSourceType === "vcenter" || effectiveSourceType === "hyperv" || effectiveSourceType === "nutanix") {
         const { sourceVmName = "", vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage } = body
+
+
         // Live migration via NFC-on-snapshot is only plumbed for vcenter today.
         // Hyper-V and Nutanix still force cold: their pipelines don't own the
         // source VM snapshot surface that live needs to keep the source running.
         const v2vMigrationType: "cold" | "live" =
           effectiveSourceType === "vcenter" && migrationType === "live" ? "live" : "cold"
+
         await runV2vMigrationPipeline(job.id, {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
@@ -158,33 +203,40 @@ export async function POST(req: Request) {
         let routeToV2v = false
         let vmPathName = ""
         let esxiHostname = ""
+
         try {
           // Use a fresh tenant-scoped prisma inside after() — the request-scoped
           // prisma from getSessionPrisma() may have been torn down by the framework
           // once the response was sent.
           const afterPrisma = getTenantPrisma(tenantId)
+
           const authCreds = await afterPrisma.connection.findUnique({
             where: { id: sourceConnectionId },
             select: { apiTokenEnc: true, baseUrl: true, insecureTLS: true, sshKeyEnc: true, sshPassEnc: true, sshEnabled: true },
           })
+
           if (authCreds?.apiTokenEnc) {
             const creds = decryptSecret(authCreds.apiTokenEnc)
             const colonIdx = creds.indexOf(":")
             const esxiUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "root"
             const esxiPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
             const soap = await soapLogin(authCreds.baseUrl.replace(/\/$/, ""), esxiUser, esxiPass, authCreds.insecureTLS)
+
             try {
               const xml = await soapGetVmConfig(soap, sourceVmId)
               const parsed = parseVmConfig(xml)
+
               vmPathName = parsed.vmPathName || ""
               try { esxiHostname = new URL(authCreds.baseUrl).hostname } catch { esxiHostname = "" }
               const isWindowsGuest = /win/i.test(parsed.guestOS) || /win/i.test(parsed.guestId)
+
               // virt-v2v -i vmx -it ssh needs SSH auth on the ESXi source. The v2v
               // pipeline handles both: it reuses the stored key when present, or
               // bootstraps a one-shot key via sshpass when only a password is
               // configured (same pattern as pipeline.ts SSHFS Boot). So we only
               // require `sshEnabled` plus *some* credential here.
               const hasSshCredential = !!authCreds.sshKeyEnc || !!authCreds.sshPassEnc
+
               if (isWindowsGuest && vmPathName && authCreds.sshEnabled && hasSshCredential) {
                 routeToV2v = true
               }
@@ -205,6 +257,7 @@ export async function POST(req: Request) {
           const datastore = vmxMatch?.[1] || ""
           const relPath = vmxMatch?.[2] || ""
           const posixVmxPath = datastore && relPath ? `/vmfs/volumes/${datastore}/${relPath}` : ""
+
           if (posixVmxPath && esxiHostname) {
             await runV2vMigrationPipeline(job.id, {
               sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName || "",
@@ -216,9 +269,12 @@ export async function POST(req: Request) {
               esxiHost: esxiHostname,
               ...(targetVmid !== undefined && { targetVmid }),
             }, tenantId)
-            return
+
+return
           }
         }
+
+
         // Not routed to v2v (non-Windows, missing key auth, or VMX resolution failed) →
         // fall through to the in-house direct-ESXi pipeline.
         await runMigrationPipeline(job.id, migrationConfig, tenantId)
@@ -241,6 +297,7 @@ export async function GET() {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
+
     if (denied) return denied
 
     const jobs = await prisma.migrationJob.findMany({

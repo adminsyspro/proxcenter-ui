@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -92,6 +93,7 @@ type TreeCluster = {
 }
 
 export interface TreeDialogsProps {
+
   // VM context menu
   contextMenu: VmContextMenu
   handleCloseContextMenu: () => void
@@ -222,16 +224,20 @@ export interface TreeDialogsProps {
 
   // Snapshot handler
   handleTakeSnapshot: () => void
+
   // Backup handler
   handleBackupNow: () => Promise<void>
+
   // Console handler
   handleOpenConsole: () => void
+
   // Unlock handler
   handleUnlock: () => Promise<void>
 }
 
 export default function TreeDialogs(props: TreeDialogsProps) {
   const t = useTranslations()
+
   // Migration is a provider-only operation in MSP/vDC mode (placement is
   // the provider's job — tenants don't choose nodes). Hides the per-VM
   // Migrate menu entry and the node-level "Migrate all VMs" bulk action.
@@ -525,7 +531,9 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               if (!nodeContextMenu) return 'online'
               const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
               const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
-              return n?.status || 'online'
+
+
+return n?.status || 'online'
             })()} maintenance={nodeContextMenu?.maintenance} size={14} />
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
               {nodeContextMenu?.node}
@@ -629,8 +637,10 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             if (nodeContextMenu) {
               const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
               const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
+
               openTagDialog('host', '', nodeContextMenu.node, nodeContextMenu.connId, nodeContextMenu.node, { nodeStatus: n?.status, nodeMaintenance: nodeContextMenu.maintenance })
             }
+
             handleCloseNodeContextMenu()
           }}>
             <ListItemIcon sx={{ minWidth: 36 }}>
@@ -794,11 +804,14 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               color={maintenanceTarget?.maintenance ? 'success' : 'warning'}
               disabled={(() => {
                 if (maintenanceBusy || maintenanceStorageLoading) return true
+
                 if (entering && mRunningVms.length > 0 && mIsCluster) {
                   if (mSharedVms.length > 0 && !maintenanceMigrateTarget) return true
                   if (mLocalVms.length > 0 && !maintenanceShutdownLocal) return true
                 }
-                return false
+
+
+return false
               })()}
               startIcon={maintenanceBusy ? <CircularProgress size={16} /> : undefined}
             >
@@ -964,6 +977,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           onMigrate={async (targetNode, online, targetStorage, withLocalDisks) => {
             // Migration intra-cluster
             const { connId, node, type, vmid } = migrateTarget
+
             const res = await fetch(
               `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/migrate`,
               {
@@ -972,16 +986,20 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 body: JSON.stringify({ target: targetNode, online, targetstorage: targetStorage, 'with-local-disks': withLocalDisks })
               }
             )
+
             if (!res.ok) {
               const err = await res.json().catch(() => ({}))
+
               throw new Error(err?.error || res.statusText)
             }
+
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)
           }}
           onCrossClusterMigrate={async (params: CrossClusterMigrateParams) => {
             const { connId, node, type, vmid } = migrateTarget
+
             await crossClusterMigrate({ connId, node, type, vmid }, params)
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
@@ -1261,7 +1279,9 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               {(() => {
                 const XTermShell = require('@/components/xterm/XTermShell').default
-                return (
+
+
+return (
                   <XTermShell
                     wsUrl={shellDialog.data.wsUrl}
                     host={shellDialog.data.host}

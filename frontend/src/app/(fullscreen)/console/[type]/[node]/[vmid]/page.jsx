@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react'
 
 import { useSearchParams, useRouter } from 'next/navigation'
+
 import { useTranslations } from 'next-intl'
 
 export default function FullscreenConsolePage({ params }) {
@@ -17,17 +18,18 @@ export default function FullscreenConsolePage({ params }) {
     // Rediriger vers la page noVNC statique avec les paramètres
     if (type && node && vmid && connId) {
       const novncUrl = `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
+
       window.location.href = novncUrl
     }
   }, [type, node, vmid, connId])
 
   // Afficher un écran de chargement pendant la redirection
   return (
-    <div style={{ 
-      width: '100vw', 
-      height: '100vh', 
-      margin: 0, 
-      padding: 0, 
+    <div style={{
+      width: '100vw',
+      height: '100vh',
+      margin: 0,
+      padding: 0,
       overflow: 'hidden',
       background: '#000',
       display: 'flex',

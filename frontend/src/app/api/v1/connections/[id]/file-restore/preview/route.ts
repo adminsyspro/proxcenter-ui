@@ -26,10 +26,10 @@ const MAX_PREVIEW_SIZE = 500 * 1024
 
 /**
  * GET /api/v1/connections/{pveId}/file-restore/preview
- * 
+ *
  * Prévisualise un fichier depuis un backup.
  * Retourne le contenu texte ou une image en base64.
- * 
+ *
  * Query params:
  * - storage: Nom du storage PBS dans PVE
  * - volume: Volume ID du backup
@@ -48,6 +48,7 @@ export async function GET(
     }
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "connection", pveId)
+
     if (denied) return denied
 
     const url = new URL(req.url)
@@ -62,12 +63,12 @@ export async function GET(
     // Déterminer le type de fichier
     const filename = filepath.split('/').pop() || ''
     const ext = ('.' + filename.split('.').pop()?.toLowerCase()) || ''
-    
+
     const isText = TEXT_EXTENSIONS.includes(ext) || filename.startsWith('.')
     const isImage = IMAGE_EXTENSIONS.includes(ext)
 
     if (!isText && !isImage) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "File type not supported for preview",
         supportedText: TEXT_EXTENSIONS.slice(0, 10).join(', ') + '...',
         supportedImages: IMAGE_EXTENSIONS.join(', '),
@@ -107,6 +108,7 @@ export async function GET(
     if (!nodeName) {
       return NextResponse.json({ error: "No available node found with storage access" }, { status: 500 })
     }
+
     const filepathBase64 = Buffer.from(filepath, 'utf-8').toString('base64')
     const volumeId = volume.includes(':') ? volume : `${storage}:${volume}`
 
@@ -127,10 +129,10 @@ export async function GET(
     if (pveRes.statusCode < 200 || pveRes.statusCode >= 300) {
       const errorText = await pveRes.body.text()
 
-      
-return NextResponse.json({ 
+
+return NextResponse.json({
         error: `PVE error: ${pveRes.statusCode}`,
-        details: errorText 
+        details: errorText
       }, { status: pveRes.statusCode })
     }
 
@@ -147,7 +149,7 @@ return NextResponse.json({
           chunks.push(chunk)
           break
         } else {
-          return NextResponse.json({ 
+          return NextResponse.json({
             error: "File too large for preview",
             size: totalSize,
             maxSize: MAX_PREVIEW_SIZE,
@@ -163,13 +165,13 @@ return NextResponse.json({
     if (isText) {
       // Détecter l'encodage et convertir en texte
       let content = buffer.toString('utf-8')
-      
+
       // Vérifier si c'est du texte valide
-      const isBinary = content.includes('\x00') || 
+      const isBinary = content.includes('\x00') ||
         (buffer.length > 100 && content.replace(/[\x00-\x1F\x7F-\x9F]/g, '').length < buffer.length * 0.7)
-      
+
       if (isBinary) {
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: "File appears to be binary, not text",
         }, { status: 400 })
       }
@@ -215,7 +217,7 @@ return NextResponse.json({
     return NextResponse.json({ error: "Unknown file type" }, { status: 400 })
   } catch (e: any) {
     console.error("Preview error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

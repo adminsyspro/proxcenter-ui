@@ -24,6 +24,7 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -58,7 +59,9 @@ function formatTaskType(type, t) {
   // MISSING_MESSAGE on unknown keys, so we probe with t.has() first instead
   // of using defaultValue (which next-intl doesn't honour).
   const key = `events.taskTypes.${type}`
+
   if (typeof t.has === 'function' && !t.has(key)) return type
+
   try {
     return t(key)
   } catch {
@@ -156,6 +159,7 @@ function DonutStatCard({ title, value, total, color }) {
 
 function DonutTotalCard({ title, value, segments }) {
   const data = segments.filter(s => s.value > 0)
+
   if (data.length === 0) data.push({ value: 1, color: 'rgba(255,255,255,0.08)' })
 
   return (
@@ -199,12 +203,14 @@ export default function EventsPage() {
 
   // SWR data fetching with configurable polling
   const eventsRefreshInterval = useRefreshInterval(30000)
+
   const { data: eventsResponse, error, isLoading, mutate } = useSWRFetch('/api/v1/events?limit=500', {
     refreshInterval: eventsRefreshInterval,
     onSuccess: (json) => {
       // Envoyer les événements à l'orchestrator pour analyse (alertes sur événements)
       // Seulement en mode Enterprise
       const eventsData = Array.isArray(json?.data) ? json.data : []
+
       if (isEnterprise && eventsData.length > 0) {
         fetch('/api/v1/orchestrator/alerts/events', {
           method: 'POST',
@@ -221,6 +227,7 @@ export default function EventsPage() {
   const events = useMemo(() => {
     return Array.isArray(eventsResponse?.data) ? eventsResponse.data : []
   }, [eventsResponse])
+
   const loading = isLoading
 
   useEffect(() => {
@@ -536,7 +543,8 @@ return { total, errors, warnings, running }
                   if (params.row.status === 'running') return 'row-running'
                   if (params.row.level === 'error' || (params.row.status && params.row.status !== 'OK' && !params.row.status.includes('WARNINGS'))) return 'row-error'
                   if (params.row.level === 'warning' || params.row.status?.includes('WARNINGS')) return 'row-warning'
-                  return ''
+
+return ''
                 }}
                 sx={{
                   border: 'none',

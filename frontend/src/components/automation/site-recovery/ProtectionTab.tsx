@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -11,6 +12,7 @@ import {
 } from '@mui/material'
 
 import { AreaChart, Area, YAxis, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import EmptyState from '@/components/EmptyState'
@@ -39,7 +41,9 @@ function formatDuration(seconds: number | undefined | null): string {
 function computeRpoActual(lastSync: string | null | undefined): number | null {
   if (!lastSync) return null
   const diff = Math.floor((Date.now() - new Date(lastSync).getTime()) / 1000)
-  return diff > 0 ? diff : null
+
+
+return diff > 0 ? diff : null
 }
 
 function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): string {
@@ -49,18 +53,23 @@ function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): stri
   // Tag-based jobs: show tags + VM count
   if (tags.length > 0) {
     const tagStr = tags.map(t => `#${t}`).join(', ')
-    return `${tagStr} (${ids.length} VM${ids.length !== 1 ? 's' : ''})`
+
+
+return `${tagStr} (${ids.length} VM${ids.length !== 1 ? 's' : ''})`
   }
 
   if (ids.length === 0) return 'Replication Job'
 
   const labels = ids.map(id => {
     const name = vmNameMap?.[id] || (job.vm_names || [])[ids.indexOf(id)]
-    return name ? `${id} - ${name}` : `VM ${id}`
+
+
+return name ? `${id} - ${name}` : `VM ${id}`
   })
 
   if (labels.length <= 3) return labels.join(', ')
-  return `${ids.length} VMs (${labels.slice(0, 2).join(', ')}…)`
+
+return `${ids.length} VMs (${labels.slice(0, 2).join(', ')}…)`
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
@@ -98,6 +107,7 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
   const color = theme.palette.primary.main
   const isLarge = size === 'large'
   const gradientId = `bwGrad-${size}-${data[0]?.ts || 0}`
+
   // Shallow copy — recharts may mutate the array internally (React 19 freezes props)
   const chartData = data.slice()
 
@@ -166,6 +176,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
         borderColor: isError ? 'error.main' : isSyncing ? 'primary.main' : 'divider',
         position: 'relative', overflow: 'hidden',
         '&:hover': { borderColor: isError ? 'error.light' : 'primary.main', bgcolor: 'action.hover' },
+
         // Progress fill
         ...(isSyncing ? {
           '&::before': {
@@ -179,6 +190,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             transition: 'width 1.5s ease',
             zIndex: 0,
           },
+
           // Animated data flow sweep (left → right)
           '&::after': {
             content: '""',
@@ -357,6 +369,7 @@ export default function ProtectionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<ReplicationJob | null>(null)
+
   type VMStatusRow = {
     job_id: string
     vmid: number
@@ -388,6 +401,7 @@ export default function ProtectionTab({
   if (throughputHistoryRef.current === null) {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
+
       if (raw) {
         const parsed: Record<string, ThroughputPoint[]> = JSON.parse(raw)
         const now = Date.now()
@@ -395,6 +409,7 @@ export default function ProtectionTab({
 
         for (const [id, pts] of Object.entries(parsed)) {
           const fresh = pts.filter(p => now - p.ts < MAX_AGE_MS)
+
           if (fresh.length > 0) map.set(id, fresh)
         }
 
@@ -425,12 +440,14 @@ export default function ProtectionTab({
           while (arr.length > 0 && now - arr[0].ts > MAX_AGE_MS) arr.shift()
         }
       }
+
       // Don't delete history when sync stops — keep it for the graph
     }
 
     // Persist to localStorage
     try {
       const obj: Record<string, ThroughputPoint[]> = {}
+
       for (const [id, pts] of map) obj[id] = pts
       localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
     } catch { /* storage full — non-critical */ }
@@ -440,8 +457,10 @@ export default function ProtectionTab({
 
   const connMap = useMemo(() => {
     const m: Record<string, string> = {}
+
     for (const c of connections || []) m[c.id] = c.name
-    return m
+
+return m
   }, [connections])
 
   const connName = (id: string) => connMap[id] || id
@@ -451,6 +470,7 @@ export default function ProtectionTab({
 
     return (jobs || []).filter(j => {
       const label = jobLabel(j, vmNameMap)
+
       const matchQ = !qq || label.toLowerCase().includes(qq) ||
         (j.name || '').toLowerCase().includes(qq) ||
         connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
@@ -483,37 +503,48 @@ export default function ProtectionTab({
   useEffect(() => {
     if (!drawerOpen || !selectedJobId) {
       setVmStatuses(null)
-      return
+
+return
     }
+
     const job = (jobs || []).find(j => j.id === selectedJobId)
+
     if (!job || (job.vm_ids || []).length <= 1) {
       setVmStatuses(null)
-      return
+
+return
     }
+
     let cancelled = false
+
     setVmStatusesLoading(true)
     fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/vms`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : []))
       .then(data => { if (!cancelled) setVmStatuses(Array.isArray(data) ? data : []) })
       .catch(() => { if (!cancelled) setVmStatuses([]) })
       .finally(() => { if (!cancelled) setVmStatusesLoading(false) })
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [drawerOpen, selectedJobId, jobs])
 
   // Fetch throughput history when drawer opens or window changes
   useEffect(() => {
     if (!drawerOpen || !selectedJobId) {
       setThSamples(null)
-      return
+
+return
     }
+
     let cancelled = false
+
     setThLoading(true)
     fetch(`/api/v1/orchestrator/replication/jobs/${selectedJobId}/throughput?window=${thWindow}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : []))
       .then(data => { if (!cancelled) setThSamples(Array.isArray(data) ? data : []) })
       .catch(() => { if (!cancelled) setThSamples([]) })
       .finally(() => { if (!cancelled) setThLoading(false) })
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [drawerOpen, selectedJobId, thWindow])
 
   const closeDrawer = () => {
@@ -524,6 +555,7 @@ export default function ProtectionTab({
   const copyLogs = useCallback(() => {
     if (!logs || logs.length === 0) return
     const text = logs.map(l => `[${new Date(l.created_at).toLocaleTimeString()}] [${l.level}] ${l.message}`).join('\n')
+
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -533,14 +565,17 @@ export default function ProtectionTab({
     if (seconds < 60) return `${seconds}s`
     if (seconds < 3600) return `${Math.round(seconds / 60)}m`
     if (seconds < 86400) return `${Math.round(seconds / 3600)}h`
-    return `${Math.round(seconds / 86400)}d`
+
+return `${Math.round(seconds / 86400)}d`
   }
 
   const planningLabel = (j: typeof jobs[0]) => {
     if (j.schedule_spec) {
       return scheduleToLabel(j.schedule_spec, j.timezone || '', t)
     }
-    return `${t('siteRecovery.rpoTargetLabel')}: ${formatRPO(j.rpo_target)}`
+
+
+return `${t('siteRecovery.rpoTargetLabel')}: ${formatRPO(j.rpo_target)}`
   }
 
   if (loading) {
@@ -645,7 +680,9 @@ export default function ProtectionTab({
                   <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                     {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
                       const name = vmNameMap?.[id]
-                      return name ? `${id} - ${name}` : `${id}`
+
+
+return name ? `${id} - ${name}` : `${id}`
                     }).join(', ')}
                   </Typography>
                 </Box>
@@ -714,7 +751,9 @@ export default function ProtectionTab({
                       <Box sx={{ maxHeight: 280, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
                         {vmStatuses.map(row => {
                           const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : 'default'
-                          return (
+
+
+return (
                             <Box key={row.vmid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, px: 1.25, py: 1, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
                               <Box sx={{ flex: 1, minWidth: 0 }}>
                                 <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.25 }}>
@@ -784,7 +823,9 @@ export default function ProtectionTab({
                           content={({ active, payload }) => {
                             if (!active || !payload?.[0]) return null
                             const p = payload[0].payload as { ts: number; bps: number }
-                            return (
+
+
+return (
                               <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, px: 1.25, py: 0.75, boxShadow: 2 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
                                   <i className='ri-speed-line' style={{ fontSize: 14, opacity: 0.7 }} />

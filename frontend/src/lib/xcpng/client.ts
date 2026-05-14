@@ -55,6 +55,7 @@ export interface XoNetworkInfo {
  */
 export async function getXoConnectionInfo(connectionId: string): Promise<XoConnectionInfo> {
   const prisma = await getSessionPrisma()
+
   const conn = await prisma.connection.findUnique({
     where: { id: connectionId },
     select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
@@ -125,10 +126,12 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
 
     // Get VDI details
     const vdiUuid = vbd.VDI
+
     if (!vdiUuid) continue
 
     try {
       const vdi = await xoFetch<any>(xo, `/vdis/${vdiUuid}`)
+
       disks.push({
         vdiUuid: vdi.uuid,
         label: vdi.name_label || `disk-${vbd.position}`,
@@ -146,6 +149,7 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
 
   // Resolve VIFs for network info
   const vifUuids: string[] = vm.$VIFs || []
+
   const vifs = await Promise.all(
     vifUuids.map(uuid => xoFetch<any>(xo, `/vifs/${uuid}`).catch(() => null))
   )
@@ -219,16 +223,22 @@ async function xoPost<T = any>(xo: XoConnectionInfo, path: string, body?: Record
 
   if (!res.ok) {
     const text = await res.text().catch(() => "")
+
     throw new Error(`XO API POST ${path} failed: ${res.status} ${res.statusText} ${text}`)
   }
 
   const contentType = res.headers.get("content-type") || ""
+
   if (contentType.includes("application/json")) {
     return res.json()
   }
+
+
   // Some XO actions return the UUID as plain text
   const text = await res.text()
-  return text.trim() as unknown as T
+
+
+return text.trim() as unknown as T
 }
 
 /**
@@ -248,6 +258,7 @@ async function xoDelete(xo: XoConnectionInfo, path: string): Promise<void> {
   }
 
   const res = await fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
+
   if (!res.ok && res.status !== 404) {
     throw new Error(`XO API DELETE ${path} failed: ${res.status} ${res.statusText}`)
   }
@@ -265,18 +276,25 @@ export interface XoSnapshotInfo {
  */
 async function xoWaitForTask(xo: XoConnectionInfo, taskId: string, timeoutMs = 300000): Promise<any> {
   const start = Date.now()
+
   while (Date.now() - start < timeoutMs) {
     const task = await xoFetch<any>(xo, `/tasks/${taskId}`)
+
     if (task.status === "success") {
       return task.result
     }
+
     if (task.status === "failure") {
       const errMsg = task.result?.message || task.result || "unknown error"
+
       throw new Error(`XO task ${taskId} failed: ${errMsg}`)
     }
+
+
     // Still pending — wait and poll again
     await new Promise(r => setTimeout(r, 2000))
   }
+
   throw new Error(`XO task ${taskId} timed out after ${timeoutMs / 1000}s`)
 }
 
@@ -296,6 +314,7 @@ export async function xoCreateSnapshot(xo: XoConnectionInfo, vmUuid: string, nam
   if (typeof result === "string" && result.includes("/tasks/")) {
     const taskId = result.split("/tasks/").pop()!.replace(/^\/|\/$/g, "")
     const snapshotUuid = await xoWaitForTask(xo, taskId)
+
     if (typeof snapshotUuid === "string" && snapshotUuid.length > 0) return snapshotUuid
     if (typeof snapshotUuid === "object" && snapshotUuid?.id) return snapshotUuid.id
     if (typeof snapshotUuid === "object" && snapshotUuid?.$id) return snapshotUuid.$id
@@ -306,6 +325,7 @@ export async function xoCreateSnapshot(xo: XoConnectionInfo, vmUuid: string, nam
   // Async task — poll for completion (object with taskId property)
   if (typeof result === "object" && result.taskId) {
     const snapshotUuid = await xoWaitForTask(xo, result.taskId)
+
     if (typeof snapshotUuid === "string" && snapshotUuid.length > 0) return snapshotUuid
     if (typeof snapshotUuid === "object" && snapshotUuid?.id) return snapshotUuid.id
     if (typeof snapshotUuid === "object" && snapshotUuid?.$id) return snapshotUuid.$id
@@ -341,6 +361,7 @@ export async function xoGetSnapshotDisks(
     if (!vbd) continue
     if (vbd.is_cd_drive || vbd.type === "CD") continue
     const vdiUuid = vbd.VDI
+
     if (!vdiUuid) continue
 
     const position = typeof vbd.position === "number" ? vbd.position : Number.parseInt(vbd.position, 10) || 0
@@ -358,7 +379,8 @@ export async function xoGetSnapshotDisks(
   }
 
   disks.sort((a, b) => a.position - b.position)
-  return disks
+
+return disks
 }
 
 /**

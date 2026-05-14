@@ -12,6 +12,7 @@ async function getAISettings() {
   try {
     const tenantId = await getCurrentTenantId()
     const stored = await getSetting<any>('ai', tenantId)
+
     if (stored) return stored
   } catch (e) {
     console.error('Failed to get AI settings:', e)
@@ -29,6 +30,7 @@ async function getAISettings() {
 async function getConnections() {
   try {
     const prisma = await getSessionPrisma()
+
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },
       select: {
@@ -44,7 +46,7 @@ async function getConnections() {
     return connections
   } catch (e) {
     console.error('Failed to get connections:', e)
-    
+
 return []
   }
 }
@@ -53,6 +55,7 @@ return []
 async function getActiveAlerts() {
   try {
     const prisma = await getSessionPrisma()
+
     const alerts = await prisma.alert.findMany({
       where: { status: 'active' },
       orderBy: { lastSeenAt: 'desc' },
@@ -68,11 +71,11 @@ async function getActiveAlerts() {
       }
     })
 
-    
+
 return alerts
   } catch (e) {
     console.error('Failed to get alerts:', e)
-    
+
 return []
   }
 }
@@ -106,7 +109,7 @@ async function fetchProxmoxData(connections: any[]) {
         },
         '/cluster/resources'
       )
-      
+
       // Process nodes
       const nodes = resources.filter((r: any) => r.type === 'node')
 
@@ -123,7 +126,7 @@ async function fetchProxmoxData(connections: any[]) {
         allData.summary.totalNodes++
         if (n.status === 'online') allData.summary.onlineNodes++
       })
-      
+
       // Process VMs (qemu) and Containers (lxc)
       const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
 
@@ -144,7 +147,7 @@ async function fetchProxmoxData(connections: any[]) {
         if (vm.status === 'running') allData.summary.runningVMs++
         else allData.summary.stoppedVMs++
       })
-      
+
       allData.clusters.push({
         name: conn.name,
         nodes: nodes.length,
@@ -154,7 +157,7 @@ async function fetchProxmoxData(connections: any[]) {
       console.error(`Failed to fetch data from ${conn.name}:`, e)
     }
   }
-  
+
   return allData
 }
 
@@ -265,8 +268,10 @@ ${topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.v
   }
 
   let stoppedVMsSection = ''
+
   if (stoppedVMs.length > 0) {
     const byCluster: Record<string, any[]> = {}
+
     stoppedVMs.forEach((vm: any) => {
       if (!byCluster[vm.cluster]) byCluster[vm.cluster] = []
       byCluster[vm.cluster].push(vm)
@@ -294,6 +299,7 @@ ${alerts.map((a: any) => `- [${a.severity?.toUpperCase()}] ${a.message} (${a.ent
 
   if (runningVMs.length > 0) {
     const vmsToShow = runningVMs.slice(0, 20)
+
     prompt += `
 📋 ${s.runningHeader(runningVMs.length, runningVMs.length > 20)}:
 ${vmsToShow.map((vm: any) => `- ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
@@ -318,6 +324,7 @@ ${s.instructions}
 export async function POST(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { messages, locale } = await request.json()
@@ -335,6 +342,7 @@ export async function POST(request: Request) {
     const systemPrompt = await buildSystemPrompt(lang)
 
     const lastUserMessage = messages[messages.length - 1]
+
     const userInstruction = lang === 'fr'
       ? 'Réponds en utilisant UNIQUEMENT les données de l\'infrastructure ci-dessus. Cite les noms exacts des VMs et leurs métriques.'
       : 'Respond using ONLY the infrastructure data above. Cite exact VM names and their metrics.'
@@ -352,7 +360,7 @@ ${userInstruction}`
         ...messages.slice(0, -1), // Messages précédents sans le dernier
         { role: 'user', content: contextualizedMessage }
       ]
-      
+
       const response = await fetch(`${settings.ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -366,30 +374,31 @@ ${userInstruction}`
           }
         })
       })
-      
+
       if (!response.ok) {
         const text = await response.text()
 
         throw new Error(`Ollama error: ${text}`)
       }
-      
+
       const json = await response.json()
 
-      
-return NextResponse.json({ 
+
+return NextResponse.json({
         response: json.message?.content || json.response,
         provider: 'ollama',
         model: settings.ollamaModel
       })
-      
+
     } else if (settings.provider === 'openai') {
       // OpenAI API
       const openaiMessages = [
         { role: 'system', content: systemPrompt },
         ...messages
       ]
-      
+
       const openaiBase = (settings.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '')
+
       const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -402,32 +411,32 @@ return NextResponse.json({
           max_tokens: 1000
         })
       })
-      
+
       if (!response.ok) {
         const json = await response.json().catch(() => ({}))
 
         throw new Error(json?.error?.message || `OpenAI error: ${response.status}`)
       }
-      
+
       const json = await response.json()
 
-      
-return NextResponse.json({ 
+
+return NextResponse.json({
         response: json.choices?.[0]?.message?.content,
         provider: 'openai',
         model: settings.openaiModel
       })
-      
+
     } else if (settings.provider === 'anthropic') {
       // Anthropic API
       const anthropicMessages = messages.map((m: any) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content
       }))
-      
+
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'x-api-key': settings.anthropicKey,
           'anthropic-version': '2023-06-01'
@@ -439,29 +448,29 @@ return NextResponse.json({
           max_tokens: 1000
         })
       })
-      
+
       if (!response.ok) {
         const json = await response.json().catch(() => ({}))
 
         throw new Error(json?.error?.message || `Anthropic error: ${response.status}`)
       }
-      
+
       const json = await response.json()
 
-      
-return NextResponse.json({ 
+
+return NextResponse.json({
         response: json.content?.[0]?.text,
         provider: 'anthropic',
         model: settings.anthropicModel
       })
-      
+
     } else {
       throw new Error(`Provider inconnu: ${settings.provider}`)
     }
-    
+
   } catch (e: any) {
     console.error('AI chat failed:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

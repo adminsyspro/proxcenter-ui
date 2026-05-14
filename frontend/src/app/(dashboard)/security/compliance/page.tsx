@@ -57,6 +57,7 @@ const categoryColors: Record<string, string> = {
 
 // Proxmox Hardening Guide (PVE 9) base URL
 const PVE_GUIDE_BASE = 'https://github.com/HomeSecExplorer/Proxmox-Hardening-Guide/blob/main/docs/pve9-hardening-guide.md'
+
 // CIS Debian Linux Benchmark page
 const CIS_BENCHMARK_URL = 'https://www.cisecurity.org/benchmark/debian_linux'
 
@@ -170,7 +171,8 @@ const CHECK_RECOMMENDATIONS: Record<string, string> = {
 function scoreColor(score: number): string {
   if (score >= 80) return '#22c55e'
   if (score >= 50) return '#f59e0b'
-  return '#ef4444'
+
+return '#ef4444'
 }
 
 // All 25 check IDs with readable names and descriptions
@@ -200,6 +202,7 @@ const ALL_CHECKS = [
   { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm', description: 'Detects VMs with USB or PCI device passthrough, which bypasses the hypervisor isolation boundary.' },
   { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm', description: 'Checks that VMs use emulated CPU types instead of host passthrough, maintaining migration compatibility and isolation.' },
   { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm', description: 'Verifies that IP filtering is enabled on VM firewalls to prevent IP spoofing and unauthorized network access.' },
+
   // --- CIS Benchmark: OS Hardening (SSH-based) ---
   { id: 'os_kernel_modules', name: 'Dangerous kernel modules disabled', category: 'os', description: 'CIS 1.1.1 — Checks that unused filesystem and network kernel modules (cramfs, freevxfs, hfs, jffs2, usb-storage) are disabled or blacklisted.' },
   { id: 'os_coredumps_disabled', name: 'Core dumps disabled', category: 'os', description: 'CIS 1.5.11 — Verifies core dumps are disabled via systemd coredump.conf and limits.conf to prevent sensitive data leakage.' },
@@ -213,6 +216,7 @@ const ALL_CHECKS = [
   { id: 'access_pw_quality', name: 'Password quality enforcement', category: 'os', description: 'CIS 5.3.1 — Verifies libpam-pwquality is installed and configured for minimum password complexity requirements.' },
   { id: 'access_shell_timeout', name: 'Shell idle timeout (TMOUT)', category: 'os', description: 'CIS 5.4.3 — Checks that TMOUT is set in shell profiles to automatically disconnect idle sessions.' },
   { id: 'access_login_banner', name: 'Login warning banner', category: 'os', description: 'CIS 1.7.1 — Verifies a legal warning banner is configured in /etc/issue and /etc/issue.net for authorized-use notices.' },
+
   // --- CIS Benchmark: SSH Hardening ---
   { id: 'ssh_strong_ciphers', name: 'SSH strong ciphers only', category: 'ssh', description: 'CIS 5.1.4 — Verifies sshd_config uses only strong ciphers (AES-GCM, ChaCha20) and no weak CBC ciphers.' },
   { id: 'ssh_strong_kex', name: 'SSH strong key exchange', category: 'ssh', description: 'CIS 5.1.5 — Checks that only secure key exchange algorithms (curve25519, ecdh-sha2) are configured.' },
@@ -222,23 +226,27 @@ const ALL_CHECKS = [
   { id: 'ssh_empty_passwords', name: 'SSH empty passwords disabled', category: 'ssh', description: 'CIS 5.1.17 — Ensures PermitEmptyPasswords is "no" to prevent login without credentials.' },
   { id: 'ssh_idle_timeout', name: 'SSH idle timeout configured', category: 'ssh', description: 'CIS 5.1.20 — Checks ClientAliveInterval and ClientAliveCountMax are set for a maximum 15-minute idle timeout.' },
   { id: 'ssh_file_perms', name: 'SSH file permissions', category: 'ssh', description: 'CIS 5.1.1 — Verifies sshd_config (600) and host private keys (600) have restrictive file permissions.' },
+
   // --- CIS Benchmark: Network ---
   { id: 'net_ip_forward', name: 'IP forwarding disabled', category: 'network', description: 'CIS 3.1.1 — Checks net.ipv4.ip_forward is 0 to prevent the node from acting as a router (expected on Proxmox routers).' },
   { id: 'net_icmp_redirects', name: 'ICMP redirects disabled', category: 'network', description: 'CIS 3.2.2 — Verifies ICMP redirect acceptance and sending are disabled to prevent routing table manipulation.' },
   { id: 'net_source_routing', name: 'Source routing disabled', category: 'network', description: 'CIS 3.2.1 — Checks source-routed packets are rejected to prevent attackers from specifying packet routes.' },
   { id: 'net_syn_cookies', name: 'TCP SYN cookies enabled', category: 'network', description: 'CIS 3.2.8 — Verifies TCP SYN cookies are enabled to protect against SYN flood denial-of-service attacks.' },
   { id: 'net_rp_filter', name: 'Reverse path filtering enabled', category: 'network', description: 'CIS 3.2.7 — Checks reverse path filtering is active to drop packets with spoofed source addresses.' },
+
   // --- CIS Benchmark: Services ---
   { id: 'svc_unnecessary_disabled', name: 'Unnecessary services disabled', category: 'services', description: 'CIS 2.1 — Verifies non-essential services (bluetooth, cups, avahi-daemon) are not running on hypervisor nodes.' },
   { id: 'svc_apparmor', name: 'AppArmor enabled', category: 'services', description: 'CIS 1.4 — Checks that AppArmor mandatory access control is active and enforcing security profiles.' },
   { id: 'svc_auditd', name: 'Audit daemon installed and running', category: 'services', description: 'CIS 4.1.1 — Verifies auditd is installed and active for system call auditing and security event logging.' },
   { id: 'svc_ntp_sync', name: 'NTP time synchronization', category: 'services', description: 'CIS 2.2.1 — Checks that time synchronization (chrony/systemd-timesyncd/ntp) is active for accurate logging.' },
   { id: 'svc_fail2ban', name: 'Fail2Ban installed and running', category: 'services', description: 'CIS 2.3.3 — Verifies Fail2Ban is protecting against brute-force attacks on SSH and the PVE web interface.' },
+
   // --- CIS Benchmark: Filesystem ---
   { id: 'fs_permissions', name: 'Critical file permissions', category: 'filesystem', description: 'CIS 6.1 — Checks permissions on /etc/passwd (644), /etc/shadow (640), /etc/group (644), /etc/gshadow (640).' },
   { id: 'fs_suid_audit', name: 'SUID/SGID files audit', category: 'filesystem', description: 'CIS 6.1.10 — Counts SUID/SGID binaries on the system. Excessive count may indicate unauthorized privilege escalation tools.' },
   { id: 'fs_world_writable', name: 'No world-writable files', category: 'filesystem', description: 'CIS 6.1.11 — Detects world-writable files outside /tmp that could be modified by any user for privilege escalation.' },
   { id: 'fs_integrity', name: 'File integrity monitoring', category: 'filesystem', description: 'CIS 1.3.1 — Verifies AIDE or debsums is installed for detecting unauthorized file modifications on the system.' },
+
   // --- CIS Benchmark: Logging ---
   { id: 'log_journald_persistent', name: 'Journald persistent storage', category: 'logging', description: 'CIS 4.2.1 — Checks journald is configured with Storage=persistent for durable log retention across reboots.' },
   { id: 'log_syslog_forwarding', name: 'Syslog remote forwarding', category: 'logging', description: 'CIS 4.2.3 — Verifies rsyslog is configured to forward logs to a remote server for centralized logging and SIEM.' },
@@ -285,9 +293,11 @@ function HardeningTab() {
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
       const next = new Set(prev)
+
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      return next
+
+return next
     })
   }
 
@@ -476,7 +486,9 @@ function HardeningTab() {
                   {filteredChecks.map((check: any) => {
                     const isExpanded = expandedRows.has(check.id)
                     const catColor = categoryColors[check.category] || '#6366f1'
-                    return (
+
+
+return (
                       <Fragment key={check.id}>
                         <TableRow
                           hover
@@ -640,12 +652,14 @@ function ProfilesTab() {
   const handleEditProfile = async (profileId: string) => {
     try {
       const res = await fetch(`/api/v1/compliance/profiles/${profileId}`)
+
       if (!res.ok) throw new Error('Failed to load profile')
       const { data: profile } = await res.json()
 
       // Merge with ALL_CHECKS to ensure all 25 checks are represented
       const mergedChecks = ALL_CHECKS.map(ac => {
         const existing = profile.checks.find((c: any) => c.check_id === ac.id)
+
         if (existing) {
           return {
             check_id: existing.check_id,
@@ -655,7 +669,9 @@ function ProfilesTab() {
             category: existing.category || ac.category,
           }
         }
-        return { check_id: ac.id, enabled: false, weight: 1.0, control_ref: '', category: ac.category }
+
+
+return { check_id: ac.id, enabled: false, weight: 1.0, control_ref: '', category: ac.category }
       })
 
       setEditDialog({
@@ -685,6 +701,7 @@ function ProfilesTab() {
             description: editDialog.description,
           }),
         })
+
         if (!res.ok) throw new Error('Failed to create profile')
         const { data: profile } = await res.json()
 
@@ -719,6 +736,7 @@ function ProfilesTab() {
 
   const handleDeleteProfile = async (profileId: string) => {
     if (!confirm(t('compliance.confirmDeleteProfile'))) return
+
     try {
       await fetch(`/api/v1/compliance/profiles/${profileId}`, { method: 'DELETE' })
       mutateProfiles()
@@ -900,7 +918,9 @@ function ProfilesTab() {
                 <TableBody>
                   {editDialog.checks.map((check: any, idx: number) => {
                     const checkDef = ALL_CHECKS.find(c => c.id === check.check_id)
-                    return (
+
+
+return (
                       <TableRow key={check.check_id}>
                         <TableCell padding="checkbox">
                           <Switch
@@ -909,8 +929,10 @@ function ProfilesTab() {
                             onChange={(e) => {
                               setEditDialog((prev: any) => {
                                 const checks = [...prev.checks]
+
                                 checks[idx] = { ...checks[idx], enabled: e.target.checked }
-                                return { ...prev, checks }
+
+return { ...prev, checks }
                               })
                             }}
                           />
@@ -941,8 +963,10 @@ function ProfilesTab() {
                             onChange={(_, val) => {
                               setEditDialog((prev: any) => {
                                 const checks = [...prev.checks]
+
                                 checks[idx] = { ...checks[idx], weight: val as number }
-                                return { ...prev, checks }
+
+return { ...prev, checks }
                               })
                             }}
                           />
@@ -997,16 +1021,20 @@ function PoliciesTab() {
     if (!form) return
     setSaving(true)
     setToast(null)
+
     try {
       const res = await fetch('/api/v1/compliance/policies', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
+
       if (!res.ok) {
         const err = await res.json()
+
         throw new Error(err.error || 'Failed to save')
       }
+
       mutate()
       setToast({ type: 'success', message: t('compliance.policiesSaved') })
     } catch (e: any) {

@@ -43,9 +43,11 @@ export default function VmDetailDrawer({ vm, onClose }: Props) {
   const loadRrd = useCallback(async () => {
     if (!vm) return
     setLoading(true)
+
     try {
       const path = `/nodes/${vm.node}/${vm.type}/${vm.vmid}`
       const raw = await fetchRrd(vm.connId, path, tf)
+
       setSeries(buildSeriesFromRrd(raw))
     } catch (e) {
       console.error('Failed to fetch VM RRD:', e)

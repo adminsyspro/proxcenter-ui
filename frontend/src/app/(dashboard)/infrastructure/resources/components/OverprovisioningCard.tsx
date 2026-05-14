@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import {
   Alert,
   Box,
@@ -37,27 +38,32 @@ export default function OverprovisioningCard({ data, loading }: { data: Overprov
     const thresholds = type === 'cpu'
       ? { safe: 2, warning: 4, danger: 6 }
       : { safe: 1, warning: 1.3, danger: 1.5 }
+
     if (ratio <= thresholds.safe) return COLORS.success
     if (ratio <= thresholds.warning) return COLORS.warning
     if (ratio <= thresholds.danger) return '#f97316'
-    return COLORS.error
+
+return COLORS.error
   }
 
   const getRatioLabel = (ratio: number, type: 'cpu' | 'ram') => {
     const thresholds = type === 'cpu'
       ? { safe: 2, warning: 4, danger: 6 }
       : { safe: 1, warning: 1.3, danger: 1.5 }
+
     if (ratio <= thresholds.safe) return t('resources.conservative')
     if (ratio <= thresholds.warning) return t('resources.optimal')
     if (ratio <= thresholds.danger) return t('resources.aggressive')
-    return t('resources.critical')
+
+return t('resources.critical')
   }
 
   const getEfficiencyStatus = (efficiency: number) => {
     if (efficiency >= 70) return { label: t('resources.scoreExcellent'), color: COLORS.success }
     if (efficiency >= 50) return { label: t('resources.scoreGood'), color: COLORS.info }
     if (efficiency >= 30) return { label: t('resources.medium'), color: COLORS.warning }
-    return { label: t('resources.low'), color: COLORS.error }
+
+return { label: t('resources.low'), color: COLORS.error }
   }
 
   if (loading) {

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
@@ -36,11 +37,12 @@ const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: 
 const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
+import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts'
+
 import { useLicense } from '@/contexts/LicenseContext'
 import { useDRSStatus, useDRSMetrics } from '@/hooks/useDRS'
 import { useRBAC } from '@/contexts/RBACContext'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
-import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
@@ -113,15 +115,20 @@ function RootInventoryView({
   const predictiveAlerts = useMemo(() => {
     if (!kpis || !trends || trends.length === 0) return [] as PredictiveAlert[]
     const { alerts } = calculateImprovedPredictions(kpis, trends)
-    return alerts
+
+
+return alerts
   }, [kpis, trends])
 
   // Real alerts from orchestrator
   const fetcher = (url: string) => fetch(url).then(r => r.json())
   const { data: activeAlertsData } = useSWR('/api/v1/orchestrator/alerts/active', fetcher, { refreshInterval: 30000 })
+
   const activeAlerts = useMemo(() => {
     const raw = activeAlertsData?.data || activeAlertsData || []
-    return Array.isArray(raw) ? raw : []
+
+
+return Array.isArray(raw) ? raw : []
   }, [activeAlertsData])
 
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false)
@@ -132,7 +139,9 @@ function RootInventoryView({
     const realCriticals = activeAlerts.filter((a: any) => a.severity === 'critical' || a.severity === 'high').length
     const realWarnings = activeAlerts.filter((a: any) => a.severity === 'warning' || a.severity === 'medium').length
     const result = calculateHealthScoreWithDetails(kpis, predictiveAlerts, undefined, { critical: realCriticals, warning: realWarnings })
-    return { healthScore: result.score, healthBreakdown: result.breakdown }
+
+
+return { healthScore: result.score, healthBreakdown: result.breakdown }
   }, [kpis, predictiveAlerts, activeAlerts])
 
   // Resource percentages for bars
@@ -170,7 +179,8 @@ function RootInventoryView({
   // Build score tooltip rows from breakdown
   const scoreTooltipRows = useMemo(() => {
     if (!healthBreakdown) return null
-    return [
+
+return [
       { label: 'CPU', reason: healthBreakdown.cpu.reason, penalty: healthBreakdown.cpu.penalty },
       { label: 'RAM', reason: healthBreakdown.ram.reason, penalty: healthBreakdown.ram.penalty },
       { label: t('resources.storageLabel'), reason: healthBreakdown.storage.reason, penalty: healthBreakdown.storage.penalty },
@@ -182,14 +192,15 @@ function RootInventoryView({
   // Grouper les VMs par cluster (connexion)
   const clusters = useMemo(() => {
     const map = new Map<string, { connId: string; connName: string; vms: AllVmItem[] }>()
-    
+
     allVms.forEach(vm => {
       if (!map.has(vm.connId)) {
         map.set(vm.connId, { connId: vm.connId, connName: vm.connName, vms: [] })
       }
+
       map.get(vm.connId)!.vms.push(vm)
     })
-    
+
     return Array.from(map.values()).sort((a, b) => a.connName.localeCompare(b.connName))
   }, [allVms])
 
@@ -202,10 +213,13 @@ function RootInventoryView({
   useEffect(() => {
     try {
       const savedClusters = localStorage.getItem('rootViewExpandedClusters')
+
       if (savedClusters) setExpandedClusters(new Set(JSON.parse(savedClusters)))
       const savedHosts = localStorage.getItem('rootViewExpandedHosts')
+
       if (savedHosts) setExpandedHosts(new Set(JSON.parse(savedHosts)))
     } catch {}
+
     setIsHydrated(true)
   }, [])
 
@@ -258,30 +272,32 @@ function RootInventoryView({
       name: vm.name
     })
   }, [onToggleFavorite])
-  
+
   // Helper pour calculer les stats CPU/RAM d'un groupe de VMs
   const calculateStats = (vms: AllVmItem[]) => {
     const runningVms = vms.filter(vm => vm.status === 'running')
+
     if (runningVms.length === 0) return { avgCpu: 0, avgRam: 0, totalMem: 0, usedMem: 0 }
-    
+
     let totalCpu = 0
     let totalMem = 0
     let usedMem = 0
     let cpuCount = 0
     let memCount = 0
-    
+
     runningVms.forEach(vm => {
       if (vm.cpu !== undefined) {
         totalCpu += vm.cpu * 100
         cpuCount++
       }
+
       if (vm.mem !== undefined && vm.maxmem !== undefined && vm.maxmem > 0) {
         usedMem += vm.mem
         totalMem += vm.maxmem
         memCount++
       }
     })
-    
+
     return {
       avgCpu: cpuCount > 0 ? totalCpu / cpuCount : 0,
       avgRam: totalMem > 0 ? (usedMem / totalMem) * 100 : 0,
@@ -289,20 +305,24 @@ function RootInventoryView({
       usedMem
     }
   }
-  
+
   // Compter les VMs par statut
   const vmStats = useMemo(() => {
     const running = allVms.filter(vm => vm.status === 'running').length
     const stopped = allVms.filter(vm => vm.status === 'stopped').length
     const other = allVms.length - running - stopped
-    return { running, stopped, other, total: allVms.length }
+
+
+return { running, stopped, other, total: allVms.length }
   }, [allVms])
-  
+
   // VM type split (QEMU vs LXC)
   const vmTypeSplit = useMemo(() => {
     const qemu = allVms.filter(vm => vm.type === 'qemu').length
     const lxc = allVms.filter(vm => vm.type === 'lxc').length
-    return { qemu, lxc, total: allVms.length }
+
+
+return { qemu, lxc, total: allVms.length }
   }, [allVms])
 
   // Top 3 consumers (running VMs by CPU or RAM)
@@ -324,13 +344,18 @@ function RootInventoryView({
   const drsHealthScore = useMemo(() => {
     if (!drsMetrics) return null
     const clusters = Object.values(drsMetrics) as any[]
+
     if (clusters.length === 0) return null
     let total = 0
+
     for (const cluster of clusters) {
       const breakdown = computeDrsHealthScore(cluster.summary, cluster.nodes)
+
       total += breakdown.score
     }
-    return Math.round(total / clusters.length)
+
+
+return Math.round(total / clusters.length)
   }, [drsMetrics])
 
   // Per-node RRD graphs for infrastructure overview
@@ -347,9 +372,12 @@ function RootInventoryView({
     setInfraRrdHiddenNodes(prev => {
       // If this node is already isolated (all others hidden), show all
       const allOthersHidden = infraRrdNodeNames.every(n => n === name || prev.has(n))
+
       if (allOthersHidden) {
         return new Set()
       }
+
+
       // Isolate: hide all others, show only this one
       return new Set(infraRrdNodeNames.filter(n => n !== name))
     })
@@ -358,33 +386,45 @@ function RootInventoryView({
   const infraNodeColors = useMemo(() => {
     const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1']
     const map: Record<string, string> = {}
+
     infraRrdNodeNames.forEach((name, i) => { map[name] = palette[i % palette.length] })
-    return map
+
+return map
   }, [infraRrdNodeNames])
 
   // Stable key: only re-fetch RRD when the actual node list changes, not on every hosts reference update
   // Debounced to avoid multiple fetch cycles during progressive SSE inventory loading
   const hostsRef = useRef(hosts)
+
   hostsRef.current = hosts
+
   const rawInfraRrdNodesKey = useMemo(() => {
     return hosts.map(h => `${h.connId}|${h.node}`).sort((a, b) => a.localeCompare(b)).join(',')
   }, [hosts])
+
   const [infraRrdNodesKey, setInfraRrdNodesKey] = useState(rawInfraRrdNodesKey)
+
   useEffect(() => {
     if (rawInfraRrdNodesKey === infraRrdNodesKey) return
+
+
     // console.log(`[infra-rrd] Debounce: hosts changed (${hosts.length} hosts), waiting 1s...`)
     const timer = setTimeout(() => {
       // console.log(`[infra-rrd] Debounce: committed (${hosts.length} hosts)`)
       setInfraRrdNodesKey(rawInfraRrdNodesKey)
     }, 1000)
-    return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
   }, [rawInfraRrdNodesKey])
 
   useEffect(() => {
     const currentHosts = hostsRef.current
+
     if (currentHosts.length === 0) return
     const abortController = new AbortController()
     const isAutoRefresh = infraRrdRefreshTick > 0 && infraRrdSeries.length > 0
+
     if (!isAutoRefresh) setInfraRrdLoading(true)
 
     // console.log(`[infra-rrd] Starting RRD fetch for ${currentHosts.length} hosts, timeframe=${infraRrdTf}`)
@@ -396,6 +436,7 @@ function RootInventoryView({
 
       // Group hosts by connection for batch RRD fetches (1 request per connection instead of 1 per node)
       const byConn = new Map<string, { connId: string; nodes: string[] }>()
+
       for (const host of currentHosts) {
         if (!byConn.has(host.connId)) byConn.set(host.connId, { connId: host.connId, nodes: [] })
         byConn.get(host.connId)!.nodes.push(host.node)
@@ -405,13 +446,17 @@ function RootInventoryView({
         Array.from(byConn.values()).map(async ({ connId, nodes }) => {
           const paths = nodes.map(n => `/nodes/${n}`)
           const batchResult = await fetchRrdBatch(connId, paths, infraRrdTf, abortController.signal)
+
           if (abortController.signal.aborted) return
+
           for (const node of nodes) {
             const raw = batchResult.get(`/nodes/${node}`) || []
+
             perNode[node] = buildSeriesFromRrd(raw)
           }
         })
       )
+
       if (abortController.signal.aborted) {
         // console.log(`[infra-rrd] Aborted (stale effect)`)
         return
@@ -419,6 +464,7 @@ function RootInventoryView({
 
       const nodeNames = Object.keys(perNode).sort((a, b) => a.localeCompare(b))
       const failed = currentHosts.filter(h => !perNode[h.node]).map(h => h.node)
+
       // console.log(`[infra-rrd] Done: ${nodeNames.length}/${currentHosts.length} OK, failed=[${failed.join(', ')}]`)
 
       setInfraRrdPerNode(perNode)
@@ -428,16 +474,20 @@ function RootInventoryView({
       const resolutionMs: Record<string, number> = {
         hour: 60_000, day: 1_800_000, week: 10_800_000, month: 43_200_000, year: 604_800_000,
       }
+
       const snapRes = resolutionMs[infraRrdTf] || 60_000
 
       // Merge into unified time series with per-node keys
       const timeMap = new Map<number, Record<string, number>>()
+
       for (const [nodeName, series] of Object.entries(perNode)) {
         for (const point of series) {
           if (!point.t) continue
           const snapped = Math.round(point.t / snapRes) * snapRes
+
           if (!timeMap.has(snapped)) timeMap.set(snapped, { t: snapped })
           const entry = timeMap.get(snapped)!
+
           if (point.cpuPct != null) entry[`cpu_${nodeName}`] = point.cpuPct
           if (point.ramPct != null) entry[`ram_${nodeName}`] = point.ramPct
           if (point.netInBps != null) entry[`netIn_${nodeName}`] = point.netInBps
@@ -452,8 +502,10 @@ function RootInventoryView({
       // causing gaps where some nodes have no data at certain time slots.
       // Forward-fill then backward-fill to cover both trailing and leading gaps.
       const keys = nodeNames.flatMap(name => ['cpu_', 'ram_', 'netIn_', 'netOut_', 'load_'].map(p => `${p}${name}`))
+
       // Forward-fill: propagate last known value
       const lastKnown: Record<string, number> = {}
+
       for (const slot of merged) {
         for (const key of keys) {
           if (slot[key] != null) {
@@ -463,10 +515,14 @@ function RootInventoryView({
           }
         }
       }
+
+
       // Backward-fill: fill leading gaps with the first known value
       const firstKnown: Record<string, number> = {}
+
       for (let i = merged.length - 1; i >= 0; i--) {
         const slot = merged[i]
+
         for (const key of keys) {
           if (slot[key] != null) {
             firstKnown[key] = slot[key]
@@ -488,43 +544,50 @@ function RootInventoryView({
   // Auto-refresh RRD data every 30s
   useEffect(() => {
     if (infraRrdSeries.length === 0) return
+
     const iv = setInterval(() => {
       setInfraRrdRefreshTick(prev => prev + 1)
     }, 30_000)
-    return () => clearInterval(iv)
+
+
+return () => clearInterval(iv)
   }, [infraRrdSeries.length > 0])
 
   const toggleCluster = (connId: string) => {
     setExpandedClusters(prev => {
       const next = new Set(prev)
+
       if (next.has(connId)) next.delete(connId)
       else next.add(connId)
-      return next
+
+return next
     })
   }
-  
+
   const toggleHost = (key: string) => {
     setExpandedHosts(prev => {
       const next = new Set(prev)
+
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      return next
+
+return next
     })
   }
-  
+
   // Expand/Collapse all
   const expandAll = () => {
     setExpandedClusters(new Set(clusters.map(c => c.connId)))
     setExpandedHosts(new Set(hosts.map(h => h.key)))
   }
-  
+
   const collapseAll = () => {
     setExpandedClusters(new Set())
     setExpandedHosts(new Set())
   }
 
   const isAllExpanded = expandedClusters.size > 0 || expandedHosts.size > 0
-  
+
   // Composant mini barre de progression avec gradient
   const MINI_GRADIENT = 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)'
 
@@ -623,6 +686,7 @@ function RootInventoryView({
                     const predWarnings = predictiveAlerts.filter(a => a.severity === 'warning').length
                     const criticals = realCriticals + predCriticals
                     const warnings = realWarnings + predWarnings
+
                     if (criticals > 0 || warnings > 0) {
                       return (
                         <MuiTooltip title={t('inventory.alertsDialog.title')} arrow>
@@ -651,7 +715,9 @@ function RootInventoryView({
                         </MuiTooltip>
                       )
                     }
-                    return (
+
+
+return (
                       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.success.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
                         <i className="ri-shield-check-line" style={{ fontSize: 13, color: theme.palette.success.main }} />
                         <Typography variant="caption" fontWeight={600} sx={{ color: 'success.main', fontSize: 11 }}>
@@ -706,12 +772,17 @@ function RootInventoryView({
                   {(() => {
                     const fmtSize = (bytes: number) => {
                       const gb = bytes / 1073741824
-                      return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${Math.round(gb)} GB`
+
+
+return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${Math.round(gb)} GB`
                     }
+
                     const ramUsedBytes = kpis.ram.used / 100 * kpis.ram.total
                     const storUsed = kpis.storage.used
                     const storTotal = kpis.storage.total
-                    return [
+
+
+return [
                       { label: 'CPU', pct: cpuPct, tooltip: `${kpis.cpu.total} vCPUs — ${Math.round(kpis.cpu.allocated)} allocated, ${Math.round(cpuPct)}% used` },
                       { label: 'RAM', pct: ramPct, tooltip: `${fmtSize(kpis.ram.total)} — ${fmtSize(kpis.ram.allocated)} allocated, ${Math.round(ramPct)}% used` },
                       { label: 'Stor.', pct: storePct, tooltip: `${fmtSize(storUsed)} / ${fmtSize(storTotal)}` },
@@ -743,7 +814,9 @@ function RootInventoryView({
                   {/* DRS score inline */}
                   {isEnterprise && drsHealthScore !== null && (() => {
                     const drsColor = drsHealthScore >= 80 ? theme.palette.success.main : drsHealthScore >= 50 ? theme.palette.warning.main : theme.palette.error.main
-                    return (
+
+
+return (
                       <MuiTooltip title={`DRS: ${drsHealthScore}/100 — Mode: ${(drsStatus?.mode || 'manual')}`} placement="left" arrow>
                         <Stack direction="row" alignItems="center" spacing={0.75} sx={{ cursor: 'default' }}>
                           <Typography variant="caption" fontWeight={600} sx={{ minWidth: 28, fontSize: 10 }}>DRS</Typography>
@@ -831,7 +904,9 @@ function RootInventoryView({
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
                         const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                        return (
+
+
+return (
                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
@@ -842,7 +917,9 @@ function RootInventoryView({
                             {sorted.map(entry => {
                               const v = Number(entry.value)
                               const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'
-                              return (
+
+
+return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                 <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('cpu_', '')}</Typography>
@@ -886,7 +963,9 @@ function RootInventoryView({
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
                         const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                        return (
+
+
+return (
                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#9c27b0' }} />
@@ -938,7 +1017,9 @@ function RootInventoryView({
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
                         const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                        return (
+
+
+return (
                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-ram-line" style={{ fontSize: 13, color: '#4caf50' }} />
@@ -949,7 +1030,9 @@ function RootInventoryView({
                             {sorted.map(entry => {
                               const v = Number(entry.value)
                               const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'
-                              return (
+
+
+return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                 <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('ram_', '')}</Typography>
@@ -995,7 +1078,9 @@ function RootInventoryView({
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null
                         const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                        return (
+
+
+return (
                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(255,152,0,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-wifi-line" style={{ fontSize: 13, color: '#ff9800' }} />
@@ -1006,7 +1091,9 @@ function RootInventoryView({
                             {sorted.map(entry => {
                               const isOut = String(entry.name).startsWith('netOut_')
                               const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
-                              return (
+
+
+return (
                                 <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                   <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>
@@ -1081,7 +1168,9 @@ function RootInventoryView({
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
                       const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('cpu_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                      return (
+
+
+return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
@@ -1089,7 +1178,11 @@ function RootInventoryView({
                             <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
-                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                 <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('cpu_', '')}</Typography>
@@ -1120,7 +1213,9 @@ function RootInventoryView({
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
                       const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('load_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                      return (
+
+
+return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#9c27b0' }} />
@@ -1159,7 +1254,9 @@ function RootInventoryView({
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
                       const sorted = [...payload].filter(e => !infraRrdHiddenNodes.has(String(e.name).replaceAll('ram_', ''))).sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                      return (
+
+
+return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-ram-line" style={{ fontSize: 13, color: '#4caf50' }} />
@@ -1167,7 +1264,11 @@ function RootInventoryView({
                             <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
-                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                            {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                               <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                 <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                 <Typography variant="caption" sx={{ flex: 1 }}>{String(entry.name).replaceAll('ram_', '')}</Typography>
@@ -1200,7 +1301,9 @@ function RootInventoryView({
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
                       const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                      return (
+
+
+return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(255,152,0,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-wifi-line" style={{ fontSize: 13, color: '#ff9800' }} />
@@ -1211,7 +1314,9 @@ function RootInventoryView({
                             {sorted.map(entry => {
                               const isOut = String(entry.name).startsWith('netOut_')
                               const nodeName = String(entry.name).replace(/^net(In|Out)_/, '')
-                              return (
+
+
+return (
                                 <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                   <Typography variant="caption" sx={{ flex: 1 }}>{nodeName} {isOut ? '↑ Out' : '↓ In'}</Typography>

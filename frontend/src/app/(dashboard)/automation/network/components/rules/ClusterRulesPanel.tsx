@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -34,8 +35,10 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
 
   const reloadClusterRules = async () => {
     if (!selectedConnection) return
+
     try {
       const rules = await firewallAPI.getClusterRules(selectedConnection)
+
       setClusterRules(Array.isArray(rules) ? rules : [])
     } catch (err) {
       console.error('Error reloading cluster rules:', err)
@@ -44,6 +47,7 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
 
   const handleAddClusterRule = async () => {
     if (!selectedConnection) return
+
     try {
       await firewallAPI.addClusterRule(selectedConnection, newClusterRule)
       showToast(t('network.ruleAdded'), 'success')
@@ -58,6 +62,7 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
 
   const handleUpdateClusterRule = async () => {
     if (!editingClusterRule?.rule || !selectedConnection) return
+
     try {
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${editingClusterRule.rule.pos}`, {
         method: 'PUT',
@@ -75,6 +80,7 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
 
   const handleDeleteClusterRule = async () => {
     if (!deleteClusterRuleConfirm || !selectedConnection) return
+
     try {
       await firewallAPI.deleteClusterRule(selectedConnection, deleteClusterRuleConfirm.pos)
       showToast(t('network.ruleDeleted'), 'success')
@@ -92,22 +98,29 @@ export default function ClusterRulesPanel({ clusterRules, securityGroups, select
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
+
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
     setClusterDragState({ draggedPos: null, dragOverPos: null })
   }
+
   const handleDragOver = (e: React.DragEvent, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
     if (clusterDragState.draggedPos !== null && clusterDragState.draggedPos !== pos) {
       setClusterDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
+
   const handleDragLeave = () => setClusterDragState(prev => ({ ...prev, dragOverPos: null }))
+
   const handleDrop = async (e: React.DragEvent, toPos: number) => {
     e.preventDefault()
     const fromPos = clusterDragState.draggedPos
+
     setClusterDragState({ draggedPos: null, dragOverPos: null })
+
     if (fromPos !== null && fromPos !== toPos) {
       try {
         await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {

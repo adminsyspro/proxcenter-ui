@@ -1,10 +1,9 @@
 'use client'
 
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { getOsSvgIcon } from '@/lib/utils/osIcons'
-import { useTagColors } from '@/contexts/TagColorContext'
-import { useTenant } from '@/contexts/TenantContext'
+
 
 import { createPortal } from 'react-dom'
 import {
@@ -31,7 +30,12 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+
+import { useTenant } from '@/contexts/TenantContext'
+import { useTagColors } from '@/contexts/TagColorContext'
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import ChartContainer from '@/components/ChartContainer'
+
 // XLSX is dynamically imported in handleExportExcel to reduce bundle size
 
 // RemixIcon replacements for @mui/icons-material
@@ -112,7 +116,7 @@ const StatusChip = ({ status, compact = false }: { status: string; compact?: boo
   if (s === 'running') return <Chip size='small' color='success' label={compact ? 'Run' : 'Running'} sx={sx} />
   if (s === 'stopped') return <Chip size='small' color='default' label={compact ? 'Stop' : 'Stopped'} sx={sx} />
   if (s === 'paused') return <Chip size='small' color='warning' label={compact ? 'Pause' : 'Paused'} sx={sx} />
-  
+
 return <Chip size='small' color='default' label={status || '—'} sx={sx} />
 }
 
@@ -155,9 +159,11 @@ const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (
   const measure = useCallback(() => {
     const container = containerRef.current
     const badge = badgeRef.current
+
     if (!container || !badge) return
 
     const tagEls = Array.from(container.querySelectorAll('[data-tag]')) as HTMLElement[]
+
     if (tagEls.length === 0) return
     const containerRight = container.getBoundingClientRect().right
 
@@ -167,6 +173,7 @@ const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (
 
     // Check if all tags fit
     const lastEl = tagEls[tagEls.length - 1]
+
     if (lastEl && lastEl.getBoundingClientRect().right <= containerRight) return
 
     // Not all fit - find how many fit with space for the badge
@@ -175,17 +182,21 @@ const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (
     const badgeWidth = badge.getBoundingClientRect().width + 4 // +4 for gap
 
     let fitCount = 0
+
     for (let i = 0; i < tagEls.length; i++) {
       if (tagEls[i].getBoundingClientRect().right > containerRight - badgeWidth) break
       fitCount++
     }
+
     fitCount = Math.max(1, fitCount)
 
     // Hide overflow tags, update badge
     for (let i = fitCount; i < tagEls.length; i++) {
       tagEls[i].style.display = 'none'
     }
+
     const hiddenCount = tagEls.length - fitCount
+
     if (hiddenCount > 0) {
       badge.textContent = `+${hiddenCount}`
     } else {
@@ -198,11 +209,13 @@ const TagsCell = ({ tags, getTagColor, shape }: { tags: string[]; getTagColor: (
   // Re-measure on column resize — observe the DataGrid cell wrapper
   useEffect(() => {
     const container = containerRef.current
+
     if (!container) return
 
     // The DataGrid cell element that actually resizes
     const cell = container.closest('.MuiDataGrid-cell') || container.parentElement || container
     const ro = new ResizeObserver(measure)
+
     ro.observe(cell)
 
     return () => ro.disconnect()
@@ -285,7 +298,8 @@ function formatRate(bytes: number) {
   if (bytes < 1024) return `${bytes.toFixed(0)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB/s`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB/s`
+
+return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB/s`
 }
 
 function IoNetTooltip({ active, payload, label }: any) {
@@ -295,8 +309,10 @@ function IoNetTooltip({ active, payload, label }: any) {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({ x: e.clientX, y: e.clientY })
     }
+
     window.addEventListener('mousemove', handleMouseMove)
-    return () => window.removeEventListener('mousemove', handleMouseMove)
+
+return () => window.removeEventListener('mousemove', handleMouseMove)
   }, [])
 
   if (!active || !payload || payload.length === 0) return null
@@ -358,13 +374,13 @@ function TrendTooltip({ active, payload, label }: any) {
     }
 
     window.addEventListener('mousemove', handleMouseMove)
-    
+
 return () => window.removeEventListener('mousemove', handleMouseMove)
   }, [])
 
   if (!active || !payload || payload.length === 0) return null
   if (typeof window === 'undefined') return null
-  
+
   const cpu = payload.find((p: any) => p.dataKey === 'cpu')?.value
   const ram = payload.find((p: any) => p.dataKey === 'ram')?.value
 
@@ -520,6 +536,7 @@ function VmsTable({
   const t = useTranslations()
   const { getColor, getShape, loadConnection } = useTagColors()
   const primaryColor = theme.palette.primary.main
+
   // VM placement is provider-only in MSP/vDC mode. Hide migrate icons
   // (per-row + context menu) for tenant admins. Done at the table level
   // so every callsite (InventoryDetails right panel, NodeTabs, ClusterTabs)
@@ -527,10 +544,11 @@ function VmsTable({
   const { currentTenant, loading: tenantLoading } = useTenant()
   const canMigrate = !tenantLoading && currentTenant?.id === 'default'
   const effectiveOnMigrate = canMigrate ? onMigrate : undefined
-  
+
   // Load tag color overrides for all connections in the table
   useEffect(() => {
     const connIds = new Set(vms.map(vm => vm.connId))
+
     connIds.forEach(id => loadConnection(id))
   }, [vms, loadConnection])
 
@@ -542,19 +560,19 @@ function VmsTable({
   // Helper pour vérifier si une VM est en migration
   const isVmMigrating = useCallback((connId: string, vmid: string | number) => {
     if (!migratingVmIds) return false
-    
+
 return migratingVmIds.has(`${connId}:${vmid}`)
   }, [migratingVmIds])
-  
+
   // Responsive breakpoints - noSsr: true pour éviter les problèmes de hydratation
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })  // < 600px
   const isTablet = useMediaQuery(theme.breakpoints.down('md'), { noSsr: true })  // < 900px
   const isSmallDesktop = useMediaQuery(theme.breakpoints.down('lg'), { noSsr: true })  // < 1200px
   const isLargeDesktop = useMediaQuery(theme.breakpoints.up('xl'), { noSsr: true })  // >= 1536px
-  
+
   // État local pour la densité (compact par défaut)
   const [isCompact, setIsCompact] = useState(compactProp)
-  
+
   // État pour le menu de sélection des colonnes
   const [columnsMenuAnchor, setColumnsMenuAnchor] = useState<null | HTMLElement>(null)
 
@@ -589,6 +607,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     // Restore from localStorage
     try {
       const saved = localStorage.getItem('proxcenter_vmtable_columns')
+
       if (saved) return { ...defaults, ...JSON.parse(saved) }
     } catch {}
 
@@ -606,22 +625,27 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     try {
       const saved = localStorage.getItem('proxcenter_vmtable_colwidths')
+
       if (saved) return JSON.parse(saved)
     } catch {}
-    return {}
+
+
+return {}
   })
 
   const handleColumnWidthChange = useCallback((params: any) => {
     setColumnWidths(prev => {
       const next = { ...prev, [params.colDef.field]: params.width }
+
       try { localStorage.setItem('proxcenter_vmtable_colwidths', JSON.stringify(next)) } catch {}
-      return next
+
+return next
     })
   }, [])
 
   // État pour le menu contextuel (clic droit)
   const [contextMenu, setContextMenu] = useState<VmContextMenu>(null)
-  
+
   // Handlers pour le menu contextuel
   const handleContextMenu = useCallback((event: React.MouseEvent, vm: VmRow) => {
     event.preventDefault()
@@ -632,23 +656,23 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       vm
     })
   }, [])
-  
+
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null)
   }, [])
-  
+
   const handleContextAction = useCallback((action: 'start' | 'shutdown' | 'stop' | 'pause' | 'suspend' | 'reboot' | 'console' | 'details' | 'clone') => {
     if (!contextMenu || !onVmAction) return
     onVmAction(contextMenu.vm, action)
     handleCloseContextMenu()
   }, [contextMenu, onVmAction, handleCloseContextMenu])
-  
+
   const handleContextMigrate = useCallback(() => {
     if (!contextMenu || !effectiveOnMigrate) return
     effectiveOnMigrate(contextMenu.vm)
     handleCloseContextMenu()
   }, [contextMenu, effectiveOnMigrate, handleCloseContextMenu])
-  
+
   // Calculer le pageSize selon la hauteur - remplir l'écran
   const calculatedPageSize = useMemo(() => {
     // Estimer la hauteur d'une ligne
@@ -656,52 +680,52 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     const headerHeight = 56
     const footerHeight = 56
     const toggleHeight = showDensityToggle ? 44 : 0
-    
+
     // Hauteur disponible estimée (viewport - éléments fixes)
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 900
     const availableHeight = viewportHeight - 180 - headerHeight - footerHeight - toggleHeight
-    
+
     const rows = Math.floor(availableHeight / rowHeight)
 
-    
+
 return Math.max(10, Math.min(rows, 50))
   }, [isCompact, showDensityToggle])
-  
+
   // État local pour les trends
   const [trendsData, setTrendsData] = useState<Record<string, TrendPoint[]>>({})
   const [trendsLoading, setTrendsLoading] = useState<Record<string, boolean>>({})
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
-  
+
   // Calculer les VMs visibles sur la page actuelle
   const visibleVms = useMemo(() => {
     const start = paginationModel.page * paginationModel.pageSize
     const end = start + paginationModel.pageSize
 
-    
+
 return vms.slice(start, end)
   }, [vms, paginationModel.page, paginationModel.pageSize])
-  
+
   // Charger les trends uniquement pour les VMs visibles et running
   useEffect(() => {
     if (!showTrends) return
     if (!onLoadTrendsBatch && !onLoadTrends) return
-    
+
     // VMs running visibles qui n'ont pas encore de données
     const vmsToLoad = visibleVms.filter(
       vm => vm.status === 'running' && !trendsData[vm.id] && !trendsLoading[vm.id]
     )
-    
+
     if (vmsToLoad.length === 0) return
-    
+
     // Marquer SEULEMENT les VMs qu'on va charger comme loading
     const loadingState: Record<string, boolean> = {}
 
     vmsToLoad.forEach(vm => { loadingState[vm.id] = true })
     setTrendsLoading(prev => ({ ...prev, ...loadingState }))
-    
+
     const loadTrends = async () => {
       let results: Record<string, TrendPoint[]> = {}
-      
+
       // Préférer le batch loading s'il est disponible
       if (onLoadTrendsBatch) {
         try {
@@ -716,7 +740,7 @@ return vms.slice(start, end)
             try {
               const data = await onLoadTrends(vm)
 
-              
+
 return { id: vm.id, data }
             } catch (e) {
               return { id: vm.id, data: [] }
@@ -730,20 +754,20 @@ return { id: vm.id, data }
           }
         })
       }
-      
+
       // Mettre à jour les états
       const newTrends: Record<string, TrendPoint[]> = {}
       const newLoading: Record<string, boolean> = {}
-      
+
       vmsToLoad.forEach(vm => {
         newTrends[vm.id] = results[vm.id] || []
         newLoading[vm.id] = false
       })
-      
+
       setTrendsData(prev => ({ ...prev, ...newTrends }))
       setTrendsLoading(prev => ({ ...prev, ...newLoading }))
     }
-    
+
     loadTrends()
   }, [showTrends, visibleVms, onLoadTrends, onLoadTrendsBatch]) // Ne dépend que des VMs visibles
 
@@ -816,6 +840,7 @@ return { id: vm.id, data }
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
+
     a.href = url
     a.download = `vms-export-${new Date().toISOString().split('T')[0]}.xlsx`
     a.click()
@@ -830,12 +855,12 @@ return { id: vm.id, data }
         <span>{label}</span>
       </Stack>
     )
-    
+
     // Header compact pour mobile (juste l'icône)
     const headerIconOnly = (icon: string) => () => (
       <i className={icon} style={{ fontSize: 14, opacity: 0.7 }} />
     )
-    
+
     const cols: GridColDef[] = [
       // ID - peut être masqué via le menu des colonnes
       {
@@ -865,7 +890,7 @@ return { id: vm.id, data }
         renderCell: (params) => {
           const isFav = favorites?.has(params.row.id) || false
 
-          
+
 return (
             <IconButton
               size="small"
@@ -873,7 +898,7 @@ return (
                 e.stopPropagation()
                 onToggleFavorite?.(params.row)
               }}
-              sx={{ 
+              sx={{
                 p: 0.25,
                 color: isFav ? '#ffc107' : 'text.disabled',
                 '&:hover': { color: '#ffc107' }
@@ -1012,7 +1037,7 @@ return (
         )
       })
     }
-    
+
     // Colonne HA - toujours inclus quand expanded et qu'il y a des VMs cluster
     if (showNode || expanded) {
       const hasClusterVms = vms.some(vm => vm.isCluster)
@@ -1028,19 +1053,19 @@ return (
             if (!params.row.isCluster) {
               return <Typography variant='caption' sx={{ opacity: 0.3 }}>—</Typography>
             }
-            
+
             const hastate = params.row.hastate
             const hagroup = params.row.hagroup
-            
+
             if (!hastate) {
               return <Typography variant='caption' sx={{ opacity: 0.3 }}>—</Typography>
             }
-            
+
             return (
               <Tooltip title={`State: ${hastate}${hagroup ? `, Group: ${hagroup}` : ''}`}>
-                <Chip 
-                  label={hagroup || hastate} 
-                  size='small' 
+                <Chip
+                  label={hagroup || hastate}
+                  size='small'
                   variant='outlined'
                   sx={{ height: 18, fontSize: '0.6rem', maxWidth: 60, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
                 />
@@ -1062,7 +1087,7 @@ return (
           const maxmem = params.row.maxmem
 
           if (!maxmem) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
-          
+
 return (
             <Typography variant='body2' sx={{ fontSize: '0.7rem' }}>
               {bytesToGb(maxmem)}G
@@ -1083,7 +1108,7 @@ return (
           const maxdisk = params.row.maxdisk
 
           if (!maxdisk) return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
-          
+
 return (
             <Typography variant='body2' sx={{ fontSize: '0.7rem' }}>
               {bytesToGb(maxdisk)}G
@@ -1091,7 +1116,7 @@ return (
           )
         }
       })
-      
+
       // Tags
       cols.push({
         field: 'tags',
@@ -1118,7 +1143,7 @@ return (
               return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
             }
 
-            
+
 return (
               <Typography variant='body2' sx={{ fontSize: '0.7rem' }}>
                 {ip}
@@ -1138,11 +1163,11 @@ return (
               return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
             }
 
-            
+
 return (
-              <Chip 
-                size='small' 
-                label={snaps} 
+              <Chip
+                size='small'
+                label={snaps}
                 color={snaps > 0 ? 'info' : 'default'}
                 sx={{ height: 18, fontSize: '0.65rem', minWidth: 24 }}
               />
@@ -1160,9 +1185,10 @@ return (
             if (!osInfo) {
               return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
             }
-            
+
             // Icône selon le type d'OS (SVG si disponible)
             const osSvgIcon = getOsSvgIcon(osInfo.name || '', osInfo.type)
+
             const osRiIcon = osInfo.type === 'windows'
               ? 'ri-windows-fill'
               : 'ri-terminal-box-line'
@@ -1201,7 +1227,7 @@ return (
         }
       )
     }
-    
+
     // Colonne Trend (si activé)
     if (showTrends) {
       cols.push({
@@ -1217,10 +1243,10 @@ return (
           if (vm.status !== 'running') {
             return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
           }
-          
+
           const data = trendsData[vm.id] || vm.trend || []
           const isLoading = trendsLoading[vm.id]
-          
+
           if (isLoading) {
             return (
               <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
@@ -1228,7 +1254,7 @@ return (
               </Box>
             )
           }
-          
+
           if (!data || data.length === 0) {
             return (
               <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
@@ -1236,21 +1262,21 @@ return (
               </Box>
             )
           }
-          
+
           // Clé unique pour forcer le re-render quand les données changent
           const chartKey = `${vm.id}-${data.length}`
-          
+
           // Calculer le domaine Y dynamiquement pour un meilleur rendu (basé sur CPU et RAM)
           const allValues = data.flatMap((d: any) => [d.cpu || 0, d.ram || 0])
           const maxVal = Math.max(...allValues, 10)
           const minVal = Math.min(...allValues, 0)
           const yMax = Math.min(100, maxVal + 10)
           const yMin = Math.max(0, minVal - 5)
-          
+
           // Couleurs
           const cpuColor = '#e57000'  // Orange vif
           const ramColor = '#b35500'  // Orange foncé
-          
+
           return (
             <ChartContainer key={chartKey} height={32} sx={{ position: 'relative' }}>
               <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
@@ -1325,6 +1351,7 @@ return (
           }
 
           const hasIoData = data.some((d: any) => (d.diskread || 0) > 0 || (d.diskwrite || 0) > 0 || (d.netin || 0) > 0 || (d.netout || 0) > 0)
+
           if (!hasIoData) {
             return (
               <Box sx={{ height: 32, width: '100%', display: 'flex', alignItems: 'center' }}>
@@ -1375,7 +1402,7 @@ return (
             return <Typography variant='caption' sx={{ opacity: 0.5 }}>—</Typography>
           }
 
-          
+
 return (
             <Typography variant='body2' sx={{ fontSize: '0.7rem' }}>
               {secondsToUptime(params.row.uptime)}
@@ -1436,20 +1463,20 @@ return (
           const isRunning = vm.status === 'running'
           const isStopped = vm.status === 'stopped'
           const isPaused = vm.status === 'paused'
-          
+
           // Pour les templates, afficher icône Deploy + Migration si cluster
           if (vm.template) {
             return (
               <Stack direction='row' spacing={0.25} sx={{ alignItems: 'center' }}>
                 {/* Deploy (Clone) */}
                 <Tooltip title={t('vmActions.deployFromTemplate')}>
-                  <IconButton 
+                  <IconButton
                     size='small'
-                    onClick={(e) => { 
+                    onClick={(e) => {
                       e.stopPropagation()
-                      onVmAction(vm, 'clone') 
+                      onVmAction(vm, 'clone')
                     }}
-                    sx={{ 
+                    sx={{
                       color: 'primary.main',
                       p: 0.5,
                       '&:hover': { bgcolor: 'primary.main', color: 'white' }
@@ -1458,7 +1485,7 @@ return (
                     <i className='ri-file-copy-2-line' style={{ fontSize: 16 }} />
                   </IconButton>
                 </Tooltip>
-                
+
                 {/* Migrate - toujours disponible (cross-cluster pour standalone) */}
                 {effectiveOnMigrate && (
                   <Tooltip title={t('vmActions.migrate')}>
@@ -1478,20 +1505,20 @@ return (
               </Stack>
             )
           }
-          
+
           // Sur mobile, afficher seulement Start/Stop
           if (isMobile) {
             return (
               <Stack direction='row' spacing={0.25} sx={{ alignItems: 'center' }}>
                 <Tooltip title={isRunning ? t('vmActions.stop') : t('vmActions.start')}>
                   <span>
-                    <IconButton 
-                      size='small' 
-                      onClick={(e) => { 
+                    <IconButton
+                      size='small'
+                      onClick={(e) => {
                         e.stopPropagation()
-                        onVmAction(vm, isRunning ? 'shutdown' : 'start') 
+                        onVmAction(vm, isRunning ? 'shutdown' : 'start')
                       }}
-                      sx={{ 
+                      sx={{
                         color: isRunning ? 'warning.main' : 'success.main',
                         p: 0.5,
                       }}
@@ -1502,11 +1529,11 @@ return (
                 </Tooltip>
                 <Tooltip title="Console">
                   <span>
-                    <IconButton 
+                    <IconButton
                       size='small'
                       disabled={!isRunning}
                       onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'console') }}
-                      sx={{ 
+                      sx={{
                         color: isRunning ? 'text.secondary' : 'action.disabled',
                         p: 0.5,
                       }}
@@ -1518,17 +1545,17 @@ return (
               </Stack>
             )
           }
-          
+
           return (
             <Stack direction='row' spacing={0.25} sx={{ alignItems: 'center' }}>
               {/* Start - visible si stopped ou paused */}
               <Tooltip title={t('vmActions.start')}>
                 <span>
-                  <IconButton 
-                    size='small' 
+                  <IconButton
+                    size='small'
                     disabled={isRunning}
                     onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'start') }}
-                    sx={{ 
+                    sx={{
                       color: (isStopped || isPaused) ? 'success.main' : 'action.disabled',
                       p: 0.5,
                       '&:hover': { bgcolor: 'success.main', color: 'white' }
@@ -1538,15 +1565,15 @@ return (
                   </IconButton>
                 </span>
               </Tooltip>
-              
+
               {/* Shutdown - visible si running */}
               <Tooltip title={t('vmActions.shutdown')}>
                 <span>
-                  <IconButton 
+                  <IconButton
                     size='small'
                     disabled={!isRunning}
                     onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'shutdown') }}
-                    sx={{ 
+                    sx={{
                       color: isRunning ? 'warning.main' : 'action.disabled',
                       p: 0.5,
                       '&:hover': { bgcolor: 'warning.main', color: 'white' }
@@ -1556,16 +1583,16 @@ return (
                   </IconButton>
                 </span>
               </Tooltip>
-              
+
               {/* Stop - visible si running - masqué sur tablette */}
               {!isTablet && (
                 <Tooltip title={t('vmActions.forceStop')}>
                   <span>
-                    <IconButton 
+                    <IconButton
                       size='small'
                       disabled={!isRunning}
                       onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'stop') }}
-                      sx={{ 
+                      sx={{
                         color: isRunning ? 'error.main' : 'action.disabled',
                         p: 0.5,
                         '&:hover': { bgcolor: 'error.main', color: 'white' }
@@ -1576,16 +1603,16 @@ return (
                   </span>
                 </Tooltip>
               )}
-              
+
               {/* Pause - visible si running - masqué sur tablette */}
               {!isTablet && (
                 <Tooltip title={isPaused ? t('vmActions.resume') : t('vmActions.pause')}>
                   <span>
-                    <IconButton 
+                    <IconButton
                       size='small'
                       disabled={isStopped}
                       onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'pause') }}
-                      sx={{ 
+                      sx={{
                         color: (isRunning || isPaused) ? 'info.main' : 'action.disabled',
                         p: 0.5,
                         '&:hover': { bgcolor: 'info.main', color: 'white' }
@@ -1596,15 +1623,15 @@ return (
                   </span>
                 </Tooltip>
               )}
-              
+
               {/* Console - visible si running */}
               <Tooltip title="Console">
                 <span>
-                  <IconButton 
+                  <IconButton
                     size='small'
                     disabled={!isRunning}
                     onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'console') }}
-                    sx={{ 
+                    sx={{
                       color: isRunning ? 'text.secondary' : 'action.disabled',
                       p: 0.5,
                       '&:hover': { bgcolor: 'action.hover' }
@@ -1614,7 +1641,7 @@ return (
                   </IconButton>
                 </span>
               </Tooltip>
-              
+
               {/* Migrate - toujours disponible (cross-cluster pour standalone) */}
               {effectiveOnMigrate && (
                 <Tooltip title={t('vmActions.migrate')}>
@@ -1631,13 +1658,13 @@ return (
                   </IconButton>
                 </Tooltip>
               )}
-              
+
               {/* Details */}
               <Tooltip title={t('vmActions.details')}>
-                <IconButton 
+                <IconButton
                   size='small'
                   onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'details') }}
-                  sx={{ 
+                  sx={{
                     color: 'text.secondary',
                     p: 0.5,
                     '&:hover': { bgcolor: 'primary.main', color: 'white' }
@@ -1658,7 +1685,7 @@ return (
     const responsiveHidden: Record<string, boolean> = {
       vmid: isMobile,      // ID masqué sur mobile
       type: isTablet,      // Type masqué sur tablette et mobile
-      ha: isTablet,        // HA masqué sur tablette et mobile  
+      ha: isTablet,        // HA masqué sur tablette et mobile
       maxmem: isTablet,    // Mémoire masquée sur tablette
       disk: isTablet,      // Disque masqué sur tablette
       tags: isSmallDesktop, // Tags masqués sur petits desktops
@@ -1670,7 +1697,7 @@ return (
       trendIoNet: !isLargeDesktop, // IO/Net trend seulement sur grands écrans
       node: isMobile,      // Node masqué sur mobile
     }
-    
+
     return cols.filter(col => {
       // Si l'utilisateur a explicitement masqué la colonne
       if (visibleColumns[col.field] === false) return false
@@ -1681,7 +1708,9 @@ return (
 return true
     }).map(col => {
       const saved = columnWidths[col.field]
+
       if (!saved) return col
+
       // Strip flex so the saved width actually takes effect. With flex set,
       // MUI re-runs flex layout on every columns-prop change and ignores width.
       return { ...col, width: saved, flex: undefined }
@@ -1700,12 +1729,12 @@ return true
     }}>
       {/* Toolbar avec toggle densité et bouton IP/Snap */}
       {(showDensityToggle || (showIpSnap && onLoadIpSnap) || vms.length > 0) && (
-        <Box sx={{ 
-          display: 'flex', 
+        <Box sx={{
+          display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: 1,
-          p: 1, 
+          p: 1,
           borderBottom: '1px solid',
           borderColor: 'divider',
           flexShrink: 0
@@ -1741,7 +1770,7 @@ return true
               )}
             </Box>
           ) : <Box />}
-          
+
           {/* Zone droite avec Export et Densité */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {/* Bouton Export Excel */}
@@ -1764,7 +1793,7 @@ return true
                 <i className='ri-file-excel-2-line' style={{ fontSize: 14 }} />
               </Box>
             </Tooltip>
-            
+
             {/* Bouton sélection colonnes */}
             <Tooltip title={t('common.configuration')}>
               <Box
@@ -1785,7 +1814,7 @@ return true
                 <i className='ri-layout-column-line' style={{ fontSize: 14 }} />
               </Box>
             </Tooltip>
-            
+
             {/* Menu sélection colonnes */}
             <Menu
               anchorEl={columnsMenuAnchor}
@@ -1819,14 +1848,14 @@ return true
                 { field: 'trendIoNet', label: 'Trend (IO/Net)' },
                 { field: 'actions', label: t('common.actions') },
               ].map(({ field, label }) => (
-                <MenuItem 
-                  key={field} 
+                <MenuItem
+                  key={field}
                   dense
                   onClick={() => setVisibleColumns(prev => ({ ...prev, [field]: !prev[field] }))}
                   sx={{ py: 0.5 }}
                 >
-                  <Checkbox 
-                    checked={visibleColumns[field] !== false} 
+                  <Checkbox
+                    checked={visibleColumns[field] !== false}
                     size="small"
                     sx={{ p: 0.5, mr: 1 }}
                   />
@@ -1834,7 +1863,7 @@ return true
                 </MenuItem>
               ))}
             </Menu>
-            
+
             {/* Toggle densité */}
             {showDensityToggle && (
               <Box
@@ -1859,7 +1888,7 @@ return true
           </Box>
         </Box>
       )}
-      
+
       <DataGrid
         rows={vms}
         columns={columns}
@@ -1888,7 +1917,7 @@ return true
           const isMigrating = isVmMigrating(vm.connId, vm.vmid)
           const isHighlighted = highlightedId && params.row.id === highlightedId
 
-          
+
 return [
             isMigrating ? 'migrating-row' : '',
             isHighlighted ? 'highlighted-row' : ''
@@ -2008,7 +2037,7 @@ return [
           noRowsLabel: t('common.noData'),
         }}
       />
-      
+
       {/* Menu contextuel (clic droit) */}
       <Menu
         open={contextMenu !== null}
@@ -2032,9 +2061,9 @@ return [
 
         {/* Actions pour VM normale */}
         {!contextMenu?.vm.template && [
-          <MenuItem 
+          <MenuItem
             key="start"
-            onClick={() => handleContextAction('start')} 
+            onClick={() => handleContextAction('start')}
             disabled={contextMenu?.vm.status === 'running'}
           >
             <ListItemIcon>
@@ -2089,7 +2118,7 @@ return [
 
           <Divider key="divider1" />,
 
-          <MenuItem 
+          <MenuItem
             key="console"
             onClick={() => {
               if (contextMenu?.vm) {

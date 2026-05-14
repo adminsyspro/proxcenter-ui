@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -33,6 +34,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { useToast } from '@/contexts/ToastContext'
 
 interface MetricServer {
@@ -88,10 +90,13 @@ export default function MetricServerTab({ connectionId }: Props) {
   const fetchServers = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(apiBase, { cache: 'no-store' })
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
+
       setServers(json?.data || [])
     } catch (e: any) {
       setError(e?.message || 'Failed to load')
@@ -119,6 +124,7 @@ export default function MetricServerTab({ connectionId }: Props) {
 
   const handleDialogSave = async () => {
     setDialogSaving(true)
+
     try {
       if (dialogMode === 'create') {
         const res = await fetch(apiBase, {
@@ -126,19 +132,29 @@ export default function MetricServerTab({ connectionId }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ serverId: dialogData.id || dialogData.name, type: dialogType, ...dialogData }),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('metricServerCreated'))
       } else {
         const serverId = dialogData.id
         const { id: _, type: __, ...params } = dialogData
+
         const res = await fetch(`${apiBase}/${encodeURIComponent(serverId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(params),
         })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+        if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
         toast.success(t('metricServerUpdated'))
       }
+
       setDialogOpen(false)
       await fetchServers()
     } catch (e: any) {
@@ -151,9 +167,14 @@ export default function MetricServerTab({ connectionId }: Props) {
   const handleDelete = async () => {
     if (!deleteTarget) return
     setDeleting(true)
+
     try {
       const res = await fetch(`${apiBase}/${encodeURIComponent(deleteTarget.id)}`, { method: 'DELETE' })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+
+      if (!res.ok) { const e = await res.json().catch(() => ({}));
+
+ throw new Error(e.error || `HTTP ${res.status}`) }
+
       toast.success(t('metricServerDeleted'))
       setDeleteTarget(null)
       await fetchServers()

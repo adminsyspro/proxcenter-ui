@@ -3,7 +3,9 @@ export function linearRegression(data: number[]): { slope: number; intercept: nu
 
   if (n < 2) {
     const avg = data.length > 0 ? data[0] : 0
-    return { slope: 0, intercept: avg, predict: () => avg }
+
+
+return { slope: 0, intercept: avg, predict: () => avg }
   }
 
   let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0
@@ -33,12 +35,15 @@ export function calculateStdDev(data: number[], predict: (x: number) => number):
   const residuals = data.map((val, i) => val - predict(i))
   const mean = residuals.reduce((a, b) => a + b, 0) / residuals.length
   const variance = residuals.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / residuals.length
-  return Math.sqrt(variance)
+
+
+return Math.sqrt(variance)
 }
 
 export function detectTrendType(slope: number): 'stable' | 'linear' | 'accelerating' | 'decelerating' {
   if (Math.abs(slope) < 0.05) return 'stable'
-  return 'linear'
+
+return 'linear'
 }
 
 export function findThresholdDayLinear(currentValue: number, slope: number, threshold: number, maxDays: number = 180): number | null {

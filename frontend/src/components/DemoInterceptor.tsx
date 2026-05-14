@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+
 import { useToast } from '@/contexts/ToastContext'
 
 /**
@@ -11,6 +12,7 @@ import { useToast } from '@/contexts/ToastContext'
 export default function DemoInterceptor() {
   const toast = useToast()
   const toastRef = useRef(toast)
+
   toastRef.current = toast
 
   useEffect(() => {
@@ -26,6 +28,7 @@ export default function DemoInterceptor() {
       if (method === 'GET') return originalFetch.apply(this, args)
 
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url
+
       if (!url.includes('/api/')) return originalFetch.apply(this, args)
 
       const response = await originalFetch.apply(this, args)
@@ -33,8 +36,10 @@ export default function DemoInterceptor() {
       // Check for demo mode header
       if (response.headers.get('x-demo-mode') === 'true') {
         const clone = response.clone()
+
         try {
           const body = await clone.json()
+
           if (body?.demo === true) {
             toastRef.current.warning('This action is disabled in demo mode')
           }

@@ -10,14 +10,19 @@
 import React from 'react'
 
 interface RiIconProps {
+
   /** RemixIcon class name, e.g. "ri-refresh-line" */
   name: string
+
   /** Font size in px (default: 20) */
   size?: number | string
+
   /** CSS color value */
   color?: string
+
   /** Additional inline styles */
   style?: React.CSSProperties
+
   /** Additional CSS class names */
   className?: string
 }

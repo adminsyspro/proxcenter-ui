@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useEffect, useRef, useState, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
 import {
   Box,
@@ -10,6 +10,9 @@ import {
   Tooltip as MuiTooltip,
   Typography,
 } from '@mui/material'
+
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
+
 
 /**
  * Decode a base64-encoded PPM (P6 binary) image and draw it onto a canvas.
@@ -20,29 +23,40 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
     try {
       const binary = atob(b64Data)
       const bytes = new Uint8Array(binary.length)
+
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.codePointAt(i) ?? 0
 
       // Parse PPM P6 header: "P6\n<width> <height>\n<maxval>\n"
       let offset = 0
+
       const readLine = (): string => {
         let line = ''
+
         while (offset < bytes.length) {
           const ch = bytes[offset++]
+
           if (ch === 10) break // \n
           line += String.fromCodePoint(ch)
         }
+
+
         // Skip comment lines
         if (line.startsWith('#')) return readLine()
-        return line.trim()
+
+return line.trim()
       }
 
       const magic = readLine()
-      if (magic !== 'P6') { resolve(null); return }
+
+      if (magic !== 'P6') { resolve(null);
+
+return }
 
       // Width and height might be on one line or two
       let dims = readLine()
       const parts = dims.split(/\s+/)
       let width: number, height: number
+
       if (parts.length >= 2) {
         width = Number.parseInt(parts[0])
         height = Number.parseInt(parts[1])
@@ -52,14 +66,21 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
       }
 
       const maxVal = Number.parseInt(readLine())
-      if (!width || !height || !maxVal) { resolve(null); return }
+
+      if (!width || !height || !maxVal) { resolve(null);
+
+return }
 
       // Create canvas and draw pixel data
       const canvas = document.createElement('canvas')
+
       canvas.width = width
       canvas.height = height
       const ctx = canvas.getContext('2d')
-      if (!ctx) { resolve(null); return }
+
+      if (!ctx) { resolve(null);
+
+return }
 
       const imageData = ctx.createImageData(width, height)
       const data = imageData.data
@@ -67,6 +88,7 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
 
       for (let i = 0; i < width * height; i++) {
         const srcIdx = offset + i * pixelBytes
+
         if (pixelBytes === 3) {
           data[i * 4] = bytes[srcIdx]       // R
           data[i * 4 + 1] = bytes[srcIdx + 1] // G
@@ -77,6 +99,7 @@ function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
           data[i * 4 + 1] = bytes[srcIdx + 2]
           data[i * 4 + 2] = bytes[srcIdx + 4]
         }
+
         data[i * 4 + 3] = 255 // A
       }
 
@@ -126,16 +149,21 @@ function ConsolePreview({
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/screenshot`
       )
+
       const json = await res.json()
 
       if (json.data) {
         const dataUrl = await decodePpmToDataUrl(json.data)
+
         if (dataUrl) {
           setScreenshotUrl(dataUrl)
           setScreenshotFailed(false)
-          return
+
+return
         }
       }
+
+
       // No data or decode failed - keep existing screenshot if any, mark as failed for fresh attempts
       setScreenshotFailed(true)
     } catch {
@@ -149,7 +177,8 @@ function ConsolePreview({
     if (!isRunning || !isQemu) {
       setScreenshotUrl(null)
       setScreenshotFailed(false)
-      return
+
+return
     }
 
     function start() {
@@ -203,6 +232,7 @@ function ConsolePreview({
     const osType = osInfo?.type
 
     const svgIcon = getOsSvgIcon(osName, osType)
+
     if (svgIcon) return { type: 'svg' as const, src: svgIcon }
 
     if (osName.toLowerCase().includes('mac') || osName.toLowerCase().includes('darwin')) {

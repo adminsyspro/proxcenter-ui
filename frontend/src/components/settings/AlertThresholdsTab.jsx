@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -36,11 +37,14 @@ export default function AlertThresholdsTab() {
 
   useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       try {
         const r = await fetch('/api/v1/settings/alerts/thresholds')
+
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         const data = await r.json()
+
         if (!cancelled) setThresholds({ ...DEFAULTS, ...data })
       } catch (e) {
         if (!cancelled) setSnackbar({ open: true, severity: 'error', message: e.message || 'Failed to load' })
@@ -48,22 +52,29 @@ export default function AlertThresholdsTab() {
         if (!cancelled) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
+
     try {
       const r = await fetch('/api/v1/settings/alerts/thresholds', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(thresholds),
       })
+
       if (!r.ok) {
         const data = await r.json().catch(() => null)
+
         throw new Error(data?.error || `HTTP ${r.status}`)
       }
+
       const saved = await r.json()
+
       setThresholds({ ...DEFAULTS, ...saved })
       setSnackbar({ open: true, severity: 'success', message: t('settings.alertThresholds.saved') })
     } catch (e) {
@@ -201,7 +212,9 @@ function ThresholdCard({ icon, label, warning, critical, onChange, tWarning, tCr
         </Typography>
         <Slider
           value={[warning, critical]}
-          onChange={(_, v) => { const [w, c] = v; onChange(w, c) }}
+          onChange={(_, v) => { const [w, c] = v;
+
+ onChange(w, c) }}
           valueLabelDisplay='auto'
           valueLabelFormat={(v) => `${v}%`}
           min={50}

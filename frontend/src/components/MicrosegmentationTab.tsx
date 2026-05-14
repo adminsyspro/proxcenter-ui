@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -114,7 +115,7 @@ interface MicrosegConfig {
 // Default patterns for infrastructure networks that should NOT be micro-segmented
 const DEFAULT_EXCLUDE_PATTERNS = [
   'ceph',
-  'corosync', 
+  'corosync',
   'migration',
   'backup',
   'cluster',
@@ -129,14 +130,14 @@ const DEFAULT_EXCLUDE_PATTERNS = [
 export default function MicrosegmentationTab({ connectionId }: Props) {
   const theme = useTheme()
   const t = useTranslations()
-  
+
   // State
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [analysis, setAnalysis] = useState<MicrosegAnalysis | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' })
-  
+
   // Configuration
   const [config, setConfig] = useState<MicrosegConfig>(() => {
     // Try to load from localStorage
@@ -150,7 +151,7 @@ export default function MicrosegmentationTab({ connectionId }: Props) {
       }
     }
 
-    
+
 return {
       gatewayMode: 'last',
       customOffset: 254,
@@ -163,38 +164,38 @@ return {
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [newPattern, setNewPattern] = useState('')
-  
+
   // How it works toggle
   const [showHowItWorks, setShowHowItWorks] = useState(false)
 
   // Dialogs
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
   const [previewResult, setPreviewResult] = useState<GenerateResult | null>(null)
-  
+
   // Save config to localStorage when it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(`microseg-config-${connectionId}`, JSON.stringify(config))
     }
   }, [config, connectionId])
-  
+
   // Check if a network is excluded based on patterns
   const isNetworkExcluded = useCallback((networkName: string): boolean => {
     const lowerName = networkName.toLowerCase()
 
-    
-return config.excludePatterns.some(pattern => 
+
+return config.excludePatterns.some(pattern =>
       lowerName.includes(pattern.toLowerCase())
     )
   }, [config.excludePatterns])
-  
+
   // Filter networks for display and operations
   const getFilteredNetworks = useCallback(() => {
     if (!analysis) return { included: [], excluded: [] }
-    
+
     const included: NetworkInfo[] = []
     const excluded: NetworkInfo[] = []
-    
+
     analysis.networks.forEach(net => {
       if (isNetworkExcluded(net.name)) {
         excluded.push(net)
@@ -202,10 +203,10 @@ return config.excludePatterns.some(pattern =>
         included.push(net)
       }
     })
-    
+
     return { included, excluded }
   }, [analysis, isNetworkExcluded])
-  
+
   // Compute gateway offset based on config
   const getGatewayOffset = () => {
     switch (config.gatewayMode) {
@@ -215,7 +216,7 @@ return config.excludePatterns.some(pattern =>
       default: return 254
     }
   }
-  
+
   // Load analysis
   const loadAnalysis = useCallback(async () => {
     setLoading(true)
@@ -235,11 +236,11 @@ return config.excludePatterns.some(pattern =>
       setLoading(false)
     }
   }, [connectionId, config.gatewayMode, config.customOffset])
-  
+
   useEffect(() => {
     loadAnalysis()
   }, [loadAnalysis])
-  
+
   // Generate base SGs
   const handleGenerate = async (dryRun: boolean) => {
     setGenerating(true)
@@ -247,7 +248,7 @@ return config.excludePatterns.some(pattern =>
     try {
       const { included } = getFilteredNetworks()
       const includedNames = included.map(n => n.name)
-      
+
       const res = await fetch(`/api/v1/firewall/microseg/${connectionId}/generate-base`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -261,7 +262,7 @@ return config.excludePatterns.some(pattern =>
 
       if (!res.ok) throw new Error('Failed to generate')
       const result = await res.json()
-      
+
       if (dryRun) {
         setPreviewResult(result)
       } else {
@@ -280,7 +281,7 @@ return config.excludePatterns.some(pattern =>
       setGenerating(false)
     }
   }
-  
+
   // Add exclusion pattern
   const handleAddPattern = () => {
     if (newPattern.trim() && !config.excludePatterns.includes(newPattern.trim().toLowerCase())) {
@@ -291,7 +292,7 @@ return config.excludePatterns.some(pattern =>
       setNewPattern('')
     }
   }
-  
+
   // Remove exclusion pattern
   const handleRemovePattern = (pattern: string) => {
     setConfig({
@@ -299,7 +300,7 @@ return config.excludePatterns.some(pattern =>
       excludePatterns: config.excludePatterns.filter(p => p !== pattern)
     })
   }
-  
+
   // Reset to default patterns
   const handleResetPatterns = () => {
     setConfig({
@@ -307,7 +308,7 @@ return config.excludePatterns.some(pattern =>
       excludePatterns: DEFAULT_EXCLUDE_PATTERNS
     })
   }
-  
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
@@ -315,7 +316,7 @@ return config.excludePatterns.some(pattern =>
       </Box>
     )
   }
-  
+
   if (error) {
     return (
       <Alert severity="error" sx={{ m: 3 }}>
@@ -324,26 +325,26 @@ return config.excludePatterns.some(pattern =>
       </Alert>
     )
   }
-  
+
   if (!analysis) return null
-  
+
   const { included, excluded } = getFilteredNetworks()
-  
+
   // Calculate stats based on included networks only
-  const readinessPercent = included.length > 0 
+  const readinessPercent = included.length > 0
     ? Math.round((included.filter(n => n.has_gateway && n.has_base_sg).length / included.length) * 100)
     : 100
-  
+
   const isolationPercent = analysis.total_vms > 0
     ? Math.round((analysis.isolated_vms / analysis.total_vms) * 100)
     : 0
 
   const gatewayOffsetLabel = config.gatewayMode === 'first' ? '.1' : config.gatewayMode === 'last' ? '.254' : `.${config.customOffset}`
-  
+
   // Filter missing items to exclude infrastructure networks
   const filteredMissingGateways = analysis.missing_gateways.filter(gw => !isNetworkExcluded(gw.network_name))
   const filteredMissingBaseSGs = analysis.missing_base_sgs.filter(sg => !isNetworkExcluded(sg.network_name))
-  
+
   const isSegmentationReady = filteredMissingGateways.length === 0 && filteredMissingBaseSGs.length === 0
 
   return (
@@ -376,17 +377,17 @@ return config.excludePatterns.some(pattern =>
             </Button>
           </Box>
         </Box>
-        
+
         {/* Status Cards */}
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ 
+            <Card sx={{
               background: `linear-gradient(135deg, ${alpha(isSegmentationReady ? '#22c55e' : '#f59e0b', 0.1)} 0%, transparent 100%)`,
               border: `1px solid ${alpha(isSegmentationReady ? '#22c55e' : '#f59e0b', 0.2)}`
             }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <i className={isSegmentationReady ? "ri-checkbox-circle-fill" : "ri-error-warning-fill"} 
+                  <i className={isSegmentationReady ? "ri-checkbox-circle-fill" : "ri-error-warning-fill"}
                      style={{ fontSize: 20, color: isSegmentationReady ? '#22c55e' : '#f59e0b' }} />
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase' }}>
                     Readiness
@@ -395,21 +396,21 @@ return config.excludePatterns.some(pattern =>
                 <Typography variant="h4" sx={{ fontWeight: 900, color: isSegmentationReady ? '#22c55e' : '#f59e0b' }}>
                   {readinessPercent}%
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={readinessPercent} 
-                  sx={{ 
-                    mt: 1, 
-                    height: 6, 
+                <LinearProgress
+                  variant="determinate"
+                  value={readinessPercent}
+                  sx={{
+                    mt: 1,
+                    height: 6,
                     borderRadius: 3,
                     bgcolor: alpha(isSegmentationReady ? '#22c55e' : '#f59e0b', 0.1),
                     '& .MuiLinearProgress-bar': { bgcolor: isSegmentationReady ? '#22c55e' : '#f59e0b' }
-                  }} 
+                  }}
                 />
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
               <CardContent>
@@ -429,7 +430,7 @@ return config.excludePatterns.some(pattern =>
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
               <CardContent>
@@ -443,17 +444,17 @@ return config.excludePatterns.some(pattern =>
                   {analysis.isolated_vms}
                   <Typography component="span" variant="h6" color="text.secondary">/{analysis.total_vms}</Typography>
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={isolationPercent} 
-                  sx={{ mt: 1, height: 6, borderRadius: 3 }} 
+                <LinearProgress
+                  variant="determinate"
+                  value={isolationPercent}
+                  sx={{ mt: 1, height: 6, borderRadius: 3 }}
                 />
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ 
+            <Card sx={{
               background: analysis.unprotected_vms > 0 ? `linear-gradient(135deg, ${alpha('#ef4444', 0.1)} 0%, transparent 100%)` : undefined,
               border: `1px solid ${alpha(analysis.unprotected_vms > 0 ? '#ef4444' : theme.palette.divider, 0.2)}`
             }}>
@@ -474,11 +475,11 @@ return config.excludePatterns.some(pattern =>
             </Card>
           </Grid>
         </Grid>
-        
+
         {/* Missing Configuration Alert */}
         {!isSegmentationReady && (
-          <Alert 
-            severity="warning" 
+          <Alert
+            severity="warning"
             icon={<i className="ri-error-warning-line" style={{ fontSize: 22 }} />}
             action={
               <Button color="inherit" size="small" onClick={() => setGenerateDialogOpen(true)}>
@@ -493,7 +494,7 @@ return config.excludePatterns.some(pattern =>
             </Typography>
           </Alert>
         )}
-        
+
         {/* Networks Table */}
         <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <CardContent>
@@ -506,14 +507,14 @@ return config.excludePatterns.some(pattern =>
                   <Chip size="small" label={`${excluded.length} ${t('microseg.excluded')}`} variant="outlined" />
                 )}
               </Typography>
-              <Chip 
-                size="small" 
+              <Chip
+                size="small"
                 variant="outlined"
                 icon={<i className="ri-route-line" style={{ fontSize: 14 }} />}
-                label={`Gateway: ${gatewayOffsetLabel}`} 
+                label={`Gateway: ${gatewayOffsetLabel}`}
               />
             </Box>
-            
+
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -533,7 +534,7 @@ return config.excludePatterns.some(pattern =>
                     const gwName = `gw-${suffix}`
                     const sgName = `sg-base-${suffix}`
                     const isComplete = net.has_gateway && net.has_base_sg
-                    
+
                     return (
                       <TableRow key={net.name} hover>
                         <TableCell>
@@ -575,7 +576,7 @@ return config.excludePatterns.some(pattern =>
                       </TableRow>
                     )
                   })}
-                  
+
                   {/* Excluded networks (if showExcluded is true) */}
                   {config.showExcluded && excluded.length > 0 && (
                     <>
@@ -619,7 +620,7 @@ return config.excludePatterns.some(pattern =>
             </TableContainer>
           </CardContent>
         </Card>
-        
+
         {/* VM Isolation Panel */}
         <Card sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <CardContent sx={{ p: 0 }}>
@@ -632,13 +633,13 @@ return config.excludePatterns.some(pattern =>
                 {t('microseg.clickVmToIsolate')}
               </Typography>
             </Box>
-            <VMIsolationPanel 
-              connectionId={connectionId} 
+            <VMIsolationPanel
+              connectionId={connectionId}
               excludePatterns={config.excludePatterns}
             />
           </CardContent>
         </Card>
-        
+
         {/* How it works — collapsible */}
         <Box>
           <Button
@@ -707,7 +708,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
           </Collapse>
         </Box>
       </Stack>
-      
+
       {/* Configuration Dialog */}
       <Dialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -725,8 +726,8 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                 {t('microseg.configDialog.gatewayAddressDesc')}
               </Typography>
               <FormControl component="fieldset">
-                <RadioGroup 
-                  value={config.gatewayMode} 
+                <RadioGroup
+                  value={config.gatewayMode}
                   onChange={(e) => setConfig({ ...config, gatewayMode: e.target.value as any })}
                 >
                   <FormControlLabel
@@ -770,9 +771,9 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                 </RadioGroup>
               </FormControl>
             </Box>
-            
+
             <Divider />
-            
+
             {/* Exclusion Patterns */}
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -786,7 +787,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 {t('microseg.configDialog.excludedNetworksDesc')}
               </Typography>
-              
+
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                 <TextField
                   size="small"
@@ -800,7 +801,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                   {t('microseg.configDialog.add')}
                 </Button>
               </Box>
-              
+
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {config.excludePatterns.map(pattern => (
                   <Chip
@@ -817,12 +818,12 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                   </Typography>
                 )}
               </Box>
-              
+
               <FormControlLabel
                 sx={{ mt: 2 }}
                 control={
-                  <Switch 
-                    checked={config.showExcluded} 
+                  <Switch
+                    checked={config.showExcluded}
                     onChange={(e) => setConfig({ ...config, showExcluded: e.target.checked })}
                     size="small"
                   />
@@ -830,9 +831,9 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                 label={<Typography variant="body2">{t('microseg.configDialog.showExcludedInList')}</Typography>}
               />
             </Box>
-            
+
             <Divider />
-            
+
             {/* Generation Options */}
             <Box>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
@@ -873,8 +874,8 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfigDialogOpen(false)}>{t('common.cancel')}</Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             onClick={() => { setConfigDialogOpen(false); loadAnalysis(); }}
             startIcon={<i className="ri-check-line" />}
           >
@@ -882,7 +883,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
           </Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* Generate Dialog */}
       <Dialog open={generateDialogOpen} onClose={() => setGenerateDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -899,7 +900,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
               </Alert>
 
               <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>{t('microseg.generateDialog.itemsToCreate')}</Typography>
-              
+
               {filteredMissingGateways.length > 0 && config.createGateways && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -912,7 +913,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                   </Stack>
                 </Box>
               )}
-              
+
               {filteredMissingBaseSGs.length > 0 && config.createBaseSGs && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -925,7 +926,7 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                   </Stack>
                 </Box>
               )}
-              
+
               {filteredMissingGateways.length === 0 && filteredMissingBaseSGs.length === 0 && (
                 <Alert severity="success">
                   {t('microseg.generateDialog.allConfigured')}
@@ -960,9 +961,9 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                         {previewResult.plan.map((action, idx) => (
                           <TableRow key={idx}>
                             <TableCell>
-                              <Chip 
-                                size="small" 
-                                label={action.type === 'alias' ? 'Alias' : 'Security Group'} 
+                              <Chip
+                                size="small"
+                                label={action.type === 'alias' ? 'Alias' : 'Security Group'}
                                 color={action.type === 'alias' ? 'default' : 'primary'}
                                 sx={{ height: 22 }}
                               />
@@ -1009,11 +1010,11 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
           )}
         </DialogActions>
       </Dialog>
-      
+
       {/* Snackbar */}
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={5000} 
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >

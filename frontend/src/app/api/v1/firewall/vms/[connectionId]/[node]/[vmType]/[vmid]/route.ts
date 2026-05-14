@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -16,27 +17,29 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+
     if (denied) return denied
 
     const url = new URL(req.url)
     const type = url.searchParams.get('type') || 'options'
-    
+
     const orchestrator = getOrchestratorClient()
 
-    const endpoint = type === 'rules' 
+    const endpoint = type === 'rules'
       ? `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`
       : `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`
-    
+
     const response = await orchestrator.get(endpoint)
 
-    
+
 return NextResponse.json(response.data)
   } catch (e: any) {
     console.error("[firewall/vms] GET error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -46,9 +49,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -60,11 +65,11 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       body
     )
 
-    
+
 return NextResponse.json(response.data, { status: 201 })
   } catch (e: any) {
     console.error("[firewall/vms] POST error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -74,9 +79,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -88,11 +95,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
       body
     )
 
-    
+
 return NextResponse.json(response.data)
   } catch (e: any) {
     console.error("[firewall/vms] PUT error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

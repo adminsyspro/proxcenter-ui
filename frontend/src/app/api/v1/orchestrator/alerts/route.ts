@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
@@ -33,7 +34,9 @@ function buildOrchestratorFingerprint(alert: {
 }): string {
   const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
   const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}|${alert.rule_id || ''}`
-  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
+
+
+return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
 }
 
 /**
@@ -42,6 +45,7 @@ function buildOrchestratorFingerprint(alert: {
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -50,6 +54,7 @@ export async function GET(req: Request) {
     // see alerts on their own resources. Tenant scoping is enforced by the
     // tenantConnectionIds + vdcScope filters below.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -65,6 +70,7 @@ export async function GET(req: Request) {
     const prisma = await getSessionPrisma()
     const tenantConnectionIds = await getTenantConnectionIds()
     const tenantId = await getCurrentTenantId()
+
     // For vDC tenants on multi-tenant clusters, drop non-VM alerts (node /
     // license / cluster-wide system alerts are provider concerns) and apply
     // node-level scoping so neighbour activity doesn't leak.
@@ -83,14 +89,17 @@ export async function GET(req: Request) {
     const allAlerts = response.data?.data || response.data || []
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
     const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids }
+
     // isAlertVisibleToTenant became async in the Postgres cutover; resolve
     // each alert's visibility up-front before filtering, otherwise the
     // filter sees a Promise (truthy) and lets every alert through.
     let filtered = allAlerts
+
     if (Array.isArray(allAlerts)) {
       const visible = await Promise.all(
         allAlerts.map((a: any) => isAlertVisibleToTenant(a, visibilityCtx)),
       )
+
       filtered = allAlerts.filter((_: any, i: number) => visible[i])
     }
 
@@ -125,6 +134,7 @@ export async function GET(req: Request) {
       ? filtered.map((a: any) => {
           const fp = buildOrchestratorFingerprint(a)
           const silence = silenceMap.get(fp)
+
           if (silence) {
             return {
               ...a,
@@ -135,7 +145,9 @@ export async function GET(req: Request) {
               _fingerprint: fp,
             }
           }
-          return { ...a, _fingerprint: fp }
+
+
+return { ...a, _fingerprint: fp }
         })
       : filtered
 
@@ -145,10 +157,13 @@ export async function GET(req: Request) {
           annotated.reduce((map: Map<string, any>, a: any) => {
             const fp = a._fingerprint
             const existing = map.get(fp)
+
             if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
               map.set(fp, a)
             }
-            return map
+
+
+return map
           }, new Map()).values()
         )
       : annotated
@@ -169,7 +184,7 @@ export async function GET(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts] GET error:', error)
     }
-    
+
     // Si l'orchestrator n'est pas disponible, retourner une liste vide
     if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout')) {
       return NextResponse.json({
@@ -194,10 +209,12 @@ export async function GET(req: Request) {
  */
 export async function DELETE(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -206,6 +223,7 @@ export async function DELETE(req: Request) {
     // Verify connection belongs to tenant if specified
     if (connectionId) {
       const tenantConnectionIds = await getTenantConnectionIds()
+
       if (!tenantConnectionIds.has(connectionId)) {
         return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
       }

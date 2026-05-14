@@ -26,6 +26,7 @@ const tenantIndexes = new Map<string, TenantIndex>()
 
 function rebuildIndex(tenantId: string): Map<string, VmMeta> | null {
   const cache = getInventoryFromCache(tenantId)
+
   if (cache.status === "miss") return null
 
   const idx = new Map<string, VmMeta>()
@@ -34,6 +35,7 @@ function rebuildIndex(tenantId: string): Map<string, VmMeta> | null {
     for (const node of cluster.nodes || []) {
       for (const g of (node.guests || []) as any[]) {
         const rid = `${cluster.id}:${node.node}:${g.type}:${g.vmid}`
+
         const tags =
           typeof g.tags === "string"
             ? g.tags
@@ -41,23 +43,30 @@ function rebuildIndex(tenantId: string): Map<string, VmMeta> | null {
                 .map((t: string) => t.trim())
                 .filter(Boolean)
             : []
+
         idx.set(rid, { tags, pool: g.pool || undefined })
       }
     }
   }
 
   tenantIndexes.set(tenantId, { index: idx, lastBuild: Date.now() })
-  return idx
+
+return idx
 }
 
 export function resolveVmMeta(resourceId: string, tenantId = 'default'): VmMeta | null {
   const existing = tenantIndexes.get(tenantId)
+
   if (!existing || Date.now() - existing.lastBuild > 30_000) {
     const idx = rebuildIndex(tenantId)
+
     if (!idx) return null
-    return idx.get(resourceId) ?? null
+
+return idx.get(resourceId) ?? null
   }
-  return existing.index.get(resourceId) ?? null
+
+
+return existing.index.get(resourceId) ?? null
 }
 
 /**
@@ -73,20 +82,28 @@ export function findVmMetaByVmid(
   tenantId = 'default',
 ): VmMeta | null {
   const existing = tenantIndexes.get(tenantId)
+
   if (!existing || Date.now() - existing.lastBuild > 30_000) {
     if (!rebuildIndex(tenantId)) return null
   }
+
   const idx = tenantIndexes.get(tenantId)?.index
+
   if (!idx) return null
 
   const target = String(vmid)
   const prefix = `${connectionId}:`
+
   for (const [rid, meta] of idx) {
     if (!rid.startsWith(prefix)) continue
+
     // rid format: connId:node:type:vmid → split on ':' from the end
     const lastColon = rid.lastIndexOf(':')
+
     if (lastColon < 0) continue
     if (rid.slice(lastColon + 1) === target) return meta
   }
-  return null
+
+
+return null
 }

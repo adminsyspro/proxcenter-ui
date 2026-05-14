@@ -74,6 +74,7 @@ describe('getNodeIp - priority order', () => {
     ])
 
     const { getNodeIp } = await import('./node-ip')
+
     await getNodeIp({ id: 'conn-1', baseUrl: 'https://10.0.0.1:8006' }, 'node with space')
 
     expect(pveFetchMock).toHaveBeenCalledWith(
@@ -111,6 +112,7 @@ describe('getNodeIp - priority order', () => {
     resolve4Mock.mockRejectedValueOnce(new Error('ENOTFOUND'))
 
     const { getNodeIp } = await import('./node-ip')
+
     const ip = await getNodeIp(
       { id: 'conn-1', baseUrl: 'https://10.0.0.1:8006', behindProxy: false },
       'pve1',
@@ -125,6 +127,7 @@ describe('getNodeIp - priority order', () => {
     resolve4Mock.mockRejectedValueOnce(new Error('ENOTFOUND'))
 
     const { getNodeIp } = await import('./node-ip')
+
     const ip = await getNodeIp(
       { id: 'conn-1', baseUrl: 'https://pve.example.com:8006', behindProxy: false },
       'pve1',
@@ -139,6 +142,7 @@ describe('getNodeIp - priority order', () => {
     resolve4Mock.mockRejectedValueOnce(new Error('ENOTFOUND'))
 
     const { getNodeIp } = await import('./node-ip')
+
     const ip = await getNodeIp(
       { id: 'conn-1', baseUrl: 'https://lb.example.com:8006', behindProxy: true },
       'pve1',

@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Card, CardContent, Chip, CircularProgress,
@@ -34,6 +35,7 @@ const categoryColors: Record<string, string> = {
 
 // Proxmox Hardening Guide (PVE 9) base URL
 const PVE_GUIDE_BASE = 'https://github.com/HomeSecExplorer/Proxmox-Hardening-Guide/blob/main/docs/pve9-hardening-guide.md'
+
 // CIS Debian Linux Benchmark page
 const CIS_BENCHMARK_URL = 'https://www.cisecurity.org/benchmark/debian_linux'
 
@@ -64,6 +66,7 @@ const CHECK_INFO: Record<string, { description: string; recommendation: string; 
   vm_no_usb_passthrough: { description: 'Detects USB/PCI passthrough.', recommendation: 'Remove USB/PCI passthrough devices unless strictly required for the workload.' },
   vm_cpu_isolation: { description: 'Checks VMs use emulated CPU types.', recommendation: 'Set CPU type to kvm64 or a specific model instead of "host" in VM > Hardware > Processor.' },
   vm_ip_filter: { description: 'Verifies IP filtering on VM firewalls.', recommendation: 'Enable IP Filter in VM > Firewall > Options to prevent IP spoofing.' },
+
   // CIS Benchmark: OS Hardening
   os_kernel_modules: { cisRef: 'CIS 1.1.1', cisUrl: `${PVE_GUIDE_BASE}#111-apply-debian-13-cis-level-1`, description: 'Checks dangerous kernel modules are disabled or blacklisted.', recommendation: 'Add modules to /etc/modprobe.d/blacklist.conf: install cramfs /bin/true, etc.' },
   os_coredumps_disabled: { cisRef: 'CIS 1.5.11', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies core dumps are disabled via systemd and limits.conf.', recommendation: 'Set Storage=none in /etc/systemd/coredump.conf and add "* hard core 0" to /etc/security/limits.conf.' },
@@ -77,6 +80,7 @@ const CHECK_INFO: Record<string, { description: string; recommendation: string; 
   access_pw_quality: { cisRef: 'CIS 5.3.1', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies libpam-pwquality is installed and configured.', recommendation: 'Install libpam-pwquality and configure minlen=14 in /etc/security/pwquality.conf.' },
   access_shell_timeout: { cisRef: 'CIS 5.4.3', cisUrl: CIS_BENCHMARK_URL, description: 'Checks TMOUT is set in shell profiles for idle timeout.', recommendation: 'Add TMOUT=900 and readonly TMOUT to /etc/profile.d/timeout.sh.' },
   access_login_banner: { cisRef: 'CIS 1.7.1', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies a legal warning banner is configured.', recommendation: 'Configure authorized-use warning text in /etc/issue and /etc/issue.net.' },
+
   // CIS Benchmark: SSH Hardening
   ssh_strong_ciphers: { cisRef: 'CIS 5.1.4', cisUrl: `${PVE_GUIDE_BASE}#114-apply-ssh-audit-hardening-profile`, description: 'Verifies only strong ciphers (AES-GCM, ChaCha20) are configured.', recommendation: 'Set Ciphers aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr in /etc/ssh/sshd_config.' },
   ssh_strong_kex: { cisRef: 'CIS 5.1.5', cisUrl: `${PVE_GUIDE_BASE}#114-apply-ssh-audit-hardening-profile`, description: 'Checks only secure key exchange algorithms are used.', recommendation: 'Set KexAlgorithms curve25519-sha256,ecdh-sha2-nistp521 in /etc/ssh/sshd_config.' },
@@ -86,23 +90,27 @@ const CHECK_INFO: Record<string, { description: string; recommendation: string; 
   ssh_empty_passwords: { cisRef: 'CIS 5.1.17', cisUrl: `${PVE_GUIDE_BASE}#114-apply-ssh-audit-hardening-profile`, description: 'Ensures PermitEmptyPasswords is "no".', recommendation: 'Set PermitEmptyPasswords no in /etc/ssh/sshd_config.' },
   ssh_idle_timeout: { cisRef: 'CIS 5.1.20', cisUrl: `${PVE_GUIDE_BASE}#114-apply-ssh-audit-hardening-profile`, description: 'Checks ClientAliveInterval and ClientAliveCountMax for idle timeout.', recommendation: 'Set ClientAliveInterval 300 and ClientAliveCountMax 3 in /etc/ssh/sshd_config.' },
   ssh_file_perms: { cisRef: 'CIS 5.1.1', cisUrl: `${PVE_GUIDE_BASE}#114-apply-ssh-audit-hardening-profile`, description: 'Verifies sshd_config and host key file permissions.', recommendation: 'Run: chmod 600 /etc/ssh/sshd_config && chmod 600 /etc/ssh/ssh_host_*_key.' },
+
   // CIS Benchmark: Network
   net_ip_forward: { cisRef: 'CIS 3.1.1', cisUrl: `${PVE_GUIDE_BASE}#122-network-separation`, description: 'Checks net.ipv4.ip_forward is 0.', recommendation: 'Set net.ipv4.ip_forward=0 in /etc/sysctl.conf (note: Proxmox may need forwarding for VMs).' },
   net_icmp_redirects: { cisRef: 'CIS 3.2.2', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies ICMP redirect acceptance and sending are disabled.', recommendation: 'Set net.ipv4.conf.all.accept_redirects=0 and send_redirects=0 in /etc/sysctl.conf.' },
   net_source_routing: { cisRef: 'CIS 3.2.1', cisUrl: CIS_BENCHMARK_URL, description: 'Checks source-routed packets are rejected.', recommendation: 'Set net.ipv4.conf.all.accept_source_route=0 in /etc/sysctl.conf.' },
   net_syn_cookies: { cisRef: 'CIS 3.2.8', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies TCP SYN cookies are enabled.', recommendation: 'Set net.ipv4.tcp_syncookies=1 in /etc/sysctl.conf.' },
   net_rp_filter: { cisRef: 'CIS 3.2.7', cisUrl: CIS_BENCHMARK_URL, description: 'Checks reverse path filtering is active.', recommendation: 'Set net.ipv4.conf.all.rp_filter=1 in /etc/sysctl.conf.' },
+
   // CIS Benchmark: Services
   svc_unnecessary_disabled: { cisRef: 'CIS 2.1', cisUrl: CIS_BENCHMARK_URL, description: 'Verifies non-essential services are not running.', recommendation: 'Disable unnecessary services: systemctl disable --now bluetooth cups avahi-daemon.' },
   svc_apparmor: { cisRef: 'CIS 1.4', cisUrl: CIS_BENCHMARK_URL, description: 'Checks AppArmor mandatory access control is active.', recommendation: 'Install and enable: apt install apparmor apparmor-utils && aa-enforce /etc/apparmor.d/*.' },
   svc_auditd: { cisRef: 'CIS 4.1.1', cisUrl: `${PVE_GUIDE_BASE}#512-auditd-for-etcpve`, description: 'Verifies auditd is installed and active.', recommendation: 'Install and enable: apt install auditd && systemctl enable --now auditd.' },
   svc_ntp_sync: { cisRef: 'CIS 2.2.1', cisUrl: CIS_BENCHMARK_URL, description: 'Checks time synchronization is active.', recommendation: 'Ensure chrony or systemd-timesyncd is running: systemctl enable --now chrony.' },
   svc_fail2ban: { cisRef: 'CIS 2.3.3', cisUrl: `${PVE_GUIDE_BASE}#233-protect-the-gui-with-fail2ban`, description: 'Verifies Fail2Ban is protecting against brute-force.', recommendation: 'Install and enable: apt install fail2ban && systemctl enable --now fail2ban.' },
+
   // CIS Benchmark: Filesystem
   fs_permissions: { cisRef: 'CIS 6.1', cisUrl: CIS_BENCHMARK_URL, description: 'Checks permissions on /etc/passwd, /etc/shadow, /etc/group.', recommendation: 'Fix permissions: chmod 644 /etc/passwd /etc/group && chmod 640 /etc/shadow /etc/gshadow.' },
   fs_suid_audit: { cisRef: 'CIS 6.1.10', cisUrl: CIS_BENCHMARK_URL, description: 'Counts SUID/SGID binaries on the system.', recommendation: 'Audit SUID/SGID files: find / -perm /6000 -type f and remove unnecessary setuid bits.' },
   fs_world_writable: { cisRef: 'CIS 6.1.11', cisUrl: CIS_BENCHMARK_URL, description: 'Detects world-writable files outside /tmp.', recommendation: 'Find and fix: find / -xdev -type f -perm -0002 -exec chmod o-w {} \\;.' },
   fs_integrity: { cisRef: 'CIS 1.3.1', cisUrl: `${PVE_GUIDE_BASE}#531-system-audits`, description: 'Verifies AIDE or debsums is installed for integrity monitoring.', recommendation: 'Install AIDE: apt install aide && aideinit && systemctl enable aide-check.timer.' },
+
   // CIS Benchmark: Logging
   log_journald_persistent: { cisRef: 'CIS 4.2.1', cisUrl: `${PVE_GUIDE_BASE}#511-centralized-logging`, description: 'Checks journald is configured with Storage=persistent.', recommendation: 'Set Storage=persistent in /etc/systemd/journald.conf and restart systemd-journald.' },
   log_syslog_forwarding: { cisRef: 'CIS 4.2.3', cisUrl: `${PVE_GUIDE_BASE}#511-centralized-logging`, description: 'Verifies rsyslog forwards logs to a remote server.', recommendation: 'Configure rsyslog forwarding: add *.* @@remote-server:514 to /etc/rsyslog.d/50-remote.conf.' },
@@ -112,7 +120,8 @@ const CHECK_INFO: Record<string, { description: string; recommendation: string; 
 function scoreColor(score: number): string {
   if (score >= 80) return '#22c55e'
   if (score >= 50) return '#f59e0b'
-  return '#ef4444'
+
+return '#ef4444'
 }
 
 interface ComplianceTabProps {
@@ -127,6 +136,7 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
   const statusOrder: Record<string, number> = { fail: 0, warning: 1, pass: 2, skip: 3 }
+
   const allChecks = [...(data?.checks || [])].sort(
     (a: any, b: any) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4)
   )
@@ -144,9 +154,11 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
       const next = new Set(prev)
+
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      return next
+
+return next
     })
   }
 
@@ -280,7 +292,9 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
                   const isExpanded = expandedRows.has(check.id)
                   const catColor = categoryColors[check.category] || '#6366f1'
                   const info = CHECK_INFO[check.id]
-                  return (
+
+
+return (
                     <Fragment key={check.id}>
                       <TableRow
                         hover

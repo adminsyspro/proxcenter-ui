@@ -1,8 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
+
 import { Box, CircularProgress } from '@mui/material'
+
 import { useTenant } from '@/contexts/TenantContext'
 
 // Routes autorisées sans connexion Proxmox configurée
@@ -38,7 +41,8 @@ export default function OnboardingGuard({ children }) {
 
       setChecking(false)
       setReady(true)
-      return
+
+return
     }
 
     // Vérifier l'état de l'application

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -41,8 +42,10 @@ const pulse = keyframes`
 function datetimeLocalToUnix(value: string): number | null {
   if (!value) return null
   const ms = Date.parse(value)
+
   if (Number.isNaN(ms)) return null
-  return Math.floor(ms / 1000)
+
+return Math.floor(ms / 1000)
 }
 
 /** Escape a string for inclusion in a RegExp. */
@@ -55,7 +58,9 @@ function highlightLine(line: string, search: string): React.ReactNode {
   if (!search) return line
   const re = new RegExp(`(${escapeRegExp(search)})`, 'gi')
   const parts = line.split(re)
-  return parts.map((part, idx) =>
+
+
+return parts.map((part, idx) =>
     re.test(part) ? (
       <Box
         key={idx}
@@ -103,31 +108,42 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
     const handle = setTimeout(() => {
       setServiceFilter(serviceInput.trim())
     }, SERVICE_DEBOUNCE_MS)
-    return () => clearTimeout(handle)
+
+
+return () => clearTimeout(handle)
   }, [serviceInput])
 
   const buildQuery = useCallback(
     (overrides?: { lastentries?: number; service?: string; since?: number; until?: number }) => {
       const qs = new URLSearchParams()
       const le = overrides?.lastentries ?? lastEntries
+
       qs.set('lastentries', String(le))
       const s = overrides?.since
+
       if (typeof s === 'number' && !Number.isNaN(s)) {
         qs.set('since', String(s))
       } else if (s === undefined) {
         const sinceUnix = datetimeLocalToUnix(since)
+
         if (sinceUnix !== null) qs.set('since', String(sinceUnix))
       }
+
       const u = overrides?.until
+
       if (typeof u === 'number' && !Number.isNaN(u)) {
         qs.set('until', String(u))
       } else if (u === undefined) {
         const untilUnix = datetimeLocalToUnix(until)
+
         if (untilUnix !== null) qs.set('until', String(untilUnix))
       }
+
       const svc = overrides?.service ?? serviceFilter
+
       if (svc) qs.set('service', svc)
-      return qs
+
+return qs
     },
     [lastEntries, since, until, serviceFilter]
   )
@@ -135,27 +151,36 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   const fetchSyslog = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const qs = buildQuery()
+
       const res = await fetch(`/api/v1/pbs/${pbsId}/syslog?${qs.toString()}`, {
         cache: 'no-store',
       })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
       const newLines: string[] = Array.isArray(body?.data?.lines) ? body.data.lines : []
+
       const src: SyslogSource | null =
         body?.data?.source === 'journal' || body?.data?.source === 'syslog'
           ? body.data.source
           : null
+
       setLines(newLines)
       setSource(src)
       setLastUpdated(new Date())
+
       // After initial load, scroll to bottom
       requestAnimationFrame(() => {
         const el = scrollContainerRef.current
+
         if (el) {
           el.scrollTop = el.scrollHeight
           userAtBottomRef.current = true
@@ -185,55 +210,71 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   const pollTailOnce = useCallback(async () => {
     try {
       const qs = buildQuery({ lastentries: TAIL_FETCH_COUNT })
+
       const res = await fetch(`/api/v1/pbs/${pbsId}/syslog?${qs.toString()}`, {
         cache: 'no-store',
       })
+
       if (!res.ok) return // silently skip — keep polling
       const body = await res.json().catch(() => null)
       const fetched: string[] = Array.isArray(body?.data?.lines) ? body.data.lines : []
+
       if (fetched.length === 0) return
 
       // Dedupe: find the longest overlap suffix of current buffer with the fetched prefix
       const current = linesRef.current
       let appendFrom = 0
+
       if (current.length > 0) {
         const tail = current.slice(-Math.min(current.length, fetched.length))
+
         // Walk k from largest possible down to 1; append fetched[k:] if tail.endsWith(fetched[0..k])
         let matched = false
+
         for (let k = Math.min(tail.length, fetched.length); k > 0; k--) {
           let ok = true
+
           for (let i = 0; i < k; i++) {
             if (tail[tail.length - k + i] !== fetched[i]) {
               ok = false
               break
             }
           }
+
           if (ok) {
             appendFrom = k
             matched = true
             break
           }
         }
+
         if (!matched) {
           // No overlap found; fall back to line-by-line dedup against a tail set
           const tailSet = new Set(current.slice(-Math.max(fetched.length, 200)))
           const filtered = fetched.filter(l => !tailSet.has(l))
+
           if (filtered.length === 0) return
           setLines(prev => {
             const next = prev.concat(filtered)
-            return next.length > MAX_BUFFER_LINES ? next.slice(next.length - MAX_BUFFER_LINES) : next
+
+
+return next.length > MAX_BUFFER_LINES ? next.slice(next.length - MAX_BUFFER_LINES) : next
           })
           setLastUpdated(new Date())
           maybeScrollToBottom()
-          return
+
+return
         }
       }
 
       const toAppend = fetched.slice(appendFrom)
+
       if (toAppend.length === 0) return
       setLines(prev => {
         const next = prev.concat(toAppend)
-        return next.length > MAX_BUFFER_LINES ? next.slice(next.length - MAX_BUFFER_LINES) : next
+
+
+return next.length > MAX_BUFFER_LINES ? next.slice(next.length - MAX_BUFFER_LINES) : next
       })
       setLastUpdated(new Date())
       maybeScrollToBottom()
@@ -245,6 +286,7 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   const maybeScrollToBottom = () => {
     requestAnimationFrame(() => {
       const el = scrollContainerRef.current
+
       if (el && userAtBottomRef.current) {
         el.scrollTop = el.scrollHeight
       }
@@ -254,13 +296,18 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   useEffect(() => {
     if (!liveTail) {
       stopPolling()
-      return
+
+return
     }
+
+
     // Start interval
     pollTimerRef.current = setInterval(() => {
       pollTailOnce()
     }, POLL_INTERVAL_MS)
-    return () => {
+
+
+return () => {
       stopPolling()
     }
   }, [liveTail, pollTailOnce, stopPolling])
@@ -275,6 +322,7 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   const handleScroll = (e: React.UIEvent<HTMLPreElement>) => {
     const el = e.currentTarget
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+
     userAtBottomRef.current = distFromBottom < BOTTOM_STICKY_THRESHOLD_PX
   }
 
@@ -282,7 +330,9 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
   const filteredLines = useMemo(() => {
     if (!search) return lines
     const needle = search.toLowerCase()
-    return lines.filter(l => l.toLowerCase().includes(needle))
+
+
+return lines.filter(l => l.toLowerCase().includes(needle))
   }, [lines, search])
 
   return (
@@ -429,7 +479,7 @@ export default function PbsSyslogTab({ pbsId }: PbsSyslogTabProps) {
             m: 0,
             bgcolor: '#1e1e1e',
             color: '#d4d4d4',
-            
+
             fontSize: 12,
             lineHeight: 1.5,
             overflow: 'auto',

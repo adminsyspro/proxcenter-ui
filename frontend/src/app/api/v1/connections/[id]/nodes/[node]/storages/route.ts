@@ -66,13 +66,16 @@ return contents.includes(contentFilter)
     // PBS namespace isolation is the only supported tenant backup path.
     const tenantId = await getCurrentTenantId()
     const scope = await getVdcScope(tenantId)
+
     if (scope && storages) {
       const allowed = scope.storagesByConnection.get(id)
+
       storages = allowed
         ? storages.filter((s: any) => {
             if (!allowed.has(s.storage)) return false
             if (contentFilter === 'backup') return s.type === 'pbs'
-            return true
+
+return true
           })
         : []
     }
@@ -80,7 +83,7 @@ return contents.includes(contentFilter)
     return NextResponse.json({ data: storages || [] })
   } catch (e: any) {
     console.error('Error fetching storages:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -68,7 +69,8 @@ export default function NetworkAutomationPage() {
   // ── Effects ──
   useEffect(() => {
     setPageInfo(t('network.title'), t('microseg.subtitle'), 'ri-shield-flash-fill')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   useEffect(() => {

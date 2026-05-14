@@ -18,6 +18,7 @@ type RouteContext = {
  */
 export async function PUT(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -57,8 +58,8 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (body.keepYearly !== undefined) params['keep-yearly'] = body.keepYearly || null
 
     const result = await pbsFetch<any>(
-      conn, 
-      `/admin/datastore/${encodeURIComponent(store)}/prune-job/${encodeURIComponent(jobId)}`, 
+      conn,
+      `/admin/datastore/${encodeURIComponent(store)}/prune-job/${encodeURIComponent(jobId)}`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -66,7 +67,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       }
     )
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: 'Prune job updated successfully'
     })
@@ -84,6 +85,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  */
 export async function DELETE(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -106,14 +108,14 @@ export async function DELETE(req: Request, ctx: RouteContext) {
     const conn = await getPbsConnectionById(id)
 
     await pbsFetch<any>(
-      conn, 
-      `/admin/datastore/${encodeURIComponent(store)}/prune-job/${encodeURIComponent(jobId)}`, 
+      conn,
+      `/admin/datastore/${encodeURIComponent(store)}/prune-job/${encodeURIComponent(jobId)}`,
       {
         method: 'DELETE'
       }
     )
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Prune job deleted successfully'
     })
   } catch (e: any) {

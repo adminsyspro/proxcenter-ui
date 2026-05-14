@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { parseNodeId } from '../helpers'
 
 interface UseNodeDataResult {
@@ -32,6 +33,7 @@ interface UseNodeDataResult {
   setNodeShellData: (v: any) => void
   setNodeShellConnected: (v: boolean) => void
   setNodeShellLoading: (v: boolean) => void
+
   // Expose setters for reload triggers from tab components
   setNodeReplicationLoaded: (v: boolean) => void
   setNodeSystemLoaded: (v: boolean) => void
@@ -151,6 +153,7 @@ export function useNodeData(
     if (!isNode || nodeSubscriptionLoaded || nodeSubscriptionLoading) return
     const isInCluster = !!clusterName
     const subscriptionTabIndex = isInCluster ? 11 : 12
+
     if (nodeTab !== subscriptionTabIndex) return
 
     setNodeSubscriptionLoading(true)
@@ -168,6 +171,7 @@ export function useNodeData(
     if (!isNode || nodeReplicationLoaded || nodeReplicationLoading) return
     const isInCluster = !!clusterName
     const replicationTabIndex = isInCluster ? 9 : 10
+
     if (nodeTab !== replicationTabIndex) return
 
     setNodeReplicationLoading(true)
@@ -212,8 +216,10 @@ export function useNodeData(
   useEffect(() => {
     if (!isNode || nodeCephLoaded || nodeCephLoading) return
     const isInCluster = !!clusterName
+
     if (!isInCluster) return
     const cephTabIndex = 8
+
     if (nodeTab !== cephTabIndex) return
 
     setNodeCephLoading(true)

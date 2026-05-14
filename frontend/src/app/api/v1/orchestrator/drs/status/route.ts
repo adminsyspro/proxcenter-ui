@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const tenantConnectionIds = await getTenantConnectionIds()

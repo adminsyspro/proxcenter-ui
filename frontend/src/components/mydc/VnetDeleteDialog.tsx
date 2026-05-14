@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import { Dialog, DialogContent, DialogActions, Button, Alert, Typography, Stack } from '@mui/material'
@@ -21,13 +22,17 @@ export default function VnetDeleteDialog({ vnet, vdcId, onClose, onDeleted }: Pr
 
   const handleDelete = async () => {
     setDeleting(true); setError(null)
+
     try {
       const segment = vnet.displayName ?? vnet.pveName
+
       const res = await fetch(
         `/api/v1/vdcs/${encodeURIComponent(vdcId)}/vnets/${encodeURIComponent(segment)}`,
         { method: 'DELETE' }
       )
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       onDeleted()
     } catch (e: any) {

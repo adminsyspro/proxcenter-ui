@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -35,6 +36,7 @@ import {
   Autocomplete,
   CircularProgress,
 } from '@mui/material'
+
 // RemixIcon replacements for @mui/icons-material
 const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const EditIcon = (props: any) => <i className="ri-pencil-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -97,10 +99,13 @@ function analyzeRule(rule: AffinityRule, vms: VMInfo[], allNodes: string[]): Rul
   if (rule.type === 'affinity') {
     // All VMs must be on the same node
     const nodeCount: Record<string, number> = {}
+
     for (const vm of ruleVMs) {
       nodeCount[vm.node] = (nodeCount[vm.node] || 0) + 1
     }
+
     const targetNode = Object.entries(nodeCount).sort((a, b) => b[1] - a[1])[0]?.[0]
+
     if (targetNode) {
       for (const vm of ruleVMs) {
         if (vm.node !== targetNode) {
@@ -112,19 +117,23 @@ function analyzeRule(rule: AffinityRule, vms: VMInfo[], allNodes: string[]): Rul
   } else if (rule.type === 'anti-affinity') {
     // No two VMs should share a node
     const nodeGroups: Record<string, VMInfo[]> = {}
+
     for (const vm of ruleVMs) {
       if (!nodeGroups[vm.node]) nodeGroups[vm.node] = []
       nodeGroups[vm.node].push(vm)
     }
+
     const usedNodes = new Set(ruleVMs.map(v => v.node))
     const availableNodes = allNodes.filter(n => !usedNodes.has(n))
     let availIdx = 0
+
     for (const [node, group] of Object.entries(nodeGroups)) {
       if (group.length > 1) {
         // Keep the first VM on this node, migrate the rest
         for (let i = 1; i < group.length; i++) {
           const vm = group[i]
           const targetNode = availableNodes[availIdx] || allNodes.find(n => n !== node) || node
+
           if (availableNodes[availIdx]) availIdx++
           violations.push(`${vm.name} (${vm.vmid}) shares node ${node} with ${group[0].name}`)
           requiredMigrations.push({ vmid: vm.vmid, name: vm.name, fromNode: node, toNode: targetNode })
@@ -135,6 +144,7 @@ function analyzeRule(rule: AffinityRule, vms: VMInfo[], allNodes: string[]): Rul
     // All VMs must be on one of rule.nodes
     const allowedNodes = rule.nodes || []
     const targetNode = allowedNodes[0] || ''
+
     for (const vm of ruleVMs) {
       if (!allowedNodes.includes(vm.node)) {
         violations.push(`${vm.name} (${vm.vmid}) is on ${vm.node}, should be on ${allowedNodes.join(' or ')}`)
@@ -263,6 +273,7 @@ export default function AffinityRulesManager({
 
   const openAnalyzeDialog = (rule: AffinityRule) => {
     const result = analyzeRule(rule, vms, nodes)
+
     setAnalyzingRule(rule)
     setAnalysis(result)
     setAnalyzeDialogOpen(true)
@@ -271,6 +282,7 @@ export default function AffinityRulesManager({
   const handleEnforce = async () => {
     if (!analyzingRule || !onEnforceRule) return
     setEnforcing(true)
+
     try {
       await onEnforceRule(analyzingRule.id)
       setAnalyzeDialogOpen(false)
@@ -442,9 +454,9 @@ export default function AffinityRulesManager({
                             )
                           })}
                           {(rule.vmids?.length || 0) > 3 && (
-                            <Chip 
-                              label={`+${rule.vmids.length - 3}`} 
-                              size="small" 
+                            <Chip
+                              label={`+${rule.vmids.length - 3}`}
+                              size="small"
                               sx={{ height: 22, fontSize: '0.7rem' }}
                             />
                           )}

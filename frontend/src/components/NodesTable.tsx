@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react'
+
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 
@@ -21,7 +22,9 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
+
 // RemixIcon replacements for @mui/icons-material
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -45,7 +48,7 @@ const secondsToUptime = (s: any) => {
   const m = Math.floor((sec % 3600) / 60)
 
   if (h > 0) return `${h}h ${m}m`
-  
+
 return `${m}m`
 }
 
@@ -136,28 +139,38 @@ function formatRate(bytes: number) {
   if (bytes < 1024) return `${bytes.toFixed(0)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB/s`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB/s`
+
+return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GiB/s`
 }
 
 function formatTrendTime(label: any) {
   const ts = Number(label)
+
   if (!ts || Number.isNaN(ts)) return String(label || '')
+
   // Timestamps from RRD are in seconds if < 1e12, milliseconds otherwise
   const ms = ts < 1e12 ? ts * 1000 : ts
-  return new Date(ms).toLocaleTimeString()
+
+
+return new Date(ms).toLocaleTimeString()
 }
 
 function NodeTrendTooltip({ active, payload, label }: any) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
   useEffect(() => {
     const h = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY })
+
     window.addEventListener('mousemove', h)
-    return () => window.removeEventListener('mousemove', h)
+
+return () => window.removeEventListener('mousemove', h)
   }, [])
   if (!active || !payload?.length || typeof window === 'undefined') return null
   const cpu = payload.find((p: any) => p.dataKey === 'cpu')?.value
   const ram = payload.find((p: any) => p.dataKey === 'ram')?.value
-  return createPortal(
+
+
+return createPortal(
     <div style={{ position: 'fixed', left: mousePos.x + 15, top: mousePos.y - 70, background: '#1a1a2e', border: '1px solid #444', color: 'white', padding: '8px 12px', borderRadius: 6, fontSize: 11, lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', zIndex: 99999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
       <div style={{ opacity: 0.7, marginBottom: 4, fontWeight: 600, borderBottom: '1px solid #444', paddingBottom: 4 }}>{formatTrendTime(label)}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -175,17 +188,22 @@ function NodeTrendTooltip({ active, payload, label }: any) {
 
 function NodeIoNetTooltip({ active, payload, label }: any) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
   useEffect(() => {
     const h = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY })
+
     window.addEventListener('mousemove', h)
-    return () => window.removeEventListener('mousemove', h)
+
+return () => window.removeEventListener('mousemove', h)
   }, [])
   if (!active || !payload?.length || typeof window === 'undefined') return null
   const diskread = payload.find((p: any) => p.dataKey === 'diskread')?.value
   const diskwrite = payload.find((p: any) => p.dataKey === 'diskwrite')?.value
   const netin = payload.find((p: any) => p.dataKey === 'netin')?.value
   const netout = payload.find((p: any) => p.dataKey === 'netout')?.value
-  return createPortal(
+
+
+return createPortal(
     <div style={{ position: 'fixed', left: mousePos.x + 15, top: mousePos.y - 90, background: '#1a1a2e', border: '1px solid #444', color: 'white', padding: '8px 12px', borderRadius: 6, fontSize: 11, lineHeight: 1.5, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', zIndex: 99999, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
       <div style={{ opacity: 0.7, marginBottom: 4, fontWeight: 600, borderBottom: '1px solid #444', paddingBottom: 4 }}>{formatTrendTime(label)}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -273,9 +291,9 @@ function NodesTable({
         headerName: 'IP',
         width: 130,
         renderCell: (params) => (
-          <Typography 
-            variant='body2' 
-            sx={{ 
+          <Typography
+            variant='body2'
+            sx={{
               fontSize: '0.8rem',
               opacity: params.row.ip ? 1 : 0.4
             }}
@@ -336,7 +354,9 @@ function NodesTable({
           const sub = (params.row.subscription || '').toLowerCase()
           const label = sub === 'active' ? 'Active' : (sub === 'notfound' || sub === 'unknown' || sub === '') ? 'Community' : sub
           const color = sub === 'active' ? 'success' : 'default'
-          return <Chip size="small" label={label} color={color as any} sx={{ height: 20, fontSize: 10 }} />
+
+
+return <Chip size="small" label={label} color={color as any} sx={{ height: 20, fontSize: 10 }} />
         }
       },
     ]
@@ -352,14 +372,18 @@ function NodesTable({
         renderCell: (params) => {
           const node = params.row as NodeRow
           const data = node.trend || []
+
           if (node.status !== 'online' || data.length === 0) {
             return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
           }
+
           const cpuColor = '#e57000'
           const ramColor = '#b35500'
           const allValues = data.flatMap(d => [d.cpu || 0, d.ram || 0])
           const yMax = Math.min(100, Math.max(...allValues, 10) + 10)
-          return (
+
+
+return (
             <ChartContainer height={32}>
               <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <defs>
@@ -389,16 +413,22 @@ function NodesTable({
         renderCell: (params) => {
           const node = params.row as NodeRow
           const data = node.trend || []
+
           if (node.status !== 'online' || data.length === 0) {
             return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
           }
+
           const hasData = data.some(d => (d.diskread || 0) > 0 || (d.diskwrite || 0) > 0 || (d.netin || 0) > 0 || (d.netout || 0) > 0)
+
           if (!hasData) {
             return <Typography variant='caption' sx={{ opacity: 0.4 }}>—</Typography>
           }
+
           const diskColor = '#2196f3'
           const netColor = '#4caf50'
-          return (
+
+
+return (
             <ChartContainer height={32}>
               <AreaChart data={data} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
                 <defs>

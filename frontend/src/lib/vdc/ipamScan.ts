@@ -35,14 +35,18 @@ export interface ScannedIp {
 
 export interface ScanArgs {
   conn: ProxmoxClientOptions
+
   /** PVE pool name backing the vDC. Scoping the scan to this pool is the
    *  whole point — a provider's full inventory is out of bounds. */
   vdcPoolName: string
+
   /** PVE-side VNet ID (the 8-char hashed name we use as the bridge in
    *  netN). We only count IPs from NICs attached to THIS bridge. */
   vnetPveName: string
+
   /** Subnet identifier, used as the cache key. */
   subnetId: string
+
   /** Connection identifier, used as the cache key. */
   connectionId: string
 }
@@ -92,15 +96,19 @@ async function mapWithLimit<T, R>(
 ): Promise<R[]> {
   const out: R[] = new Array(items.length)
   let next = 0
+
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (true) {
       const i = next++
+
       if (i >= items.length) return
       out[i] = await fn(items[i])
     }
   })
+
   await Promise.all(workers)
-  return out
+
+return out
 }
 
 // ---------------------------------------------------------------------------
@@ -128,16 +136,21 @@ export function parseNetLine(value: string): { bridge: string | null; mac: strin
   let bridge: string | null = null
   let modelMac: string | null = null
   let macaddrMac: string | null = null
+
   for (const part of parts) {
     const eq = part.indexOf('=')
+
     if (eq < 0) continue
     const k = part.slice(0, eq).trim()
     const v = part.slice(eq + 1).trim()
+
     if (k === 'bridge') bridge = v
     else if (NET_MODEL_TOKENS.has(k)) modelMac = v.toUpperCase()
     else if (k === 'macaddr') macaddrMac = v.toUpperCase()
   }
-  return { bridge, mac: modelMac ?? macaddrMac }
+
+
+return { bridge, mac: modelMac ?? macaddrMac }
 }
 
 /**
@@ -147,17 +160,24 @@ export function parseNetLine(value: string): { bridge: string | null; mac: strin
  */
 export function parseIpconfigLine(value: string): { ip: string | null } {
   const parts = String(value || '').split(',')
+
   for (const part of parts) {
     const eq = part.indexOf('=')
+
     if (eq < 0) continue
     const k = part.slice(0, eq).trim()
     const v = part.slice(eq + 1).trim()
+
     if (k !== 'ip') continue
     if (!v || v.toLowerCase() === 'dhcp') return { ip: null }
     const ip = v.split('/')[0]
-    return { ip: ipToInt(ip) === null ? null : ip }
+
+
+return { ip: ipToInt(ip) === null ? null : ip }
   }
-  return { ip: null }
+
+
+return { ip: null }
 }
 
 // ---------------------------------------------------------------------------
@@ -178,13 +198,16 @@ export async function scanUsedIpsForSubnet(args: ScanArgs): Promise<ScannedIp[]>
   const key = cacheKey(args.connectionId, args.subnetId)
   const cached = cache.get(key)
   const now = Date.now()
+
   if (cached && cached.expiresAt > now) return cached.scanned
 
   // Step 1: list pool members. PVE returns { members: [{ vmid, node, type, ... }] }.
   let members: Array<{ vmid: number; node: string; type: string }> = []
+
   try {
     const pool = await pveFetch<any>(args.conn, `/pools/${encodeURIComponent(args.vdcPoolName)}`)
     const list: any[] = Array.isArray(pool?.members) ? pool.members : []
+
     members = list
       .filter((m) => m && m.type === 'qemu' && Number.isFinite(Number(m.vmid)) && typeof m.node === 'string')
       .map((m) => ({ vmid: Number(m.vmid), node: String(m.node), type: 'qemu' }))
@@ -193,7 +216,8 @@ export async function scanUsedIpsForSubnet(args: ScanArgs): Promise<ScannedIp[]>
     // protects us from collisions among ProxCenter-tracked VMs.
     console.warn(`[ipam-scan] /pools/${args.vdcPoolName} failed: ${err?.message ?? err}`)
     cache.set(key, { expiresAt: now + CACHE_TTL_MS, scanned: [] })
-    return []
+
+return []
   }
 
   // Step 2: fan-out config fetches with bounded concurrency.
@@ -203,10 +227,13 @@ export async function scanUsedIpsForSubnet(args: ScanArgs): Promise<ScannedIp[]>
         args.conn,
         `/nodes/${encodeURIComponent(m.node)}/qemu/${encodeURIComponent(String(m.vmid))}/config`,
       )
-      return { vmid: m.vmid, cfg }
+
+
+return { vmid: m.vmid, cfg }
     } catch (err: any) {
       console.warn(`[ipam-scan] config fetch failed for vmid=${m.vmid}: ${err?.message ?? err}`)
-      return { vmid: m.vmid, cfg: null }
+
+return { vmid: m.vmid, cfg: null }
     }
   })
 
@@ -214,31 +241,41 @@ export async function scanUsedIpsForSubnet(args: ScanArgs): Promise<ScannedIp[]>
   // that has a static ipconfigN. NICs without a static IP (ip=dhcp, no
   // ipconfigN) are intentionally skipped — we can't know their address.
   const out: ScannedIp[] = []
+
   for (const { vmid, cfg } of configs) {
     if (!cfg || typeof cfg !== 'object') continue
+
     for (const k of Object.keys(cfg)) {
       const m = NET_KEY_REGEX.exec(k)
+
       if (!m) continue
       const idx = m[1]
       const { bridge, mac } = parseNetLine(String(cfg[k] ?? ''))
+
       if (bridge !== args.vnetPveName) continue
       const ipconfigKey = `ipconfig${idx}`
       const { ip } = parseIpconfigLine(String(cfg[ipconfigKey] ?? ''))
+
       if (!ip) continue
       out.push({ vmid, mac, ip })
     }
   }
 
   cache.set(key, { expiresAt: now + CACHE_TTL_MS, scanned: out })
-  return out
+
+return out
 }
 
 /** Convenience: convert the scan result to the uint32 set allocateIp consumes. */
 export function scannedToIntSet(scanned: ScannedIp[]): Set<number> {
   const s = new Set<number>()
+
   for (const { ip } of scanned) {
     const n = ipToInt(ip)
+
     if (n !== null) s.add(n)
   }
-  return s
+
+
+return s
 }

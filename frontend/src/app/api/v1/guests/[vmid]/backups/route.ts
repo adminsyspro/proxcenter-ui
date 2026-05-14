@@ -14,9 +14,9 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/guests/[vmid]/backups
- * 
+ *
  * Récupère toutes les sauvegardes d'une VM depuis tous les PBS configurés.
- * 
+ *
  * Query params:
  * - type: 'vm' | 'ct' (optionnel, pour filtrer par type)
  */
@@ -52,7 +52,9 @@ export async function GET(
     const sessionPrisma = await getSessionPrisma()
     const connPrisma = vdcScope ? globalPrisma : sessionPrisma
     const pbsWhere: any = { type: 'pbs' }
+
     if (vdcScope) pbsWhere.id = { in: [...vdcScope.pbsConnectionIds] }
+
     const pbsConnections = await connPrisma.connection.findMany({
       where: pbsWhere,
       select: {
@@ -111,6 +113,7 @@ export async function GET(
 
               if (Array.isArray(nsData)) {
                 const subNs = nsData.map(n => n.ns || '').filter(Boolean)
+
                 namespaces = ['', ...subNs]
               }
             } catch {
@@ -120,6 +123,7 @@ export async function GET(
             // Fetch snapshots for each namespace in parallel
             const nsPromises = namespaces.map(async (ns) => {
               const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
+
               const snapshots = await pbsFetch<any[]>(
                 conn,
                 `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`
@@ -202,7 +206,7 @@ return []
 
         const results = await Promise.all(datastorePromises)
 
-        
+
 return results.flat()
       } catch (e: any) {
         console.warn(`Failed to query PBS ${pbs.name}:`, e)
@@ -242,7 +246,7 @@ return []
     })
   } catch (e: any) {
     console.error("Guest backups error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

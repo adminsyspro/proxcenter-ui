@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import {
   Box,
   Card,
@@ -16,6 +17,7 @@ import {
 import { alpha } from '@mui/material/styles'
 import { useLocale, useTranslations } from 'next-intl'
 import { XAxis, YAxis, Tooltip as RTooltip, ReferenceLine, ComposedChart, Line, Area } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
@@ -51,7 +53,9 @@ export default function ProjectionChart({ data, loading, period }: {
     const startDate = new Date(period.start)
     const endDate = new Date(period.end)
     const formatOptions: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
-    return `${startDate.toLocaleDateString(dateLocale, formatOptions)} → ${endDate.toLocaleDateString(dateLocale, formatOptions)}`
+
+
+return `${startDate.toLocaleDateString(dateLocale, formatOptions)} → ${endDate.toLocaleDateString(dateLocale, formatOptions)}`
   }
 
   return (

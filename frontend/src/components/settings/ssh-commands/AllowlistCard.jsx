@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import useSWR from 'swr'
 import { useTranslations } from 'next-intl'
 import {
@@ -26,13 +27,16 @@ import {
 
 const fetcher = url => fetch(url).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return r.json()
+
+return r.json()
 })
 
 function filterCategories(categories, query) {
   if (!query) return categories
   const q = query.toLowerCase()
-  return categories
+
+
+return categories
     .map(cat => ({
       ...cat,
       commands: cat.commands.filter(c =>
@@ -51,7 +55,8 @@ export default function AllowlistCard() {
 
   const categories = useMemo(() => {
     if (!data?.categories) return []
-    return filterCategories(data.categories, query)
+
+return filterCategories(data.categories, query)
   }, [data, query])
 
   return (

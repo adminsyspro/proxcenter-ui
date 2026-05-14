@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -32,8 +33,10 @@ interface SeriesPoint {
 }
 
 interface Props {
+
   /** The vDC's connection IDs; the card subscribes to the inventory stream. */
   connectionIds: string[]
+
   /** Node names authorised by the vDC (filter applied client-side). */
   allowedNodes: string[]
 }
@@ -42,23 +45,31 @@ const hostKey = (h: Host) => `${h.connId}:${h.node}`
 
 function buildSeries(raw: any[]): SeriesPoint[] {
   const out: SeriesPoint[] = []
+
   for (const p of raw || []) {
     const t = p.time ?? p.t ?? p.timestamp
+
     if (!t) continue
     const cpuRaw = p.cpu ?? p.cpu_avg
+
     const cpu = cpuRaw != null
       ? Math.max(0, Math.min(100, Math.round(cpuRaw <= 1.5 ? cpuRaw * 100 : cpuRaw)))
       : 0
+
     const memRaw = p.mem ?? p.memused
     const maxMem = p.maxmem ?? p.memtotal
     let ram = 0
+
     if (memRaw != null) {
       if (memRaw <= 1.5) ram = Math.round(memRaw * 100)
       else if (maxMem > 0) ram = Math.round((memRaw / maxMem) * 100)
     }
+
     out.push({ t, cpu, ram, netin: p.netin ?? 0, netout: p.netout ?? 0 })
   }
-  return out.sort((a, b) => a.t - b.t)
+
+
+return out.sort((a, b) => a.t - b.t)
 }
 
 /**
@@ -80,8 +91,10 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
     if (connectionIds.length === 0) {
       setHosts([])
       setLoading(false)
-      return
+
+return
     }
+
     setLoading(true)
     const accepted = new Set(connectionIds)
     const allow = new Set(allowedNodes)
@@ -91,7 +104,9 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
     const onCluster = (ev: MessageEvent) => {
       try {
         const cluster = JSON.parse(ev.data)
+
         if (!accepted.has(cluster.id)) return
+
         for (const n of cluster.nodes ?? []) {
           if (allow.size > 0 && !allow.has(n.node)) continue
           found.push({
@@ -101,9 +116,11 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
             connId: cluster.id,
           })
         }
+
         setHosts([...found])
       } catch {}
     }
+
     const onDone = () => { setLoading(false); src.close() }
     const onError = () => { setLoading(false); src.close() }
 
@@ -130,20 +147,25 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
           try {
             const url = `/api/v1/connections/${encodeURIComponent(h.connId)}/rrd?path=${encodeURIComponent(`/nodes/${h.node}`)}&timeframe=hour`
             const res = await fetch(url, { cache: 'no-store', signal: controller.signal })
+
             if (!res.ok) return null
             const json = await res.json()
             let raw: any[] = []
+
             if (Array.isArray(json)) raw = json
             else if (Array.isArray(json?.data)) raw = json.data
             else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-            return { key: hostKey(h), series: buildSeries(raw) }
+
+return { key: hostKey(h), series: buildSeries(raw) }
           } catch {
             return null
           }
         }),
       )
+
       if (cancelled) return
       const next: Record<string, SeriesPoint[]> = {}
+
       for (const r of results) if (r && r.series.length > 0) next[r.key] = r.series
       setTrends(next)
     }
@@ -163,6 +185,7 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(sortedHosts.length / ROWS_PER_PAGE) - 1)
+
     if (page > maxPage) setPage(maxPage)
   }, [sortedHosts.length, page])
 
@@ -180,7 +203,9 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
   ) => {
     const hasData = series && series.length > 1
     const cursorColor = variant === 'cpuRam' ? '#f97316' : '#ab47bc'
-    return (
+
+
+return (
       <SparklineCell
         hasData={!!hasData}
         fallback={
@@ -248,7 +273,9 @@ export default function HostsCard({ connectionIds, allowedNodes }: Props) {
             <TableBody>
               {pageHosts.map(h => {
                 const series = trends[hostKey(h)]
-                return (
+
+
+return (
                   <TableRow key={hostKey(h)} hover>
                     <TableCell sx={{ py: 0.75, borderBottom: cellBorder }}>
                       <Stack direction="row" alignItems="center" spacing={1}>

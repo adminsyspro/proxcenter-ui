@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { Box } from '@mui/material'
 
 const DEFAULT_BACKGROUND = '/images/login-background.jpg'

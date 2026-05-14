@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+
 import {
   Box, Card, CardContent, Typography, TextField, Button, Switch,
   FormControlLabel, Alert, CircularProgress, Divider, IconButton,
   Tooltip, alpha, useTheme
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
+
 import { useBranding } from '@/contexts/BrandingContext'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -41,6 +43,7 @@ export default function WhiteLabelTab() {
     changelogUrl: '',
     hideVersion: false,
   })
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState('')
@@ -66,17 +69,22 @@ export default function WhiteLabelTab() {
     setSaving(true)
     setError('')
     setSuccess('')
+
     try {
       const cleanedHighlights = (config.loginHighlights || [])
         .filter(h => h && h.icon && h.text && h.icon.trim() !== '' && h.text.trim() !== '')
         .slice(0, 3)
+
       const payload = { ...config, loginHighlights: cleanedHighlights }
+
       const res = await fetch('/api/v1/settings/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+
       const data = await res.json()
+
       if (data.error) throw new Error(data.error)
       setSuccess('Branding settings saved successfully')
       await refresh()
@@ -89,15 +97,19 @@ export default function WhiteLabelTab() {
 
   const handleUpload = useCallback(async (file, type) => {
     if (!file) return
+
     if (file.size > MAX_FILE_SIZE) {
       setError('File too large (max 5MB)')
-      return
+
+return
     }
 
     setUploading(type)
     setError('')
+
     try {
       const formData = new FormData()
+
       formData.append('file', file)
       formData.append('type', type)
 
@@ -105,10 +117,13 @@ export default function WhiteLabelTab() {
         method: 'POST',
         body: formData,
       })
+
       const data = await res.json()
+
       if (data.error) throw new Error(data.error)
 
       const urlField = type === 'favicon' ? 'faviconUrl' : type === 'loginLogo' ? 'loginLogoUrl' : 'logoUrl'
+
       setConfig(prev => ({ ...prev, [urlField]: data.imageUrl }))
     } catch (e) {
       setError(e.message)
@@ -119,6 +134,7 @@ export default function WhiteLabelTab() {
 
   const handleRemoveImage = useCallback(async (type) => {
     setError('')
+
     try {
       await fetch('/api/v1/settings/branding/logo', {
         method: 'DELETE',
@@ -126,6 +142,7 @@ export default function WhiteLabelTab() {
         body: JSON.stringify({ type }),
       })
       const urlField = type === 'favicon' ? 'faviconUrl' : type === 'loginLogo' ? 'loginLogoUrl' : 'logoUrl'
+
       setConfig(prev => ({ ...prev, [urlField]: '' }))
     } catch (e) {
       setError(e.message)
@@ -256,11 +273,11 @@ export default function WhiteLabelTab() {
                   </IconButton>
                 </Tooltip>
               )}
-              <input ref={logoInputRef} type="file" hidden accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              <input ref={logoInputRef} type="file" hidden accept="image/png,image/jpeg,image/webp"
                 onChange={e => handleUpload(e.target.files?.[0], 'logo')} />
             </Box>
             <Typography variant="caption" sx={{ opacity: 0.5, mt: 0.5, display: 'block' }}>
-              Recommended: 200x50px, PNG or SVG with transparent background
+              Recommended: 200x50px, PNG or WebP with transparent background
             </Typography>
           </Box>
 
@@ -292,7 +309,7 @@ export default function WhiteLabelTab() {
                   </IconButton>
                 </Tooltip>
               )}
-              <input ref={loginLogoInputRef} type="file" hidden accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              <input ref={loginLogoInputRef} type="file" hidden accept="image/png,image/jpeg,image/webp"
                 onChange={e => handleUpload(e.target.files?.[0], 'loginLogo')} />
             </Box>
             <Typography variant="caption" sx={{ opacity: 0.5, mt: 0.5, display: 'block' }}>
@@ -328,7 +345,7 @@ export default function WhiteLabelTab() {
                   </IconButton>
                 </Tooltip>
               )}
-              <input ref={faviconInputRef} type="file" hidden accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
+              <input ref={faviconInputRef} type="file" hidden accept="image/png,image/x-icon,image/vnd.microsoft.icon"
                 onChange={e => handleUpload(e.target.files?.[0], 'favicon')} />
             </Box>
             <Typography variant="caption" sx={{ opacity: 0.5, mt: 0.5, display: 'block' }}>
@@ -413,7 +430,7 @@ export default function WhiteLabelTab() {
             }
             label={
               <Typography variant="body2">
-                Show "Powered by ProxCenter" in footer
+                Show &quot;Powered by ProxCenter&quot; in footer
               </Typography>
             }
             sx={{ mt: 1.5 }}

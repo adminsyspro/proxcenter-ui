@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { formatBytes } from '@/utils/format'
+
 import {
   Alert,
   Box,
@@ -43,6 +44,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+
+import { formatBytes } from '@/utils/format'
+
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
@@ -184,6 +188,7 @@ interface RollingUpdateWizardProps {
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
   connectedNode?: string | null
   hasCeph?: boolean
+
   /** When set, the wizard opens directly in monitoring mode for an existing rolling update */
   resumeRollingUpdateId?: string | null
 }
@@ -218,22 +223,22 @@ export default function RollingUpdateWizard({
   resumeRollingUpdateId,
 }: RollingUpdateWizardProps) {
   const t = useTranslations()
-  
+
   // Wizard state
   const [activeStep, setActiveStep] = useState(0)
   const steps = [t('updates.wizardStepConfiguration'), t('updates.wizardStepVerifications'), t('updates.wizardStepExecution'), t('updates.wizardStepCompleted')]
-  
+
   // Configuration state
   const [config, setConfig] = useState<RollingUpdateConfig>(() => buildDefaultConfig(hasCeph))
   const [nodeOrder, setNodeOrder] = useState<string[]>([])
   const [excludedNodes, setExcludedNodes] = useState<string[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
-  
+
   // Preflight state
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null)
   const [preflightError, setPreflightError] = useState<string | null>(null)
-  
+
   // SSH check
   const [sshNotConfigured, setSshNotConfigured] = useState(false)
 
@@ -247,7 +252,7 @@ export default function RollingUpdateWizard({
   const [rollingUpdate, setRollingUpdate] = useState<RollingUpdate | null>(null)
   const [executionError, setExecutionError] = useState<string | null>(null)
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
-  
+
   // Initialize node order from nodes — place connectedNode last
   useEffect(() => {
     if (nodes.length > 0 && nodeOrder.length === 0) {
@@ -258,6 +263,7 @@ export default function RollingUpdateWizard({
 
       if (connectedNode && onlineNodes.includes(connectedNode)) {
         const filtered = onlineNodes.filter(n => n !== connectedNode)
+
         filtered.push(connectedNode)
         setNodeOrder(filtered)
       } else {
@@ -265,7 +271,7 @@ export default function RollingUpdateWizard({
       }
     }
   }, [nodes])
-  
+
   // Resume monitoring an existing rolling update
   useEffect(() => {
     if (!open || !resumeRollingUpdateId) return
@@ -276,10 +282,12 @@ export default function RollingUpdateWizard({
       try {
         const res = await fetch(`/api/v1/orchestrator/rolling-updates/${resumeRollingUpdateId}`)
         const json = await res.json()
+
         if (cancelled || !res.ok || !json.data) return
 
         setRollingUpdate(json.data)
         const isTerminal = ['completed', 'failed', 'cancelled'].includes(json.data.status)
+
         setActiveStep(isTerminal ? 3 : 2)
 
         if (!isTerminal) {
@@ -287,8 +295,10 @@ export default function RollingUpdateWizard({
             try {
               const r = await fetch(`/api/v1/orchestrator/rolling-updates/${resumeRollingUpdateId}`)
               const j = await r.json()
+
               if (r.ok && j.data) {
                 setRollingUpdate(j.data)
+
                 if (['completed', 'failed', 'cancelled'].includes(j.data.status)) {
                   clearInterval(interval)
                   setPollingInterval(null)
@@ -299,6 +309,7 @@ export default function RollingUpdateWizard({
               console.error('Polling error:', e)
             }
           }, 3000)
+
           setPollingInterval(interval)
         }
       } catch (e) {
@@ -323,6 +334,7 @@ export default function RollingUpdateWizard({
     if (!open || !connectionId) return
 
     let cancelled = false
+
     setSshNotConfigured(false)
 
     fetch(`/api/v1/connections/${connectionId}`)
@@ -353,6 +365,7 @@ export default function RollingUpdateWizard({
 
         for (const n of nodesData) {
           const name = n.node || n.name
+
           if (!name) continue
           if (n.hostId) hostIds[name] = n.hostId
           if (n.sshAddress) addresses[name] = n.sshAddress
@@ -368,6 +381,7 @@ export default function RollingUpdateWizard({
               .then(res => res.json())
               .then(json => {
                 if (cancelled) return
+
                 const ifaces = (json.data || [])
                   .filter((iface: any) => iface.address && !iface.address.startsWith('127.'))
                   .map((iface: any) => ({
@@ -375,6 +389,7 @@ export default function RollingUpdateWizard({
                     iface: iface.iface || '',
                     gateway: iface.gateway || '',
                   }))
+
                 networks[n.node] = ifaces
               })
               .catch(() => {})
@@ -393,16 +408,20 @@ export default function RollingUpdateWizard({
     // Optimistic: update state immediately so the select reflects the choice
     setSshAddresses(prev => {
       const next = { ...prev }
+
       if (address) next[nodeName] = address
       else delete next[nodeName]
-      return next
+
+return next
     })
 
     // Persist to backend if we have a hostId
     const hostId = nodeHostIds[nodeName]
+
     if (!hostId) return
 
     setSshSaving(prev => ({ ...prev, [nodeName]: true }))
+
     try {
       await fetch(`/api/v1/hosts/${hostId}`, {
         method: 'PATCH',
@@ -418,14 +437,14 @@ export default function RollingUpdateWizard({
     setPreflightLoading(true)
     setPreflightError(null)
     setPreflightResult(null)
-    
+
     try {
       const finalConfig = {
         ...config,
         node_order: nodeOrder.filter(n => !excludedNodes.includes(n)),
         exclude_nodes: excludedNodes,
       }
-      
+
       const res = await fetch('/api/v1/orchestrator/rolling-updates/preflight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -434,13 +453,13 @@ export default function RollingUpdateWizard({
           config: finalConfig,
         }),
       })
-      
+
       const json = await res.json()
-      
+
       if (!res.ok) {
         throw new Error(json.error || 'Preflight check failed')
       }
-      
+
       setPreflightResult(json.data)
       setActiveStep(1)
     } catch (e: any) {
@@ -449,18 +468,18 @@ export default function RollingUpdateWizard({
       setPreflightLoading(false)
     }
   }, [connectionId, config, nodeOrder, excludedNodes])
-  
+
   // Start rolling update
   const startRollingUpdate = useCallback(async () => {
     setExecutionError(null)
-    
+
     try {
       const finalConfig = {
         ...config,
         node_order: nodeOrder.filter(n => !excludedNodes.includes(n)),
         exclude_nodes: excludedNodes,
       }
-      
+
       const res = await fetch('/api/v1/orchestrator/rolling-updates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -469,25 +488,25 @@ export default function RollingUpdateWizard({
           config: finalConfig,
         }),
       })
-      
+
       const json = await res.json()
-      
+
       if (!res.ok) {
         throw new Error(json.error || 'Failed to start rolling update')
       }
-      
+
       setRollingUpdate(json.data)
       setActiveStep(2)
-      
+
       // Start polling for updates
       const interval = setInterval(async () => {
         try {
           const statusRes = await fetch(`/api/v1/orchestrator/rolling-updates/${json.data.id}`)
           const statusJson = await statusRes.json()
-          
+
           if (statusRes.ok && statusJson.data) {
             setRollingUpdate(statusJson.data)
-            
+
             // Stop polling if completed, failed, or cancelled
             if (['completed', 'failed', 'cancelled'].includes(statusJson.data.status)) {
               clearInterval(interval)
@@ -499,39 +518,42 @@ export default function RollingUpdateWizard({
           console.error('Polling error:', e)
         }
       }, 3000)
-      
+
       setPollingInterval(interval)
     } catch (e: any) {
       setExecutionError(e.message || 'Unknown error')
     }
   }, [connectionId, config, nodeOrder, excludedNodes])
-  
+
   // Pause/Resume/Cancel actions
   const executeAction = useCallback(async (action: 'pause' | 'resume' | 'cancel') => {
     if (!rollingUpdate) return
-    
+
     try {
       const res = await fetch(`/api/v1/orchestrator/rolling-updates/${rollingUpdate.id}/${action}`, {
         method: 'POST',
       })
-      
+
       if (!res.ok) {
         const json = await res.json()
+
         throw new Error(json.error || `Failed to ${action}`)
       }
     } catch (e: any) {
       setExecutionError(e.message)
     }
   }, [rollingUpdate])
-  
+
   // Format time
   const formatTime = (minutes: number) => {
     if (minutes < 60) return `~${minutes} min`
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
-    return mins > 0 ? `~${hours}h ${mins}min` : `~${hours}h`
+
+
+return mins > 0 ? `~${hours}h ${mins}min` : `~${hours}h`
   }
-  
+
   // Get node status icon
   const getNodeStatusIcon = (status: string) => {
     switch (status) {
@@ -550,7 +572,7 @@ export default function RollingUpdateWizard({
         return <WarningIcon sx={{ color: 'warning.main' }} />
     }
   }
-  
+
   // Handle close
   const handleClose = () => {
     if (rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status)) {
@@ -559,45 +581,45 @@ export default function RollingUpdateWizard({
         return
       }
     }
-    
+
     if (pollingInterval) {
       clearInterval(pollingInterval)
       setPollingInterval(null)
     }
-    
+
     // Reset state
     setActiveStep(0)
     setPreflightResult(null)
     setPreflightError(null)
     setRollingUpdate(null)
     setExecutionError(null)
-    
+
     onClose()
   }
-  
+
   // Toggle node exclusion
   const toggleNodeExclusion = (node: string) => {
-    setExcludedNodes(prev => 
-      prev.includes(node) 
+    setExcludedNodes(prev =>
+      prev.includes(node)
         ? prev.filter(n => n !== node)
         : [...prev, node]
     )
   }
-  
+
   // Move node in order
   const moveNode = (index: number, direction: 'up' | 'down') => {
     const newOrder = [...nodeOrder]
     const newIndex = direction === 'up' ? index - 1 : index + 1
-    
+
     if (newIndex < 0 || newIndex >= newOrder.length) return
-    
+
     [newOrder[index], newOrder[newIndex]] = [newOrder[newIndex], newOrder[index]]
     setNodeOrder(newOrder)
   }
-  
+
   return (
-    <Dialog 
-      open={open} 
+    <Dialog
+      open={open}
       onClose={handleClose}
       maxWidth="md"
       fullWidth
@@ -607,8 +629,8 @@ export default function RollingUpdateWizard({
         <i className="ri-refresh-line" style={{ fontSize: 24 }} />
         Rolling Update
         {rollingUpdate && (
-          <Chip 
-            size="small" 
+          <Chip
+            size="small"
             label={rollingUpdate.status}
             color={
               rollingUpdate.status === 'completed' ? 'success' :
@@ -621,7 +643,7 @@ export default function RollingUpdateWizard({
           />
         )}
       </DialogTitle>
-      
+
       <DialogContent dividers>
         <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
           {steps.map((label, index) => (
@@ -630,7 +652,7 @@ export default function RollingUpdateWizard({
             </Step>
           ))}
         </Stepper>
-        
+
         {/* Step 0: Configuration */}
         {activeStep === 0 && (
           <Stack spacing={3}>
@@ -658,16 +680,16 @@ export default function RollingUpdateWizard({
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
                   {t('updates.nodeOrderDescription')}
                 </Typography>
-                
+
                 <List dense>
                   {nodeOrder.map((node, index) => {
                     const isExcluded = excludedNodes.includes(node)
                     const updateCount = nodeUpdates[node]?.count || 0
-                    
+
                     return (
                       <ListItem
                         key={node}
-                        sx={{ 
+                        sx={{
                           bgcolor: isExcluded ? 'action.disabledBackground' : 'transparent',
                           borderRadius: 1,
                           mb: 0.5,
@@ -681,15 +703,15 @@ export default function RollingUpdateWizard({
                               color={updateCount > 0 ? 'warning' : 'success'}
                               sx={{ height: 20, fontSize: 11 }}
                             />
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => moveNode(index, 'up')}
                               disabled={index === 0 || isExcluded}
                             >
                               <i className="ri-arrow-up-s-line" />
                             </IconButton>
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => moveNode(index, 'down')}
                               disabled={index === nodeOrder.length - 1 || isExcluded}
                             >
@@ -737,8 +759,10 @@ export default function RollingUpdateWizard({
                 {(() => {
                   if (!connectedNode || excludedNodes.includes(connectedNode)) return null
                   const activeNodes = nodeOrder.filter(n => !excludedNodes.includes(n))
+
                   if (activeNodes.length === 0 || activeNodes[activeNodes.length - 1] === connectedNode) return null
-                  return (
+
+return (
                     <Alert severity="warning" sx={{ mt: 1 }}>
                       {t('updates.connectedNodeNotLast')}
                     </Alert>
@@ -777,6 +801,7 @@ export default function RollingUpdateWizard({
                               value={selectValue}
                               onChange={(e) => {
                                 const val = e.target.value as string
+
                                 saveSshAddress(nodeName, val === '__auto__' ? '' : val)
                               }}
                               sx={{ fontSize: 13 }}
@@ -835,7 +860,7 @@ export default function RollingUpdateWizard({
                   <i className="ri-settings-3-line" style={{ marginRight: 8 }} />
                   {t('updates.mainOptions')}
                 </Typography>
-                
+
                 <Stack spacing={2} sx={{ mt: 2 }}>
                   <FormControlLabel
                     control={
@@ -846,7 +871,7 @@ export default function RollingUpdateWizard({
                     }
                     label={t('updates.migrateNonHaVms')}
                   />
-                  
+
                   <FormControlLabel
                     control={
                       <Switch
@@ -863,7 +888,7 @@ export default function RollingUpdateWizard({
                       </Typography>
                     </Alert>
                   )}
-                  
+
                   {hasCeph && (
                     <FormControlLabel
                       control={
@@ -885,7 +910,7 @@ export default function RollingUpdateWizard({
                     }
                     label={t('updates.abortOnFailure')}
                   />
-                  
+
                   <FormControlLabel
                     control={
                       <Switch
@@ -898,7 +923,7 @@ export default function RollingUpdateWizard({
                 </Stack>
               </CardContent>
             </Card>
-            
+
             {/* Advanced options */}
             <Box>
               <Button
@@ -908,7 +933,7 @@ export default function RollingUpdateWizard({
               >
                 {t('updates.advancedOptions')}
               </Button>
-              
+
               <Collapse in={showAdvanced}>
                 <Card variant="outlined" sx={{ mt: 1 }}>
                   <CardContent>
@@ -926,7 +951,7 @@ export default function RollingUpdateWizard({
                           valueLabelDisplay="auto"
                         />
                       </Box>
-                      
+
                       <TextField
                         label={t('updates.migrationTimeout')}
                         type="number"
@@ -935,7 +960,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, migration_timeout: Number.parseInt(e.target.value) || 600 }))}
                         InputProps={{ inputProps: { min: 60, max: 3600 } }}
                       />
-                      
+
                       <TextField
                         label={t('updates.rebootTimeoutSeconds')}
                         type="number"
@@ -944,7 +969,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, reboot_timeout: Number.parseInt(e.target.value) || 300 }))}
                         InputProps={{ inputProps: { min: 60, max: 1800 } }}
                       />
-                      
+
                       <TextField
                         label={t('updates.minHealthyNodes')}
                         type="number"
@@ -954,7 +979,7 @@ export default function RollingUpdateWizard({
                         InputProps={{ inputProps: { min: 1, max: 10 } }}
                         helperText={t('updates.minHealthyNodesHelper')}
                       />
-                      
+
                       <FormControlLabel
                         control={
                           <Switch
@@ -964,7 +989,7 @@ export default function RollingUpdateWizard({
                         }
                         label={t('updates.shutdownLocalVms')}
                       />
-                      
+
                       {hasCeph && (
                         <FormControlLabel
                           control={
@@ -983,12 +1008,12 @@ export default function RollingUpdateWizard({
             </Box>
           </Stack>
         )}
-        
+
         {/* Step 1: Preflight Results */}
         {activeStep === 1 && preflightResult && (
           <Stack spacing={3}>
             {/* Overall status */}
-            <Alert 
+            <Alert
               severity={preflightResult.can_proceed ? 'success' : 'error'}
               icon={preflightResult.can_proceed ? <CheckCircleIcon /> : <ErrorIcon />}
             >
@@ -1003,7 +1028,7 @@ export default function RollingUpdateWizard({
                 </Typography>
               )}
             </Alert>
-            
+
             {/* Errors */}
             {preflightResult.errors && preflightResult.errors.length > 0 && (
               <Card variant="outlined" sx={{ borderColor: 'error.main' }}>
@@ -1022,7 +1047,7 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
-            
+
             {/* Repository Issues */}
             {preflightResult.repo_issues && preflightResult.repo_issues.length > 0 && (
               <Card variant="outlined" sx={{ borderColor: 'error.main' }}>
@@ -1070,7 +1095,7 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
-            
+
             {/* Cluster health */}
             {preflightResult.cluster_health && (
               <Card variant="outlined">
@@ -1080,19 +1105,19 @@ export default function RollingUpdateWizard({
                     {t('updates.clusterHealth')}
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
-                    <Chip 
+                    <Chip
                       size="small"
                       icon={preflightResult.cluster_health.quorum_ok ? <CheckCircleIcon /> : <ErrorIcon />}
                       label={preflightResult.cluster_health.quorum_ok ? t('updates.quorumOk') : t('updates.quorumLost')}
                       color={preflightResult.cluster_health.quorum_ok ? 'success' : 'error'}
                     />
-                    <Chip 
+                    <Chip
                       size="small"
                       label={t('updates.nodesOnline', { online: preflightResult.cluster_health.online_nodes || 0, total: preflightResult.cluster_health.total_nodes || 0 })}
                       color={preflightResult.cluster_health.online_nodes === preflightResult.cluster_health.total_nodes ? 'success' : 'warning'}
                     />
                     {preflightResult.cluster_health.ceph_healthy !== undefined && (
-                      <Chip 
+                      <Chip
                         size="small"
                         icon={preflightResult.cluster_health.ceph_healthy ? <CheckCircleIcon /> : <WarningIcon />}
                         label={preflightResult.cluster_health.ceph_healthy ? t('updates.cephOk') : t('updates.cephDegraded')}
@@ -1103,7 +1128,7 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
-            
+
             {/* Updates summary */}
             {preflightResult.updates_available && preflightResult.updates_available.length > 0 && (
               <Card variant="outlined">
@@ -1114,11 +1139,11 @@ export default function RollingUpdateWizard({
                   </Typography>
                   <Box sx={{ mt: 1 }}>
                     {preflightResult.updates_available.map((u) => (
-                      <Box 
+                      <Box
                         key={u.node}
-                        sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
                           justifyContent: 'space-between',
                           py: 0.5,
                           borderBottom: '1px solid',
@@ -1144,13 +1169,15 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
-            
+
             {/* Reboot prediction + skip summary */}
             {preflightResult.updates_available && preflightResult.updates_available.length > 0 && (() => {
               const kernelNodes = preflightResult.updates_available.filter(u => u.kernel_update)
               const noUpdateNodes = preflightResult.updates_available.filter(u => u.package_count === 0)
+
               if (kernelNodes.length === 0 && noUpdateNodes.length === 0) return null
-              return (
+
+return (
                 <Stack spacing={1}>
                   {kernelNodes.length > 0 && (
                     <Alert severity="warning" icon={<i className="ri-restart-line" />}>
@@ -1214,13 +1241,13 @@ export default function RollingUpdateWizard({
                   {rollingUpdate.current_node && t('updates.inProgressNode', { node: rollingUpdate.current_node })}
                 </Typography>
               </Box>
-              <LinearProgress 
-                variant="determinate" 
+              <LinearProgress
+                variant="determinate"
                 value={(rollingUpdate.completed_nodes / rollingUpdate.total_nodes) * 100}
                 sx={{ height: 8, borderRadius: 1 }}
               />
             </Box>
-            
+
             {/* Node statuses */}
             {rollingUpdate.node_statuses && rollingUpdate.node_statuses.length > 0 && (
               <Card variant="outlined">
@@ -1234,12 +1261,12 @@ export default function RollingUpdateWizard({
                       <ListItemIcon sx={{ minWidth: 40 }}>
                         {getNodeStatusIcon(ns.status)}
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary={ns.node_name}
                         secondary={
                           <>
                             {ns.status}
-                            {ns.version_before && ns.version_after && 
+                            {ns.version_before && ns.version_after &&
                               ` • ${ns.version_before} → ${ns.version_after}`}
                             {ns.did_reboot && ` • ${t('updates.rebooted')}`}
                           </>
@@ -1254,7 +1281,7 @@ export default function RollingUpdateWizard({
               </CardContent>
             </Card>
             )}
-            
+
             {/* Logs */}
             {rollingUpdate.logs && rollingUpdate.logs.length > 0 && (
               <Card variant="outlined">
@@ -1262,10 +1289,10 @@ export default function RollingUpdateWizard({
                   <Typography variant="subtitle2" fontWeight={700} gutterBottom>
                     {t('updates.logs')}
                   </Typography>
-                  <Box 
-                    sx={{ 
-                      maxHeight: 200, 
-                      overflow: 'auto', 
+                  <Box
+                    sx={{
+                      maxHeight: 200,
+                      overflow: 'auto',
                       bgcolor: 'background.default',
                       borderRadius: 1,
                       p: 1,
@@ -1274,11 +1301,11 @@ export default function RollingUpdateWizard({
                     }}
                   >
                     {rollingUpdate.logs.slice(-50).map((log, i) => (
-                      <Box 
+                      <Box
                         key={i}
-                        sx={{ 
-                          color: log.level === 'error' ? 'error.main' : 
-                                 log.level === 'warning' ? 'warning.main' : 
+                        sx={{
+                          color: log.level === 'error' ? 'error.main' :
+                                 log.level === 'warning' ? 'warning.main' :
                                  'text.primary'
                         }}
                       >
@@ -1291,17 +1318,17 @@ export default function RollingUpdateWizard({
                 </CardContent>
               </Card>
             )}
-            
+
             {executionError && (
               <Alert severity="error">{executionError}</Alert>
             )}
           </Stack>
         )}
-        
+
         {/* Step 3: Completed */}
         {activeStep === 3 && rollingUpdate && (
           <Stack spacing={3}>
-            <Alert 
+            <Alert
               severity={rollingUpdate.status === 'completed' ? 'success' : 'error'}
               icon={rollingUpdate.status === 'completed' ? <CheckCircleIcon /> : <ErrorIcon />}
             >
@@ -1319,7 +1346,7 @@ export default function RollingUpdateWizard({
                 </Typography>
               )}
             </Alert>
-            
+
             {/* Final node statuses */}
             {rollingUpdate.node_statuses && rollingUpdate.node_statuses.length > 0 && (
               <Card variant="outlined">
@@ -1333,7 +1360,7 @@ export default function RollingUpdateWizard({
                         <ListItemIcon sx={{ minWidth: 40 }}>
                           {getNodeStatusIcon(ns.status)}
                         </ListItemIcon>
-                        <ListItemText 
+                        <ListItemText
                           primary={ns.node_name}
                           secondary={
                             <>
@@ -1353,7 +1380,7 @@ export default function RollingUpdateWizard({
             )}
           </Stack>
         )}
-        
+
         {/* Loading state */}
         {preflightLoading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
@@ -1363,7 +1390,7 @@ export default function RollingUpdateWizard({
             </Typography>
           </Box>
         )}
-        
+
         {/* Error state */}
         {preflightError && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -1371,7 +1398,7 @@ export default function RollingUpdateWizard({
           </Alert>
         )}
       </DialogContent>
-      
+
       <DialogActions sx={{ px: 3, py: 2 }}>
         {activeStep === 0 && (
           <>
@@ -1386,7 +1413,7 @@ export default function RollingUpdateWizard({
             </Button>
           </>
         )}
-        
+
         {activeStep === 1 && (
           <>
             <Button onClick={() => setActiveStep(0)}>{t('common.back')}</Button>
@@ -1401,7 +1428,7 @@ export default function RollingUpdateWizard({
             </Button>
           </>
         )}
-        
+
         {activeStep === 2 && rollingUpdate && (
           <>
             {rollingUpdate.status === 'running' && (
@@ -1441,7 +1468,7 @@ export default function RollingUpdateWizard({
             )}
           </>
         )}
-        
+
         {activeStep === 3 && (
           <Button onClick={handleClose} variant="contained">
             {t('common.close')}

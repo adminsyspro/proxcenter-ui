@@ -16,6 +16,7 @@ import {
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { InventoryCluster, InventoryNode } from '../types'
@@ -29,7 +30,8 @@ const statusColors: Record<string, string> = {
 function getUsageColor(pct: number): string {
   if (pct >= 90) return '#ef4444'
   if (pct >= 70) return '#f59e0b'
-  return '#22c55e'
+
+return '#22c55e'
 }
 
 function formatBytes(bytes: number): string {
@@ -164,6 +166,7 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
   const totalNodes = cluster.nodes.length
   const onlineNodes = cluster.nodes.filter((n) => n.status === 'online').length
   const totalVms = cluster.nodes.reduce((sum, n) => sum + n.guests.length, 0)
+
   const runningVms = cluster.nodes.reduce(
     (sum, n) => sum + n.guests.filter((g) => g.status === 'running').length, 0
   )
@@ -186,10 +189,12 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
   const allGuests = cluster.nodes.flatMap((n) =>
     n.guests.map((g) => ({ ...g, nodeName: n.node }))
   )
+
   const sortedVms = [...allGuests].sort((a, b) => {
     if (a.status === 'running' && b.status !== 'running') return -1
     if (a.status !== 'running' && b.status === 'running') return 1
-    return (a.name || '').localeCompare(b.name || '')
+
+return (a.name || '').localeCompare(b.name || '')
   })
 
   // Fetch trends for nodes and VMs
@@ -206,8 +211,10 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
               `/api/v1/connections/${encodeURIComponent(cluster.id)}/rrd?path=${encodeURIComponent(`/nodes/${node.node}`)}&timeframe=hour`,
               { cache: 'no-store' }
             )
+
             const json = await res.json()
             const raw = Array.isArray(json) ? json : []
+
             const points: TrendPoint[] = raw
               .filter((p: any) => p && typeof p.time === 'number')
               .slice(-36)
@@ -249,6 +256,7 @@ export default function GeoDetailsSidebar({ cluster, onClose }: GeoDetailsSideba
               }),
             }
           )
+
           const json = await res.json()
           const data = json?.data || {}
           const vTrends: Record<string, TrendPoint[]> = {}

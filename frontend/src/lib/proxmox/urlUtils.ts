@@ -15,15 +15,19 @@ export function extractHostFromUrl(url: string): string | null {
 /** Replace the host (hostname/IP) in a URL, keeping port and protocol */
 export function replaceHostInUrl(url: string, newHost: string): string {
   const parsed = new URL(url)
+
   parsed.hostname = newHost
-  return parsed.toString().replace(/\/$/, "")
+
+return parsed.toString().replace(/\/$/, "")
 }
 
 /** Extract the port from a URL (returns the explicit port or a default) */
 export function extractPortFromUrl(url: string, defaultPort = 8006): number {
   try {
     const parsed = new URL(url)
-    return parsed.port ? Number.parseInt(parsed.port, 10) : defaultPort
+
+
+return parsed.port ? Number.parseInt(parsed.port, 10) : defaultPort
   } catch {
     return defaultPort
   }

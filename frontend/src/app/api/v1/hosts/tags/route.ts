@@ -12,6 +12,7 @@ export const runtime = "nodejs"
 export async function PATCH(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()

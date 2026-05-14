@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import { assertNodeName, assertVmid, InvalidShellArgError } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -18,9 +19,9 @@ export async function POST(
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
   try {
-    const { id, type, node, vmid } = await ctx.params
+    const { id, type, node: rawNode, vmid: rawVmid } = await ctx.params
 
-    if (!id || !type || !node || !vmid) {
+    if (!id || !type || !rawNode || !rawVmid) {
       return NextResponse.json({ error: "Missing parameters" }, { status: 400 })
     }
 
@@ -28,12 +29,28 @@ export async function POST(
       return NextResponse.json({ error: "Invalid type. Must be 'qemu' or 'lxc'" }, { status: 400 })
     }
 
+    let node: string
+    let vmid: string
+
+    try {
+      node = assertNodeName(rawNode)
+      vmid = assertVmid(rawVmid)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
+
     // RBAC
     const resourceId = buildVmResourceId(id, node, type, vmid)
     const denied = await checkPermission(PERMISSIONS.VM_CONFIG, "vm", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -76,7 +93,8 @@ export async function POST(
 
   } catch (e: any) {
     console.error(`[unlock] Error:`, e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -98,9 +116,11 @@ export async function GET(
 
     const resourceId = buildVmResourceId(id, node, type, vmid)
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -117,6 +137,7 @@ export async function GET(
 
   } catch (e: any) {
     console.error(`[unlock/check] Error:`, e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -16,9 +16,11 @@ export async function GET(
 ) {
   try {
     const { id } = await ctx.params
+
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -40,9 +42,12 @@ export async function GET(
     const results = await Promise.allSettled(
       guests.map(async (guest) => {
         const apiPath = `/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/snapshot`
+
         try {
           const snaps = await pveFetch<any[]>(conn, apiPath)
-          return (snaps || [])
+
+
+return (snaps || [])
             .filter((s) => s.name !== "current")
             .map((s) => ({
               vmid: guest.vmid,
@@ -78,6 +83,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Bulk snapshots error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

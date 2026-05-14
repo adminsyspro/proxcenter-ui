@@ -2,11 +2,14 @@
 import { Agent, request } from "undici"
 
 let insecureAgent: Agent | null = null
+
 function getInsecureAgent(): Agent {
   if (!insecureAgent) {
     insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
   }
-  return insecureAgent
+
+
+return insecureAgent
 }
 
 export type PbsClientOptions = {

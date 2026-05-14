@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -41,16 +42,20 @@ function formatBytes(b: number | undefined | null): string {
   if (!b || b <= 0) return '—'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(b) / Math.log(1024))
-  return `${(b / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+
+
+return `${(b / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
 function formatAge(ts: number): string {
   if (!ts) return '—'
   const diff = Math.floor(Date.now() / 1000 - ts)
+
   if (diff < 60) return `${diff}s`
   if (diff < 3600) return `${Math.floor(diff / 60)}m`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`
-  return `${Math.floor(diff / 86400)}d`
+
+return `${Math.floor(diff / 86400)}d`
 }
 
 export default function SnapshotsTab({ connections, vmNameMap }: Props) {
@@ -68,6 +73,8 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
   const [detailLoading, setDetailLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<MirrorSnapshot[] | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+
   // Per-item progress for the "Delete mirror snapshots" dialog. We delete
   // sequentially (one POST per snapshot) so the user gets a real-time
   // counter instead of a blind spinner — orchestrator-side deletion can
@@ -75,6 +82,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number; current: string | null }>({
     done: 0, total: 0, current: null,
   })
+
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(25)
 
@@ -83,10 +91,13 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
+
     try {
       const res = await fetch('/api/v1/orchestrator/replication/snapshots', { cache: 'no-store' })
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
+
       setSnaps(Array.isArray(data) ? data : [])
     } catch (e: any) {
       setError(e?.message || 'Failed to load snapshots')
@@ -100,13 +111,17 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
-    return (snaps || []).filter(s => {
+
+
+return (snaps || []).filter(s => {
       if (clusterFilter !== 'all' && s.cluster_id !== clusterFilter) return false
       if (statusFilter === 'orphan' && !s.is_orphan) return false
       if (statusFilter === 'active' && s.is_orphan) return false
       if (!qq) return true
       const vmName = s.vmid ? vmNameMap?.[s.vmid] : undefined
-      return (
+
+
+return (
         s.cluster_name?.toLowerCase().includes(qq) ||
         s.pool?.toLowerCase().includes(qq) ||
         s.image?.toLowerCase().includes(qq) ||
@@ -120,6 +135,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
   // Reset page when filters change and current page would be out of range
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1)
+
     if (page > maxPage) setPage(0)
   }, [filtered.length, rowsPerPage, page])
 
@@ -130,7 +146,9 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
 
   const totals = useMemo(() => {
     const list = snaps || []
-    return {
+
+
+return {
       all: list.length,
       orphans: list.filter(s => s.is_orphan).length,
       clusters: new Set(list.map(s => s.cluster_id)).size,
@@ -139,10 +157,13 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
 
   const toggleSelect = (s: MirrorSnapshot) => {
     const k = key(s)
+
     setSelected(prev => {
       const next = new Set(prev)
+
       next.has(k) ? next.delete(k) : next.add(k)
-      return next
+
+return next
     })
   }
 
@@ -158,11 +179,14 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
     setDetail(s)
     setDetailUsage(null)
     setDetailLoading(true)
+
     try {
       const params = new URLSearchParams({ cluster: s.cluster_id, pool: s.pool, image: s.image, snap: s.snapshot })
       const res = await fetch(`/api/v1/orchestrator/replication/snapshots/usage?${params.toString()}`, { cache: 'no-store' })
+
       if (res.ok) {
         const data = await res.json()
+
         setDetailUsage({ used_bytes: data.used_bytes, provisioned_bytes: data.provisioned_bytes })
       }
     } catch { /* ignore — drawer just shows "—" */ } finally {
@@ -177,7 +201,9 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i]
+
       setDeleteProgress({ done: i, total: items.length, current: item.snapshot })
+
       try {
         const res = await fetch('/api/v1/orchestrator/replication/snapshots', {
           method: 'POST',
@@ -191,8 +217,10 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
             }],
           }),
         })
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json().catch(() => ({}))
+
         if (Array.isArray(json?.failed) && json.failed.length > 0) {
           failures.push({ item, reason: json.failed[0]?.error || 'failed' })
         }
@@ -206,6 +234,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
     if (failures.length > 0) {
       setError(`${failures.length}/${items.length} snapshot(s) failed to delete: ${failures.map(f => f.item.snapshot).join(', ')}`)
     }
+
     setSelected(new Set())
     await load()
     setDeleting(false)
@@ -220,6 +249,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
     () => (snaps || []).filter(s => selected.has(key(s))),
     [snaps, selected]
   )
+
   const orphansInView = useMemo(() => filtered.filter(s => s.is_orphan), [filtered])
 
   return (
@@ -341,7 +371,9 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
               {paged.map(s => {
                 const k = key(s)
                 const vmName = s.vmid ? vmNameMap?.[s.vmid] : undefined
-                return (
+
+
+return (
                   <TableRow key={k} hover selected={selected.has(k)}>
                     <TableCell padding='checkbox'>
                       <Tooltip title={!s.is_orphan ? t('siteRecovery.snapshots.cannotDeleteActive') : ''} arrow disableHoverListener={s.is_orphan}>

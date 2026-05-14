@@ -39,10 +39,12 @@ export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promis
     where: { id: vdcId, tenantId },
     select: { id: true, tenantId: true, connectionId: true, sdnZoneName: true, enabled: true },
   })
+
   if (!row) return null
   if (row.enabled === false) return null
   if (!row.sdnZoneName) return null
-  return {
+
+return {
     id: row.id,
     tenantId: row.tenantId,
     connectionId: row.connectionId,
@@ -65,9 +67,12 @@ export async function checkVnetQuota(vdcId: string): Promise<VnetQuotaResult> {
     prisma.vdcQuota.findUnique({ where: { vdcId }, select: { maxVnets: true } }),
     prisma.vdcVnet.count({ where: { vdcId } }),
   ])
+
   const max: number | null = quotaRow?.maxVnets ?? null
+
   if (max === null) return { allowed: true, current, max: null }
-  return { allowed: current < max, current, max }
+
+return { allowed: current < max, current, max }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +82,13 @@ export async function checkVnetQuota(vdcId: string): Promise<VnetQuotaResult> {
 function rowToSubnet(r: any): VdcSubnet | null {
   if (!r || !r.id) return null
   const dnsRaw: string | null = r.dnsServers ?? null
+
   const dnsServers = dnsRaw
     ? dnsRaw.split(',').map((s: string) => s.trim()).filter(Boolean)
     : []
-  return {
+
+
+return {
     id: r.id,
     vnetId: r.vnetId,
     cidr: r.cidr,
@@ -93,6 +101,7 @@ function rowToSubnet(r: any): VdcSubnet | null {
 
 function rowToVnet(r: any): VdcVnet {
   const subnet = rowToSubnet(r.subnet)
+
   if (!subnet) {
     // The schema enforces a 1-1 between VNet and subnet now (subnet is
     // created in the same transaction as the VNet). A missing row means
@@ -100,7 +109,9 @@ function rowToVnet(r: any): VdcVnet {
     // it loudly rather than silently returning a half-broken VNet.
     throw new Error(`VNet ${r.id} has no subnet — DB migration required`)
   }
-  return {
+
+
+return {
     id: r.id,
     vdcId: r.vdcId,
     pveName: r.pveName,
@@ -120,7 +131,9 @@ export async function listVnetsForTenant(vdcId: string): Promise<VdcVnet[]> {
     include: { subnet: true },
     orderBy: { displayName: 'asc' },
   })
-  return rows.map(rowToVnet)
+
+
+return rows.map(rowToVnet)
 }
 
 /** Resolve a user-facing display name (scoped to a vDC) to its row. */
@@ -138,11 +151,13 @@ async function findVnetByDisplayName(vdcId: string, displayName: string) {
 export interface CreateVnetInput {
   vdcId: string
   tenantId: string
+
   /** Free-form, tenant-facing name; unique per vDC. We hash this into the
    *  8-char pve_name actually sent to PVE so two tenants can both use "lan". */
   displayName: string
   description?: string
   firewall?: boolean
+
   /** L3 + IPAM config attached at create time. Mandatory: ProxCenter's IPAM
    *  is the only working IP allocator on VXLAN (PVE-native IPAM/DHCP are
    *  broken on PVE 9.x VXLAN zones), so a VNet without a subnet would have
@@ -161,6 +176,7 @@ function validateSubnetInput(input: CreateVnetInput['subnet']): void {
   if (!parseCidr(input.cidr)) {
     throw new Error(`Invalid CIDR "${input.cidr}" — expected IPv4 form like 10.42.0.0/24`)
   }
+
   if (!gatewayValidForCidr(input.gateway, input.cidr)) {
     throw new Error(`Gateway "${input.gateway}" is not a usable host inside ${input.cidr}`)
   }
@@ -176,15 +192,19 @@ async function getConn(vdc: ResolvedVdc): Promise<any> {
     where: { id: vdc.connectionId },
     select: { tenantId: true },
   })
+
   if (!connMeta) throw new Error(`Connection not found: ${vdc.connectionId}`)
-  return getConnectionById(vdc.connectionId, connMeta.tenantId)
+
+return getConnectionById(vdc.connectionId, connMeta.tenantId)
 }
 
 export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVnet> {
   const vdc = await resolveVdcForVnet(input.vdcId, input.tenantId)
+
   if (!vdc) throw new Error('vDC not found')
 
   const displayName = input.displayName
+
   if (!VNET_DISPLAY_NAME_REGEX.test(displayName)) {
     throw new Error('Invalid VNet name (1-20 chars, lowercase letters / digits / dashes, must start with a letter)')
   }
@@ -200,12 +220,14 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
   }
 
   const quota = await checkVnetQuota(vdc.id)
+
   if (!quota.allowed) {
     throw new Error(`Quota exceeded: max_vnets=${quota.max}, current=${quota.current}`)
   }
 
   const pveName = await generatePveVnetId(vdc.id, displayName)
   const conn = await getConn(vdc)
+
   // Pass the PVE connection so allocateVni can union our DB's max VxlanTag
   // with the live `/cluster/sdn/vnets` set — avoids handing back a tag a
   // legacy zone already booked under our feet.
@@ -266,6 +288,7 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
   // about why mirroring it had no functional value on VXLAN zones).
   const dnsList = (input.subnet.dnsServers ?? []).map(s => s.trim()).filter(Boolean)
   const subnetId = randomUUID()
+
   try {
     await prisma.vdcSubnet.create({
       data: {
@@ -308,6 +331,7 @@ export async function updateVnetForTenant(
   patch: {
     description?: string
     firewall?: boolean
+
     /** Subnet patch — only DNS is editable. CIDR/gateway changes would
      *  invalidate IPAM allocations and require a recreate. */
     subnet?: {
@@ -316,9 +340,11 @@ export async function updateVnetForTenant(
   }
 ): Promise<VdcVnet> {
   const vdc = await resolveVdcForVnet(vdcId, tenantId)
+
   if (!vdc) throw new Error('vDC not found')
 
   const row = await findVnetByDisplayName(vdc.id, displayName)
+
   if (!row) throw new Error(`VNet "${displayName}" not found`)
 
   const pveName: string = row.pveName
@@ -333,9 +359,11 @@ export async function updateVnetForTenant(
     if (!row.subnet) {
       throw new Error(`VNet "${displayName}" has no subnet — DB migration required`)
     }
+
     const dnsCsv = patch.subnet.dnsServers.length > 0
       ? patch.subnet.dnsServers.map(s => s.trim()).filter(Boolean).join(',')
       : ''
+
     await prisma.vdcSubnet.update({
       where: { id: row.subnet.id },
       data: { dnsServers: dnsCsv || null },
@@ -349,8 +377,10 @@ export async function updateVnetForTenant(
   }
 
   const updateData: Record<string, unknown> = {}
+
   if (patch.description !== undefined) updateData.description = patch.description
   if (patch.firewall !== undefined) updateData.firewall = patch.firewall
+
   if (Object.keys(updateData).length > 0) {
     await prisma.vdcVnet.update({ where: { id: row.id }, data: updateData })
   }
@@ -359,7 +389,9 @@ export async function updateVnetForTenant(
     where: { id: row.id },
     include: { subnet: true },
   })
-  return rowToVnet(updated)
+
+
+return rowToVnet(updated)
 }
 
 // ---------------------------------------------------------------------------
@@ -372,15 +404,18 @@ export async function deleteVnetForTenant(
   displayName: string
 ): Promise<{ deleted: true } | { deleted: false; attachmentCount: number }> {
   const vdc = await resolveVdcForVnet(vdcId, tenantId)
+
   if (!vdc) throw new Error('vDC not found')
 
   const row = await findVnetByDisplayName(vdc.id, displayName)
+
   if (!row) throw new Error(`VNet "${displayName}" not found`)
 
   const pveName: string = row.pveName
 
   const conn = await getConn(vdc)
   const attachments = await countVnetAttachments(conn, pveName)
+
   if (attachments > 0) {
     return { deleted: false, attachmentCount: attachments }
   }
@@ -418,20 +453,26 @@ export async function getAllowedBridgesForTenant(tenantId: string, connectionId:
       sharedBridges: { select: { bridge: true } },
     },
   })
+
   if (vdcRows.length === 0) return null
 
   const allowed = new Set<string>()
+
   for (const vdc of vdcRows) {
     for (const v of vdc.vnets) allowed.add(v.pveName)
     for (const b of vdc.sharedBridges) allowed.add(b.bridge)
   }
-  return allowed
+
+
+return allowed
 }
 
 /** Parse bridge= from a PVE net config string */
 export function parseBridgeFromNet(netStr: string): string | null {
   const m = String(netStr || '').match(/bridge=([^,]+)/)
-  return m ? m[1] : null
+
+
+return m ? m[1] : null
 }
 
 // ---------------------------------------------------------------------------
@@ -447,6 +488,7 @@ export interface SubnetForBridge {
   gateway: string
   dnsServers: string[]
   sdnZoneName: string
+
   /** PVE pool name backing the vDC. Used by the IPAM scanner to limit
    *  the search to the vDC's VMs instead of the whole cluster. */
   pvePoolName: string
@@ -479,8 +521,10 @@ export async function resolveSubnetForBridge(
       subnet: true,
     },
   })
+
   if (!row || !row.subnet || !row.vdc.sdnZoneName) return null
-  return {
+
+return {
     vdcId: row.vdc.id,
     vnetId: row.id,
     subnetId: row.subnet.id,

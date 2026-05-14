@@ -14,9 +14,11 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId, node, vmType, vmid } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -31,6 +33,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json(response.data)
   } catch (e: any) {
     console.error("[firewall/vms/nic-firewall] PUT error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

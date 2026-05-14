@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -14,6 +15,7 @@ import {
   alpha,
 } from '@mui/material'
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
 
@@ -65,10 +67,13 @@ export default function BackupTrendsChart({ pbsId }) {
 
     const load = async () => {
       setLoading(true)
+
       try {
         const res = await fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/backups/trends?days=${days}`)
+
         if (res.ok) {
           const json = await res.json()
+
           setData(json.data)
         }
       } catch (e) {
@@ -83,7 +88,8 @@ export default function BackupTrendsChart({ pbsId }) {
 
   const chartData = useMemo(() => {
     if (!data?.daily) return []
-    return data.daily.map(d => ({
+
+return data.daily.map(d => ({
       ...d,
       dateLabel: new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     }))
@@ -92,7 +98,9 @@ export default function BackupTrendsChart({ pbsId }) {
   const pieData = useMemo(() => {
     if (!data?.typeDistribution) return []
     const d = data.typeDistribution
-    return [
+
+
+return [
       { name: 'VM', value: d.vm },
       { name: 'CT', value: d.ct },
     ].filter(x => x.value > 0)

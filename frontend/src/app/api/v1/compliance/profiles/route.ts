@@ -11,10 +11,12 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -22,7 +24,9 @@ export async function GET(req: Request) {
     const tenantId = await getCurrentTenantId()
 
     const profiles = await listProfiles(tenantId, connectionId)
-    return NextResponse.json({ data: profiles })
+
+
+return NextResponse.json({ data: profiles })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
@@ -30,10 +34,12 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const body = await req.json()

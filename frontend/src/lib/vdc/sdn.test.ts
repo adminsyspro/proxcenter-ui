@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
@@ -11,6 +12,7 @@ beforeEach(async () => {
   await truncate(TABLES)
 
   const now = new Date()
+
   await prismaTest.tenant.create({
     data: { id: 'tenant-1', slug: 'tenant-1', name: 'Test', createdAt: now, updatedAt: now },
   })
@@ -54,12 +56,14 @@ async function addVnet(vdcId: string, pveName: string, vxlanTag: number): Promis
 describe('generateZoneName', () => {
   it('strips hyphens, prefixes with z, caps at 8 chars total', async () => {
     const name = await generateZoneName('conn1', { id: 'vdc-1', slug: 'acme-prod' })
+
     expect(name).toBe('zacmepro')
     expect(name.length).toBe(8)
   })
 
   it('truncates long slugs to fit within the 8-char ceiling', async () => {
     const name = await generateZoneName('conn1', { id: 'vdc-2', slug: 'very-long-slug-name' })
+
     expect(name).toBe('zverylon')
     expect(name.length).toBe(8)
   })
@@ -69,12 +73,14 @@ describe('generateZoneName', () => {
 
     const name = await generateZoneName('conn1', { id: 'vdc-3', slug: 'acme-prod' })
     const hash = crypto.createHash('sha1').update('vdc-3').digest('hex').slice(0, 2)
+
     expect(name).toBe('zacmep' + hash) // 'z' + 5 slug + 2 hash = 8
     expect(name.length).toBe(8)
   })
 
   it('throws on double collision', async () => {
     const hash = crypto.createHash('sha1').update('vdc-4').digest('hex').slice(0, 2)
+
     await addVdc({ id: 'other-1', connectionId: 'conn1', slug: 'acme-prod', sdnZoneName: 'zacmepro' })
     await addVdc({ id: 'other-2', connectionId: 'conn1', slug: 'acme-prod-2', sdnZoneName: 'zacmep' + hash })
     await expect(
@@ -123,6 +129,7 @@ describe('generatePveVnetId', () => {
   it('produces an 8-char id starting with a letter', async () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const id = await generatePveVnetId('vdc-1', 'lan')
+
     expect(id).toMatch(/^[a-z][a-z0-9]{7}$/)
     expect(id).toHaveLength(8)
   })
@@ -131,6 +138,7 @@ describe('generatePveVnetId', () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const id1 = await generatePveVnetId('vdc-1', 'lan')
     const id2 = await generatePveVnetId('vdc-1', 'lan')
+
     expect(id1).toBe(id2)
   })
 
@@ -138,6 +146,7 @@ describe('generatePveVnetId', () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const id1 = await generatePveVnetId('vdc-1', 'lan')
     const id2 = await generatePveVnetId('vdc-1', 'dmz')
+
     expect(id1).not.toBe(id2)
   })
 
@@ -146,15 +155,18 @@ describe('generatePveVnetId', () => {
     await addVdc({ id: 'vdc-B', connectionId: 'conn-shared' })
     const idA = await generatePveVnetId('vdc-A', 'lan')
     const idB = await generatePveVnetId('vdc-B', 'lan')
+
     expect(idA).not.toBe(idB)
   })
 
   it('collision-resistant via nonce when hash collides', async () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const firstTry = await generatePveVnetId('vdc-1', 'lan')
+
     await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: firstTry, vxlanTag: 10000 } })
 
     const next = await generatePveVnetId('vdc-1', 'lan')
+
     expect(next).not.toBe(firstTry)
     expect(next).toMatch(/^[a-z][a-z0-9]{7}$/)
   })

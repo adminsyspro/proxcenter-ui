@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+
 import { Box } from '@mui/material'
 import { ResponsiveContainer } from 'recharts'
 
@@ -29,19 +30,25 @@ export default function ChartContainer({ height, width, children, sx }: Props) {
   useEffect(() => {
     if (!ref.current) return
     const el = ref.current
+
     const ro = new ResizeObserver((entries) => {
       const r = entries[0]?.contentRect
+
       if (!r) return
       const w = width != null ? width : r.width
       const h = height != null ? height : r.height
+
       if (w > 0 && h > 0) setDims({ w, h })
     })
+
     ro.observe(el)
     const rect = el.getBoundingClientRect()
     const w = width != null ? width : rect.width
     const h = height != null ? height : rect.height
+
     if (w > 0 && h > 0) setDims({ w, h })
-    return () => ro.disconnect()
+
+return () => ro.disconnect()
   }, [width, height])
 
   const boxSx = {

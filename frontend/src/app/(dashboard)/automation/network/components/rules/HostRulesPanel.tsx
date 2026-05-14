@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useState, useEffect, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -31,7 +32,9 @@ interface HostRulesPanelProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
+
+
+return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -39,9 +42,11 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   if (rule.macro) return rule.macro
   const proto = rule.proto?.toUpperCase() || ''
   const port = rule.dport || ''
+
   if (!proto && !port) return 'any'
   if (proto && port) return `${proto}/${port}`
-  return proto || port
+
+return proto || port
 }
 
 const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
@@ -74,15 +79,19 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   // Load node options for all nodes
   useEffect(() => {
     if (!selectedConnection || nodesList.length === 0) return
+
     const fetchAll = async () => {
       const result: Record<string, firewallAPI.NodeOptions> = {}
+
       for (const node of nodesList) {
         try {
           result[node] = await firewallAPI.getNodeOptions(selectedConnection, node)
         } catch { /* ignore */ }
       }
+
       setNodeOptionsByNode(result)
     }
+
     fetchAll()
   }, [selectedConnection, nodesList])
 
@@ -92,9 +101,11 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
 
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
+
     for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
     for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    return opts
+
+return opts
   }, [aliases, ipsets])
 
   // ── Toggle node firewall ──
@@ -102,6 +113,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     if (!selectedConnection) return
     const current = nodeOptionsByNode[node]
     const newEnable = current?.enable === 1 ? 0 : 1
+
     try {
       await firewallAPI.updateNodeOptions(selectedConnection, node, { enable: newEnable })
       showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
@@ -115,6 +127,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const handleToggleHostRuleEnable = async (node: string, rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
     const newEnable = rule.enable === 1 ? 0 : 1
+
     try {
       await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${rule.pos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
@@ -129,6 +142,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   // ── CRUD handlers ──
   const handleAddHostRule = async () => {
     if (!editingHostRule || !selectedConnection) return
+
     try {
       await firewallAPI.addNodeRule(selectedConnection, editingHostRule.node, newHostRule)
       showToast(t('network.ruleAdded'), 'success')
@@ -143,6 +157,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
 
   const handleUpdateHostRule = async () => {
     if (!editingHostRule?.rule || !selectedConnection) return
+
     try {
       await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${editingHostRule.node}/rules/${editingHostRule.rule.pos}`, {
         method: 'PUT',
@@ -161,6 +176,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const handleDeleteHostRule = async () => {
     if (!deleteHostRuleConfirm || !selectedConnection) return
     const { node, pos } = deleteHostRuleConfirm
+
     try {
       await firewallAPI.deleteNodeRule(selectedConnection, node, pos)
       showToast(t('network.ruleDeleted'), 'success')
@@ -178,22 +194,29 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
+
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
     setHostDragState({ node: '', draggedPos: null, dragOverPos: null })
   }
+
   const handleDragOver = (e: React.DragEvent, node: string, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
     if (hostDragState.node === node && hostDragState.draggedPos !== null && hostDragState.draggedPos !== pos) {
       setHostDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
+
   const handleDragLeave = () => setHostDragState(prev => ({ ...prev, dragOverPos: null }))
+
   const handleDrop = async (e: React.DragEvent, node: string, toPos: number) => {
     e.preventDefault()
     const fromPos = hostDragState.draggedPos
+
     setHostDragState({ node: '', draggedPos: null, dragOverPos: null })
+
     if (fromPos !== null && fromPos !== toPos && hostDragState.node === node) {
       try {
         await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${fromPos}`, {
@@ -276,7 +299,11 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                         cursor: 'pointer',
                         '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
                       }}
-                      onClick={() => setExpandedHosts(prev => { const n = new Set(prev); if (n.has(node)) n.delete(node); else n.add(node); return n })}
+                      onClick={() => setExpandedHosts(prev => { const n = new Set(prev);
+
+ if (n.has(node)) n.delete(node); else n.add(node);
+
+return n })}
                     >
                       <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

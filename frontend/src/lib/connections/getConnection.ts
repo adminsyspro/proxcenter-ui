@@ -48,6 +48,7 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
 
   const cacheKey = `${resolvedTenantId}:${id}`
   const cached = connectionCache.get(cacheKey)
+
   if (cached && cached.expiry > Date.now()) {
     return cached.data as PveConn
   }
@@ -76,6 +77,7 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
       where: { tenantId: resolvedTenantId, connectionId: id, enabled: true },
       select: { id: true },
     })
+
     if (!vdcAccess) {
       throw new Error(`Connection not found: ${id}`)
     }
@@ -112,6 +114,7 @@ export async function getPbsConnectionByIdUnscoped(id: string): Promise<PbsConn>
 
   const cacheKey = `pbs-unscoped:${id}`
   const cached = connectionCache.get(cacheKey)
+
   if (cached && cached.expiry > Date.now()) {
     return cached.data as PbsConn
   }
@@ -153,6 +156,7 @@ export async function getPbsConnectionById(id: string, tenantId?: string): Promi
 
   const cacheKey = `pbs:${resolvedTenantId}:${id}`
   const cached = connectionCache.get(cacheKey)
+
   if (cached && cached.expiry > Date.now()) {
     return cached.data as PbsConn
   }
@@ -179,6 +183,7 @@ export async function getPbsConnectionById(id: string, tenantId?: string): Promi
   if (c.tenantId !== resolvedTenantId) {
     const { getVdcScope } = await import('@/lib/vdc/scope')
     const scope = await getVdcScope(resolvedTenantId)
+
     if (!scope || !scope.pbsConnectionIds.has(id)) {
       throw new Error(`PBS Connection not found: ${id}`)
     }

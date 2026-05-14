@@ -1,4 +1,5 @@
 import { Client } from "ssh2"
+
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { safeLog } from "@/lib/log/sanitize"
@@ -73,6 +74,8 @@ export async function executeSSH(
     } catch {
       return { success: false, error: "Failed to decrypt SSH key" }
     }
+
+
     // Passphrase for key
     if (connection.sshPassEnc) {
       try {
@@ -92,9 +95,11 @@ export async function executeSSH(
     if (connection.sshKeyEnc) {
       try { key = decryptSecret(connection.sshKeyEnc) } catch {}
     }
+
     if (connection.sshPassEnc) {
       try {
         const decrypted = decryptSecret(connection.sshPassEnc)
+
         if (key) passphrase = decrypted
         else password = decrypted
       } catch {}
@@ -115,6 +120,7 @@ export async function executeSSH(
   // 1. Try orchestrator
   try {
     const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
+
     if (key) body.key = key
     if (password) body.password = password
     if (passphrase) body.passphrase = passphrase
@@ -128,12 +134,16 @@ export async function executeSSH(
 
     if (res.ok) {
       const data = await res.json()
+
       console.log(`[ssh] executed via orchestrator on ${safeLog(nodeIp)}`)
-      return { success: data.success !== false, output: data.output, error: data.error }
+
+return { success: data.success !== false, output: data.output, error: data.error }
     }
 
     const err = await res.json().catch(() => ({}))
     const errMsg = err?.error || res.statusText
+
+
     // If orchestrator rejects the command (whitelist), fall through to direct ssh2
     if (errMsg.includes('not allowed') || errMsg.includes('not permitted') || res.status === 403) {
       console.log(`[ssh] orchestrator rejected command, falling back to ssh2 for ${safeLog(nodeIp)}`)
@@ -164,10 +174,12 @@ export function executeSSHDirect(opts: {
 }): Promise<SSHResult> {
   return new Promise((resolve) => {
     const conn = new Client()
+
     // Overall timeout for the full SSH operation (connect + exec + stream).
     // Long-running commands (e.g. multi-GB dd writes) pass a large timeoutMs
     // from the caller. Falls back to 30s for plain command execs.
     const overallTimeoutMs = opts.timeoutMs ?? 30_000
+
     const timeout = setTimeout(() => {
       conn.end()
       resolve({ success: false, error: `SSH connection timeout (${Math.round(overallTimeoutMs / 1000)}s)` })
@@ -180,7 +192,8 @@ export function executeSSHDirect(opts: {
           clearTimeout(timeout)
           conn.end()
           resolve({ success: false, error: err.message })
-          return
+
+return
         }
 
         let stdout = ""
@@ -195,6 +208,7 @@ export function executeSSHDirect(opts: {
         stream.on("close", (code: number) => {
           clearTimeout(timeout)
           conn.end()
+
           if (code === 0 || code === null) {
             console.log(`[ssh] executed via ssh2 on ${safeLog(opts.host)}`)
             resolve({ success: true, output: stdout.trim(), error: stderr.trim() || undefined })
@@ -234,6 +248,7 @@ export function executeSSHDirect(opts: {
       connectConfig.privateKey = opts.key
       if (opts.passphrase) connectConfig.passphrase = opts.passphrase
     }
+
     if (opts.password) {
       connectConfig.password = opts.password
       connectConfig.tryKeyboard = true

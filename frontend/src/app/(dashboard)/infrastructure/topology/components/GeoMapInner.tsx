@@ -20,12 +20,14 @@ const statusColors: Record<string, string> = {
 function getUsageColor(pct: number): string {
   if (pct >= 90) return '#ef4444'
   if (pct >= 70) return '#f59e0b'
-  return '#22c55e'
+
+return '#22c55e'
 }
 
 function computeClusterStats(conn: InventoryCluster) {
   const totalNodes = conn.nodes.length
   const totalVms = conn.nodes.reduce((sum, n) => sum + n.guests.length, 0)
+
   const runningVms = conn.nodes.reduce(
     (sum, n) => sum + n.guests.filter((g) => g.status === 'running').length,
     0
@@ -41,6 +43,7 @@ function computeClusterStats(conn: InventoryCluster) {
       cpuSum += node.cpu
       cpuCount++
     }
+
     if (node.mem != null) memUsed += node.mem
     if (node.maxmem != null) memTotal += node.maxmem
   }
@@ -77,6 +80,7 @@ function createSingleConnectionHtml(conn: InventoryCluster) {
   const ramColor = getUsageColor(stats.ramPct)
 
   const name = conn.name.length > 18 ? conn.name.slice(0, 17) + '…' : conn.name
+
   const location = conn.locationLabel
     ? (conn.locationLabel.length > 22 ? conn.locationLabel.slice(0, 21) + '…' : conn.locationLabel)
     : ''
@@ -107,6 +111,7 @@ function createGroupedIcon(group: InventoryCluster[]) {
   // Use the worst status color for the border
   const worstStatus = group.some(c => c.status === 'offline') ? 'offline'
     : group.some(c => c.status === 'degraded') ? 'degraded' : 'online'
+
   const borderColor = statusColors[worstStatus] || '#6b7280'
 
   const innerHtml = group
@@ -152,6 +157,7 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
       map.setView(positions[0], 10)
     } else {
       const bounds = L.latLngBounds(positions.map(([lat, lng]) => [lat, lng]))
+
       map.fitBounds(bounds, { padding: [80, 80], maxZoom: 12 })
     }
   }, [map, positions])
@@ -226,8 +232,13 @@ export default function GeoMapInner({ connections, onSelectCluster }: GeoMapInne
 
               if (connId) {
                 const conn = group.connections.find(c => c.id === connId)
-                if (conn) { onSelectCluster(conn); return }
+
+                if (conn) { onSelectCluster(conn);
+
+return }
               }
+
+
               // Fallback: open first connection
               onSelectCluster(group.connections[0])
             },

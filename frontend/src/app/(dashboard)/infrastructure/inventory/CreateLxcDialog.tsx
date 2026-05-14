@@ -1,9 +1,8 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { useRBAC } from '@/contexts/RBACContext'
-import { useTenant } from '@/contexts/TenantContext'
 
 import {
   Alert,
@@ -33,7 +32,12 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { alpha } from '@mui/material/styles'
+
+import { useRBAC } from '@/contexts/RBACContext'
+import { useTenant } from '@/contexts/TenantContext'
+
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { AllVmItem } from './InventoryTree'
@@ -56,6 +60,7 @@ function CreateLxcDialog({
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin } = useRBAC()
+
   // Tenants other than the provider get the cloud abstraction: no node
   // picker, smart auto-placement on the least-loaded node.
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -191,9 +196,11 @@ return
     const scopedVms = selectedConnection
       ? allVms.filter(vm => vm.connId === selectedConnection)
       : allVms
+
     const usedIds = new Set(scopedVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
 
     let nextId = 100
+
     while (usedIds.has(nextId)) {
       nextId++
     }
@@ -225,6 +232,7 @@ return
             nodesList.forEach((node: any) => {
               const cpuPct = node.maxcpu ? (node.cpu || 0) * 100 : 0
               const memPct = node.maxmem ? ((node.mem || 0) / node.maxmem) * 100 : 0
+
               allNodes.push({
                 ...node,
                 connId: conn.id,
@@ -248,12 +256,15 @@ return
         if (pool.length === 0) return null
         const online = pool.filter(n => n.status === 'online')
         const candidates = online.length > 0 ? online : pool
+
         const scored = candidates.map(n => ({
           node: n,
           score: (n.cpuPct ?? 0) + 1.5 * (n.memPct ?? 0),
         }))
+
         scored.sort((a, b) => a.score - b.score)
-        return scored[0].node
+
+return scored[0].node
       }
 
       if (allNodes.length > 0) {
@@ -261,7 +272,9 @@ return
           const pool = defaultConnId
             ? allNodes.filter((n: any) => n.connId === defaultConnId)
             : allNodes
+
           const target = pickBestNode(pool.length > 0 ? pool : allNodes)
+
           if (target) {
             setSelectedNodeValue(target.node)
             setResolvedNode(target.node)
@@ -270,11 +283,13 @@ return
         } else if (defaultConnId && defaultNode) {
           const match = allNodes.find((n: any) => n.connId === defaultConnId && n.node === defaultNode)
           const target = match || allNodes[0]
+
           setSelectedNodeValue(target.node)
           setResolvedNode(target.node)
           setSelectedConnection(target.connId)
         } else if (defaultConnId) {
           const clusterNodes = allNodes.filter((n: any) => n.connId === defaultConnId)
+
           if (clusterNodes.length > 0) {
             setPendingClusterSelect(defaultConnId)
             setSelectedConnection(defaultConnId)
@@ -309,19 +324,23 @@ return
     }[] = []
 
     const connMap = new Map<string, any[]>()
+
     nodes.forEach(n => {
       if (!connMap.has(n.connId)) {
         connMap.set(n.connId, [])
       }
+
       connMap.get(n.connId)!.push(n)
     })
 
     connMap.forEach((nodeList, connId) => {
       const connName = nodeList[0]?.connName || connId
       const onlineNodes = nodeList.filter(n => n.status === 'online')
+
       const avgCpu = onlineNodes.length > 0
         ? onlineNodes.reduce((sum, n) => sum + (n.cpuPct || 0), 0) / onlineNodes.length
         : 0
+
       const avgMem = onlineNodes.length > 0
         ? onlineNodes.reduce((sum, n) => sum + (n.memPct || 0), 0) / onlineNodes.length
         : 0
@@ -342,15 +361,19 @@ return
   // Trouver le meilleur node d'un cluster
   const findBestNode = (connId: string): string | null => {
     const group = groupedNodes.find(g => g.connId === connId)
+
     if (!group) return null
 
     const onlineNodes = group.nodes.filter(n => n.status === 'online')
+
     if (onlineNodes.length === 0) return null
 
     const bestNode = onlineNodes.reduce((best, node) => {
       const score = (node.cpuPct || 0) + (node.memPct || 0)
       const bestScore = (best.cpuPct || 0) + (best.memPct || 0)
-      return score < bestScore ? node : best
+
+
+return score < bestScore ? node : best
     })
 
     return bestNode.node
@@ -379,7 +402,8 @@ return
   useEffect(() => {
     if (!open || !selectedConnection) {
       setPools([])
-      return
+
+return
     }
 
     const loadPools = async () => {
@@ -403,14 +427,17 @@ return
   useEffect(() => {
     if (pendingClusterSelect && groupedNodes.length > 0) {
       const group = groupedNodes.find(g => g.connId === pendingClusterSelect)
+
       if (group && group.isCluster) {
         handleNodeChange(`cluster:${pendingClusterSelect}`)
       } else if (group) {
         const nodeName = group.nodes[0]?.node || ''
+
         setSelectedNodeValue(nodeName)
         setResolvedNode(nodeName)
         setSelectedConnection(pendingClusterSelect)
       }
+
       setPendingClusterSelect(null)
     }
   }, [pendingClusterSelect, groupedNodes])
@@ -418,9 +445,11 @@ return
   // Quand on sélectionne un node ou cluster
   const handleNodeChange = (value: string) => {
     setSelectedNodeValue(value)
+
     if (value.startsWith('cluster:')) {
       const connId = value.replaceAll('cluster:', '')
       const bestNode = findBestNode(connId)
+
       if (bestNode) {
         setResolvedNode(bestNode)
         setSelectedConnection(connId)
@@ -428,6 +457,7 @@ return
     } else {
       setResolvedNode(value)
       const nodeData = nodes.find(n => n.node === value)
+
       if (nodeData) {
         setSelectedConnection(nodeData.connId)
       }
@@ -465,6 +495,7 @@ return
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/network-choices?node=${encodeURIComponent(node)}`
       )
+
       if (res.ok) {
         const json = await res.json()
         const choices = Array.isArray(json.data) ? json.data : []
@@ -472,6 +503,7 @@ return
 
         if (bridgeList.length > 0) {
           setBridges(bridgeList)
+
           if (!bridgeList.includes(networkBridge)) {
             setNetworkBridge(bridgeList[0])
           }
@@ -495,7 +527,8 @@ return
   useEffect(() => {
     if (!selectedConnection || !templateStorage) {
       setTemplates([])
-      return
+
+return
     }
 
     // Candidate nodes = every entry in `storages` that matches this storage
@@ -510,10 +543,12 @@ return
 
     if (candidateNodes.length === 0) {
       setTemplates([])
-      return
+
+return
     }
 
     let cancelled = false
+
     setLoadingTemplates(true)
 
     Promise.all(candidateNodes.map(async (n) => {
@@ -521,25 +556,31 @@ return
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(selectedConnection)}/nodes/${encodeURIComponent(n)}/storage/${encodeURIComponent(templateStorage)}/content?content=vztmpl`
         )
+
         if (!res.ok) return { node: n, items: [] }
         const json = await res.json()
-        return { node: n, items: Array.isArray(json.data) ? json.data : [] }
+
+
+return { node: n, items: Array.isArray(json.data) ? json.data : [] }
       } catch {
         return { node: n, items: [] }
       }
     })).then(results => {
       if (cancelled) return
+
       // Merge by filename. For shared storages we'd see the same volid
       // on every node; for non-shared we see it only on the node that has
       // it. `availableOn` carries which nodes can actually create using
       // this template — used downstream to switch resolvedNode if the
       // current one doesn't host the picked template.
       const merged = new Map<string, any>()
+
       for (const { node: n, items } of results) {
         for (const item of items) {
           const volid = item.volid || ''
           const filename = volid.includes('/') ? volid.split('/').pop()! : volid
           const existing = merged.get(filename)
+
           if (existing) {
             if (!existing.availableOn.includes(n)) existing.availableOn.push(n)
           } else {
@@ -553,7 +594,9 @@ return
           }
         }
       }
+
       const list = Array.from(merged.values()).sort((a, b) => a.filename.localeCompare(b.filename))
+
       setTemplates(list)
     }).finally(() => {
       if (!cancelled) setLoadingTemplates(false)
@@ -951,7 +994,9 @@ return
                     value={template}
                     onChange={(e) => {
                       const filename = e.target.value
+
                       setTemplate(filename)
+
                       // For non-shared storages (e.g. `local`), the template
                       // only exists on the nodes listed in `availableOn`. If
                       // resolvedNode (picked earlier by findBestNode) isn't
@@ -959,6 +1004,7 @@ return
                       // "template doesn't exist". Auto-realign to a hosting
                       // node so the LXC lands where the template actually is.
                       const tmpl = templates.find((tt: any) => tt.filename === filename)
+
                       if (tmpl && Array.isArray(tmpl.availableOn) && tmpl.availableOn.length > 0
                         && !tmpl.availableOn.includes(resolvedNode)) {
                         setResolvedNode(tmpl.availableOn[0])
@@ -1034,7 +1080,9 @@ return
       case 3: // CPU
         {
           const cpuPresets = [1, 2, 4, 8, 16]
-          return (
+
+
+return (
             <Stack spacing={2}>
               {/* Quick presets */}
               <Box>
@@ -1101,18 +1149,25 @@ return
       case 4: // Memory
         {
           const memoryMarks = [128, 256, 512, 1024, 2048, 4096, 8192, 16384]
+
           const memoryToSlider = (mib: number) => {
             for (let i = memoryMarks.length - 1; i >= 0; i--) {
               if (mib >= memoryMarks[i]) return i + (mib - memoryMarks[i]) / (memoryMarks[Math.min(i + 1, memoryMarks.length - 1)] - memoryMarks[i])
             }
-            return 0
+
+
+return 0
           }
+
           const sliderToMemory = (val: number) => {
             const idx = Math.floor(val)
             const frac = val - idx
+
             if (idx >= memoryMarks.length - 1) return memoryMarks[memoryMarks.length - 1]
             const raw = memoryMarks[idx] + frac * (memoryMarks[idx + 1] - memoryMarks[idx])
-            return Math.round(raw / 32) * 32 || 32
+
+
+return Math.round(raw / 32) * 32 || 32
           }
 
           return (
@@ -1328,7 +1383,9 @@ return
               {items}
             </Box>
           )
-          return (
+
+
+return (
             <Box>
               {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
               <Alert severity="info" sx={{ mb: 2 }}>

@@ -25,6 +25,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -61,6 +62,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Build set of CephFS pool names (data + metadata pools) to distinguish from RBD pools
     const cephFSPoolNames = new Set<string>()
+
     for (const fs of (fsList || [])) {
       if (fs.data_pool) cephFSPoolNames.add(fs.data_pool)
       if (fs.metadata_pool) cephFSPoolNames.add(fs.metadata_pool)
@@ -68,16 +70,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Si pas de status Ceph, le cluster n'a probablement pas Ceph
     if (!status) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Ceph not available on this cluster",
-        hasCeph: false 
+        hasCeph: false
       }, { status: 404 })
     }
 
     // Parser le statut de santé
     const health = status.health?.status || 'UNKNOWN'
     const healthChecks = status.health?.checks || {}
-    
+
     // Parser les checks de santé en liste
     const healthIssues: any[] = []
 
@@ -94,6 +96,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Statistiques du cluster
     const pgmap = status.pgmap || {}
+
     // RAW capacity from pgmap (total physical disk space, before replication)
     const rawTotalBytes = pgmap.bytes_total || 0
     const rawUsedBytes = pgmap.bytes_used || 0
@@ -105,9 +108,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // Effective capacity using data_bytes (logical data, no replication overhead)
     // and bytes_avail / avg replication factor for available space
     const poolsArr = Array.isArray(poolList) ? poolList : []
+
     const avgReplication = poolsArr.length > 0
       ? poolsArr.reduce((sum: number, p: any) => sum + (p.size || 3), 0) / poolsArr.length
       : 3
+
     const dataBytes = pgmap.data_bytes || 0
     const effectiveAvailBytes = rawAvailBytes > 0 ? rawAvailBytes / avgReplication : 0
     const effectiveTotalBytes = dataBytes + effectiveAvailBytes
@@ -156,10 +161,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         }
       }
 
-      
+
 return result
     }
-    
+
     // Extract CRUSH tree hierarchy preserving root → datacenter → host → osd nesting
     const extractCrushTree = (items: any[]): any[] => {
       return items.map(item => {
@@ -168,12 +173,16 @@ return result
           name: item.name,
           type: item.type || (typeof item.id === 'number' && item.id >= 0 ? 'osd' : 'unknown'),
         }
+
         if (item.type_id !== undefined) node.type_id = item.type_id
         if (item.status) node.status = item.status
+
         if (item.children && Array.isArray(item.children)) {
           node.children = extractCrushTree(item.children)
         }
-        return node
+
+
+return node
       })
     }
 
@@ -194,9 +203,10 @@ return result
         flatOsdList = extractOsdsFromTree((osdList as any).root.children)
       }
     }
-    
+
     // Extract full CRUSH tree hierarchy
     let crushTree: any[] = []
+
     if (Array.isArray(osdList)) {
       if (osdList.length > 0 && osdList[0]?.children) {
         crushTree = extractCrushTree(osdList)
@@ -231,12 +241,12 @@ return result
         // Parfois c'est une string "up" ou "down"
         const statusStr = String(osd.status || '').toLowerCase()
 
-        const isUp = osd.up === 1 || osd.up === true || osd.up === '1' || 
+        const isUp = osd.up === 1 || osd.up === true || osd.up === '1' ||
                      statusStr === 'up' || statusStr.includes('up')
 
         const isIn = osd.in === 1 || osd.in === true || osd.in === '1' ||
                      (osd.reweight !== undefined && osd.reweight > 0)
-        
+
         return {
           id: osd.id,
           name: osd.name || `osd.${osd.id}`,
@@ -263,7 +273,7 @@ return result
     const monitors = (Array.isArray(monList) ? monList : []).map((mon: any) => {
       const isInQuorum = quorum.includes(mon.name)
 
-      
+
 return {
         name: mon.name,
         host: mon.host || mon.addr?.split(':')[0] || 'unknown',
@@ -330,7 +340,7 @@ return {
     const cephData = {
       hasCeph: true,
       nodeName,
-      
+
       // Santé
       health: {
         status: health,
@@ -347,6 +357,7 @@ return {
         totalFormatted: formatBytes(totalBytes),
         usedFormatted: formatBytes(usedBytes),
         availFormatted: formatBytes(availBytes),
+
         // RAW (physical disk totals, before replication)
         rawTotalBytes,
         rawUsedBytes,
@@ -410,13 +421,13 @@ return {
   } catch (e: any) {
     // Si erreur 501 ou 500, Ceph n'est probablement pas installé
     if (e?.message?.includes('501') || e?.message?.includes('not installed')) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Ceph not installed on this cluster",
-        hasCeph: false 
+        hasCeph: false
       }, { status: 404 })
     }
 
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

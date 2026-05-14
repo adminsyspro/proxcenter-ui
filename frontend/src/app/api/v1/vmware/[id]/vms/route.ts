@@ -18,9 +18,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, subType: true, vmwareDatacenter: true },
@@ -53,14 +55,18 @@ export async function GET(
       // an empty map and the path fields stay undefined on the response.
       const hostMors = vmList.map(vm => vm.hostMor).filter(Boolean)
       let hostPathByMor = new Map<string, { datacenter: string; cluster: string | null; host: string; status: "ok" | "warn" | "crit" | "unknown"; connectionState?: string; powerState?: string }>()
+
       try {
         hostPathByMor = await soapResolveHostInventoryPaths(session, hostMors)
+
+
         // Diagnostic logging: helps debug "vcenterDatacenter required" pipeline errors.
         // Logs are scoped per-connection so a vCenter with broken inventory permissions
         // is identifiable without dumping every VM. Only logs when something is "off".
         if (session.isVcenter) {
           const uniqueHosts = new Set(hostMors).size
           const resolvedCount = hostPathByMor.size
+
           if (resolvedCount < uniqueHosts) {
             console.warn(
               `[vmware/vms] Resolved only ${resolvedCount}/${uniqueHosts} ESXi host inventory paths ` +
@@ -81,7 +87,9 @@ export async function GET(
       // Map VmwareVmSummary to the response format expected by the frontend
       const vms = vmList.map(vm => {
         const path = vm.hostMor ? hostPathByMor.get(vm.hostMor) : undefined
-        return {
+
+
+return {
           vmid: vm.moId,
           name: vm.name,
           status: vm.powerState === 'poweredOn' ? 'running' : vm.powerState === 'suspended' ? 'suspended' : 'stopped',
@@ -91,15 +99,18 @@ export async function GET(
           guest_OS: vm.guestOS || undefined,
           committed: vm.committedStorage || undefined,
           uncommitted: vm.uncommittedStorage || undefined,
+
           // VMware Tools state, used by the migration modal to preflight
           // Live migrations of Windows guests (VSS quiesce needs running Tools).
           toolsStatus: vm.toolsStatus,
           toolsRunningStatus: vm.toolsRunningStatus,
+
           // vCenter-only fields used by the virt-v2v migration flow.
           // Undefined on standalone ESXi (no inventory hierarchy needed there).
           vcenterDatacenter: path?.datacenter,
           vcenterCluster: path?.cluster ?? undefined,
           vcenterHost: path?.host,
+
           /**
            * Aggregate health of the ESXi host running this VM, surfaced so the
            * inventory tree can paint a status pastille on host group rows. The

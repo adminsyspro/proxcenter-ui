@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import { Box, Paper, Typography, useTheme, Skeleton, Stack } from '@mui/material'
@@ -23,18 +24,21 @@ const VM_COLORS_BY_METRIC: Record<Metric, string[]> = {
     '#f59e0b', '#fbbf24', '#d97706', '#b45309', '#fcd34d', '#92400e',
     '#ef4444', '#dc2626', '#f87171', '#7c2d12',
   ],
+
   // RAM — blue / cyan
   ram: [
     '#3b82f6', '#60a5fa', '#2563eb', '#1d4ed8', '#93c5fd', '#1e40af',
     '#0ea5e9', '#38bdf8', '#0284c7', '#0369a1', '#7dd3fc', '#075985',
     '#06b6d4', '#22d3ee', '#0891b2', '#155e75',
   ],
+
   // Network — green / lime
   net: [
     '#22c55e', '#4ade80', '#16a34a', '#15803d', '#86efac', '#166534',
     '#10b981', '#34d399', '#059669', '#047857', '#6ee7b7', '#065f46',
     '#84cc16', '#a3e635', '#65a30d', '#3f6212',
   ],
+
   // Disk I/O — purple / magenta
   io: [
     '#a855f7', '#c084fc', '#9333ea', '#7e22ce', '#d8b4fe', '#6b21a8',
@@ -61,7 +65,9 @@ const guestKey = (g: Guest) => `${g.connId}:${g.type}:${g.vmid}`
 
 function fmtTime(ts: number): string {
   const d = new Date(ts * 1000)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+
+
+return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function fmtBytes(n: number): string {
@@ -69,8 +75,10 @@ function fmtBytes(n: number): string {
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
   let v = n
   let i = 0
+
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
-  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`
+
+return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`
 }
 
 /**
@@ -83,21 +91,26 @@ function reshape(vms: VmSeries[]): { rows: any[]; vmIndex: Array<{ key: string; 
 
   for (const vm of vms) {
     const m = new Map<number, { cpu: number | null; ram: number | null; net: number; io: number }>()
+
     for (const p of vm.raw || []) {
       const t = Number(p?.time)
+
       if (!Number.isFinite(t)) continue
       const cpuRaw = Number(p?.cpu)
       const cpuPct = Number.isFinite(cpuRaw) ? Math.max(0, Math.min(100, cpuRaw <= 1.5 ? cpuRaw * 100 : cpuRaw)) : null
       const memRaw = Number(p?.mem ?? p?.memused ?? 0)
       const maxMem = Number(p?.maxmem ?? p?.memtotal ?? 0)
       let ramPct: number | null = null
+
       if (memRaw <= 1.5 && memRaw > 0) ramPct = Math.max(0, Math.min(100, memRaw * 100))
       else if (maxMem > 0) ramPct = Math.max(0, Math.min(100, (memRaw / maxMem) * 100))
       const net = Number(p?.netin ?? 0) + Number(p?.netout ?? 0)
       const io = Number(p?.diskread ?? 0) + Number(p?.diskwrite ?? 0)
+
       m.set(t, { cpu: cpuPct, ram: ramPct, net, io })
       tsSet.add(t)
     }
+
     if (m.size > 0) byVm[vm.key] = m
   }
 
@@ -107,14 +120,18 @@ function reshape(vms: VmSeries[]): { rows: any[]; vmIndex: Array<{ key: string; 
 
   const rows = sortedTs.map(ts => {
     const row: any = { t: fmtTime(ts), ts }
+
     for (const v of vmIndex) {
       const point = byVm[v.key].get(ts)
+
       row[`${v.key}_cpu`] = point?.cpu == null ? null : Math.round(point.cpu)
       row[`${v.key}_ram`] = point?.ram == null ? null : Math.round(point.ram)
       row[`${v.key}_net`] = point?.net ?? null
       row[`${v.key}_io`] = point?.io ?? null
     }
-    return row
+
+
+return row
   })
 
   return { rows, vmIndex }
@@ -136,8 +153,10 @@ function MetricTooltip({ active, payload, label, isDark, spec }: any) {
   const tooltipBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'
   const tooltipText = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)'
   const visible = (payload as any[]).filter(e => e.value != null)
+
   if (visible.length === 0) return null
-  return (
+
+return (
     <div style={{
       background: tooltipBg, border: `1px solid ${tooltipBorder}`, borderRadius: 6,
       overflow: 'hidden', fontSize: 10, minWidth: 160, color: tooltipText,
@@ -212,10 +231,13 @@ function ChartCard({ spec, rows, vmIndex, loading, empty }: ChartCardProps) {
                   const palette = VM_COLORS_BY_METRIC[spec.metric]
                   const color = palette[i % palette.length]
                   const gradId = `myvdc-grad-${spec.metric}-${i}`
+
                   // Top opacity scales down with VM count so 30 VMs don't stack
                   // into a muddy block. Floor at 0.08 keeps a visible tint.
                   const topOpacity = Math.max(0.08, Math.min(0.45, 1.4 / Math.max(1, vmIndex.length)))
-                  return (
+
+
+return (
                     <linearGradient key={gradId} id={gradId} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={color} stopOpacity={topOpacity} />
                       <stop offset="100%" stopColor={color} stopOpacity={0} />
@@ -237,7 +259,9 @@ function ChartCard({ spec, rows, vmIndex, loading, empty }: ChartCardProps) {
                 const palette = VM_COLORS_BY_METRIC[spec.metric]
                 const color = palette[i % palette.length]
                 const gradId = `myvdc-grad-${spec.metric}-${i}`
-                return (
+
+
+return (
                   <Area
                     key={v.key}
                     type="monotone"
@@ -276,8 +300,10 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
     if (connectionIds.length === 0) {
       setGuests([])
       setLoading(false)
-      return
+
+return
     }
+
     setLoading(true)
     const accepted = new Set(connectionIds)
     const found: Guest[] = []
@@ -286,7 +312,9 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
     const onCluster = (ev: MessageEvent) => {
       try {
         const cluster = JSON.parse(ev.data)
+
         if (!accepted.has(cluster.id)) return
+
         for (const n of cluster.nodes ?? []) {
           for (const g of n.guests ?? []) {
             found.push({
@@ -300,9 +328,11 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
             })
           }
         }
+
         setGuests([...found])
       } catch {}
     }
+
     const onDone = () => { src.close() }
     const onError = () => { src.close() }
 
@@ -322,8 +352,10 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
     if (guests.length === 0) {
       setPerVm([])
       setLoading(false)
-      return
+
+return
     }
+
     const controller = new AbortController()
     let cancelled = false
 
@@ -331,27 +363,35 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
       // Templates have no metrics; everything else (running OR stopped that
       // ran earlier in the window) gets a fetch — recharts handles null gaps.
       const targets = guests.filter(g => !g.template)
+
       if (targets.length === 0) {
         if (!cancelled) { setPerVm([]); setLoading(false) }
-        return
+
+return
       }
+
       const results = await Promise.all(targets.map(async (g): Promise<VmSeries> => {
         try {
           const path = `/nodes/${g.node}/${g.type}/${g.vmid}`
           const url = `/api/v1/connections/${encodeURIComponent(g.connId)}/rrd?path=${encodeURIComponent(path)}&timeframe=hour`
           const res = await fetch(url, { cache: 'no-store', signal: controller.signal })
+
           if (!res.ok) return { key: guestKey(g), name: g.name, raw: [] }
           const json = await res.json()
           let raw: any[] = []
+
           if (Array.isArray(json)) raw = json
           else if (Array.isArray(json?.data)) raw = json.data
           else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-          return { key: guestKey(g), name: g.name, raw }
+
+return { key: guestKey(g), name: g.name, raw }
         } catch {
           return { key: guestKey(g), name: g.name, raw: [] }
         }
       }))
+
       if (cancelled) return
+
       // Stable sort by VM name so the color palette stays consistent across
       // refreshes. Without this, lines change color on every poll cycle.
       results.sort((a, b) => a.name.localeCompare(b.name))
@@ -361,7 +401,9 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
 
     void fetchAll()
     const interval = setInterval(() => { void fetchAll() }, RRD_REFRESH_MS)
-    return () => { cancelled = true; controller.abort(); clearInterval(interval) }
+
+
+return () => { cancelled = true; controller.abort(); clearInterval(interval) }
   }, [guests])
 
   const { rows, vmIndex } = useMemo(() => reshape(perVm), [perVm])

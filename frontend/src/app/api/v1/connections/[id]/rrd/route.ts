@@ -13,6 +13,7 @@ export const runtime = "nodejs"
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   const params = await Promise.resolve(ctx.params)
@@ -25,6 +26,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     if (!path.startsWith("/nodes/")) {
@@ -43,6 +45,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
   } catch (e: any) {
     console.error(`[rrd-api] ERROR connId=${id} path=${path} tf=${timeframe}:`, e?.message || e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Box, Button, CircularProgress, Alert, Stack } from '@mui/material'
+
 import { useToast } from '@/contexts/ToastContext'
 
 import TagStyleSection from './TagStyleSection'
@@ -37,6 +39,7 @@ function parseTagStyle(tagStyle: any): {
   caseSensitive: boolean
 } {
   const result = { colorMap: [] as TagColorEntry[], shape: 'full', ordering: 'config', caseSensitive: false }
+
   if (!tagStyle) return result
 
   if (typeof tagStyle === 'object') {
@@ -44,28 +47,36 @@ function parseTagStyle(tagStyle: any): {
       String(tagStyle['color-map']).split(';').forEach(entry => {
         if (!entry) return
         const segments = entry.split(':')
+
         if (segments.length < 2) return
         const tag = segments[0], bgHex = segments[1], fgHex = segments[2]
+
         if (!tag || !bgHex || bgHex.length < 6) return
         result.colorMap.push({ tag, bg: `#${bgHex.slice(0, 6)}`, fg: fgHex && fgHex.length >= 6 ? `#${fgHex.slice(0, 6)}` : '#ffffff' })
       })
     }
+
     if (tagStyle.shape) result.shape = tagStyle.shape
     if (tagStyle.ordering) result.ordering = tagStyle.ordering
     if (tagStyle['case-sensitive'] === 1 || tagStyle['case-sensitive'] === '1') result.caseSensitive = true
-    return result
+
+return result
   }
 
   const parts = String(tagStyle).split(',')
+
   for (const part of parts) {
     const [key, ...rest] = part.split('=')
     const val = rest.join('=')
+
     if (key === 'color-map' && val) {
       val.split(';').forEach(entry => {
         if (!entry) return
         const segments = entry.split(':')
+
         if (segments.length < 2) return
         const tag = segments[0], bgHex = segments[1], fgHex = segments[2]
+
         if (!tag || !bgHex || bgHex.length < 6) return
         result.colorMap.push({ tag, bg: `#${bgHex.slice(0, 6)}`, fg: fgHex && fgHex.length >= 6 ? `#${fgHex.slice(0, 6)}` : '#ffffff' })
       })
@@ -73,24 +84,32 @@ function parseTagStyle(tagStyle: any): {
     else if (key === 'ordering') result.ordering = val || 'config'
     else if (key === 'case-sensitive') result.caseSensitive = val === '1'
   }
-  return result
+
+
+return result
 }
 
 function buildTagStyleString(colorMap: TagColorEntry[], shape: string, ordering: string, caseSensitive: boolean): string {
   const parts: string[] = []
+
   if (colorMap.length > 0) {
     const mapStr = colorMap
       .filter(e => e.tag && e.bg)
       .map(e => {
         const bg = e.bg.replace('#', ''), fg = e.fg.replace('#', '')
-        return fg && fg !== 'ffffff' ? `${e.tag}:${bg}:${fg}` : `${e.tag}:${bg}`
+
+
+return fg && fg !== 'ffffff' ? `${e.tag}:${bg}:${fg}` : `${e.tag}:${bg}`
       }).join(';')
+
     if (mapStr) parts.push(`color-map=${mapStr}`)
   }
+
   if (shape && shape !== 'full') parts.push(`shape=${shape}`)
   if (ordering && ordering !== 'config') parts.push(`ordering=${ordering}`)
   if (caseSensitive) parts.push('case-sensitive=1')
-  return parts.join(',')
+
+return parts.join(',')
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,20 +118,27 @@ function buildTagStyleString(colorMap: TagColorEntry[], shape: string, ordering:
 
 function parseKV(val: any, keys: string[]): Record<string, string> {
   const result: Record<string, string> = {}
+
   keys.forEach(k => result[k] = '')
   if (!val) return result
+
   if (typeof val === 'object') {
     keys.forEach(k => { if (val[k] !== undefined) result[k] = String(val[k]) })
+
     // webauthn uses 'rp' for name
     if (val.rp !== undefined && keys.includes('rp')) result.rp = String(val.rp)
-    return result
+
+return result
   }
+
   String(val).split(',').forEach(part => {
     const [k, ...rest] = part.split('=')
     const v = rest.join('=')
+
     if (keys.includes(k)) result[k] = v || ''
   })
-  return result
+
+return result
 }
 
 function buildKV(obj: Record<string, string>): string {
@@ -234,15 +260,19 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
   const fetchOptions = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/cluster/options`, { cache: 'no-store' })
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
       const data: DatacenterOptions = json?.data || {}
+
       setRawOptions(data)
 
       // Tag style
       const ts = parseTagStyle(data['tag-style'])
+
       setTagColors(ts.colorMap)
       setTagShape(ts.shape)
       setTagOrdering(ts.ordering)
@@ -259,25 +289,31 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
       // Migration
       const mig = parseKV(data.migration, ['type', 'network'])
+
       setMigrationType(mig.type)
       setMigrationNetwork(mig.network)
 
       // Replication
       const rep = parseKV(data.replication, ['type', 'network'])
+
       setReplicationType(rep.type)
       setReplicationNetwork(rep.network)
 
       // Fetch network interfaces from first node
       try {
         const nodesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`, { cache: 'no-store' })
+
         if (nodesRes.ok) {
           const nodesJson = await nodesRes.json()
           const nodes = nodesJson?.data || []
+
           if (nodes.length > 0) {
             const firstNode = nodes[0].node
             const netRes = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(firstNode)}/network`, { cache: 'no-store' })
+
             if (netRes.ok) {
               const netJson = await netRes.json()
+
               setNetworkInterfaces(netJson?.data || [])
             }
           }
@@ -286,26 +322,31 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
       // HA
       const ha = parseKV(data.ha, ['shutdown_policy'])
+
       setHaShutdownPolicy(ha.shutdown_policy || 'conditional')
 
       // CRS
       const crs = parseKV(data.crs, ['ha', 'ha-rebalance-on-start'])
+
       setCrsHaScheduling(crs.ha || 'basic')
       setCrsRebalance(crs['ha-rebalance-on-start'] === '1')
 
       // U2F
       const u2f = parseKV(data.u2f, ['appid', 'origin'])
+
       setU2fAppId(u2f.appid)
       setU2fOrigin(u2f.origin)
 
       // WebAuthn
       const wa = parseKV(data.webauthn, ['rp', 'origin', 'id'])
+
       setWebauthnName(wa.rp)
       setWebauthnOrigin(wa.origin)
       setWebauthnId(wa.id)
 
       // Bandwidth
       const bw = parseBwLimit(data.bwlimit)
+
       setBwDefault(bw.default)
       setBwRestore(bw.restore)
       setBwMigration(bw.migration)
@@ -314,10 +355,12 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
       // Advanced
       const nid = parseKV(data['next-id'], ['lower', 'upper'])
+
       setNextIdLower(nid.lower)
       setNextIdUpper(nid.upper)
 
       const uta = parseKV(data['user-tag-access'], ['user-allow'])
+
       setUserTagAccess(uta['user-allow'] || 'free')
       setRegisteredTags(data['registered-tags'] || '')
       setConsentText(data['consent-text'] || '')
@@ -336,12 +379,14 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
   const handleSave = async () => {
     setSaving(true)
+
     try {
       const body: Record<string, string> = {}
       const deleteKeys: string[] = []
 
       // Tag style
       const tagStyleStr = buildTagStyleString(tagColors, tagShape, tagOrdering, tagCaseSensitive)
+
       if (tagStyleStr) body['tag-style'] = tagStyleStr
       else if (rawOptions['tag-style']) deleteKeys.push('tag-style')
 
@@ -357,6 +402,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
         { key: 'registered-tags', value: registeredTags },
         { key: 'consent-text', value: consentText },
       ]
+
       for (const { key, value } of simpleFields) {
         if (value) body[key] = value
         else if (rawOptions[key]) deleteKeys.push(key)
@@ -364,63 +410,77 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
       // Migration
       const migStr = buildKV({ type: migrationType, network: migrationNetwork })
+
       if (migStr) body.migration = migStr
       else if (rawOptions.migration) deleteKeys.push('migration')
 
       // Replication
       const repStr = buildKV({ type: replicationType, network: replicationNetwork })
+
       if (repStr) body.replication = repStr
       else if (rawOptions.replication) deleteKeys.push('replication')
 
       // HA
       const haStr = buildKV({ shutdown_policy: haShutdownPolicy })
+
       if (haStr) body.ha = haStr
       else if (rawOptions.ha) deleteKeys.push('ha')
 
       // CRS
       const crsparts: string[] = []
+
       if (crsHaScheduling && crsHaScheduling !== 'basic') crsparts.push(`ha=${crsHaScheduling}`)
       if (crsRebalance) crsparts.push('ha-rebalance-on-start=1')
       const crsStr = crsparts.join(',')
+
       if (crsStr) body.crs = crsStr
       else if (rawOptions.crs) deleteKeys.push('crs')
 
       // U2F
       const u2fStr = buildKV({ appid: u2fAppId, origin: u2fOrigin })
+
       if (u2fStr) body.u2f = u2fStr
       else if (rawOptions.u2f) deleteKeys.push('u2f')
 
       // WebAuthn
       const waStr = buildKV({ rp: webauthnName, origin: webauthnOrigin, id: webauthnId })
+
       if (waStr) body.webauthn = waStr
       else if (rawOptions.webauthn) deleteKeys.push('webauthn')
 
       // Bandwidth
       const bwStr = buildBwLimit({ default: bwDefault, restore: bwRestore, migration: bwMigration, clone: bwClone, move: bwMove })
+
       if (bwStr) body.bwlimit = bwStr
       else if (rawOptions.bwlimit) deleteKeys.push('bwlimit')
 
       // Next ID
       const nidStr = buildKV({ lower: nextIdLower, upper: nextIdUpper })
+
       if (nidStr) body['next-id'] = nidStr
       else if (rawOptions['next-id']) deleteKeys.push('next-id')
 
       // User tag access
       const utaStr = userTagAccess && userTagAccess !== 'free' ? `user-allow=${userTagAccess}` : ''
+
       if (utaStr) body['user-tag-access'] = utaStr
       else if (rawOptions['user-tag-access']) deleteKeys.push('user-tag-access')
 
       if (deleteKeys.length > 0) body.delete = deleteKeys.join(',')
 
-      if (Object.keys(body).length === 0) { setDirty(false); return }
+      if (Object.keys(body).length === 0) { setDirty(false);
+
+return }
 
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/cluster/options`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
+
         throw new Error(errData.error || `HTTP ${res.status}`)
       }
 

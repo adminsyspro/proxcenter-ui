@@ -86,9 +86,12 @@ export class HyperVClient {
     `.trim()
 
     let diskMap: Record<string, Array<{ Path: string; SizeBytes: number }>> = {}
+
     try {
       const diskRaw = await this.winrm.execute(diskPs)
       const parsed = JSON.parse(diskRaw.trim())
+
+
       // PowerShell ConvertTo-Json wraps single-element arrays as objects,
       // and nested arrays may be objects too. Normalize carefully.
       diskMap = this.normalizeDiskMap(parsed)
@@ -189,10 +192,13 @@ export class HyperVClient {
    */
   private parseJsonArray(raw: string): any[] {
     const trimmed = raw.trim()
+
     if (!trimmed || trimmed === "[]") return []
 
     const parsed = JSON.parse(trimmed)
-    return Array.isArray(parsed) ? parsed : [parsed]
+
+
+return Array.isArray(parsed) ? parsed : [parsed]
   }
 
   /**
@@ -200,7 +206,8 @@ export class HyperVClient {
    */
   private normalizeArray(val: any): any[] {
     if (!val) return []
-    return Array.isArray(val) ? val : [val]
+
+return Array.isArray(val) ? val : [val]
   }
 
   /**
@@ -214,13 +221,16 @@ export class HyperVClient {
     if (!parsed || typeof parsed !== "object") return {}
 
     const result: Record<string, Array<{ Path: string; SizeBytes: number }>> = {}
+
     for (const [key, val] of Object.entries(parsed)) {
       result[key] = this.normalizeArray(val).map((d: any) => ({
         Path: d?.Path || "",
         SizeBytes: typeof d?.SizeBytes === "number" ? d.SizeBytes : 0,
       }))
     }
-    return result
+
+
+return result
   }
 
   /**
@@ -233,11 +243,15 @@ export class HyperVClient {
     if (typeof state === "string") {
       // Already resolved by PS (some versions return the enum name)
       const known = ["Running", "Off", "Saved", "Paused", "Stopping", "Starting", "Reset", "Other"]
+
       if (known.includes(state)) return state
+
       // Try parsing as number
       const n = Number.parseInt(state, 10)
+
       if (!Number.isNaN(n)) return this.stateNumberToString(n)
-      return state
+
+return state
     }
 
     return this.stateNumberToString(state)

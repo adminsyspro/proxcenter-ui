@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -47,10 +48,13 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
   const handleOpenAdd = async (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget)
     setLoadingTags(true)
+
     try {
       const res = await fetch('/api/v1/tags', { cache: 'no-store' })
+
       if (res.ok) {
         const json = await res.json()
+
         setAvailableTags(Array.isArray(json?.data) ? json.data : [])
       }
     } catch (e) {
@@ -74,8 +78,10 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tags: tagsString })
       })
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || String(res.status))
       }
     } else {
@@ -85,8 +91,10 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connectionId, node: nodeName, tags: tagsString })
       })
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || String(res.status))
       }
     }
@@ -94,10 +102,13 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
 
   const handleAddTag = async (tagToAdd: string) => {
     const sanitized = sanitizeTag(tagToAdd)
+
     if (!sanitized || tags.includes(sanitized)) return
     setBusy(true)
+
     try {
       const newTags = [...tags, sanitized]
+
       await saveTagsToApi(newTags)
       onTagsChange(newTags)
       setNewTagInput('')
@@ -110,8 +121,10 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
 
   const handleRemoveTag = async (tagToRemove: string) => {
     setBusy(true)
+
     try {
       const newTags = tags.filter(t => t !== tagToRemove)
+
       await saveTagsToApi(newTags)
       onTagsChange(newTags)
     } catch (e: any) {
@@ -127,7 +140,9 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
     <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
       {tags.map(tag => {
         const c = tagColorFallback(tag)
-        return (
+
+
+return (
           <Chip
             key={tag}
             size="small"
@@ -226,7 +241,9 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxHeight: 150, overflow: 'auto' }}>
               {suggestedTags.map(tag => {
                 const c = tagColorFallback(tag)
-                return (
+
+
+return (
                   <Chip
                     key={tag}
                     size="small"

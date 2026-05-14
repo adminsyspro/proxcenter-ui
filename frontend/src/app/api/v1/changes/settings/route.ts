@@ -8,6 +8,7 @@ export const runtime = 'nodejs'
 export async function GET() {
   try {
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (permError) return permError
 
     const data = await orchestratorFetch<any>('/changes/settings')
@@ -21,6 +22,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   try {
     const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (permError) return permError
 
     const body = await req.json()

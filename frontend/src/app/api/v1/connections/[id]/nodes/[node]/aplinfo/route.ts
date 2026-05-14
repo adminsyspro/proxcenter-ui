@@ -17,6 +17,7 @@ export async function GET(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -29,7 +30,8 @@ export async function GET(
     return NextResponse.json({ data: data || [] })
   } catch (e: any) {
     console.error("Error fetching aplinfo:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -44,6 +46,7 @@ export async function POST(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.STORAGE_UPLOAD, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -74,6 +77,7 @@ export async function POST(
     return NextResponse.json({ success: true, data })
   } catch (e: any) {
     console.error("Error downloading template:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -57,7 +57,9 @@ function rowToNode(r: any): NodeGreenConfigRow {
 
 export async function getConnectionGreenConfig(connectionId: string): Promise<ConnectionGreenConfigRow | null> {
   const r = await prisma.connectionGreenConfig.findUnique({ where: { connectionId } })
-  return r ? rowToConnection(r) : null
+
+
+return r ? rowToConnection(r) : null
 }
 
 export async function upsertConnectionGreenConfig(connectionId: string, input: GreenConfigInput): Promise<ConnectionGreenConfigRow> {
@@ -68,12 +70,15 @@ export async function upsertConnectionGreenConfig(connectionId: string, input: G
     overheadPerNodeW: input.overheadPerNodeW ?? null,
     updatedAt: new Date(),
   }
+
   const r = await prisma.connectionGreenConfig.upsert({
     where: { connectionId },
     update: data,
     create: { connectionId, ...data },
   })
-  return rowToConnection(r)
+
+
+return rowToConnection(r)
 }
 
 export async function deleteConnectionGreenConfig(connectionId: string): Promise<void> {
@@ -86,7 +91,9 @@ export async function getNodeGreenConfig(connectionId: string, nodeName: string)
   const r = await prisma.nodeGreenConfig.findUnique({
     where: { connectionId_nodeName: { connectionId, nodeName } },
   })
-  return r ? rowToNode(r) : null
+
+
+return r ? rowToNode(r) : null
 }
 
 export async function listNodeGreenConfigs(connectionId: string): Promise<NodeGreenConfigRow[]> {
@@ -94,7 +101,9 @@ export async function listNodeGreenConfigs(connectionId: string): Promise<NodeGr
     where: { connectionId },
     orderBy: { nodeName: 'asc' },
   })
-  return rows.map(rowToNode)
+
+
+return rows.map(rowToNode)
 }
 
 export async function upsertNodeGreenConfig(
@@ -109,12 +118,15 @@ export async function upsertNodeGreenConfig(
     overheadPerNodeW: input.overheadPerNodeW ?? null,
     updatedAt: new Date(),
   }
+
   const r = await prisma.nodeGreenConfig.upsert({
     where: { connectionId_nodeName: { connectionId, nodeName } },
     update: data,
     create: { connectionId, nodeName, ...data },
   })
-  return rowToNode(r)
+
+
+return rowToNode(r)
 }
 
 export async function deleteNodeGreenConfig(connectionId: string, nodeName: string): Promise<void> {

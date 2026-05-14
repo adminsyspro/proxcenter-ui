@@ -15,6 +15,7 @@ const RBACContext = createContext({
   scopeTypes: [],
   hiddenWidgets: [],
   loading: true,
+
   // Default stubs accept an argument so TypeScript consumers inferring the
   // context type (e.g. `rbac.hasPermission('connection.manage')`) don't trip
   // the "Expected 0 arguments" error. The real implementations below use the

@@ -1,14 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
 import {
   Box, Button, Chip, Tab, Tabs
-} from '@mui/material'
+, Typography } from '@mui/material'
 
-import { Typography } from '@mui/material'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
@@ -40,7 +40,8 @@ import type { RecoveryPlan, RecoveryExecution, UpdateReplicationJobRequest } fro
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
-  return res.json()
+
+return res.json()
 })
 
 export default function SiteRecoveryPage() {
@@ -56,6 +57,7 @@ export default function SiteRecoveryPage() {
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [createPlanOpen, setCreatePlanOpen] = useState(false)
   const [editJobId, setEditJobId] = useState<string | null>(null)
+
   const [failoverDialog, setFailoverDialog] = useState<{
     open: boolean
     planId: string | null
@@ -131,8 +133,10 @@ export default function SiteRecoveryPage() {
   // VM name map for display (vmid → name)
   const vmNameMap = useMemo(() => {
     const m: Record<number, string> = {}
+
     for (const vm of allVMs) if (vm.vmid && vm.name) m[vm.vmid] = vm.name
-    return m
+
+return m
   }, [allVMs])
 
   // Selected plan for failover dialog
@@ -164,12 +168,15 @@ export default function SiteRecoveryPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
     })
+
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({ error: res.statusText }))
       const err = new Error(errBody.error || res.statusText) as Error & { status?: number }
+
       err.status = res.status
       throw err
     }
+
     mutateJobs()
   }
 
@@ -252,6 +259,7 @@ export default function SiteRecoveryPage() {
         headers: body ? { 'Content-Type': 'application/json' } : {},
         body
       })
+
       const data = await res.json()
 
       setActiveExecution(data)
@@ -264,9 +272,11 @@ export default function SiteRecoveryPage() {
   const handleCleanupTest = useCallback(async () => {
     if (!failoverDialog.planId) return
     setCleanupLoading(true)
+
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/cleanup-test`, { method: 'POST' })
       const data = await res.json()
+
       setCleanupResult(data)
       mutateJobs()
       mutatePlans()
@@ -283,21 +293,27 @@ export default function SiteRecoveryPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vm_id: vmId, target_cluster: targetCluster, replication_job_id: jobId })
     })
+
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
+
       throw new Error(data.error || 'Failed to start VM')
     }
+
     mutateJobs()
   }, [mutateJobs])
 
   // Poll execution status every 3s while running
   useEffect(() => {
     if (!activeExecution || activeExecution.status !== 'running') return
+
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/v1/orchestrator/replication/executions/${activeExecution.id}`)
         const data = await res.json()
+
         setActiveExecution(data)
+
         if (data.status !== 'running') {
           clearInterval(interval)
           mutatePlans()
@@ -306,7 +322,9 @@ export default function SiteRecoveryPage() {
         console.error('Failed to poll execution:', e)
       }
     }, 3000)
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [activeExecution?.id, activeExecution?.status, mutatePlans])
 
   return (

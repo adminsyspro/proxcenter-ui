@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -29,6 +30,8 @@ function formatTaskType(type, t) {
   // Use translation keys from tasks.types
   const key = `tasks.types.${type}`
   const translated = t(key)
+
+
   // If translation returns the key itself, return the raw type
   return translated === key ? type : translated
 }
@@ -49,7 +52,8 @@ function getStatusLabel(status, t) {
   if (status === 'stopped') return t('tasks.status.stopped')
   if (status.includes && status.includes('migration problems')) return t('tasks.status.completedWithWarnings', { defaultMessage: 'Completed (warnings)' })
   if (status.includes && (status.includes('received interrupt') || status.includes('interrupted by user'))) return t('tasks.status.stopped')
-  return status
+
+return status
 }
 
 function getLogType(text) {
@@ -91,6 +95,7 @@ export default function TaskDetailDialog({ open, task, onClose }) {
 
   // SWR hook for task details
   const isRunningInput = task?.status === 'running' || !task?.status
+
   const { data: fetchedDetails } = useTaskDetail(
     open ? task?.connectionId : undefined,
     open ? task?.node : undefined,
@@ -104,6 +109,7 @@ export default function TaskDetailDialog({ open, task, onClose }) {
       setDetails(fetchedDetails)
       setLoading(false)
       setError(null)
+
       if (fetchedDetails.logs?.length > prevLogsLengthRef.current) {
         prevLogsLengthRef.current = fetchedDetails.logs.length
         setTimeout(scrollToBottom, 100)
@@ -171,6 +177,7 @@ export default function TaskDetailDialog({ open, task, onClose }) {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
+
         throw new Error(data.error || 'Failed to stop task')
       }
 

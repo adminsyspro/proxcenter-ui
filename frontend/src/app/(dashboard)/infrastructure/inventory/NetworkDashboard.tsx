@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import {
   Box,
   Card,
@@ -20,6 +21,7 @@ import {
   useTheme,
 } from '@mui/material'
 import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
 import { useTenant } from '@/contexts/TenantContext'
@@ -42,7 +44,9 @@ type Props = {
 /** Provider-only KPI counter. Tenants get the donut variant below. */
 function KpiCard({ label, value, icon }: { label: string; value: number | string; icon: string }) {
   const theme = useTheme()
-  return (
+
+
+return (
     <Card
       variant="outlined"
       sx={{
@@ -89,6 +93,7 @@ function NetworkKpi({
   count: number
   total?: number | null
   accent: string
+
   /** Optional sub-line shown under the count (e.g. "of 5"). */
   hint?: string
 }) {
@@ -163,9 +168,11 @@ function VlanVmsList({ vlans }: { vlans: VlanEntry[] }) {
   const toggle = (vlan: number) => {
     setExpanded(prev => {
       const next = new Set(prev)
+
       if (next.has(vlan)) next.delete(vlan)
       else next.add(vlan)
-      return next
+
+return next
     })
   }
 
@@ -180,7 +187,9 @@ function VlanVmsList({ vlans }: { vlans: VlanEntry[] }) {
         <Stack spacing={0}>
           {vlans.map((v) => {
             const isOpen = expanded.has(v.vlan)
-            return (
+
+
+return (
               <Box key={v.vlan}>
                 <Box
                   onClick={() => toggle(v.vlan)}
@@ -269,12 +278,14 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const { currentTenant } = useTenant()
+
   // Provider tenant keeps the legacy bridge-centric dashboard; non-provider
   // (tenant admin) gets the VNet/IPAM-focused KPIs and skips the bridges
   // table entirely. Detection key matches useRBACScopeProfile.
   const isProviderTenant = currentTenant?.id === 'default' || !currentTenant
   const [loading, setLoading] = useState(false)
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
+
   // VNet KPIs are computed from the same data VnetsSection fetches; pulling
   // it up here lets the donut row and the list stay in sync without a
   // duplicate burst of requests. Only fetched on the tenant view.
@@ -287,14 +298,18 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     if (!connIdsKey) return
     const ids = connIdsKey.split(',')
     let alive = true
+
     setLoading(true)
     Promise.all(
       ids.map(async (connId) => {
         try {
           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
+
           if (!res.ok) return []
           const json = await res.json()
-          return (json.data || []).map((vm: any) => ({ ...vm, connId }))
+
+
+return (json.data || []).map((vm: any) => ({ ...vm, connId }))
         } catch { return [] }
       })
     ).then((results) => {
@@ -304,7 +319,8 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       if (!alive) return
       setLoading(false)
     })
-    return () => { alive = false }
+
+return () => { alive = false }
   }, [connIdsKey])
 
   // Fetch tenant-visible VNets across all reachable vDCs. Mirrors the loader
@@ -314,23 +330,30 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     if (!connIdsKey || isProviderTenant) return
     const accept = new Set(connIdsKey.split(','))
     let alive = true
+
     ;(async () => {
       try {
         const vdcsRes = await fetch('/api/v1/vdcs')
         const vdcsJson = await vdcsRes.json()
         const allVdcs: Array<{ id: string; connectionId?: string }> = Array.isArray(vdcsJson?.data) ? vdcsJson.data : []
+
         const visible = accept.size === 0
           ? allVdcs
           : allVdcs.filter(v => !v.connectionId || accept.has(v.connectionId))
+
         const out: VnetSummary[] = []
+
         await Promise.all(visible.map(async (v) => {
           try {
             const r = await fetch(`/api/v1/vdcs/${encodeURIComponent(v.id)}/vnets`)
+
             if (!r.ok) return
             const j = await r.json()
             const list: any[] = Array.isArray(j?.data) ? j.data : []
+
             for (const vnet of list) {
               const sn = vnet.subnet
+
               out.push({
                 id: vnet.id,
                 vdcId: v.id,
@@ -346,7 +369,9 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
         if (alive) setVnets(out)
       } catch { /* keep KPIs at 0 */ }
     })()
-    return () => { alive = false }
+
+
+return () => { alive = false }
   }, [connIdsKey, isProviderTenant])
 
   // The summary is always built — even when networkData is empty — so the
@@ -360,10 +385,12 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
 
     for (const vm of networkData) {
       if (vm.nets.length > 0) totalVmsWithNetwork++
+
       for (const net of vm.nets) {
         if (net.bridge) {
           const key = `${vm.connId}:${vm.node}:${net.bridge}`
           const existing = bridgeMap.get(key)
+
           if (existing) {
             existing.vmCount++
           } else {
@@ -376,8 +403,10 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
             })
           }
         }
+
         if (net.tag != null) {
           const existing = vlanMap.get(net.tag)
+
           if (existing) {
             existing.vmCount++
             if (net.bridge) existing.bridges.add(net.bridge)
@@ -451,7 +480,9 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
         const vnetsWithFirewall = vnets.filter(v => v.firewall).length
         const tenantBridgeSet = new Set(vnets.map(v => v.pveName))
         const vmsConnectedToTenantVnets = networkData.filter(vm => vm.nets.some(n => n.bridge && tenantBridgeSet.has(n.bridge))).length
-        return (
+
+
+return (
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
             <NetworkKpi
               icon="ri-git-branch-line"
@@ -553,7 +584,9 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
                   <TableBody>
                     {summary.bridgeBreakdown.map((bridge, idx) => {
                       const typeColor = getBridgeTypeColor(bridge.type)
-                      return (
+
+
+return (
                         <TableRow
                           key={`${bridge.connName}-${bridge.node}-${bridge.bridge}-${idx}`}
                           sx={{ '&:last-child td': { border: 0 }, '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) } }}

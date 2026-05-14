@@ -11,8 +11,10 @@ export const runtime = "nodejs"
 type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 
 interface AssignmentPayload {
+
   /** Connection IDs whose entire cluster (and every node) should point to this DC. */
   clusters?: string[]
+
   /** Per-node assignments. Used when only a subset of a cluster's nodes are on this DC. */
   nodes?: Array<{ connectionId: string; nodeName: string }>
 }
@@ -27,13 +29,16 @@ interface AssignmentPayload {
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const dc = await getDatacenterById(id)
+
     if (!dc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const [clusters, nodes] = await Promise.all([
@@ -71,17 +76,21 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const dc = await getDatacenterById(id)
+
     if (!dc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json().catch(() => ({})) as AssignmentPayload
     const targetClusters = new Set((body.clusters ?? []).filter(Boolean))
+
     const targetNodes = new Set(
       (body.nodes ?? []).filter(n => n?.connectionId && n?.nodeName).map(n => `${n.connectionId}|${n.nodeName}`),
     )
@@ -128,6 +137,7 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
       for (const key of currentNodes) {
         if (!targetNodes.has(key)) {
           const [cid, nname] = key.split('|')
+
           await tx.nodeGreenConfig.update({
             where: { connectionId_nodeName: { connectionId: cid, nodeName: nname } },
             data: { datacenterId: null, updatedAt: now },
@@ -137,6 +147,8 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 
       for (const key of targetNodes) {
         const [cid, nname] = key.split('|')
+
+
         // Skip nodes whose cluster is itself on this DC — covered by cluster-level row.
         if (targetClusters.has(cid)) continue
         await tx.nodeGreenConfig.upsert({
@@ -148,7 +160,8 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     })
 
     invalidateGreenResolution()
-    return NextResponse.json({ success: true })
+
+return NextResponse.json({ success: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

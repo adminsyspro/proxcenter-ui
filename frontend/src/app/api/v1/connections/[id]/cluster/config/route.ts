@@ -16,6 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -28,8 +29,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     try {
       const status = await pveFetch<any[]>(conn, "/cluster/status")
-      
+
       const clusterRow = status.find((x) => x?.type === "cluster")
+
       if (clusterRow) {
         isCluster = true
         clusterName = clusterRow.name || ''
@@ -58,8 +60,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (nodes.length > 0) {
       // Fetch hastate for maintenance detection
       let nodeHastateMap = new Map<string, string>()
+
       try {
         const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=node')
+
         for (const r of resources || []) {
           if (r?.node && r?.hastate) nodeHastateMap.set(r.node, r.hastate)
         }
@@ -72,8 +76,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
         // Try to get management IP from node network interfaces
         let managementIp = node.ip
+
         try {
           const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node.name)}/network`)
+
           managementIp = resolveManagementIp(networks) || node.ip
         } catch {}
 
@@ -85,30 +91,33 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // Si c'est un cluster, récupérer les informations de join
     let joinInfo: any = null
+
     if (isCluster) {
       try {
         // L'API /cluster/config/join retourne les informations de join
         const join = await pveFetch<any>(conn, "/cluster/config/join")
-        
+
         // Construire l'IP Address depuis le premier node local
         const localNode = nodes.find(n => n.local)
         const ipAddress = localNode?.ip || ''
-        
+
         // Le fingerprint peut être à différents endroits selon la version de PVE
         // Essayer plusieurs chemins possibles
         let fingerprint = ''
+
         if (join?.fingerprint) {
           fingerprint = join.fingerprint
         } else if (join?.totem?.config_version && join?.nodelist?.[0]?.pve_fp) {
           // PVE 8+ peut avoir le fingerprint dans nodelist
           fingerprint = join.nodelist[0].pve_fp
         }
-        
+
         // Si toujours pas de fingerprint, essayer de le récupérer depuis /cluster/config/nodes
         if (!fingerprint) {
           try {
             const configNodes = await pveFetch<any[]>(conn, "/cluster/config/nodes")
             const localConfigNode = configNodes?.find((n: any) => n.name === localNode?.name)
+
             if (localConfigNode?.pve_fp) {
               fingerprint = localConfigNode.pve_fp
             }
@@ -116,11 +125,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
             // Failed to get nodes config, non-critical
           }
         }
-        
+
         // Construire les peerLinks depuis la nodelist
         const peerLinks: Record<string, string> = {}
         const ringAddr: string[] = []
-        
+
         if (join?.nodelist && Array.isArray(join.nodelist)) {
           join.nodelist.forEach((node: any, idx: number) => {
             // ring0_addr pour les anciens clusters
@@ -128,13 +137,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
               peerLinks[String(idx)] = node.ring0_addr
               ringAddr.push(node.ring0_addr)
             }
+
+
             // pve_addr0, pve_addr1, etc. pour les nouveaux clusters
             for (let i = 0; i <= 7; i++) {
               const linkKey = `pve_addr${i}`
+
               if (node[linkKey]) {
                 if (!peerLinks[String(i)]) {
                   peerLinks[String(i)] = node[linkKey]
                 }
+
                 if (!ringAddr.includes(node[linkKey])) {
                   ringAddr.push(node[linkKey])
                 }
@@ -142,7 +155,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
             }
           })
         }
-        
+
         // Construire l'objet join information complet
         const joinData = {
           ipAddress,
@@ -151,14 +164,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           ring_addr: ringAddr.length > 0 ? ringAddr : [ipAddress],
           totem: join?.totem || {}
         }
-        
+
         // Encoder en base64 pour le join information
         const joinInfoEncoded = Buffer.from(JSON.stringify(joinData)).toString('base64')
-        
+
         joinInfo = {
           ipAddress,
           fingerprint,
           encoded: joinInfoEncoded,
+
           // Données brutes pour debug
           raw: join
         }
@@ -169,11 +183,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // Récupérer les interfaces réseau du node pour la création de cluster
     let networks: any[] = []
+
     try {
       const nodesList = await pveFetch<any[]>(conn, "/nodes")
       const firstNode = nodesList[0]?.node
+
       if (firstNode) {
         const net = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(firstNode)}/network`)
+
         networks = (net || [])
           .filter(n => n.active && (n.type === 'bridge' || n.type === 'eth' || n.type === 'bond' || n.type === 'vlan') && n.address)
           .map(n => ({
@@ -213,6 +230,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
+
     if (denied) return denied
 
     const body = await req.json()

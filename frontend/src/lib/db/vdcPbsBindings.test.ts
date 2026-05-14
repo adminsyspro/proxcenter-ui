@@ -23,6 +23,7 @@ beforeEach(async () => {
   await truncate(TABLES)
 
   const now = new Date()
+
   await prismaTest.tenant.create({
     data: {
       id: 'tenant-1',
@@ -74,8 +75,10 @@ describe('vdcPbsBindings', () => {
       pbsTokenId: 'root@pam!vdc-abc',
       pbsTokenSecret: 'sekret',
     })
+
     expect(row.id).toMatch(/^[a-f0-9-]{36}$/)
     const found = await findBindingByTuple('pbs-conn', 'store1', 'tenant-x/vdc-y')
+
     expect(found?.id).toBe(row.id)
   })
 
@@ -109,6 +112,7 @@ describe('vdcPbsBindings', () => {
       vdcId: 'v1', pbsConnectionId: 'pbs-conn', datastore: 'd', namespace: 'n',
       mode: 'auto', pbsTokenId: 't', pbsTokenSecret: 's',
     })
+
     await insertPveStorage({
       bindingId: b.id, pveConnectionId: 'pve-conn', pveStorageName: 'pbs-acme-prod', managed: true,
     })

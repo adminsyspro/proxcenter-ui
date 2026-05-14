@@ -17,6 +17,7 @@
 // falls into Advanced so the user keeps editing what they already had.
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -52,19 +53,23 @@ const MONTHLY_RE = /^\*-\*-(\d{1,2})\s+(\d{2}:\d{2})$/
  */
 export function parseSchedule(expr) {
   const s = String(expr || '').trim()
+
   if (!s) return { frequency: 'daily', time: '00:00', days: [], dayOfMonth: 1, advanced: false, raw: '' }
 
   // Bare HH:MM or `daily HH:MM`
   const dailyMatch = s.match(DAILY_RE)
+
   if (dailyMatch && TIME_RE.test(dailyMatch[1])) {
     return { frequency: 'daily', time: dailyMatch[1], days: [], dayOfMonth: 1, advanced: false, raw: s }
   }
 
   // mon..fri HH:MM — expand range to explicit days for the toggle group.
   const rangeMatch = s.match(WEEKLY_RANGE_RE)
+
   if (rangeMatch) {
     const start = WEEKDAYS.indexOf(rangeMatch[1].toLowerCase())
     const end = WEEKDAYS.indexOf(rangeMatch[2].toLowerCase())
+
     if (start >= 0 && end >= start) {
       return {
         frequency: 'weekly',
@@ -79,8 +84,10 @@ export function parseSchedule(expr) {
 
   // mon,wed,fri HH:MM
   const weeklyMatch = s.match(WEEKLY_RE)
+
   if (weeklyMatch) {
     const days = weeklyMatch[1].toLowerCase().split(',').filter(d => WEEKDAYS.includes(d))
+
     if (days.length > 0) {
       return { frequency: 'weekly', time: weeklyMatch[2], days, dayOfMonth: 1, advanced: false, raw: s }
     }
@@ -88,8 +95,10 @@ export function parseSchedule(expr) {
 
   // *-*-DD HH:MM
   const monthlyMatch = s.match(MONTHLY_RE)
+
   if (monthlyMatch) {
     const dom = Number.parseInt(monthlyMatch[1], 10)
+
     if (Number.isFinite(dom) && dom >= 1 && dom <= 31) {
       return { frequency: 'monthly', time: monthlyMatch[2], days: [], dayOfMonth: dom, advanced: false, raw: s }
     }
@@ -102,18 +111,28 @@ export function parseSchedule(expr) {
 export function serializeSchedule(state) {
   if (state.advanced) return state.raw || ''
   if (state.frequency === 'daily') return state.time || '00:00'
+
   if (state.frequency === 'weekly') {
     const days = (state.days || []).filter(d => WEEKDAYS.includes(d))
+
     if (days.length === 0) return state.time || '00:00'
+
     // Preserve the canonical Mon..Sun order so the string is stable.
     const ordered = WEEKDAYS.filter(d => days.includes(d))
-    return `${ordered.join(',')} ${state.time || '00:00'}`
+
+
+return `${ordered.join(',')} ${state.time || '00:00'}`
   }
+
   if (state.frequency === 'monthly') {
     const dom = Math.max(1, Math.min(31, Number.parseInt(state.dayOfMonth, 10) || 1))
-    return `*-*-${String(dom).padStart(2, '0')} ${state.time || '00:00'}`
+
+
+return `*-*-${String(dom).padStart(2, '0')} ${state.time || '00:00'}`
   }
-  return state.time || '00:00'
+
+
+return state.time || '00:00'
 }
 
 /**
@@ -139,8 +158,10 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
   // what we'd produce — otherwise the controls would flicker.
   useEffect(() => {
     const reproduced = serializeSchedule({ frequency, time, days, dayOfMonth, advanced, raw })
+
     if (reproduced === (value ?? '')) return
     const parsed = parseSchedule(value)
+
     setFrequency(parsed.frequency)
     setTime(parsed.time)
     setDays(parsed.days)
@@ -153,6 +174,7 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
   // Push every structured change up.
   const emit = (next) => {
     const merged = { frequency, time, days, dayOfMonth, advanced, raw, ...next }
+
     onChange?.(serializeSchedule(merged))
   }
 
@@ -232,6 +254,7 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
           value={dayOfMonth}
           onChange={(e) => {
             const v = Math.max(1, Math.min(31, Number.parseInt(e.target.value, 10) || 1))
+
             setDayOfMonth(v)
             emit({ dayOfMonth: v })
           }}

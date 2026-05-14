@@ -35,6 +35,7 @@ const MOCK_HEALTH = {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -43,6 +44,7 @@ export async function GET() {
 
     // Filter sites by tenant connections
     const data = response.data as any
+
     if (data?.sites && Array.isArray(data.sites)) {
       data.sites = data.sites.filter((s: any) => !s.cluster_id || tenantConnectionIds.has(s.cluster_id))
     }

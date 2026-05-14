@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -26,6 +27,7 @@ interface ImageCatalogTabProps {
 
 export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const t = useTranslations()
+
   // Anyone can add their own private custom image (kept tenant-scoped via
   // the prisma extension on the API). Edit/Delete on a card is per-image:
   // available on images that belong to the caller, hidden on shared
@@ -37,6 +39,7 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const [vendors, setVendors] = useState(VENDORS as readonly { id: string; name: string; icon: string }[])
   const [loading, setLoading] = useState(true)
   const [vendorFilter, setVendorFilter] = useState<string>('all')
+
   // Format facet — split the catalog into unattended cloud images and
   // boot ISOs (manual installer). 'all' is the default; ISOs were rare
   // enough until now that the facet stays compact (3 buttons).
@@ -60,24 +63,32 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
 
   const filtered = useMemo(() => {
     let result = images
+
     if (vendorFilter !== 'all') {
       result = result.filter(img => img.vendor === vendorFilter)
     }
+
     if (formatFilter !== 'all') {
       result = result.filter(img => {
         const isIso = String(img.format || '').toLowerCase() === 'iso'
-        return formatFilter === 'iso' ? isIso : !isIso
+
+
+return formatFilter === 'iso' ? isIso : !isIso
       })
     }
+
     if (search.trim()) {
       const q = search.toLowerCase()
+
       result = result.filter(img =>
         img.name.toLowerCase().includes(q) ||
         img.vendor.toLowerCase().includes(q) ||
         img.tags.some(tag => tag.toLowerCase().includes(q))
       )
     }
-    return result
+
+
+return result
   }, [images, vendorFilter, formatFilter, search])
 
   const handleDialogClose = (saved?: boolean) => {
@@ -93,6 +104,7 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
       .then(r => r.json())
       .then(res => {
         const match = (res.data || []).find((ci: any) => ci.slug === image.slug)
+
         if (match) {
           setEditImage(match)
           setDialogOpen(true)
@@ -103,9 +115,11 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
 
   const handleDelete = async (image: any) => {
     if (!image.isCustom) return
+
     // Find the custom image ID
     const res = await fetch('/api/v1/templates/custom-images').then(r => r.json())
     const match = (res.data || []).find((ci: any) => ci.slug === image.slug)
+
     if (!match) return
     await fetch(`/api/v1/templates/custom-images/${match.id}`, { method: 'DELETE' })
     fetchCatalog()
@@ -215,7 +229,9 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
             // provider entries it sees through the catalogue.
             const isShared = !!(image as any).isShared
             const canMutate = !!(image as any).isCustom && (isProviderTenant || !isShared)
-            return (
+
+
+return (
               <ImageCard
                 key={image.slug}
                 image={image}

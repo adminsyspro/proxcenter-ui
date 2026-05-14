@@ -20,6 +20,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -46,14 +47,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (!path.startsWith("/nodes/")) {
           return { path, data: null, error: "Invalid path" }
         }
+
         const rrdPath = `${path.replace(/\/$/, "")}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
         const data = await pveFetch<any[]>(conn, rrdPath)
-        return { path, data }
+
+
+return { path, data }
       })
     )
 
     // Build response map
     const dataMap: Record<string, any[]> = {}
+
     for (const result of results) {
       if (result.status === "fulfilled" && result.value.data) {
         dataMap[result.value.path] = result.value.data
@@ -64,6 +69,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   } catch (e: any) {
     console.error(`[rrd-batch] ERROR connId=${id}:`, e?.message || e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

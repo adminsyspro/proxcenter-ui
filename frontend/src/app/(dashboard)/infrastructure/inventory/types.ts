@@ -19,6 +19,7 @@ export type InventorySelection =
   | { type: 'net-conn'; id: string }
   | { type: 'net-node'; id: string }
   | { type: 'net-vlan'; id: string }
+
   /** Tenant-only: a single SDN VNet selected from the Network tree.
    *  ID format: `tvnet:<vdcId>:<displayName>`. */
   | { type: 'tvnet'; id: string }
@@ -160,6 +161,7 @@ export type DetailsPayload = {
     hostSockets?: number
     hostCoresPerSocket?: number
   }
+
   /**
    * Raw config keys currently in `config.pending` on the Proxmox VM, used by
    * the UI to badge which tabs have unreverted pending changes.
@@ -490,6 +492,7 @@ export type SeriesPoint = {
   netOutBps?: number
   diskReadBps?: number
   diskWriteBps?: number
+
   // Extended metrics (matching PVE rrddata fields)
   iowait?: number
   memAvailable?: number

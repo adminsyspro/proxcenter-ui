@@ -17,9 +17,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
@@ -36,10 +38,12 @@ export async function GET(
     const xoUrl = conn.baseUrl.replace(/\/$/, '')
 
     const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+
     const fetchOpts: any = {
       headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
       signal: AbortSignal.timeout(15000),
     }
+
     if (conn.insecureTLS) {
       fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
     }
@@ -74,6 +78,8 @@ export async function GET(
     if (e.name === 'AbortError') {
       return NextResponse.json({ error: "Connection timeout" }, { status: 504 })
     }
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

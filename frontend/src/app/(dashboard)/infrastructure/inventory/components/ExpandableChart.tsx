@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { Box, IconButton, Typography } from '@mui/material'
 import { ResponsiveContainer } from 'recharts'
 
@@ -8,8 +9,10 @@ type ExpandableChartProps = {
   title: string
   height?: number | string
   children: React.ReactNode
+
   /** Custom header content (replaces default title) */
   header?: React.ReactNode
+
   /** Render the chart for the expanded overlay (gets more height) */
   renderExpanded?: () => React.ReactNode
 }

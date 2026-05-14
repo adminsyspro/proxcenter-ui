@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -62,9 +63,11 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
   const [disconnect, setDisconnect] = useState(false)
   const [rateLimit, setRateLimit] = useState('')
   const [mtu, setMtu] = useState('')
+
   // QEMU-only
   const [model, setModel] = useState('virtio')
   const [multiqueue, setMultiqueue] = useState('')
+
   // LXC-only
   const [ifname, setIfname] = useState('eth0')
   const [ipv4Mode, setIpv4Mode] = useState<IPv4Mode>('static')
@@ -86,6 +89,7 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/network-choices?node=${encodeURIComponent(node)}`
         )
+
         if (res.ok) {
           const json = await res.json()
           const choices = Array.isArray(json.data) ? json.data : []
@@ -149,20 +153,24 @@ return match ? Number.parseInt(match[1]) : -1
       const netId = `net${netIndex}`
 
       let netConfig: string
+
       if (isLxc) {
         // LXC config string format (see PVE Parser.printLxcNetwork).
         const parts: string[] = []
+
         if (ifname) parts.push(`name=${ifname}`)
         parts.push(`bridge=${bridge}`)
         if (macAddress) parts.push(`hwaddr=${macAddress}`)
         if (vlanTag) parts.push(`tag=${vlanTag}`)
         parts.push(`firewall=${firewall ? 1 : 0}`)
+
         if (ipv4Mode === 'dhcp') {
           parts.push('ip=dhcp')
         } else if (ipv4Mode === 'static' && ipv4Cidr) {
           parts.push(`ip=${ipv4Cidr}`)
           if (ipv4Gw) parts.push(`gw=${ipv4Gw}`)
         }
+
         if (ipv6Mode === 'dhcp') {
           parts.push('ip6=dhcp')
         } else if (ipv6Mode === 'auto') {
@@ -171,6 +179,7 @@ return match ? Number.parseInt(match[1]) : -1
           parts.push(`ip6=${ipv6Cidr}`)
           if (ipv6Gw) parts.push(`gw6=${ipv6Gw}`)
         }
+
         if (disconnect) parts.push('link_down=1')
         if (mtu) parts.push(`mtu=${mtu}`)
         if (rateLimit) parts.push(`rate=${rateLimit}`)

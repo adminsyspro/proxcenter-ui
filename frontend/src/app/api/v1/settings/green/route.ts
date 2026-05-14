@@ -118,6 +118,7 @@ export async function PUT(request: Request) {
 
     // Fusionner avec les valeurs par défaut
     const settings = { ...DEFAULT_GREEN_SETTINGS, ...body }
+
     await setSetting('green', tenantId, settings)
 
     return NextResponse.json({ success: true })

@@ -40,6 +40,7 @@ export async function GET(
     // Use the shared resolver so tenants can reach connections they only
     // access via vDC assignment (not only the ones they own).
     let conn
+
     try {
       conn = await getConnectionById(connId)
     } catch {
@@ -58,7 +59,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Get notes error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -86,6 +87,7 @@ export async function PUT(
     // Use the shared resolver so tenants can reach connections they only
     // access via vDC assignment (not only the ones they own).
     let conn
+
     try {
       conn = await getConnectionById(connId)
     } catch {
@@ -93,11 +95,11 @@ export async function PUT(
     }
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`
-    
+
     const formData = new URLSearchParams()
 
     formData.append('description', content)
-    
+
     await pveFetch<any>(conn, apiPath, {
       method: 'PUT',
       body: formData.toString(),
@@ -114,7 +116,7 @@ export async function PUT(
     })
   } catch (e: any) {
     console.error("Update notes error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

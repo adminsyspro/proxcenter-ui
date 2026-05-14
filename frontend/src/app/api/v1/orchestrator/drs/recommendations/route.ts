@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const validate = request.nextUrl.searchParams.get('validate') === 'true'
@@ -42,13 +43,13 @@ export async function POST() {
 
     const client = getOrchestratorClient()
     const response = await client.triggerEvaluation()
-    
+
     return NextResponse.json(response.data)
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error triggering DRS evaluation:", e)
     }
-    
+
 return NextResponse.json(
       { error: e?.message || "Failed to trigger evaluation" },
       { status: 500 }

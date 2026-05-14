@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -115,10 +116,13 @@ export default function DeploymentWizard({
   // ── Step 2: Apply rules sequentially ──
   useEffect(() => {
     if (activeStep !== 2 || applyDone) return
+
+
     // Initialize statuses for all rules on first entry
     if (ruleStatuses.length !== allRules.length) {
       setRuleStatuses(allRules.map(() => 'pending'))
-      return
+
+return
     }
 
     let cancelled = false
@@ -132,8 +136,10 @@ export default function DeploymentWizard({
 
         setRuleStatuses(prev => {
           const next = [...prev]
+
           next[i] = 'creating'
-          return next
+
+return next
         })
 
         try {
@@ -149,17 +155,22 @@ export default function DeploymentWizard({
           if (!cancelled) {
             setRuleStatuses(prev => {
               const next = [...prev]
+
               next[i] = 'success'
-              return next
+
+return next
             })
           }
         } catch {
           errors++
+
           if (!cancelled) {
             setRuleStatuses(prev => {
               const next = [...prev]
+
               next[i] = 'error'
-              return next
+
+return next
             })
           }
         }
@@ -172,14 +183,17 @@ export default function DeploymentWizard({
     }
 
     applyRules()
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [activeStep, applyDone, selectedConnection, ruleStatuses.length, allRules.length])
 
   // ── Step 3: Activate ──
   const handleActivate = async () => {
     setActivating(true)
+
     try {
       const opts: firewallAPI.UpdateOptionsRequest = {}
+
       if (enableFirewall) opts.enable = 1
       if (enableFirewall && setDrop) opts.policy_in = 'DROP'
       await firewallAPI.updateClusterOptions(selectedConnection, opts)

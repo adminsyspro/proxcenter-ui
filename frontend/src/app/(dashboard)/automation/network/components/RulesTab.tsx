@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import { Box, Chip, ToggleButton, ToggleButtonGroup, useTheme, alpha } from '@mui/material'
@@ -15,29 +16,35 @@ import VMRulesPanel from './rules/VMRulesPanel'
 interface RulesTabProps {
   activeSubTab: number
   onSubTabChange: (newTab: number) => void
+
   // Cluster
   clusterRules: firewallAPI.FirewallRule[]
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
   clusterOptions: firewallAPI.ClusterOptions | null
   setClusterOptions: React.Dispatch<React.SetStateAction<firewallAPI.ClusterOptions | null>>
+
   // Host
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
   nodesList: string[]
   loadingHostRules: boolean
   loadHostRules: () => Promise<void>
   reloadHostRulesForNode: (node: string) => Promise<void>
+
   // VM
   vmFirewallData: VMFirewallInfo[]
   loadingVMRules: boolean
   loadVMFirewallData: () => Promise<void>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
+
   // Security Groups
   securityGroups: firewallAPI.SecurityGroup[]
+
   // Aliases + IPSets
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
   firewallMode: firewallAPI.FirewallMode
   totalRules: number
+
   // Common
   selectedConnection: string
   reload: () => void
@@ -53,7 +60,8 @@ function mapLegacySubTab(v: number): number {
   if (v === 0 || v === 3) return 0
   if (v === 1) return 1
   if (v === 2) return 2
-  return 0
+
+return 0
 }
 
 export default function RulesTab({

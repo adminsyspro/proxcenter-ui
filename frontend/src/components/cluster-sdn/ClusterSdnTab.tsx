@@ -52,6 +52,7 @@ export default function ClusterSdnTab({ connId }: Props) {
     try {
       const res = await fetch(`/api/v1/connections/${connId}/sdn/status`, { cache: 'no-store' })
       const body = await res.json()
+
       if (res.ok) setStatus(body.data)
     } catch {
       // Silent: banner is a nice-to-have; do not block sub-tab work.
@@ -61,22 +62,28 @@ export default function ClusterSdnTab({ connId }: Props) {
   useEffect(() => {
     void refreshStatus()
     const h = window.setInterval(refreshStatus, STATUS_POLL_INTERVAL_MS)
-    return () => window.clearInterval(h)
+
+
+return () => window.clearInterval(h)
   }, [refreshStatus])
 
   const pollTask = useCallback(async (upid: string): Promise<'ok' | 'failed' | 'timeout'> => {
     // Proxmox UPID is of form UPID:<node>:<pid_hex>:<pstart_hex>:<start_hex>:<type>:<id>:<user>:
     const node = upid.split(':')[1] || ''
     const deadline = Date.now() + TASK_POLL_MAX_MS
+
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, TASK_POLL_INTERVAL_MS))
+
       try {
         const res = await fetch(
           `/api/v1/tasks/${encodeURIComponent(connId)}/${encodeURIComponent(node)}/${encodeURIComponent(upid)}`,
           { cache: 'no-store' },
         )
+
         if (!res.ok) continue
         const body = await res.json()
+
         if (body.status === 'stopped') {
           return body.exitstatus === 'OK' ? 'ok' : 'failed'
         }
@@ -84,7 +91,9 @@ export default function ClusterSdnTab({ connId }: Props) {
         // transient; keep polling
       }
     }
-    return 'timeout'
+
+
+return 'timeout'
   }, [connId])
 
   const performApply = useCallback(async () => {
@@ -92,14 +101,19 @@ export default function ClusterSdnTab({ connId }: Props) {
     applyingRef.current = true
     setApplying(true)
     setToast({ kind: 'info', text: t('sdn.apply.toast.applying') })
+
     try {
       const res = await fetch(`/api/v1/connections/${connId}/sdn/apply`, { method: 'POST' })
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       const upid: string = body.data?.upid
+
       if (!upid) throw new Error('No UPID returned')
       const result = await pollTask(upid)
+
       setToast(null)
+
       if (result === 'ok') {
         setToast({ kind: 'success', text: t('sdn.apply.toast.success') })
       } else if (result === 'timeout') {
@@ -107,6 +121,7 @@ export default function ClusterSdnTab({ connId }: Props) {
       } else {
         setToast({ kind: 'error', text: t('sdn.apply.toast.failed', { error: 'task failed' }) })
       }
+
       void refreshStatus()
     } catch (e: any) {
       setToast(null)
@@ -119,6 +134,7 @@ export default function ClusterSdnTab({ connId }: Props) {
 
   const pending = Boolean(status?.pending)
   const applyDisabled = !pending || !canManage || applying
+
   const applyTooltip = !canManage
     ? t('sdn.apply.tooltip.noPermission')
     : !pending

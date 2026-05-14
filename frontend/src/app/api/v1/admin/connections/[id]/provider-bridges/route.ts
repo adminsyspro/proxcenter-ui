@@ -20,23 +20,30 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing connection ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const connMeta = await prisma.connection.findUnique({ where: { id }, select: { tenantId: true } })
+
     if (!connMeta) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
     const conn = await getConnectionById(id, connMeta.tenantId)
 
     // Exclude SDN-managed bridges (zone uplink bridges + vnet names)
     const sdnBridges: Set<string> = new Set()
+
     try {
       const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones") || []
+
       for (const z of zones) {
         if (z.bridge) sdnBridges.add(String(z.bridge))
       }
+
       const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets") || []
+
       for (const v of vnets) {
         if (v.vnet) sdnBridges.add(String(v.vnet))
       }
@@ -50,15 +57,18 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     for (const n of nodesRaw) {
       const nodeName = n.node
+
       if (!nodeName) continue
 
       try {
         const ifaces = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`) || []
+
         for (const ifc of ifaces) {
           if (ifc.type !== "bridge" && ifc.type !== "OVSBridge") continue
           if (sdnBridges.has(ifc.iface)) continue
 
           const existing = bridgeMap.get(ifc.iface)
+
           if (existing) {
             existing.nodes.push(nodeName)
           } else {
@@ -77,9 +87,12 @@ export async function GET(_req: Request, ctx: RouteContext) {
     }
 
     const bridges = Array.from(bridgeMap.values()).sort((a, b) => a.iface.localeCompare(b.iface))
-    return NextResponse.json({ data: bridges })
+
+
+return NextResponse.json({ data: bridges })
   } catch (e: any) {
     console.error("[provider-bridges] error:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

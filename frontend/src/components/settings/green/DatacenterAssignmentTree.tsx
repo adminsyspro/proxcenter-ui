@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -21,19 +22,24 @@ interface NodeItem {
 }
 
 export interface AssignmentState {
+
   /** Connection IDs assigned to this DC at the cluster level. */
   clusters: Set<string>
+
   /** "connectionId|nodeName" pairs assigned to this DC at the node level. */
   nodes: Set<string>
 }
 
 interface Props {
+
   /** Disabled while the parent dialog is in a loading state. */
   disabled?: boolean
   state: AssignmentState
   onChange: (next: AssignmentState) => void
+
   /** Initial assignments from the server, used to compute the "expand by default" set. */
   initialState: AssignmentState
+
   /** ID of the DC currently being edited (or null when creating). Used to grey out rows already on other DCs. */
   currentDcId?: string | null
 }
@@ -61,21 +67,28 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
   // accurate AND lets us grey out rows already anchored to another DC.
   useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       try {
         const [connRes, ownRes] = await Promise.all([
           fetch('/api/v1/connections?type=pve'),
           fetch('/api/v1/admin/green-assignments'),
         ])
+
         if (!connRes.ok) throw new Error(`HTTP ${connRes.status}`)
         const json = await connRes.json()
+
         if (cancelled) return
+
         const list: ConnectionItem[] = (Array.isArray(json?.data) ? json.data : [])
           .filter((c: any) => c.type === 'pve')
           .map((c: any) => ({ id: c.id, name: c.name, type: c.type }))
+
         setConnections(list)
+
         if (ownRes.ok) {
           const ownJson = await ownRes.json()
+
           if (!cancelled && ownJson?.data) {
             setOwnership({
               clusters: ownJson.data.clusters ?? {},
@@ -85,29 +98,37 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
         }
 
         const auto = new Set<string>()
+
         for (const c of list) {
           if (initialState.clusters.has(c.id)) auto.add(c.id)
           if ([...initialState.nodes].some(k => k.startsWith(`${c.id}|`))) auto.add(c.id)
         }
+
         setExpanded(auto)
 
         // Eagerly fetch every cluster's node list — needed for the health dot.
         const results = await Promise.all(list.map(async c => {
           try {
             const r = await fetch(`/api/v1/admin/connections/${encodeURIComponent(c.id)}/green-config`)
+
             if (!r.ok) return [c.id, [] as NodeItem[]] as const
             const j = await r.json()
+
             const nodes: NodeItem[] = (Array.isArray(j?.data?.nodes) ? j.data.nodes : []).map((n: any) => ({
               nodeName: n.nodeName,
               status: n.status ?? null,
             }))
-            return [c.id, nodes] as const
+
+
+return [c.id, nodes] as const
           } catch {
             return [c.id, [] as NodeItem[]] as const
           }
         }))
+
         if (cancelled) return
         const map: Record<string, NodeItem[]> = {}
+
         for (const [id, nodes] of results) map[id] = nodes
         setNodesByConn(map)
       } catch {
@@ -116,26 +137,40 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
         if (!cancelled) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [initialState])
 
   const loadNodesFor = useCallback(async (connId: string) => {
     if (nodesByConn[connId]) return
-    setNodesLoading(s => { const n = new Set(s); n.add(connId); return n })
+    setNodesLoading(s => { const n = new Set(s);
+
+ n.add(connId);
+
+return n })
+
     try {
       // Re-use the existing green-config GET which returns the merged saved + live node list.
       const res = await fetch(`/api/v1/admin/connections/${encodeURIComponent(connId)}/green-config`)
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
+
       const nodes: NodeItem[] = (Array.isArray(json?.data?.nodes) ? json.data.nodes : []).map((n: any) => ({
         nodeName: n.nodeName,
         status: n.status ?? null,
       }))
+
       setNodesByConn(s => ({ ...s, [connId]: nodes }))
     } catch {
       setNodesByConn(s => ({ ...s, [connId]: [] }))
     } finally {
-      setNodesLoading(s => { const n = new Set(s); n.delete(connId); return n })
+      setNodesLoading(s => { const n = new Set(s);
+
+ n.delete(connId);
+
+return n })
     }
   }, [nodesByConn])
 
@@ -149,9 +184,11 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
   const toggleExpand = (connId: string) => {
     setExpanded(s => {
       const n = new Set(s)
+
       if (n.has(connId)) n.delete(connId)
       else n.add(connId)
-      return n
+
+return n
     })
   }
 
@@ -160,34 +197,44 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
       clusters: new Set(state.clusters),
       nodes: new Set(state.nodes),
     }
+
     if (next.clusters.has(connId)) {
       next.clusters.delete(connId)
     } else {
       next.clusters.add(connId)
+
+
       // Cluster pick wins over per-node — clear partial node assignments.
       for (const k of [...next.nodes]) {
         if (k.startsWith(`${connId}|`)) next.nodes.delete(k)
       }
     }
+
     onChange(next)
   }
 
   const toggleNode = (connId: string, nodeName: string) => {
     const k = nodeKey(connId, nodeName)
+
     const next: AssignmentState = {
       clusters: new Set(state.clusters),
       nodes: new Set(state.nodes),
     }
+
+
     // Checking a single node demotes the cluster from "all" to partial — drop
     // the cluster entry so only the explicitly checked nodes are anchored here.
     if (next.clusters.has(connId)) {
       next.clusters.delete(connId)
+
       // The cluster used to mean "all nodes here" — preserve that intent for
       // the other nodes in the cluster by switching them from implicit-all to
       // explicit-selected, then toggle the user's node off.
       const nodes = nodesByConn[connId] ?? []
+
       for (const n of nodes) next.nodes.add(nodeKey(connId, n.nodeName))
     }
+
     if (next.nodes.has(k)) next.nodes.delete(k)
     else next.nodes.add(k)
     onChange(next)
@@ -277,15 +324,19 @@ export default function DatacenterAssignmentTree({ disabled, state, onChange, in
                     const checked = isClusterChecked || partialNodeNames.has(n.nodeName)
                     const nodeOwner = ownership.nodes[`${conn.id}|${n.nodeName}`]
                     const nodeLockedByOther = !!nodeOwner && nodeOwner.datacenterId !== currentDcId
+
                     // A node is also locked when its cluster is anchored elsewhere
                     // (the cluster pick wins by inheritance).
                     const lockedByCluster = clusterLockedByOther
+
                     const lockLabel = nodeLockedByOther
                       ? nodeOwner.datacenterName
                       : lockedByCluster
                         ? clusterOwner.datacenterName
                         : null
-                    return (
+
+
+return (
                       <FormControlLabel
                         key={n.nodeName}
                         disabled={disabled || isClusterChecked || nodeLockedByOther || lockedByCluster}

@@ -1,12 +1,13 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { isSharedStorage } from '@/lib/proxmox/storage'
+
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
-import { 
+import {
   Alert,
   Box,
   Button,
@@ -21,7 +22,7 @@ import {
   DialogTitle,
   Divider,
   FormControl,
-  IconButton, 
+  IconButton,
   InputAdornment,
   InputLabel,
   ListItemIcon,
@@ -36,10 +37,13 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
-  Tooltip, 
+  Tooltip,
   Typography,
   useTheme
 } from '@mui/material'
+
+import { isSharedStorage } from '@/lib/proxmox/storage'
+
 // RemixIcon replacements for @mui/icons-material
 const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const SearchIcon = (props: any) => <i className="ri-search-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -47,6 +51,7 @@ const ClearIcon = (props: any) => <i className="ri-close-circle-line" style={{ f
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+
 /* PauseIcon, TerminalIcon, MoveUpIcon, ContentCopyIcon, DescriptionIcon → ./components/TreeDialogs */
 
 import EntityTagManager from './components/EntityTagManager'
@@ -78,6 +83,7 @@ export type InventorySelection =
   | { type: 'extvm'; id: string } // id = connectionId:vmid (external hypervisor VM)
   | { type: 'storage-root'; id: 'storage-root' }
   | { type: 'network-root'; id: 'network-root' }
+
   /** Tenant-only: SDN VNet selected from the Network tree.
    *  id = `tvnet:<vdcId>:<displayName>` */
   | { type: 'tvnet'; id: string }
@@ -435,6 +441,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin } = useRBAC()
+
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely
@@ -463,12 +470,16 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
     // Load entity tags from /api/v1/tags/entities (raw SQL, no Prisma select issues)
     const loadEntityTags = async () => {
       const map = new Map<string, { tags: string[]; type: 'cluster' | 'node'; connId: string; name: string; node?: string }>()
+
       try {
         const res = await fetch('/api/v1/tags/entities', { cache: 'no-store' })
+
         if (res.ok) {
           const json = await res.json()
+
           for (const e of json?.data || []) {
             const tags = e.tags ? String(e.tags).split(';').filter(Boolean) : []
+
             if (tags.length > 0) {
               if (e.entityType === 'cluster') {
                 map.set(`cluster:${e.id}`, { tags, type: 'cluster', connId: e.id, name: e.name })
@@ -479,40 +490,43 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
           }
         }
       } catch {}
+
       setEntityTagsMap(map)
     }
+
     loadEntityTags()
   }, [reloadTick])
-  
+
   // Helper pour vérifier si une VM est en migration
   const isVmMigrating = useCallback((connId: string, vmid: string) => {
     if (!migratingVmIds) return false
-    
+
 return migratingVmIds.has(`${connId}:${vmid}`)
   }, [migratingVmIds])
 
   // Helper pour vérifier si une VM a une action en cours
   const isVmPendingAction = useCallback((connId: string, vmid: string) => {
     if (!pendingActionVmIds) return false
-    return pendingActionVmIds.has(`${connId}:${vmid}`)
+
+return pendingActionVmIds.has(`${connId}:${vmid}`)
   }, [pendingActionVmIds])
 
   // Favoris : utiliser les props si fournies, sinon état local
   const [localFavorites, setLocalFavorites] = useState<Set<string>>(new Set())
   const favorites = propFavorites ?? localFavorites
-  
+
   // Mode d'affichage: 'tree' (arbre), 'vms' (liste VMs), 'hosts' (par hôte), 'pools' (par pool), 'tags' (par tag), 'favorites' (favoris)
   const [internalViewMode, setInternalViewMode] = useState<ViewMode>(controlledViewMode ?? 'tree')
-  
+
   // Utiliser le viewMode contrôlé s'il est fourni, sinon l'état interne
   const viewMode = controlledViewMode ?? internalViewMode
-  
+
   // Fonction pour changer le viewMode (met à jour l'état interne et notifie le parent)
   const setViewMode = (mode: ViewMode) => {
     setInternalViewMode(mode)
     onViewModeChange?.(mode)
   }
-  
+
   // Synchroniser l'état interne si le viewMode contrôlé change
   useEffect(() => {
     if (controlledViewMode !== undefined && controlledViewMode !== internalViewMode) {
@@ -550,19 +564,24 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       if (isMainSection && wasCollapsed) {
         // Ouvrir cette section, fermer les autres sections principales
         const next = new Set(prev)
+
         mainSections.forEach(s => next.add(s))
         next.delete(key)
-        return next
+
+return next
       }
 
       // Toggle simple (fermer, ou sections non-principales comme host:xxx, pool:xxx)
       const next = new Set(prev)
+
       if (wasCollapsed) {
         next.delete(key)
       } else {
         next.add(key)
       }
-      return next
+
+
+return next
     })
   }
 
@@ -570,21 +589,27 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   useEffect(() => {
     try {
       const savedExpanded = localStorage.getItem('inventoryExpandedItems')
+
       if (savedExpanded) setManualExpandedItems(JSON.parse(savedExpanded))
 
       const savedCollapsed = localStorage.getItem('inventoryCollapsedSections')
+
       if (savedCollapsed) {
         const parsed = JSON.parse(savedCollapsed)
+
         setCollapsedSections(new Set(parsed))
       }
 
       const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')
+
       if (savedStorageExpanded) setStorageExpandedItems(JSON.parse(savedStorageExpanded))
 
       const savedBackupExpanded = localStorage.getItem('inventoryBackupExpandedItems')
+
       if (savedBackupExpanded) setBackupExpandedItems(JSON.parse(savedBackupExpanded))
 
       const savedMigrationExpanded = localStorage.getItem('inventoryMigrationExpandedItems')
+
       if (savedMigrationExpanded) setMigrationExpandedItems(JSON.parse(savedMigrationExpanded))
 
       // Network state is persisted too so "Expand all" survives navigation
@@ -592,13 +617,18 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       // until `clusters` arrives via SSE — see the effect that watches
       // `expandedNetSections` + `clusters.length` below.
       const savedNetSections = localStorage.getItem('inventoryExpandedNetSections')
+
       if (savedNetSections) {
         const parsed = JSON.parse(savedNetSections)
+
         if (Array.isArray(parsed)) setExpandedNetSections(new Set(parsed))
       }
+
       const savedNetTreeExpanded = localStorage.getItem('inventoryNetworkTreeExpandedItems')
+
       if (savedNetTreeExpanded) setNetworkTreeExpandedItems(JSON.parse(savedNetTreeExpanded))
     } catch {}
+
     setIsHydrated(true)
   }, [])
 
@@ -650,15 +680,21 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         setClusters(prev => prev.map(clu => {
           if (clu.connId !== connId) return clu
           let changed = false
+
           const nodes = clu.nodes.map(n => {
             const vms = n.vms.map(vm => {
               if (String(vm.vmid) !== String(vmid)) return vm
               changed = true
-              return { ...vm, status }
+
+return { ...vm, status }
             })
-            return changed ? { ...n, vms } : n
+
+
+return changed ? { ...n, vms } : n
           })
-          return changed ? { ...clu, nodes } : clu
+
+
+return changed ? { ...clu, nodes } : clu
         }))
       })
     }
@@ -669,18 +705,25 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     if (onOptimisticVmTagsRef) {
       onOptimisticVmTagsRef((connId: string, vmid: string, tags: string[]) => {
         const tagsStr = tags.join(';')
+
         setClusters(prev => prev.map(clu => {
           if (clu.connId !== connId) return clu
           let changed = false
+
           const nodes = clu.nodes.map(n => {
             const vms = n.vms.map(vm => {
               if (String(vm.vmid) !== String(vmid)) return vm
               changed = true
-              return { ...vm, tags: tagsStr }
+
+return { ...vm, tags: tagsStr }
             })
-            return changed ? { ...n, vms } : n
+
+
+return changed ? { ...n, vms } : n
           })
-          return changed ? { ...clu, nodes } : clu
+
+
+return changed ? { ...clu, nodes } : clu
         }))
       })
     }
@@ -732,11 +775,13 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
+
       throw new Error(err?.error || `HTTP ${res.status}`)
     }
 
     const json = await res.json()
     const upid = json.data
+
     if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
       trackTask({
         upid,
@@ -768,6 +813,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
@@ -800,13 +846,17 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
   const handleOpenShell = async (connId: string, node: string) => {
     setShellDialog({ open: true, connId, node, loading: true, data: null, error: null })
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/terminal`, { method: 'POST' })
+
       if (res.ok) {
         const json = await res.json()
+
         setShellDialog(prev => ({ ...prev, loading: false, data: { ...json.data, node } }))
       } else {
         const err = await res.json().catch(() => ({}))
+
         setShellDialog(prev => ({ ...prev, loading: false, error: err.error || res.statusText }))
       }
     } catch (e: any) {
@@ -816,6 +866,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
   const [migrateDialogOpen, setMigrateDialogOpen] = useState(false)
   const [migrateTarget, setMigrateTarget] = useState<VmContextMenu>(null)
+
   // Menu contextuel Cluster
   const [clusterContextMenu, setClusterContextMenu] = useState<{ mouseX: number; mouseY: number; connId: string; name: string; nodes: { status?: string }[] } | null>(null)
 
@@ -833,12 +884,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const openTagDialog = useCallback((type: 'connection' | 'host', entityId: string, name: string, connId?: string, node?: string, extra?: { nodeStatus?: string; nodeMaintenance?: string; clusterNodes?: { status?: string }[] }) => {
     setTagDialog({ type, entityId, connId, node, name, ...extra })
     setTagDialogTags([])
+
+
     // Load current tags
     if (type === 'connection') {
       fetch(`/api/v1/connections/${encodeURIComponent(entityId)}`)
         .then(r => r.ok ? r.json() : null)
         .then(json => {
           const tags = json?.data?.tags
+
           setTagDialogTags(tags ? String(tags).split(';').filter(Boolean) : [])
         })
         .catch(() => {})
@@ -849,15 +903,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
           const hosts = json?.data?.hosts || []
           const host = hosts.find((h: any) => h.node === node)
           const tags = host?.managedHost?.tags || host?.tags
+
           setTagDialogTags(tags ? String(tags).split(';').filter(Boolean) : [])
         })
         .catch(() => {})
     }
   }, [])
+
   const [maintenanceStorageLoading, setMaintenanceStorageLoading] = useState(false)
   const [maintenanceMigrateTarget, setMaintenanceMigrateTarget] = useState('')
   const [maintenanceShutdownLocal, setMaintenanceShutdownLocal] = useState(false)
   const [maintenanceStep, setMaintenanceStep] = useState<string | null>(null)
+
+
   // Bulk action dialog state
   const [bulkActionDialog, setBulkActionDialog] = useState<{
     open: boolean
@@ -866,9 +924,11 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     node: string
     targetNode: string
   }>({ open: false, action: null, connId: '', node: '', targetNode: '' })
+
   const [bulkActionBusy, setBulkActionBusy] = useState(false)
 
   const [unlocking, setUnlocking] = useState(false)
+
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
     open: boolean
     error: string
@@ -878,44 +938,48 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Handler pour unlock une VM
   const handleUnlock = async () => {
     if (!contextMenu) return
-    
+
     const { connId, node, type, vmid, name } = contextMenu
-    
+
     setUnlocking(true)
     setActionBusy(true)
-    
+
     try {
       // D'abord vérifier si la VM est verrouillée
       const checkRes = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`
       )
-      
+
       if (checkRes.ok) {
         const checkData = await checkRes.json()
+
         if (!checkData.data?.locked) {
           setUnlockErrorDialog({
             open: true,
             error: t('inventory.vmNotLocked')
           })
           handleCloseContextMenu()
-          return
+
+return
         }
       }
-      
+
       // Procéder au unlock
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`,
         { method: 'POST' }
       )
-      
+
       if (res.ok) {
         const data = await res.json()
+
         if (data.data?.unlocked) {
           // Rafraîchir l'inventaire
           setReloadTick(x => x + 1)
         }
       } else {
         const err = await res.json().catch(() => ({}))
+
         setUnlockErrorDialog({
           open: true,
           error: err?.error || res.statusText,
@@ -993,6 +1057,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const handleMaintenanceClick = () => {
     if (!nodeContextMenu) return
     const { connId, node, maintenance } = nodeContextMenu
+
     setMaintenanceTarget({ connId, node, maintenance })
     setMaintenanceError(null)
     handleCloseNodeContextMenu()
@@ -1004,34 +1069,43 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     const { connId, node } = maintenanceTarget
 
     const otherNodes = clusters.find(c => c.connId === connId)?.nodes.filter(n => n.node !== node) || []
+
     if (otherNodes.length === 0) return // standalone
 
     const runningVms = getNodeVms(connId, node).filter(v => v.status === 'running')
+
     if (runningVms.length === 0) return
 
     const cs = clusterStorages.find(c => c.connId === connId)
     const sharedSet = new Set<string>()
+
     if (cs) {
       for (const s of cs.sharedStorages) sharedSet.add(s.storage)
       for (const n of cs.nodes) for (const s of n.storages) if (isSharedStorage(s)) sharedSet.add(s.storage)
     }
 
     let alive = true
+
     setMaintenanceStorageLoading(true)
 
     ;(async () => {
       const localKeys = new Set<string>()
+
       for (let i = 0; i < runningVms.length; i += 5) {
         const batch = runningVms.slice(i, i + 5)
+
         await Promise.all(batch.map(async (vm) => {
           try {
             const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/config`)
+
             if (!res.ok) return
             const json = await res.json()
             const config = json.data || {}
+
             for (const [key, val] of Object.entries(config)) {
               if (/^(scsi|virtio|ide|sata|efidisk)\d+$/.test(key) && typeof val === 'string' && !val.includes('media=cdrom') && val !== 'none') {
                 const storageName = val.split(':')[0]
+
                 if (storageName && storageName !== 'none' && !sharedSet.has(storageName)) {
                   localKeys.add(`${connId}:${vm.vmid}`)
                   break
@@ -1041,6 +1115,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
           } catch { /* ignore */ }
         }))
       }
+
       if (!alive) return
       setMaintenanceLocalVms(localKeys)
       setMaintenanceStorageLoading(false)
@@ -1056,6 +1131,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     setMaintenanceBusy(true)
     setMaintenanceError(null)
+
     try {
       // When entering maintenance: handle VMs first
       if (entering) {
@@ -1071,13 +1147,17 @@ return migratingVmIds.has(`${connId}:${vmid}`)
           if (sharedVms.length > 0 && maintenanceMigrateTarget) {
             setMaintenanceStep(t('inventory.nodeActionMigratingStep', { done: 0, total: sharedVms.length }))
             let done = 0
+
             for (let i = 0; i < sharedVms.length; i += 3) {
               const batch = sharedVms.slice(i, i + 3)
+
               await Promise.all(batch.map(async (vm) => {
                 try {
                   const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/migrate`
+
                   await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: maintenanceMigrateTarget, online: true }) })
                 } catch { /* ignore */ }
+
                 done++
                 setMaintenanceStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length }))
               }))
@@ -1088,14 +1168,17 @@ return migratingVmIds.has(`${connId}:${vmid}`)
           if (localVms.length > 0 && maintenanceShutdownLocal) {
             setMaintenanceStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: localVms.length }))
             let done = 0
+
             for (const vm of localVms) {
               const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/shutdown`
+
               await fetch(url, { method: 'POST' }).catch(() => {})
               done++
               setMaintenanceStep(t('inventory.nodeActionShutdownVmsStep', { done, total: localVms.length }))
             }
           }
         }
+
         setMaintenanceStep(t('inventory.nodeActionMaintenanceStep'))
       }
 
@@ -1103,11 +1186,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
         { method: entering ? 'POST' : 'DELETE' }
       )
+
       const data = await res.json().catch(() => ({}))
+
       if (!res.ok) {
         setMaintenanceError(data?.error || res.statusText)
-        return
+
+return
       }
+
       setMaintenanceTarget(null)
       setMaintenanceStep(null)
       setMaintenanceMigrateTarget('')
@@ -1126,10 +1213,14 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     for (const c of clusters) {
       if (c.connId === connId) {
         const n = c.nodes.find(nd => nd.node === nodeName)
-        return (n?.vms || []).filter(v => !v.template)
+
+
+return (n?.vms || []).filter(v => !v.template)
       }
     }
-    return []
+
+
+return []
   }, [clusters])
 
   // Helper: get other nodes in the same cluster
@@ -1139,19 +1230,23 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         return c.nodes.filter(n => n.node !== nodeName && n.status === 'online').map(n => n.node)
       }
     }
-    return []
+
+
+return []
   }, [clusters])
 
   // Bulk action handlers
   const handleBulkActionClick = (action: 'start-all' | 'shutdown-all' | 'migrate-all') => {
     if (!nodeContextMenu) return
     const { connId, node } = nodeContextMenu
+
     setBulkActionDialog({ open: true, action, connId, node, targetNode: '' })
     handleCloseNodeContextMenu()
   }
 
   const handleBulkActionConfirm = async () => {
     const { action, connId, node, targetNode } = bulkActionDialog
+
     if (!action) return
 
     const vms = getNodeVms(connId, node)
@@ -1176,24 +1271,30 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     if (vmsToProcess.length === 0) {
       setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })
-      return
+
+return
     }
 
     setBulkActionBusy(true)
+
     try {
       const batchSize = 5
+
       for (let i = 0; i < vmsToProcess.length; i += batchSize) {
         const batch = vmsToProcess.slice(i, i + batchSize)
+
         await Promise.all(batch.map(async (vm) => {
           try {
             let url: string
             let body: string | undefined
+
             if (apiAction === 'migrate') {
               url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/migrate`
               body = JSON.stringify({ target: targetNode, online: vm.status === 'running' })
             } else {
               url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
             }
+
             await fetch(url, {
               method: 'POST',
               headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -1202,6 +1303,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
           } catch {}
         }))
       }
+
+
       // Trigger immediate SSE poll — tree will be updated via persistent EventSource
       setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
     } finally {
@@ -1219,7 +1322,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     // Confirmation pour les actions destructives via MUI Dialog
     if (['shutdown', 'stop', 'suspend', 'hibernate', 'reboot', 'reset'].includes(action)) {
       setVmActionConfirm({ action, name })
-      return
+
+return
     }
 
     await executeVmAction(action)
@@ -1256,20 +1360,28 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         hibernate: 'stopped',
         resume: 'running',
       }
+
       const newStatus = optimisticStatus[action]
+
       if (newStatus) {
         setClusters(prev => prev.map(clu => {
           if (clu.connId !== connId) return clu
           let changed = false
+
           const nodes = clu.nodes.map(n => {
             const vms = n.vms.map(vm => {
               if (String(vm.vmid) !== String(vmid) || vm.type !== type) return vm
               changed = true
-              return { ...vm, status: newStatus }
+
+return { ...vm, status: newStatus }
             })
-            return changed ? { ...n, vms } : n
+
+
+return changed ? { ...n, vms } : n
           })
-          return changed ? { ...clu, nodes } : clu
+
+
+return changed ? { ...clu, nodes } : clu
         }))
       }
 
@@ -1302,6 +1414,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     try {
       const vmKey = `${snapshotTarget.connId}:${snapshotTarget.type}:${snapshotTarget.node}:${snapshotTarget.vmid}`
+
       const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmKey)}/snapshots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1310,6 +1423,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
@@ -1363,6 +1477,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
@@ -1381,6 +1496,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const handleOpenConsole = () => {
     if (!contextMenu) return
     const { connId, node, type, vmid } = contextMenu
+
     openConsoleWindow(connId, node, type, vmid)
     handleCloseContextMenu()
   }
@@ -1419,14 +1535,14 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     // Si la prop onToggleFavorite est fournie, l'utiliser
     if (onToggleFavorite) {
       onToggleFavorite({ connId, node, type: vmType, vmid, name: vmName })
-      
+
 return
     }
-    
+
     // Sinon, gérer localement (fallback)
     const vmKey = `${connId}:${node}:${vmType}:${vmid}`
     const isFav = favorites.has(vmKey)
-    
+
     try {
       if (isFav) {
         // Supprimer
@@ -1439,7 +1555,7 @@ return
             const next = new Set(prev)
 
             next.delete(vmKey)
-            
+
 return next
           })
         }
@@ -1537,7 +1653,8 @@ return next
     return [...arr].sort((a, b) => {
       if (a.isCluster && !b.isCluster) return -1
       if (!a.isCluster && b.isCluster) return 1
-      return a.name.localeCompare(b.name)
+
+return a.name.localeCompare(b.name)
     })
   }, [])
 
@@ -1549,9 +1666,11 @@ return next
       setError(null)
 
       const url = reloadTick > 0 ? '/api/v1/inventory/stream?refresh=true' : '/api/v1/inventory/stream'
+
       eventSource = new EventSource(url)
 
       let gotFirstData = false
+
       // Accumulate streamed data — update state progressively on first load,
       // or replace all at once on refresh to avoid flicker
       const isRefresh = reloadTick > 0
@@ -1569,11 +1688,14 @@ return next
 
       eventSource.addEventListener('cluster', (e) => {
         if (!alive) return
+
         try {
           const cluster = JSON.parse(e.data)
           const tree = mapClusterToTree(cluster)
+
           accClusters.push(tree)
           if (!gotFirstData) { gotFirstData = true; setLoading(false) }
+
           // On first load, update progressively so user sees items appear
           if (!isRefresh) setClusters(sortClusters([...accClusters]))
         } catch { /* ignore malformed event */ }
@@ -1581,9 +1703,11 @@ return next
 
       eventSource.addEventListener('pbs', (e) => {
         if (!alive) return
+
         try {
           const pbs = JSON.parse(e.data)
           const tree = mapPbsToTree(pbs)
+
           accPbs.push(tree)
           if (!gotFirstData) { gotFirstData = true; setLoading(false) }
           if (!isRefresh) setPbsServers([...accPbs].sort((a, b) => a.name.localeCompare(b.name)))
@@ -1592,8 +1716,10 @@ return next
 
       eventSource.addEventListener('storage', (e) => {
         if (!alive) return
+
         try {
           const storageData: TreeClusterStorage = JSON.parse(e.data)
+
           accStorages.push(storageData)
           if (!isRefresh) setClusterStorages([...accStorages].sort((a, b) => a.connName.localeCompare(b.connName)))
         } catch { /* ignore */ }
@@ -1601,25 +1727,31 @@ return next
 
       eventSource.addEventListener('external', (e) => {
         if (!alive) return
+
         try {
           const externalData = JSON.parse(e.data)
+
           // Mark every external connection as "loading VMs" immediately. This
           // drives the spinner in the tree so the user sees an indicator while
           // the 5s defer + SOAP/API fetch runs — without it the connection row
           // sits silent for up to ~15s (5s defer + SOAP login + listVms +
           // inventory path resolution for vCenter) with no feedback.
           const extTypes = new Set(['vmware', 'xcpng', 'hyperv', 'nutanix'])
+
           const withLoadingFlag = (externalData || []).map((h: any) =>
             extTypes.has(h.type) ? { ...h, vmsLoading: true } : h,
           )
+
           setExternalHypervisors(withLoadingFlag)
 
           // Defer external VM fetches to avoid competing with critical-path requests at startup.
           // The tree renders immediately with connection info; VMs appear after the defer.
           const extConns = (externalData || []).filter((h: any) => extTypes.has(h.type))
+
           if (extConns.length > 0) {
             setTimeout(() => {
               if (!alive) return
+
               // IMPORTANT: do NOT use Promise.all here. Promise.all waits for EVERY
               // fetch to settle before handing back control, so a single unreachable
               // hypervisor (Nutanix/Hyper-V/XCP-ng with a dead host) would stall the
@@ -1629,19 +1761,25 @@ return next
               // resolves — the working connections pop their VMs immediately, the
               // broken ones stay spinning until their own timeout hits.
               const VM_FETCH_TIMEOUT_MS = 15_000
+
               for (const conn of extConns) {
                 const controller = new AbortController()
                 const timeoutId = setTimeout(() => controller.abort(), VM_FETCH_TIMEOUT_MS)
+
                 const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
+
                 ;(async () => {
                   let vms: any[] = []
                   let loadError: string | undefined
+
                   try {
                     const vmRes = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`, {
                       signal: controller.signal,
                     })
+
                     if (vmRes.ok) {
                       const vmJson = await vmRes.json()
+
                       vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
                     } else {
                       loadError = `HTTP ${vmRes.status}`
@@ -1653,7 +1791,9 @@ return next
                   } finally {
                     clearTimeout(timeoutId)
                   }
+
                   if (!alive) return
+
                   // Narrow update: only flip the state for this single connection;
                   // leaves every other connection's loading/vms untouched so they
                   // stream in as their own fetches settle.
@@ -1674,20 +1814,25 @@ return next
       eventSource.addEventListener('done', () => {
         if (!alive) return
         if (!gotFirstData) setLoading(false)
+
+
         // On refresh, swap all data at once to avoid flicker
         if (isRefresh) {
           setClusters(sortClusters([...accClusters]))
           setPbsServers([...accPbs].sort((a, b) => a.name.localeCompare(b.name)))
           setClusterStorages([...accStorages].sort((a, b) => a.connName.localeCompare(b.connName)))
         }
+
         eventSource?.close()
         eventSource = null
       })
 
       eventSource.addEventListener('error', (e) => {
         if (!alive) return
+
         try {
           const err = JSON.parse((e as any).data || '{}')
+
           setError(err.message || 'Connection error')
         } catch {
           if (!gotFirstData) {
@@ -1695,6 +1840,7 @@ return next
             setLoading(false)
           }
         }
+
         eventSource?.close()
         eventSource = null
       })
@@ -1721,17 +1867,23 @@ return next
 
       es.addEventListener('vm:update', (e) => {
         if (!alive) return
+
         try {
           const d = JSON.parse(e.data)
+
           setClusters(prev => {
             let anyClusterChanged = false
+
             const next = prev.map(clu => {
               if (clu.connId !== d.connId) return clu
               let nodeChanged = false
+
               const nodes = clu.nodes.map(n => {
                 let vmChanged = false
+
                 const vms = n.vms.map(vm => {
                   if (String(vm.vmid) !== String(d.vmid) || vm.type !== d.type) return vm
+
                   // Only create new object if values actually differ
                   const newStatus = d.status
                   const newCpu = d.cpu ?? vm.cpu
@@ -1740,67 +1892,90 @@ return next
                   const newDisk = d.disk ?? vm.disk
                   const newMaxdisk = d.maxdisk ?? vm.maxdisk
                   const newName = d.name ?? vm.name
+
                   if (vm.status === newStatus && vm.cpu === newCpu && vm.mem === newMem &&
                       vm.maxmem === newMaxmem && vm.disk === newDisk && vm.maxdisk === newMaxdisk &&
                       vm.name === newName) return vm
                   vmChanged = true
-                  return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName }
+
+return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName }
                 })
+
                 if (!vmChanged) return n
                 nodeChanged = true
-                return { ...n, vms }
+
+return { ...n, vms }
               })
+
               if (!nodeChanged) return clu
               anyClusterChanged = true
-              return { ...clu, nodes }
+
+return { ...clu, nodes }
             })
-            return anyClusterChanged ? next : prev
+
+
+return anyClusterChanged ? next : prev
           })
         } catch { /* ignore */ }
       })
 
       es.addEventListener('node:update', (e) => {
         if (!alive) return
+
         try {
           const d = JSON.parse(e.data)
+
           setClusters(prev => {
             let anyChanged = false
+
             const next = prev.map(clu => {
               if (clu.connId !== d.connId) return clu
               let nodeChanged = false
+
               const nodes = clu.nodes.map(n => {
                 if (n.node !== d.node) return n
                 const newStatus = d.status ?? n.status
                 const newCpu = d.cpu ?? n.cpu
                 const newMem = d.mem ?? n.mem
                 const newMaxmem = d.maxmem ?? n.maxmem
+
                 if (n.status === newStatus && n.cpu === newCpu && n.mem === newMem && n.maxmem === newMaxmem) return n
                 nodeChanged = true
-                return { ...n, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem }
+
+return { ...n, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem }
               })
+
               if (!nodeChanged) return clu
               anyChanged = true
-              return { ...clu, nodes }
+
+return { ...clu, nodes }
             })
-            return anyChanged ? next : prev
+
+
+return anyChanged ? next : prev
           })
         } catch { /* ignore */ }
       })
 
       es.addEventListener('vm:added', (e) => {
         if (!alive) return
+
         try {
           const d = JSON.parse(e.data)
+
           setClusters(prev => {
             let anyChanged = false
+
             const next = prev.map(clu => {
               if (clu.connId !== d.connId) return clu
               let nodeChanged = false
+
               const nodes = clu.nodes.map(n => {
                 if (n.node !== d.node) return n
                 if (n.vms.some(vm => String(vm.vmid) === String(d.vmid) && vm.type === d.type)) return n
                 nodeChanged = true
-                return {
+
+return {
                   ...n,
                   vms: [...n.vms, {
                     type: d.type,
@@ -1816,35 +1991,49 @@ return next
                   }].sort((a, b) => Number.parseInt(a.vmid, 10) - Number.parseInt(b.vmid, 10))
                 }
               })
+
               if (!nodeChanged) return clu
               anyChanged = true
-              return { ...clu, nodes }
+
+return { ...clu, nodes }
             })
-            return anyChanged ? next : prev
+
+
+return anyChanged ? next : prev
           })
         } catch { /* ignore */ }
       })
 
       es.addEventListener('vm:removed', (e) => {
         if (!alive) return
+
         try {
           const d = JSON.parse(e.data)
+
           setClusters(prev => {
             let anyChanged = false
+
             const next = prev.map(clu => {
               if (clu.connId !== d.connId) return clu
               let nodeChanged = false
+
               const nodes = clu.nodes.map(n => {
                 const vms = n.vms.filter(vm => !(String(vm.vmid) === String(d.vmid) && vm.type === d.type))
+
                 if (vms.length === n.vms.length) return n
                 nodeChanged = true
-                return { ...n, vms }
+
+return { ...n, vms }
               })
+
               if (!nodeChanged) return clu
               anyChanged = true
-              return { ...clu, nodes }
+
+return { ...clu, nodes }
             })
-            return anyChanged ? next : prev
+
+
+return anyChanged ? next : prev
           })
         } catch { /* ignore */ }
       })
@@ -1853,6 +2042,7 @@ return next
       es.onerror = () => {
         es?.close()
         es = null
+
         if (alive) {
           reconnectTimer = setTimeout(connect, 5000)
         }
@@ -1865,6 +2055,7 @@ return next
     // Pause SSE when tab is hidden, reconnect when visible
     function onVisChange() {
       if (!alive) return
+
       if (document.visibilityState === 'visible') {
         if (!es) connect()
       } else {
@@ -1894,7 +2085,9 @@ return next
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 300)
-    return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
   }, [searchInput])
 
   // Filtrer les clusters/nodes/vms selon la recherche
@@ -1931,7 +2124,7 @@ return next
               }
             }
 
-            
+
 return null
           })
           .filter((n): n is NonNullable<typeof n> => n !== null)
@@ -1946,7 +2139,7 @@ return null
           }
         }
 
-        
+
 return null
       })
       .filter((clu): clu is NonNullable<typeof clu> => clu !== null)
@@ -1955,7 +2148,7 @@ return null
   // Calculer les items à expand automatiquement lors d'une recherche
   const expandedItems = useMemo(() => {
     if (!search.trim()) return []
-    
+
     const items: string[] = []
 
     filteredClusters.forEach(clu => {
@@ -1964,7 +2157,7 @@ return null
         items.push(`node:${clu.connId}:${n.node}`)
       })
     })
-    
+
 return items
   }, [filteredClusters, search])
 
@@ -1972,6 +2165,7 @@ return items
   const expandAll = useCallback(() => {
     programmaticExpand.current = true
     const items: string[] = []
+
     clusters.forEach(clu => {
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => items.push(`node:${clu.connId}:${n.node}`))
@@ -1989,6 +2183,7 @@ return items
     // `cs.isCluster` gate also kept standalone-host storages collapsed even
     // though the per-node branches are rendered for them too.
     const storageItems: string[] = []
+
     clusterStorages.forEach(cs => {
       cs.nodes.filter(n => n.storages.length > 0).forEach(n => {
         storageItems.push(`storage-node:${cs.connId}:${n.node}`)
@@ -1998,6 +2193,7 @@ return items
 
     // Expand all Backup (PBS) tree items
     const backupItems: string[] = []
+
     pbsServers.forEach(pbs => {
       backupItems.push(`pbs:${pbs.connId}`)
     })
@@ -2008,12 +2204,15 @@ return items
     // Without this, "Expand all" would open connections but leave VMs hidden inside
     // collapsed host groups on vCenter sources.
     const migrationItems: string[] = []
+
     externalHypervisors.forEach(h => {
       migrationItems.push(`ext-type:${h.type}`)
       migrationItems.push(`ext:${h.id}`)
       const hostsSeen = new Set<string>()
+
       for (const vm of (h as any).vms || []) {
         const host = (vm as any).vcenterHost
+
         if (host && !hostsSeen.has(host)) {
           hostsSeen.add(host)
           migrationItems.push(`exthost:${h.id}:${host}`)
@@ -2025,6 +2224,7 @@ return items
     // Expand Network section + trigger fetch if needed
     setExpandedNetSections(new Set(['network']))
     expandNetworkOnLoadRef.current = true
+
     if (!networkFetchedRef.current) {
       networkFetchedRef.current = true
       fetchNetworksRef.current?.()
@@ -2065,7 +2265,7 @@ return items
 
   // Liste plate de toutes les VMs (pour le mode 'vms')
   const allVms = useMemo(() => {
-    const vms: { 
+    const vms: {
       connId: string
       connName: string
       node: string
@@ -2120,10 +2320,10 @@ return items
         })
       })
     })
-    
+
     // Trier par nom
     vms.sort((a, b) => a.name.localeCompare(b.name))
-    
+
 return vms
   }, [clusters])
 
@@ -2132,7 +2332,7 @@ return vms
     const q = search.trim().toLowerCase()
 
     if (!q) return allVms
-    
+
     return allVms.filter(vm =>
       vm.name.toLowerCase().includes(q) ||
       vm.vmid.toLowerCase().includes(q) ||
@@ -2187,6 +2387,7 @@ return vms
     filteredClusters.forEach(clu => {
       clu.nodes.forEach(n => {
         const key = `${clu.connId}:${n.node}`
+
         if (!hostsMap.has(key)) {
           hostsMap.set(key, { node: n.node, connName: clu.name, status: n.status || 'online', cpu: n.cpu, mem: n.mem, maxmem: n.maxmem, vms: [] })
         }
@@ -2249,12 +2450,14 @@ return a.pool.localeCompare(b.pool)
 
     const getOrCreate = (tag: string) => {
       if (!tagsMap.has(tag)) tagsMap.set(tag, { vms: [], entities: [] })
-      return tagsMap.get(tag)!
+
+return tagsMap.get(tag)!
     }
 
     displayVms.forEach(vm => {
       if (vm.tags) {
         const vmTags = vm.tags.split(/[;,]/).map(t => t.trim()).filter(Boolean)
+
         vmTags.forEach(tag => getOrCreate(tag).vms.push(vm))
       } else {
         getOrCreate(`(${t('common.none')})`).vms.push(vm)
@@ -2273,7 +2476,8 @@ return a.pool.localeCompare(b.pool)
       .sort((a, b) => {
         if (a.tag === `(${t('common.none')})`) return 1
         if (b.tag === `(${t('common.none')})`) return -1
-        return a.tag.localeCompare(b.tag)
+
+return a.tag.localeCompare(b.tag)
       })
   }, [displayVms, entityTagsMap])
 
@@ -2287,7 +2491,7 @@ return a.pool.localeCompare(b.pool)
     return filteredVms.filter(vm => {
       const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
 
-      
+
 return favorites.has(vmKey)
     })
   }, [filteredVms, favorites])
@@ -2314,35 +2518,45 @@ return favorites.has(vmKey)
   const [tenantVnets, setTenantVnets] = useState<TenantVnetItem[]>([])
   const [tenantVnetsLoading, setTenantVnetsLoading] = useState(false)
   const tenantVnetsFetchedRef = useRef(false)
+
   // Network sub-items: inverted logic — collapsed by default, expanded when added to this set
   const [expandedNetSections, setExpandedNetSections] = useState<Set<string>>(new Set())
+
   // Network tree expanded items (not persisted — data is lazy-loaded)
   const [networkTreeExpandedItems, setNetworkTreeExpandedItems] = useState<string[]>([])
+
   const toggleNetSection = useCallback((key: string) => {
     setExpandedNetSections(prev => {
       const next = new Set(prev)
+
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      return next
+
+return next
     })
   }, [])
+
   const networkCacheRef = useRef<{ connIds: string; data: VmNetData[] } | null>(null)
 
   // Fetch the tenant's VNets (display + subnet info) — only meaningful for
   // non-provider tenants. Provider keeps the legacy bridge/VLAN walk.
   const fetchTenantVnets = useCallback(async () => {
     setTenantVnetsLoading(true)
+
     try {
       const vdcsRes = await fetch('/api/v1/vdcs')
       const vdcsJson = await vdcsRes.json()
       const allVdcs: Array<{ id: string; name: string; connectionId?: string }> = Array.isArray(vdcsJson?.data) ? vdcsJson.data : []
       const out: TenantVnetItem[] = []
+
       await Promise.all(allVdcs.map(async (v) => {
         try {
           const r = await fetch(`/api/v1/vdcs/${encodeURIComponent(v.id)}/vnets`)
+
           if (!r.ok) return
           const j = await r.json()
           const list: any[] = Array.isArray(j?.data) ? j.data : []
+
           for (const vnet of list) {
             out.push({
               vdcId: v.id,
@@ -2366,30 +2580,40 @@ return favorites.has(vmKey)
   // Fetch networks when section is expanded
   const fetchNetworks = useCallback(() => {
     const connIds = clusters.map(c => c.connId).filter(Boolean)
+
     if (connIds.length === 0) return
     const cacheKey = connIds.sort().join(',')
+
     if (networkCacheRef.current?.connIds === cacheKey) {
       setNetworkData(networkCacheRef.current.data)
-      return
+
+return
     }
+
     setNetworkLoading(true)
     Promise.all(
       connIds.map(async (connId) => {
         try {
           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
+
           if (!res.ok) return []
           const json = await res.json()
-          return (json.data || []).map((vm: any) => ({ ...vm, connId }))
+
+
+return (json.data || []).map((vm: any) => ({ ...vm, connId }))
         } catch { return [] }
       })
     ).then((results) => {
       const all = results.flat()
+
       networkCacheRef.current = { connIds: cacheKey, data: all }
       setNetworkData(all)
       setNetworkLoading(false)
     })
   }, [clusters])
+
   const fetchNetworksRef = useRef(fetchNetworks)
+
   fetchNetworksRef.current = fetchNetworks
 
   // Persist Network section + inner tree (symmetry with the other sub-trees so
@@ -2411,6 +2635,7 @@ return favorites.has(vmKey)
     if (!isHydrated) return
     if (!expandedNetSections.has('network')) return
     if (clusters.length === 0) return
+
     if (isProviderTenant) {
       if (!networkFetchedRef.current) {
         networkFetchedRef.current = true
@@ -2433,13 +2658,16 @@ return favorites.has(vmKey)
 
     for (const vm of networkData) {
       const cid = vm.connId || 'unknown'
+
       if (!connMap.has(cid)) connMap.set(cid, new Map())
       const nodeMap = connMap.get(cid)!
+
       if (!nodeMap.has(vm.node)) nodeMap.set(vm.node, new Map())
       const vlanMap = nodeMap.get(vm.node)!
 
       for (const net of vm.nets) {
         const tag = net.tag ?? 'untagged'
+
         if (!vlanMap.has(tag)) vlanMap.set(tag, [])
         vlanMap.get(tag)!.push({ vm, netId: net.id, bridge: net.bridge })
       }
@@ -2447,6 +2675,7 @@ return favorites.has(vmKey)
 
     return Array.from(connMap.entries()).map(([connId, nodeMap]) => {
       const connName = clusters.find(c => c.connId === connId)?.name || connId
+
       const nodes = Array.from(nodeMap.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([node, vlanMap]) => {
@@ -2454,24 +2683,32 @@ return favorites.has(vmKey)
             .sort((a, b) => {
               if (a[0] === 'untagged') return 1
               if (b[0] === 'untagged') return -1
-              return (a[0] as number) - (b[0] as number)
+
+return (a[0] as number) - (b[0] as number)
             })
             .map(([tag, entries]) => ({
               tag,
               entries: entries.sort((a, b) => a.vm.name.localeCompare(b.vm.name)),
             }))
+
           const taggedVlans = vlans.filter(v => v.tag !== 'untagged').length
           const totalVms = vlans.reduce((sum, v) => sum + v.entries.length, 0)
-          return { node, vlans, totalVlans: taggedVlans, totalVms }
+
+
+return { node, vlans, totalVlans: taggedVlans, totalVms }
         })
-      return { connId, connName, nodes }
+
+
+return { connId, connName, nodes }
     })
   }, [networkData, clusters])
 
   // Expand all network tree items helper
   const expandNetworkOnLoadRef = useRef(false)
+
   const expandNetworkTreeItems = useCallback(() => {
     const items: string[] = []
+
     networkTree.forEach(({ connId, nodes }) => {
       items.push(`net-conn:${connId}`)
       nodes.forEach(({ node, vlans }) => {
@@ -2483,6 +2720,7 @@ return favorites.has(vmKey)
   }, [networkTree])
 
   const expandNetworkTreeItemsRef = useRef(expandNetworkTreeItems)
+
   expandNetworkTreeItemsRef.current = expandNetworkTreeItems
 
   // Auto-expand network tree when data arrives after Expand All
@@ -2555,7 +2793,8 @@ return favorites.has(vmKey)
     if (viewMode === 'vms') return displayVms
     if (viewMode === 'favorites') return favoritesList
     if (viewMode === 'templates') return filteredVms.filter(vm => vm.template)
-    return null
+
+return null
   }, [viewMode, displayVms, favoritesList, filteredVms])
 
   const virtualizer = useVirtualizer({
@@ -2624,6 +2863,7 @@ return favorites.has(vmKey)
                   const keys = viewMode === 'hosts' ? hostsList.map(h => `host:${h.key}`)
                     : viewMode === 'pools' ? poolsList.map(p => `pool:${p.pool}`)
                     : tagsList.map(t => `tag:${t.tag}`)
+
                   collapseAllSections(keys)
                 } else {
                   expandAllSections()
@@ -2799,7 +3039,9 @@ return favorites.has(vmKey)
               {virtualizer.getVirtualItems().map(virtualRow => {
                 const vm = flatItems![virtualRow.index]
                 const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                return (
+
+
+return (
                   <Box
                     key={virtualRow.key}
                     ref={virtualizer.measureElement}
@@ -2865,7 +3107,9 @@ return favorites.has(vmKey)
               {virtualizer.getVirtualItems().map(virtualRow => {
                 const vm = flatItems![virtualRow.index]
                 const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                return (
+
+
+return (
                   <Box
                     key={virtualRow.key}
                     ref={virtualizer.measureElement}
@@ -2924,16 +3168,19 @@ return favorites.has(vmKey)
             hostsList.map(host => {
               const isCollapsed = collapsedSections.has(`host:${host.key}`)
 
-              
+
 return (
               <Box key={host.key}>
                 {/* Header hôte */}
                 <Box
                   onClick={() => {
                     const willCollapse = !isCollapsed
+
                     toggleSection(`host:${host.key}`)
+
                     if (willCollapse && selected?.type === 'vm') {
                       const isInHost = host.vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+
                       if (isInHost) onSelect(null)
                     }
                   }}
@@ -2958,7 +3205,9 @@ return (
                 {/* VMs de l'hôte */}
                 {!isCollapsed && host.vms.map(vm => {
                   const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                  return (
+
+
+return (
                     <VmItem
                       key={vmKey}
                       vmKey={vmKey}
@@ -3006,16 +3255,19 @@ return (
             poolsList.map(({ pool, vms }) => {
               const isCollapsed = collapsedSections.has(`pool:${pool}`)
 
-              
+
 return (
               <Box key={pool}>
                 {/* Header pool */}
                 <Box
                   onClick={() => {
                     const willCollapse = !isCollapsed
+
                     toggleSection(`pool:${pool}`)
+
                     if (willCollapse && selected?.type === 'vm') {
                       const isInPool = vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+
                       if (isInPool) onSelect(null)
                     }
                   }}
@@ -3039,7 +3291,9 @@ return (
                 {/* VMs du pool */}
                 {!isCollapsed && vms.map(vm => {
                   const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                  return (
+
+
+return (
                     <VmItem
                       key={vmKey}
                       vmKey={vmKey}
@@ -3097,9 +3351,12 @@ return (
                 <Box
                   onClick={() => {
                     const willCollapse = !isCollapsed
+
                     toggleSection(`tag:${tag}`)
+
                     if (willCollapse && selected?.type === 'vm') {
                       const isInTag = vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
+
                       if (isInTag) onSelect(null)
                     }
                   }}
@@ -3126,7 +3383,9 @@ return (
                   const isSelected = selected?.id === (entity.type === 'cluster' ? entity.connId : `${entity.connId}:${entity.node}`)
                   const clu = clusters.find(c => c.connId === entity.connId)
                   const nodeData = entity.type === 'node' ? clu?.nodes.find(n => n.node === entity.node) : null
-                  return (
+
+
+return (
                     <Box
                       key={`${entityKey}-${tag}`}
                       onClick={() => onSelect({ type: entity.type === 'cluster' ? 'cluster' : 'node', id: entity.type === 'cluster' ? entity.connId : `${entity.connId}:${entity.node}` })}
@@ -3161,7 +3420,9 @@ return (
                 {!isCollapsed && vms.map(vm => {
                   const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                   const tagVmKey = `${vmKey}-${tag}`
-                  return (
+
+
+return (
                     <VmItem
                       key={tagVmKey}
                       vmKey={vmKey}
@@ -3210,7 +3471,9 @@ return (
               {virtualizer.getVirtualItems().map(virtualRow => {
                 const vm = flatItems![virtualRow.index]
                 const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                return (
+
+
+return (
                   <Box
                     key={virtualRow.key}
                     ref={virtualizer.measureElement}
@@ -3263,7 +3526,7 @@ return (
         {filteredClusters.length === 0 && search.trim() ? (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant='body2' sx={{ opacity: 0.6 }}>
-              {t('common.noResults')} "{search}"
+              {t('common.noResults')} &quot;{search}&quot;
             </Typography>
           </Box>
         ) : null}
@@ -3298,7 +3561,9 @@ return (
               ({(() => {
                 const realClusters = filteredClusters.filter(c => c.isCluster).length
                 const totalNodes = filteredClusters.reduce((acc, c) => acc + c.nodes.length, 0)
-                return `${realClusters} clusters, ${totalNodes} PVE, ${allVms.length} VMs`
+
+
+return `${realClusters} clusters, ${totalNodes} PVE, ${allVms.length} VMs`
               })()})
             </Typography>
           </Box>
@@ -3359,7 +3624,7 @@ return (
           if (clu.nodes.length === 1) {
             const n = clu.nodes[0]
 
-            
+
 return (
               <TreeItem
                 key={`${clu.connId}:${n.node}`}
@@ -3392,6 +3657,7 @@ return (
                 {n.vms.map(vm => {
                   const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
                   const isMigrating = isVmMigrating(clu.connId, vm.vmid)
+
                   const vmContent = (
                   <TreeItem
                     key={vmKey}
@@ -3437,7 +3703,9 @@ return (
                     }
                   />
                   )
-                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
                 })}
               </TreeItem>
             )
@@ -3467,6 +3735,7 @@ return (
                 {n.vms.map(vm => {
                   const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
                   const isMigrating = isVmMigrating(clu.connId, vm.vmid)
+
                   const vmContent = (
                   <TreeItem
                     key={vmKey}
@@ -3509,7 +3778,9 @@ return (
                     }
                   />
                   )
-                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
                 })}
               </TreeItem>
             ))
@@ -3569,6 +3840,7 @@ return (
                   {n.vms.map(vm => {
                     const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
                     const isMigrating = isVmMigrating(clu.connId, vm.vmid)
+
                     const vmContent = (
                     <TreeItem
                       key={vmKey}
@@ -3613,7 +3885,9 @@ return (
                       }
                     />
                     )
-                    return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+
+
+return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
                   })}
                 </TreeItem>
               ))}
@@ -3666,33 +3940,42 @@ return (
             onSelectedItemsChange={(_event, ids) => {
               if (expandingRef.current) return
               const picked = Array.isArray(ids) ? ids[0] : ids
+
               if (!picked) return
               const sel = selectionFromItemId(String(picked))
+
               if (sel) onSelect(sel)
             }}
           >
           {clusterStorages.map(cs => {
             const isCeph = (type: string) => type === 'rbd' || type === 'cephfs'
+
             const storageIcon = (type: string) => {
               if (isCeph(type)) return '' // handled by <img>
               if (type === 'nfs' || type === 'cifs') return 'ri-folder-shared-fill'
               if (type === 'zfspool' || type === 'zfs') return 'ri-stack-fill'
               if (type === 'lvm' || type === 'lvmthin') return 'ri-hard-drive-2-fill'
               if (type === 'dir') return 'ri-folder-fill'
-              return 'ri-hard-drive-fill'
+
+return 'ri-hard-drive-fill'
             }
+
             const storageColor = (type: string) => {
               if (type === 'nfs' || type === 'cifs') return '#3498db'
               if (type === 'zfspool' || type === 'zfs') return '#2ecc71'
               if (type === 'lvm' || type === 'lvmthin') return '#e67e22'
-              return '#95a5a6'
+
+return '#95a5a6'
             }
+
             const formatSize = (bytes: number) => {
               if (bytes >= 1099511627776) return `${(bytes / 1099511627776).toFixed(1)}T`
               if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(0)}G`
               if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)}M`
-              return `${bytes}B`
+
+return `${bytes}B`
             }
+
             const storageLabel = (s: TreeStorageItem) => (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, width: '100%' }}>
                 {isCeph(s.type)
@@ -3722,6 +4005,8 @@ return (
                 label={storageLabel(s)}
               />
             ))
+
+
             // Per-node sub-trees expose host names — only render in 'tree'
             // mode (provider view). The 'vms' mode (tenant or flat) keeps
             // shared storages only, consistent with the node abstraction.
@@ -3748,7 +4033,9 @@ return (
                 </TreeItem>
               ))
               : []
-            return [...sharedItems, ...nodeItems]
+
+
+return [...sharedItems, ...nodeItems]
           })}
           </SimpleTreeView>
           </Collapse>
@@ -3779,6 +4066,7 @@ return (
                 tenantVnetsFetchedRef.current = true
                 void fetchTenantVnets()
               }
+
               onSelect({ type: 'network-root', id: 'network-root' })
               toggleNetSection('network')
             }}
@@ -3837,8 +4125,10 @@ return (
                   onSelectedItemsChange={(_event, ids) => {
                     if (expandingRef.current) return
                     const picked = Array.isArray(ids) ? ids[0] : ids
+
                     if (!picked) return
                     const sel = selectionFromItemId(String(picked))
+
                     if (sel) onSelect(sel)
                   }}
                 >
@@ -3885,8 +4175,10 @@ return (
                 onSelectedItemsChange={(_event, ids) => {
                   if (expandingRef.current) return
                   const picked = Array.isArray(ids) ? ids[0] : ids
+
                   if (!picked) return
                   const sel = selectionFromItemId(String(picked))
+
                   if (sel) onSelect(sel)
                 }}
               >
@@ -3904,7 +4196,9 @@ return (
                 >
                   {nodes.map(({ node, vlans, totalVlans, totalVms }) => {
                     const nodeStatus = clusters.find(c => c.connId === cId)?.nodes.find(n => n.node === node)?.status
-                    return (
+
+
+return (
                     <TreeItem
                       key={`net-node:${cId}:${node}`}
                       itemId={`net-node:${cId}:${node}`}
@@ -3934,7 +4228,9 @@ return (
                         >
                           {entries.map(({ vm, netId, bridge }) => {
                             const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                            return (
+
+
+return (
                               <TreeItem
                                 key={`${vmKey}-${netId}-${tag}`}
                                 itemId={`vm:${vmKey}:${netId}:${tag}`}
@@ -4007,8 +4303,10 @@ return (
             onSelectedItemsChange={(_event, ids) => {
               if (expandingRef.current) return
               const picked = Array.isArray(ids) ? ids[0] : ids
+
               if (!picked) return
               const sel = selectionFromItemId(String(picked))
+
               if (sel) onSelect(sel)
             }}
           >
@@ -4095,21 +4393,29 @@ return (
         // behaviour of the main PVE tree (see `allVms.filter(..., search)` earlier
         // in this component). Empty search = no filtering, everything shown.
         const q = search.trim().toLowerCase()
+
         const vmMatchesSearch = (vm: any): boolean => {
           if (!q) return true
           const hay = `${vm.name || ''} ${vm.vmid || ''} ${vm.guest_OS || vm.guestOS || ''}`.toLowerCase()
-          return hay.includes(q)
+
+
+return hay.includes(q)
         }
+
         const connMatchesSearch = (conn: any): boolean => {
           if (!q) return true
+
           // A connection "matches" when its own name matches (show all its VMs)
           // OR any of its VMs match (show only the matching VMs).
           if (`${conn.name || ''}`.toLowerCase().includes(q)) return true
-          return (conn.vms || []).some((vm: any) => vmMatchesSearch(vm))
+
+return (conn.vms || []).some((vm: any) => vmMatchesSearch(vm))
         }
+
         const filteredHypervisors = q
           ? externalHypervisors.filter(connMatchesSearch).map(conn => ({
               ...conn,
+
               // Only narrow the VM list when the connection itself didn't match by name;
               // if the connection name matches, show all its VMs so the user can see
               // what's inside without re-typing.
@@ -4122,7 +4428,8 @@ return (
         const grouped = filteredHypervisors.reduce<Record<string, typeof filteredHypervisors>>((acc, h) => {
           if (!acc[h.type]) acc[h.type] = []
           acc[h.type].push(h)
-          return acc
+
+return acc
         }, {})
 
         const totalExtVms = filteredHypervisors.reduce((acc, h) => acc + (h.vms?.length || 0), 0)
@@ -4167,10 +4474,13 @@ return (
                   // back to the user's manual expansion state from localStorage.
                   if (!q) return migrationExpandedItems
                   const auto: string[] = []
+
                   for (const [type, conns] of Object.entries(grouped)) {
                     auto.push(`ext-type:${type}`)
+
                     for (const conn of conns) {
                       auto.push(`ext:${conn.id}`)
+
                       for (const vm of conn.vms || []) {
                         if (vm.vcenterHost) {
                           auto.push(`exthost:${conn.id}:${vm.vcenterHost}`)
@@ -4178,7 +4488,9 @@ return (
                       }
                     }
                   }
-                  return [...new Set([...migrationExpandedItems, ...auto])]
+
+
+return [...new Set([...migrationExpandedItems, ...auto])]
                 })()}
                 onExpandedItemsChange={(_event, itemIds) => {
                   if (!isHydrated) return
@@ -4189,15 +4501,19 @@ return (
                 onSelectedItemsChange={(_event, ids) => {
                   if (expandingRef.current) return
                   const picked = Array.isArray(ids) ? ids[0] : ids
+
                   if (!picked) return
                   const sel = selectionFromItemId(String(picked))
+
                   if (sel) onSelect(sel)
                 }}
               >
               {Object.entries(grouped).map(([type, conns]) => {
                 const cfg = hypervisorConfig[type] || { label: type, icon: 'ri-server-line', color: '#999' }
                 const totalVms = conns.reduce((acc, c) => acc + (c.vms?.length || 0), 0)
-                return (
+
+
+return (
                   <TreeItem
                     key={`ext-type:${type}`}
                     itemId={`ext-type:${type}`}
@@ -4225,7 +4541,9 @@ return (
                           vm.status === 'running' ? '#4caf50' :
                           vm.status === 'paused' || vm.status === 'suspended' ? '#ed6c02' :
                           '#f44336'
-                        return (
+
+
+return (
                           <TreeItem
                             key={`extvm:${conn.id}:${vm.vmid}`}
                             itemId={`extvm:${conn.id}:${vm.vmid}`}
@@ -4260,14 +4578,18 @@ return (
                       const anyHostResolved = allVms.some((vm: any) => !!vm.vcenterHost)
                       let groupedByHost: [string, any[]][] = []
                       let unhostedVms: any[] = []
+
                       if (anyHostResolved) {
                         const map = new Map<string, any[]>()
+
                         for (const vm of allVms) {
                           const host = vm.vcenterHost || ''
+
                           if (!host) { unhostedVms.push(vm); continue }
                           if (!map.has(host)) map.set(host, [])
                           map.get(host)!.push(vm)
                         }
+
                         groupedByHost = [...map.entries()].sort(([a], [b]) => a.localeCompare(b))
                       }
 
@@ -4324,17 +4646,21 @@ return (
                                 // VM. Default to 'unknown' if the SOAP resolution
                                 // didn't return a status (e.g. orphaned host).
                                 const hostStatus = (vms[0] as any)?.vcenterHostStatus || 'unknown'
+
                                 const statusColor =
                                   hostStatus === 'ok' ? '#4caf50' :
                                   hostStatus === 'warn' ? '#ff9800' :
                                   hostStatus === 'crit' ? '#f44336' :
                                   '#9e9e9e' // unknown -> grey
+
                                 const statusTitle =
                                   hostStatus === 'ok' ? 'Connected, powered on' :
                                   hostStatus === 'warn' ? 'Not responding or standby' :
                                   hostStatus === 'crit' ? 'Disconnected or powered off' :
                                   'Status unknown'
-                                return (
+
+
+return (
                                 <TreeItem
                                   key={`exthost:${conn.id}:${host}`}
                                   itemId={`exthost:${conn.id}:${host}`}
@@ -4489,4 +4815,3 @@ return (
     </Box>
   )
 }
-

@@ -16,10 +16,13 @@ const ALWAYS_ALLOWED: ViewMode[] = ['vms', 'favorites', 'templates']
 const INFRA_VIEW_MODES = new Set<ViewMode>(['tree', 'hosts'])
 
 type ScopeProfile = {
+
   /** Which view to open by default */
   defaultViewMode: ViewMode
+
   /** Which toggle buttons to show */
   allowedViewModes: Set<ViewMode>
+
   /** True while RBAC data is still loading */
   loading: boolean
 }
@@ -39,6 +42,7 @@ type ScopeProfile = {
 export function useRBACScopeProfile(): ScopeProfile {
   const { roles, isAdmin, loading } = useRBAC()
   const { currentTenant, loading: tenantLoading } = useTenant()
+
   // Tenants other than the provider get the cloud-style abstraction:
   // nodes / hosts / clusters are an implementation detail and never appear
   // in their UI, regardless of RBAC scope.
@@ -48,13 +52,17 @@ export function useRBACScopeProfile(): ScopeProfile {
   return useMemo(() => {
     const restrict = (profile: ScopeProfile): ScopeProfile => {
       if (!hideInfra) return profile
+
       const safe = new Set<ViewMode>(
         [...profile.allowedViewModes].filter(m => !INFRA_VIEW_MODES.has(m)),
       )
+
       const defaultView = INFRA_VIEW_MODES.has(profile.defaultViewMode)
         ? ('vms' as ViewMode)
         : profile.defaultViewMode
-      return { ...profile, allowedViewModes: safe, defaultViewMode: defaultView }
+
+
+return { ...profile, allowedViewModes: safe, defaultViewMode: defaultView }
     }
 
     if (loading) {

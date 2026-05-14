@@ -23,11 +23,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
+
     if (!vdcId || !displayName) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 })
     }
 
     const denied = await checkPermission("sdn.vnet.view")
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -41,6 +43,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
         vdc: { select: { connectionId: true } },
       },
     })
+
     if (!vnetRow || !vnetRow.subnet) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
 
     const row = {
@@ -60,20 +63,24 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // gracefully and return the IPAM rows alone — the IP/MAC are still
     // useful even without the live state.
     const vmIndex = new Map<number, { name: string; node: string; status: string; type: string }>()
+
     try {
       const connMeta = await prisma.connection.findUnique({
         where: { id: row.connection_id },
         select: { tenantId: true },
       })
+
       if (connMeta) {
         const conn = await getConnectionById(row.connection_id, connMeta.tenantId)
         const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+
         for (const r of resources ?? []) {
           // PVE returns vmid as a number on /cluster/resources, but be
           // defensive: some older versions / proxies stringify it. Always
           // normalise to Number so the Map lookup matches the IPAM row's
           // numeric vmid.
           const vmidNum = Number(r?.vmid)
+
           if (!Number.isFinite(vmidNum)) continue
           vmIndex.set(vmidNum, {
             name: String(r.name ?? `vm-${vmidNum}`),
@@ -93,11 +100,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // managed appliances declare a smaller CIDR.
     const parsed = parseCidr(row.cidr)
     let usable = 0
+
     if (parsed) {
       const low = parsed.firstUsableInt
       const high = parsed.lastUsableInt
       const gatewayInt = parseCidr(`${row.gateway}/32`)?.networkInt
       const gatewayInRange = typeof gatewayInt === 'number' && gatewayInt >= low && gatewayInt <= high
+
       usable = Math.max(0, high - low + 1 - (gatewayInRange ? 1 : 0))
     }
 
@@ -111,7 +120,9 @@ export async function GET(_req: Request, ctx: RouteContext) {
         used: allocations.length,
         allocations: allocations.map((a) => {
           const vm = a.vmid != null ? vmIndex.get(a.vmid) ?? null : null
-          return {
+
+
+return {
             id: a.id,
             ip: a.ip,
             mac: a.mac,

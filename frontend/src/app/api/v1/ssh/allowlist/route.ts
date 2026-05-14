@@ -12,15 +12,20 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const data = await orchestratorFetch("/ssh/allowlist")
-    return NextResponse.json(data)
+
+
+return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== "ORCHESTRATOR_UNAVAILABLE") {
       console.error("Failed to fetch SSH allowlist:", String(error?.message || "").replace(/[\r\n]/g, ""))
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Failed to fetch SSH allowlist" },
       { status: 500 }
     )

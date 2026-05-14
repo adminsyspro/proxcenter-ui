@@ -24,6 +24,7 @@ function round1(n: number) {
 export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -66,7 +67,7 @@ export async function GET(req: Request) {
 
         const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
         const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
-        
+
         const isCluster = nodes.length > 1
 
         // Transformer les resources en format attendu
@@ -106,7 +107,7 @@ export async function GET(req: Request) {
         })
       } catch (e) {
         console.error(`[vms] Error fetching connection ${conn.id}:`, e)
-        
+
 return []
       }
     })
@@ -128,8 +129,10 @@ return []
     if (vdcScope) {
       allVms = allVms.filter(vm => {
         const pools = vdcScope.poolsByConnection.get(vm.connId)
+
         if (!pools) return false // connection not in any vDC
-        return vm.pool != null && pools.has(vm.pool)
+
+return vm.pool != null && pools.has(vm.pool)
       })
     }
 
@@ -138,7 +141,7 @@ return []
       const aId = Number.parseInt(a.vmid, 10) || 0
       const bId = Number.parseInt(b.vmid, 10) || 0
 
-      
+
 return aId - bId
     })
 
@@ -161,7 +164,7 @@ return aId - bId
     })
   } catch (e: any) {
     console.error("[vms] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

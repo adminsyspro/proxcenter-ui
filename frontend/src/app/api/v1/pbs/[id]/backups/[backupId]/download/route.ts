@@ -10,6 +10,7 @@
 // name.
 
 import { cookies } from 'next/headers'
+
 import { Agent, request } from 'undici'
 
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
@@ -19,9 +20,11 @@ import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 export const runtime = 'nodejs'
 
 let insecureAgent: Agent | null = null
+
 function getInsecureAgent(): Agent {
   if (!insecureAgent) insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
-  return insecureAgent
+
+return insecureAgent
 }
 
 export async function GET(
@@ -38,16 +41,21 @@ export async function GET(
     }
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const url = new URL(req.url)
     const fileName = url.searchParams.get('file')
+
     if (!fileName) {
       return new Response('Missing file query param', { status: 400 })
     }
+
+
     // Restricted to .blob to avoid serving up the chunk-index of a
     // .didx/.fidx — those bytes are useless on their own (they reference
     // chunks in the datastore the browser can't reassemble). For .pxar
@@ -60,9 +68,11 @@ export async function GET(
     // contain '/', so a left-aligned split misassigns segments.
     const decoded = decodeURIComponent(rawBackupId)
     const parts = decoded.split('/')
+
     if (parts.length < 4) {
       return new Response('Invalid backupId format', { status: 400 })
     }
+
     const datastore = parts[0]
     const timestamp = parts[parts.length - 1]
     const vmid = parts[parts.length - 2]
@@ -86,6 +96,7 @@ export async function GET(
       'backup-time': timestamp,
       'file-name': fileName,
     })
+
     if (ns) qs.set('ns', ns)
 
     const upstreamUrl = `${conn.baseUrl.replace(/\/$/, '')}/api2/json/admin/datastore/${encodeURIComponent(datastore)}/file-download?${qs.toString()}`
@@ -101,7 +112,9 @@ export async function GET(
 
     if (upstream.statusCode < 200 || upstream.statusCode >= 300) {
       const errText = await upstream.body.text()
-      return new Response(`PBS ${upstream.statusCode}: ${errText.slice(0, 500)}`, { status: upstream.statusCode })
+
+
+return new Response(`PBS ${upstream.statusCode}: ${errText.slice(0, 500)}`, { status: upstream.statusCode })
     }
 
     // Forward the body as a Web stream so Next.js doesn't buffer the whole
@@ -109,16 +122,19 @@ export async function GET(
     // is the same for any future expansion.
     const body = upstream.body as unknown as ReadableStream<Uint8Array>
     const contentLength = upstream.headers['content-length']
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/octet-stream',
       'Content-Disposition': `attachment; filename="${fileName.replaceAll('"', '')}"`,
       'Cache-Control': 'no-store',
     }
+
     if (typeof contentLength === 'string') headers['Content-Length'] = contentLength
 
     return new Response(body, { status: 200, headers })
   } catch (e: any) {
     console.error('PBS download error:', e)
-    return new Response('PBS download failed', { status: 500 })
+
+return new Response('PBS download failed', { status: 500 })
   }
 }

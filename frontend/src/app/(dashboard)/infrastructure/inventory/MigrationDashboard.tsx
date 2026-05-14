@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { Box, Card, CardContent, Typography, Stack, Chip, LinearProgress, alpha, useTheme } from '@mui/material'
 import { PieChart, Pie, Cell } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 type ExternalHypervisor = {
@@ -53,7 +55,9 @@ const TYPE_LOGOS: Record<string, string> = {
 
 function isRunning(status: string): boolean {
   const s = status.toLowerCase()
-  return s.includes('running') || s.includes('power')
+
+
+return s.includes('running') || s.includes('power')
 }
 
 export default function MigrationDashboard({ externalHypervisors, onHostClick }: Props) {
@@ -66,6 +70,7 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         const jobs = (d?.data || []).slice(0, 10) // Last 10 jobs
+
         setRecentJobs(jobs)
       })
       .catch(() => {})
@@ -78,9 +83,11 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
 
   // Group by type for donut chart
   const typeGroups: Record<string, number> = {}
+
   for (const h of externalHypervisors) {
     typeGroups[h.type] = (typeGroups[h.type] ?? 0) + 1
   }
+
   const donutData = Object.entries(typeGroups).map(([type, count]) => ({
     name: TYPE_LABELS[type] ?? type,
     value: count,
@@ -252,7 +259,9 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
               <Stack spacing={1}>
                 {donutData.map((entry, index) => {
                   const typeKey = Object.entries(TYPE_LABELS).find(([, v]) => v === entry.name)?.[0] || ''
-                  return (
+
+
+return (
                     <Stack key={index} direction="row" alignItems="center" spacing={1}>
                       {TYPE_LOGOS[typeKey] ? (
                         <img src={TYPE_LOGOS[typeKey]} alt="" width={16} height={16} />
@@ -446,14 +455,18 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
                 : job.status === 'failed' ? theme.palette.error.main
                 : job.status === 'cancelled' ? theme.palette.warning.main
                 : theme.palette.info.main
+
               const statusIcon = job.status === 'completed' ? 'ri-checkbox-circle-fill'
                 : job.status === 'failed' ? 'ri-close-circle-fill'
                 : job.status === 'cancelled' ? 'ri-forbid-line'
                 : 'ri-loader-4-line'
+
               const isActive = job.status === 'transferring' || job.status === 'preflight' || job.status === 'creating_vm' || job.status === 'configuring' || job.status === 'pending'
+
               const duration = job.startedAt && job.completedAt
                 ? Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 1000)
                 : null
+
               const formatDuration = (s: number) => s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
 
               return (

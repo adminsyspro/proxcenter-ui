@@ -17,6 +17,7 @@ export async function GET(
     const { id, sid } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -29,7 +30,7 @@ export async function GET(
     const errorMsg = e?.message || ''
 
     if (
-      errorMsg.includes('404') || 
+      errorMsg.includes('404') ||
       errorMsg.includes('does not exist') ||
       errorMsg.includes('no such resource')
     ) {
@@ -37,7 +38,7 @@ export async function GET(
     }
 
     console.error('Error fetching HA resource:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -52,6 +53,7 @@ export async function POST(
     const { id, sid } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
     if (denied) return denied
 
     // HA configuration is a cluster-level concern (governs failover policy
@@ -59,6 +61,7 @@ export async function POST(
     // can READ the state but never write — gate at the API layer too so
     // crafted POSTs don't bypass the read-only UI.
     const providerOnly = await requireProviderTenant()
+
     if (providerOnly) return providerOnly
 
     const conn = await getConnectionById(id)
@@ -76,16 +79,17 @@ export async function POST(
 
     // Construire les paramètres
     const params = new URLSearchParams()
-    
+
     if (!exists) {
       // Création: sid est requis
       params.append('sid', sid)
     }
-    
+
     if (body.group) params.append('group', body.group)
     if (body.state) params.append('state', body.state)
     if (body.max_restart !== undefined) params.append('max_restart', String(body.max_restart))
     if (body.max_relocate !== undefined) params.append('max_relocate', String(body.max_relocate))
+
     // PVE 9+ per-resource failback flag (defaults to enabled). Older clusters
     // reject unknown params, so only forward when the caller sets it.
     if (body.failback !== undefined) params.append('failback', body.failback ? '1' : '0')
@@ -109,13 +113,13 @@ export async function POST(
       })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: exists ? 'HA configuration updated' : 'HA configuration created'
     })
   } catch (e: any) {
     console.error('Error saving HA resource:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -130,11 +134,13 @@ export async function DELETE(
     const { id, sid } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
     if (denied) return denied
 
     // Same provider-only gate as POST — HA write surface stays out of
     // tenant reach even with NODE_MANAGE on their vDC connections.
     const providerOnly = await requireProviderTenant()
+
     if (providerOnly) return providerOnly
 
     const conn = await getConnectionById(id)
@@ -143,13 +149,13 @@ export async function DELETE(
       method: 'DELETE'
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: null,
       message: 'HA configuration removed'
     })
   } catch (e: any) {
     console.error('Error deleting HA resource:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

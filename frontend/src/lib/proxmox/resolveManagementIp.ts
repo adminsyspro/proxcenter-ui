@@ -21,14 +21,17 @@ export function resolveManagementIp(networks: any[]): string | undefined {
 
   // 1. Interface with a gateway defined → management interface
   const withGateway = active.find((i: any) => i.gateway || i.gateway6)
+
   if (withGateway?.address) return withGateway.address
 
   // 2. vmbr0 specifically (standard Linux bridge setup)
   const vmbr0 = active.find((i: any) => i.iface === 'vmbr0')
+
   if (vmbr0?.address) return vmbr0.address
 
   // 3. Any bridge interface with an IP
   const bridge = active.find((i: any) => i.iface?.startsWith('vmbr'))
+
   if (bridge?.address) return bridge.address
 
   // 4. First interface with an IP

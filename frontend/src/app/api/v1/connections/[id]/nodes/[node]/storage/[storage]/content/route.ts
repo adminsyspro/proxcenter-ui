@@ -27,6 +27,7 @@ export async function GET(
     const { id, node, storage } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
     if (denied) return denied
 
     // Tenants may browse content (mainly ISOs for the VM create picker) ONLY
@@ -35,8 +36,10 @@ export async function GET(
     // shared storages the tenant never attached.
     const tenantId = await getCurrentTenantId()
     const scope = await getVdcScope(tenantId)
+
     if (scope) {
       const allowed = scope.storagesByConnection.get(id)
+
       if (!allowed || !allowed.has(storage)) {
         return NextResponse.json({ error: "Storage not accessible" }, { status: 403 })
       }
@@ -46,8 +49,10 @@ export async function GET(
     // Mirrors the convention applied by POST /custom-images. Super admins
     // skip this lookup entirely — they get the unfiltered listing.
     let tenantSlug: string | null = null
+
     if (scope) {
       const row = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
+
       tenantSlug = row?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
     }
 
@@ -57,6 +62,8 @@ export async function GET(
     const contentType = url.searchParams.get("content") || ""
 
     const query = contentType ? `?content=${encodeURIComponent(contentType)}` : ""
+
+
     // NFS/SMB stores enumerate every file and can be slow on large shares.
     // This endpoint is user-triggered (click on storage), not polled, so we
     // can afford a generous timeout. Default 8s is too short for big NFS.
@@ -78,21 +85,27 @@ export async function GET(
     // have their own ownership models handled elsewhere — VM disks via PVE
     // pool, backups via PBS namespace.
     let payload = data || []
+
     if (tenantSlug) {
       const ownPrefix = `custom-${tenantSlug}-`
+
       payload = payload.filter((item: any) => {
         const itemContent = String(item?.content || '')
+
         if (!TENANT_FILTERED_CONTENT.has(itemContent)) return true
         const volid: string = String(item?.volid || '')
         const slash = volid.lastIndexOf('/')
+
         if (slash < 0) return false
-        return volid.slice(slash + 1).startsWith(ownPrefix)
+
+return volid.slice(slash + 1).startsWith(ownPrefix)
       })
     }
 
     return NextResponse.json({ data: payload })
   } catch (e: any) {
     console.error("Error fetching storage content:", String(e?.message || e).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

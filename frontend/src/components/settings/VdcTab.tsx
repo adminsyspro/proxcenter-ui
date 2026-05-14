@@ -46,6 +46,7 @@ interface VdcFormState {
   tenantId: string
   connectionId: string
   nodes: string[]
+
   /** Single shared storage (CEPH/NFS) that backs all VM disks for this
    *  vDC. Local storages and ISO/backup-only storages are filtered out
    *  by the available-resources route — the form only sees candidates
@@ -94,15 +95,21 @@ const emptyForm: VdcFormState = {
 function formatRelative(iso: string | null | undefined, t: (k: string, p?: any) => string): string {
   if (!iso) return ''
   const ts = Date.parse(iso)
+
   if (Number.isNaN(ts)) return ''
   const diff = Date.now() - ts
+
   if (diff < 60_000) return t('time.justNow')
   const minutes = Math.floor(diff / 60_000)
+
   if (minutes < 60) return t('time.minutesAgo', { count: minutes })
   const hours = Math.floor(diff / 3_600_000)
+
   if (hours < 24) return t('time.hoursAgo', { count: hours })
   const days = Math.floor(diff / 86_400_000)
-  return t('time.daysAgo', { count: days })
+
+
+return t('time.daysAgo', { count: days })
 }
 
 export default function VdcTab() {
@@ -151,6 +158,7 @@ export default function VdcTab() {
     datastore: '',
     namespace: '',
   })
+
   const [pbsDraftDatastores, setPbsDraftDatastores] = useState<string[]>([])
 
   // Node statuses keyed `${connectionId}|${nodeName}` -> 'online' | 'offline' | …
@@ -166,7 +174,9 @@ export default function VdcTab() {
   useEffect(() => {
     if (!success) return
     const timer = setTimeout(() => setSuccess(''), 5000)
-    return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
   }, [success])
 
   // ------- Data loading -------
@@ -216,6 +226,7 @@ export default function VdcTab() {
   useEffect(() => {
     if (vdcs.length === 0) return
     const connIds = Array.from(new Set(vdcs.map((v: any) => v.connectionId).filter(Boolean)))
+
     if (connIds.length === 0) return
     let cancelled = false
 
@@ -223,22 +234,29 @@ export default function VdcTab() {
       const results = await Promise.all(connIds.map(async (cid) => {
         try {
           const r = await fetch(`/api/v1/admin/connections/${encodeURIComponent(cid)}/available-resources`)
+
           if (!r.ok) return null
           const j = await r.json()
           const ns = j?.data?.nodes ?? []
-          return { cid, nodes: Array.isArray(ns) ? ns : [] }
+
+
+return { cid, nodes: Array.isArray(ns) ? ns : [] }
         } catch {
           return null
         }
       }))
+
       if (cancelled) return
       const statuses: Record<string, string> = {}
+
       for (const r of results) {
         if (!r) continue
+
         for (const n of r.nodes as Array<{ name: string; status?: string }>) {
           if (n?.name) statuses[`${r.cid}|${n.name}`] = n.status || 'unknown'
         }
       }
+
       setNodeStatuses(statuses)
     })()
 
@@ -250,6 +268,7 @@ export default function VdcTab() {
   useEffect(() => {
     if (vdcs.length === 0) return
     const tenantIds = Array.from(new Set(vdcs.map((v: any) => v.tenantId).filter(Boolean)))
+
     if (tenantIds.length === 0) return
     let cancelled = false
 
@@ -257,15 +276,20 @@ export default function VdcTab() {
       const results = await Promise.all(tenantIds.map(async (tid) => {
         try {
           const r = await fetch(`/api/v1/tenants/${encodeURIComponent(tid)}/users`)
+
           if (!r.ok) return { tid, users: [] }
           const j = await r.json()
-          return { tid, users: Array.isArray(j?.data) ? j.data : [] }
+
+
+return { tid, users: Array.isArray(j?.data) ? j.data : [] }
         } catch {
           return { tid, users: [] }
         }
       }))
+
       if (cancelled) return
       const map: Record<string, any[]> = {}
+
       for (const r of results) map[r.tid] = r.users
       setTenantUsers(map)
     })()
@@ -274,10 +298,14 @@ export default function VdcTab() {
   }, [vdcs])
 
   useEffect(() => {
-    ;(async () => {
+    ;
+
+(async () => {
       const r = await fetch('/api/v1/admin/connections?type=pbs')
+
       if (r.ok) {
         const j = await r.json()
+
         setPbsConnections((j.data ?? []).map((c: any) => ({ id: c.id, name: c.name, fingerprint: c.fingerprint ?? null })))
       }
     })()
@@ -287,7 +315,8 @@ export default function VdcTab() {
   useEffect(() => {
     if (!form.connectionId) {
       setAvailableResources(null)
-      return
+
+return
     }
 
     let cancelled = false
@@ -301,6 +330,7 @@ export default function VdcTab() {
         const url = editingVdc
           ? `/api/v1/admin/connections/${form.connectionId}/available-resources?vdcId=${encodeURIComponent(editingVdc.id)}`
           : `/api/v1/admin/connections/${form.connectionId}/available-resources`
+
         const res = await fetch(url)
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -309,7 +339,10 @@ export default function VdcTab() {
 
         if (!cancelled) {
           const resources = data.data || null
+
           setAvailableResources(resources)
+
+
           // Auto-embed all nodes (HA cluster: every node can run any VM)
           // and auto-pick a sensible default primary storage when the
           // form has none yet. Available-resources only returns shared +
@@ -318,13 +351,18 @@ export default function VdcTab() {
           // back to the largest other shared storage.
           if (!editingVdc && resources) {
             const candidates: any[] = (resources.storages || [])
+
             const ranked = [...candidates].sort((a, b) => {
               const aIsCeph = String(a.type || '').toLowerCase() === 'rbd' ? 1 : 0
               const bIsCeph = String(b.type || '').toLowerCase() === 'rbd' ? 1 : 0
+
               if (aIsCeph !== bIsCeph) return bIsCeph - aIsCeph
-              return (b.maxdisk || 0) - (a.maxdisk || 0)
+
+return (b.maxdisk || 0) - (a.maxdisk || 0)
             })
+
             const autoPick = ranked[0]?.id || ''
+
             setForm((f) => ({
               ...f,
               nodes: (resources.nodes || []).map((n: any) => n.name).filter(Boolean),
@@ -355,19 +393,25 @@ export default function VdcTab() {
   useEffect(() => {
     if (!pbsDraft.enabled || !pbsDraft.pbsConnectionId) {
       setPbsDraftDatastores([])
-      return
+
+return
     }
+
     let cancelled = false
+
     ;(async () => {
       try {
         const r = await fetch(`/api/v1/admin/pbs-connections/${encodeURIComponent(pbsDraft.pbsConnectionId)}/datastores`)
         const j = await r.json()
+
         if (!cancelled) setPbsDraftDatastores(Array.isArray(j.data) ? j.data : [])
       } catch {
         if (!cancelled) setPbsDraftDatastores([])
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [pbsDraft.enabled, pbsDraft.pbsConnectionId])
 
   // Default the PBS namespace to `tenant-<slug>/vdc-<slug>` once both are
@@ -377,6 +421,7 @@ export default function VdcTab() {
     if (!pbsDraft.enabled) return
     if (pbsDraft.namespace) return
     const tSlug = getTenantSlug(form.tenantId)
+
     if (!tSlug || !form.slug) return
     setPbsDraft((d) => (d.namespace ? d : { ...d, namespace: `tenant-${tSlug}/vdc-${form.slug}` }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -386,13 +431,17 @@ export default function VdcTab() {
   useEffect(() => {
     if (!form.connectionId) {
       setProviderBridges([])
-      return
+
+return
     }
+
     void (async () => {
       try {
         const res = await fetch(`/api/v1/admin/connections/${encodeURIComponent(form.connectionId)}/provider-bridges`)
+
         if (res.ok) {
           const json = await res.json()
+
           setProviderBridges(Array.isArray(json.data) ? json.data : [])
         }
       } catch (err) {
@@ -406,12 +455,16 @@ export default function VdcTab() {
 
   const getConnectionName = (connectionId: string) => {
     const conn = connections.find((c) => c.id === connectionId)
-    return conn?.name || connectionId
+
+
+return conn?.name || connectionId
   }
 
   const getTenantSlug = (tenantId: string) => {
     const tenant = tenants.find((t) => t.id === tenantId)
-    return tenant?.slug || ''
+
+
+return tenant?.slug || ''
   }
 
   // Slug derivation. The user no longer types the slug — it's a fully
@@ -432,7 +485,9 @@ export default function VdcTab() {
     const tSlug = sluggify(tenant.slug || tenant.name || tenant.id || '')
     const conn = connections.find((c) => c.id === connectionId)
     const cSlug = conn ? sluggify(conn.name || conn.id || '') : ''
-    return cSlug ? `${tSlug}-${cSlug}` : tSlug
+
+
+return cSlug ? `${tSlug}-${cSlug}` : tSlug
   }
 
   // ------- Handlers -------
@@ -474,9 +529,11 @@ export default function VdcTab() {
 
     if (vdc.sharedBridges?.length) {
       const map = new Map<string, string>()
+
       for (const sb of vdc.sharedBridges) {
         map.set(sb.bridge, sb.label ?? '')
       }
+
       setSelectedSharedBridges(map)
     } else {
       setSelectedSharedBridges(new Map())
@@ -522,6 +579,7 @@ export default function VdcTab() {
       const liveNodes = (availableResources?.nodes || [])
         .map((n: any) => n.name)
         .filter(Boolean)
+
       const nodesPayload = (editingVdc ? form.nodes : (form.nodes.length > 0 ? form.nodes : liveNodes))
 
       if (!form.primaryStorage) {
@@ -553,6 +611,7 @@ export default function VdcTab() {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
+
           throw new Error(err.error || t('vdc.failedSave'))
         }
       } else {
@@ -577,6 +636,7 @@ export default function VdcTab() {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
+
           throw new Error(err.error || t('vdc.failedSave'))
         }
 
@@ -593,6 +653,7 @@ export default function VdcTab() {
         ) {
           const created = await res.json().catch(() => ({}))
           const newVdcId = created?.data?.id
+
           if (newVdcId) {
             try {
               const bindRes = await fetch(
@@ -608,8 +669,10 @@ export default function VdcTab() {
                   }),
                 },
               )
+
               if (!bindRes.ok) {
                 const bindErr = await bindRes.json().catch(() => ({}))
+
                 setError(t('vdc.pbsBindCreatedVdcFailedBind', { error: bindErr.error || `HTTP ${bindRes.status}` }))
               }
             } catch (e: any) {
@@ -637,6 +700,7 @@ export default function VdcTab() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err.error || t('vdc.failedDelete'))
       }
 
@@ -667,10 +731,13 @@ export default function VdcTab() {
         unlimitedLabel={t('vdc.quotaUnlimited')}
       />
     )
+
     if (!lastSyncedAt) return donut
     const when = formatRelative(lastSyncedAt, t)
+
     if (!when) return donut
-    return (
+
+return (
       <Tooltip title={t('time.synced', { time: when })} arrow>
         <Box sx={{ display: 'inline-flex' }}>{donut}</Box>
       </Tooltip>
@@ -753,13 +820,17 @@ export default function VdcTab() {
       valueGetter: (_v, row) => (tenantUsers[row.tenantId] || []).length,
       renderCell: (params) => {
         const users = tenantUsers[params.row.tenantId] || []
+
         if (users.length === 0) {
           return <Typography variant="caption" color="text.secondary">—</Typography>
         }
+
         const MAX_VISIBLE = 2
         const visible = users.slice(0, MAX_VISIBLE)
         const hidden = users.slice(MAX_VISIBLE)
-        return (
+
+
+return (
           <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden', width: '100%' }}>
             {visible.map((u) => (
               <Tooltip key={u.id} arrow title={u.name ? u.email : ''} disableInteractive>
@@ -836,7 +907,9 @@ export default function VdcTab() {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                     {hidden.map((name) => {
                       const status = nodeStatuses[`${connId}|${name}`]
-                      return (
+
+
+return (
                         <Stack key={name} direction="row" alignItems="center" spacing={0.5}>
                           <NodeIcon status={status} size={14} />
                           <Typography variant="caption">{name}</Typography>
@@ -924,7 +997,9 @@ export default function VdcTab() {
       headerAlign: 'center',
       renderCell: (params) => {
         const used = Array.isArray(params.row.vnets) ? params.row.vnets.length : 0
-        return renderQuotaDonut('ri-git-branch-line', used, params.row.quota?.maxVnets)
+
+
+return renderQuotaDonut('ri-git-branch-line', used, params.row.quota?.maxVnets)
       },
     },
     {
@@ -937,6 +1012,7 @@ export default function VdcTab() {
       renderCell: (params) => {
         const bindings: any[] = Array.isArray(params.row.pbsBindings) ? params.row.pbsBindings : []
         const count = bindings.length
+
         const tooltip = count === 0 ? t('myVdc.cockpit.noBackups') : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             {bindings.map((b) => (
@@ -984,14 +1060,17 @@ export default function VdcTab() {
                 // blocked on stale `usedVms` values when the user has
                 // just torn down their VMs in PVE.
                 setDeleteVdc(params.row)
+
                 try {
                   const res = await fetch(
                     `/api/v1/admin/vdcs/${encodeURIComponent(params.row.id)}/usage?refresh=true`,
                     { cache: 'no-store' },
                   )
+
                   if (!res.ok) return
                   const json = await res.json()
                   const usage = json?.data?.usage
+
                   if (usage) {
                     setDeleteVdc((prev: any) => (prev?.id === params.row.id ? { ...prev, usage } : prev))
                   }
@@ -1018,10 +1097,12 @@ export default function VdcTab() {
     const numeric = Number.parseFloat((form[valueKey] as string) || '')
     const hasValue = !unlimited && Number.isFinite(numeric) && numeric > 0
     const overCap = !!cluster && cluster.total > 0 && hasValue && numeric > cluster.total
+
     const pct =
       cluster && cluster.total > 0 && hasValue
         ? Math.min(100, (numeric / cluster.total) * 100)
         : 0
+
     const barColor = overCap || pct >= 90 ? 'error' : pct >= 70 ? 'warning' : 'success'
 
     return (
@@ -1036,6 +1117,7 @@ export default function VdcTab() {
               checked={unlimited}
               onChange={(e) => {
                 const v = e.target.checked
+
                 setForm((f) => ({
                   ...f,
                   [unlimitedKey]: v,
@@ -1060,12 +1142,16 @@ export default function VdcTab() {
             // Save-button gate, applied per keystroke for instant
             // feedback rather than letting the error linger.
             const raw = e.target.value
+
             if (raw === '' || !cluster || cluster.total <= 0) {
               setForm((f) => ({ ...f, [valueKey]: raw }))
-              return
+
+return
             }
+
             const n = Number.parseFloat(raw)
             const capped = Number.isFinite(n) && n > cluster.total ? String(cluster.total) : raw
+
             setForm((f) => ({ ...f, [valueKey]: capped }))
           }}
           disabled={unlimited}
@@ -1105,24 +1191,31 @@ export default function VdcTab() {
     (acc: number, n: any) => acc + (Number(n.maxcpu) || 0),
     0,
   )
+
   const clusterRamGbTotal = Math.round(
     (availableResources?.nodes || []).reduce(
       (acc: number, n: any) => acc + (Number(n.maxmem) || 0),
       0,
     ) / (1024 ** 3),
   )
+
   const clusterStorageGbTotal = (() => {
     const primary = (availableResources?.storages || []).find(
       (s: any) => s.id === form.primaryStorage,
     )
-    return primary ? Math.round((Number(primary.maxdisk) || 0) / (1024 ** 3)) : 0
+
+
+return primary ? Math.round((Number(primary.maxdisk) || 0) / (1024 ** 3)) : 0
   })()
 
   const exceeds = (raw: string, total: number) => {
     if (!total) return false
     const n = Number.parseFloat(raw || '')
-    return Number.isFinite(n) && n > total
+
+
+return Number.isFinite(n) && n > total
   }
+
   const quotaOverCapacity =
     (!form.unlimitedVcpus && exceeds(form.maxVcpus, clusterVcpuTotal)) ||
     (!form.unlimitedRam && exceeds(form.maxRamGb, clusterRamGbTotal)) ||
@@ -1134,6 +1227,7 @@ export default function VdcTab() {
   const existingTenantVdcs = !editingVdc && form.tenantId
     ? vdcs.filter((v: any) => v.tenantId === form.tenantId)
     : []
+
   const tenantHasExistingVdc = existingTenantVdcs.length > 0
 
   return (
@@ -1238,7 +1332,8 @@ export default function VdcTab() {
               setForm((f) => {
                 if (!v) return { ...f, tenantId: '' }
                 if (editingVdc) return { ...f, tenantId: v.id }
-                return {
+
+return {
                   ...f,
                   tenantId: v.id,
                   name: v.name || v.id,
@@ -1297,12 +1392,16 @@ export default function VdcTab() {
                 if (editingVdc) {
                   return { ...f, connectionId: v?.id || '', nodes: [], primaryStorage: '' }
                 }
+
+
                 // Re-derive slug now that the connection is known —
                 // see computeVdcSlug for the format. Without this, a
                 // tenant with two vDCs across clusters would hit the
                 // (tenant_id, slug) UNIQUE on save.
                 const tenant = tenants.find((tn) => tn.id === f.tenantId) || null
-                return {
+
+
+return {
                   ...f,
                   connectionId: v?.id || '',
                   nodes: [],
@@ -1351,6 +1450,7 @@ export default function VdcTab() {
                   {(() => {
                     const candidates: Array<{ id: string; type: string; maxdisk?: number; disk?: number }> =
                       availableResources?.storages || []
+
                     if (candidates.length === 0) {
                       return (
                         <Alert severity="error" sx={{ mt: 1 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
@@ -1358,7 +1458,9 @@ export default function VdcTab() {
                         </Alert>
                       )
                     }
-                    return (
+
+
+return (
                       <Box sx={{ mt: 2 }}>
                         <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
                           <Typography variant="subtitle2">
@@ -1379,7 +1481,9 @@ export default function VdcTab() {
                               const totalGb = (s.maxdisk || 0) / (1024 ** 3)
                               const usedGb = (s.disk || 0) / (1024 ** 3)
                               const pct = s.maxdisk ? Math.min(100, (usedGb / totalGb) * 100) : 0
-                              return (
+
+
+return (
                                 <MenuItem key={s.id} value={s.id}>
                                   <Stack direction="row" alignItems="center" spacing={1.5} sx={{ width: '100%' }}>
                                     <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 140 }}>
@@ -1557,7 +1661,9 @@ export default function VdcTab() {
                         {providerBridges.map((pb) => {
                           const selected = selectedSharedBridges.has(pb.iface)
                           const label = selectedSharedBridges.get(pb.iface) ?? ''
-                          return (
+
+
+return (
                             <Stack key={pb.iface} direction="row" spacing={1} alignItems="center">
                               <FormControlLabel
                                 sx={{ minWidth: 180 }}
@@ -1567,9 +1673,11 @@ export default function VdcTab() {
                                     onChange={(e) => {
                                       setSelectedSharedBridges((prev) => {
                                         const next = new Map(prev)
+
                                         if (e.target.checked) next.set(pb.iface, label)
                                         else next.delete(pb.iface)
-                                        return next
+
+return next
                                       })
                                     }}
                                   />
@@ -1585,8 +1693,10 @@ export default function VdcTab() {
                                 onChange={(e) => {
                                   setSelectedSharedBridges((prev) => {
                                     const next = new Map(prev)
+
                                     if (next.has(pb.iface)) next.set(pb.iface, e.target.value)
-                                    return next
+
+return next
                                   })
                                 }}
                               />
@@ -1643,22 +1753,26 @@ export default function VdcTab() {
               !form.tenantId ||
               !form.connectionId ||
               !form.primaryStorage ||
+
               // Hold the click until /available-resources has populated
               // form.nodes and the primary storage candidate list —
               // without this gate the user could submit before the
               // auto-fill ran and the backend would 400.
               resourcesLoading ||
+
               // Defense-in-depth: per-keystroke clamping in renderQuotaField
               // already prevents typing past the cluster total, but an
               // edited vDC could carry a legacy quota that exceeds the
               // current cluster (e.g. node decommissioned since create).
               quotaOverCapacity ||
+
               // PBS draft: when the toggle is ON at create time, all three
               // sub-fields must be filled. Otherwise the bind step is silently
               // skipped after the vDC is created.
               (!editingVdc && pbsDraft.enabled && (
                 !pbsDraft.pbsConnectionId || !pbsDraft.datastore || !pbsDraft.namespace
               )) ||
+
               // 1 tenant = 1 vDC: the Cluster picker is also disabled in
               // this case, so this is mainly defense-in-depth.
               tenantHasExistingVdc

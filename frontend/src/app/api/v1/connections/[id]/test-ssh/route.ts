@@ -33,6 +33,7 @@ export async function POST(
 
     // RBAC: Check connection.manage permission
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
+
     if (denied) return denied
 
     // Optional form overrides: allow testing SSH against unsaved edits in
@@ -195,6 +196,7 @@ export async function POST(
         sshUser: effectiveSshUser,
         sshAuthMethod: effectiveAuthMethod,
       }
+
       if (sshKey) sshCredentials.sshKey = sshKey
       if (sshPassword) sshCredentials.sshPassword = sshPassword
       if (sshPassphrase) sshCredentials.sshPassphrase = sshPassphrase
@@ -211,8 +213,10 @@ export async function POST(
 
       clearTimeout(timeoutId)
       const result = await res.json()
+
       console.log(`[test-ssh] tested via orchestrator`)
-      return NextResponse.json(result)
+
+return NextResponse.json(result)
     } catch (fetchError: any) {
       if (fetchError.name === 'AbortError') {
         return NextResponse.json(
@@ -227,12 +231,14 @@ export async function POST(
 
     // 2. Fallback: direct ssh2 test on each node
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
     // Fetch node list from Proxmox API
     let nodes: any[]
+
     try {
       nodes = await pveFetch<any[]>(conn, '/nodes')
     } catch (e: any) {
@@ -247,6 +253,7 @@ export async function POST(
       where: { connectionId: id },
       select: { node: true, sshAddress: true },
     })
+
     const sshOverrides = new Map(
       managedHosts.filter(h => h.sshAddress).map(h => [h.node, h.sshAddress!])
     )
@@ -257,6 +264,7 @@ export async function POST(
     const results = await Promise.all(
       (nodes || []).map(async (n: any) => {
         const nodeName = n.node || n.name
+
         if (!nodeName) return null
 
         const ip = sshOverrides.get(nodeName) || await getNodeIp(conn, nodeName)

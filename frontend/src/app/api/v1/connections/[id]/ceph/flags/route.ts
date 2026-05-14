@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -19,14 +20,17 @@ export async function GET(
     const { id } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
     const allFlags = await pveFetch<any[]>(conn, '/cluster/ceph/flags').catch(() => [])
+
     const activeFlags = (allFlags || [])
       .filter((f: any) => f.value === true || f.value === 1)
       .map((f: any) => f.name)
@@ -34,7 +38,8 @@ export async function GET(
     return NextResponse.json({ data: { flags: activeFlags } })
   } catch (e: any) {
     console.error("[ceph/flags] GET Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to get Ceph flags" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to get Ceph flags" }, { status: 500 })
   }
 }
 
@@ -57,9 +62,11 @@ export async function PUT(
     }
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -69,7 +76,8 @@ export async function PUT(
     return NextResponse.json({ success: true, flag })
   } catch (e: any) {
     console.error("[ceph/flags] PUT Error:", String(e?.message).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ error: e?.message || "Failed to set Ceph flag" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to set Ceph flag" }, { status: 500 })
   }
 }
 
@@ -92,9 +100,11 @@ export async function DELETE(
     }
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -104,6 +114,7 @@ export async function DELETE(
     return NextResponse.json({ success: true, flag })
   } catch (e: any) {
     console.error("[ceph/flags] DELETE Error:", String(e?.message).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ error: e?.message || "Failed to unset Ceph flag" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to unset Ceph flag" }, { status: 500 })
   }
 }

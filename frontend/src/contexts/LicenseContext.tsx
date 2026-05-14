@@ -131,8 +131,10 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const loadLicenseStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/license/status')
+
       if (res.ok) {
         const data = await res.json()
+
         setStatus(data)
         setError(null)
       } else {
@@ -161,15 +163,19 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const features: Feature[] = useMemo(() => {
     const edition = status?.edition || ''
     const editionFeatures = EDITION_FEATURES[edition] || []
-    return editionFeatures.map(id => ({ id, enabled: isLicensed }))
+
+
+return editionFeatures.map(id => ({ id, enabled: isLicensed }))
   }, [status?.edition, isLicensed])
 
   const hasFeature = useCallback((featureId: FeatureId | string): boolean => {
     if (!isLicensed) return false
     const edition = status?.edition || ''
     const editionFeatures = EDITION_FEATURES[edition]
+
     if (!editionFeatures) return false
-    return editionFeatures.includes(featureId as FeatureId)
+
+return editionFeatures.includes(featureId as FeatureId)
   }, [isLicensed, status?.edition])
 
   return (
@@ -191,10 +197,13 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
 export function useLicense() {
   const context = useContext(LicenseContext)
+
   if (!context) {
     throw new Error('useLicense must be used within a LicenseProvider')
   }
-  return context
+
+
+return context
 }
 
 export default LicenseContext

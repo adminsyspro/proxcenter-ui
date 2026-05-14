@@ -18,9 +18,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id, vmid } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, subType: true, vmwareDatacenter: true },
@@ -125,6 +127,7 @@ export async function GET(
       // Parse VirtualDisk devices
       const diskRegex = /xsi:type="VirtualDisk">([\s\S]*?)(?=<VirtualDevice|$)/g
       let diskMatch
+
       while ((diskMatch = diskRegex.exec(devicesXml)) !== null) {
         const d = diskMatch[1]
         const label = d.match(/<label>([^<]*)<\/label>/)?.[1] || ''
@@ -132,6 +135,7 @@ export async function GET(
         const capacityKB = d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1]
         const fileName = d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || ''
         const thinProvisioned = d.includes('<thinProvisioned>true</thinProvisioned>')
+
         disks.push({
           label,
           capacityBytes: capacityBytes ? Number.parseInt(capacityBytes, 10) : (capacityKB ? Number.parseInt(capacityKB, 10) * 1024 : 0),
@@ -143,12 +147,14 @@ export async function GET(
       // Parse VirtualEthernetCard (network adapters)
       const netRegex = /xsi:type="Virtual(?:Vmxnet3|E1000e?|Vmxnet2?)">([\s\S]*?)(?=<VirtualDevice|$)/g
       let netMatch
+
       while ((netMatch = netRegex.exec(devicesXml)) !== null) {
         const n = netMatch[1]
         const label = n.match(/<label>([^<]*)<\/label>/)?.[1] || ''
         const mac = n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || ''
         const network = n.match(/<summary>([^<]*)<\/summary>/)?.[1] || ''
         const connected = !n.includes('<connected>false</connected>')
+
         networks.push({ label, macAddress: mac, network, connected })
       }
 
@@ -168,12 +174,16 @@ export async function GET(
       let vcenterHostStatus: "ok" | "warn" | "crit" | "unknown" | undefined
       let vcenterHostConnectionState: string | undefined
       let vcenterHostPowerState: string | undefined
+
       console.log(`[vmware/vms/${vmid}] runtime.host extraction: isVcenter=${session.isVcenter}, hostMor=${JSON.stringify(hostMor)}`)
+
       if (hostMor && session.isVcenter) {
         try {
           const paths = await soapResolveHostInventoryPaths(session, [hostMor])
           const path = paths.get(hostMor)
+
           console.log(`[vmware/vms/${vmid}] inventory path resolution: hostMor=${hostMor}, resolved=${path ? JSON.stringify(path) : 'NULL'}`)
+
           if (path) {
             vcenterDatacenter = path.datacenter
             vcenterCluster = path.cluster ?? undefined

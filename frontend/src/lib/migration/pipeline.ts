@@ -35,6 +35,7 @@ interface MigrationConfig {
   targetNode: string
   targetStorage: string
   networkBridge: string
+
   /**
    * Optional 802.1Q VLAN tag (1-4094) appended to net0 as `tag=N`. Empty/undefined
    * means access port on the bridge's native VLAN. ESXi portgroup VLAN is not
@@ -44,11 +45,13 @@ interface MigrationConfig {
   startAfterMigration: boolean
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
+
   // User-selected temp directory on the PVE node for large intermediate files
   // (SSHFS mount root, VMDK dumps, vmkfstools clone targets). Defaults to /tmp
   // when unset, but /tmp is typically a tiny tmpfs on PVE so the user should
   // pick a real filesystem with enough free space.
   tempStorage?: string
+
   // User-supplied target VMID. When set, used directly instead of
   // `/cluster/nextid`; PVE rejects the create call if it's already taken,
   // and we surface that error instead of silently falling back.
@@ -76,12 +79,14 @@ function getPrismaForJob(jobId: string) {
 
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
   const prisma = getPrismaForJob(id)
+
   const data: any = {
     status,
     currentStep: status,
     ...(status === "completed" ? { completedAt: new Date() } : {}),
     ...extra,
   }
+
   await prisma.migrationJob.update({ where: { id }, data })
 }
 
@@ -89,6 +94,7 @@ async function appendLog(id: string, msg: string, level: LogEntry["level"] = "in
   const prisma = getPrismaForJob(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
   const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
+
   logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
   await prisma.migrationJob.update({ where: { id }, data: { logs } })
 }
@@ -105,17 +111,21 @@ async function waitForPveTask(
   timeoutMs = 300000
 ): Promise<void> {
   const start = Date.now()
+
   while (Date.now() - start < timeoutMs) {
     const status = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`
     )
+
     if (status?.status === "stopped") {
       if (status.exitstatus === "OK") return
       throw new Error(`PVE task failed: ${status.exitstatus || "unknown error"}`)
     }
+
     await new Promise(r => setTimeout(r, 3000))
   }
+
   throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
 }
 
@@ -129,13 +139,16 @@ async function getNodeIpForMigration(db: any, connectionId: string, nodeName: st
     where: { connectionId, node: nodeName, enabled: true },
     select: { ip: true, sshAddress: true },
   })
+
   if (host?.sshAddress) return host.sshAddress
   if (host?.ip) return host.ip
 
   // Fallback: extract from baseUrl
   try {
     const url = new URL(baseUrl)
-    return url.hostname
+
+
+return url.hostname
   } catch {
     throw new Error(`Cannot determine IP for node ${nodeName}`)
   }
@@ -148,16 +161,20 @@ async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: strin
     await appendLog(jobId, "Source VM powered off", "success")
   } catch (e: any) {
     const msg = e?.message || String(e)
+
     if (msg.includes("InvalidPowerState") || msg.includes("poweredOff")) {
       await appendLog(jobId, "VM was already powered off", "info")
     } else if (msg.includes("license") || msg.includes("prohibits")) {
       await appendLog(jobId, "Cannot power off via API (ESXi license restriction). Please power off the VM manually now.", "warn")
       let powered = true
+
       for (let attempt = 0; attempt < 24; attempt++) {
         await new Promise(r => setTimeout(r, 5000))
         const xml = await soapGetVmConfig(session, vmid)
+
         if (extractProp(xml, "runtime.powerState") === "poweredOff") { powered = false; break }
       }
+
       if (powered) {
         await appendLog(jobId, "VM still running after 120s — proceeding anyway (disk image may be crash-consistent)", "warn")
       } else {
@@ -175,11 +192,13 @@ async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: strin
 export async function runMigrationPipeline(jobId: string, config: MigrationConfig, tenantId = 'default'): Promise<void> {
   // Register tenant-scoped prisma for this job
   const prisma = getTenantPrisma(tenantId)
+
   jobPrisma.set(jobId, prisma)
 
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
   let storageTempDir = ''
+
   // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
   // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
   // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
@@ -198,6 +217,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         sshEnabled: true, sshPort: true, sshUser: true, sshAuthMethod: true, sshKeyEnc: true, sshPassEnc: true,
       },
     })
+
     if (!esxiConn || esxiConn.type !== "vmware") {
       throw new Error("ESXi connection not found")
     }
@@ -210,6 +230,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
+
     await appendLog(jobId, `Connecting to ESXi host ${esxiUrl}...`)
 
     // SOAP login
@@ -279,8 +300,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // The only reliable path for vSAN is NFC via vCenter, so we refuse the direct-ESXi flow
     // and point the user at their vCenter connection.
     const vsanDisks = vmConfig.disks.filter(d => d.datastoreName.toLowerCase().includes('vsan'))
+
     if (vsanDisks.length > 0) {
       const dsNames = [...new Set(vsanDisks.map(d => d.datastoreName))].join(', ')
+
       throw new Error(
         `Source VM has disks on vSAN (${dsNames}). vSAN datastores are not supported through a direct ESXi connection ` +
         `because vSAN objects require the NFC protocol, which is only available via vCenter. ` +
@@ -292,11 +315,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Verify PVE SSH connectivity
     const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+
     await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${nodeIp})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
+
     if (!sshTest.success) {
       throw new Error(`SSH to Proxmox node failed: ${sshTest.error}`)
     }
+
     await appendLog(jobId, "SSH connectivity OK", "success")
 
     // Ensure the temp base dir exists on the PVE node. When the user picked a custom
@@ -305,6 +331,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (tempBase !== '/tmp') {
       const mkdirResult = await executeSSH(config.targetConnectionId, nodeIp,
         `mkdir -p "${tempBase}" && test -w "${tempBase}" && echo OK || echo FAIL`)
+
       if (!mkdirResult.output?.includes("OK")) {
         throw new Error(`Temp storage "${tempBase}" is not writable on the target Proxmox node. Pick a different path or ensure the directory is writable by the SSH user.`)
       }
@@ -312,11 +339,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Check sshpass on PVE node (needed when ESXi auth is password-based, for nested SSH)
     const esxiUsesPassword = esxiConn.sshAuthMethod !== "key" && esxiConn.sshPassEnc && !esxiConn.sshKeyEnc
+
     if (esxiSshAvailable && esxiUsesPassword) {
       const sshpassCheck = await executeSSH(config.targetConnectionId, nodeIp, "which sshpass")
+
       if (!sshpassCheck.success || !sshpassCheck.output?.trim()) {
         throw new Error("sshpass is not installed on the Proxmox node. Install it with: apt install sshpass")
       }
+
       await appendLog(jobId, "sshpass available on PVE node", "success")
     }
 
@@ -328,12 +358,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     const requestedTransferMode = config.transferMode || "sshfs"
     const hasVsanDisks = vmConfig.disks.some(d => d.datastoreName.toLowerCase().includes('vsan'))
     let useSSHFS = false
+
     if (isSshfsBoot || requestedTransferMode === "sshfs" || (requestedTransferMode === "auto" && esxiSshAvailable)) {
       if (!esxiSshAvailable) {
         throw new Error("SSHFS transfer mode requires SSH to be configured on the ESXi connection. Please enable SSH in the connection settings.")
       }
+
       useSSHFS = true
     }
+
+
     // vSAN requires SSHFS — HTTPS /folder/ endpoint can't serve vSAN object-backed disks reliably
     if (hasVsanDisks && !useSSHFS) {
       throw new Error(
@@ -344,17 +378,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Check sshfs binary on PVE node when SSHFS mode is active
     let sshfsMountPath = ''
+
     if (useSSHFS) {
       const sshfsCheck = await executeSSH(config.targetConnectionId, nodeIp, "which sshfs")
+
       if (!sshfsCheck.success || !sshfsCheck.output?.trim()) {
         throw new Error("sshfs is not installed on the Proxmox node. Install it with: apt install sshfs")
       }
+
       sshfsMountPath = `${tempBase}/proxcenter-sshfs-${jobId}`
       await appendLog(jobId, `Transfer mode: SSHFS (mount ESXi datastore on PVE node)`, "success")
+
       if (tempBase === '/tmp') {
         await appendLog(jobId, "Using /tmp as temp base — on most Proxmox hosts this is a small tmpfs. If the VM disk is large, pick a custom Temporary Storage in the dialog to avoid filling /tmp.", "warn")
       }
     }
+
     if (!useSSHFS) {
       await appendLog(jobId, `Transfer mode: HTTPS (download via ESXi API)`, "info")
     }
@@ -364,9 +403,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(config.targetStorage)}/status`
     )
+
     const freeBytes = (storageStatus?.avail || 0)
     const neededBytes = vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)
+
     await appendLog(jobId, `Target storage "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(neededBytes / 1073741824).toFixed(1)} GB`)
+
     if (freeBytes < neededBytes * 1.1) {
       throw new Error(`Insufficient disk space on "${config.targetStorage}": ${(freeBytes / 1073741824).toFixed(1)} GB free, need ${(neededBytes / 1073741824).toFixed(1)} GB`)
     }
@@ -375,6 +417,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // ── STEP 2: Allocate VMID & Create VM shell on Proxmox ──
     await updateJob(jobId, "creating_vm")
+
     if (config.targetVmid !== undefined) {
       targetVmid = config.targetVmid
       await appendLog(jobId, `Using user-specified VMID ${targetVmid}`)
@@ -383,9 +426,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       targetVmid = Number(await pveFetch<number | string>(pveConn, "/cluster/nextid"))
       await appendLog(jobId, `Allocated VMID ${targetVmid}`)
     }
+
     await updateJob(jobId, "creating_vm", { targetVmid })
 
     const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
+
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     // Build URLSearchParams for VM creation (without disks — we import them separately)
@@ -404,6 +449,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       agent: pveParams.agent,
       serial0: "socket",
     })
+
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }
@@ -413,9 +459,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu`,
       { method: "POST", body: createBody }
     )
+
     if (createResult) {
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
+
     await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -434,6 +482,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // For block storage, we stream directly to the device (no temp files needed)
     if (isFileBased) {
       const storagePath = storageConfig?.path || '/var/lib/vz'
+
       storageTempDir = `${storagePath}/images/${targetVmid}`
       await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
       await appendLog(jobId, `Temp directory: ${storageTempDir} (on target storage)`)
@@ -447,16 +496,21 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Find next available disk number by checking VM config + already allocated volumes
       const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
       let maxDiskNum = -1
+
       for (const val of Object.values(vmConf || {})) {
         if (typeof val === 'string') {
           const m = (val as string).match(/vm-\d+-disk-(\d+)/)
+
           if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
         }
       }
+
       for (const av of allocatedVolumes) {
         const m = av.volumeId.match(/disk-(\d+)/)
+
         if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
       }
+
       const diskNum = maxDiskNum + 1
       const sizeKB = Math.ceil(sizeBytes / 1024)
       const volName = `vm-${targetVmid}-disk-${diskNum}`
@@ -467,6 +521,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         config.targetConnectionId, nodeIp,
         config.targetStorage, targetVmid, volName, sizeKB,
       )
+
       const volumeId = alloc.volumeId
       let devicePath = alloc.devicePath
 
@@ -475,34 +530,45 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
       let rbdMapped = false
       const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
+
       if (devicePath.startsWith('rbd:')) {
         const rbdSpec = devicePath.split(':')[1] // "CephStoragePool/vm-201-disk-0"
+
         if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
+
         const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
           `rbd map "${rbdSpec}" 2>&1`)
+
         if (!mapResult.success || !mapResult.output?.trim()) {
           throw new Error(`Failed to rbd map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
         }
+
         devicePath = mapResult.output.trim() // e.g. /dev/rbd0
         rbdMapped = true
         await appendLog(jobId, `RBD mapped ${rbdSpec} → ${devicePath}`)
       } else if (krbdMatch) {
         const [, pool, image] = krbdMatch
         const rbdSpec = `${pool}/${image}`
+
         const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
           `rbd device map "${rbdSpec}" 2>&1`)
+
         if (!mapResult.success) {
           throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
         }
+
+
         // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
         rbdMapped = true
         await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
       }
 
       const result = { volumeId, devicePath, rbdMapped }
+
       allocatedVolumes.push(result)
       await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
-      return result
+
+return result
     }
 
     // Attach a pre-allocated block volume to a SCSI slot
@@ -511,6 +577,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // land on a bus OVMF can enumerate (AHCI/SATA). Data disks stay on SCSI.
       const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+
       try {
         await pveFetch<any>(
           pveConn,
@@ -526,11 +593,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: stream a disk from ESXi to a pre-allocated block device via HTTPS
     async function streamDiskToBlock(i: number, disk: EsxiDiskInfo, devicePath: string, overrideUrl?: string) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Streaming "${disk.label}" to block device (${diskSizeGB} GB)...`)
 
       const soapCookie = soapSession!.cookie
       const safeCookie = soapCookie.replaceAll('"', '')
       const vmdkUrl = overrideUrl || buildVmdkDownloadUrl(esxiUrl, disk)
+
       await appendLog(jobId, `Download URL: ${vmdkUrl.replace(/\?.*/, '?...')}${overrideUrl ? ' (NFC lease)' : ''}`, "info")
 
       await updateJob(jobId, "transferring", {
@@ -553,10 +622,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,
         `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`)
+
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start streaming: ${startDl.error}`)
       }
+
       const pid = startDl.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -569,6 +641,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}"`)
           throw new Error("Migration cancelled")
         }
+
         await new Promise(r => setTimeout(r, 3000))
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
@@ -577,10 +650,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Parse dd progress output: "123456789 bytes (123 MB, ...) copied, ..."
         const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
           `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
+
         transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
 
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
+
         transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
         const diskProgress = totalBytes > 0 ? Math.min(Math.round((transferredBytes / totalBytes) * 100), 99) : 0
@@ -594,20 +669,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         if (!isRunning) {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}"`)
+
           if (exitCode !== 0) {
             throw new Error(`Streaming failed: curl/dd exit code ${exitCode}`)
           }
+
           break
         }
       }
 
       const elapsed = (Date.now() - startTime) / 1000
+
       await updateJob(jobId, "transferring", { bytesTransferred: BigInt(transferredBytes), transferSpeed })
       await appendLog(jobId, `Streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
+
       if (allocVol?.rbdMapped) {
         await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
       }
@@ -655,11 +735,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           const startClone = await executeSSH(config.targetConnectionId, nodeIp,
             `nohup bash "${cloneScript}" > /dev/null 2>&1 & echo $!`)
+
           if (!startClone.success || !startClone.output?.trim()) {
             throw new Error(`Failed to start vmkfstools: ${startClone.error}`)
           }
 
           const cloneStartTime = Date.now()
+
           while (true) {
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             if (Date.now() - cloneStartTime > 3600000) throw new Error("vmkfstools clone timed out (1h)")
@@ -668,12 +750,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             try {
               const sizeCheck = await executeSSH(config.targetConnectionId, nodeIp,
                 `${clSetup} && ${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "stat -c %s '${cloneFlatPath}' 2>/dev/null || echo 0" 2>/dev/null`)
+
               const clonedBytes = Number.parseInt(sizeCheck.output?.trim() || "0", 10) || 0
+
               if (clonedBytes > 0) {
                 const cloneProgress = Math.min(Math.round((clonedBytes / disk.capacityBytes) * 100), 99)
                 const elapsed = (Date.now() - cloneStartTime) / 1000
                 const speed = elapsed > 0 ? clonedBytes / elapsed : 0
                 const speedStr = speed > 1048576 ? `${(speed / 1048576).toFixed(1)} MB/s` : `${(speed / 1024).toFixed(0)} KB/s`
+
                 await updateJob(jobId, "transferring", {
                   currentStep: `cloning_disk_${i + 1}`,
                   bytesTransferred: BigInt(clonedBytes),
@@ -685,12 +770,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             } catch {}
 
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
+
             if (exitCheck.output?.trim() === "RUNNING") continue
 
             const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
+
               await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${cloneScript}" "${cloneExitFile}" "${cloneErrFile}" "${cloneOutFile}" "${cloneTmpPrefix}.esxi-key"`)
               throw new Error(`vmkfstools failed (exit ${exitCode}): ${errMsg}`)
             }
@@ -702,6 +790,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           cloneCreated = true
           downloadPath = cloneFlatPath
           const cloneTime = Math.round((Date.now() - cloneStartTime) / 1000)
+
           await appendLog(jobId, `Clone created on ESXi datastore (${cloneTime}s)`, "success")
         } catch (cloneErr: any) {
           throw new Error(`vmkfstools clone failed: ${cloneErr.message}`)
@@ -731,11 +820,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,
         `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`)
+
       if (!startDl.success || !startDl.output?.trim()) {
         if (cloneCreated) await executeOnEsxi(`vmkfstools -U '${cloneVmdkPath}'`).catch(() => {})
         throw new Error(`Failed to start SSH streaming: ${startDl.error}`)
       }
+
       const ddPid = startDl.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${ddPid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -749,6 +841,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             await executeSSH(config.targetConnectionId, nodeIp, `kill ${ddPid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${ctrlPrefix}.esxi-key" "${errFile}"`)
             throw new Error("Migration cancelled")
           }
+
           await new Promise(r => setTimeout(r, 3000))
 
           const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
@@ -757,10 +850,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Parse dd progress output
           const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
             `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
+
           transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
 
           const elapsed = (Date.now() - startTime) / 1000
           const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
+
           transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
           const diskProgress = totalBytes > 0 ? Math.min(Math.round((transferredBytes / totalBytes) * 100), 99) : 0
@@ -804,6 +899,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
+
       if (allocVol?.rbdMapped) {
         await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
       }
@@ -813,6 +909,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // overrideUrl: used by NFC lease in live mode (datastore browser returns 500 when snapshot active)
     async function downloadDisk(i: number, disk: EsxiDiskInfo, overrideUrl?: string) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, ${disk.thinProvisioned ? "thin" : "thick"})...`)
 
       const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
@@ -822,6 +919,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // ESXi returns: vmware_soap_session="abc123" — quotes are decorative, not required
       const safeCookie = soapCookie.replaceAll('"', '')
       const vmdkUrl = overrideUrl || buildVmdkDownloadUrl(esxiUrl, disk)
+
       await appendLog(jobId, `Download URL: ${vmdkUrl.replace(/\?.*/, '?...')}${overrideUrl ? ' (NFC lease)' : ''}`, "info")
 
       await updateJob(jobId, "transferring", {
@@ -834,19 +932,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
       const dlScript = `${tmpFile}.dl.sh`
+
+
       // Write download script to avoid shell quoting issues with cookie/URL values
       // Note: no -f flag — we check HTTP code and file size after download
       await executeSSH(config.targetConnectionId, nodeIp,
         `cat > "${dlScript}" << 'DLEOF'\ncurl -sk -b '${safeCookie}' -o "${tmpFile}.vmdk" -w '{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}' '${vmdkUrl}' > "${statsFile}" 2>&1\necho $? > "${pidFile}.exit"\nDLEOF`
       )
+
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
         `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`
       )
+
       if (!startDl.success || !startDl.output?.trim()) {
         throw new Error(`Failed to start download: ${startDl.error}`)
       }
+
       const curlPid = startDl.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -868,10 +972,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
         const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
+
         downloadedBytes = currentSize
 
         const elapsed = (Date.now() - startTime) / 1000
         const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+
         downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
         const diskProgress = totalBytes > 0 ? Math.min(Math.round((currentSize / totalBytes) * 100), 99) : 0
@@ -885,6 +991,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         if (!isRunning) {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
             throw new Error(`Download failed: curl exit code ${exitCode}`)
@@ -893,9 +1000,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
           const curlStats = statsContent.output?.match(/\{[^}]+\}/)
           let httpCode = 0
+
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
+
               downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
@@ -910,6 +1019,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             // Read first bytes of the downloaded file to see error content
             const errorPreview = await executeSSH(config.targetConnectionId, nodeIp, `head -c 500 "${tmpFile}.vmdk" 2>/dev/null | tr '\\n' ' '`)
             const preview = errorPreview.output?.trim().substring(0, 200) || "(empty)"
+
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
             throw new Error(`Download failed: HTTP ${httpCode} from ESXi. Response: ${preview}`)
           }
@@ -917,8 +1027,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Validate downloaded file size (must be at least 1 MB for any real disk)
           const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
           const actualSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10)
+
           if (actualSize < 1048576) {
             const errorPreview = await executeSSH(config.targetConnectionId, nodeIp, `head -c 500 "${tmpFile}.vmdk" 2>/dev/null | tr '\\n' ' '`)
+
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
             throw new Error(`Download produced a ${actualSize}-byte file (expected ~${diskSizeGB} GB, HTTP ${httpCode}). Content: ${errorPreview.output?.trim().substring(0, 200)}`)
           }
@@ -951,11 +1063,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (esxiConn.sshAuthMethod === "key" && esxiConn.sshKeyEnc) {
         const esxiKey = decryptSecret(esxiConn.sshKeyEnc)
         const keyFile = `${tmpPrefix}.esxi-key`
+
         setupCmd = `cat > "${keyFile}" << 'KEYEOF'\n${esxiKey}\nKEYEOF\nchmod 600 "${keyFile}"`
         sshPrefix = `ssh ${esxiSshOpts} -i "${keyFile}"`
         cleanupCmd = `rm -f "${keyFile}"`
       } else if (esxiPass) {
         const safePass = esxiPass.replaceAll("'", "'\\''")
+
         setupCmd = `export SSHPASS='${safePass}'`
         sshPrefix = `sshpass -e ssh ${esxiSshOpts}`
         cleanupCmd = ""
@@ -983,18 +1097,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const startResult = await executeSSH(config.targetConnectionId, nodeIp,
         `nohup bash "${script}" > /dev/null 2>&1 & echo $!`
       )
+
       if (!startResult.success || !startResult.output?.trim()) {
         throw new Error(`Failed to start ESXi command: ${startResult.error}`)
       }
+
       const pid = startResult.output.trim()
 
       // Poll for completion
       const startTime = Date.now()
+
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
           throw new Error("Migration cancelled")
         }
+
         if (Date.now() - startTime > timeoutMs) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
           throw new Error(`ESXi command timed out after ${Math.round(timeoutMs / 60000)}m`)
@@ -1003,6 +1121,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await new Promise(r => setTimeout(r, 3000))
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
+
         if (exitCheck.output?.trim() === "RUNNING") continue
 
         const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
@@ -1011,13 +1130,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         if (exitCode !== 0) {
           const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${errFile}" 2>/dev/null | head -c 500`)
+
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
           const errMsg = stderrContent.output?.trim() || output
+
           throw new Error(`ESXi command failed (exit ${exitCode}): ${errMsg}`)
         }
 
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
-        return output
+
+return output
       }
     }
 
@@ -1054,6 +1176,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const safeDsName = datastoreName.replaceAll("'", "'\\''")
       const resolveCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${resolveSshPrefix} -p ${resolvePort} ${resolveUser}@${resolveHost} "readlink -f '/vmfs/volumes/${safeDsName}'" 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
       const resolveResult = await executeSSH(config.targetConnectionId, nodeIp, resolveCmd)
+
       if (resolveResult.success && resolveResult.output?.trim().startsWith("/vmfs/")) {
         remotePath = resolveResult.output.trim()
         await appendLog(jobId, `Resolved datastore path: ${datastoreName} -> ${remotePath}`, "info")
@@ -1062,10 +1185,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await appendLog(jobId, `readlink failed for ${datastoreName}, trying ls -la fallback...`, "warn")
         const fallbackCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${resolveSshPrefix} -p ${resolvePort} ${resolveUser}@${resolveHost} "ls -la '/vmfs/volumes/${safeDsName}'" 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
         const fallbackResult = await executeSSH(config.targetConnectionId, nodeIp, fallbackCmd)
+
         // ls -la on a symlink: lrwxrwxrwx ... 3Par_DMZ1 -> 6508540b-49183378-c5fe-bc97e1ab7c50
         const arrowMatch = fallbackResult.output?.match(/->\s*(\S+)/)
+
         if (arrowMatch?.[1]) {
           const resolvedUuid = arrowMatch[1]
+
           remotePath = resolvedUuid.startsWith("/") ? resolvedUuid : `/vmfs/volumes/${resolvedUuid}`
           await appendLog(jobId, `Resolved datastore via ls fallback: ${datastoreName} -> ${remotePath}`, "info")
         } else {
@@ -1073,53 +1199,67 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await appendLog(jobId, `Could not resolve datastore symlink for "${datastoreName}". SSHFS/SFTP cannot follow symlinks — mount will likely fail. If it does, check SSH connectivity from the Proxmox node to the ESXi host.`, "error")
         }
       }
+
       let mounted = false
       const mountErrors: string[] = []
 
       if (esxiKey) {
         // Key-based auth
         const keyFile = `${mountPath}.esxi-key`
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `cat > "${keyFile}" << 'KEYEOF'\n${esxiKey}\nKEYEOF\nchmod 600 "${keyFile}"`
         )
         const sshWrapperKey = `#!/bin/sh\nexec ssh -p ${esxiSshPort} -i ${keyFile} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Compression=no "$@"`
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperKey}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
+
         // Try with perf options
         const mountCmd = `mkdir -p "${mountPath}" && sshfs -o ${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
         const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
+
         if (rc.success) mounted = true
         else mountErrors.push(`attempt 1 (key+perf): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
+
         if (!mounted) {
           // Fallback: minimal
           const mountCmd2 = `mkdir -p "${mountPath}" && sshfs -o StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
+
           if (rc2.success) mounted = true
           else mountErrors.push(`attempt 2 (key+minimal): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
         }
       } else if (esxiPass) {
         // Password-based auth via password_stdin + ssh wrapper script
         const safePass = esxiPass.replaceAll("'", "'\\''")
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperContent}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
+
         // Try with perf options + algo wrapper
         const mountCmd = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,${sshfsBaseOpts},ssh_command=${sshWrapperPath} ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
         const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
+
         if (rc.success) mounted = true
         else mountErrors.push(`attempt 1 (perf+algo): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
+
         if (!mounted) {
           // Fallback: no algo wrapper (let ssh negotiate)
           const mountCmd2 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ServerAliveInterval=15,cache=yes,entry_timeout=3600,attr_timeout=3600 ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
+
           if (rc2.success) mounted = true
           else mountErrors.push(`attempt 2 (negotiate): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
         }
+
         if (!mounted) {
           // Fallback: absolute minimal
           const mountCmd3 = `mkdir -p "${mountPath}" && printf '%s' '${safePass}' | sshfs -o password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,cache=yes ${esxiSshUser}@${esxiHost}:${remotePath} "${mountPath}" 2>&1`
           const rc3 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd3)
+
           if (rc3.success) mounted = true
           else mountErrors.push(`attempt 3 (minimal): ${(rc3.error || rc3.output || '').toString().trim().slice(0, 300)}`)
         }
@@ -1128,6 +1268,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (!mounted) {
         // Cleanup wrapper script
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${sshWrapperPath}" "${mountPath}.esxi-key"`).catch(() => {})
+
+
         // Surface the actual SSH/sshfs error so the user can diagnose. Common causes:
         //   - "Connection refused": SSH not enabled on the ESXi (vSphere -> Configure -> Services -> SSH)
         //   - "Permission denied": wrong password, or root login disabled
@@ -1136,6 +1278,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const errSummary = mountErrors.length
           ? mountErrors.join(" | ")
           : "no SSH/sshfs output captured (check authentication method and ESXi SSH availability)"
+
         throw new Error(
           `Failed to mount ESXi datastore via SSHFS on ${esxiHost}:${esxiSshPort}. ` +
           `Underlying errors: ${errSummary}. ` +
@@ -1147,18 +1290,21 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Verify mount by listing files
       const verifyResult = await executeSSH(config.targetConnectionId, nodeIp, `ls "${mountPath}/" | head -5`)
+
       if (!verifyResult.success || !verifyResult.output?.trim()) {
         await unmountSshfs()
         throw new Error("SSHFS mount succeeded but datastore appears empty. Check ESXi SSH access and datastore name.")
       }
 
       await appendLog(jobId, `SSHFS mounted: ${esxiHost}:${remotePath} → ${mountPath}`, "success")
-      return mountPath
+
+return mountPath
     }
 
     // Unmount SSHFS and cleanup
     async function unmountSshfs() {
       if (!sshfsMountPath) return
+
       try {
         await executeSSH(config.targetConnectionId, nodeIp, `fusermount -uz "${sshfsMountPath}" 2>/dev/null; rmdir "${sshfsMountPath}" 2>/dev/null; rm -f "${sshfsMountPath}.esxi-key" "${sshfsMountPath}.ssh-wrapper.sh" 2>/dev/null`)
       } catch {
@@ -1169,6 +1315,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Transfer disk via SSHFS for file-based storage (qemu-img convert from mounted VMDK)
     async function transferDiskViaSshfs(i: number, disk: EsxiDiskInfo) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting "${disk.label}" via SSHFS (${diskSizeGB} GB)...`)
 
       // The flat VMDK is the raw data file; the descriptor .vmdk is a small text file
@@ -1179,15 +1326,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Verify the disk file is accessible via SSHFS
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
+
       if (checkFile.output?.trim() !== "EXISTS") {
         // -flat.vmdk not found (common on vSAN where data is object-backed)
         // Fall back to VMDK descriptor - qemu-img -f vmdk can read it and follow references
         const altPath = `${sshfsMountPath}/${disk.relativePath}`
         const checkAlt = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${altPath}" && echo EXISTS || echo MISSING`)
+
         if (checkAlt.output?.trim() === "EXISTS") {
           await appendLog(jobId, `Using VMDK descriptor (vSAN/object storage): qemu-img will read via descriptor`, "info")
-          return await sshfsConvertAndImport(i, disk, altPath, tmpFile, "vmdk")
+
+return await sshfsConvertAndImport(i, disk, altPath, tmpFile, "vmdk")
         }
+
         throw new Error(`Disk file not found via SSHFS: ${sshfsDiskPath} (also tried descriptor: ${altPath})`)
       }
 
@@ -1225,23 +1376,29 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       const startConvert = await executeSSH(config.targetConnectionId, nodeIp,
         `nohup bash "${convertScript}" > /dev/null 2>&1 & echo $!`)
+
       if (!startConvert.success || !startConvert.output?.trim()) {
         throw new Error(`Failed to start qemu-img convert: ${startConvert.error}`)
       }
+
       const pid = startConvert.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
 
       const startTime = Date.now()
+
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${convertScript}" "${pidFile}" "${exitFile}" "${progressFile}" "${outputFile}"`)
           throw new Error("Migration cancelled")
         }
+
         await new Promise(r => setTimeout(r, 3000))
 
         // Parse qemu-img progress: outputs lines like "(12.34/100%)"
         const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
           `tail -c 100 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '[\\d.]+(?=/100%)' | tail -1 || echo 0`)
+
         const pct = Number.parseFloat(progressResult.output?.trim() || "0") || 0
         const estimatedBytes = Math.round((pct / 100) * disk.capacityBytes)
 
@@ -1259,23 +1416,29 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
+
         if (exitCheck.output?.trim() !== "RUNNING") {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
           // Capture the FULL stderr from qemu-img BEFORE deleting the progress file.
           // qemu-img writes both progress lines (carriage-return separated) and error
           // messages to stderr; on failure the last lines are usually the actual error.
           // Without this we'd surface the useless "exit 1" generic, hiding the root cause
           // (locked file, bad descriptor, permission denied, broken vmdk chain, etc.).
           let stderrTail = ""
+
           if (exitCode !== 0) {
             const stderrCapture = await executeSSH(
               config.targetConnectionId,
               nodeIp,
               `tail -c 2000 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -v '/100%' | tail -10`,
             )
+
             stderrTail = (stderrCapture.output || "").trim()
           }
+
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${convertScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
+
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${outputFile}"`)
             throw new Error(
@@ -1286,6 +1449,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
                 : `No stderr captured. Common causes: VMDK descriptor references missing -flat file (vSAN object access issue), VMDK locked by running VM (power off and retry), or sparse VMDK with broken extent map.`),
             )
           }
+
           break
         }
       }
@@ -1295,6 +1459,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const outputSize = Number.parseInt(fileSizeResult.output?.trim() || "0", 10)
       const speedBps = elapsed > 0 ? disk.capacityBytes / elapsed : 0
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
+
       await appendLog(jobId, `Conversion complete: ${diskSizeGB} GB in ${elapsed.toFixed(0)}s (${transferSpeed}), output ${(outputSize / 1073741824).toFixed(1)} GB`, "success")
 
       // Import into Proxmox storage
@@ -1306,6 +1471,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         `qm disk import ${targetVmid} "${outputFile}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
+
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${outputFile}"`)
 
       if (!importResult.success) {
@@ -1317,6 +1483,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const importOutput = importResult.output || ""
       const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
       const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
+
       if (importMatch?.[1]) {
         diskVolume = importMatch[1]
       } else if (altMatch?.[1]) {
@@ -1325,13 +1492,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         try {
           const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
           const unusedKeys = Object.keys(vmConf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
+
           if (unusedKeys.length > 0) diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
         } catch {}
+
         if (!diskVolume) diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
       }
 
       // Attach disk
       const attachBody = new URLSearchParams({ [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}` })
+
       try {
         await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`, { method: "PUT", body: attachBody })
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
@@ -1343,6 +1513,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Stream disk via SSHFS for block storage (dd or qemu-img convert to pre-allocated device)
     async function streamDiskViaSshfsToBlock(i: number, disk: EsxiDiskInfo, devicePath: string) {
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
+
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Streaming "${disk.label}" via SSHFS to block device (${diskSizeGB} GB)...`)
 
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
@@ -1351,11 +1522,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Verify file exists
       const checkFile = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${sshfsDiskPath}" && echo EXISTS || echo MISSING`)
+
       if (checkFile.output?.trim() !== "EXISTS") {
         // -flat.vmdk not found (common on vSAN where data is object-backed)
         // Fall back to VMDK descriptor - qemu-img can read it and follow references to actual data
         const altPath = `${sshfsMountPath}/${disk.relativePath}`
         const checkAlt = await executeSSH(config.targetConnectionId, nodeIp, `test -f "${altPath}" && echo EXISTS || echo MISSING`)
+
         if (checkAlt.output?.trim() === "EXISTS") {
           sshfsDiskPath = altPath
           useVmdkDescriptor = true
@@ -1393,10 +1566,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       const startCmd = await executeSSH(config.targetConnectionId, nodeIp,
         `nohup bash "${transferScript}" > /dev/null 2>&1 & echo $!`)
+
       if (!startCmd.success || !startCmd.output?.trim()) {
         throw new Error(`Failed to start ${useVmdkDescriptor ? 'qemu-img convert' : 'dd'}: ${startCmd.error}`)
       }
+
       const pid = startCmd.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -1408,18 +1584,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
           throw new Error("Migration cancelled")
         }
+
         await new Promise(r => setTimeout(r, 3000))
 
         if (useVmdkDescriptor) {
           // Parse qemu-img progress: outputs lines like "(12.34/100%)"
           const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
             `tail -c 100 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '[\\d.]+(?=/100%)' | tail -1 || echo 0`)
+
           const pct = Number.parseFloat(progressResult.output?.trim() || "0") || 0
+
           transferredBytes = Math.round((pct / 100) * totalBytes)
         } else {
           // Parse dd progress: "123456789 bytes ..."
           const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
             `tail -c 200 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -oP '^\\d+' | tail -1 || echo 0`)
+
           transferredBytes = Number.parseInt(progressResult.output?.trim() || "0", 10) || 0
         }
 
@@ -1437,21 +1617,28 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
+
         if (exitCheck.output?.trim() !== "RUNNING") {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
           // Capture stderr tail BEFORE deleting progressFile (same bug as transferDiskViaSshfs).
           let stderrTail = ""
+
           if (exitCode !== 0) {
             const stderrCapture = await executeSSH(
               config.targetConnectionId,
               nodeIp,
               `tail -c 2000 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | grep -v '/100%' | tail -10`,
             )
+
             stderrTail = (stderrCapture.output || "").trim()
           }
+
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
+
           if (exitCode !== 0) {
             const tool = useVmdkDescriptor ? 'qemu-img convert' : 'dd'
+
             throw new Error(
               `${tool} failed (exit ${exitCode}) on ${sshfsDiskPath} -> ${devicePath}. ` +
               (stderrTail
@@ -1459,6 +1646,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
                 : `No stderr captured. For vSAN: descriptor may reference unreachable -flat object. For block storage: target device may be in use or wrong size.`),
             )
           }
+
           break
         }
       }
@@ -1466,10 +1654,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const elapsed = (Date.now() - startTime) / 1000
       const speedBps = elapsed > 0 ? transferredBytes / elapsed : 0
       const transferSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
+
       await appendLog(jobId, `SSHFS streaming complete: ${(transferredBytes / 1073741824).toFixed(1)} GB in ${elapsed.toFixed(0)}s (${transferSpeed})`, "success")
 
       // Unmap RBD device if we mapped it
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
+
       if (allocVol?.rbdMapped) {
         await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
       }
@@ -1487,6 +1677,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Build the VMFS path
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
       const vmfsPath = `/vmfs/volumes/${disk.datastoreName}/${flatPath}`
+
       // Clone path on ESXi datastore (temporary, cleaned up after download)
       const cloneName = `.proxcenter-clone-${jobId}-disk${i}`
       const cloneVmdkPath = `/vmfs/volumes/${disk.datastoreName}/${cloneName}.vmdk`
@@ -1525,12 +1716,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           const startClone = await executeSSH(config.targetConnectionId, nodeIp,
             `nohup bash "${cloneScript}" > /dev/null 2>&1 & echo $!`
           )
+
           if (!startClone.success || !startClone.output?.trim()) {
             throw new Error(`Failed to start vmkfstools: ${startClone.error}`)
           }
 
           // Poll for clone completion with progress tracking via clone file size on ESXi
           const cloneStartTime = Date.now()
+
           while (true) {
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             if (Date.now() - cloneStartTime > 3600000) throw new Error("vmkfstools clone timed out (1h)")
@@ -1542,12 +1735,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               const sizeCheck = await executeSSH(config.targetConnectionId, nodeIp,
                 `${clSetup} && ${clSshPrefix} -p ${clPort} ${clUser}@${clHost} "stat -c %s '${cloneFlatPath}' 2>/dev/null || echo 0" 2>/dev/null`
               )
+
               const clonedBytes = Number.parseInt(sizeCheck.output?.trim() || "0", 10) || 0
+
               if (clonedBytes > 0) {
                 const cloneProgress = Math.min(Math.round((clonedBytes / disk.capacityBytes) * 100), 99)
                 const elapsed = (Date.now() - cloneStartTime) / 1000
                 const speed = elapsed > 0 ? clonedBytes / elapsed : 0
                 const speedStr = speed > 1048576 ? `${(speed / 1048576).toFixed(1)} MB/s` : `${(speed / 1024).toFixed(0)} KB/s`
+
                 await updateJob(jobId, "transferring", {
                   currentStep: `cloning_disk_${i + 1}`,
                   bytesTransferred: BigInt(clonedBytes),
@@ -1561,12 +1757,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             }
 
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
+
             if (exitCheck.output?.trim() === "RUNNING") continue
 
             const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
+
               await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${cloneScript}" "${cloneExitFile}" "${cloneErrFile}" "${cloneOutFile}" "${cloneTmpPrefix}.esxi-key"`)
               throw new Error(`vmkfstools failed (exit ${exitCode}): ${errMsg}`)
             }
@@ -1578,6 +1777,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           cloneCreated = true
           downloadPath = cloneFlatPath
           const cloneTime = Math.round((Date.now() - cloneStartTime) / 1000)
+
           await appendLog(jobId, `Clone created on ESXi datastore (${cloneTime}s)`, "success")
         } catch (cloneErr: any) {
           throw new Error(`vmkfstools clone failed: ${cloneErr.message}`)
@@ -1608,11 +1808,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         config.targetConnectionId, nodeIp,
         `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`
       )
+
       if (!startDl.success || !startDl.output?.trim()) {
         if (cloneCreated) await executeOnEsxi(`vmkfstools -U '${cloneVmdkPath}'`).catch(() => {})
         throw new Error(`Failed to start SSH download: ${startDl.error}`)
       }
+
       const ddPid = startDl.output.trim()
+
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${ddPid} > "${pidFile}"`)
 
       const totalBytes = disk.capacityBytes
@@ -1635,10 +1838,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
           const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
+
           downloadedBytes = currentSize
 
           const elapsed = (Date.now() - startTime) / 1000
           const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+
           downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
           const diskProgress = totalBytes > 0 ? Math.min(Math.round((currentSize / totalBytes) * 100), 99) : 0
@@ -1652,6 +1857,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           if (!isRunning) {
             const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+
             downloadTime = elapsed
 
             if (exitCode !== 0) {
@@ -1666,6 +1872,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               } else {
                 const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${errFile}" 2>/dev/null | head -c 500`)
                 const errMsg = stderrContent.output?.trim() || "(no stderr output)"
+
                 await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key" "${errFile}"`)
                 throw new Error(`SSH dd download failed (exit ${exitCode}): ${errMsg}`)
               }
@@ -1673,6 +1880,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
             const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
             const actualSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10)
+
             if (actualSize < 1048576) {
               await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key"`)
               throw new Error(`SSH dd produced a ${actualSize}-byte file (expected ~${diskSizeGB} GB)`)
@@ -1701,6 +1909,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
+
       // For EFI guests, attach the boot disk (i=0) as SATA: OVMF ships AHCI/VirtIO/NVMe/USB
       // drivers but not LSI, so a disk attached to the default `scsihw: lsi` controller is
       // invisible to the firmware. Windows has AHCI built-in, so this works without driver
@@ -1716,10 +1925,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         `qemu-img convert -f raw -O ${importFormat} "${tmpFile}.vmdk" "${tmpFile}.${importFormat}" 2>&1 && echo CONVERT_OK`,
         14400000
       )
+
       if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${tmpFile}.${importFormat}"`)
         throw new Error(`Conversion failed: ${convertResult.error || convertResult.output}`)
       }
+
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk"`)
 
@@ -1734,6 +1945,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         `qm disk import ${targetVmid} "${tmpFile}.${importFormat}" ${config.targetStorage} --format ${importFormat} 2>&1`,
         3600000
       )
+
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.${importFormat}"`)
 
       if (!importResult.success) {
@@ -1743,24 +1955,30 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Parse the actual disk volume name from qm disk import output
       let diskVolume = ""
       const importOutput = importResult.output || ""
+
       // Try standard format: "Successfully imported disk as 'unused0:storage:vm-XXX-disk-N'"
       const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
+
       // Also try alternate format: "unused0: successfully imported disk 'storage:vm-XXX-disk-N'"
       const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
+
       if (importMatch?.[1]) {
         diskVolume = importMatch[1]
       } else if (altMatch?.[1]) {
         diskVolume = altMatch[1]
       } else {
         await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
+
         try {
           const vmConf = await pveFetch<Record<string, any>>(
             pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
           )
+
           const unusedKeys = Object.keys(vmConf)
             .filter(k => k.startsWith("unused"))
             .sort((a, b) => a.localeCompare(b))
+
           if (unusedKeys.length > 0) {
             diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
             await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
@@ -1768,6 +1986,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         } catch (e: any) {
           await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
         }
+
         if (!diskVolume) {
           diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
           await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
@@ -1778,6 +1997,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const attachBody = new URLSearchParams({
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
+
       try {
         await pveFetch<any>(
           pveConn,
@@ -1793,16 +2013,23 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Mount SSHFS if transfer mode requires it
     // All disks on the same datastore share one mount; multiple datastores need separate mounts
     const sshfsMountedDatastores = new Map<string, string>() // datastoreName → mountPath
+
     if (useSSHFS) {
       const datastores = [...new Set(vmConfig.disks.map(d => d.datastoreName))]
+
       for (const ds of datastores) {
         const baseMountPath = sshfsMountPath
+
+
         // For multi-datastore VMs, append datastore name to mount path
         if (datastores.length > 1) {
           sshfsMountPath = `${baseMountPath}-${ds.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}`
         }
+
         const mountPath = await mountSshfs(ds)
+
         sshfsMountedDatastores.set(ds, mountPath)
+
         if (datastores.length > 1) {
           sshfsMountPath = baseMountPath // restore
         }
@@ -1843,6 +2070,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Generate RSA key on PVE node (best ESXi compatibility)
         const genResult = await executeSSH(config.targetConnectionId, nodeIp,
           `ssh-keygen -t rsa -b 4096 -f "${tmpKeyPath}" -N '' -q -C 'proxcenter-sshfsboot-${jobId}' 2>&1 && echo KEYGEN_OK`)
+
         if (!genResult.success || !genResult.output?.includes("KEYGEN_OK")) {
           throw new Error(`Failed to generate SSH key: ${genResult.error || genResult.output}`)
         }
@@ -1850,6 +2078,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Read public key
         const pubKeyResult = await executeSSH(config.targetConnectionId, nodeIp, `cat "${tmpKeyPath}.pub"`)
         const pubKey = pubKeyResult.output?.trim()
+
         if (!pubKey) throw new Error("Failed to read generated SSH public key")
 
         // Deploy to ESXi via nested SSH (using sshpass for password auth)
@@ -1896,11 +2125,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Check if -flat.vmdk exists (won't on vSAN)
       if (useSSHFS) {
         const firstMountPath = sshfsMountedDatastores.get(firstDisk.datastoreName) || sshfsMountPath
+
         const flatCheck = await executeSSH(config.targetConnectionId, nodeIp,
           `test -f "${firstMountPath}/${firstFlatPath}" && echo EXISTS || echo MISSING`)
+
         if (flatCheck.output?.trim() !== "EXISTS") {
           const descCheck = await executeSSH(config.targetConnectionId, nodeIp,
             `test -f "${firstMountPath}/${firstDescriptorPath}" && echo EXISTS || echo MISSING`)
+
           if (descCheck.output?.trim() === "EXISTS") {
             useVmdkFormat = true
             await appendLog(jobId, "vSAN detected: -flat.vmdk not found, using VMDK descriptor with format=vmdk", "info")
@@ -1915,6 +2147,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       if (qemuSshKeyPath) {
         await appendLog(jobId, "Testing QEMU SSH driver connectivity...", "info")
+
         const qemuTestResult = await executeSSH(config.targetConnectionId, nodeIp,
           `timeout 15 qemu-img info 'json:{"file.driver":"ssh","file.host":"${esxiHost}","file.port":${esxiSshPort},"file.path":"${firstEsxiPath}","file.user":"${esxiSshUser}","file.host-key-check.mode":"none","file.identity-file":"${qemuSshKeyPath}"}' 2>&1`)
 
@@ -1934,6 +2167,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         const fuseTestResult = await executeSSH(config.targetConnectionId, nodeIp,
           `timeout 10 qemu-img info ${useVmdkFormat ? "-f vmdk " : ""}'${firstFusePath}' 2>&1`)
+
         if (fuseTestResult.output?.includes("virtual size") || fuseTestResult.output?.includes("file format")) {
           useSshfsForBoot = true
 
@@ -1957,8 +2191,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (!bootMethod) {
         await appendLog(jobId, "Trying NBD bridge (qemu-nbd serves SSHFS files via Unix socket)...", "info")
         const nbdModResult = await executeSSH(config.targetConnectionId, nodeIp, "modprobe nbd max_part=0 2>/dev/null; which qemu-nbd 2>/dev/null")
+
         if (nbdModResult.success && nbdModResult.output?.trim()) {
           let nbdOk = true
+
           for (let di = 0; di < vmConfig.disks.length; di++) {
             const disk = vmConfig.disks[di]
             const diskFile = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
@@ -1974,6 +2210,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
             await new Promise(r => setTimeout(r, 1000))
             const sockCheck = await executeSSH(config.targetConnectionId, nodeIp, `test -S "${sockPath}" && echo EXISTS`)
+
             if (nbdStart.success && sockCheck.output?.includes("EXISTS")) {
               ndbSocketPaths.push(sockPath)
               await appendLog(jobId, `NBD disk ${di}: ${sockPath} serving ${fusePath}`, "info")
@@ -1983,6 +2220,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               break
             }
           }
+
           if (nbdOk && ndbSocketPaths.length === vmConfig.disks.length) {
             bootMethod = "nbd"
             await appendLog(jobId, "NBD bridge ready", "success")
@@ -1993,21 +2231,28 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (!bootMethod) {
         // All boot methods failed - fall back to regular SSHFS offline copy
         await appendLog(jobId, "All remote boot methods failed - falling back to offline SSHFS copy", "warn")
+
         // Clean up temp key
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpKeyPath}" "${tmpKeyPath}.pub"`)
+
+
         // Re-use the SSHFS offline transfer code path
         for (let i = 0; i < vmConfig.disks.length; i++) {
           await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
           const diskDs = vmConfig.disks[i].datastoreName
+
           if (sshfsMountedDatastores.has(diskDs)) sshfsMountPath = sshfsMountedDatastores.get(diskDs)!
+
           if (isFileBased) {
             await transferDiskViaSshfs(i, vmConfig.disks[i])
           } else {
             const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+
             await streamDiskViaSshfsToBlock(i, vmConfig.disks[i], vol.devicePath)
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             await attachBlockDisk(i, vol.volumeId)
           }
+
           await updateJob(jobId, "transferring", { currentDisk: i + 1, progress: Math.round(((i + 1) / vmConfig.disks.length) * 100) })
         }
       } else {
@@ -2018,12 +2263,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Seed used disk numbers from current VM config so efidisk0 (which occupies
         // vm-<vmid>-disk-0.raw after `qm create --bios ovmf`) does not collide with data disks.
         const fileBasedUsedNums = new Set<number>()
+
         if (isFileBased) {
           const vmConfForAlloc = await pveFetch<Record<string, any>>(pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
+
           for (const val of Object.values(vmConfForAlloc || {})) {
             if (typeof val === 'string') {
               const m = val.match(/vm-\d+-disk-(\d+)/)
+
               if (m) fileBasedUsedNums.add(Number.parseInt(m[1]))
             }
           }
@@ -2031,29 +2279,36 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         for (let di = 0; di < vmConfig.disks.length; di++) {
           const diskSizeBytes = vmConfig.disks[di].capacityBytes
+
           if (isFileBased) {
             // File-based storage (dir, NFS, CIFS): create a raw image file for drive-mirror target
             const storagePath = storageConfig?.path || '/var/lib/vz'
             const imgDir = `${storagePath}/images/${targetVmid}`
+
             await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${imgDir}"`)
 
             // Pick next free disk number, skipping slots already taken (efidisk0, tpmstate0, ...).
             let diskNum = 0
+
             while (fileBasedUsedNums.has(diskNum)) diskNum++
             fileBasedUsedNums.add(diskNum)
 
             const imgPath = `${imgDir}/vm-${targetVmid}-disk-${diskNum}.raw`
             const sizeGB = Math.ceil(diskSizeBytes / 1073741824)
+
             const createResult = await executeSSH(config.targetConnectionId, nodeIp,
               `qemu-img create -f raw "${imgPath}" ${sizeGB}G 2>&1`)
+
             if (!createResult.success) {
               throw new Error(`Failed to create disk image: ${createResult.error || createResult.output}`)
             }
+
             localVolumes.push({ volumeId: `${config.targetStorage}:${targetVmid}/vm-${targetVmid}-disk-${diskNum}.raw`, devicePath: imgPath, isFileVol: true })
             await appendLog(jobId, `Disk ${di}: ${imgPath} (${sizeGB} GB raw image)`, "info")
           } else {
             // Block storage (LVM, ZFS, RBD): pre-allocate volume
             const vol = await allocateBlockVolume(diskSizeBytes)
+
             localVolumes.push(vol)
             await appendLog(jobId, `Disk ${di}: ${vol.volumeId} -> ${vol.devicePath} (${(diskSizeBytes / 1073741824).toFixed(1)} GB)`, "info")
           }
@@ -2066,11 +2321,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Determine SCSI controller if needed
         let scsiControllerArgs = ""
+
         if (diskBus === "scsi") {
           // Read scsihw from VM config
           const scsihwResult = await executeSSH(config.targetConnectionId, nodeIp,
             `grep '^scsihw:' "${confPath}" 2>/dev/null`)
+
           const scsihwType = scsihwResult.output?.trim().split(":")[1]?.trim() || "virtio-scsi-pci"
+
           const scsiDeviceMap: Record<string, string> = {
             "pvscsi": "pvscsi",
             "virtio-scsi-pci": "virtio-scsi-pci",
@@ -2079,31 +2337,39 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             "lsi53c810": "lsi53c810",
             "megasas": "megasas",
           }
+
           scsiControllerArgs = `-device ${scsiDeviceMap[scsihwType] || "virtio-scsi-pci"},id=scsihw0 `
         }
 
         const argsParts: string[] = []
+
         for (let di = 0; di < vmConfig.disks.length; di++) {
           const disk = vmConfig.disks[di]
           const diskFile = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
           const driveId = `sshfs-disk${di}`
 
           let driveSpec = ""
+
           if (bootMethod === "qemu-ssh") {
             const esxiPath = `/vmfs/volumes/${disk.datastoreName}/${diskFile}`
+
             driveSpec = `file.driver=ssh,file.host=${esxiHost},file.port=${esxiSshPort},file.path=${esxiPath},file.user=${esxiSshUser},file.host-key-check.mode=none${sshKeyOpt},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads`
           } else if (bootMethod === "sshfs") {
             const mp = sshfsMountedDatastores.get(disk.datastoreName) || sshfsMountPath
             const fusePath = `${mp}/${diskFile}`
+
             driveSpec = `file=${fusePath},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads,detect-zeroes=on`
           } else if (bootMethod === "nbd") {
             const sockPath = ndbSocketPaths[di]
+
+
             // NBD exports raw blocks regardless of source format (qemu-nbd handles conversion)
             driveSpec = `file.driver=nbd,file.path=${sockPath},format=raw,if=none,id=${driveId},cache=writeback,aio=threads`
           }
 
           // Device spec matching the disk controller
           let deviceSpec: string
+
           if (diskBus === "scsi") {
             deviceSpec = `scsi-hd,bus=scsihw0.0,scsi-id=${di},lun=0,drive=${driveId},bootindex=${di}`
           } else {
@@ -2121,11 +2387,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await executeSSH(config.targetConnectionId, nodeIp,
             `sed -i '/^scsi${di}:/d; /^sata${di}:/d; /^ide${di}:/d; /^virtio${di}:/d' "${confPath}"`)
         }
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `sed -i '/^args:/d; /^boot:/d' "${confPath}"`)
 
         // Write args line (escape single quotes)
         const escapedArgs = fullArgs.replaceAll("'", "'\\''")
+
         await executeSSH(config.targetConnectionId, nodeIp,
           `echo 'args: ${escapedArgs}' >> "${confPath}"`)
 
@@ -2138,6 +2406,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // ── Phase 5: Start VM (downtime ends when VM boots) ──
         const downtimeStart = Date.now()
+
         await appendLog(jobId, `Starting VM ${targetVmid} (${bootMethod} backend + cache=writeback)...`, "info")
 
         await pveFetch<any>(
@@ -2148,6 +2417,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Wait for VM to be running
         await new Promise(r => setTimeout(r, 8000))
+
         const vmStatus = await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/current`
@@ -2157,16 +2427,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Check QEMU logs for error
           const logResult = await executeSSH(config.targetConnectionId, nodeIp,
             `tail -20 /var/log/pve/qemu-server/${targetVmid}.log 2>/dev/null | grep -i 'error\\|failed\\|abort' | tail -3`)
+
           const qemuLog = logResult.output?.trim() || "(no error in logs)"
+
           await appendLog(jobId, `VM failed to start (status: ${vmStatus?.status}). QEMU log: ${qemuLog}`, "error")
 
           // Try NBD fallback if we were on SSHFS
           if (bootMethod === "sshfs" && ndbSocketPaths.length === 0) {
             await appendLog(jobId, "Retrying with NBD bridge fallback...", "warn")
+
             // Set up NBD
             await executeSSH(config.targetConnectionId, nodeIp, "modprobe nbd max_part=0 2>/dev/null")
             let nbdFallbackOk = true
             const nbdFallbackParts: string[] = []
+
             for (let di = 0; di < vmConfig.disks.length; di++) {
               const disk = vmConfig.disks[di]
               const diskP = useVmdkFormat ? disk.relativePath : disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
@@ -2175,17 +2449,22 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               const sockPath = `/tmp/proxcenter-nbd-${jobId}-${di}.sock`
 
               await executeSSH(config.targetConnectionId, nodeIp, `fuser -k "${sockPath}" 2>/dev/null; rm -f "${sockPath}"`)
+
               const nbdStartResult = await executeSSH(config.targetConnectionId, nodeIp,
                 `qemu-nbd --fork --persistent --socket="${sockPath}" --format=${bootDiskFormat} --cache=writeback --aio=threads '${fusePath}' 2>&1`)
+
               await new Promise(r => setTimeout(r, 1000))
               const sockExists = await executeSSH(config.targetConnectionId, nodeIp, `test -S "${sockPath}" && echo EXISTS`)
+
               if (nbdStartResult.success && sockExists.output?.includes("EXISTS")) {
                 ndbSocketPaths.push(sockPath)
                 const driveId = `nbd-disk${di}`
                 const driveSpec = `file.driver=nbd,file.path=${sockPath},format=raw,if=none,id=${driveId},cache=writeback,aio=threads`
+
                 const deviceSpec = diskBus === "scsi"
                   ? `scsi-hd,bus=scsihw0.0,scsi-id=${di},lun=0,drive=${driveId},bootindex=${di}`
                   : `ide-hd,drive=${driveId},bus=ide.${Math.floor(di / 2)},unit=${di % 2},bootindex=${di}`
+
                 nbdFallbackParts.push(`-drive ${driveSpec}`)
                 nbdFallbackParts.push(`-device ${deviceSpec}`)
               } else {
@@ -2197,6 +2476,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             if (nbdFallbackOk && nbdFallbackParts.length > 0) {
               const nbdArgs = scsiControllerArgs + nbdFallbackParts.join(" ")
               const nbdEscaped = nbdArgs.replaceAll("'", "'\\''")
+
               await executeSSH(config.targetConnectionId, nodeIp,
                 `sed -i '/^args:/d' "${confPath}" && echo 'args: ${nbdEscaped}' >> "${confPath}"`)
               bootMethod = "nbd"
@@ -2204,8 +2484,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
                 `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
                 { method: "POST" })
               await new Promise(r => setTimeout(r, 8000))
+
               const vmStatus2 = await pveFetch<any>(pveConn,
                 `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/current`)
+
               if (vmStatus2?.status === "running") {
                 await appendLog(jobId, `VM ${targetVmid} STARTED via NBD bridge - DOWNTIME ENDS`, "success")
               } else {
@@ -2219,6 +2501,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           }
         } else {
           const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
+
           await appendLog(jobId, `VM ${targetVmid} STARTED via ${bootMethod} - DOWNTIME ENDS (${downtimeSec}s)`, "success")
           await appendLog(jobId, `VM is running on ${bootMethod}-backed storage with writeback cache`, "info")
         }
@@ -2231,14 +2514,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Send HMP command to QEMU via "qm monitor" over SSH (API monitor endpoint is root-only)
         async function qmMonitorCmd(command: string): Promise<{ success: boolean, output: string }> {
           const safeCmd = command.replaceAll("'", "'\\''")
+
           const result = await executeSSH(config.targetConnectionId, nodeIp,
             `echo '${safeCmd}' | qm monitor ${targetVmid} 2>&1`)
+
           if (!result.success) {
             return { success: false, output: result.error || "" }
           }
+
+
           // qm monitor outputs "Entering QEMU Monitor...\n<output>\n" — strip the header
           const output = (result.output || "").replace(/^Entering.*?Monitor[^\n]*\n?/i, "").trim()
-          return { success: true, output }
+
+
+return { success: true, output }
         }
 
         // Start drive-mirror for each disk
@@ -2253,34 +2542,45 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           // Verify drive exists in QEMU block graph
           const blockInfo = await qmMonitorCmd("info block")
+
           if (!blockInfo.output.includes(driveId)) {
             const drives = blockInfo.output.split("\n").filter(l => l.includes(":") && !l.includes("Removable")).map(l => l.trim().split(":")[0])
+
             await appendLog(jobId, `drive '${driveId}' not found. Available: ${drives.slice(0, 10).join(", ")}`, "warn")
             throw new Error(`Drive ${driveId} not found in QEMU block graph`)
           }
 
           // Start drive-mirror: -n = reuse existing target, -f = skip size check
           let mirrorStarted = false
+
           for (const cmd of [`drive_mirror -n -f ${driveId} ${targetPath} raw`, `drive_mirror -n ${driveId} ${targetPath} raw`]) {
             await appendLog(jobId, `drive-mirror cmd: ${cmd}`, "info")
             const mirrorResult = await qmMonitorCmd(cmd)
+
             await appendLog(jobId, `drive-mirror response: ${mirrorResult.output.substring(0, 200)}`, "info")
+
             if (mirrorResult.success && !mirrorResult.output.toLowerCase().includes("error")) {
               // Set speed to unlimited
               await qmMonitorCmd(`block_job_set_speed ${driveId} 0`)
+
               // Verify job started
               await new Promise(r => setTimeout(r, 1500))
               const jobsCheck = await qmMonitorCmd("info block-jobs")
+
               await appendLog(jobId, `block-jobs: ${jobsCheck.output.substring(0, 200)}`, "info")
+
               if (jobsCheck.output.includes(driveId)) {
                 mirrorStarted = true
                 mirrors.push({ driveId, diskTotal, diskIndex: di })
                 await appendLog(jobId, `drive-mirror started: ${driveId}`, "success")
                 break
               }
+
+
               // Wait a bit more
               await new Promise(r => setTimeout(r, 3000))
               const jobsCheck2 = await qmMonitorCmd("info block-jobs")
+
               if (jobsCheck2.output.includes(driveId)) {
                 mirrorStarted = true
                 mirrors.push({ driveId, diskTotal, diskIndex: di })
@@ -2310,9 +2610,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             for (const m of mirrors) await qmMonitorCmd(`block_job_cancel ${m.driveId}`)
             throw new Error("Migration cancelled")
           }
+
           await new Promise(r => setTimeout(r, 2000))
 
           const jobsResult = await qmMonitorCmd("info block-jobs")
+
           if (!jobsResult.success) continue
 
           let allNear100 = true
@@ -2323,6 +2625,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             // Check if drive is no longer in block-jobs (completed or errored)
             if (!jobsResult.output.includes(mirror.driveId)) {
               const elapsed = Date.now() - mirrorStart
+
               if (elapsed < 10000) { allNear100 = false; continue }
               readyDrives.add(mirror.driveId)
               continue
@@ -2330,6 +2633,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
             // Check if this drive is "ready" (mirror synced, waiting for pivot)
             const readyMatch = new RegExp(`${mirror.driveId.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*ready`, "i")
+
             if (readyMatch.test(jobsResult.output)) {
               readyDrives.add(mirror.driveId)
               continue
@@ -2339,9 +2643,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const progressMatch = jobsResult.output.match(
               new RegExp(`${mirror.driveId.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?Completed\\s+(\\d+)\\s+of\\s+(\\d+)`)
             )
+
             if (progressMatch) {
               const done = Number.parseInt(progressMatch[1], 10)
               const total = Number.parseInt(progressMatch[2], 10)
+
               if (total > 0 && done >= total * 0.995) {
                 if (!at100Since.has(mirror.driveId)) at100Since.set(mirror.driveId, Date.now())
               } else {
@@ -2356,6 +2662,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Update overall progress
           const totalBytes = mirrors.reduce((s, m) => s + m.diskTotal, 0)
           let totalDone = 0
+
           for (const mirror of mirrors) {
             if (readyDrives.has(mirror.driveId)) {
               totalDone += mirror.diskTotal
@@ -2363,9 +2670,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               const pm = jobsResult.output.match(
                 new RegExp(`${mirror.driveId.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?Completed\\s+(\\d+)`)
               )
+
               if (pm) totalDone += Number.parseInt(pm[1], 10)
             }
           }
+
           const overallPct = totalBytes > 0 ? Math.min(Math.round((totalDone / totalBytes) * 95), 95) : 0
           const elapsed = (Date.now() - mirrorStart) / 1000
           const speedBps = elapsed > 0 ? totalDone / elapsed : 0
@@ -2382,17 +2691,21 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (Date.now() - lastProgressLog >= 10000) {
             for (const mirror of mirrors) {
               if (readyDrives.has(mirror.driveId)) continue
+
               const pm = jobsResult.output.match(
                 new RegExp(`${mirror.driveId.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*?Completed\\s+(\\d+)\\s+of\\s+(\\d+)`)
               )
+
               if (pm) {
                 const done = Number.parseInt(pm[1], 10)
                 const total = Number.parseInt(pm[2], 10)
                 const pct = total > 0 ? (done * 100 / total).toFixed(1) : "0"
                 const spd = elapsed > 0 ? done / (1048576 * elapsed) : 0
+
                 await appendLog(jobId, `disk${mirror.diskIndex}: ${pct}% (${spd.toFixed(0)} MB/s)`, "info")
               }
             }
+
             lastProgressLog = Date.now()
           }
 
@@ -2401,8 +2714,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // pause the VM (freeze CPUs), let mirrors catch up, pivot, then resume.
           const driveIdsSet = new Set(mirrors.map(m => m.driveId))
           const notReady = new Set([...driveIdsSet].filter(d => !readyDrives.has(d)))
+
           if (notReady.size > 0 && allNear100 && at100Since.size > 0) {
             const oldest100 = Math.min(...Array.from(at100Since.values()))
+
             if (Date.now() - oldest100 > PAUSE_PIVOT_AFTER_MS) {
               await appendLog(jobId, "All disks at 100% but not 'ready' - using pause-pivot-resume...", "info")
               await appendLog(jobId, "Pausing VM for atomic pivot (~1-2s)...", "warn")
@@ -2413,27 +2728,34 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
               // Step 2: Wait for mirrors to catch up (no new I/O since CPUs frozen)
               const readyAfterPause = new Set(readyDrives)
+
               for (let wait = 0; wait < 10; wait++) {
                 await new Promise(r => setTimeout(r, 1000))
                 const jobs2 = await qmMonitorCmd("info block-jobs")
+
                 if (jobs2.success) {
                   for (const mirror of mirrors) {
                     if (readyAfterPause.has(mirror.driveId)) continue
+
                     if (!jobs2.output.includes(mirror.driveId)) {
                       readyAfterPause.add(mirror.driveId)
                     } else {
                       const readyRe = new RegExp(`${mirror.driveId.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*ready`, "i")
+
                       if (readyRe.test(jobs2.output)) readyAfterPause.add(mirror.driveId)
                     }
                   }
                 }
+
                 if (readyAfterPause.size >= driveIdsSet.size) break
               }
 
               // Step 3: Pivot all drives
               let pivotOk = true
+
               for (const mirror of mirrors) {
                 const pivotResult = await qmMonitorCmd(`block_job_complete ${mirror.driveId}`)
+
                 if (!pivotResult.success && pivotResult.output.toLowerCase().includes("not ready")) {
                   await appendLog(jobId, `${mirror.driveId}: pivot failed (not ready) - cancelling`, "warn")
                   await qmMonitorCmd(`block_job_cancel ${mirror.driveId}`)
@@ -2445,6 +2767,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               await new Promise(r => setTimeout(r, 2000))
               const jobs3 = await qmMonitorCmd("info block-jobs")
               const remaining = mirrors.filter(m => jobs3.output.includes(m.driveId))
+
               if (remaining.length > 0) {
                 await new Promise(r => setTimeout(r, 5000))
               }
@@ -2455,10 +2778,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
               if (pivotOk) {
                 const totalGB = mirrors.reduce((s, m) => s + m.diskTotal, 0) / 1073741824
                 const mirrorElapsed = Math.round((Date.now() - mirrorStart) / 1000)
+
                 await appendLog(jobId, `Pause-pivot-resume complete! ${totalGB.toFixed(1)} GB in ${mirrorElapsed}s - VM resumed on local storage`, "success")
               } else {
                 await appendLog(jobId, "Pivot during pause partially failed - VM resumed but some disks may still be on remote storage", "warn")
               }
+
               break
             }
           }
@@ -2467,20 +2792,26 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (readyDrives.size >= driveIdsSet.size) {
             // All ready - pivot atomically
             await appendLog(jobId, "All mirrors synced - pivoting to local storage...", "info")
+
             for (const mirror of mirrors) {
               const pivotResult = await qmMonitorCmd(`block_job_complete ${mirror.driveId}`)
+
               if (!pivotResult.success) {
                 await appendLog(jobId, `Warning: pivot ${mirror.driveId} failed: ${pivotResult.output.substring(0, 150)}`, "warn")
               }
             }
+
+
             // Wait for pivots to complete
             await new Promise(r => setTimeout(r, 3000))
             const jobsFinal = await qmMonitorCmd("info block-jobs")
             const remainingFinal = mirrors.filter(m => jobsFinal.output.includes(m.driveId))
+
             if (remainingFinal.length > 0) await new Promise(r => setTimeout(r, 5000))
 
             const totalGB = mirrors.reduce((s, m) => s + m.diskTotal, 0) / 1073741824
             const mirrorElapsed = Math.round((Date.now() - mirrorStart) / 1000)
+
             await appendLog(jobId, `All pivots complete - VM on local storage (${totalGB.toFixed(1)} GB in ${mirrorElapsed}s)`, "success")
             break
           }
@@ -2499,11 +2830,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await pveFetch<any>(pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/stop`,
           { method: "POST" })
+
+
         // Wait for VM to stop
         for (let wait = 0; wait < 30; wait++) {
           await new Promise(r => setTimeout(r, 2000))
+
           const st = await pveFetch<any>(pveConn,
             `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/current`)
+
           if (st?.status === "stopped") break
         }
 
@@ -2515,9 +2850,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         if (pveParams.bios === "ovmf" && isFileBased && localVolumes[0]) {
           await appendLog(jobId, "Ensuring UEFI fallback bootloader is present on EFI partition...", "info")
           const bootDiskPath = localVolumes[0].devicePath
+
           const injectScript = [
             'set +e',
             'modprobe nbd max_part=16 2>/dev/null',
+
             // Find a free nbd device (no pid file means unused)
             'NBD=""',
             'for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do',
@@ -2528,8 +2865,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             'sleep 1',
             'partprobe "$NBD" 2>/dev/null',
             'sleep 1',
+
             // Find EFI System Partition by GUID
             `EFI_PART=$(lsblk -nr -o NAME,PARTTYPE "$NBD" 2>/dev/null | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print "/dev/"$1; exit}')`,
+
             // Fallback: look for any FAT partition on the disk
             'if [ -z "$EFI_PART" ]; then',
             '  for p in ${NBD}p*; do',
@@ -2546,6 +2885,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             '  echo "INJECT_RESULT=MOUNT_FAIL"; exit 0',
             'fi',
             'RESULT=NO_BOOTLOADER',
+
             // Windows: copy bootmgfw.efi to \EFI\Boot\bootx64.efi if missing
             'if [ -f "$MNT/EFI/Microsoft/Boot/bootmgfw.efi" ]; then',
             '  if [ -f "$MNT/EFI/Boot/bootx64.efi" ] || [ -f "$MNT/EFI/BOOT/BOOTX64.EFI" ]; then',
@@ -2560,8 +2900,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             'qemu-nbd --disconnect "$NBD" >/dev/null 2>&1',
             'echo "INJECT_RESULT=$RESULT"',
           ].join('\n')
+
           const injectResult = await executeSSH(config.targetConnectionId, nodeIp, injectScript)
           const out = injectResult.output || ""
+
           if (out.includes("INJECT_RESULT=WINDOWS_INJECTED")) {
             await appendLog(jobId, "Windows UEFI fallback bootloader installed (\\EFI\\Boot\\bootx64.efi)", "success")
           } else if (out.includes("INJECT_RESULT=ALREADY_PRESENT")) {
@@ -2585,12 +2927,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // AHCI in its built-in driver set, so moving the boot disk to SATA works without
         // guest driver injection. Data disks stay on SCSI for performance.
         const forceEfiSataForBoot = pveParams.bios === "ovmf" && diskBus === "scsi"
+
         if (forceEfiSataForBoot) {
           await appendLog(jobId, "EFI guest: attaching boot disk as SATA (OVMF lacks LSI SCSI driver)", "info")
         }
+
         const slotPerDisk: string[] = []
+
         for (let di = 0; di < localVolumes.length; di++) {
           let slot: string
+
           if (forceEfiSataForBoot && di === 0) slot = "sata0"
           else if (forceEfiSataForBoot) slot = `scsi${di - 1}`
           else slot = diskBus === "scsi" ? `scsi${di}` : `sata${di}`
@@ -2600,13 +2946,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Attach all disks + boot order atomically in a single PVE API PUT (replaces previous per-disk PUTs).
         const reconfigBody = new URLSearchParams()
         const diskOpts = isFileBased ? ",discard=on" : ""
+
         for (let di = 0; di < localVolumes.length; di++) {
           reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskOpts}`)
         }
+
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveFetch<any>(pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
           { method: "PUT", body: reconfigBody })
+
         for (let di = 0; di < localVolumes.length; di++) {
           await appendLog(jobId, `Disk ${di} attached as ${slotPerDisk[di]} (${localVolumes[di].volumeId})`, "success")
         }
@@ -2623,20 +2972,28 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         if (qemuSshKeyPath && !esxiKeyRaw && esxiPass) {
           const pubKeyResult = await executeSSH(config.targetConnectionId, nodeIp, `cat "${tmpKeyPath}.pub" 2>/dev/null`)
           const pubKey = pubKeyResult.output?.trim()
+
           if (pubKey) {
             const safePub = pubKey.replaceAll(/[/\\&]/g, '\\$&')
             const safeEsxiPass2 = esxiPass.replaceAll("'", "'\\''")
             const esxiSshOpts2 = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+
             await executeSSH(config.targetConnectionId, nodeIp,
               `export SSHPASS='${safeEsxiPass2}' && sshpass -e ssh ${esxiSshOpts2} -p ${esxiSshPort} ${esxiSshUser}@${esxiHost} "sed -i '/${safePub.substring(0, 40)}/d' /etc/ssh/keys-${esxiSshUser}/authorized_keys ~/.ssh/authorized_keys 2>/dev/null; echo CLEANED" 2>&1`)
           }
         }
+
+
         // Remove temp key from PVE node
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpKeyPath}" "${tmpKeyPath}.pub"`)
+
+
         // Kill NBD servers
         for (const sockPath of ndbSocketPaths) {
           await executeSSH(config.targetConnectionId, nodeIp, `fuser -k "${sockPath}" 2>/dev/null; rm -f "${sockPath}"`)
         }
+
+
         // Restore AppArmor
         if (bootMethod === "sshfs") {
           await executeSSH(config.targetConnectionId, nodeIp,
@@ -2667,6 +3024,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Phase 0: Create snapshot — makes base VMDK read-only so vmkfstools can clone it
       await appendLog(jobId, "Creating snapshot on ESXi (base disk becomes read-only)...", "info")
+
       try {
         await soapCreateSnapshot(soapSession!, config.sourceVmId, "proxcenter-live-mig", "ProxCenter live migration - do not delete manually")
         await appendLog(jobId, "Snapshot created", "success")
@@ -2680,13 +3038,16 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       try {
         for (let i = 0; i < vmConfig.disks.length; i++) {
           await updateJob(jobId, "transferring", { currentDisk: i })
+
           if (isFileBased) {
             await downloadDiskViaSsh(i, vmConfig.disks[i], true)
           } else {
             // Block storage: allocate + stream directly to device
             const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+
             await streamDiskViaSshToBlock(i, vmConfig.disks[i], vol.devicePath, true)
           }
+
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
         }
       } finally {
@@ -2699,6 +3060,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Phase 2: Power off source VM (downtime starts here)
       const downtimeStart = Date.now()
+
       await appendLog(jobId, "All disks transferred - powering off source VM (downtime starts now)...", "warn")
       await powerOffSourceVm(jobId, soapSession!, config.sourceVmId)
 
@@ -2706,8 +3068,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (isFileBased) {
         // File-based: convert + import from storage temp path
         await appendLog(jobId, "Converting and importing disks to Proxmox...")
+
         for (let i = 0; i < vmConfig.disks.length; i++) {
           const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+
           await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
           await convertAndImportDisk(i)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -2715,8 +3079,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } else {
         // Block storage: data already streamed — just attach volumes
         await appendLog(jobId, "Attaching pre-streamed volumes to VM...")
+
         for (let i = 0; i < vmConfig.disks.length; i++) {
           const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
+
           await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
           await attachBlockDisk(i, allocatedVolumes[i].volumeId)
         }
@@ -2725,6 +3091,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
       const downtimeMin = Math.floor(downtimeSec / 60)
       const downtimeRemSec = downtimeSec % 60
+
       await appendLog(jobId, `Source VM downtime: ${downtimeMin > 0 ? `${downtimeMin}m ${downtimeRemSec}s` : `${downtimeSec}s`}`, "info")
     } else if (useSSHFS) {
       // ── Offline mode with SSHFS: mount ESXi datastore → convert/stream directly ──
@@ -2734,6 +3101,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Set sshfsMountPath to the correct mount for this disk's datastore
         const diskDs = vmConfig.disks[i].datastoreName
+
         if (sshfsMountedDatastores.has(diskDs)) {
           sshfsMountPath = sshfsMountedDatastores.get(diskDs)!
         }
@@ -2744,10 +3112,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         } else {
           // Block storage: dd from SSHFS mount directly to pre-allocated block device
           const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+
           await streamDiskViaSshfsToBlock(i, vmConfig.disks[i], vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
         }
+
         await updateJob(jobId, "transferring", {
           currentDisk: i + 1,
           progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
@@ -2758,6 +3128,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       for (let i = 0; i < vmConfig.disks.length; i++) {
         await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
         const isVsanDs = vmConfig.disks[i].datastoreName.toLowerCase().includes('vsan')
+
         if (isVsanDs) {
           throw new Error(`vSAN datastores require SSHFS transfer mode. Please select "SSHFS" or "Auto" transfer mode in the migration settings.`)
         }
@@ -2770,10 +3141,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         } else {
           // Block storage: allocate volume → stream directly to device (no temp files)
           const vol = await allocateBlockVolume(vmConfig.disks[i].capacityBytes)
+
           await streamDiskToBlock(i, vmConfig.disks[i], vol.devicePath)
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await attachBlockDisk(i, vol.volumeId)
         }
+
         await updateJob(jobId, "transferring", {
           currentDisk: i + 1,
           progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
@@ -2785,8 +3158,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Always unmount SSHFS (even on error during transfer)
       if (useSSHFS) {
         const mountPaths = Array.from(sshfsMountedDatastores.values())
+
         for (let mi = 0; mi < mountPaths.length; mi++) {
           const origMountPath = sshfsMountPath
+
           sshfsMountPath = mountPaths[mi]
           await unmountSshfs()
           sshfsMountPath = origMountPath
@@ -2804,6 +3179,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Set boot order — honour the EFI SATA rule applied in convertAndImportDisk/attachBlockDisk.
       const finalBootSlot = pveParams.bios === "ovmf" ? "sata0" : "scsi0"
+
       await pveFetch<any>(
         pveConn,
         `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
@@ -2817,6 +3193,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // better disk and network performance but is optional.
       if (isWindowsVm(vmConfig)) {
         const bootBusLabel = pveParams.bios === "ovmf" ? "SATA (OVMF-compatible)" : "LSI SCSI"
+
         await appendLog(jobId, `Windows VM detected - boot disk on ${bootBusLabel} + e1000 NIC (built-in Windows drivers). Install VirtIO drivers from the virtio-win ISO afterwards for better disk/network performance.`, "warn")
       }
 
@@ -2836,6 +3213,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // ── DONE ──
     const totalCapacity = vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)
+
     await updateJob(jobId, "completed", {
       progress: 100,
       bytesTransferred: BigInt(totalCapacity),
@@ -2845,6 +3223,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Audit
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "migration",
@@ -2859,6 +3238,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     })
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
+
     await updateJob(jobId, "failed", { error: errorMsg })
     await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
 
@@ -2866,14 +3246,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     try {
       const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
         (await getConnectionById(config.targetConnectionId)).baseUrl)
+
+
       // Clean temp files on storage path (file-based storage)
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,
           `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vmdk "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
       }
+
+
       // Clean control files (always in /tmp)
       await executeSSH(config.targetConnectionId, nodeIp,
         `rm -f /tmp/proxcenter-mig-${jobId}-disk*.pid* /tmp/proxcenter-mig-${jobId}-disk*.stats /tmp/proxcenter-mig-${jobId}-disk*.dl.sh /tmp/proxcenter-mig-${jobId}-ctrl*.pid* /tmp/proxcenter-mig-${jobId}-ctrl*.dl.sh /tmp/proxcenter-mig-${jobId}-ctrl*.progress /tmp/proxcenter-mig-${jobId}-ctrl*.stderr /tmp/proxcenter-mig-${jobId}-sshfs*.pid* /tmp/proxcenter-mig-${jobId}-sshfs*.exit /tmp/proxcenter-mig-${jobId}-sshfs*.progress /tmp/proxcenter-mig-${jobId}-sshfs*.sh /tmp/proxcenter-mig-${jobId}-sshfsblk*.pid* /tmp/proxcenter-mig-${jobId}-sshfsblk*.exit /tmp/proxcenter-mig-${jobId}-sshfsblk*.progress /tmp/proxcenter-mig-${jobId}-sshfsblk*.sh`)
+
       // Unmount SSHFS if still mounted (error path)
       await executeSSH(config.targetConnectionId, nodeIp,
         `fusermount -uz /tmp/proxcenter-sshfs-${jobId} 2>/dev/null; fusermount -uz /tmp/proxcenter-sshfs-${jobId}-* 2>/dev/null; rmdir /tmp/proxcenter-sshfs-${jobId}* 2>/dev/null; rm -f /tmp/proxcenter-sshfs-${jobId}.esxi-key 2>/dev/null`)
@@ -2885,6 +3270,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
+
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}`,
@@ -2899,6 +3285,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (soapSession) {
       await soapLogout(soapSession)
     }
+
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }
@@ -2937,6 +3324,7 @@ async function executeSSHWithTimeout(
   let passphrase: string | undefined
 
   const authMethod = connection.sshAuthMethod || (connection.sshKeyEnc ? "key" : "password")
+
   if (authMethod === "key" && connection.sshKeyEnc) {
     key = decryptSecret(connection.sshKeyEnc)
     if (connection.sshPassEnc) try { passphrase = decryptSecret(connection.sshPassEnc) } catch {}
@@ -2948,6 +3336,7 @@ async function executeSSHWithTimeout(
 
   return new Promise((resolve) => {
     const conn = new Client()
+
     const timeout = setTimeout(() => {
       conn.end()
       resolve({ success: false, error: `SSH timeout after ${timeoutMs / 1000}s` })
@@ -2955,15 +3344,19 @@ async function executeSSHWithTimeout(
 
     conn.on("ready", () => {
       conn.exec(finalCommand, (err, stream) => {
-        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message }); return }
+        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message });
+
+return }
 
         let stdout = ""
         let stderr = ""
+
         stream.on("data", (data: Buffer) => { stdout += data.toString() })
         stream.stderr.on("data", (data: Buffer) => { stderr += data.toString() })
         stream.on("close", (code: number) => {
           clearTimeout(timeout)
           conn.end()
+
           if (code === 0 || code === null) {
             resolve({ success: true, output: stdout.trim() })
           } else {
@@ -2979,6 +3372,7 @@ async function executeSSHWithTimeout(
       host: nodeIp, port, username: user, readyTimeout: 30_000,
       keepaliveInterval: 10000, keepaliveCountMax: 999,
     }
+
     if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }
     else if (password) { connectConfig.password = password }
 

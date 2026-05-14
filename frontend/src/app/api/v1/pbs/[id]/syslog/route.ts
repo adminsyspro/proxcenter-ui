@@ -11,11 +11,14 @@ type SyslogSource = "journal" | "syslog"
 
 function isNotFound(err: any): boolean {
   const msg = String(err?.message || err || "")
-  return /\b404\b/.test(msg)
+
+
+return /\b404\b/.test(msg)
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -25,6 +28,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)
@@ -47,6 +51,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // Try /nodes/localhost/journal first (PBS 3+)
     const journalQs = new URLSearchParams()
+
     journalQs.set("lastentries", String(lastentries))
     if (!Number.isNaN(sinceSec)) journalQs.set("since", String(sinceSec))
     if (!Number.isNaN(untilSec)) journalQs.set("until", String(untilSec))
@@ -56,6 +61,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         conn,
         `/nodes/localhost/journal?${journalQs.toString()}`
       )
+
       lines = Array.isArray(journal) ? journal.map(l => String(l)) : []
       source = "journal"
     } catch (e: any) {
@@ -65,6 +71,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
       // Fallback to legacy /syslog endpoint
       const syslogQs = new URLSearchParams()
+
       syslogQs.set("start", "0")
       syslogQs.set("limit", String(lastentries))
       if (!Number.isNaN(sinceSec)) syslogQs.set("since", String(sinceSec))
@@ -74,12 +81,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         conn,
         `/nodes/localhost/syslog?${syslogQs.toString()}`
       )
+
       lines = Array.isArray(legacy) ? legacy.map(row => String(row?.t ?? "")) : []
       source = "syslog"
     }
 
     if (service) {
       const needle = service.toLowerCase()
+
       lines = lines.filter(l => l.toLowerCase().includes(needle))
     }
 

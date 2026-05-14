@@ -14,12 +14,14 @@ export interface PreflightResult {
   virtV2vInstalled: boolean
   pvInstalled: boolean
   virtioWinInstalled: boolean
+
   /**
    * nbdkit server binary present on the target node. Required by virt-v2v's
    * `-i disk` mode (the NFC path used for vSAN VMs). Missing nbdkit causes the
    * migration to fail right after NFC download with "nbdkit is not installed".
    */
   nbdkitInstalled: boolean
+
   /**
    * nbdcopy binary present on the target node (from package `libnbd-bin` on
    * Debian). virt-v2v shells out to nbdcopy during the "Copying disk N/N"
@@ -27,6 +29,7 @@ export interface PreflightResult {
    * which is the worst failure point cost-wise. We surface it upfront.
    */
   nbdcopyInstalled: boolean
+
   /**
    * rhsrvany.exe or pvvxsvc.exe present on the target node (from package
    * `guestfs-tools`). Required by virt-v2v to install Windows firstboot
@@ -34,6 +37,7 @@ export interface PreflightResult {
    * conversion fails with "rhsrvany.exe is missing".
    */
   guestfsToolsInstalled: boolean
+
   /**
    * OVMF firmware present on the target node (package `ovmf`). virt-v2v
    * requires it at "Creating output metadata" for any UEFI guest — missing
@@ -64,6 +68,7 @@ export async function runV2vPreflight(
   sourceType?: string
 ): Promise<PreflightResult> {
   const errors: string[] = []
+
   const result: PreflightResult = {
     ssh: false,
     virtioWinInstalled: false,
@@ -85,11 +90,14 @@ export async function runV2vPreflight(
 
   // 1. Check SSH connectivity
   const sshCheck = await executeSSH(targetConnectionId, nodeIp, "echo ok")
+
   if (!sshCheck.success) {
     errors.push(`SSH connectivity failed: ${sshCheck.error || "unknown error"}`)
+
     // If SSH fails, no point running the other checks
     return result
   }
+
   result.ssh = true
 
   // 2-4: Run remaining checks in parallel
@@ -102,8 +110,10 @@ export async function runV2vPreflight(
     executeSSH(targetConnectionId, nodeIp, "which virt-customize && echo yes || echo no"),
     executeSSH(targetConnectionId, nodeIp, "which nbdkit"),
     executeSSH(targetConnectionId, nodeIp, "which nbdcopy"),
+
     // rhsrvany.exe or pvvxsvc.exe: required by virt-v2v for Windows firstboot scripts
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virt-tools/rhsrvany.exe -o -f /usr/share/virt-tools/pvvxsvc.exe && echo yes || echo no"),
+
     // OVMF firmware: required for UEFI guests at "Creating output metadata"
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/OVMF/OVMF_CODE_4M.fd -o -f /usr/share/OVMF/OVMF_CODE.fd && echo yes || echo no"),
   ])
@@ -132,6 +142,7 @@ export async function runV2vPreflight(
   } else {
     errors.push("nbdkit is not installed on the target node (required for vSAN VM migration via virt-v2v -i disk)")
   }
+
   if (nbdcopyCheck.success && nbdcopyCheck.output?.trim()) {
     result.nbdcopyInstalled = true
   } else {
@@ -166,12 +177,15 @@ export async function runV2vPreflight(
   // 5. Check disk space on /tmp
   if (dfCheck.success && dfCheck.output?.trim()) {
     const availableBytes = Number.parseInt(dfCheck.output.trim(), 10)
+
     if (!Number.isNaN(availableBytes)) {
       result.diskSpaceAvailableBytes = availableBytes
       result.diskSpaceSufficient = availableBytes >= requiredDiskBytes
+
       if (!result.diskSpaceSufficient) {
         const availableGB = (availableBytes / 1_073_741_824).toFixed(1)
         const requiredGB = (requiredDiskBytes / 1_073_741_824).toFixed(1)
+
         errors.push(
           `Insufficient disk space on /tmp: ${availableGB} GB available, ${requiredGB} GB required`
         )
@@ -186,6 +200,7 @@ export async function runV2vPreflight(
   // 5. Check cifs-utils for Hyper-V only (needed for auto-mount)
   if (sourceType === 'hyperv') {
     const cifsCheck = await executeSSH(targetConnectionId, nodeIp, "which mount.cifs")
+
     if (!cifsCheck.success || !cifsCheck.output?.trim()) {
       // Not an error - pipeline will install if needed
     }
@@ -196,10 +211,13 @@ export async function runV2vPreflight(
     // Get mount points with significant space (excluding tmpfs, devtmpfs, squashfs, etc.)
     const dfAllResult = await executeSSH(targetConnectionId, nodeIp,
       `df -B1 --output=target,avail,size,fstype | tail -n +2 | awk '$4 !~ /tmpfs|devtmpfs|squashfs|overlay/ && $1 !~ /^\\/mnt\\/hyperv/ && $1 != "/" && $2 > 1073741824 {print $1"|"$2"|"$3"|"$4}'`)
+
     if (dfAllResult.success && dfAllResult.output?.trim()) {
       const storages: TempStorageOption[] = []
+
       for (const line of dfAllResult.output.trim().split('\n')) {
         const [path, avail, total, fs] = line.split('|')
+
         if (path && avail && total) {
           storages.push({
             path: path.trim(),
@@ -209,8 +227,11 @@ export async function runV2vPreflight(
           })
         }
       }
+
+
       // Sort by available space descending
       storages.sort((a, b) => b.availableBytes - a.availableBytes)
+
       if (storages.length > 0) {
         result.tempStorages = storages
       }
@@ -222,14 +243,18 @@ export async function runV2vPreflight(
     try {
       const scanResult = await executeSSH(targetConnectionId, nodeIp,
         `find /mnt/hyperv -iname "*${vmName.replaceAll(/[^a-zA-Z0-9._-]/g, '*')}*" \\( -iname "*.vhdx" -o -iname "*.vhd" \\) 2>/dev/null || true`)
+
       const detected = (scanResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
+
       if (detected.length > 0) {
         result.detectedDisks = detected
       } else {
         // Fallback: list all VHDX/VHD in /mnt/hyperv/
         const allResult = await executeSSH(targetConnectionId, nodeIp,
           `find /mnt/hyperv -iname "*.vhdx" -o -iname "*.vhd" 2>/dev/null || true`)
+
         const all = (allResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
+
         if (all.length > 0) {
           result.detectedDisks = all
         }
@@ -273,6 +298,7 @@ export async function installV2vPackages(
   // leaving preflight red after the UI says "install OK". Semicolons (not &&)
   // because the if/then/fi block can't be joined with &&.
   const script =
+
     // pipefail so a failing rpm2cpio can't be masked by a successful cpio
     "set -eo pipefail; " +
     "apt-get update -qq; " +
@@ -295,6 +321,7 @@ export async function installV2vPackages(
 const VIRTIO_WIN_URL = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 const VIRTIO_WIN_PATH = "/usr/share/virtio-win/virtio-win.iso"
 const VIRTIO_WIN_EXIT = "/tmp/.virtio-win-download.exit"
+
 // Approximate size of the latest stable virtio-win ISO for progress estimation
 const VIRTIO_WIN_EXPECTED_BYTES = 700 * 1024 * 1024
 
@@ -343,6 +370,8 @@ export async function checkVirtioWinProgress(
   }
 
   const exitCode = Number.parseInt(exitOut, 10)
+
+
   // Clean up exit marker
   await executeSSH(targetConnectionId, nodeIp, `rm -f ${VIRTIO_WIN_EXIT}`).catch(() => {})
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import {
@@ -61,7 +62,9 @@ function portToService(port: number, protocol: string): string {
     6789: 'Ceph MON', 3300: 'Ceph MON', 2049: 'NFS', 445: 'SMB',
     9090: 'Prometheus', 9100: 'Node Exp', 5044: 'Logstash',
   }
-  return services[port] || `${port}/${protocol}`
+
+
+return services[port] || `${port}/${protocol}`
 }
 
 // Color palette for flows
@@ -73,9 +76,12 @@ const FLOW_COLORS = [
 
 async function fetchIPPairs(): Promise<IPPair[]> {
   const res = await fetch('/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=100')
+
   if (!res.ok) return []
   const data = await res.json()
-  return Array.isArray(data) ? data : []
+
+
+return Array.isArray(data) ? data : []
 }
 
 // Detail info for the modal
@@ -115,6 +121,7 @@ export default function SankeyChart() {
   const [hoveredNode, setHoveredNode] = useState<number | null>(null)
   const [containerWidth, setContainerWidth] = useState(typeof window !== 'undefined' ? window.innerWidth - 300 : 900)
   const [detail, setDetail] = useState<DetailData | null>(null)
+
   useEffect(() => {
     fetchIPPairs().then(data => {
       setPairs(data)
@@ -123,6 +130,7 @@ export default function SankeyChart() {
 
     const interval = setInterval(async () => {
       const data = await fetchIPPairs()
+
       setPairs(data)
     }, 15000)
 
@@ -132,21 +140,27 @@ export default function SankeyChart() {
   // Track container width
   useEffect(() => {
     if (!containerRef.current) return
+
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
         setContainerWidth(Math.max(400, Math.floor(entry.contentRect.width)))
       }
     })
+
     observer.observe(containerRef.current)
-    return () => observer.disconnect()
+
+return () => observer.disconnect()
   }, [])
 
   // SVG dimensions: full width, height = fill remaining viewport
   const svgWidth = containerWidth || 900
+
   const svgHeight = useMemo(() => {
     // Viewport height - page header(64) - tabs(48) - card header(40) - paddings(48)
     const available = typeof window !== 'undefined' ? window.innerHeight - 200 : 500
-    return Math.max(350, available)
+
+
+return Math.max(350, available)
   }, [containerWidth]) // recalc when width changes (orientation change)
 
   // Build Sankey data
@@ -159,11 +173,14 @@ export default function SankeyChart() {
 
     const getOrCreateNode = (name: string, category: SankeyNodeData['category']): number => {
       const key = `${category}:${name}`
+
       if (nodeMap.has(key)) return nodeMap.get(key)!
       const idx = nodes.length
+
       nodeMap.set(key, idx)
       nodes.push({ name, category })
-      return idx
+
+return idx
     }
 
     // Aggregate by src → service → dst
@@ -174,6 +191,7 @@ export default function SankeyChart() {
       const key = `${pair.src_ip}|${service}|${pair.dst_ip}`
 
       const existing = aggregated.get(key)
+
       if (existing) {
         existing.bytes += pair.bytes
         existing.packets += pair.packets
@@ -200,6 +218,7 @@ export default function SankeyChart() {
 
       // src → service
       links.push({ source: srcIdx, target: svcIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP })
+
       // service → dst
       links.push({ source: svcIdx, target: dstIdx, value: flow.bytes, protocol: flow.protocol, port: flow.port, packets: flow.packets, srcIP: flow.srcIP, dstIP: flow.dstIP })
     }
@@ -224,7 +243,9 @@ export default function SankeyChart() {
         .extent([[0, 0], [width, height]])
         .nodeSort((a, b) => {
           const catOrder = { source: 0, service: 1, destination: 2 }
-          return (catOrder[a.category] || 0) - (catOrder[b.category] || 0)
+
+
+return (catOrder[a.category] || 0) - (catOrder[b.category] || 0)
         })
 
       const result = sankeyGenerator({
@@ -241,6 +262,7 @@ export default function SankeyChart() {
   // Total bytes for percentage calculations
   const totalBytes = useMemo(() => {
     if (!layout) return 0
+
     // Sum only source→service links (half the links) to avoid double counting
     return layout.links.reduce((sum: number, l: any, i: number) => i % 2 === 0 ? sum + (l.value || 0) : sum, 0)
   }, [layout])
@@ -265,6 +287,7 @@ export default function SankeyChart() {
         totalNodeBytes += link.value
         totalNodePackets += link.packets || 0
       }
+
       if ((link.target as any).index === nodeIdx) {
         connections.push({
           name: (link.source as any).name,
@@ -307,12 +330,14 @@ export default function SankeyChart() {
       srcIP = srcNode.name
       service = tgtNode.name
       const siblingLink = (layout?.links as any[])?.[linkIdx + 1]
+
       if (siblingLink) dstIP = (siblingLink.target as any)?.name || dstIP
     } else if (srcNode.category === 'service' && tgtNode.category === 'destination') {
       // This is service→dst, the previous link is src→service
       service = srcNode.name
       dstIP = tgtNode.name
       const siblingLink = (layout?.links as any[])?.[linkIdx - 1]
+
       if (siblingLink) srcIP = (siblingLink.source as any)?.name || srcIP
     } else {
       srcIP = srcNode.name
@@ -339,8 +364,10 @@ export default function SankeyChart() {
     if (hoveredNode === nodeIdx) return true
     if (hoveredLink === null) return false
     const link = (layout?.links as any[])?.[hoveredLink]
+
     if (!link) return false
-    return (link.source as any).index === nodeIdx || (link.target as any).index === nodeIdx
+
+return (link.source as any).index === nodeIdx || (link.target as any).index === nodeIdx
   }
 
   if (loading) {
@@ -367,6 +394,7 @@ export default function SankeyChart() {
 
   // Category labels — aligned with the Sankey columns (inside the margin area)
   const layoutWidth = svgWidth - margin.left - margin.right
+
   const categories = [
     { label: t('networkFlows.source'), x: margin.left },
     { label: t('networkFlows.application'), x: margin.left + layoutWidth / 2 - 30 },
@@ -424,6 +452,7 @@ export default function SankeyChart() {
                 {/* Links */}
                 {layoutLinks.map((link: any, idx: number) => {
                   const path = linkPathGenerator(link)
+
                   if (!path) return null
 
                   const color = FLOW_COLORS[idx % FLOW_COLORS.length]
@@ -584,7 +613,9 @@ export default function SankeyChart() {
                   <TableBody>
                     {detail.connections.map((conn, i) => {
                       const pct = detail.totalBytes > 0 ? (conn.bytes / detail.totalBytes) * 100 : 0
-                      return (
+
+
+return (
                         <TableRow key={i} hover>
                           <TableCell>
                             <Chip

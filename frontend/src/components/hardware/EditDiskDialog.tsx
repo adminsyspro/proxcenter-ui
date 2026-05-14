@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -127,10 +128,12 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
     () => storages.find(s => s.storage === targetStorage),
     [storages, targetStorage]
   )
+
   const supportedFormats = useMemo(
     () => selectedTargetStorageObj ? getSupportedFormats(selectedTargetStorageObj.type) : ['raw', 'qcow2', 'vmdk'],
     [selectedTargetStorageObj]
   )
+
   const supportsMultipleFormats = supportedFormats.length > 1
 
   // Reset format when target storage changes and current format is not supported
@@ -160,6 +163,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
       // CDROM-specific init
       if (disk.isCdrom) {
         const raw = disk.rawValue || ''
+
         if (raw === 'cdrom') {
           // Physical CD/DVD drive
           setCdromMode('physical')
@@ -172,8 +176,10 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
         } else if (raw.includes('media=cdrom') && disk.storage && disk.storage !== 'none') {
           setCdromMode('iso')
           setIsoStorage(disk.storage)
+
           // Extract ISO filename from raw value like "local:iso/debian.iso,media=cdrom"
           const isoMatch = raw.match(/^[^:]+:iso\/(.+?)(?:,|$)/)
+
           setIsoImage(isoMatch ? isoMatch[1] : '')
         } else {
           setCdromMode('none')
@@ -226,15 +232,19 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   // Load ISO storages for CDROM
   useEffect(() => {
     if (!open || !disk?.isCdrom || !connId || !node) return
+
     const loadIsoStorages = async () => {
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storages?content=iso`)
+
         if (res.ok) {
           const json = await res.json()
+
           setIsoStorages((json.data || []).filter((s: any) => s.content?.includes('iso')))
         }
       } catch {}
     }
+
     loadIsoStorages()
   }, [open, disk?.isCdrom, connId, node])
 
@@ -242,23 +252,31 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   useEffect(() => {
     if (!open || !disk?.isCdrom || !connId || !node || !isoStorage) {
       setIsoImages([])
-      return
+
+return
     }
+
     const loadIsos = async () => {
       setIsoLoading(true)
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(isoStorage)}/content?content=iso`)
+
         if (res.ok) {
           const json = await res.json()
+
           setIsoImages((json.data || []).map((i: any) => {
             // volid looks like "local:iso/debian.iso" — extract filename
             const m = i.volid?.match(/iso\/(.+)$/)
-            return m ? m[1] : i.volid || ''
+
+
+return m ? m[1] : i.volid || ''
           }).filter(Boolean))
         }
       } catch {}
       finally { setIsoLoading(false) }
     }
+
     loadIsos()
   }, [open, disk?.isCdrom, connId, node, isoStorage])
 
@@ -367,9 +385,11 @@ return
       // rawValue looks like "local-lvm:vm-102-disk-0,size=32G,cache=writeback,..."
       const raw = disk.rawValue || ''
       const rawParts = raw.split(',')
+
       // Keep volume (first part) and size
       const baseParts: string[] = [rawParts[0]]
       const sizeParam = rawParts.find(p => p.startsWith('size='))
+
       if (sizeParam) baseParts.push(sizeParam)
 
       // Build new options
@@ -399,8 +419,10 @@ return
     if (!disk) return
     setCdromSaving(true)
     setError(null)
+
     try {
       let value: string
+
       if (cdromMode === 'iso' && isoStorage && isoImage) {
         value = `${isoStorage}:iso/${isoImage},media=cdrom`
       } else if (cdromMode === 'physical') {
@@ -408,6 +430,7 @@ return
       } else {
         value = 'none,media=cdrom'
       }
+
       await onSave(value)
       onClose()
     } catch (e: any) {
@@ -421,11 +444,18 @@ return
   useEffect(() => {
     if (!open || !disk?.isUnused || !existingDisks) return
     const prefix = reassignBus === 'virtio' ? 'virtio' : reassignBus
+
     const usedIndexes = existingDisks
       .filter(d => d.startsWith(prefix))
-      .map(d => { const m = d.match(/(\d+)$/); return m ? Number.parseInt(m[1]) : -1 })
+      .map(d => { const m = d.match(/(\d+)$/);
+
+
+
+return m ? Number.parseInt(m[1]) : -1 })
       .filter(i => i >= 0)
+
     let next = 0
+
     while (usedIndexes.includes(next)) next++
     setReassignIndex(next)
   }, [open, disk?.isUnused, existingDisks, reassignBus])
@@ -434,8 +464,11 @@ return
     if (!disk) return
     setReassigning(true)
     setError(null)
+
     try {
       const targetId = reassignBus === 'virtio' ? `virtio${reassignIndex}` : `${reassignBus}${reassignIndex}`
+
+
       // Two-step to avoid orphaning the volume: if we send both assignment
       // and `delete: unusedN` in a single PUT and PVE fails mid-way (e.g.
       // volume not found on storage), the unused entry is already gone AND
@@ -444,6 +477,8 @@ return
       // unused entry in most cases. On failure, unused stays intact so
       // the user can retry.
       await onSave({ [targetId]: disk.rawValue })
+
+
       // Step 2: best-effort cleanup. If PVE already removed the unused
       // entry, this errors harmlessly.
       try {
@@ -451,6 +486,7 @@ return
       } catch {
         // non-fatal: volume is already assigned to the new bus
       }
+
       onClose()
     } catch (e: any) {
       setError(e.message || 'Error')
@@ -883,7 +919,9 @@ return
                         const avail = s.avail ?? (total - used)
                         const usagePct = total > 0 ? Math.round((used / total) * 100) : 0
                         const usageColor = usagePct > 90 ? 'error' : usagePct > 75 ? 'warning' : 'primary'
-                        return (
+
+
+return (
                           <MenuItem key={s.storage} value={s.storage}>
                             <Box sx={{ width: '100%' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>

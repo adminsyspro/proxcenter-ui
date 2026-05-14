@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+
 import { getSetting } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
 
@@ -24,6 +25,7 @@ const DEFAULT_BRANDING = {
 export async function GET() {
   try {
     let tenantId = 'default'
+
     try { tenantId = await getCurrentTenantId() } catch {}
     const stored = await getSetting<any>('branding', tenantId)
     const settings = { ...DEFAULT_BRANDING, ...(stored ?? {}) }
@@ -37,7 +39,8 @@ export async function GET() {
 
     const sanitizeHighlights = (raw: unknown): Array<{ icon: string; text: string }> => {
       if (!Array.isArray(raw)) return []
-      return raw
+
+return raw
         .filter((h): h is { icon: string; text: string } =>
           h && typeof h === 'object' && typeof (h as any).icon === 'string' && typeof (h as any).text === 'string'
         )

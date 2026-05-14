@@ -49,6 +49,7 @@ export function useHA({
   const [haGroup, setHaGroup] = useState<string>('')
   const [haMaxRestart, setHaMaxRestart] = useState<number>(1)
   const [haMaxRelocate, setHaMaxRelocate] = useState<number>(1)
+
   // PVE 9+ per-resource flag. Default true (PVE's own default) so we don't
   // accidentally disable failback for users coming from older clusters.
   const [haFailback, setHaFailback] = useState<boolean>(true)
@@ -85,6 +86,7 @@ export function useHA({
           setHaGroup(configJson.data.group || '')
           setHaMaxRestart(configJson.data.max_restart ?? 1)
           setHaMaxRelocate(configJson.data.max_relocate ?? 1)
+
           // PVE returns failback as 0/1; treat undefined as enabled (PVE default).
           setHaFailback(configJson.data.failback === undefined ? true : Boolean(Number(configJson.data.failback)))
           setHaComment(configJson.data.comment || '')

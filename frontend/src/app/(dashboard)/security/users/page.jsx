@@ -65,6 +65,7 @@ return t ? t('time.daysAgo', { count: Math.floor(diff / 86400) }) : `${Math.floo
 
 function RoleChip({ roles, t }) {
   const list = Array.isArray(roles) ? roles : []
+
   if (list.length === 0) {
     return <Chip size='small' label={t ? t('usersPage.noRole') : 'No role'} variant='outlined' sx={{ opacity: 0.5 }} />
   }
@@ -74,9 +75,12 @@ function RoleChip({ roles, t }) {
   // tenant-2) get a Multiple chip whose tooltip lists the breakdown so
   // the operator notices and audits without leaving the row.
   const distinctRoleIds = new Set(list.map(r => r.id).filter(Boolean))
+
   if (distinctRoleIds.size <= 1) {
     const role = list[0]
-    return (
+
+
+return (
       <Chip
         size='small'
         label={t && role.is_system ? t(`rbac.roles.${role.id}`) : role.name}
@@ -89,8 +93,11 @@ function RoleChip({ roles, t }) {
       />
     )
   }
+
   const breakdown = list.map(r => `${r.tenant_name || r.tenant_id || '?'}: ${r.name}`).join(' · ')
-  return (
+
+
+return (
     <Tooltip title={breakdown}>
       <Chip
         size='small'
@@ -151,10 +158,13 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [showPassword, setShowPassword] = useState(false)
 
   const isEdit = !!user
+
   // Super admins are pinned to every tenant by design — disable the
   // multi-select but still display their current memberships so the
   // operator sees the rule rather than an empty field.
   const tenantPickerDisabled = isEdit && !!user?.is_super_admin
+
+
   // Detect role divergence across tenants. Used in provider view to
   // warn that saving a single role propagates to every membership and
   // overwrites per-tenant differences (typically set via the per-tenant
@@ -167,13 +177,16 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
     if (user) {
       setName(user.name || '')
       setEmail(user.email || '')
+
       // user.enabled is a Postgres boolean since the SQLite cutover; the
       // legacy int comparison (=== 1) was always false and pinned the
       // Switch off regardless of the row's real state.
       setEnabled(!!user.enabled)
+
       // Divergent roles → leave the picker empty so the operator must
       // pick a role explicitly (and acknowledge the propagation).
       const distinctIds = new Set((user.roles || []).map(r => r.id).filter(Boolean))
+
       setSelectedRole(distinctIds.size > 1 ? null : (user.roles?.[0] || null))
       setSelectedTenants(Array.isArray(user.tenants) ? user.tenants.map(t2 => t2.id) : [])
       setPassword('')
@@ -196,12 +209,15 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   // toast far from where the operator made the change.
   useEffect(() => {
     if (!selectedRole) return
+
     const targetTenantIds = enableTenantMgmt
       ? (selectedTenants.length > 0
           ? selectedTenants
           : (user?.tenants?.map(tn => tn.id) ?? []))
       : [currentSessionTenantId]
+
     const hasNonDefaultTarget = targetTenantIds.some(id => id !== 'default')
+
     if (hasNonDefaultTarget && TENANT_FORBIDDEN_ROLE_IDS.has(selectedRole.id)) {
       setSelectedRole(null)
     }
@@ -409,7 +425,9 @@ return
                 ? selectedTenants
                 : (user?.tenants?.map(tn => tn.id) ?? []))
             : [currentSessionTenantId]
+
           const hasNonDefaultTarget = targetTenantIds.some(id => id !== 'default')
+
           const visibleRoles = hasNonDefaultTarget
             ? rbacRoles.filter(r => !TENANT_FORBIDDEN_ROLE_IDS.has(r.id))
             : rbacRoles
@@ -591,6 +609,7 @@ export default function UsersPage() {
   const { hasFeature } = useLicense()
   const showRbac = hasFeature(Features.RBAC)
   const showTenants = hasFeature(Features.MULTI_TENANCY)
+
   // Cross-tenant management (list every user, edit memberships from the
   // user dialog) is only allowed from the provider tenant. Tenant-scoped
   // sessions stay limited to their own scope. Community editions never
@@ -702,6 +721,7 @@ return () => setPageInfo('', '', '')
           </Box>
         ),
       },
+
       // Colonne RBAC - seulement si la feature est disponible
       ...(showRbac ? [{
         field: 'roles',
@@ -709,6 +729,7 @@ return () => setPageInfo('', '', '')
         width: 200,
         renderCell: params => <RoleChip roles={params.row.roles} t={t} />,
       }] : []),
+
       // Tenants (multi-tenancy view) - Enterprise only.
       ...(showTenants ? [{
         field: 'tenants',
@@ -732,16 +753,22 @@ return () => setPageInfo('', '', '')
               </Tooltip>
             )
           }
+
           const list = Array.isArray(params.row.tenants) ? params.row.tenants : []
+
           if (list.length === 0) {
             return <Typography variant='body2' sx={{ opacity: 0.5, fontStyle: 'italic' }}>{t('usersPage.tenantsNone')}</Typography>
           }
+
+
           // Cap chip rendering at 3 to keep row height stable — anything
           // beyond gets folded into a "+N" chip whose tooltip lists the
           // overflow names so you can still inspect on demand.
           const visible = list.slice(0, 3)
           const overflow = list.slice(3)
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center', minWidth: 0 }}>
               {visible.map(t2 => (
                 <Chip

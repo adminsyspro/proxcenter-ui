@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -45,6 +46,7 @@ interface DeployWizardProps {
   onClose: () => void
   image: CloudImage | null
   prefillBlueprint?: any | null
+
   // When set, the wizard reopens directly at the Progress step attached
   // to an existing deployment (resuming a job that was minimized to the
   // taskbar). Mutually exclusive with the regular new-deploy flow — if
@@ -87,6 +89,7 @@ interface StorageInfo {
 
 export default function DeployWizard({ open, onClose, image, prefillBlueprint, resumeDeploymentId }: DeployWizardProps) {
   const t = useTranslations()
+
   // Tenants get cloud-style abstraction in step "Target": no connection /
   // node / storage / VMID picker. They only enter a name. Selections are
   // resolved in the background (first allowed connection, least-loaded
@@ -105,6 +108,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [node, setNode] = useState('')
   const [storages, setStorages] = useState<StorageInfo[]>([])
   const [storage, setStorage] = useState('')
+
   // ISO-mode only: storages on the node that have content=iso. The boot ISO
   // is downloaded here (separate from the disk storage above).
   const [isoStorages, setIsoStorages] = useState<StorageInfo[]>([])
@@ -120,11 +124,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [scsihw, setScsihw] = useState('virtio-scsi-single')
   const [networkModel, setNetworkModel] = useState('virtio')
   const [networkBridge, setNetworkBridge] = useState('vmbr0')
+
   // VLAN tag is gone from the wizard: deployments here always land on a
   // SDN VNet (see the bridge picker below) which carries its own VNI, so
   // PVE rejects per-NIC tags. The blueprint loader and deploy payload
   // both ignore vlanTag for this reason.
   const [cpu, setCpu] = useState('host')
+
   // ISO-mode only: BIOS firmware + OS type override. Cloud-images keep
   // ostype from the catalog and seabios silently; ISO installs need an
   // explicit choice (ovmf+pre-enrolled-keys for Windows 10/11/Server 2025).
@@ -153,6 +159,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     type: string
     label?: string | null
     vdc?: string | null
+
     /** vDC UUID (for /api/v1/vdcs/{id}/... routes). vdc above is the slug,
      *  surfaced for legacy reasons; vdcId is the only safe identifier. */
     vdcId?: string | null
@@ -201,6 +208,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // reservation block can render and the next-free fetcher knows which
   // VNet to query.
   const isoBridgeChoice = bridges.find((b) => b.iface === networkBridge)
+
   // vdcId is the UUID required by /api/v1/vdcs/{id}/... routes; vdc is
   // a slug kept around for display compatibility — never use it for
   // route building.
@@ -213,20 +221,30 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     if (!isoBridgeChoice?.vdcId || !isoBridgeChoice?.displayName) return
     setReservationLoading(true)
     setReservationError(null)
+
     try {
       const r = await fetch(
         `/api/v1/vdcs/${encodeURIComponent(isoBridgeChoice.vdcId)}/vnets/${encodeURIComponent(isoBridgeChoice.displayName)}/ipam/next-free`,
         { cache: 'no-store' },
       )
+
       const j = await r.json()
+
       if (!r.ok) {
         setReservationError(j?.error || `HTTP ${r.status}`)
-        return
+
+return
       }
+
       const d = j?.data
-      if (!d) { setReservationError('Invalid response'); return }
+
+      if (!d) { setReservationError('Invalid response');
+
+return }
+
       if (which === 'both' || which === 'ip') setStaticIp(String(d.ip || ''))
       if (which === 'both' || which === 'mac') setStaticMac(String(d.suggestedMac || ''))
+
       if (which === 'both') {
         setStaticDns(Array.isArray(d.dnsServers) ? d.dnsServers : [])
         setStaticPrefix(typeof d.prefix === 'number' ? d.prefix : null)
@@ -245,11 +263,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // to a non-IPAM bridge we clear the values so they don't leak into
   // a non-IPAM submit, and reset the marker so a flip back re-fetches.
   const prefilledForRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (!open) {
       prefilledForRef.current = null
-      return
+
+return
     }
+
     if (!isoNeedsReservation || !isoBridgeChoice?.vdcId || !isoBridgeChoice?.displayName) {
       if (prefilledForRef.current !== null) {
         prefilledForRef.current = null
@@ -259,9 +280,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         setStaticPrefix(null)
         setReservationError(null)
       }
-      return
+
+
+return
     }
+
     const key = `${isoBridgeChoice.vdcId}|${isoBridgeChoice.displayName}`
+
     if (prefilledForRef.current === key) return
     prefilledForRef.current = key
     fetchNextFree('both')
@@ -273,15 +298,20 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const windowsHint = (() => {
     if (!image) return false
     const ot = String(image.ostype || '').toLowerCase()
+
     if (ot === 'win10' || ot === 'win11' || ot.startsWith('win')) return true
     const vendor = String(image.vendor || '').toLowerCase()
+
     if (vendor.includes('microsoft') || vendor.includes('windows')) return true
-    return image.tags?.some(tg => /windows|win-?\d+|win2k|server2025/i.test(String(tg))) || false
+
+return image.tags?.some(tg => /windows|win-?\d+|win2k|server2025/i.test(String(tg))) || false
   })()
 
   // Reset state on open
   useEffect(() => {
     if (!open) return
+
+
     // Resume path: jump straight to the Progress step bound to an existing
     // deployment. Skip the form reset since none of the form fields will
     // be shown; DeploymentProgress drives the rest from the deploymentId.
@@ -290,8 +320,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       setDeploying(true)
       setDeploymentId(resumeDeploymentId)
       setDeployError(null)
-      return
+
+return
     }
+
     setActiveStep(0)
     setDeploying(false)
     setDeploymentId(null)
@@ -302,6 +334,8 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       setMemory(image.recommendedMemory)
       setDiskSize(image.defaultDiskSize)
       setVmName('')
+
+
       // ISO defaults: pre-set Windows install media to win11 + OVMF
       // (Secure Boot enrolled), other ISOs to ostype='other' + SeaBIOS.
       // Cloud images keep their catalog ostype (no override).
@@ -325,6 +359,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         const hw = typeof prefillBlueprint.hardware === 'string'
           ? JSON.parse(prefillBlueprint.hardware)
           : prefillBlueprint.hardware
+
         setCores(hw.cores || 2)
         setSockets(hw.sockets || 1)
         setMemory(hw.memory || 2048)
@@ -342,13 +377,16 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             ? JSON.parse(prefillBlueprint.cloudInit)
             : prefillBlueprint.cloudInit)
           : null
+
         if (ci) {
           setCiuser(ci.ciuser || '')
           setCipassword(ci.cipassword || '')
           setSshKeys(ci.sshKeys || '')
+
           // Try to extract a manual IP from a saved blueprint's ipconfig0;
           // anything else (dhcp, manual, empty) → leave empty so IPAM wins.
           const m = String(ci.ipconfig0 || '').match(/(?:^|,)\s*ip=([0-9.]+)(?:\/\d+)?/)
+
           setIpOverride(m ? m[1] : '')
           setNameserver(ci.nameserver || '')
           setSearchdomain(ci.searchdomain || '')
@@ -358,6 +396,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       // Prefill target from retry
       if (prefillBlueprint._retryFrom) {
         const rf = prefillBlueprint._retryFrom
+
         if (rf.connectionId) setConnectionId(rf.connectionId)
         if (rf.node) setNode(rf.node)
         if (rf.storage) setStorage(rf.storage)
@@ -373,7 +412,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       .then(r => r.json())
       .then(res => {
         const conns = res.data || []
+
         setConnections(conns)
+
+
         // Tenant: auto-pick the first connection from their vDC scope so
         // step Target requires no input. Provider keeps manual selection
         // unless there's a single option.
@@ -386,12 +428,17 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
   // Fetch nodes when connection changes
   useEffect(() => {
-    if (!connectionId) { setNodes([]); setNode(''); return }
+    if (!connectionId) { setNodes([]); setNode('');
+
+return }
+
     fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes`)
       .then(r => r.json())
       .then(res => {
         const nodeList = (res.data || []).filter((n: any) => n.status === 'online')
+
         setNodes(nodeList)
+
         if (nodeList.length === 1) {
           setNode(nodeList[0].node)
         } else if (hideInfra && nodeList.length > 0) {
@@ -399,8 +446,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           const scored = nodeList.map((n: any) => {
             const cpuPct = n.maxcpu ? (n.cpu || 0) * 100 : 0
             const memPct = n.maxmem ? ((n.mem || 0) / n.maxmem) * 100 : 0
-            return { n, score: cpuPct + 1.5 * memPct }
+
+
+return { n, score: cpuPct + 1.5 * memPct }
           })
+
           scored.sort((a: any, b: any) => a.score - b.score)
           setNode(scored[0].n.node)
         }
@@ -410,7 +460,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
   // Fetch storages + next VMID when node changes
   useEffect(() => {
-    if (!connectionId || !node) { setStorages([]); setIsoStorages([]); return }
+    if (!connectionId || !node) { setStorages([]); setIsoStorages([]);
+
+return }
 
     // Fetch file-based storages (content types are auto-enabled by the deploy route)
     fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/nodes/${encodeURIComponent(node)}/storages`)
@@ -427,13 +479,17 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           && s.enabled !== 0
           && (s.content?.includes('images') || s.content?.includes('rootdir')),
         )
+
         setStorages(stList)
+
+
         // Tenant: prefer a shared storage (cluster-wide, no node leak), then
         // fall back to the first available. Provider keeps the existing
         // first-match logic.
         if (stList.length > 0) {
           if (hideInfra) {
             const shared = stList.find((s: any) => s.shared)
+
             setStorage((shared || stList[0]).storage)
           } else {
             setStorage(stList[0].storage)
@@ -446,10 +502,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // lets you mount an ISO from a storage advertising content=iso, so
         // we can't just reuse the disk storage list.
         const isoList = all.filter((s: any) => s.enabled !== 0 && s.content?.includes('iso'))
+
         setIsoStorages(isoList)
+
         if (isoList.length > 0) {
           if (hideInfra) {
             const shared = isoList.find((s: any) => s.shared)
+
             setIsoStorage((shared || isoList[0]).storage)
           } else {
             setIsoStorage(isoList[0].storage)
@@ -476,6 +535,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       .then(r => r.json())
       .then(res => {
         const choices = Array.isArray(res?.data) ? res.data : []
+
         const list: BridgeChoice[] = choices.map((c: any) => ({
           iface: c.name,
           type: c.kind === 'vnet' ? 'vnet' : c.kind === 'shared' ? 'shared' : (c.type || 'bridge'),
@@ -485,7 +545,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           displayName: c.displayName ?? null,
           subnet: c.subnet ?? null,
         }))
+
         setBridges(list)
+
         // Auto-pick the first VNet so the displayed picker value and
         // the deploy payload stay in sync — the wizard now restricts
         // the bridge to SDN VNets only, so non-VNet pre-fills (e.g.
@@ -493,6 +555,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // would otherwise leave networkBridge pointing at something the
         // dropdown no longer surfaces.
         const vnets = list.filter((b: { type: string }) => b.type === 'vnet')
+
         if (vnets.length > 0 && !vnets.some((b: { iface: string }) => b.iface === networkBridge)) {
           setNetworkBridge(vnets[0].iface)
         }
@@ -506,17 +569,26 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   useEffect(() => {
     if (!open || !connectionId) {
       setVdcQuota(null); setVdcUsage(null)
-      return
+
+return
     }
+
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
-        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
+
+        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ;
+
+return }
+
         const json = await res.json()
         const vdcs: any[] = Array.isArray(json?.data) ? json.data : []
         const match = vdcs.find(v => v.connectionId === connectionId || v.connection_id === connectionId)
+
         if (cancelled) return
+
         if (match?.quota) {
           setVdcQuota({
             maxVcpus: match.quota.maxVcpus ?? null,
@@ -537,24 +609,31 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         if (!cancelled) { setVdcQuota(null); setVdcUsage(null) }
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, connectionId])
 
   const handleNext = useCallback(() => {
     setActiveStep(s => {
       const next = Math.min(s + 1, STEP_LABELS.length - 1)
+
+
       // ISO mode skips the cloud-init step (index 3) — install media has
       // no notion of cloud-init, the user runs the OS installer manually.
       if (isIsoMode && next === 3) return 4
-      return next
+
+return next
     })
   }, [isIsoMode])
 
   const handleBack = useCallback(() => {
     setActiveStep(s => {
       const prev = Math.max(s - 1, 0)
+
       if (isIsoMode && prev === 3) return 2
-      return prev
+
+return prev
     })
   }, [isIsoMode])
 
@@ -581,11 +660,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           scsihw,
           networkModel,
           networkBridge,
+
           // Hard-null: the bridge picker only exposes SDN VNets which
           // already segment traffic via their own VNI. PVE rejects per-NIC
           // VLAN tags on VXLAN VNets, and the form's VLAN field is locked
           // to match — so we drop any stale value loaded from a blueprint.
           vlanTag: null,
+
           // ISO mode lets the user override ostype (Windows install media
           // pre-selects win11) — fall back to the catalog ostype otherwise.
           ostype: isIsoMode ? (ostypeOverride || image.ostype) : image.ostype,
@@ -593,6 +674,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           cpu,
           bios: isIsoMode ? bios : 'seabios',
         },
+
         // ISO deployments don't run cloud-init: omit the block entirely so
         // the backend skips the configure step. Cloud-image deployments
         // keep their existing cloud-init payload.
@@ -605,12 +687,16 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           const selectedBridge = bridges.find(b => b.iface === networkBridge)
           const subnet = selectedBridge?.subnet ?? null
           let ipconfig0 = ''
+
           if (ipOverride && subnet) {
             const prefixMatch = subnet.cidr.match(/\/(\d+)$/)
             const prefix = prefixMatch ? prefixMatch[1] : '24'
+
             ipconfig0 = `ip=${ipOverride}/${prefix},gw=${subnet.gateway}`
           }
-          return {
+
+
+return {
             ciuser: ciuser || undefined,
             cipassword: cipassword || undefined,
             sshKeys: sshKeys || undefined,
@@ -622,7 +708,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         saveAsBlueprint,
         blueprintName: saveAsBlueprint ? blueprintName : undefined,
       }
+
       if (isIsoMode) body.isoStorage = isoStorage
+
       if (isoNeedsReservation) {
         body.staticIp = staticIp
         body.staticMac = staticMac
@@ -636,20 +724,25 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
       const text = await res.text()
       let data: any
+
       try {
         data = JSON.parse(text)
       } catch {
         console.warn('[DeployWizard] Non-JSON response from /api/v1/templates/deploy →', text.slice(0, 200))
         setDeployError('Server returned an invalid response')
         setDeploying(false)
-        return
+
+return
       }
+
       if (data.error) {
         // Validation / permission errors from the sync part
         setDeployError(data.error)
         setDeploying(false)
-        return
+
+return
       }
+
       if (data.data?.deploymentId) {
         setDeploymentId(data.data.deploymentId)
       }
@@ -674,33 +767,47 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const canProceed = useMemo(() => {
     switch (activeStep) {
       case 0: return !!image
+
       case 1: {
         const baseOk = !!connectionId && !!node && !!storage && vmid >= 100 && !!vmName.trim()
+
+
         // ISO mode also requires an ISO-capable storage on the node — if
         // the tenant's vDC has none we surface a blocking message instead
         // of the picker, and the wizard can't advance.
         if (isIsoMode) return baseOk && !!isoStorage
-        return baseOk
+
+return baseOk
       }
+
+
       // Hardware step: also block while the vDC quota would be exceeded.
       // ISO + IPAM-managed VNet requires an explicit static IP — we can't
       // pin it via cloud-init (no agent during install), so the tenant
       // must commit to the IP before we let them advance.
       case 2: {
         const baseOk = cores >= 1 && memory >= 128 && !!diskSize && !quotaBlocked
+
         // Win11/Server 2025 ISO install needs ≥32 GB or the installer
         // refuses to start — block Next instead of letting the user walk
         // into a hard failure on the deploy step.
         const sizeNum = Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || 0
         const ot = ostypeOverride || image?.ostype || ''
+
         if (isIsoMode && ot === 'win11' && sizeNum < 32) return false
+
         if (isoNeedsReservation) {
           const ipOk = /^\d{1,3}(\.\d{1,3}){3}$/.test(staticIp)
           const macOk = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/.test(staticMac)
-          return baseOk && ipOk && macOk
+
+
+return baseOk && ipOk && macOk
         }
-        return baseOk
+
+
+return baseOk
       }
+
       case 3: return true
       case 4: return !quotaBlocked
       default: return false
@@ -711,7 +818,8 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
 
   const renderImageStep = () => {
     if (!image) return null
-    return (
+
+return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box
@@ -893,12 +1001,15 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // Convert "20G" → MB for the quota banner. Falls back to 0 on parse error.
   const parseDiskSizeMb = (s: string): number => {
     const m = /^(\d+)\s*([GTM]?)$/i.exec(String(s).trim())
+
     if (!m) return 0
     const n = Number.parseInt(m[1], 10)
     const unit = m[2].toUpperCase()
+
     if (unit === 'T') return n * 1024 * 1024
     if (unit === 'M') return n
-    return n * 1024
+
+return n * 1024
   }
 
   const renderHardwareStep = () => (
@@ -933,7 +1044,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // 128 per VM).
         const coresMarks = [1, 2, 4, 8, 16, 32]
         const coresSliderMax = 32
-        return (
+
+
+return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
@@ -976,26 +1089,37 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // granularity in between if they really want it). Mirrors
         // CreateVmDialog so the two flows feel consistent.
         const memoryMarks = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
+
         const memoryToSlider = (mib: number) => {
           for (let i = memoryMarks.length - 1; i >= 0; i--) {
             if (mib >= memoryMarks[i]) {
               return i + (mib - memoryMarks[i]) / (memoryMarks[Math.min(i + 1, memoryMarks.length - 1)] - memoryMarks[i])
             }
           }
-          return 0
+
+
+return 0
         }
+
         const sliderToMemory = (val: number) => {
           const idx = Math.floor(val)
           const frac = val - idx
+
           if (idx >= memoryMarks.length - 1) return memoryMarks[memoryMarks.length - 1]
           const raw = memoryMarks[idx] + frac * (memoryMarks[idx + 1] - memoryMarks[idx])
-          return Math.round(raw / 128) * 128 || 128
+
+
+return Math.round(raw / 128) * 128 || 128
         }
+
         const formatMem = (mib: number) => mib >= 1024 ? `${(mib / 1024).toFixed(mib % 1024 === 0 ? 0 : 1)} GB` : `${mib} MB`
+
         // The slider caps at 64 GiB; the manual override accepts anything
         // ≥128 MiB so users can go higher if their vDC quota allows.
         const memorySliderMax = memoryMarks[memoryMarks.length - 1]
-        return (
+
+
+return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
@@ -1041,26 +1165,37 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // Slider operates in GiB ints; conversions are trivial.
         const diskMarks = [10, 20, 50, 100, 250, 500, 1000]
         const diskGiB = Math.max(diskMarks[0], Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || diskMarks[0])
+
         const diskGiBToSlider = (gib: number) => {
           for (let i = diskMarks.length - 1; i >= 0; i--) {
             if (gib >= diskMarks[i]) {
               return i + (gib - diskMarks[i]) / (diskMarks[Math.min(i + 1, diskMarks.length - 1)] - diskMarks[i])
             }
           }
-          return 0
+
+
+return 0
         }
+
         const sliderToDiskGiB = (val: number) => {
           const idx = Math.floor(val)
           const frac = val - idx
+
           if (idx >= diskMarks.length - 1) return diskMarks[diskMarks.length - 1]
           const raw = diskMarks[idx] + frac * (diskMarks[idx + 1] - diskMarks[idx])
+
+
           // Round to 5 GiB so users land on tidy values.
           return Math.max(diskMarks[0], Math.round(raw / 5) * 5)
         }
+
+
         // The slider caps at 1000 GiB; the manual override on the right
         // accepts anything ≥1 GiB (PVE itself takes much larger volumes).
         const diskSliderMax = diskMarks[diskMarks.length - 1]
-        return (
+
+
+return (
           <Box sx={{ gridColumn: '1 / -1', px: 1.5 }}>
             <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
               <Typography variant="caption" sx={{ opacity: 0.7, fontWeight: 600 }}>
@@ -1222,7 +1357,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             const sizeNum = Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || 0
             const ot = ostypeOverride || image?.ostype || ''
             const isWin2025OrLater = ot === 'win11'
-            return (isWin2025OrLater && sizeNum > 0 && sizeNum < 32) ? (
+
+
+return (isWin2025OrLater && sizeNum > 0 && sizeNum < 32) ? (
               <Alert severity="error" variant="outlined" sx={{ mt: 1.5 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
                 {t('templates.deploy.iso.diskWarning')}
               </Alert>
@@ -1265,6 +1402,8 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     // never come up.
     const selectedBridge = bridges.find(b => b.iface === networkBridge)
     const subnet = selectedBridge?.subnet ?? null
+
+
     // Validate the optional override IP: must be IPv4-shaped and not equal
     // to the gateway. Range bounds are enforced server-side by IPAM, but
     // this catch-22 ("user typed gateway as VM IP") is worth flagging in
@@ -1467,7 +1606,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       const consoleHref = (isIsoMode && !deploying && !deployError && connectionId)
         ? `/novnc/console.html?connId=${encodeURIComponent(connectionId)}&type=qemu&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(String(vmid))}`
         : null
-      return (
+
+
+return (
         <>
           <DeploymentProgress deploymentId={deploymentId} onComplete={handleDeployComplete} />
           {consoleHref && (
@@ -1516,6 +1657,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // render functions are cheap (just JSX construction); React's normal
   // reconciliation handles the per-render cost just fine.
   let stepContent: ReactNode = null
+
   switch (activeStep) {
     case 0: stepContent = renderImageStep(); break
     case 1: stepContent = renderTargetStep(); break
@@ -1526,6 +1668,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   }
 
   const isProgressStep = activeStep === 5
+
   // Minimize is only meaningful while a deploy is in flight — at that
   // point the pipeline runs server-side independently of the dialog.
   // Closing the wizard via the minimize button leaves the deployment

@@ -1,9 +1,10 @@
-import useSWR, { SWRConfiguration } from 'swr'
+import useSWR, { type SWRConfiguration } from 'swr'
 import { dequal } from 'dequal'
 
 const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(async res => {
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   const text = await res.text()
+
   try {
     return JSON.parse(text)
   } catch {

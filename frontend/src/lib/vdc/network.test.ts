@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import {
   isValidIpv4,
   ipToInt,
@@ -29,6 +30,7 @@ describe('ipToInt / intToIp', () => {
   it('round-trips edge values', () => {
     for (const ip of ['0.0.0.0', '127.0.0.1', '192.168.1.1', '255.255.255.255']) {
       const n = ipToInt(ip)!
+
       expect(intToIp(n)).toBe(ip)
     }
   })
@@ -38,6 +40,7 @@ describe('ipToInt / intToIp', () => {
   })
   it('preserves the high bit (no sign issues at 128.x.x.x)', () => {
     const n = ipToInt('128.0.0.0')!
+
     expect(n).toBeGreaterThan(0)
     expect(intToIp(n)).toBe('128.0.0.0')
   })
@@ -46,6 +49,7 @@ describe('ipToInt / intToIp', () => {
 describe('parseCidr', () => {
   it('parses a /24 with correct network + broadcast', () => {
     const p = parseCidr('10.42.0.0/24')!
+
     expect(p.prefix).toBe(24)
     expect(intToIp(p.networkInt)).toBe('10.42.0.0')
     expect(intToIp(p.broadcastInt)).toBe('10.42.0.255')
@@ -54,21 +58,25 @@ describe('parseCidr', () => {
   })
   it('parses a /30: 4 IPs, 2 usable', () => {
     const p = parseCidr('10.0.0.0/30')!
+
     expect(intToIp(p.firstUsableInt)).toBe('10.0.0.1')
     expect(intToIp(p.lastUsableInt)).toBe('10.0.0.2')
   })
   it('parses /31 RFC3021: both IPs usable', () => {
     const p = parseCidr('10.0.0.0/31')!
+
     expect(intToIp(p.firstUsableInt)).toBe('10.0.0.0')
     expect(intToIp(p.lastUsableInt)).toBe('10.0.0.1')
   })
   it('parses /32: single host', () => {
     const p = parseCidr('10.0.0.42/32')!
+
     expect(p.firstUsableInt).toBe(p.lastUsableInt)
     expect(intToIp(p.firstUsableInt)).toBe('10.0.0.42')
   })
   it('aligns IP to network on /N', () => {
     const p = parseCidr('10.42.0.99/24')!
+
     expect(intToIp(p.networkInt)).toBe('10.42.0.0')
   })
   it('rejects garbage', () => {

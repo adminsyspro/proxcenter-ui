@@ -2,11 +2,14 @@
 
 import { useState, useMemo, useEffect } from 'react'
 
-import { Box, Typography, IconButton, Divider, LinearProgress, Button, Paper, CircularProgress, Collapse } from '@mui/material'
-import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 
+import { Box, Typography, IconButton, Divider, LinearProgress, Button, Paper, CircularProgress, Collapse } from '@mui/material'
+import { useTranslations } from 'next-intl'
+
 import { useTheme } from '@mui/material/styles'
+
+import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 
 import type {
   SelectedNodeInfo,
@@ -22,7 +25,6 @@ import type {
   InventoryGuest,
 } from '../types'
 import { getStatusColor, getVmStatusColor, getResourceStatus } from '../lib/topologyColors'
-import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { fetchRrd, buildSeriesFromRrd, formatTime } from '../../inventory/helpers'
@@ -109,6 +111,7 @@ function VmRrdCharts({ connectionId, nodeName, vmType, vmid }: {
 
   useEffect(() => {
     let cancelled = false
+
     setLoading(true)
 
     const type = vmType === 'lxc' ? 'lxc' : 'qemu'
@@ -171,6 +174,7 @@ function HostRrdCharts({ connectionId, nodeName }: {
 
   useEffect(() => {
     let cancelled = false
+
     setLoading(true)
 
     fetchRrd(connectionId, `/nodes/${nodeName}`, 'hour')
@@ -234,7 +238,9 @@ function HostRrdCharts({ connectionId, nodeName }: {
                 labelFormatter={v => new Date(Number(v)).toLocaleString()}
                 formatter={(v: any) => {
                   const n = Number(v)
-                  return [Number.isFinite(n) ? n.toFixed(2) : '—', '']
+
+
+return [Number.isFinite(n) ? n.toFixed(2) : '—', '']
                 }}
               />
               <Area
@@ -873,16 +879,19 @@ function getInventoryUrl(node: SelectedNodeInfo): string {
 
       return `${base}?vmid=${d.vmid}&connId=${encodeURIComponent(d.connectionId)}&node=${encodeURIComponent(d.nodeName)}&type=${encodeURIComponent(d.vmType)}`
     }
+
     case 'host': {
       const d = node.data as HostNodeData
 
       return `${base}?selectType=node&selectId=${encodeURIComponent(d.connectionId)}:${encodeURIComponent(d.nodeName)}`
     }
+
     case 'cluster': {
       const d = node.data as ClusterNodeData
 
       return `${base}?selectType=cluster&selectId=${encodeURIComponent(d.connectionId)}`
     }
+
     default:
       return base
   }

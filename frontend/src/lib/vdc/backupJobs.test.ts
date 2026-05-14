@@ -31,7 +31,9 @@ function makeScope(over: Partial<{
   // are also indexed under the PVE connection so the PVE-side caller
   // can answer "is this namespace bound to any vDC on this cluster?".
   const pbsRows = over.pbs ?? [{ datastore: 'main', namespace: 'tenant-acme/vdc-prod' }]
-  return {
+
+
+return {
     connectionIds: new Set([CONN]),
     pbsConnectionIds: new Set(),
     nodesByConnection: new Map([[CONN, new Set(over.nodes ?? ['pve1', 'pve2'])]]),
@@ -68,59 +70,70 @@ describe('validateTenantJobBody (pool-only contract)', () => {
 describe('validateTenantJobInfra (storage / node / fleecing / namespace)', () => {
   it('accepts a body whose fields all live in the vDC', () => {
     const scope = makeScope()
+
     const err = validateTenantJobInfra(
       { storage: 'vdc-acme-pbs', node: 'pve1', namespace: 'tenant-acme/vdc-prod' },
       scope,
       CONN,
     )
+
     expect(err).toBeNull()
   })
 
   it('rejects a foreign storage', () => {
     const scope = makeScope()
     const err = validateTenantJobInfra({ storage: 'provider-only', node: 'pve1' }, scope, CONN)
+
     expect(err).toMatch(/Storage "provider-only" is not authorised/)
   })
 
   it('rejects a foreign node', () => {
     const scope = makeScope()
     const err = validateTenantJobInfra({ storage: 'vdc-acme-pbs', node: 'pve9' }, scope, CONN)
+
     expect(err).toMatch(/Node "pve9" is not authorised/)
   })
 
   it('rejects an empty node when the body explicitly sets it (PUT delete-pin attempt)', () => {
     const scope = makeScope()
+
     expect(validateTenantJobInfra({ node: '' }, scope, CONN)).toMatch(/pinned to a vDC node/)
     expect(validateTenantJobInfra({ node: null }, scope, CONN)).toMatch(/pinned to a vDC node/)
   })
 
   it('rejects fleecing onto a foreign storage when fleecing is enabled', () => {
     const scope = makeScope()
+
     const err = validateTenantJobInfra(
       { storage: 'vdc-acme-pbs', fleecing: true, fleecingStorage: 'provider-fleece' },
       scope,
       CONN,
     )
+
     expect(err).toMatch(/Fleecing storage "provider-fleece" is not authorised/)
   })
 
   it('ignores fleecingStorage when fleecing is disabled', () => {
     const scope = makeScope()
+
     const err = validateTenantJobInfra(
       { storage: 'vdc-acme-pbs', fleecing: false, fleecingStorage: 'provider-fleece' },
       scope,
       CONN,
     )
+
     expect(err).toBeNull()
   })
 
   it('rejects a PBS namespace outside the vDC bindings', () => {
     const scope = makeScope()
+
     const err = validateTenantJobInfra(
       { storage: 'vdc-acme-pbs', namespace: 'tenant-foreign/vdc-prod' },
       scope,
       CONN,
     )
+
     expect(err).toMatch(/PBS namespace "tenant-foreign\/vdc-prod" is not authorised/)
   })
 
@@ -129,6 +142,7 @@ describe('validateTenantJobInfra (storage / node / fleecing / namespace)', () =>
     // gets a non-null scope with empty Sets/Maps; the helper must deny
     // every infra field by construction.
     const scope = makeScope({ nodes: [], storages: [], pools: [], pbs: [] })
+
     expect(validateTenantJobInfra({ storage: 'any' }, scope, CONN)).toMatch(/not authorised/)
     expect(validateTenantJobInfra({ node: 'pve1' }, scope, CONN)).toMatch(/not authorised/)
     expect(validateTenantJobInfra({ fleecing: true, fleecingStorage: 'any' }, scope, CONN)).toMatch(/not authorised/)
@@ -137,6 +151,7 @@ describe('validateTenantJobInfra (storage / node / fleecing / namespace)', () =>
 
   it('treats an empty body as a no-op (PUT with unrelated fields)', () => {
     const scope = makeScope()
+
     expect(validateTenantJobInfra({}, scope, CONN)).toBeNull()
   })
 })

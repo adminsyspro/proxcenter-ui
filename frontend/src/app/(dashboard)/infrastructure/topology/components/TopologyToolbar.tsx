@@ -36,13 +36,17 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
   // Patch CSSStyleDeclaration.font to prevent html-to-image crash on SVG elements
   const patchFontProperty = () => {
     const desc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'font')
+
     if (!desc || !desc.get) return null
     const originalGet = desc.get
+
     Object.defineProperty(CSSStyleDeclaration.prototype, 'font', {
       get() {
         try {
           const val = originalGet.call(this)
-          return val || ''
+
+
+return val || ''
         } catch {
           return ''
         }
@@ -51,12 +55,14 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
       enumerable: desc.enumerable,
       configurable: true,
     })
-    return originalGet
+
+return originalGet
   }
 
   const restoreFontProperty = (originalGet: (() => string) | null) => {
     if (!originalGet) return
     const desc = Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'font')
+
     Object.defineProperty(CSSStyleDeclaration.prototype, 'font', {
       get: originalGet,
       set: desc?.set,
@@ -67,6 +73,7 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
 
   const getExportParams = () => {
     const nodes = getNodes()
+
     if (nodes.length === 0) return null
     const bounds = getNodesBounds(nodes)
     const padding = 80
@@ -74,8 +81,10 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
     const imageHeight = bounds.height + padding * 2
     const vp = getViewportForBounds(bounds, imageWidth, imageHeight, 0.5, 2, padding)
     const flowEl = document.querySelector('.react-flow__viewport') as HTMLElement
+
     if (!flowEl) return null
-    return { flowEl, imageWidth, imageHeight, vp }
+
+return { flowEl, imageWidth, imageHeight, vp }
   }
 
   const captureOpts = (flowEl: HTMLElement, w: number, h: number, vp: { x: number; y: number; zoom: number }) => ({
@@ -91,23 +100,29 @@ export default function TopologyToolbar({ filters, onChange, connections }: Topo
     filter: (node: any) => {
       if (node instanceof HTMLElement) {
         const cls = node.className || ''
+
         if (typeof cls === 'string' && (cls.includes('react-flow__minimap') || cls.includes('react-flow__controls') || cls.includes('react-flow__panel'))) {
           return false
         }
       }
-      return true
+
+
+return true
     },
   })
 
   const handleExport = async () => {
     const params = getExportParams()
+
     if (!params) return
 
     const originalFont = patchFontProperty()
+
     try {
       const { toPng } = await import('html-to-image')
       const dataUrl = await toPng(params.flowEl, captureOpts(params.flowEl, params.imageWidth, params.imageHeight, params.vp))
       const link = document.createElement('a')
+
       link.download = 'topology-export.png'
       link.href = dataUrl
       link.click()

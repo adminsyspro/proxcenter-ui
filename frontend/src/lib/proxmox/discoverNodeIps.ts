@@ -16,20 +16,26 @@ export async function discoverNodeIps(
 ): Promise<string[]> {
   try {
     const nodes = await pveFetch<any[]>(connOpts, "/nodes")
+
     if (!nodes || !Array.isArray(nodes)) return []
 
     // Resolve management IPs in parallel
     const entries = await Promise.all(
       nodes.map(async (node: any) => {
         const nodeName = node.node || node.name
+
         if (!nodeName) return null
+
         try {
           const networks = await pveFetch<any[]>(
             connOpts,
             `/nodes/${encodeURIComponent(nodeName)}/network`
           ).catch(() => null)
+
           const ip = resolveManagementIp(networks) || null
-          return { node: nodeName, ip }
+
+
+return { node: nodeName, ip }
         } catch {
           return { node: nodeName, ip: null }
         }
@@ -44,9 +50,11 @@ export async function discoverNodeIps(
 
     // Populate in-memory cache
     const ips = validEntries.map(e => e.ip)
+
     try {
       const port = extractPortFromUrl(connOpts.baseUrl)
       const protocol = new URL(connOpts.baseUrl).protocol.replaceAll(":", "")
+
       setNodeIps(connectionId, ips, port, protocol)
     } catch {}
 
@@ -54,16 +62,20 @@ export async function discoverNodeIps(
     try {
       const { prisma } = await import("../db/prisma")
       const liveNodeNames: string[] = []
+
       await Promise.all(
         entries.filter(e => e !== null).map((e) => {
           liveNodeNames.push(e!.node)
-          return prisma.managedHost.upsert({
+
+return prisma.managedHost.upsert({
             where: { connectionId_node: { connectionId, node: e!.node } },
             update: { ip: e!.ip || null },
             create: { connectionId, node: e!.node, ip: e!.ip || null },
           })
         })
       )
+
+
       // Cleanup stale entries for nodes no longer in the cluster
       if (liveNodeNames.length > 0) {
         await prisma.managedHost.deleteMany({
@@ -73,9 +85,11 @@ export async function discoverNodeIps(
     } catch {}
 
     console.log(`[failover] Discovered ${ips.length} node IPs for connection ${connectionId}: ${ips.join(", ")}`)
-    return ips
+
+return ips
   } catch (e: any) {
     console.error(`[failover] Node IP discovery failed for ${connectionId}:`, e?.message)
-    return []
+
+return []
   }
 }

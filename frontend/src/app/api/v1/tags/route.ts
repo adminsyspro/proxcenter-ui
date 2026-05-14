@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -32,6 +33,7 @@ export async function GET() {
       if (row.tags) {
         for (const t of String(row.tags).split(';')) {
           const trimmed = t.trim()
+
           if (trimmed) tagSet.add(trimmed)
         }
       }

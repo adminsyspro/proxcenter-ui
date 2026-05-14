@@ -72,8 +72,10 @@ export async function getCurrentTenantId(): Promise<string> {
 
   // Verify the user actually belongs to this tenant (guards against stale JWTs)
   const userId = (session as any)?.user?.id
+
   if (userId && tenantId !== DEFAULT_TENANT_ID) {
     const allowed = await userHasAccessToTenant(userId, tenantId)
+
     if (!allowed) return DEFAULT_TENANT_ID
   }
 
@@ -90,13 +92,16 @@ export async function getUserTenants(userId: string): Promise<Tenant[]> {
       where: { enabled: true },
       orderBy: [{ id: "asc" }, { name: "asc" }],
     })
+
+
     // Prisma can't express "default first" in orderBy; do it client-side.
     return all
       .map(rowToTenant)
       .sort((a, b) => {
         if (a.id === DEFAULT_TENANT_ID && b.id !== DEFAULT_TENANT_ID) return -1
         if (b.id === DEFAULT_TENANT_ID && a.id !== DEFAULT_TENANT_ID) return 1
-        return a.name.localeCompare(b.name)
+
+return a.name.localeCompare(b.name)
       })
   }
 
@@ -105,15 +110,20 @@ export async function getUserTenants(userId: string): Promise<Tenant[]> {
     include: { tenant: true },
     orderBy: [{ isDefault: "desc" }],
   })
-  return memberships
+
+
+return memberships
     .map(m => rowToTenant(m.tenant))
+
     // Stable secondary sort by name; the Prisma orderBy only guarantees the
     // is_default ordering primary, names are post-sorted client-side.
     .sort((a, b) => {
       const aDefault = memberships.find(m => m.tenantId === a.id)?.isDefault ?? false
       const bDefault = memberships.find(m => m.tenantId === b.id)?.isDefault ?? false
+
       if (aDefault !== bDefault) return aDefault ? -1 : 1
-      return a.name.localeCompare(b.name)
+
+return a.name.localeCompare(b.name)
     })
 }
 
@@ -125,7 +135,9 @@ export async function getUserDefaultTenantId(userId: string): Promise<string> {
     where: { userId, isDefault: true },
     select: { tenantId: true },
   })
-  return row?.tenantId || DEFAULT_TENANT_ID
+
+
+return row?.tenantId || DEFAULT_TENANT_ID
 }
 
 /**
@@ -143,7 +155,9 @@ async function isSuperAdminLocal(userId: string): Promise<boolean> {
     },
     select: { id: true },
   })
-  return !!row
+
+
+return !!row
 }
 
 /**
@@ -152,11 +166,14 @@ async function isSuperAdminLocal(userId: string): Promise<boolean> {
  */
 export async function userHasAccessToTenant(userId: string, tenantId: string): Promise<boolean> {
   if (await isSuperAdminLocal(userId)) return true
+
   const row = await prisma.userTenant.findUnique({
     where: { userId_tenantId: { userId, tenantId } },
     select: { userId: true },
   })
-  return !!row
+
+
+return !!row
 }
 
 /**
@@ -169,11 +186,13 @@ export function getTenantPrisma(tenantId: string) {
       $allModels: {
         async findMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async findFirst({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async findUnique({ args, query }: any) {
           // findUnique uses unique fields, so we verify after fetch.
@@ -199,7 +218,8 @@ export function getTenantPrisma(tenantId: string) {
         },
         async create({ args, query }: any) {
           args.data = { ...args.data, tenantId }
-          return query(args)
+
+return query(args)
         },
         async createMany({ args, query }: any) {
           if (Array.isArray(args.data)) {
@@ -207,67 +227,88 @@ export function getTenantPrisma(tenantId: string) {
           } else {
             args.data = { ...args.data, tenantId }
           }
-          return query(args)
+
+
+return query(args)
         },
         async update({ model, args, query }: any) {
           // Verify ownership before updating via the base prisma client
           const modelKey = model.charAt(0).toLowerCase() + model.slice(1)
+
           const check = await (prisma as any)[modelKey].findUnique({
             where: args.where,
             select: { tenantId: true },
           })
+
           if (!check || check.tenantId !== tenantId) {
             throw new Error('Record not found')
           }
-          return query(args)
+
+
+return query(args)
         },
         async updateMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async delete({ model, args, query }: any) {
           // Verify ownership before deleting via the base prisma client
           const modelKey = model.charAt(0).toLowerCase() + model.slice(1)
+
           const check = await (prisma as any)[modelKey].findUnique({
             where: args.where,
             select: { tenantId: true },
           })
+
           if (!check || check.tenantId !== tenantId) {
             throw new Error('Record not found')
           }
-          return query(args)
+
+
+return query(args)
         },
         async deleteMany({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async upsert({ model, args, query }: any) {
           // Inject tenantId into create data and strip it from update to prevent tenant reassignment
           args.create = { ...args.create, tenantId }
           const { tenantId: _stripTenantId, ...safeUpdate } = args.update || {}
+
           args.update = safeUpdate
+
           // Check if record already exists and verify tenant ownership
           const modelKey = model.charAt(0).toLowerCase() + model.slice(1)
+
           const existing = await (prisma as any)[modelKey].findUnique({
             where: args.where,
             select: { tenantId: true },
           })
+
           if (existing && existing.tenantId !== tenantId) {
             throw new Error('Record not found')
           }
-          return query(args)
+
+
+return query(args)
         },
         async count({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async aggregate({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
         async groupBy({ args, query }: any) {
           args.where = { ...args.where, tenantId }
-          return query(args)
+
+return query(args)
         },
       },
     },
@@ -280,7 +321,9 @@ export function getTenantPrisma(tenantId: string) {
  */
 export async function getSessionPrisma() {
   const tenantId = await getCurrentTenantId()
-  return getTenantPrisma(tenantId)
+
+
+return getTenantPrisma(tenantId)
 }
 
 /**
@@ -311,6 +354,7 @@ export async function getTenantConnectionIds(): Promise<Set<string>> {
   const { getVdcScope } = await import('@/lib/vdc/scope')
   const tenantId = await getCurrentTenantId()
   const scope = await getVdcScope(tenantId)
+
   if (scope) {
     for (const cid of scope.connectionIds) ids.add(cid)
     for (const cid of scope.pbsConnectionIds) ids.add(cid)
@@ -327,16 +371,22 @@ export async function getTenantConnectionIds(): Promise<Set<string>> {
  */
 export async function verifyConnectionOwnership(connectionId: string): Promise<Response | null> {
   const tenantConnectionIds = await getTenantConnectionIds()
+
   if (tenantConnectionIds.has(connectionId)) return null
+
   // Fall back to vDC scope so vDC tenants can reach provider-owned PVE/PBS
   // referenced by their bindings (mirror of the bypass used by getConnectionById).
   const { getVdcScope } = await import('@/lib/vdc/scope')
   const scope = await getVdcScope(await getCurrentTenantId())
+
   if (scope && (scope.connectionIds.has(connectionId) || scope.pbsConnectionIds.has(connectionId))) {
     return null
   }
+
   const { NextResponse } = await import('next/server')
-  return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+
+
+return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
 }
 
 /**
@@ -346,14 +396,19 @@ export async function verifyConnectionOwnership(connectionId: string): Promise<R
  */
 export async function requireProviderTenant(): Promise<Response | null> {
   const tenantId = await getCurrentTenantId()
+
   if (tenantId !== DEFAULT_TENANT_ID) {
     const { NextResponse } = await import('next/server')
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: 'This operation is only available from the provider tenant' },
       { status: 403 }
     )
   }
-  return null
+
+
+return null
 }
 
 /**
@@ -361,7 +416,9 @@ export async function requireProviderTenant(): Promise<Response | null> {
  */
 export async function listTenants(): Promise<Tenant[]> {
   const rows = await prisma.tenant.findMany({ orderBy: { name: "asc" } })
-  return rows.map(rowToTenant)
+
+
+return rows.map(rowToTenant)
 }
 
 /**
@@ -375,6 +432,7 @@ export async function createTenant(data: {
 }): Promise<Tenant> {
   const id = crypto.randomUUID()
   const now = new Date()
+
   const row = await prisma.tenant.create({
     data: {
       id,
@@ -403,6 +461,7 @@ export async function createTenant(data: {
     select: { userId: true },
     distinct: ["userId"],
   })
+
   if (superAdminRows.length > 0) {
     await prisma.userTenant.createMany({
       data: superAdminRows.map(r => ({
@@ -426,6 +485,7 @@ export async function updateTenant(
   data: { name?: string; slug?: string; description?: string; enabled?: boolean },
 ): Promise<Tenant | null> {
   const existing = await prisma.tenant.findUnique({ where: { id } })
+
   if (!existing) return null
 
   const row = await prisma.tenant.update({
@@ -438,7 +498,9 @@ export async function updateTenant(
       updatedAt: new Date(),
     },
   })
-  return rowToTenant(row)
+
+
+return rowToTenant(row)
 }
 
 /**
@@ -457,7 +519,9 @@ export async function deleteTenant(id: string): Promise<boolean> {
   const deleted = await prisma.$transaction(async tx => {
     await tx.rbacUserRole.deleteMany({ where: { tenantId: id } })
     const result = await tx.tenant.deleteMany({ where: { id, NOT: { id: "default" } } })
-    return result.count > 0
+
+
+return result.count > 0
   })
 
   return deleted
@@ -475,11 +539,13 @@ export async function addUserToTenant(userId: string, tenantId: string, isDefaul
 
   await prisma.$transaction(async tx => {
     let markDefault = isDefault
+
     if (!markDefault) {
       const existingDefault = await tx.userTenant.findFirst({
         where: { userId, isDefault: true },
         select: { userId: true },
       })
+
       if (!existingDefault) markDefault = true
     }
 
@@ -496,6 +562,7 @@ export async function addUserToTenant(userId: string, tenantId: string, isDefaul
     const existing = await tx.userTenant.findUnique({
       where: { userId_tenantId: { userId, tenantId } },
     })
+
     if (!existing) {
       await tx.userTenant.create({
         data: {
@@ -539,6 +606,7 @@ export async function removeUserFromTenant(userId: string, tenantId: string): Pr
     where: { userId_tenantId: { userId, tenantId } },
     select: { isDefault: true },
   })
+
   if (!existing) {
     throw new TenantMembershipError("User is not a member of this tenant", "NOT_A_MEMBER")
   }
@@ -555,6 +623,7 @@ export async function removeUserFromTenant(userId: string, tenantId: string): Pr
     },
     select: { id: true },
   })
+
   if (isSuperAdmin) {
     throw new TenantMembershipError(
       "Super admins are members of every tenant by design and cannot be removed",
@@ -567,6 +636,7 @@ export async function removeUserFromTenant(userId: string, tenantId: string): Pr
     orderBy: { joinedAt: "asc" },
     select: { tenantId: true },
   })
+
   if (!replacement) {
     throw new TenantMembershipError(
       "Cannot remove the user's last tenant membership",
@@ -578,12 +648,15 @@ export async function removeUserFromTenant(userId: string, tenantId: string): Pr
     await tx.userTenant.delete({
       where: { userId_tenantId: { userId, tenantId } },
     })
+
     if (existing.isDefault) {
       await tx.userTenant.update({
         where: { userId_tenantId: { userId, tenantId: replacement.tenantId } },
         data: { isDefault: true },
       })
     }
+
+
     // Drop role and direct-permission grants scoped to the removed tenant.
     await tx.rbacUserRole.deleteMany({ where: { userId, tenantId } })
     await tx.rbacUserPermission.deleteMany({ where: { userId, tenantId } })
@@ -616,6 +689,7 @@ export async function getTenantUsers(tenantId: string): Promise<
   })
 
   const userIds = memberships.map(m => m.userId)
+
   const superAdminRows = userIds.length > 0
     ? await prisma.rbacUserRole.findMany({
         where: {
@@ -627,6 +701,7 @@ export async function getTenantUsers(tenantId: string): Promise<
         distinct: ["userId"],
       })
     : []
+
   const superAdminIds = new Set(superAdminRows.map(r => r.userId))
 
   return memberships.map(m => ({

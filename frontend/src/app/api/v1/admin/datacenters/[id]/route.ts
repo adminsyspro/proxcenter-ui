@@ -12,15 +12,19 @@ type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 export async function GET(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const dc = await getDatacenterById(id)
+
     if (!dc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ data: dc })
+
+return NextResponse.json({ data: dc })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -29,8 +33,10 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 export async function PUT(req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
@@ -54,29 +60,39 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
       comment: body.comment === undefined ? undefined : (body.comment ?? null),
       isDefault: typeof body.isDefault === 'boolean' ? body.isDefault : undefined,
     })
+
     invalidateGreenResolution()
-    return NextResponse.json({ data: dc })
+
+return NextResponse.json({ data: dc })
   } catch (e: any) {
     const msg = e?.message || String(e)
     const status = msg.includes('not found') ? 404 : 400
-    return NextResponse.json({ error: msg }, { status })
+
+
+return NextResponse.json({ error: msg }, { status })
   }
 }
 
 export async function DELETE(_req: NextRequest, ctx: RouteContext) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     await deleteDatacenter(id)
     invalidateGreenResolution()
-    return new NextResponse(null, { status: 204 })
+
+return new NextResponse(null, { status: 204 })
   } catch (e: any) {
     const msg = e?.message || String(e)
+
+
     // Conflict: still referenced or only default
     return NextResponse.json({ error: msg }, { status: 409 })
   }

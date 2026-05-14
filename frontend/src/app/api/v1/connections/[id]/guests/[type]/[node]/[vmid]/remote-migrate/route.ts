@@ -6,15 +6,22 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId, requireProviderTenant } from "@/lib/tenant"
 import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import {
+  assertBridgeName,
+  assertNodeName,
+  assertStorageName,
+  assertVmid,
+  InvalidShellArgError,
+} from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
 /**
  * POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate
- * 
+ *
  * Lance une migration cross-cluster (remote_migrate) d'une VM vers un autre cluster Proxmox.
  * Utilise l'API Proxmox: POST /nodes/{node}/qemu/{vmid}/remote_migrate
- * 
+ *
  * Body params:
  * - targetConnectionId: string - ID de la connexion cible dans ProxCenter
  * - targetNode: string - Nom du nœud cible sur le cluster distant
@@ -30,7 +37,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
   try {
-    const { id, type, node, vmid } = await ctx.params
+    const { id, type, node: rawNode, vmid: rawVmid } = await ctx.params
 
     // Vérifier que c'est bien une VM QEMU (remote_migrate n'est pas supporté pour LXC actuellement)
     if (type !== 'qemu') {
@@ -40,18 +47,37 @@ export async function POST(
       )
     }
 
+    // vmid + node land in `qm unlock ${vmid}` inside watchMigrationAndCleanup
+    // once the migration completes, so they must be validated at this entry.
+    let node: string
+    let vmid: string
+
+    try {
+      node = assertNodeName(rawNode)
+      vmid = assertVmid(rawVmid)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
+    }
+
     // RBAC: Check vm.migrate permission
     const resourceId = buildVmResourceId(id, node, type, vmid)
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
+
     if (denied) return denied
 
     // Cross-cluster migration is even more provider-only than same-cluster:
     // it crosses connection boundaries and the tenant has no notion of the
     // remote cluster. Mirror the gate from the local /migrate route.
     const providerOnly = await requireProviderTenant()
+
     if (providerOnly) return providerOnly
 
     const body = await req.json()
+
     const {
       targetConnectionId,
       targetNode,
@@ -67,14 +93,34 @@ export async function POST(
     if (!targetConnectionId) {
       return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
     }
+
     if (!targetNode) {
       return NextResponse.json({ error: "targetNode is required" }, { status: 400 })
     }
+
     if (!targetStorage) {
       return NextResponse.json({ error: "targetStorage is required" }, { status: 400 })
     }
+
     if (!targetBridge) {
       return NextResponse.json({ error: "targetBridge is required" }, { status: 400 })
+    }
+
+    // Body fields are echoed back to the target cluster as form-encoded
+    // params (not shell-interpolated here), but lock them to strict
+    // grammars anyway: cleaner error surface and removes any chance of
+    // accidental shell-flow downstream if a future refactor pipes them
+    // through executeSSH.
+    try {
+      assertNodeName(targetNode)
+      assertStorageName(targetStorage)
+      assertBridgeName(targetBridge)
+    } catch (e) {
+      if (e instanceof InvalidShellArgError) {
+        return NextResponse.json({ error: e.message }, { status: 400 })
+      }
+
+      throw e
     }
 
     // Récupérer les informations de connexion source et cible
@@ -94,12 +140,12 @@ export async function POST(
     // Récupérer le fingerprint TLS du certificat du serveur cible
     // C'est le fingerprint SHA-256 du certificat TLS qui est requis par remote_migrate
     let targetFingerprint = ''
-    
+
     try {
       // Méthode 1: Récupérer le fingerprint directement depuis le certificat TLS
       const tls = await import('tls')
       const net = await import('net')
-      
+
       targetFingerprint = await new Promise<string>((resolve, reject) => {
         const socket = tls.connect({
           host: targetHost,
@@ -108,10 +154,11 @@ export async function POST(
           timeout: 10000,
         }, () => {
           const cert = socket.getPeerCertificate()
+
           socket.end()
-          
+
           if (cert && cert.fingerprint256) {
-            // Le fingerprint est au format XX:XX:XX:... 
+            // Le fingerprint est au format XX:XX:XX:...
             resolve(cert.fingerprint256)
           } else if (cert && cert.fingerprint) {
             // Fallback sur SHA1 si SHA256 non disponible (moins courant)
@@ -120,25 +167,25 @@ export async function POST(
             reject(new Error('No certificate fingerprint available'))
           }
         })
-        
+
         socket.on('error', (err) => {
           reject(err)
         })
-        
+
         socket.on('timeout', () => {
           socket.destroy()
           reject(new Error('Connection timeout'))
         })
       })
-      
+
     } catch (tlsError) {
       console.warn('[remote-migrate] Failed to get TLS fingerprint:', tlsError)
-      
+
       // Fallback: essayer les méthodes API Proxmox
       try {
         // Pour un cluster, essayer /cluster/config/join
         const joinInfo = await pveFetch<any>(targetConn, "/cluster/config/join")
-        
+
         if (joinInfo?.fingerprint) {
           targetFingerprint = joinInfo.fingerprint
         } else if (joinInfo?.nodelist?.[0]?.pve_fp) {
@@ -147,12 +194,13 @@ export async function POST(
       } catch {
         // Pas un cluster ou pas d'accès
       }
-      
+
       // Fallback: récupérer depuis /cluster/config/nodes
       if (!targetFingerprint) {
         try {
           const configNodes = await pveFetch<any[]>(targetConn, "/cluster/config/nodes")
           const targetNodeConfig = configNodes?.find((n: any) => n.name === targetNode)
+
           if (targetNodeConfig?.pve_fp) {
             targetFingerprint = targetNodeConfig.pve_fp
           }
@@ -161,7 +209,7 @@ export async function POST(
         }
       }
     }
-    
+
     if (!targetFingerprint) {
       return NextResponse.json(
         { error: "Could not retrieve TLS fingerprint from target cluster. Please ensure the target is reachable." },
@@ -177,7 +225,7 @@ export async function POST(
       `port=${targetPort}`,
       `fingerprint=${targetFingerprint}`,
     ]
-    
+
     const targetEndpoint = targetEndpointParts.join(',')
 
     // Construire les paramètres de migration
@@ -186,21 +234,21 @@ export async function POST(
       'target-storage': targetStorage,
       'target-bridge': targetBridge,
     }
-    
+
     // VMID cible (optionnel)
     if (targetVmid !== undefined && targetVmid !== null && targetVmid !== '') {
       migrateParams['target-vmid'] = String(targetVmid)
     }
-    
+
     // Migration online/offline
     if (online) {
       migrateParams['online'] = '1'
     }
-    
+
     // Note: Proxmox remote_migrate does NOT support the 'delete' parameter.
     // Source VM deletion is handled by our task completion handler instead
     // (see /api/v1/tasks/[connectionId]/[node]/[upid]/route.ts).
-    
+
     // Limite de bande passante
     if (bwlimit !== undefined && bwlimit !== null && bwlimit !== '') {
       migrateParams['bwlimit'] = String(bwlimit)
@@ -238,6 +286,7 @@ export async function POST(
     // tenantId must be captured here while the request session is alive.
     if (typeof result === 'string' && result.startsWith('UPID:')) {
       const tenantId = await getCurrentTenantId()
+
       void watchMigrationAndCleanup({
         connectionId: id,
         tenantId,
@@ -268,10 +317,10 @@ export async function POST(
 
   } catch (e: any) {
     console.error('[remote-migrate] Error:', String(e?.message || e).replace(/[\r\n]/g, ''))
-    
+
     // Parser le message d'erreur Proxmox pour le rendre plus lisible
     let errorMessage = e?.message || String(e)
-    
+
     // Erreurs communes
     if (errorMessage.includes('no export formats')) {
       errorMessage = 'Cloud-init drives cannot be migrated. Please remove or reconfigure the cloud-init drive before migration.'
@@ -280,7 +329,7 @@ export async function POST(
     } else if (errorMessage.includes('storage') && errorMessage.includes('not found')) {
       errorMessage = `Target storage not found or not accessible. Verify the storage "${errorMessage}" exists and the API token has access.`
     }
-    
+
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

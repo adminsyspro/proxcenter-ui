@@ -4,6 +4,7 @@ import { getLocale } from 'next-intl/server'
 import { VerticalNavProvider } from '@menu/contexts/verticalNavContext'
 import { SettingsProvider } from '@core/contexts/settingsContext'
 import ThemeProvider from '@components/theme'
+
 // AuthProvider (SessionProvider) is mounted at the root layout so that
 // BrandingProvider — also at the root — can react to session changes and
 // fetch the right tenant's white-label on login / tenant switch.

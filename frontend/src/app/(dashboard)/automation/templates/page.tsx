@@ -1,8 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+
 import { useSearchParams, useRouter } from 'next/navigation'
+
+import { useTranslations } from 'next-intl'
 import { Box, Card, Tab, Tabs } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -14,11 +16,15 @@ import { getImageBySlug } from '@/lib/templates/cloudImages'
 /** Resolve image slug: built-in or fetch from catalog API (custom images) */
 async function resolveImage(slug: string): Promise<CloudImage | null> {
   const builtIn = getImageBySlug(slug)
+
   if (builtIn) return builtIn
+
   try {
     const res = await fetch('/api/v1/templates/catalog')
     const data = await res.json()
-    return (data.data?.images || []).find((img: any) => img.slug === slug) || null
+
+
+return (data.data?.images || []).find((img: any) => img.slug === slug) || null
   } catch { return null }
 }
 
@@ -32,6 +38,7 @@ export default function TemplatesPage() {
   const [wizardOpen, setWizardOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<CloudImage | null>(null)
   const [selectedBlueprint, setSelectedBlueprint] = useState<any | null>(null)
+
   // Resume mode — set when the user clicks an active deployment in the
   // navbar TasksDropdown. The wizard reopens at the Progress step bound
   // to this deployment id and the form fields stay hidden.
@@ -46,21 +53,25 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     const depId = searchParams?.get('deployment')
+
     if (!depId) return
     setResumeDeploymentId(depId)
     setSelectedImage(null)
     setSelectedBlueprint(null)
     setWizardOpen(true)
+
     // Strip the query param so a second mount (back-button) doesn't
     // trigger another reopen.
     const url = new URL(window.location.href)
+
     url.searchParams.delete('deployment')
     router.replace(url.pathname + (url.search || ''), { scroll: false })
   }, [searchParams, router])
 
   useEffect(() => {
     setPageInfo(t('templates.title'), t('templates.catalogSubtitle'), 'ri-instance-line')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   const handleDeployImage = useCallback((image: CloudImage) => {
@@ -71,6 +82,7 @@ export default function TemplatesPage() {
 
   const handleDeployBlueprint = useCallback(async (blueprint: any) => {
     const image = await resolveImage(blueprint.imageSlug)
+
     setSelectedImage(image || null)
     setSelectedBlueprint(blueprint)
     setWizardOpen(true)
@@ -85,12 +97,14 @@ export default function TemplatesPage() {
 
   const handleRetryDeployment = useCallback(async (deployment: any) => {
     const image = deployment.imageSlug ? await resolveImage(deployment.imageSlug) : null
+
     setSelectedImage(image || null)
 
     // Build a prefill object from the deployment's saved config. Since
     // step 2.5 the API returns config as a parsed object; tolerate the
     // legacy string shape for older cached clients.
     let config: any = null
+
     if (deployment.config) {
       if (typeof deployment.config === 'string') {
         try { config = JSON.parse(deployment.config) } catch { /* ignore */ }

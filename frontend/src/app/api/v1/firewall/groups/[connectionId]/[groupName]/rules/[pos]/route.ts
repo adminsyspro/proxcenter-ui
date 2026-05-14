@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,11 @@ export async function PUT(
   try {
     const { connectionId, groupName, pos } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -28,7 +31,7 @@ export async function PUT(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error updating rule:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to update rule' },
       { status: 500 }
@@ -44,9 +47,11 @@ export async function DELETE(
   try {
     const { connectionId, groupName, pos } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -56,7 +61,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('Error deleting rule:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to delete rule' },
       { status: 500 }

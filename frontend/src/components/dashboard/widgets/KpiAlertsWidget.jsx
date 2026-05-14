@@ -20,7 +20,9 @@ function translateAlertMessage(alert, t) {
       return alert.message
     }
   }
-  return alert?.message
+
+
+return alert?.message
 }
 
 function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
@@ -43,7 +45,7 @@ function AlertDetailDialog({ alert, open, onClose, onNavigate, router, t }) {
       return `/infrastructure/inventory?selectType=cluster&selectId=${a.connId}`
     }
 
-    
+
 return null
   }
 
@@ -126,7 +128,7 @@ function AlertsListDialog({ alerts, open, onClose, t, router }) {
       return `/infrastructure/inventory?selectType=cluster&selectId=${alert.entityId}`
     }
 
-    
+
 return null
   }
 
@@ -138,7 +140,7 @@ return null
     if (diff < 60) return t('time.justNow')
     if (diff < 3600) return t('time.minutesAgo', { count: Math.floor(diff / 60) })
     if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
-    
+
 return t('time.daysAgo', { count: Math.floor(diff / 86400) })
   }
 

@@ -59,14 +59,16 @@ function scoreToGrade(score: number): string {
   if (score >= 70) return 'B'
   if (score >= 55) return 'C'
   if (score >= 40) return 'D'
-  return 'E'
+
+return 'E'
 }
 
 function cpuDelta(avgCpuPct: number): number {
   if (avgCpuPct < 10) return -20
   if (avgCpuPct < 20) return -10
   if (avgCpuPct < 30) return -5
-  return 0
+
+return 0
 }
 
 function pueDelta(pue: number): number {
@@ -74,13 +76,15 @@ function pueDelta(pue: number): number {
   if (pue > 1.5) return -10
   if (pue > 1.3) return -5
   if (pue <= 1.2) return +5
-  return 0
+
+return 0
 }
 
 function fmtDelta(n: number): string {
   if (n > 0) return `+${n}`
   if (n < 0) return `${n}`
-  return '0'
+
+return '0'
 }
 
 const GRADE_COLORS: Record<string, string> = {
@@ -100,25 +104,31 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
 
   useEffect(() => {
     let cancelled = false
+
     setLoading(true)
     setError(null)
     const qs = new URLSearchParams({ days: String(days) })
+
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(String(vmid))}/green?${qs}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
+
+return r.json()
       })
       .then((json: GreenResponse) => { if (!cancelled) setData(json) })
       .catch((e) => { if (!cancelled) setError(e?.message || 'fetch error') })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [connId, node, type, vmid, days])
 
   if (loading) {
     if (inline) {
       return <Skeleton variant="rectangular" width={260} height={20} sx={{ borderRadius: 1, flexShrink: 0 }} />
     }
-    return (
+
+
+return (
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ py: 1.5 }}>
           <Skeleton variant="rectangular" height={64} />
@@ -145,7 +155,9 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
         </Box>
       )
     }
-    return (
+
+
+return (
       <Card variant="outlined" sx={{ mb: 2 }}>
         <CardContent sx={{ py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box component="i" className="ri-leaf-line" sx={{ fontSize: 18, color: 'success.main' }} />
@@ -158,14 +170,17 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
   }
 
   const { metrics, insight } = data
+
   if (!metrics) return null
 
   const grade = scoreToGrade(metrics.efficiency.score)
   const gradeColor = GRADE_COLORS[grade]
+
   const sevColor =
     insight?.severity === 'warning' ? theme.palette.warning.main :
     insight?.severity === 'success' ? theme.palette.success.main :
     theme.palette.info.main
+
   const sevIcon =
     insight?.severity === 'warning' ? 'ri-error-warning-line' :
     insight?.severity === 'success' ? 'ri-leaf-line' :

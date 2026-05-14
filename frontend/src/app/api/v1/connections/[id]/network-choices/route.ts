@@ -16,10 +16,12 @@ export async function GET(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const connId = (params as any)?.id
+
     if (!connId) return NextResponse.json({ error: "Missing connection ID" }, { status: 400 })
 
     const url = new URL(req.url)
     const node = url.searchParams.get("node")
+
     if (!node) return NextResponse.json({ error: "Missing node query param" }, { status: 400 })
 
     // connection.view is enough to populate the VM-create network picker:
@@ -28,12 +30,14 @@ export async function GET(req: Request, ctx: RouteContext) {
     // real network-management operations, not this read-only helper.
     const resourceId = buildNodeResourceId(connId, node)
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "node", resourceId)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
     const scope = await getVdcScope(tenantId)
 
     const connMeta = await prisma.connection.findUnique({ where: { id: connId }, select: { tenantId: true } })
+
     if (!connMeta) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     const pveConn = await getConnectionById(connId, connMeta.tenantId)
 
@@ -43,6 +47,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     // gateway, both driven by IPAM rather than typed by hand).
     type SubnetInfo = { cidr: string; gateway: string; dnsServers: string[]; subnetId: string }
     const subnetByPveName = new Map<string, SubnetInfo>()
+
     {
       const subnetRows = await prisma.vdcVnet.findMany({
         where: {
@@ -54,6 +59,7 @@ export async function GET(req: Request, ctx: RouteContext) {
           subnet: { select: { id: true, cidr: true, gateway: true, dnsServers: true } },
         },
       })
+
       for (const r of subnetRows) {
         if (!r.subnet) continue
         subnetByPveName.set(r.pveName, {
@@ -77,12 +83,15 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (scope === null) {
       // Super admin or tenant without vDC - return all physical bridges + all VNets
       const ifaces = await pveFetch<any[]>(pveConn, `/nodes/${encodeURIComponent(node)}/network`)
+
       for (const ifc of ifaces || []) {
         if (ifc.type !== "bridge" && ifc.type !== "OVSBridge") continue
         choices.push({ kind: "bridge", name: ifc.iface, type: ifc.type })
       }
+
       try {
         const vnets = await pveFetch<any[]>(pveConn, "/cluster/sdn/vnets")
+
         for (const v of vnets || []) {
           // PVE returns alias when set (we set it to display_name on create);
           // fall back to the bare ID for legacy/externally-managed VNets.
@@ -91,6 +100,7 @@ export async function GET(req: Request, ctx: RouteContext) {
             name: v.vnet,
             displayName: v.alias ?? v.vnet,
             vdc: "*",
+
             // Super-admin (no scope filter) sees PVE VNets directly —
             // the matching ProxCenter vDC isn't always 1-to-1, so we
             // leave vdcId null. Endpoints that need a specific vDC
@@ -117,6 +127,7 @@ export async function GET(req: Request, ctx: RouteContext) {
           vdc: { select: { id: true, slug: true, sdnZoneName: true } },
         },
       })
+
       for (const v of vnetRows) {
         if (allowedVnets.has(v.pveName)) {
           choices.push({
@@ -124,6 +135,7 @@ export async function GET(req: Request, ctx: RouteContext) {
             name: v.pveName,
             displayName: v.displayName ?? v.pveName,
             vdc: v.vdc.slug,
+
             // Routes that hit /api/v1/vdcs/{id}/... need the UUID, not
             // the slug. Surface it explicitly so the deploy wizard
             // (and any future caller) doesn't have to do a second
@@ -141,8 +153,11 @@ export async function GET(req: Request, ctx: RouteContext) {
           where: { vdc: { tenantId, connectionId: connId } },
           select: { bridge: true, label: true },
         })
+
         const labelMap = new Map<string, string | null>()
+
         for (const r of sharedRows) labelMap.set(r.bridge, r.label ?? null)
+
         for (const bridge of allowedShared) {
           choices.push({ kind: "shared", name: bridge, label: labelMap.get(bridge) ?? null })
         }

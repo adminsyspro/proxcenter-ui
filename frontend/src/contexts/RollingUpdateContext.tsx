@@ -18,10 +18,13 @@ export type ActiveRollingUpdate = {
 }
 
 type RollingUpdateContextValue = {
+
   /** Currently active rolling updates (running/paused/pending) */
   activeUpdates: ActiveRollingUpdate[]
+
   /** Open the wizard to monitor an existing rolling update */
   openMonitor: (rollingUpdateId: string, connectionId: string) => void
+
   /** Whether a rolling update is active for a given connection */
   hasActiveUpdate: (connectionId: string) => string | null
 }
@@ -59,9 +62,11 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
       try {
         const res = await fetch('/api/v1/orchestrator/rolling-updates')
         const json = await res.json()
+
         if (cancelled || !res.ok) return
         const items: any[] = Array.isArray(json.data) ? json.data : []
         const active = items.filter((ru: any) => ['running', 'paused', 'pending'].includes(ru.status))
+
         activeCountRef.current = active.length
         setActiveUpdates(active)
       } catch {
@@ -74,7 +79,8 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
     }
 
     check()
-    return () => { cancelled = true; clearTimeout(timer) }
+
+return () => { cancelled = true; clearTimeout(timer) }
   }, [rollingUpdatesAvailable])
 
   const openMonitor = useCallback((rollingUpdateId: string, connectionId: string) => {
@@ -85,7 +91,9 @@ export function RollingUpdateProvider({ children }: { children: React.ReactNode 
 
   const hasActiveUpdate = useCallback((connectionId: string): string | null => {
     const found = activeUpdates.find(ru => ru.connection_id === connectionId)
-    return found?.id || null
+
+
+return found?.id || null
   }, [activeUpdates])
 
   const handleClose = useCallback(() => {

@@ -32,15 +32,19 @@ export default function ClusterSdnVNetFirewallPanel({ connId }: Props) {
 
   useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       setLoadingVNets(true)
       setError(null)
+
       try {
         const res = await fetch(`/api/v1/connections/${connId}/sdn/vnets`, { cache: 'no-store' })
         const body = await res.json()
+
         if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
         if (cancelled) return
         const list: SdnVNet[] = body.data?.vnets ?? []
+
         setVNets(list)
         if (list.length > 0) setSelected(list[0].vnet)
       } catch (e: any) {
@@ -49,19 +53,24 @@ export default function ClusterSdnVNetFirewallPanel({ connId }: Props) {
         if (!cancelled) setLoadingVNets(false)
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [connId])
 
   const fetchRules = useCallback(async (vnet: string) => {
     if (!vnet) return
     setLoadingRules(true)
     setError(null)
+
     try {
       const res = await fetch(
         `/api/v1/connections/${connId}/sdn/vnets/${encodeURIComponent(vnet)}/firewall/rules`,
         { cache: 'no-store' },
       )
+
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setRules(body.data?.rules ?? [])
     } catch (e: any) {
@@ -93,6 +102,7 @@ export default function ClusterSdnVNetFirewallPanel({ connId }: Props) {
   if (loadingVNets) {
     return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
   }
+
   if (vnets.length === 0) {
     return <Box sx={{ p: 2 }}><Alert severity="info">{t('sdn.vnetFirewallPanel.noVnets')}</Alert></Box>
   }

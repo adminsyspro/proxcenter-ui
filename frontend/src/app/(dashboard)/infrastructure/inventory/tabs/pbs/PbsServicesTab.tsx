@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -28,6 +29,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 
 type PbsService = {
@@ -54,14 +56,16 @@ function getStatusIcon(state: string): { icon: string; color: string } {
   if (state === 'running') return { icon: 'ri-checkbox-circle-fill', color: '#22c55e' }
   if (state === 'stopped') return { icon: 'ri-stop-circle-fill', color: '#64748b' }
   if (state === 'dead') return { icon: 'ri-close-circle-fill', color: '#ef4444' }
-  return { icon: 'ri-question-fill', color: '#9ca3af' }
+
+return { icon: 'ri-question-fill', color: '#9ca3af' }
 }
 
 function getStatusDotColor(state: string): string {
   if (state === 'running') return '#22c55e'
   if (state === 'stopped') return '#ef4444'
   if (state === 'dead') return '#9ca3af'
-  return '#9ca3af'
+
+return '#9ca3af'
 }
 
 export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
@@ -78,6 +82,7 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
   const [menuService, setMenuService] = useState<PbsService | null>(null)
 
   const [confirmOpen, setConfirmOpen] = useState<boolean>(false)
+
   const [pendingAction, setPendingAction] = useState<{
     service: PbsService
     action: ServiceAction
@@ -94,14 +99,19 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
   const fetchServices = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/services`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
       const data: PbsService[] = Array.isArray(body?.data) ? body.data : []
+
       setServices(data)
       setLastUpdated(new Date())
     } catch (e: any) {
@@ -113,7 +123,9 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
 
   useEffect(() => {
     fetchServices()
-    return () => {
+
+
+return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current)
         refreshTimerRef.current = null
@@ -123,14 +135,18 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
 
   const sortedServices = useMemo(() => {
     const arr = [...services]
+
     arr.sort((a, b) => {
       const na = getServiceName(a).toLowerCase()
       const nb = getServiceName(b).toLowerCase()
+
       if (na < nb) return order === 'asc' ? -1 : 1
       if (na > nb) return order === 'asc' ? 1 : -1
-      return 0
+
+return 0
     })
-    return arr
+
+return arr
   }, [services, order])
 
   const handleSortName = () => {
@@ -150,15 +166,19 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
   const runAction = useCallback(
     async (svc: PbsService, action: ServiceAction) => {
       const name = getServiceName(svc)
+
       try {
         const res = await fetch(
           `/api/v1/pbs/${pbsId}/services/${encodeURIComponent(name)}/${action}`,
           { method: 'POST' }
         )
+
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
+
           throw new Error(body?.error || `HTTP ${res.status}`)
         }
+
         setSnackbar({
           open: true,
           severity: 'success',
@@ -183,13 +203,15 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
 
   const handleActionClick = (action: ServiceAction) => {
     const svc = menuService
+
     closeMenu()
     if (!svc) return
 
     if (action === 'stop' || action === 'restart') {
       setPendingAction({ service: svc, action })
       setConfirmOpen(true)
-      return
+
+return
     }
 
     runAction(svc, action)
@@ -197,6 +219,7 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
 
   const handleConfirm = () => {
     const pa = pendingAction
+
     setConfirmOpen(false)
     setPendingAction(null)
     if (pa) runAction(pa.service, pa.action)
@@ -214,10 +237,13 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
 
   const statusLabel = (state: string): string => {
     const known = ['running', 'stopped', 'dead', 'unknown']
+
     if (known.includes(state)) {
       return t(`inventory.pbsServicesStatus.${state}`)
     }
-    return state || t('inventory.pbsServicesStatus.unknown')
+
+
+return state || t('inventory.pbsServicesStatus.unknown')
   }
 
   return (
@@ -305,7 +331,9 @@ export default function PbsServicesTab({ pbsId }: PbsServicesTabProps) {
                       <TableCell>
                         {(() => {
                           const ic = getStatusIcon(state)
-                          return (
+
+
+return (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className={ic.icon} style={{ fontSize: 18, color: ic.color }} />
                               <Typography variant="body2">{statusLabel(state)}</Typography>

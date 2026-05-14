@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+
 import { Box, Typography } from '@mui/material'
 
 const BANNER_HEIGHT = 32
@@ -12,7 +13,9 @@ export default function DemoBanner() {
     if (!isDemo) return
     document.documentElement.style.setProperty('--demo-banner-height', `${BANNER_HEIGHT}px`)
     document.body.style.paddingTop = `${BANNER_HEIGHT}px`
-    return () => {
+
+
+return () => {
       document.documentElement.style.removeProperty('--demo-banner-height')
       document.body.style.paddingTop = ''
     }

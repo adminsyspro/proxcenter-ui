@@ -38,7 +38,7 @@ function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
-  
+
 return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
 
@@ -46,7 +46,7 @@ function getTaskLevel(status?: string): 'info' | 'warning' | 'error' {
   if (!status) return 'info' // En cours
   if (status === 'OK') return 'info'
   if (status.includes('WARNINGS')) return 'warning'
-  
+
 return 'error'
 }
 
@@ -54,22 +54,25 @@ function getLogLevel(pri: number): 'info' | 'warning' | 'error' {
   // Syslog priority: 0=emerg, 1=alert, 2=crit, 3=err, 4=warning, 5=notice, 6=info, 7=debug
   if (pri <= 3) return 'error'
   if (pri <= 4) return 'warning'
-  
+
 return 'info'
 }
 
 export async function GET(req: Request) {
   try {
     const sessionPrisma = await getSessionPrisma()
+
     // connection.view baseline — tenants get a scoped feed filtered by their
     // vDC's nodes below. Super admins (no scope) see everything.
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (permError) return permError
 
     const { getCurrentTenantId } = await import('@/lib/tenant')
     const { getVdcScope } = await import('@/lib/vdc/scope')
     const tenantId = await getCurrentTenantId()
     const vdcScope = await getVdcScope(tenantId)
+
     // Pool-level scope (shared-node MSP clusters need this on top of the
     // node filter, which collapses to a no-op when every vDC owns every
     // node).
@@ -86,9 +89,10 @@ export async function GET(req: Request) {
     // gets an empty connections list and zero tasks in the taskbar.
     const connPrisma = vdcScope ? globalPrisma : sessionPrisma
     const connWhere: any = { type: 'pve' }
+
     if (vdcScope) connWhere.id = { in: [...vdcScope.connectionIds] }
     const connections = await connPrisma.connection.findMany({ where: connWhere })
-    
+
     if (connections.length === 0) {
       return NextResponse.json({ data: [] })
     }
@@ -104,7 +108,7 @@ export async function GET(req: Request) {
           // Récupérer les tâches
           if (source === 'all' || source === 'tasks') {
             let tasks: ProxmoxTask[] = []
-            
+
             // Essayer d'abord /cluster/tasks (pour les clusters)
             try {
               const clusterTasks = await pveFetch<ProxmoxTask[]>(
@@ -141,8 +145,10 @@ export async function GET(req: Request) {
 
             // Build VMID → name lookup from cluster resources
             const vmNameMap: Record<string, string> = {}
+
             try {
               const resources = await pveFetch<any[]>(connection, '/cluster/resources?type=vm')
+
               if (Array.isArray(resources)) {
                 for (const r of resources) {
                   if (r.vmid != null && r.name) {
@@ -155,19 +161,25 @@ export async function GET(req: Request) {
             // Tenant vDC scope: drop tasks that ran on a node outside the
             // tenant's authorised set. Super admin keeps the full list.
             const allowedNodes = vdcScope?.nodesByConnection.get(conn.id)
+
             if (allowedNodes) {
               tasks = tasks.filter(t => !t.node || allowedNodes.has(t.node))
             }
+
+
             // Pool-membership filter: on a shared-node cluster the node
             // filter above is a no-op, so apply vmid → vDC pool isolation.
             // VM tasks must target a tenant vmid; non-VM tasks (cluster /
             // node level, e.g. ceph, package updates) are provider-only.
             const allowedVmids = vdcVmids?.get(conn.id)
+
             if (allowedVmids) {
               tasks = tasks.filter(t => {
                 const vmid = extractTaskVmid(t.id)
+
                 if (!vmid) return false
-                return allowedVmids.has(vmid)
+
+return allowedVmids.has(vmid)
               })
             }
 
@@ -210,7 +222,7 @@ export async function GET(req: Request) {
           // would surface neighbour activity).
           if ((source === 'all' || source === 'logs') && !vdcScope) {
             let logs: ProxmoxClusterLog[] = []
-            
+
             // Essayer d'abord /cluster/log (pour les clusters)
             try {
               const clusterLogs = await pveFetch<ProxmoxClusterLog[]>(
@@ -228,6 +240,7 @@ export async function GET(req: Request) {
 
             // Same tenant scope filter for cluster logs.
             const allowedNodesLogs = vdcScope?.nodesByConnection.get(conn.id)
+
             if (allowedNodesLogs) {
               logs = logs.filter(l => !l.node || allowedNodesLogs.has(l.node))
             }
@@ -263,7 +276,7 @@ export async function GET(req: Request) {
     // Limiter le nombre de résultats
     const limitedEvents = allEvents.slice(0, limit)
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: limitedEvents,
       meta: {
         total: allEvents.length,
@@ -273,7 +286,7 @@ export async function GET(req: Request) {
     })
   } catch (error: any) {
     console.error('Erreur API events:', error)
-    
+
 return NextResponse.json(
       { error: error?.message || 'Server error' },
       { status: 500 }

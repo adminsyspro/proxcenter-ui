@@ -9,6 +9,7 @@ export const runtime = "nodejs"
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -18,6 +19,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)
@@ -34,6 +36,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -43,6 +46,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "pbs", id)
+
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))

@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
 import { createPbsStorage, deletePbsStorage, pbsStorageExists, sanitizeStorageName } from './pvePbsStorage'
 
 vi.mock('./client', () => ({ pveFetch: vi.fn() }))
 import { pveFetch } from './client'
+
 const mock = pveFetch as any
 
 const conn = { id: 'c1', name: 'cl', baseUrl: 'https://pve', apiToken: 't', insecureDev: true, behindProxy: false }
@@ -13,6 +15,7 @@ describe('sanitizeStorageName', () => {
   })
   it('truncates to 40 chars max', () => {
     const out = sanitizeStorageName('a'.repeat(30), 'b'.repeat(30))
+
     expect(out.length).toBeLessThanOrEqual(40)
     expect(out.startsWith('pbs-')).toBe(true)
   })
@@ -50,6 +53,7 @@ describe('createPbsStorage', () => {
     })
     expect(mock.mock.calls[1][1]).toBe('/storage')
     const body = mock.mock.calls[1][2].body as URLSearchParams
+
     expect(body).toBeInstanceOf(URLSearchParams)
     expect(body.get('storage')).toBe('pbs-acme-prod')
     expect(body.get('type')).toBe('pbs')

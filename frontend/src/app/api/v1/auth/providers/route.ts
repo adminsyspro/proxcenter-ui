@@ -10,10 +10,12 @@ export async function GET() {
       isOidcEnabled(),
       isLdapEnabled(),
     ])
+
     let oidcProviderName = 'SSO'
 
     if (oidcEnabled) {
       const config = await getOidcConfig()
+
       oidcProviderName = config?.providerName || 'SSO'
     }
 

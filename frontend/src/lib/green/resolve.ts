@@ -68,6 +68,7 @@ export async function resolveGreenConfigForNode(
 ): Promise<ResolvedGreenConfig> {
   const cacheKey = `${connectionId}|${nodeName}`
   const cached = cache.get(cacheKey)
+
   if (cached && cached.expiry > Date.now()) return cached.data
 
   const node = await getNodeGreenConfig(connectionId, nodeName)
@@ -75,6 +76,7 @@ export async function resolveGreenConfigForNode(
 
   // Datacentre: most specific non-null DC ID wins; fall back to is_default DC.
   let dcRow: DatacenterRow | null = null
+
   if (node?.datacenterId) dcRow = await getDatacenterById(node.datacenterId)
   if (!dcRow && cluster?.datacenterId) dcRow = await getDatacenterById(cluster.datacenterId)
   if (!dcRow) dcRow = await ensureDefaultDatacenter()
@@ -94,10 +96,12 @@ export async function resolveGreenConfigForNode(
     ?? cluster?.tdpPerCoreW
     ?? dcRow?.tdpPerCoreW
     ?? HARDCODED_DEFAULTS.tdpPerCore
+
   const wattsPerGbRam = node?.wattsPerGbRam
     ?? cluster?.wattsPerGbRam
     ?? dcRow?.wattsPerGbRam
     ?? HARDCODED_DEFAULTS.wattsPerGbRam
+
   const overheadPerNode = node?.overheadPerNodeW
     ?? cluster?.overheadPerNodeW
     ?? dcRow?.overheadPerNodeW
@@ -109,18 +113,24 @@ export async function resolveGreenConfigForNode(
     wattsPerGbRam,
     overheadPerNode,
   }
+
   cache.set(cacheKey, { data: resolved, expiry: Date.now() + TTL_MS })
-  return resolved
+
+return resolved
 }
 
 export function invalidateGreenResolution(connectionId?: string, nodeName?: string) {
   if (connectionId && nodeName) {
     cache.delete(`${connectionId}|${nodeName}`)
-    return
+
+return
   }
+
   if (connectionId) {
     for (const k of cache.keys()) if (k.startsWith(`${connectionId}|`)) cache.delete(k)
-    return
+
+return
   }
+
   cache.clear()
 }

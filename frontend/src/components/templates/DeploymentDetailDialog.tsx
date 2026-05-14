@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -63,10 +64,12 @@ const STATUS_COLORS: Record<string, 'success' | 'error' | 'warning' | 'info' | '
 
 function getLogType(text: string) {
   const t = text.toLowerCase()
+
   if (t.includes('error') || t.includes('failed')) return 'error'
   if (t.includes('warning')) return 'warning'
   if (t.includes('%') || t.includes('transferred')) return 'transfer'
-  return 'info'
+
+return 'info'
 }
 
 function getLogColor(type: string) {
@@ -83,10 +86,12 @@ function formatDuration(start: string | null, end: string | null): string {
   const startDate = new Date(start)
   const endDate = end ? new Date(end) : new Date()
   const seconds = Math.floor((endDate.getTime() - startDate.getTime()) / 1000)
+
   if (seconds < 0) return '—'
   if (seconds < 60) return `${seconds}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+
+return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
 }
 
 export default function DeploymentDetailDialog({ open, deployment, onClose }: DeploymentDetailDialogProps) {
@@ -100,6 +105,7 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
   // PVE task detail
   const isRunning = !!deployment && !['completed', 'failed'].includes(deployment.status)
   const hasTask = !!deployment?.taskUpid
+
   const { data: taskData } = useTaskDetail(
     open && hasTask ? deployment?.connectionId : undefined,
     open && hasTask ? deployment?.node : undefined,
@@ -125,14 +131,17 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
   const handleScroll = () => {
     if (!logsContainerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current
+
     setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
   }
 
   const handleCopyLogs = async () => {
     if (!taskData?.logs) return
+
     const logsText = taskData.logs
       .map((l: any) => `${String(l.n).padStart(4, ' ')} ${l.t}`)
       .join('\n')
+
     try {
       await navigator.clipboard.writeText(logsText)
       setSnackbar({ open: true, message: t('common.copied') })
@@ -150,10 +159,12 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
   const filteredLogs = logs.filter((log: any) => {
     if (logFilter === 'all') return true
     const type = getLogType(log.t)
+
     if (logFilter === 'errors') return type === 'error'
     if (logFilter === 'warnings') return type === 'warning' || type === 'error'
     if (logFilter === 'transfers') return type === 'transfer'
-    return true
+
+return true
   })
 
   const logCounts = {
@@ -452,7 +463,9 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
                     {filteredLogs.map((log: any, idx: number) => {
                       const logType = getLogType(log.t)
                       const logColor = getLogColor(logType)
-                      return (
+
+
+return (
                         <Box
                           key={`${log.n}-${idx}`}
                           sx={{

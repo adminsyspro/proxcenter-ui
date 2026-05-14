@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const config = await prisma.ldapConfig.findUnique({ where: { id: "default" } })
@@ -27,6 +28,7 @@ export async function GET() {
           name_attribute: "cn",
           tls_insecure: false,
           group_attribute: "memberOf",
+
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           // Returning the canonical empty-object string keeps the response shape stable.
           group_role_mapping: "{}",
@@ -71,7 +73,8 @@ export async function GET() {
     })
   } catch (error: any) {
     console.error("Erreur GET LDAP config:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
 
@@ -79,6 +82,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -104,6 +108,7 @@ export async function PUT(req: Request) {
       if (!url) {
         return NextResponse.json({ error: "URL LDAP requise" }, { status: 400 })
       }
+
       if (!base_dn) {
         return NextResponse.json({ error: "Base DN requise" }, { status: 400 })
       }
@@ -113,6 +118,7 @@ export async function PUT(req: Request) {
     // pattern) or as a parsed object (forward-compat). Normalise to an object
     // for the JSONB column so callers can later `WHERE settings->>'x'` query.
     let mappingObj: Record<string, string> = {}
+
     if (typeof group_role_mapping === "string") {
       try {
         mappingObj = JSON.parse(group_role_mapping || "{}")
@@ -126,6 +132,7 @@ export async function PUT(req: Request) {
     const allowedGroupsArr: string[] = Array.isArray(allowed_groups) ? allowed_groups : []
 
     const now = new Date()
+
     const baseData = {
       enabled: !!enabled,
       url: url || "",
@@ -147,14 +154,17 @@ export async function PUT(req: Request) {
     // value: leaving the field blank preserves the previously-saved secret
     // (the GET response only exposes a `hasBindPassword` boolean).
     const update: Record<string, unknown> = { ...baseData }
+
     const create: Record<string, unknown> = {
       id: "default",
       ...baseData,
       createdAt: now,
       bindPasswordEnc: null as string | null,
     }
+
     if (bind_password) {
       const enc = encryptSecret(bind_password)
+
       update.bindPasswordEnc = enc
       create.bindPasswordEnc = enc
     }
@@ -166,6 +176,7 @@ export async function PUT(req: Request) {
     })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update",
       category: "settings",
@@ -184,6 +195,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Erreur PUT LDAP config:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }

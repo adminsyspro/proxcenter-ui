@@ -85,6 +85,7 @@ export async function GET(
     let resolvedNode = node
     let movedTo: string | null = null
     let configEffective: any
+
     try {
       configEffective = await pveFetch<any>(
         conn,
@@ -94,6 +95,7 @@ export async function GET(
     } catch (err: any) {
       if (!isVmConfigNotFoundError(err)) throw err
       const located = await locateVmInCluster(conn, vmid, type as GuestType)
+
       if (!located || located.node === node) throw err
       resolvedNode = located.node
       movedTo = located.node
@@ -103,6 +105,7 @@ export async function GET(
         { method: "GET" }
       )
     }
+
     const configCurrent = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(resolvedNode)}/${type}/${encodeURIComponent(vmid)}/config?current=1`,
@@ -118,6 +121,7 @@ export async function GET(
 
       for (const key of Object.keys(configEffective)) {
         if (skipKeys.has(key)) continue
+
         if (configEffective[key] !== configCurrent[key] && configEffective[key] !== undefined) {
           pending[key] = configEffective[key]
         }
@@ -165,6 +169,7 @@ export async function PUT(
 
     // ── vDC Quota Check (CPU/RAM increases) ──
     const tenantId = await getCurrentTenantId()
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
@@ -206,15 +211,18 @@ export async function PUT(
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
 
     // Phase 4b: Enforce bridge whitelist
     const allowedBridges = await getAllowedBridgesForTenant(tenantId, id)
+
     if (allowedBridges !== null) {
       for (const key of Object.keys(body || {})) {
         if (!/^net\d+$/.test(key)) continue
         const bridge = parseBridgeFromNet(String(body[key] || ""))
+
         if (bridge && !allowedBridges.has(bridge)) {
           return NextResponse.json(
             { error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(allowedBridges).join(", ")}` },
@@ -229,7 +237,7 @@ export async function PUT(
 
     // Construire les données à envoyer à Proxmox
     const formData = new URLSearchParams()
-    
+
     for (const [key, value] of Object.entries(body)) {
       // Vérifier si le champ est autorisé ou si c'est un champ réseau/disque
       const isAllowed = allowedFields.has(key) ||
@@ -264,14 +272,18 @@ export async function PUT(
     // about to push. The helper handles the no-op case (no IPAM-managed
     // bridge involved) cheaply, so this is safe to call unconditionally.
     let ipamRollback: (() => Promise<void>) | null = null
+
     if (type === 'qemu') {
       const before = await pveFetch<any>(
         conn,
         `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
       )
+
+
       // Build the after-snapshot the helper compares against. body is a
       // sparse patch — fields not in body inherit from before.
       const after = { ...before, ...body }
+
       try {
         const sync = await syncIpamForVmConfig({
           before,
@@ -281,7 +293,10 @@ export async function PUT(
           vmid: Number(vmid),
           hostname: typeof body.name === 'string' ? body.name : (before?.name ?? null),
         })
+
         ipamRollback = sync.rollback
+
+
         // Patch the PVE PUT body with any ipconfigN corrections the
         // allocator emitted (auto-pick, hint conflict resolution).
         for (const [k, v] of Object.entries(sync.bodyOverrides)) {
@@ -291,15 +306,18 @@ export async function PUT(
         if (err instanceof IpamHintUnavailableError) {
           return NextResponse.json({ error: `IP unavailable: ${err.hint}` }, { status: 409 })
         }
+
         if (err instanceof IpamExhaustedError) {
           return NextResponse.json({ error: `Subnet is full — no free IP available` }, { status: 409 })
         }
+
         throw err
       }
     }
 
     // Proxmox: PUT /nodes/{node}/{qemu|lxc}/{vmid}/config
     let result: any
+
     try {
       result = await pveFetch<any>(
         conn,
@@ -318,6 +336,7 @@ export async function PUT(
       if (ipamRollback) {
         try { await ipamRollback() } catch { /* tolerate */ }
       }
+
       throw err
     }
 

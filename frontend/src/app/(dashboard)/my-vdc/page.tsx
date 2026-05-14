@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import { Box, Typography, MenuItem, Select, FormControl, InputLabel, Alert, Stack } from '@mui/material'
@@ -60,6 +61,7 @@ export default function MyVdcPage() {
 
   if (loading) return <Box p={3}>{t('common.loading')}</Box>
   if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>
+
   if (vdcs.length === 0) {
     return (
       <Box p={3}>

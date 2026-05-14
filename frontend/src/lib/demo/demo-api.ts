@@ -50,6 +50,7 @@ function generateRrdData(timeframe: string = 'hour', baseValues?: { cpu?: number
     month: { points: 70, interval: 43200 },
     year: { points: 70, interval: 432000 },
   }
+
   const { points, interval } = config[timeframe] || config.hour
 
   return Array.from({ length: points }, (_, i) => {
@@ -90,14 +91,18 @@ function formatBytesUtil(bytes: number): string {
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+
+
+return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 function generateBackupEntries(count: number, prefix: string, datastore: string): any[] {
   const now = Date.now()
   const vmNames = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','dns-primary','ldap-auth','ci-runner','vault-prod']
   const backupTypes = ['vm', 'vm', 'vm', 'vm', 'vm', 'vm', 'vm', 'vm', 'ct', 'ct']
-  return Array.from({ length: count }, (_, i) => {
+
+
+return Array.from({ length: count }, (_, i) => {
     const vmid = 100 + (i % 45)
     const name = vmNames[i % vmNames.length]
     const ageMs = Math.random() * 7 * 24 * 3600 * 1000
@@ -106,7 +111,9 @@ function generateBackupEntries(count: number, prefix: string, datastore: string)
     const size = 1073741824 + Math.floor(Math.random() * 10737418240)
     const bType = backupTypes[i % backupTypes.length]
     const verified = i < count - 2
-    return {
+
+
+return {
       id: `${datastore}/${bType}/${vmid}/${backupTime}`,
       datastore,
       namespace: '',
@@ -136,6 +143,7 @@ function generateBackupEntries(count: number, prefix: string, datastore: string)
 
 function generateChangeEntries(): any[] {
   const now = Date.now()
+
   const actions: { action: string, field: string, oldValue: string, newValue: string }[] = [
     { action: 'config_change', field: 'memory', oldValue: '4096', newValue: '8192' },
     { action: 'config_change', field: 'cores', oldValue: '2', newValue: '4' },
@@ -153,6 +161,7 @@ function generateChangeEntries(): any[] {
     { action: 'config_change', field: 'onboot', oldValue: '0', newValue: '1' },
     { action: 'config_change', field: 'scsihw', oldValue: 'lsi', newValue: 'virtio-scsi-single' },
   ]
+
   const vmNames = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','dns-primary','ldap-auth','ci-runner','vault-prod','web-prod-02','web-prod-03','db-replica-01','proxy-lb','elastic-node-01']
   const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06']
 
@@ -179,11 +188,16 @@ function generateChangeEntries(): any[] {
 
 function generateHealthHistory(): { date: string, score: number }[] {
   const now = new Date()
-  return Array.from({ length: 30 }, (_, i) => {
+
+
+return Array.from({ length: 30 }, (_, i) => {
     const d = new Date(now)
+
     d.setDate(d.getDate() - (29 - i))
     const score = 88 + Math.round(Math.random() * 8)
-    return { date: d.toISOString().slice(0, 10), score: Math.min(96, score) }
+
+
+return { date: d.toISOString().slice(0, 10), score: Math.min(96, score) }
   })
 }
 
@@ -502,6 +516,7 @@ const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/orchestrator/alerts'() {
     const now = Date.now()
     const severities = ['critical', 'warning', 'warning', 'info', 'critical', 'warning', 'info', 'warning']
+
     const messages = [
       'Node pve-node-03: RAM usage critical (94%)',
       'Node pve-node-07: CPU usage high (82%)',
@@ -512,8 +527,11 @@ const EXTRA_MOCKS: MockDataMap = {
       'PBS datastore backup-main: GC completed',
       'VM web-prod-01: High network packet loss detected',
     ]
+
     const sources = ['pve-node-03','pve-node-07','pve-node-01','pve-node-05','pve-dr-02','pve-node-11','PBS-MASTER','pve-node-01']
-    return {
+
+
+return {
       data: messages.map((msg, i) => ({
         id: `alert-demo-${i}`,
         fingerprint: `fp-${i}`,
@@ -566,6 +584,7 @@ const EXTRA_MOCKS: MockDataMap = {
       'backup.job.create', 'backup.restore',
       'user.create', 'rbac.role.assign',
     ]
+
     const details = [
       'User logged in via credentials', 'User logged in via SSO', 'User session ended',
       'Started VM 101 (web-prod-01)', 'Stopped VM 105 (monitoring)', 'Migrated VM 103 (api-gateway) from pve-node-01 to pve-node-03', 'Created snapshot "pre-update" on VM 102 (db-master)',
@@ -574,6 +593,7 @@ const EXTRA_MOCKS: MockDataMap = {
       'Created backup job for VMs 101,102,103', 'Restored VM 105 from backup vzdump-qemu-105-2026_03_08',
       'Created user operator@proxcenter.io', 'Assigned role "operator" to user operator@proxcenter.io',
     ]
+
     const resourceTypes = [
       'user', 'user', 'user',
       'vm', 'vm', 'vm', 'vm',
@@ -582,6 +602,7 @@ const EXTRA_MOCKS: MockDataMap = {
       'backup', 'backup',
       'user', 'rbac',
     ]
+
     const resourceIds = [
       'demo-user', 'demo-user', 'demo-user',
       '101', '105', '103', '102',
@@ -590,8 +611,11 @@ const EXTRA_MOCKS: MockDataMap = {
       'job-001', 'vzdump-105',
       'user-002', 'assign-002',
     ]
+
     const now = Date.now()
-    return {
+
+
+return {
       data: Array.from({ length: 15 }, (_, i) => ({
         id: `audit-${String(i + 1).padStart(3, '0')}`,
         action: actions[i],
@@ -613,12 +637,16 @@ const EXTRA_MOCKS: MockDataMap = {
     const labels = ['VM Start','VM Stop','Backup','Migration','VM Reboot','CT Start','Sync Pull','Verify','GC']
     const entities = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','ci-runner','vault-prod','proxy-lb','elastic-node-01']
     const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06']
-    return {
+
+
+return {
       data: Array.from({ length: 20 }, (_, i) => {
         const startTs = now - i * 1800
         const endTs = i === 3 ? null : startTs + 30 + Math.floor(Math.random() * 120)
         const dur = endTs ? endTs - startTs : 0
-        return {
+
+
+return {
           id: `UPID:${nodes[i % nodes.length]}:0000${String(i).padStart(4,'0')}:00000000:00000000:${types[i % types.length]}:${100 + i}:root@pam:`,
           type: types[i % types.length],
           status: i === 3 ? 'running' : (i === 7 ? 'WARNINGS' : 'OK'),
@@ -645,7 +673,9 @@ const EXTRA_MOCKS: MockDataMap = {
   // --- Changes (populated) ---
   get 'GET:/api/v1/changes'() {
     const entries = generateChangeEntries()
-    return { data: entries, pagination: { total: entries.length, page: 1, limit: 50 } }
+
+
+return { data: entries, pagination: { total: entries.length, page: 1, limit: 50 } }
   },
 
   // --- Dashboard ---
@@ -754,7 +784,8 @@ const EXTRA_MOCKS: MockDataMap = {
     const formatBytes = (b: number) => {
       if (b >= 1099511627776) return `${(b / 1099511627776).toFixed(1)} TB`
       if (b >= 1073741824) return `${(b / 1073741824).toFixed(0)} GB`
-      return `${(b / 1048576).toFixed(0)} MB`
+
+return `${(b / 1048576).toFixed(0)} MB`
     }
 
     // VM list
@@ -954,24 +985,31 @@ const EXTRA_MOCKS: MockDataMap = {
   // --- VMs list ---
   get 'GET:/api/v1/vms'() {
     const resources = (MOCK_DATA['/api/v1/connections/demo-pve-cluster-001/resources'] as any)?.data || []
+
     const vms = resources.map((r: any) => ({
       ...r,
       connId: 'demo-pve-cluster-001',
       connName: 'Production Cluster',
     }))
-    return { data: { vms } }
+
+
+return { data: { vms } }
   },
 
   // --- Storage overview ---
   get 'GET:/api/v1/storage'() {
     const storageData = (MOCK_DATA['/api/v1/connections/demo-pve-cluster-001/storage'] as any)?.data || []
     const seen = new Set<string>()
+
     const deduplicated = storageData.filter((s: any) => {
       if (seen.has(s.storage)) return false
       seen.add(s.storage)
-      return true
+
+return true
     })
-    return {
+
+
+return {
       data: {
         connections: [{
           id: 'demo-pve-cluster-001',
@@ -990,15 +1028,18 @@ const EXTRA_MOCKS: MockDataMap = {
     const topCpuVms = [...resources].sort((a: any, b: any) => (b.cpu || 0) - (a.cpu || 0)).slice(0, 5).map((v: any) => ({
       vmid: v.vmid, name: v.name, node: v.node, cpu: v.cpu, maxcpu: v.maxcpu || 4,
     }))
+
     const topRamVms = [...resources].sort((a: any, b: any) => (b.mem || 0) - (a.mem || 0)).slice(0, 5).map((v: any) => ({
       vmid: v.vmid, name: v.name, node: v.node, mem: v.mem, maxmem: v.maxmem,
     }))
 
     const seen = new Set<string>()
+
     const storagePools = storageData.filter((s: any) => {
       if (seen.has(s.storage)) return false
       seen.add(s.storage)
-      return true
+
+return true
     })
 
     return {
@@ -1012,7 +1053,9 @@ const EXTRA_MOCKS: MockDataMap = {
         },
         trends: generateRrdData('day').map(p => {
           const d = new Date(p.time * 1000)
-          return {
+
+
+return {
             t: d.toISOString().slice(0, 10),
             cpu: Math.round(p.cpu * 1000) / 10,
             ram: Math.round((p.memused / p.memtotal) * 1000) / 10,
@@ -1085,7 +1128,9 @@ const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/pbs/demo-pbs-001/backups'() {
     const backups = generateBackupEntries(20, 'pbs1', 'backup-main')
     const verifiedCount = backups.filter((b: any) => b.verified).length
-    return {
+
+
+return {
       data: {
         backups,
         stats: { total: 342, vmCount: 300, ctCount: 42, hostCount: 0, totalSize: 1099511627776, totalSizeFormatted: '1.00 TB', verifiedCount, protectedCount: 1 },
@@ -1097,7 +1142,9 @@ const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/pbs/demo-pbs-002/backups'() {
     const backups = generateBackupEntries(15, 'pbs2', 'backup-replica')
     const verifiedCount = backups.filter((b: any) => b.verified).length
-    return {
+
+
+return {
       data: {
         backups,
         stats: { total: 285, vmCount: 250, ctCount: 35, hostCount: 0, totalSize: 879609302221, totalSizeFormatted: '819.20 GB', verifiedCount, protectedCount: 1 },
@@ -1125,7 +1172,9 @@ const EXTRA_MOCKS: MockDataMap = {
     const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek
     const nextSunday3am = now - (now % dayInSec) + daysUntilSunday * dayInSec + 10800
     const lastSunday3am = nextSunday3am - 7 * dayInSec
-    return {
+
+
+return {
       data: {
         jobs: [
           {
@@ -1174,6 +1223,7 @@ const EXTRA_MOCKS: MockDataMap = {
     const now = Date.now()
     const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06','pve-node-07','pve-node-08','pve-node-09','pve-node-10','pve-node-11','pve-node-12']
     const vmNames = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','ci-runner','vault-prod','elastic-node-01','proxy-lb']
+
     const reasons = [
       'Memory imbalance: pve-node-02 at 82.3% vs pve-node-08 at 45.1%',
       'CPU imbalance: pve-node-03 at 8.2% vs pve-node-10 at 1.1%',
@@ -1181,10 +1231,14 @@ const EXTRA_MOCKS: MockDataMap = {
       'Homogenization: spreading VMs more evenly across nodes',
       'Storage I/O contention on pve-node-07 — relocate to pve-node-11',
     ]
-    return Array.from({ length: 5 }, (_, i) => {
+
+
+return Array.from({ length: 5 }, (_, i) => {
       const src = nodes[i * 2 % nodes.length]
       const tgt = nodes[(i * 2 + 5) % nodes.length]
-      return {
+
+
+return {
         id: `rec-${String(i + 1).padStart(3, '0')}`,
         connection_id: 'demo-pve-cluster-001',
         vmid: 100 + i * 3,
@@ -1205,7 +1259,9 @@ const EXTRA_MOCKS: MockDataMap = {
   },
   get 'GET:/api/v1/orchestrator/drs/migrations'() {
     const now = Date.now()
-    return [
+
+
+return [
       {
         id: 'mig-001',
         recommendation_id: 'rec-prev-001',
@@ -1271,7 +1327,9 @@ const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/orchestrator/metrics'() {
     const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06','pve-node-07','pve-node-08','pve-node-09','pve-node-10','pve-node-11','pve-node-12']
     const vmCounts = [18, 16, 15, 14, 12, 15, 13, 14, 16, 11, 14, 13]
-    return {
+
+
+return {
       'demo-pve-cluster-001': {
         connection_id: 'demo-pve-cluster-001',
         connection_name: 'Production Cluster',
@@ -1304,7 +1362,9 @@ const EXTRA_MOCKS: MockDataMap = {
   // Note: these API routes return data directly (no { data: ... } wrapper)
   get 'GET:/api/v1/orchestrator/replication/status'() {
     const now = Date.now()
-    return {
+
+
+return {
       sites: [
         {
           id: 'demo-pve-cluster-001',
@@ -1353,7 +1413,9 @@ const EXTRA_MOCKS: MockDataMap = {
   },
   get 'GET:/api/v1/orchestrator/replication/jobs'() {
     const now = Date.now()
-    return [
+
+
+return [
       {
         id: 'repl-001',
         vm_ids: [100, 101, 102, 104],
@@ -1553,11 +1615,14 @@ const EXTRA_MOCKS: MockDataMap = {
 /** Strip query string from a URL path */
 function stripQuery(urlPath: string): string {
   const idx = urlPath.indexOf('?')
-  return idx === -1 ? urlPath : urlPath.substring(0, idx)
+
+
+return idx === -1 ? urlPath : urlPath.substring(0, idx)
 }
 
 /** Replace any connection ID segment with the demo connection ID */
 const CONNECTION_ID_RE = /\/connections\/([^/]+)/
+
 function normaliseConnectionId(urlPath: string): string {
   return urlPath.replace(CONNECTION_ID_RE, `/connections/${DEMO_CONNECTION_ID}`)
 }
@@ -1567,18 +1632,24 @@ const DEMO_PBS_IDS = ['demo-pbs-001', 'demo-pbs-002']
 
 /** Replace any PBS ID segment with the first matching demo PBS ID */
 const PBS_ID_RE = /\/pbs\/([^/]+)/
+
 function normalisePbsId(urlPath: string): string {
   const match = urlPath.match(PBS_ID_RE)
+
   if (!match) return urlPath
   const requestedId = decodeURIComponent(match[1])
+
+
   // If the ID is already a known demo PBS ID, keep it
   if (DEMO_PBS_IDS.includes(requestedId)) return urlPath
+
   // Otherwise, map to the first demo PBS ID
   return urlPath.replace(PBS_ID_RE, `/pbs/${DEMO_PBS_IDS[0]}`)
 }
 
 /** Replace any node name segment with the first demo node name */
 const NODE_NAME_RE = /\/nodes\/([^/]+)/
+
 function normaliseNodeName(urlPath: string): string {
   return urlPath.replace(NODE_NAME_RE, `/nodes/${DEMO_NODE_NAME}`)
 }
@@ -1611,16 +1682,20 @@ function lookupMock(method: string, urlPath: string): any | Response | null {
 
   // --- 3. Normalise connection ID and retry ---
   const withDemoConn = normaliseConnectionId(cleanPath)
+
   if (withDemoConn !== cleanPath) {
     const connMethodKey = `${method}:${withDemoConn}`
+
     if (EXTRA_MOCKS[connMethodKey] !== undefined) return EXTRA_MOCKS[connMethodKey]
     if (method === 'GET' && MOCK_DATA[withDemoConn] !== undefined) return MOCK_DATA[withDemoConn]
   }
 
   // --- 4. Normalise node name and retry ---
   const withDemoNode = normaliseNodeName(withDemoConn)
+
   if (withDemoNode !== withDemoConn) {
     const nodeMethodKey = `${method}:${withDemoNode}`
+
     if (EXTRA_MOCKS[nodeMethodKey] !== undefined) return EXTRA_MOCKS[nodeMethodKey]
     if (method === 'GET' && MOCK_DATA[withDemoNode] !== undefined) return MOCK_DATA[withDemoNode]
   }
@@ -1628,8 +1703,10 @@ function lookupMock(method: string, urlPath: string): any | Response | null {
   // --- 4b. Normalise PBS ID and retry ---
   if (cleanPath.includes('/pbs/')) {
     const withDemoPbs = normalisePbsId(cleanPath)
+
     if (withDemoPbs !== cleanPath) {
       const pbsMethodKey = `${method}:${withDemoPbs}`
+
       if (EXTRA_MOCKS[pbsMethodKey] !== undefined) return EXTRA_MOCKS[pbsMethodKey]
       if (method === 'GET' && MOCK_DATA[withDemoPbs] !== undefined) return MOCK_DATA[withDemoPbs]
     }
@@ -1647,6 +1724,7 @@ function lookupMock(method: string, urlPath: string): any | Response | null {
       '/api/v1/users',
       '/api/v1/rbac/assignments',
     ]
+
     if (lockedPrefixes.some(p => cleanPath === p || cleanPath.startsWith(p + '/'))) {
       return demoLocked()
     }
@@ -1684,7 +1762,9 @@ function buildInventorySSE(): Response {
   // Build nodes with their guests
   const nodesWithGuests = nodesData.map((n: any) => {
     const nodeGuests = resources.filter((r: any) => r.node === n.node)
-    return {
+
+
+return {
       node: n.node,
       status: n.status || 'online',
       cpu: n.cpu,
@@ -1717,6 +1797,7 @@ function buildInventorySSE(): Response {
 
   // Ceph health
   let cephHealth: string | undefined
+
   if (cephStatus?.health?.status) {
     cephHealth = cephStatus.health.status
   }
@@ -1741,6 +1822,7 @@ function buildInventorySSE(): Response {
   const sharedStorages = storageData.filter((s: any, i: number, arr: any[]) =>
     s.shared && arr.findIndex((x: any) => x.storage === s.storage) === i
   )
+
   const storageEvent = {
     connId: mainConn?.id || 'demo-pve-cluster-001',
     connName: mainConn?.name || 'Production Cluster',
@@ -1815,6 +1897,7 @@ function buildInventorySSE(): Response {
 
   // Build SSE body
   const events: string[] = []
+
   const sse = (event: string, data: any) =>
     events.push(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
 
@@ -1872,6 +1955,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
 
   // 2. Extract URL path
   let pathname: string
+
   try {
     pathname = new URL(req.url).pathname
   } catch {
@@ -1894,26 +1978,36 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   // /my-vdc without running a real session backend, we keep the active
   // tenant in a client-side cookie that the demo handlers below read.
   const DEMO_TENANT_COOKIE = 'demo-tenant'
+
   const DEMO_TENANTS = [
     { id: 'default',             slug: 'default',  name: 'Provider (default)',   description: 'Provider workspace, manages every tenant.' },
     { id: 'demo-tenant-acme',    slug: 'acme',     name: 'Acme Corporation',     description: 'Customer with prod + DR vDCs.' },
     { id: 'demo-tenant-globex',  slug: 'globex',   name: 'Globex',               description: 'Customer with a single production vDC.' },
     { id: 'demo-tenant-initech', slug: 'initech',  name: 'Initech',              description: 'Customer with a single production vDC.' },
   ]
+
   const parseCookies = (raw: string | null): Record<string, string> => {
     const out: Record<string, string> = {}
+
     if (!raw) return out
+
     for (const part of raw.split(';')) {
       const eq = part.indexOf('=')
+
       if (eq < 0) continue
       out[part.slice(0, eq).trim()] = decodeURIComponent(part.slice(eq + 1).trim())
     }
-    return out
+
+
+return out
   }
+
   const currentDemoTenantId = (() => {
     const c = parseCookies(req.headers.get('cookie'))
     const v = c[DEMO_TENANT_COOKIE]
-    return DEMO_TENANTS.some(t => t.id === v) ? v : 'default'
+
+
+return DEMO_TENANTS.some(t => t.id === v) ? v : 'default'
   })()
 
   // 3. For any mutating request (POST/PUT/PATCH/DELETE), return a generic
@@ -1928,21 +2022,29 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
     if (method === 'POST' && cleanPath === '/api/v1/auth/switch-tenant') {
       return (async () => {
         let target = 'default'
+
         try {
           const body = await req.json()
+
           if (typeof body?.tenantId === 'string' && body.tenantId) target = body.tenantId
         } catch {
           // No body / not JSON: fall back to default
         }
+
         const valid = DEMO_TENANTS.some(t => t.id === target) ? target : 'default'
         const res = NextResponse.json({ data: { ok: true, tenantId: valid } }, { headers: demoHeaders })
+
+
         // 30 days, scoped to the demo origin. SameSite=Lax keeps the
         // cookie present across the full-page reload that switchTenant()
         // triggers immediately after the fetch resolves.
         res.cookies.set(DEMO_TENANT_COOKIE, valid, { path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 })
-        return res
+
+return res
       })()
     }
+
+
     // --- POST: node/guest trends ---
     if (method === 'POST' && cleanPath.match(/\/api\/v1\/connections\/[^/]+\/(nodes|guests)\/trends/)) {
       // Widget expects { data: { "node-name": [{ t: "HH:MM", cpu, ram }, ...] } }
@@ -2010,7 +2112,9 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
     }
 
     const specificMock = lookupMock(method, pathname)
+
     if (specificMock instanceof Response) return specificMock
+
     if (specificMock !== null) {
       return NextResponse.json(specificMock, { headers: demoHeaders })
     }
@@ -2055,7 +2159,9 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
         { vmid: 102, vm_name: 'web-prod-02', node: 'pve-node-01' },
         { vmid: 302, vm_name: 'ci-runner', node: 'pve-node-03' },
       ]
-      return NextResponse.json(vms.map(vm => ({
+
+
+return NextResponse.json(vms.map(vm => ({
         ...vm, bytes_in: Math.floor(Math.random() * 5e9 + 1e8), bytes_out: Math.floor(Math.random() * 1e9 + 1e7), packets: Math.floor(Math.random() * 1e6),
       })), { headers: demoHeaders })
     }
@@ -2071,10 +2177,15 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
         { port: 3306, protocol: 'TCP', service: 'MySQL' },
         { port: 9090, protocol: 'TCP', service: 'Prometheus' },
       ]
+
       const total = portList.length
-      return NextResponse.json(portList.map((p, i) => {
+
+
+return NextResponse.json(portList.map((p, i) => {
         const bytes = Math.floor((total - i) * 1e9 * Math.random() + 5e7)
-        return { ...p, bytes, packets: Math.floor(bytes / 1000), percent: (total - i) * 10 + Math.random() * 5 }
+
+
+return { ...p, bytes, packets: Math.floor(bytes / 1000), percent: (total - i) * 10 + Math.random() * 5 }
       }), { headers: demoHeaders })
     }
 
@@ -2085,6 +2196,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
         { src_ip: '10.10.10.10', dst_ip: '10.10.10.20', bytes: 18_500_000_000, packets: 12_000_000, protocol: 'TCP', dst_port: 5432 },
         { src_ip: '10.10.10.10', dst_ip: '10.10.10.30', bytes: 8_200_000_000, packets: 5_500_000, protocol: 'TCP', dst_port: 443 },
         { src_ip: '10.10.10.10', dst_ip: '192.168.1.100', bytes: 4_100_000_000, packets: 2_800_000, protocol: 'TCP', dst_port: 443 },
+
         // Secondary flows
         { src_ip: '10.10.10.20', dst_ip: '10.10.10.30', bytes: 2_500_000_000, packets: 1_600_000, protocol: 'TCP', dst_port: 443 },
         { src_ip: '10.10.10.3', dst_ip: '10.10.10.10', bytes: 1_800_000_000, packets: 1_200_000, protocol: 'TCP', dst_port: 8006 },
@@ -2099,14 +2211,18 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
         { src_ip: '192.168.1.100', dst_ip: '10.10.10.30', bytes: 220_000_000, packets: 140_000, protocol: 'TCP', dst_port: 443 },
         { src_ip: '10.10.10.20', dst_ip: '10.10.10.1', bytes: 180_000_000, packets: 115_000, protocol: 'UDP', dst_port: 53 },
       ]
-      return NextResponse.json(pairs, { headers: demoHeaders })
+
+
+return NextResponse.json(pairs, { headers: demoHeaders })
     }
 
     if (endpoint === 'timeseries/vm') {
       const points = Array.from({ length: 60 }, (_, i) => ({
         time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 5e7 + 1e6), bytes_out: Math.floor(Math.random() * 1e7 + 5e5), packets: Math.floor(Math.random() * 50000),
       }))
-      return NextResponse.json(points, { headers: demoHeaders })
+
+
+return NextResponse.json(points, { headers: demoHeaders })
     }
 
     if (endpoint === 'timeseries/all-vms') {
@@ -2120,7 +2236,9 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       const points = Array.from({ length: 60 }, (_, i) => ({
         time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 2e7 + 5e5),
       }))
-      return NextResponse.json(points, { headers: demoHeaders })
+
+
+return NextResponse.json(points, { headers: demoHeaders })
     }
 
     if (endpoint === 'agents') {
@@ -2172,21 +2290,27 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
     if (currentDemoTenantId === 'default') {
       return NextResponse.json({ data: [] }, { headers: demoHeaders })
     }
+
     const allVdcs = ((MOCK_DATA['/api/v1/vdcs'] as any)?.data || []) as any[]
     const scoped = allVdcs.filter(v => v.tenantId === currentDemoTenantId)
-    return NextResponse.json({ data: scoped }, { headers: demoHeaders })
+
+
+return NextResponse.json({ data: scoped }, { headers: demoHeaders })
   }
 
   // --- PBS backups/trends ---
   if (cleanPath.match(/\/api\/v1\/pbs\/[^/]+\/backups\/trends/)) {
     const days = Number(urlObj.searchParams.get('days') || 30)
     const now = new Date()
+
     const data = Array.from({ length: days }, (_, i) => {
       const date = new Date(now.getTime() - (days - 1 - i) * 86400000)
       const isWeekend = date.getDay() === 0 || date.getDay() === 6
       const baseCount = isWeekend ? 2 + Math.floor(Math.random() * 3) : 8 + Math.floor(Math.random() * 6)
       const errors = Math.random() < 0.08 ? 1 : 0
-      return {
+
+
+return {
         date: date.toISOString().split('T')[0],
         count: baseCount,
         ok: baseCount - errors,
@@ -2201,7 +2325,9 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   // --- Dynamic per-VM Green Score endpoint ---
   if (cleanPath.match(/\/api\/v1\/connections\/[^/]+\/guests\/[^/]+\/[^/]+\/[^/]+\/green$/)) {
     const nowSec = Math.floor(Date.now() / 1000)
-    return NextResponse.json({
+
+
+return NextResponse.json({
       hasEnoughData: true,
       windowDays: 30,
       samples: {
@@ -2231,9 +2357,12 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   // --- Dynamic RRD endpoints ---
   if (cleanPath.match(/\/api\/v1\/connections\/[^/]+\/rrd/) || cleanPath.match(/\/api\/v1\/connections\/[^/]+\/ceph\/rrd/)) {
     const timeframe = urlObj.searchParams.get('timeframe') || 'hour'
+
     if (cleanPath.includes('/ceph/rrd')) {
       const pts = generateRrdData(timeframe)
-      return NextResponse.json({
+
+
+return NextResponse.json({
         data: {
           iops_read: pts.map(p => ({ time: p.time, value: Math.floor(Math.random() * 5000 + 1000) })),
           iops_write: pts.map(p => ({ time: p.time, value: Math.floor(Math.random() * 3000 + 500) })),
@@ -2242,13 +2371,16 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
         },
       }, { headers: demoHeaders })
     }
-    return NextResponse.json({ data: generateRrdData(timeframe) }, { headers: demoHeaders })
+
+
+return NextResponse.json({ data: generateRrdData(timeframe) }, { headers: demoHeaders })
   }
 
   // --- Connection filtering by type ---
   if (cleanPath === '/api/v1/connections') {
     const typeFilter = urlObj.searchParams.get('type')
     const allConns = (MOCK_DATA['/api/v1/connections'] as any)?.data || []
+
     if (typeFilter) {
       return NextResponse.json({ data: allConns.filter((c: any) => c.type === typeFilter) }, { headers: demoHeaders })
     }
@@ -2258,6 +2390,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   const data = lookupMock(method, pathname)
 
   if (data instanceof Response) return data
+
   if (data !== null) {
     return NextResponse.json(data, { headers: demoHeaders })
   }

@@ -13,10 +13,12 @@ export async function GET(req: Request, ctx: Ctx) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const { id } = await ctx.params
     const image = await prisma.customImage.findUnique({ where: { id } })
+
     if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     return NextResponse.json({ data: image })
@@ -29,16 +31,20 @@ export async function PUT(req: Request, ctx: Ctx) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const { id } = await ctx.params
     const existing = await prisma.customImage.findUnique({ where: { id } })
+
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     const rawBody = await req.json().catch(() => null)
+
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const parseResult = updateCustomImageSchema.safeParse(rawBody)
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parseResult.error.flatten() },
@@ -47,20 +53,24 @@ export async function PUT(req: Request, ctx: Ctx) {
     }
 
     const body = parseResult.data
+
     // isShared can only be toggled by the provider (tenant 'default').
     // Strip it from any other tenant's update payload to keep the catalogue
     // sharing decision in provider hands.
     const tenantId = await getCurrentTenantId()
     const data: any = { ...body }
+
     if (data.isShared !== undefined && tenantId !== DEFAULT_TENANT_ID) {
       delete data.isShared
     }
+
     const image = await prisma.customImage.update({
       where: { id },
       data,
     })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update",
       category: "templates",
@@ -81,15 +91,18 @@ export async function DELETE(req: Request, ctx: Ctx) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const { id } = await ctx.params
     const existing = await prisma.customImage.findUnique({ where: { id } })
+
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     await prisma.customImage.delete({ where: { id } })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "delete",
       category: "templates",

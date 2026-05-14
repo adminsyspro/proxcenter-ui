@@ -1,6 +1,7 @@
 // src/app/api/v1/orchestrator/drs/rules/route.ts
-import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+
+import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getTenantConnectionIds } from '@/lib/tenant'
@@ -28,9 +29,11 @@ function toOrchestratorFormat(body: any) {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW)
+
     if (denied) return denied
 
     const client = getOrchestratorClient()
+
     if (!client) return NextResponse.json([])
 
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -53,6 +56,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
+
     if (denied) return denied
 
     const client = getOrchestratorClient()
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Validate connection belongs to current tenant
     const tenantConnectionIds = await getTenantConnectionIds()
+
     if (rule.connection_id && !tenantConnectionIds.has(rule.connection_id)) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }

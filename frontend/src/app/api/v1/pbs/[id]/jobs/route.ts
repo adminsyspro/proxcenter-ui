@@ -13,7 +13,7 @@ type RouteContext = {
 
 /**
  * GET /api/v1/pbs/[id]/jobs
- * 
+ *
  * Récupère tous les jobs configurés sur le PBS :
  * - Sync Jobs (synchronisation entre PBS)
  * - Verify Jobs (vérification d'intégrité)
@@ -23,6 +23,7 @@ type RouteContext = {
  */
 export async function GET(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -59,7 +60,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       '/config/tape-backup-job',  // PBS 2.x/3.x config endpoint - CORRECT
       '/tape/backup',             // Fallback
     ]
-    
+
     for (const endpoint of tapeEndpoints) {
       try {
         const result = await pbsFetch<any[]>(conn, endpoint)
@@ -78,7 +79,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       try {
         const pruneJobs = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(store)}/prune-job`)
 
-        
+
 return (pruneJobs || []).map(job => ({ ...job, datastore: store }))
       } catch {
         return []
@@ -89,7 +90,7 @@ return (pruneJobs || []).map(job => ({ ...job, datastore: store }))
       try {
         const gcStatus = await pbsFetch<any>(conn, `/admin/datastore/${encodeURIComponent(store)}/gc`)
 
-        
+
 return { datastore: store, ...gcStatus }
       } catch {
         return null
@@ -274,7 +275,7 @@ return { datastore: store, ...gcStatus }
     })
   } catch (e: any) {
     console.error("[pbs-jobs] GET Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

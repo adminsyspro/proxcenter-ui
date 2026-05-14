@@ -30,15 +30,19 @@ export async function isOidcEnabled(): Promise<boolean> {
     where: { id: "default" },
     select: { enabled: true },
   })
-  return row?.enabled === true
+
+
+return row?.enabled === true
 }
 
 /** Reads the full OIDC config + decrypts the client secret. */
 export async function getOidcConfig(): Promise<OidcConfig | null> {
   const row = await prisma.oidcConfig.findUnique({ where: { id: "default" } })
+
   if (!row) return null
 
   let clientSecret: string | null = null
+
   if (row.clientSecretEnc) {
     try {
       clientSecret = decryptSecret(row.clientSecretEnc)
@@ -89,6 +93,7 @@ export function resolveOidcRole(
 
   for (const group of groups) {
     const mappedRole = config.groupRoleMapping[group]
+
     if (mappedRole) {
       return mappedRole
     }

@@ -1,5 +1,7 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
+
 import {
   Box,
   Button,
@@ -15,7 +17,6 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
-import { useRouter } from 'next/navigation'
 
 import type { GreenMetrics } from '../types'
 import { COLORS } from '../constants'

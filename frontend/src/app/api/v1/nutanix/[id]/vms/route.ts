@@ -18,9 +18,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },

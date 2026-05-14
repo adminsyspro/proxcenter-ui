@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -41,13 +42,18 @@ export default function PbsRemotesTab({ pbsId }: PbsRemotesTabProps) {
   const fetchRemotes = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/remotes`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
+
       setRemotes(Array.isArray(body?.data) ? body.data : [])
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -141,7 +147,9 @@ export default function PbsRemotesTab({ pbsId }: PbsRemotesTabProps) {
             <TableBody>
               {remotes.map((r, idx) => {
                 const fp = String(r.fingerprint || '')
-                return (
+
+
+return (
                   <TableRow key={r.name || `remote-${idx}`} hover>
                     <TableCell sx={{ fontSize: 12 }}>
                       <Typography variant="caption" sx={{ fontWeight: 600 }}>

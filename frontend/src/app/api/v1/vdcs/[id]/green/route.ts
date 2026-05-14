@@ -28,15 +28,19 @@ export async function GET(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
+
     if (!vdcId) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const vdc = await getVdcById(vdcId)
+
     if (!vdc) return NextResponse.json({ error: "vDC not found" }, { status: 404 })
 
     const tenantId = await getCurrentTenantId()
+
     if (vdc.tenantId !== tenantId) {
       return NextResponse.json({ error: "vDC not accessible" }, { status: 403 })
     }
@@ -46,6 +50,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // only kicks in when a VM lacks a known node (rare) or when no DC has
     // been seeded yet (we auto-seed via ensureDefaultDatacenter).
     const defaultDc = await ensureDefaultDatacenter()
+
     const fallback: GreenConfig = {
       tdpPerCore: defaultDc.tdpPerCoreW,
       wattsPerGbRam: defaultDc.wattsPerGbRam,
@@ -72,8 +77,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
       .map(async (g: any) => {
         const nodeName = String(g.node ?? '')
         let perVmConfig: GreenConfig | undefined
+
         if (nodeName) {
           const resolved = await resolveGreenConfigForNode(vdc.connectionId, nodeName)
+
           perVmConfig = {
             tdpPerCore: resolved.tdpPerCore,
             wattsPerGbRam: resolved.wattsPerGbRam,
@@ -84,7 +91,9 @@ export async function GET(_req: Request, ctx: RouteContext) {
             equivalences: fallback.equivalences,
           }
         }
-        return {
+
+
+return {
           vcpus: Number(g.maxcpu) || 0,
           ramBytes: Number(g.maxmem) || 0,
           status: String(g.status ?? 'stopped'),
@@ -100,6 +109,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
         power: metrics.power,
         co2: metrics.co2,
         efficiency: metrics.efficiency,
+
         // cost intentionally omitted for tenant view
       },
       configured: true,

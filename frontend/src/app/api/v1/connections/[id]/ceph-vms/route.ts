@@ -18,12 +18,14 @@ export async function GET(
     const { id } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
 
     // 1. Get storage configs to identify RBD storages
     const storageConfigs = await pveFetch<any[]>(conn, "/storage").catch(() => [])
+
     const rbdStorages = new Set(
       (storageConfigs || [])
         .filter((s: any) => s.type === "rbd")
@@ -36,6 +38,7 @@ export async function GET(
 
     // 2. Get all QEMU VMs from cluster resources
     const resources = await pveFetch<any[]>(conn, "/cluster/resources")
+
     const qemuVMs = (resources || []).filter(
       (r: any) => r.type === "qemu" && r.status === "running"
     )
@@ -48,19 +51,24 @@ export async function GET(
             conn,
             `/nodes/${encodeURIComponent(vm.node)}/qemu/${vm.vmid}/config`
           )
+
           if (!config) return null
 
           let cephDiskSize = 0
+
           for (const [key, val] of Object.entries(config)) {
             if (!/^(scsi|virtio|ide|sata)\d+$/.test(key)) continue
             const diskStr = String(val)
             const storageName = diskStr.split(":")[0]
+
             if (!rbdStorages.has(storageName)) continue
 
             const sizeMatch = diskStr.match(/size=(\d+)([GMT])?/i)
+
             if (sizeMatch) {
               const num = Number.parseInt(sizeMatch[1], 10)
               const unit = (sizeMatch[2] || "G").toUpperCase()
+
               if (unit === "T") cephDiskSize += num * 1024
               else if (unit === "M") cephDiskSize += num / 1024
               else cephDiskSize += num

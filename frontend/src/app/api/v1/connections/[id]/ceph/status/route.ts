@@ -15,6 +15,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -30,12 +31,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // Essayer de récupérer le status Ceph depuis le premier node
     try {
       const status = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(firstNode)}/ceph/status`)
-      
+
       // Récupérer aussi la version Ceph
       let version = null
+
       try {
-        version = status?.versions?.overall?.version || 
-                  status?.version || 
+        version = status?.versions?.overall?.version ||
+                  status?.version ||
                   null
       } catch {
         // Ignore version fetch errors
@@ -43,11 +45,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
       // Normaliser les données OSD (différentes structures selon les versions)
       const osdmap = status?.osdmap?.osdmap || status?.osdmap || {}
-      
+
       // Normaliser les données MDS/fsmap - chercher dans toutes les structures possibles
       const fsmap = status?.fsmap || {}
       const mdsServers: any[] = []
-      
+
       // 1. Chercher dans filesystems[].mdsmap.info (structure principale PVE 8+)
       if (fsmap?.filesystems) {
         for (const fs of fsmap.filesystems) {
@@ -63,6 +65,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
               }
             }
           }
+
+
           // Aussi vérifier dans standby_count_wanted et up:standby
           if (fs.mdsmap?.up) {
             for (const [key, gid] of Object.entries(fs.mdsmap.up as Record<string, any>)) {
@@ -71,7 +75,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           }
         }
       }
-      
+
       // 2. Chercher dans fsmap.standbys (MDS en standby)
       if (fsmap?.standbys) {
         for (const mds of fsmap.standbys) {
@@ -99,6 +103,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       // 4. Essayer aussi de récupérer la liste des MDS depuis l'API dédiée
       try {
         const mdsData = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(firstNode)}/ceph/mds`)
+
         if (mdsData && Array.isArray(mdsData)) {
           for (const mds of mdsData) {
             if (!mdsServers.find(m => m.name === mds.name)) {
@@ -117,6 +122,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
       // Extraire les warnings/errors du health
       const healthChecks: any[] = []
+
       if (status?.health?.checks) {
         for (const [checkName, checkData] of Object.entries(status.health.checks as Record<string, any>)) {
           healthChecks.push({
@@ -131,6 +137,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         data: {
           ...status,
           version,
+
           // Données normalisées pour faciliter l'affichage
           _normalized: {
             osd: {
@@ -146,11 +153,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     } catch (e: any) {
       // Ceph n'est peut-être pas configuré
       if (e?.message?.includes('not found') || e?.message?.includes('500')) {
-        return NextResponse.json({ 
+        return NextResponse.json({
           data: null,
           message: "Ceph not configured"
         })
       }
+
       throw e
     }
   } catch (e: any) {

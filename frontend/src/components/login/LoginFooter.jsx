@@ -31,6 +31,7 @@ export default function LoginFooter({ branding }) {
   )
 
   const items = [docsNode, supportNode].filter(Boolean)
+
   if (items.length === 0) return null
 
   return (

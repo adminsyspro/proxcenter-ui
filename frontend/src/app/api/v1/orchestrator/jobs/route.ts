@@ -10,7 +10,9 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 function extractHostname(baseUrl: string): string {
   try {
     const u = new URL(baseUrl)
-    return u.hostname
+
+
+return u.hostname
   } catch {
     return baseUrl
   }
@@ -32,6 +34,7 @@ export async function GET(req: Request) {
 
     for (const c of connections) {
       const host = extractHostname(c.baseUrl)
+
       connById.set(c.id, host)
       connByName.set(c.name, host)
     }
@@ -50,9 +53,10 @@ export async function GET(req: Request) {
 
       if (rollingRes.ok) {
         const rollingData = await rollingRes.json()
-        
+
         // Handle null, undefined, or different response formats
         let rollingUpdates: any[] = []
+
         if (Array.isArray(rollingData)) {
           rollingUpdates = rollingData
         } else if (rollingData && Array.isArray(rollingData.data)) {
@@ -66,12 +70,13 @@ export async function GET(req: Request) {
         for (const ru of rollingUpdates) {
           // Map rolling update status to job status
           let jobStatus = ru.status
+
           if (ru.status === "completed") jobStatus = "success"
           if (ru.status === "cancelled") jobStatus = "failed"
 
           // Calculate progress
-          const progress = ru.total_nodes > 0 
-            ? Math.round((ru.completed_nodes / ru.total_nodes) * 100) 
+          const progress = ru.total_nodes > 0
+            ? Math.round((ru.completed_nodes / ru.total_nodes) * 100)
             : 0
 
           const ruTarget = resolve(ru.connection_id)
@@ -89,6 +94,7 @@ export async function GET(req: Request) {
               ? `En cours: ${ru.current_node} (${ru.completed_nodes}/${ru.total_nodes} nœuds)`
               : `${ru.completed_nodes}/${ru.total_nodes} nœuds`,
             target: ruTarget,
+
             // Additional data for drill-down
             metadata: {
               connectionId: ru.connection_id,
@@ -120,6 +126,7 @@ export async function GET(req: Request) {
         for (let i = 0; i < migrations.length; i++) {
           const m = migrations[i]
           let jobStatus = m.status
+
           if (m.status === "completed") jobStatus = "success"
 
           const drsTarget = resolve(m.connection_id)
@@ -167,9 +174,11 @@ export async function GET(req: Request) {
         for (const rj of replJobs) {
           // Map replication status → unified job status
           let jobStatus = rj.status
+
           if (rj.status === "synced") jobStatus = "success"
           else if (rj.status === "syncing") jobStatus = "running"
           else if (rj.status === "error") jobStatus = "failed"
+
           // paused and pending stay as-is
 
           const vmLabel = (rj.vm_names || []).length > 0
@@ -223,16 +232,19 @@ export async function GET(req: Request) {
         // Fetch history for plans that have been executed
         for (const plan of plans) {
           if (!plan.last_failover && !plan.last_test) continue
+
           try {
             const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${plan.id}/history`, {
               headers: { "Content-Type": "application/json" },
             })
+
             if (!histRes.ok) continue
             const histData = await histRes.json()
             const executions: any[] = Array.isArray(histData) ? histData : (histData?.data || [])
 
             for (const exec of executions) {
               let jobStatus = exec.status
+
               if (exec.status === "completed") jobStatus = "success"
               else if (exec.status === "cancelled") jobStatus = "failed"
 
@@ -275,6 +287,7 @@ export async function GET(req: Request) {
 
     // Filter all jobs by tenant connections
     const tenantConnIds = new Set(connections.map((c: any) => c.id))
+
     const tenantJobs = jobs.filter((j: any) =>
       !j.metadata?.connectionId || tenantConnIds.has(j.metadata.connectionId)
     ).filter((j: any) =>
@@ -296,11 +309,14 @@ export async function GET(req: Request) {
     filtered.sort((a, b) => {
       const dateA = new Date(a.startedAt || a.createdAt || 0).getTime()
       const dateB = new Date(b.startedAt || b.createdAt || 0).getTime()
-      return dateB - dateA
+
+
+return dateB - dateA
     })
 
     // Apply limit
     const limitNum = Number.parseInt(limit, 10)
+
     if (limitNum > 0) {
       filtered = filtered.slice(0, limitNum)
     }
@@ -315,7 +331,7 @@ export async function GET(req: Request) {
       paused: tenantJobs.filter(j => j.status === "paused").length,
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: filtered,
       stats,
     })
@@ -323,7 +339,9 @@ export async function GET(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error getting jobs:", error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )

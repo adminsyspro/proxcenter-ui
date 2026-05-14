@@ -600,6 +600,7 @@ function buildInfraView(
 
   // ProxCenter root node — always at top, connecting to all clusters/standalone nodes
   const pbsCount = (data.pbsServers || []).length
+
   const proxcenterData: ProxCenterNodeData = {
     label: 'ProxCenter',
     clusterCount: clusters.length,

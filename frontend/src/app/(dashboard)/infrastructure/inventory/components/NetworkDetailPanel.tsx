@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -53,6 +54,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
 
   // Fetch connection name
   const [connName, setConnName] = React.useState<string>('')
+
   React.useEffect(() => {
     if (!connId) return
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}`)
@@ -66,7 +68,9 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
     const k = 1024
     const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
+
+
+return `${(bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0)} ${sizes[i]}`
   }
 
   if (loading) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress size={28} /></Box>
@@ -74,15 +78,19 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   // --- NET-CONN: Cluster-level network overview ---
   if (selection.type === 'net-conn') {
     const nodeMap = new Map<string, { vlans: Set<string | number>; bridges: Set<string>; vms: Set<string> }>()
+
     for (const vm of netData) {
       if (!nodeMap.has(vm.node)) nodeMap.set(vm.node, { vlans: new Set(), bridges: new Set(), vms: new Set() })
       const nd = nodeMap.get(vm.node)!
+
       nd.vms.add(vm.vmid)
+
       for (const net of vm.nets) {
         nd.bridges.add(net.bridge)
         nd.vlans.add(net.tag ?? 'untagged')
       }
     }
+
     const nodes = Array.from(nodeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
     const totalVlans = new Set(netData.flatMap(vm => vm.nets.map(n => n.tag ?? 'untagged'))).size
     const totalBridges = new Set(netData.flatMap(vm => vm.nets.map(n => n.bridge))).size
@@ -175,20 +183,26 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   if (selection.type === 'net-node' && nodeName) {
     const nodeVms = netData.filter(vm => vm.node === nodeName)
     const vlanMap = new Map<string | number, { bridges: Set<string>; vms: VmNet[] }>()
+
     for (const vm of nodeVms) {
       for (const net of vm.nets) {
         const tag = net.tag ?? 'untagged'
+
         if (!vlanMap.has(tag)) vlanMap.set(tag, { bridges: new Set(), vms: [] })
         const v = vlanMap.get(tag)!
+
         v.bridges.add(net.bridge)
         if (!v.vms.find(x => x.vmid === vm.vmid)) v.vms.push(vm)
       }
     }
+
     const vlans = Array.from(vlanMap.entries()).sort((a, b) => {
       if (a[0] === 'untagged') return 1
       if (b[0] === 'untagged') return -1
-      return Number(a[0]) - Number(b[0])
+
+return Number(a[0]) - Number(b[0])
     })
+
     const totalBridges = new Set(nodeVms.flatMap(vm => vm.nets.map(n => n.bridge))).size
 
     return (
@@ -273,14 +287,17 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
     const isUntagged = vlanTag === 'untagged'
     const nodeVms = netData.filter(vm => vm.node === nodeName)
     const vlanVms: { vm: VmNet; net: NetIface }[] = []
+
     for (const vm of nodeVms) {
       for (const net of vm.nets) {
         const tag = net.tag ?? 'untagged'
+
         if (String(tag) === vlanTag) {
           vlanVms.push({ vm, net })
         }
       }
     }
+
     const bridges = [...new Set(vlanVms.map(v => v.net.bridge))]
 
     return (
@@ -372,6 +389,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
                       sx={{ cursor: 'pointer' }}
                       onClick={() => {
                         const vmKey = `${vm.connId || connId}:${vm.node}:${vm.type}:${vm.vmid}`
+
                         onSelect?.({ type: 'vm', id: vmKey })
                       }}
                     >

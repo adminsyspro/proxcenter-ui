@@ -5,10 +5,13 @@ import { Box, type BoxProps } from '@mui/material'
 import { countryFlagUrl } from '@/lib/utils/countries'
 
 interface CountryFlagProps extends Omit<BoxProps, 'component'> {
+
   /** ISO-3166-1 alpha-2 country code (case-insensitive). */
   code: string | null | undefined
+
   /** Rendered width in px. Height auto-scales with the flag's 4:3 aspect. */
   size?: number
+
   /** Visible alt text — defaults to the code. */
   alt?: string
 }
@@ -22,8 +25,10 @@ interface CountryFlagProps extends Omit<BoxProps, 'component'> {
  */
 export function CountryFlag({ code, size = 20, alt, sx, ...rest }: CountryFlagProps) {
   const url = countryFlagUrl(code, size)
+
   if (!url) return null
-  return (
+
+return (
     <Box
       component="img"
       src={url}

@@ -36,6 +36,7 @@ export async function allocateBlockVolumeAndResolvePath(
   }
 
   const allocOutput = allocResult.output.trim()
+
   // pvesm alloc output varies by plugin:
   //   - dir/NFS: "successfully created 'storage:vmid/vm-vmid-disk-N.qcow2'"
   //   - LVM:     "successfully created 'storage:vm-vmid-disk-N'"
@@ -53,6 +54,7 @@ export async function allocateBlockVolumeAndResolvePath(
   }
 
   const volumeId = captured
+
   const pathResult = await executeSSH(
     connectionId,
     nodeIp,

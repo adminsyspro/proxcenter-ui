@@ -3,6 +3,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -46,12 +47,14 @@ export type ConnectionFormData = {
   insecureTLS: boolean
   hasCeph: boolean
   apiToken: string
+
   // VMware fields
   subType: string
   vmwareUser: string
   vmwarePassword: string
   vmwareDatacenter: string
   hypervShareName: string
+
   // Location fields
   latitude: string
   longitude: string
@@ -73,10 +76,10 @@ type ConnectionDialogProps = {
   onClose: () => void
   onSave: (data: ConnectionFormData) => Promise<void>
   type: 'pve' | 'pbs' | 'vmware' | 'xcpng' | 'hyperv' | 'nutanix'
-  initialData?: Partial<ConnectionFormData> & { 
+  initialData?: Partial<ConnectionFormData> & {
     id?: string
     sshKeyConfigured?: boolean
-    sshPassConfigured?: boolean 
+    sshPassConfigured?: boolean
   }
   mode?: 'create' | 'edit'
 }
@@ -127,9 +130,10 @@ export default function ConnectionDialog({
   const [pbsFingerprint, setPbsFingerprint] = useState<string | null>(null)
   const [capturingFingerprint, setCapturingFingerprint] = useState(false)
   const [fingerprintError, setFingerprintError] = useState<string | null>(null)
-  
+
   // Test SSH
   const [testingSSH, setTestingSSH] = useState(false)
+
   const [sshTestResult, setSshTestResult] = useState<{
     success: boolean
     nodes?: { node: string; ip: string; status: string; error?: string }[]
@@ -144,16 +148,19 @@ export default function ConnectionDialog({
           ...defaultFormData,
           ...initialData,
           behindProxy: initialData.behindProxy ?? false,
+
           // Ne pas pré-remplir les secrets en mode edit
           apiToken: '',
           sshKey: '',
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
+
           // VMware sub-type
           subType: (initialData as any).subType || '',
           vmwareDatacenter: (initialData as any).vmwareDatacenter || '',
           hypervShareName: (initialData as any).hypervShareName || 'VMs',
+
           // Location: convert numbers to strings for text fields
           latitude: initialData.latitude != null ? String(initialData.latitude) : '',
           longitude: initialData.longitude != null ? String(initialData.longitude) : '',
@@ -166,6 +173,7 @@ export default function ConnectionDialog({
           vmwareUser: type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root',
         })
       }
+
       setError(null)
       setSshTestResult(null)
       setTokenId('')
@@ -189,19 +197,24 @@ export default function ConnectionDialog({
     if (!open) return
     const lat = Number.parseFloat(form.latitude)
     const lng = Number.parseFloat(form.longitude)
+
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
     if (form.country) return
     const ctrl = new AbortController()
+
     const timer = setTimeout(async () => {
       try {
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=3&lat=${lat}&lon=${lng}`
+
         const r = await fetch(url, {
           signal: ctrl.signal,
           headers: { 'Accept-Language': 'en' },
         })
+
         if (!r.ok) return
         const j = await r.json()
         const code = String(j?.address?.country_code || '').toUpperCase()
+
         if (code.length === 2 && findCountry(code)) {
           setForm(prev => prev.country ? prev : { ...prev, country: code })
         }
@@ -209,13 +222,16 @@ export default function ConnectionDialog({
         // Ignore — user keeps the empty field, can pick manually.
       }
     }, 800)
-    return () => { clearTimeout(timer); ctrl.abort() }
+
+
+return () => { clearTimeout(timer); ctrl.abort() }
   }, [open, form.latitude, form.longitude, form.country])
 
   const handleSshEnabledChange = (enabled: boolean) => {
     setForm(prev => ({
       ...prev,
       sshEnabled: enabled,
+
       // Reset SSH fields when disabled
       ...(enabled ? {} : {
         sshAuthMethod: '',
@@ -231,6 +247,7 @@ export default function ConnectionDialog({
     setForm(prev => ({
       ...prev,
       sshAuthMethod: method,
+
       // Clear the other method's fields
       sshKey: method === 'key' ? prev.sshKey : '',
       sshPassphrase: method === 'key' ? prev.sshPassphrase : '',
@@ -243,12 +260,15 @@ export default function ConnectionDialog({
     if (!initialData?.id) return
     setCapturingFingerprint(true)
     setFingerprintError(null)
+
     try {
       const res = await fetch(
         `/api/v1/admin/pbs-connections/${encodeURIComponent(initialData.id)}/fingerprint`,
         { method: 'POST' },
       )
+
       const j = await res.json()
+
       if (!res.ok) {
         setFingerprintError(j.error || `HTTP ${res.status}`)
       } else {
@@ -307,30 +327,35 @@ export default function ConnectionDialog({
     // Validation
     if (!form.name.trim()) {
       setError(t('settings.errorNameRequired'))
-      return
+
+return
     }
-    
+
     if (!form.baseUrl.trim()) {
       setError(t('settings.errorUrlRequired'))
-      return
+
+return
     }
-    
+
     // Assemble API token from split fields if they were used (PVE/PBS only)
     if (!isExternalHypervisor && tokenId.trim() && tokenSecret.trim()) {
       const separator = type === 'pbs' ? ':' : '='
+
       form.apiToken = `${tokenId.trim()}${separator}${tokenSecret.trim()}`
     }
 
     if (!isExternalHypervisor && mode === 'create' && !form.apiToken.trim()) {
       setError(t('settings.errorTokenRequired'))
-      return
+
+return
     }
 
     // VMware / XCP-ng validation
     if (isExternalHypervisor) {
       if (mode === 'create' && !form.vmwarePassword) {
         setError(t('settings.errorPasswordRequired'))
-        return
+
+return
       }
     }
 
@@ -338,45 +363,59 @@ export default function ConnectionDialog({
     if (form.sshEnabled) {
       if (!form.sshAuthMethod) {
         setError(t('settings.errorSshAuthMethodRequired'))
-        return
+
+return
       }
-      
+
       if (form.sshAuthMethod === 'key' && !form.sshKey.trim() && !initialData?.sshKeyConfigured) {
         setError(t('settings.errorSshKeyRequired'))
-        return
+
+return
       }
-      
+
       if (form.sshAuthMethod === 'password' && !form.sshPassword.trim() && !initialData?.sshPassConfigured) {
         setError(t('settings.errorSshPasswordRequired'))
-        return
+
+return
       }
     }
 
     // Auto-append default port if not specified (PVE/PBS only, external hypervisors use 443)
     const defaultPort = isExternalHypervisor ? '443' : type === 'pbs' ? '8007' : '8006'
     let finalForm = { ...form }
+
+
     // For VMware, auto-prefix https://; for XCP-ng, auto-prefix http:// (XO often runs on HTTP)
     if (isExternalHypervisor && finalForm.baseUrl && !finalForm.baseUrl.match(/^https?:\/\//)) {
       finalForm.baseUrl = isXcpng ? `http://${finalForm.baseUrl}` : `https://${finalForm.baseUrl}`
     }
+
+
     // Hyper-V: strip https:// prefix since we store just the hostname for virt-v2v
     if (isHyperv && finalForm.baseUrl) {
       finalForm.baseUrl = finalForm.baseUrl.replace(/^https?:\/\//, '')
     }
+
+
     // Nutanix: auto-append :9440 if no port specified
     if (isNutanix && finalForm.baseUrl && !finalForm.baseUrl.replace(/^https?:\/\//, '').match(/:\d+/)) {
       try {
         const url = new URL(finalForm.baseUrl)
+
         url.port = '9440'
         finalForm.baseUrl = url.toString().replace(/\/$/, '')
       } catch {
         finalForm.baseUrl = finalForm.baseUrl.replace(/\/$/, '') + ':9440'
       }
     }
+
+
     // Check if user explicitly specified a port in the raw input (e.g. :443, :8006)
     const userSpecifiedPort = finalForm.baseUrl && /:\d+/.test(finalForm.baseUrl.replace(/^https?:\/\//, ''))
+
     try {
       const url = new URL(finalForm.baseUrl)
+
       if (!url.port && !isExternalHypervisor && !userSpecifiedPort) {
         url.port = defaultPort
         finalForm.baseUrl = url.toString().replace(/\/$/, '')
@@ -426,7 +465,7 @@ export default function ConnectionDialog({
           <><i className="ri-server-line" /> {isEdit ? t('settings.editPveServer') : t('settings.addPveServer')}</>
         )}
       </DialogTitle>
-      
+
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
@@ -473,11 +512,15 @@ export default function ConnectionDialog({
               onChange={(_e, value) => {
                 if (value !== null) {
                   handleChange('subType', value)
+
+
                   // Adjust defaults based on sub-type
                   if (value === 'vcenter') {
                     if (form.vmwareUser === 'root') {
                       handleChange('vmwareUser', 'administrator@vsphere.local')
                     }
+
+
                     // Disable SSH for vCenter
                     handleSshEnabledChange(false)
                   } else if (value === 'esxi') {
@@ -699,7 +742,7 @@ export default function ConnectionDialog({
                   <Typography variant="body2" fontWeight={600}>TLS fingerprint (SHA256)</Typography>
                 </Box>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                  Required for PVE to trust this PBS when ProxCenter injects a `pbs:` storage. Click Capture to fetch from the server's TLS handshake.
+                  Required for PVE to trust this PBS when ProxCenter injects a `pbs:` storage. Click Capture to fetch from the server&apos;s TLS handshake.
                 </Typography>
                 {pbsFingerprint ? (
                   <Typography
@@ -779,6 +822,7 @@ export default function ConnectionDialog({
                       const text = isPbs
                         ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / DatastoreReader --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / DatastoreReader --auth-id 'proxcenter@pbs!proxcenter'`
                         : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin`
+
                       navigator.clipboard.writeText(text)
                     }}
                     sx={{
@@ -863,7 +907,7 @@ export default function ConnectionDialog({
                   inputProps: { min: 1, max: 65535 }
                 }}
               />
-              
+
               <TextField
                 label={t('settings.sshUser')}
                 value={form.sshUser}
@@ -907,7 +951,7 @@ export default function ConnectionDialog({
                   rows={4}
                   placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
                   helperText={
-                    initialData?.sshKeyConfigured 
+                    initialData?.sshKeyConfigured
                       ? t('settings.sshKeyConfiguredHint')
                       : t('settings.sshKeyHint')
                   }
@@ -925,7 +969,7 @@ export default function ConnectionDialog({
                   }}
                   type={showSshKey ? 'text' : 'password'}
                 />
-                
+
                 <TextField
                   fullWidth
                   label={t('settings.sshPassphrase')}
@@ -944,7 +988,7 @@ export default function ConnectionDialog({
                 <Alert severity="warning" sx={{ mb: 2 }}>
                   {t('settings.sshPasswordWarning')}
                 </Alert>
-                
+
                 <TextField
                   fullWidth
                   label={t('settings.sshPassword')}
@@ -952,7 +996,7 @@ export default function ConnectionDialog({
                   onChange={e => handleChange('sshPassword', e.target.value)}
                   type={showPassword ? 'text' : 'password'}
                   helperText={
-                    initialData?.sshPassConfigured 
+                    initialData?.sshPassConfigured
                       ? t('settings.sshPasswordConfiguredHint')
                       : undefined
                   }
@@ -1007,7 +1051,7 @@ export default function ConnectionDialog({
                         </Typography>
                         {sshTestResult.nodes?.map(node => (
                           <Box key={node.node} sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-                            <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"} 
+                            <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"}
                                style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
                             <Typography variant="body2">
                               {node.node} ({node.ip})
@@ -1087,7 +1131,9 @@ export default function ConnectionDialog({
               onChange={(_e, v) => handleChange('country', v?.code ?? '')}
               renderOption={(props, option) => {
                 const { key, ...rest } = props as any
-                return (
+
+
+return (
                   <Box component="li" key={option.code} {...rest} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <CountryFlag code={option.code} size={20} />
                     <span>{option.name}</span>

@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/nodes/[connectionId]/[node]/rules/[pos]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,11 @@ export async function PUT(
   try {
     const { connectionId, node, pos } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
@@ -27,7 +30,7 @@ export async function PUT(
     return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error updating node rule:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to update node rule' },
       { status: 500 }
@@ -43,9 +46,11 @@ export async function DELETE(
   try {
     const { connectionId, node, pos } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
@@ -55,7 +60,7 @@ export async function DELETE(
     return NextResponse.json({ status: 'deleted' })
   } catch (error: any) {
     console.error('Error deleting node rule:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to delete node rule' },
       { status: 500 }

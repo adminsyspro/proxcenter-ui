@@ -1,12 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
-import { useBranding } from '@/contexts/BrandingContext'
-import { useRBAC } from '@/contexts/RBACContext'
-import { useHostsByConnection } from '@/hooks/useHosts'
-import ExpandableChart from '../components/ExpandableChart'
 
 import {
   Alert,
@@ -48,7 +45,15 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
+
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
+import { useBranding } from '@/contexts/BrandingContext'
+import { useRBAC } from '@/contexts/RBACContext'
+import { useHostsByConnection } from '@/hooks/useHosts'
+import ExpandableChart from '../components/ExpandableChart'
+
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -254,13 +259,16 @@ export default function NodeTabs(props: any) {
     const hosts = hostsData.data.hosts
     const host = hosts.find((h: any) => h.node === nodeNodeName)
     const tags = host?.managedHost?.tags || host?.tags
-    return tags ? String(tags).split(';').filter(Boolean) : []
+
+
+return tags ? String(tags).split(';').filter(Boolean) : []
   }, [hostsData, nodeNodeName])
 
   // Fetch Ceph OSD flags when on OSD sub-tab
   useEffect(() => {
     if (nodeTab !== 8 || nodeCephSubTab !== 2 || !nodeConnId || !data.clusterName) return
     let cancelled = false
+
     setNodeCephOsdFlagsLoading(true)
     fetch(`/api/v1/connections/${encodeURIComponent(nodeConnId)}/ceph/flags`)
       .then(res => res.json())
@@ -269,22 +277,26 @@ export default function NodeTabs(props: any) {
       })
       .catch(() => {})
       .finally(() => { if (!cancelled) setNodeCephOsdFlagsLoading(false) })
-    return () => { cancelled = true }
+
+return () => { cancelled = true }
   }, [nodeTab, nodeCephSubTab, nodeConnId, data.clusterName])
 
   const handleToggleNodeCephFlag = useCallback(async (flag: string, enable: boolean) => {
     if (!nodeConnId) return
     setNodeCephFlagToggling(flag)
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(nodeConnId)}/ceph/flags`, {
         method: enable ? 'PUT' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flag }),
       })
+
       if (res.ok) {
         setNodeCephOsdFlags(prev => enable ? [...new Set([...prev, flag])] : prev.filter(f => f !== flag))
       }
     } catch { /* ignore */ }
+
     setNodeCephFlagToggling(null)
   }, [nodeConnId])
 
@@ -562,7 +574,8 @@ export default function NodeTabs(props: any) {
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                               <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                 if (!active || !payload?.length) return null
-                                return (
+
+return (
                                   <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#2196f3', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                       <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
@@ -570,7 +583,11 @@ export default function NodeTabs(props: any) {
                                       <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                     </Box>
                                     <Box sx={{ px: 1.5, py: 0.75 }}>
-                                      {payload.filter(e => e.value != null && String(e.dataKey) !== 'iowait').map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                      {payload.filter(e => e.value != null && String(e.dataKey) !== 'iowait').map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                           <Typography variant="caption" sx={{ flex: 1 }}>CPU</Typography>
@@ -600,7 +617,8 @@ export default function NodeTabs(props: any) {
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                               <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                 if (!active || !payload?.length) return null
-                                return (
+
+return (
                                   <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                       <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
@@ -608,7 +626,11 @@ export default function NodeTabs(props: any) {
                                       <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                     </Box>
                                     <Box sx={{ px: 1.5, py: 0.75 }}>
-                                      {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
+                                      {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                                         <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                                           <Typography variant="caption" sx={{ flex: 1 }}>Memory</Typography>
@@ -642,7 +664,8 @@ export default function NodeTabs(props: any) {
                               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                               <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                 if (!active || !payload?.length) return null
-                                return (
+
+return (
                                   <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                       <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
@@ -682,7 +705,8 @@ export default function NodeTabs(props: any) {
                                 <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f97316', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-bar-chart-line" style={{ fontSize: 13, color: '#f97316' }} />
@@ -719,7 +743,8 @@ export default function NodeTabs(props: any) {
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: '#ef4444' }} />
@@ -764,7 +789,8 @@ export default function NodeTabs(props: any) {
                                 <YAxis tickFormatter={v => formatBytes(Number(v))} tick={{ fontSize: 9 }} width={55} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
@@ -802,10 +828,15 @@ export default function NodeTabs(props: any) {
                                   </linearGradient>
                                 </defs>
                                 <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
-                                <YAxis domain={[0, 'auto']} tickFormatter={v => { const n = Number(v); return n < 1 ? `${n.toFixed(2)}%` : `${n.toFixed(0)}%` }} tick={{ fontSize: 9 }} width={40} />
+                                <YAxis domain={[0, 'auto']} tickFormatter={v => { const n = Number(v);
+
+
+
+return n < 1 ? `${n.toFixed(2)}%` : `${n.toFixed(0)}%` }} tick={{ fontSize: 9 }} width={40} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
-                                  return (
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-time-line" style={{ fontSize: 13, color: '#f59e0b' }} />
@@ -813,7 +844,11 @@ export default function NodeTabs(props: any) {
                                         <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
-                                        {payload.filter(e => e.value != null).map(entry => { const v = Number(entry.value); const c = v >= 20 ? '#f44336' : v >= 10 ? '#ff9800' : '#4caf50'; return (
+                                        {payload.filter(e => e.value != null).map(entry => { const v = Number(entry.value); const c = v >= 20 ? '#f44336' : v >= 10 ? '#ff9800' : '#4caf50';
+
+
+
+return (
                                           <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#f59e0b', flexShrink: 0 }} />
                                             <Typography variant="caption" sx={{ flex: 1 }}>IO Wait</Typography>
@@ -841,7 +876,9 @@ export default function NodeTabs(props: any) {
                                   if (!active || !payload?.length) return null
                                   const psiLabels: Record<string, string> = { psiCpuSome: 'CPU some', psiCpuFull: 'CPU full', psiIoSome: 'IO some', psiIoFull: 'IO full', psiMemSome: 'Mem some', psiMemFull: 'Mem full' }
                                   const psiColors: Record<string, string> = { psiCpuSome: '#2196f3', psiCpuFull: '#1565c0', psiIoSome: '#f59e0b', psiIoFull: '#d97706', psiMemSome: '#10b981', psiMemFull: '#059669' }
-                                  return (
+
+
+return (
                                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-pulse-line" style={{ fontSize: 13, color: '#ef4444' }} />
@@ -888,8 +925,8 @@ export default function NodeTabs(props: any) {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight={700}>{t('inventory.nodeNotes')}</Typography>
                       {!nodeNotesEditing ? (
-                        <Button 
-                          size="small" 
+                        <Button
+                          size="small"
                           variant="outlined"
                           startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
                           onClick={() => {
@@ -901,31 +938,34 @@ export default function NodeTabs(props: any) {
                         </Button>
                       ) : (
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             onClick={() => setNodeNotesEditing(false)}
                           >
                             {t('common.cancel')}
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="contained"
                             disabled={nodeNotesSaving}
                             onClick={async () => {
                               setNodeNotesSaving(true)
                               const { connId, node } = parseNodeId(selection?.id || '')
+
                               try {
                                 const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/notes`, {
                                   method: 'PUT',
                                   headers: { 'Content-Type': 'application/json' },
                                   body: JSON.stringify({ notes: nodeNotesEditValue })
                                 })
+
                                 if (res.ok) {
                                   setNodeNotesData(nodeNotesEditValue)
                                   setNodeNotesEditing(false)
                                 } else {
                                   const err = await res.json()
+
                                   alert(err.error || t('inventory.failedToSaveNotes'))
                                 }
                               } finally {
@@ -985,6 +1025,7 @@ export default function NodeTabs(props: any) {
                 {nodeTab === 2 && (
                   <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {!nodeShellData ? (
+
                       // Pas encore de session - afficher le bouton de connexion
                       <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
                         <Box sx={{ textAlign: 'center' }}>
@@ -993,23 +1034,27 @@ export default function NodeTabs(props: any) {
                           <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 1, mb: 3 }}>
                             {t('inventory.connectToNodeCli')}
                           </Typography>
-                          <Button 
+                          <Button
                             variant="contained"
                             disabled={nodeShellLoading}
                             startIcon={nodeShellLoading ? <CircularProgress size={16} /> : <i className="ri-terminal-box-line" />}
                             onClick={async () => {
                               setNodeShellLoading(true)
                               const { connId, node } = parseNodeId(selection?.id || '')
+
                               try {
                                 const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/terminal`, {
                                   method: 'POST'
                                 })
+
                                 if (res.ok) {
                                   const json = await res.json()
+
                                   setNodeShellData({ ...json.data, node })
                                   setNodeShellConnected(true)
                                 } else {
                                   const err = await res.json()
+
                                   alert(err.error || t('inventory.failedToCreateTerminal'))
                                 }
                               } catch (e: any) {
@@ -1024,12 +1069,15 @@ export default function NodeTabs(props: any) {
                         </Box>
                       </Box>
                     ) : (
+
                       // Session active - afficher le terminal xterm.js
                       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                         {/* Lazy load du composant XTermShell */}
                         {(() => {
                           const XTermShell = require('@/components/xterm/XTermShell').default
-                          return (
+
+
+return (
                             <XTermShell
                               wsUrl={nodeShellData.wsUrl}
                               host={nodeShellData.host}
@@ -1054,10 +1102,10 @@ export default function NodeTabs(props: any) {
                 {/* Onglet VMs - Index 3 */}
                 {nodeTab === 3 && (
                   <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                    <Box sx={{ 
-                      px: 2, 
-                      py: 1.5, 
-                      borderBottom: '1px solid', 
+                    <Box sx={{
+                      px: 2,
+                      py: 1.5,
+                      borderBottom: '1px solid',
                       borderColor: 'divider',
                       display: 'flex',
                       alignItems: 'center',
@@ -1068,7 +1116,7 @@ export default function NodeTabs(props: any) {
                         variant={expandedVmsTable ? 'contained' : 'outlined'}
                         onClick={() => setExpandedVmsTable(!expandedVmsTable)}
                         startIcon={<i className={expandedVmsTable ? 'ri-collapse-diagonal-line' : 'ri-expand-diagonal-line'} />}
-                        sx={{ 
+                        sx={{
                           textTransform: 'none',
                           fontSize: '0.75rem',
                         }}
@@ -1170,10 +1218,13 @@ export default function NodeTabs(props: any) {
                                       onClick={async () => {
                                         setNodeDisksLoading(true)
                                         const { connId, node } = parseNodeId(selection?.id || '')
+
                                         try {
                                           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks?section=disks`, { cache: 'no-store' })
+
                                           if (res.ok) {
                                             const json = await res.json()
+
                                             setNodeDisksData((prev: any) => ({ ...prev, disks: json.data?.disks || [] }))
                                           }
                                         } finally {
@@ -1205,18 +1256,18 @@ export default function NodeTabs(props: any) {
                                           <TableRow key={idx} hover>
                                             <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{disk.devpath}</TableCell>
                                             <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={disk.type?.toUpperCase() || 'HDD'} 
+                                              <Chip
+                                                size="small"
+                                                label={disk.type?.toUpperCase() || 'HDD'}
                                                 color={disk.type === 'nvme' || disk.type === 'ssd' ? 'info' : 'default'}
                                                 sx={{ height: 20, fontSize: 10 }}
                                               />
                                             </TableCell>
                                             <TableCell>
                                               {disk.used ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.used} 
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.used}
                                                   color={disk.used === 'unused' ? 'default' : 'primary'}
                                                   variant="outlined"
                                                   sx={{ height: 20, fontSize: 10 }}
@@ -1236,9 +1287,9 @@ export default function NodeTabs(props: any) {
                                             </TableCell>
                                             <TableCell>
                                               {disk.health ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.health} 
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.health}
                                                   color={disk.health === 'PASSED' ? 'success' : disk.health === 'FAILED' ? 'error' : 'warning'}
                                                   sx={{ height: 20, fontSize: 10 }}
                                                 />
@@ -1477,9 +1528,9 @@ export default function NodeTabs(props: any) {
                                             <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
                                             <TableCell sx={{ textAlign: 'center' }}>{pool.dedup ?? '-'}</TableCell>
                                             <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={pool.health || 'UNKNOWN'} 
+                                              <Chip
+                                                size="small"
+                                                label={pool.health || 'UNKNOWN'}
                                                 color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
                                                 sx={{ height: 20, fontSize: 10 }}
                                               />
@@ -1556,11 +1607,17 @@ export default function NodeTabs(props: any) {
                                       startIcon={networkReverting ? <CircularProgress size={14} /> : <i className="ri-refresh-line" style={{ fontSize: 14 }} />}
                                       onClick={async () => {
                                         const { connId, node } = parseNodeId(selection?.id || '')
+
                                         setNetworkReverting(true)
                                         setNetworkError('')
+
                                         try {
                                           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/network`, { method: 'DELETE' })
-                                          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'Failed to revert') }
+
+                                          if (!res.ok) { const j = await res.json().catch(() => ({}));
+
+ throw new Error(j.error || 'Failed to revert') }
+
                                           setNodeSystemLoaded(false)
                                           setNetworkPendingChanges(false)
                                         } catch (e: any) { setNetworkError(e?.message || 'Revert failed') }
@@ -1576,11 +1633,17 @@ export default function NodeTabs(props: any) {
                                       startIcon={networkApplying ? <CircularProgress size={14} /> : <i className="ri-check-line" style={{ fontSize: 14 }} />}
                                       onClick={async () => {
                                         const { connId, node } = parseNodeId(selection?.id || '')
+
                                         setNetworkApplying(true)
                                         setNetworkError('')
+
                                         try {
                                           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/network`, { method: 'PUT' })
-                                          if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'Failed to apply') }
+
+                                          if (!res.ok) { const j = await res.json().catch(() => ({}));
+
+ throw new Error(j.error || 'Failed to apply') }
+
                                           setNodeSystemLoaded(false)
                                           setNetworkPendingChanges(false)
                                         } catch (e: any) { setNetworkError(e?.message || 'Apply failed') }
@@ -1655,28 +1718,40 @@ export default function NodeTabs(props: any) {
                                   onSave={async (formData) => {
                                     const { connId, node } = parseNodeId(selection?.id || '')
                                     const base = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/network`
+
                                     if (networkDialogMode === 'create') {
                                       const res = await fetch(base, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(formData),
                                       })
-                                      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'Failed to create') }
+
+                                      if (!res.ok) { const j = await res.json().catch(() => ({}));
+
+ throw new Error(j.error || 'Failed to create') }
                                     } else {
                                       const res = await fetch(`${base}/${encodeURIComponent(formData.iface)}`, {
                                         method: 'PUT',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(formData),
                                       })
-                                      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'Failed to update') }
+
+                                      if (!res.ok) { const j = await res.json().catch(() => ({}));
+
+ throw new Error(j.error || 'Failed to update') }
                                     }
+
                                     setNodeSystemLoaded(false)
                                     setNetworkPendingChanges(true)
                                   }}
                                   onDelete={async (ifaceName) => {
                                     const { connId, node } = parseNodeId(selection?.id || '')
                                     const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/network/${encodeURIComponent(ifaceName)}`, { method: 'DELETE' })
-                                    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'Failed to delete') }
+
+                                    if (!res.ok) { const j = await res.json().catch(() => ({}));
+
+ throw new Error(j.error || 'Failed to delete') }
+
                                     setNodeSystemLoaded(false)
                                     setNetworkPendingChanges(true)
                                   }}
@@ -1714,7 +1789,9 @@ export default function NodeTabs(props: any) {
                                           const now = Date.now() / 1000
                                           const isExpired = cert.notAfter && cert.notAfter < now
                                           const isExpiringSoon = cert.notAfter && cert.notAfter < now + 30 * 24 * 3600 && !isExpired
-                                          return (
+
+
+return (
                                             <TableRow key={idx} hover>
                                               <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{cert.filename}</TableCell>
                                               <TableCell sx={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cert.issuer}</TableCell>
@@ -1751,9 +1828,9 @@ export default function NodeTabs(props: any) {
                               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography variant="subtitle2" fontWeight={700}>DNS Configuration</Typography>
-                                  <Button 
-                                    size="small" 
-                                    variant="outlined" 
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
                                     startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
                                     onClick={() => {
                                       setDnsFormData({
@@ -1800,9 +1877,9 @@ export default function NodeTabs(props: any) {
                               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography variant="subtitle2" fontWeight={700}>/etc/hosts</Typography>
-                                  <Button 
-                                    size="small" 
-                                    variant="outlined" 
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
                                     startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
                                     onClick={() => {
                                       setHostsFormData({
@@ -1815,13 +1892,13 @@ export default function NodeTabs(props: any) {
                                     Edit
                                   </Button>
                                 </Box>
-                                <Box 
-                                  component="pre" 
-                                  sx={{ 
-                                    fontFamily: 'monospace', 
-                                    fontSize: 12, 
-                                    m: 0, 
-                                    p: 2, 
+                                <Box
+                                  component="pre"
+                                  sx={{
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    m: 0,
+                                    p: 2,
                                     whiteSpace: 'pre-wrap',
                                     bgcolor: 'background.default',
                                     maxHeight: 300,
@@ -1873,21 +1950,26 @@ export default function NodeTabs(props: any) {
                               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography variant="subtitle2" fontWeight={700}>Time Configuration</Typography>
-                                  <Button 
-                                    size="small" 
-                                    variant="outlined" 
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
                                     startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
                                     onClick={async () => {
                                       setTimeFormData({ timezone: nodeSystemData.time?.timezone || '' })
+
+
                                       // Charger les timezones si pas encore fait
                                       if (timezonesList.length === 0) {
                                         const { connId, node } = parseNodeId(selection?.id || '')
                                         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system?section=time`, { cache: 'no-store' })
+
                                         if (res.ok) {
                                           const json = await res.json()
+
                                           setTimezonesList(json.data?.timezones || [])
                                         }
                                       }
+
                                       setEditTimeDialogOpen(true)
                                     }}
                                   >
@@ -1928,15 +2010,15 @@ export default function NodeTabs(props: any) {
                                   <Typography variant="subtitle2" fontWeight={700}>System Log</Typography>
                                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                     {nodeSyslogLive && (
-                                      <Chip 
-                                        size="small" 
-                                        label="LIVE" 
+                                      <Chip
+                                        size="small"
+                                        label="LIVE"
                                         color="success"
                                         sx={{ height: 20, fontSize: 10, animation: 'pulse 1.5s infinite' }}
                                       />
                                     )}
-                                    <Button 
-                                      size="small" 
+                                    <Button
+                                      size="small"
                                       variant={nodeSyslogLive ? 'contained' : 'outlined'}
                                       color={nodeSyslogLive ? 'error' : 'primary'}
                                       startIcon={<i className={nodeSyslogLive ? 'ri-stop-line' : 'ri-play-line'} style={{ fontSize: 14 }} />}
@@ -1944,18 +2026,21 @@ export default function NodeTabs(props: any) {
                                     >
                                       {nodeSyslogLive ? 'Stop' : 'Live'}
                                     </Button>
-                                    <Button 
-                                      size="small" 
+                                    <Button
+                                      size="small"
                                       variant="outlined"
                                       disabled={nodeSyslogLoading}
                                       startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
                                       onClick={async () => {
                                         setNodeSyslogLoading(true)
                                         const { connId, node } = parseNodeId(selection?.id || '')
+
                                         try {
                                           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/syslog?limit=200&_t=${Date.now()}`, { cache: 'no-store' })
+
                                           if (res.ok) {
                                             const json = await res.json()
+
                                             setNodeSyslogData(json.data || [])
                                           }
                                         } finally {
@@ -1972,13 +2057,13 @@ export default function NodeTabs(props: any) {
                                     <CircularProgress size={24} />
                                   </Box>
                                 ) : nodeSyslogData.length > 0 ? (
-                                  <Box 
-                                    component="pre" 
-                                    sx={{ 
-                                      fontFamily: 'monospace', 
-                                      fontSize: 11, 
-                                      m: 0, 
-                                      p: 2, 
+                                  <Box
+                                    component="pre"
+                                    sx={{
+                                      fontFamily: 'monospace',
+                                      fontSize: 11,
+                                      m: 0,
+                                      p: 2,
                                       whiteSpace: 'pre-wrap',
                                       bgcolor: 'background.default',
                                       maxHeight: 400,
@@ -1989,11 +2074,13 @@ export default function NodeTabs(props: any) {
                                       // Coloration syntaxique basique
                                       const isError = /error|fail|crit/i.test(line)
                                       const isWarning = /warn/i.test(line)
-                                      return (
-                                        <Box 
-                                          key={i} 
+
+
+return (
+                                        <Box
+                                          key={i}
                                           component="div"
-                                          sx={{ 
+                                          sx={{
                                             color: isError ? 'error.main' : isWarning ? 'warning.main' : 'inherit',
                                             '&:hover': { bgcolor: 'action.hover' }
                                           }}
@@ -2050,23 +2137,26 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setEditDnsDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               disabled={systemSaving}
                               onClick={async () => {
                                 setSystemSaving(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ section: 'dns', data: dnsFormData })
                                   })
+
                                   if (res.ok) {
                                     setEditDnsDialogOpen(false)
                                     setNodeSystemLoaded(false) // Recharger
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to update DNS')
                                   }
                                 } finally {
@@ -2094,23 +2184,26 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setEditHostsDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               disabled={systemSaving}
                               onClick={async () => {
                                 setSystemSaving(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ section: 'hosts', data: hostsFormData })
                                   })
+
                                   if (res.ok) {
                                     setEditHostsDialogOpen(false)
                                     setNodeSystemLoaded(false) // Recharger
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to update hosts')
                                   }
                                 } finally {
@@ -2139,23 +2232,26 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setEditTimeDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               disabled={systemSaving || !timeFormData.timezone}
                               onClick={async () => {
                                 setSystemSaving(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ section: 'time', data: timeFormData })
                                   })
+
                                   if (res.ok) {
                                     setEditTimeDialogOpen(false)
                                     setNodeSystemLoaded(false) // Recharger
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to update time')
                                   }
                                 } finally {
@@ -2192,15 +2288,16 @@ export default function NodeTabs(props: any) {
                         <CircularProgress size={24} />
                       </Box>
                     ) : nodeCephData?.hasCeph === false ? (
+
                       /* Ceph non installé */
                       <Box sx={{ p: 4, textAlign: 'center' }}>
-                        <Box sx={{ 
-                          width: 80, 
-                          height: 80, 
-                          borderRadius: '50%', 
-                          bgcolor: 'action.hover', 
-                          display: 'flex', 
-                          alignItems: 'center', 
+                        <Box sx={{
+                          width: 80,
+                          height: 80,
+                          borderRadius: '50%',
+                          bgcolor: 'action.hover',
+                          display: 'flex',
+                          alignItems: 'center',
                           justifyContent: 'center',
                           mx: 'auto',
                           mb: 2
@@ -2226,14 +2323,15 @@ export default function NodeTabs(props: any) {
                         </Typography>
                       </Box>
                     ) : nodeCephData ? (
+
                       /* Ceph installé - Sous-onglets */
                       <>
                         <Tabs
                           value={nodeCephSubTab}
                           onChange={(_e, v) => setNodeCephSubTab(v)}
-                          sx={{ 
-                            borderBottom: 1, 
-                            borderColor: 'divider', 
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
                             minHeight: 36,
                             '& .MuiTab-root': { minHeight: 36, py: 0.5, fontSize: 13 }
                           }}
@@ -2255,11 +2353,11 @@ export default function NodeTabs(props: any) {
                                 <Card variant="outlined">
                                   <CardContent>
                                     <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Configuration</Typography>
-                                    <Box sx={{ 
-                                      bgcolor: 'grey.900', 
-                                      borderRadius: 1, 
-                                      p: 2, 
-                                      fontFamily: 'monospace', 
+                                    <Box sx={{
+                                      bgcolor: 'grey.900',
+                                      borderRadius: 1,
+                                      p: 2,
+                                      fontFamily: 'monospace',
                                       fontSize: 12,
                                       maxHeight: 300,
                                       overflow: 'auto',
@@ -2324,11 +2422,11 @@ export default function NodeTabs(props: any) {
                               <Card variant="outlined">
                                 <CardContent>
                                   <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Crush Map</Typography>
-                                  <Box sx={{ 
-                                    bgcolor: 'grey.900', 
-                                    borderRadius: 1, 
-                                    p: 2, 
-                                    fontFamily: 'monospace', 
+                                  <Box sx={{
+                                    bgcolor: 'grey.900',
+                                    borderRadius: 1,
+                                    p: 2,
+                                    fontFamily: 'monospace',
                                     fontSize: 11,
                                     maxHeight: 500,
                                     overflow: 'auto',
@@ -2375,9 +2473,9 @@ export default function NodeTabs(props: any) {
                                             <TableCell sx={{ fontFamily: 'monospace' }}>{mon.name}</TableCell>
                                             <TableCell>{mon.host}</TableCell>
                                             <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={mon.quorum ? 'running' : 'stopped'} 
+                                              <Chip
+                                                size="small"
+                                                label={mon.quorum ? 'running' : 'stopped'}
                                                 color={mon.quorum ? 'success' : 'default'}
                                                 sx={{ height: 20, fontSize: 11 }}
                                               />
@@ -2554,7 +2652,9 @@ export default function NodeTabs(props: any) {
                                           <TableCell align="right">
                                             {(() => {
                                               const pct = osd.percent_used ?? (osd.kb && osd.kb_used ? (osd.kb_used / osd.kb) * 100 : 0)
-                                              return (
+
+
+return (
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
                                                   <Box sx={{ position: 'relative', width: 60, flexShrink: 0 }}>
                                                     <LinearProgress
@@ -2657,8 +2757,8 @@ export default function NodeTabs(props: any) {
                                               <TableCell sx={{ fontFamily: 'monospace' }}>{mds.name}</TableCell>
                                               <TableCell>{mds.host}</TableCell>
                                               <TableCell>
-                                                <Chip 
-                                                  size="small" 
+                                                <Chip
+                                                  size="small"
                                                   label={mds.state || mds.status || 'unknown'}
                                                   color={mds.state?.includes('active') ? 'success' : 'default'}
                                                   sx={{ height: 20, fontSize: 11 }}
@@ -2714,8 +2814,8 @@ export default function NodeTabs(props: any) {
                                           <TableCell align="right">{pool.pg_num}</TableCell>
                                           <TableCell align="right">{pool.pg_num_target || pool.pg_num}</TableCell>
                                           <TableCell>
-                                            <Chip 
-                                              size="small" 
+                                            <Chip
+                                              size="small"
                                               label={pool.pg_autoscale_mode || 'on'}
                                               color={pool.pg_autoscale_mode === 'on' ? 'success' : 'default'}
                                               sx={{ height: 18, fontSize: 10 }}
@@ -2726,7 +2826,9 @@ export default function NodeTabs(props: any) {
                                             {(() => {
                                               const raw = pool.percent_used ?? 0
                                               const pct = raw > 1 ? raw : raw * 100
-                                              return (
+
+
+return (
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
                                                   <Box sx={{ position: 'relative', width: 60, flexShrink: 0 }}>
                                                     <LinearProgress
@@ -2767,17 +2869,17 @@ export default function NodeTabs(props: any) {
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Typography variant="subtitle2" fontWeight={700}>Ceph Log</Typography>
                                     {nodeCephLogLive && (
-                                      <Chip 
-                                        size="small" 
-                                        label="LIVE" 
-                                        color="success" 
+                                      <Chip
+                                        size="small"
+                                        label="LIVE"
+                                        color="success"
                                         sx={{ height: 20, fontSize: 10, animation: 'pulse 2s infinite' }}
                                       />
                                     )}
                                   </Box>
                                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                    <Button 
-                                      size="small" 
+                                    <Button
+                                      size="small"
                                       variant={nodeCephLogLive ? 'contained' : 'outlined'}
                                       color={nodeCephLogLive ? 'error' : 'success'}
                                       startIcon={<i className={nodeCephLogLive ? 'ri-stop-circle-line' : 'ri-play-circle-line'} style={{ fontSize: 14 }} />}
@@ -2785,18 +2887,20 @@ export default function NodeTabs(props: any) {
                                     >
                                       {nodeCephLogLive ? 'Stop' : 'Live'}
                                     </Button>
-                                    <Button 
-                                      size="small" 
-                                      variant="outlined" 
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
                                       startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
                                       onClick={async () => {
                                         if (!selection?.id) return
                                         const { connId, node: nodeName } = parseNodeId(selection.id)
+
                                         try {
                                           const timestamp = Date.now()
+
                                           const res = await fetch(
-                                            `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/ceph?section=log&logLines=100&_t=${timestamp}`, 
-                                            { 
+                                            `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/ceph?section=log&logLines=100&_t=${timestamp}`,
+                                            {
                                               cache: 'no-store',
                                               headers: {
                                                 'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -2804,8 +2908,10 @@ export default function NodeTabs(props: any) {
                                               }
                                             }
                                           )
+
                                           if (res.ok) {
                                             const json = await res.json()
+
                                             if (json.data?.log) {
                                               setNodeCephData((prev: any) => ({ ...prev, log: json.data.log }))
                                             }
@@ -2819,12 +2925,12 @@ export default function NodeTabs(props: any) {
                                     </Button>
                                   </Box>
                                 </Box>
-                                <Box 
-                                  sx={{ 
-                                    bgcolor: 'grey.900', 
-                                    borderRadius: 1, 
-                                    p: 2, 
-                                    fontFamily: 'monospace', 
+                                <Box
+                                  sx={{
+                                    bgcolor: 'grey.900',
+                                    borderRadius: 1,
+                                    p: 2,
+                                    fontFamily: 'monospace',
                                     fontSize: 11,
                                     height: 400,
                                     overflow: 'auto',
@@ -2844,11 +2950,13 @@ export default function NodeTabs(props: any) {
                                   {(Array.isArray(nodeCephData.log) ? nodeCephData.log : []).length > 0 ? (
                                     (Array.isArray(nodeCephData.log) ? nodeCephData.log : []).map((line: string, idx: number) => {
                                       // Déterminer le niveau de log pour la couleur
-                                      const logClass = line.includes('[DBG]') ? 'log-dbg' : 
+                                      const logClass = line.includes('[DBG]') ? 'log-dbg' :
                                                        line.includes('[INF]') || line.includes('[INFO]') ? 'log-info' :
                                                        line.includes('[WRN]') || line.includes('[WARN]') ? 'log-warn' :
                                                        line.includes('[ERR]') || line.includes('[ERROR]') ? 'log-err' : ''
-                                      return (
+
+
+return (
                                         <Box key={idx} className={`log-line ${logClass}`}>
                                           {line}
                                         </Box>
@@ -2918,6 +3026,7 @@ export default function NodeTabs(props: any) {
                                     if (!clusterConfigLoaded) {
                                       loadClusterConfig(parseNodeId(selection.id).connId)
                                     }
+
                                     setCreateClusterDialogOpen(true)
                                   }}
                                 >
@@ -2965,8 +3074,8 @@ export default function NodeTabs(props: any) {
                       <Stack spacing={2}>
                         {/* Header avec boutons */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />}
                             onClick={() => {
@@ -2985,8 +3094,8 @@ export default function NodeTabs(props: any) {
                           >
                             Add
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             disabled={!editingReplicationJob}
                             startIcon={<i className="ri-edit-line" style={{ fontSize: 14 }} />}
@@ -3007,8 +3116,8 @@ export default function NodeTabs(props: any) {
                           >
                             Edit
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             color="error"
                             disabled={!editingReplicationJob}
@@ -3022,8 +3131,8 @@ export default function NodeTabs(props: any) {
                           >
                             Remove
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             disabled={!editingReplicationJob}
                             startIcon={<i className="ri-file-list-line" style={{ fontSize: 14 }} />}
@@ -3033,10 +3142,13 @@ export default function NodeTabs(props: any) {
                                 setReplicationLogDialogOpen(true)
                                 setReplicationLogLoading(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(editingReplicationJob.id)}?limit=100`, { cache: 'no-store' })
+
                                   if (res.ok) {
                                     const json = await res.json()
+
                                     setReplicationLogData(json.data || [])
                                   }
                                 } finally {
@@ -3047,24 +3159,27 @@ export default function NodeTabs(props: any) {
                           >
                             Log
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             disabled={!editingReplicationJob}
                             startIcon={<i className="ri-play-line" style={{ fontSize: 14 }} />}
                             onClick={async () => {
                               if (editingReplicationJob) {
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
-                                  const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(editingReplicationJob.id)}`, { 
+                                  const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication/${encodeURIComponent(editingReplicationJob.id)}`, {
                                     method: 'POST',
-                                    cache: 'no-store' 
+                                    cache: 'no-store'
                                   })
+
                                   if (res.ok) {
                                     // Recharger les données
                                     setNodeReplicationLoaded(false)
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to schedule replication')
                                   }
                                 } catch (e) {
@@ -3096,24 +3211,24 @@ export default function NodeTabs(props: any) {
                                   </TableHead>
                                   <TableBody>
                                     {nodeReplicationData.jobs.map((job: any) => (
-                                      <TableRow 
-                                        key={job.id} 
-                                        hover 
+                                      <TableRow
+                                        key={job.id}
+                                        hover
                                         selected={editingReplicationJob?.id === job.id}
                                         onClick={() => setEditingReplicationJob(job)}
                                         sx={{ cursor: 'pointer' }}
                                       >
                                         <TableCell padding="checkbox">
-                                          <input 
-                                            type="radio" 
+                                          <input
+                                            type="radio"
                                             checked={editingReplicationJob?.id === job.id}
                                             onChange={() => setEditingReplicationJob(job)}
                                           />
                                         </TableCell>
                                         <TableCell>
-                                          <Chip 
-                                            size="small" 
-                                            label={job.enabled ? 'Yes' : 'No'} 
+                                          <Chip
+                                            size="small"
+                                            label={job.enabled ? 'Yes' : 'No'}
                                             color={job.enabled ? 'success' : 'default'}
                                             sx={{ height: 20, fontSize: 10 }}
                                           />
@@ -3130,9 +3245,9 @@ export default function NodeTabs(props: any) {
                                         <TableCell>{job.target}</TableCell>
                                         <TableCell sx={{ fontFamily: 'monospace', fontSize: 11 }}>{job.schedule || '*/15'}</TableCell>
                                         <TableCell>
-                                          <Chip 
-                                            size="small" 
-                                            label={job.state || 'unknown'} 
+                                          <Chip
+                                            size="small"
+                                            label={job.state || 'unknown'}
                                             color={job.state === 'ok' ? 'success' : job.state === 'error' ? 'error' : 'default'}
                                             sx={{ height: 20, fontSize: 10 }}
                                           />
@@ -3250,15 +3365,17 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setReplicationDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               disabled={replicationSaving || (replicationDialogMode === 'create' && (!replicationFormData.guest || !replicationFormData.target))}
                               onClick={async () => {
                                 setReplicationSaving(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const method = replicationDialogMode === 'create' ? 'POST' : 'PUT'
-                                  const body = replicationDialogMode === 'create' 
+
+                                  const body = replicationDialogMode === 'create'
                                     ? {
                                         guest: replicationFormData.guest,
                                         target: replicationFormData.target,
@@ -3274,18 +3391,19 @@ export default function NodeTabs(props: any) {
                                         comment: replicationFormData.comment || undefined,
                                         enabled: replicationFormData.enabled
                                       }
-                                  
+
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, {
                                     method,
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify(body)
                                   })
-                                  
+
                                   if (res.ok) {
                                     setReplicationDialogOpen(false)
                                     setNodeReplicationLoaded(false) // Recharger
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to save replication job')
                                   }
                                 } catch (e) {
@@ -3313,23 +3431,26 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setDeleteReplicationDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               color="error"
                               disabled={replicationDeleting}
                               onClick={async () => {
                                 setReplicationDeleting(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication?jobId=${encodeURIComponent(deletingReplicationJob?.id)}`, {
                                     method: 'DELETE'
                                   })
+
                                   if (res.ok) {
                                     setDeleteReplicationDialogOpen(false)
                                     setEditingReplicationJob(null)
                                     setNodeReplicationLoaded(false) // Recharger
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to delete replication job')
                                   }
                                 } catch (e) {
@@ -3356,12 +3477,12 @@ export default function NodeTabs(props: any) {
                                 <CircularProgress size={24} />
                               </Box>
                             ) : replicationLogData.length > 0 ? (
-                              <Box 
-                                component="pre" 
-                                sx={{ 
-                                  fontFamily: 'monospace', 
-                                  fontSize: 11, 
-                                  whiteSpace: 'pre-wrap', 
+                              <Box
+                                component="pre"
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  whiteSpace: 'pre-wrap',
                                   wordBreak: 'break-all',
                                   m: 0,
                                   p: 2,
@@ -3393,11 +3514,13 @@ export default function NodeTabs(props: any) {
                   const nodeName = data.nodeName || selection?.id?.split(':').pop() || ''
                   const nodeUpdate = nodeUpdates?.[nodeName]
                   const pkgCount = nodeUpdate?.count || 0
+
                   const hasKernel = nodeUpdate?.updates?.some((u: any) =>
                     (u.Package || u.package || '').toLowerCase().includes('kernel') ||
                     (u.Package || u.package || '').toLowerCase().includes('linux-image') ||
                     (u.Package || u.package || '').toLowerCase().includes('pve-kernel')
                   )
+
                   const estimatedMinutes = pkgCount > 0
                     ? Math.ceil(2 + 5 + Math.ceil(pkgCount * 3 / 60) + (hasKernel ? 5 : 0) + 2)
                     : 0
@@ -3418,30 +3541,41 @@ export default function NodeTabs(props: any) {
                             onClick={async () => {
                               const { connId } = parseNodeId(selection?.id || '')
                               const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt`
+
                               setNodeUpdates((prev: any) => ({
                                 ...prev,
                                 [nodeName]: { count: 0, updates: [], version: null, loading: true }
                               }))
+
                               try {
                                 // Trigger apt update first, then fetch fresh list
                                 const postRes = await fetch(aptUrl, { method: 'POST' })
+
                                 if (postRes.status === 403) {
                                   const postJson = await postRes.json()
+
                                   setNodeUpdates((prev: any) => ({
                                     ...prev,
                                     [nodeName]: { count: 0, updates: [], version: null, loading: false, permissionError: postJson.requiredPermission || 'Sys.Modify' }
                                   }))
-                                  return
+
+return
                                 }
+
                                 const res = await fetch(aptUrl)
                                 const json = await res.json()
                                 const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
+
                                 setNodeUpdates((prev: any) => ({
                                   ...prev,
                                   [nodeName]: { count: json.count || 0, updates: json.data || [], version: pvePkg?.currentVersion || null, loading: false, permissionError: null }
                                 }))
                               } catch {
-                                setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
+                                setNodeUpdates((prev: any) => { const next = {...prev};
+
+ delete next[nodeName];
+
+return next })
                               }
                             }}
                           >
@@ -3543,7 +3677,9 @@ export default function NodeTabs(props: any) {
                                     {nodeUpdate.updates.map((upd: any, idx: number) => {
                                       const pkgName = upd.Package || upd.package || ''
                                       const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
-                                      return (
+
+
+return (
                                         <Box
                                           key={idx}
                                           sx={{
@@ -3770,8 +3906,8 @@ export default function NodeTabs(props: any) {
                       <Stack spacing={2}>
                         {/* Header avec boutons */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             startIcon={<i className="ri-upload-2-line" style={{ fontSize: 14 }} />}
                             onClick={() => {
@@ -3781,20 +3917,23 @@ export default function NodeTabs(props: any) {
                           >
                             Upload Subscription Key
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
                             onClick={async () => {
                               setNodeSubscriptionLoading(true)
                               const { connId, node } = parseNodeId(selection?.id || '')
+
                               try {
-                                const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { 
+                                const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, {
                                   method: 'POST',
-                                  cache: 'no-store' 
+                                  cache: 'no-store'
                                 })
+
                                 if (res.ok) {
                                   const json = await res.json()
+
                                   setNodeSubscriptionData(json.data || json)
                                 }
                               } finally {
@@ -3804,8 +3943,8 @@ export default function NodeTabs(props: any) {
                           >
                             Check
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             color="error"
                             disabled={!nodeSubscriptionData?.key}
@@ -3814,8 +3953,8 @@ export default function NodeTabs(props: any) {
                           >
                             Remove Subscription
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             variant="outlined"
                             startIcon={<i className="ri-file-text-line" style={{ fontSize: 14 }} />}
                             onClick={async () => {
@@ -3823,10 +3962,13 @@ export default function NodeTabs(props: any) {
                               setSystemReportLoading(true)
                               setSystemReportData(null)
                               const { connId, node } = parseNodeId(selection?.id || '')
+
                               try {
                                 const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/report`, { cache: 'no-store' })
+
                                 if (res.ok) {
                                   const json = await res.json()
+
                                   setSystemReportData(json.data || 'No report available')
                                 } else {
                                   setSystemReportData('Failed to load system report')
@@ -3869,10 +4011,10 @@ export default function NodeTabs(props: any) {
                                   <TableRow>
                                     <TableCell sx={{ fontWeight: 600, borderBottom: '1px solid', borderColor: 'divider' }}>Status</TableCell>
                                     <TableCell sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-                                      <Chip 
-                                        size="small" 
+                                      <Chip
+                                        size="small"
                                         label={nodeSubscriptionData?.status || 'unknown'}
-                                        color={nodeSubscriptionData?.status === 'active' || nodeSubscriptionData?.status === 'Active' ? 'success' : 
+                                        color={nodeSubscriptionData?.status === 'active' || nodeSubscriptionData?.status === 'Active' ? 'success' :
                                                nodeSubscriptionData?.status === 'notfound' ? 'warning' : 'default'}
                                         sx={{ height: 22, fontSize: 11 }}
                                       />
@@ -3893,7 +4035,7 @@ export default function NodeTabs(props: any) {
                                   <TableRow>
                                     <TableCell sx={{ fontWeight: 600, borderBottom: '1px solid', borderColor: 'divider' }}>Last checked</TableCell>
                                     <TableCell sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-                                      {nodeSubscriptionData?.lastChecked ? 
+                                      {nodeSubscriptionData?.lastChecked ?
                                         new Date(nodeSubscriptionData.lastChecked).toLocaleString() : '-'}
                                     </TableCell>
                                   </TableRow>
@@ -3955,24 +4097,28 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setSubscriptionKeyDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               disabled={!subscriptionKeyInput.trim() || subscriptionKeySaving}
                               onClick={async () => {
                                 setSubscriptionKeySaving(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ key: subscriptionKeyInput.trim() })
                                   })
+
                                   if (res.ok) {
                                     const json = await res.json()
+
                                     setNodeSubscriptionData(json.data || json)
                                     setSubscriptionKeyDialogOpen(false)
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to upload subscription key')
                                   }
                                 } catch (e) {
@@ -4003,23 +4149,27 @@ export default function NodeTabs(props: any) {
                           </DialogContent>
                           <DialogActions>
                             <Button onClick={() => setRemoveSubscriptionDialogOpen(false)}>Cancel</Button>
-                            <Button 
+                            <Button
                               variant="contained"
                               color="error"
                               disabled={removeSubscriptionLoading}
                               onClick={async () => {
                                 setRemoveSubscriptionLoading(true)
                                 const { connId, node } = parseNodeId(selection?.id || '')
+
                                 try {
                                   const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, {
                                     method: 'DELETE'
                                   })
+
                                   if (res.ok) {
                                     const json = await res.json()
+
                                     setNodeSubscriptionData(json.data || json)
                                     setRemoveSubscriptionDialogOpen(false)
                                   } else {
                                     const err = await res.json()
+
                                     alert(err.error || 'Failed to remove subscription')
                                   }
                                 } catch (e) {
@@ -4042,8 +4192,8 @@ export default function NodeTabs(props: any) {
                               <i className="ri-file-text-line" style={{ fontSize: 20 }} />
                               System Report - {selection?.id ? parseNodeId(selection.id).node : ''}
                             </Box>
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => {
                                 if (systemReportData) {
                                   navigator.clipboard.writeText(systemReportData)
@@ -4060,12 +4210,12 @@ export default function NodeTabs(props: any) {
                                 <CircularProgress size={24} />
                               </Box>
                             ) : (
-                              <Box 
-                                component="pre" 
-                                sx={{ 
-                                  fontFamily: 'monospace', 
-                                  fontSize: 11, 
-                                  whiteSpace: 'pre-wrap', 
+                              <Box
+                                component="pre"
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  whiteSpace: 'pre-wrap',
                                   wordBreak: 'break-all',
                                   m: 0,
                                   p: 2,

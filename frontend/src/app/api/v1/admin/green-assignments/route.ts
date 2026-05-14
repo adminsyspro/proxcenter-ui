@@ -26,8 +26,10 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const [clusterRows, nodeRows] = await Promise.all([
@@ -51,6 +53,7 @@ export async function GET() {
     ])
 
     const clusters: Record<string, { datacenterId: string; datacenterName: string }> = {}
+
     for (const r of clusterRows) {
       if (!r.datacenterId) continue
       clusters[r.connectionId] = {
@@ -58,7 +61,9 @@ export async function GET() {
         datacenterName: r.datacenter?.name ?? '',
       }
     }
+
     const nodes: Record<string, { datacenterId: string; datacenterName: string }> = {}
+
     for (const r of nodeRows) {
       if (!r.datacenterId) continue
       nodes[`${r.connectionId}|${r.nodeName}`] = {

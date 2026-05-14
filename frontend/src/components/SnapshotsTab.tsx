@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -28,6 +29,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { useToast } from '@/contexts/ToastContext'
 
 interface SnapshotEntry {
@@ -67,13 +69,17 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
 
   const fetchSnapshots = async () => {
     setLoading(true)
+
     try {
       const url = node
         ? `/api/v1/connections/${encodeURIComponent(connectionId)}/snapshots?node=${encodeURIComponent(node)}`
         : `/api/v1/connections/${encodeURIComponent(connectionId)}/snapshots`
+
       const res = await fetch(url)
+
       if (res.ok) {
         const json = await res.json()
+
         setSnapshots(json.data?.snapshots || [])
         setVmCount(json.data?.vmCount || 0)
       }
@@ -90,8 +96,10 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
 
   const nodes = useMemo(() => {
     const set = new Set<string>()
+
     for (const s of snapshots) set.add(s.node)
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+
+return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [snapshots])
 
   const handleSort = (field: SortField) => {
@@ -107,12 +115,15 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
     if (!deleteTarget) return
     setDeleting(true)
     const vmKey = `${connectionId}:${deleteTarget.vmType}:${deleteTarget.node}:${deleteTarget.vmid}`
+
     try {
       const res = await fetch(
         `/api/v1/guests/${encodeURIComponent(vmKey)}/snapshots?name=${encodeURIComponent(deleteTarget.name)}`,
         { method: 'DELETE' }
       )
+
       const json = await res.json()
+
       if (json.error) {
         toast.error(json.error)
       } else {
@@ -136,6 +147,7 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
 
     if (search) {
       const q = search.toLowerCase()
+
       list = list.filter(
         s =>
           s.name.toLowerCase().includes(q) ||
@@ -148,11 +160,14 @@ export default function SnapshotsTab({ connectionId, node }: SnapshotsTabProps) 
 
     list = [...list].sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
+
       if (sortField === 'snaptime') return (a.snaptime - b.snaptime) * dir
       if (sortField === 'vmid') return (a.vmid - b.vmid) * dir
       const av = a[sortField] || ''
       const bv = b[sortField] || ''
-      return av.localeCompare(bv) * dir
+
+
+return av.localeCompare(bv) * dir
     })
 
     return list

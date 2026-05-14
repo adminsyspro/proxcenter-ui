@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Typography } from '@mui/material'
 import parser from 'cron-parser'
+
 import type { ScheduleSpec } from './types'
 import { scheduleToCron } from './scheduleToCron'
 
@@ -15,16 +17,21 @@ interface Props {
 
 export default function SchedulePreview({ spec, timezone, count = 5 }: Props) {
   const t = useTranslations()
+
   const next = useMemo(() => {
     if (!spec) return null
+
     try {
       const cronBody = scheduleToCron(spec, '')
       const it = parser.parseExpression(cronBody, { tz: timezone || undefined })
       const out: string[] = []
+
       for (let i = 0; i < count; i++) {
         out.push(it.next().toDate().toLocaleString(undefined, { timeZone: timezone || undefined }))
       }
-      return out
+
+
+return out
     } catch (e) {
       return { error: (e as Error).message }
     }

@@ -18,13 +18,16 @@ type AutoHaSettings = typeof DEFAULTS
 
 async function loadSettings(connId: string): Promise<AutoHaSettings> {
   const stored = await getSetting<Partial<AutoHaSettings>>(`auto_ha:${connId}`)
-  return { ...DEFAULTS, ...(stored ?? {}) }
+
+
+return { ...DEFAULTS, ...(stored ?? {}) }
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
+
     if (denied) return denied
 
     return NextResponse.json({ data: await loadSettings(id) })
@@ -37,6 +40,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   try {
     const { id } = await ctx.params
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -52,7 +56,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
 
     await setSetting(`auto_ha:${id}`, "default", updated)
-    return NextResponse.json({ data: updated })
+
+return NextResponse.json({ data: updated })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

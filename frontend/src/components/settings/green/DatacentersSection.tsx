@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -28,10 +29,13 @@ export default function DatacentersSection() {
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch('/api/v1/admin/datacenters')
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
+
       setRows(Array.isArray(json?.data) ? json.data : [])
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -44,12 +48,16 @@ export default function DatacentersSection() {
 
   const handleDelete = async (row: DatacenterRow) => {
     if (!confirm(t('settings.green.dc.deleteConfirm', { name: row.name }))) return
+
     try {
       const res = await fetch(`/api/v1/admin/datacenters/${encodeURIComponent(row.id)}`, { method: 'DELETE' })
+
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
+
         throw new Error(json?.error || `HTTP ${res.status}`)
       }
+
       await load()
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -63,10 +71,13 @@ export default function DatacentersSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isDefault: true }),
       })
+
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
+
         throw new Error(json?.error || `HTTP ${res.status}`)
       }
+
       await load()
     } catch (e: any) {
       setError(e?.message || String(e))

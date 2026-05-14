@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Accordion,
@@ -20,6 +21,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 
 interface PbsNotificationsTabProps {
@@ -53,50 +55,65 @@ type PbsNotifEndpoint = {
   comment?: string
   disable?: boolean | number | string
   origin?: string
+
   // smtp
   server?: string
   port?: number | string
   'from-address'?: string
   mailto?: string | string[]
   mode?: string
+
   // gotify / webhook
   url?: string
 }
 
 function toArray(value: string | string[] | undefined): string[] {
   if (Array.isArray(value)) return value.filter(v => typeof v === 'string' && v.length > 0)
+
   if (typeof value === 'string' && value.length > 0) {
     return value
       .split(/[,;]+/)
       .map(s => s.trim())
       .filter(Boolean)
   }
-  return []
+
+
+return []
 }
 
 function isDisabled(value: boolean | number | string | undefined): boolean {
   if (value === true) return true
   if (value === 1) return true
   if (typeof value === 'string' && (value === '1' || value.toLowerCase() === 'true')) return true
-  return false
+
+return false
 }
 
 function endpointDetails(e: PbsNotifEndpoint): string {
   const type = e.type
+
   if (type === 'smtp') {
     const host = e.server ? String(e.server) : ''
     const port = e.port !== undefined && e.port !== '' ? `:${e.port}` : ''
     const from = e['from-address'] ? ` (${e['from-address']})` : ''
-    return host ? `${host}${port}${from}` : ''
+
+
+return host ? `${host}${port}${from}` : ''
   }
+
   if (type === 'gotify' || type === 'webhook') {
     return e.server || e.url || ''
   }
+
   if (type === 'sendmail') {
     const to = toArray(e.mailto).join(', ')
-    return to ? `→ ${to}` : 'sendmail'
+
+
+return to ? `→ ${to}` : 'sendmail'
   }
-  return ''
+
+
+return ''
 }
 
 export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps) {
@@ -111,6 +128,7 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [tRes, eRes, mRes] = await Promise.all([
         fetch(`/api/v1/pbs/${pbsId}/notifications/targets`, { cache: 'no-store' }),
@@ -121,6 +139,7 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
       for (const r of [tRes, eRes, mRes]) {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
+
           throw new Error(body?.error || `HTTP ${r.status}`)
         }
       }
@@ -260,7 +279,9 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
                     <TableBody>
                       {targets.map((tg, idx) => {
                         const disabled = isDisabled(tg.disable)
-                        return (
+
+
+return (
                           <TableRow key={tg.name || `target-${idx}`} hover>
                             <TableCell sx={{ fontSize: 12 }}>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -331,7 +352,9 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
                       {endpoints.map((ep, idx) => {
                         const disabled = isDisabled(ep.disable)
                         const details = endpointDetails(ep)
-                        return (
+
+
+return (
                           <TableRow key={`${ep.type || 'ep'}-${ep.name || idx}`} hover>
                             <TableCell sx={{ fontSize: 12 }}>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -425,7 +448,9 @@ export default function PbsNotificationsTab({ pbsId }: PbsNotificationsTabProps)
                         const severity = toArray(m['match-severity'])
                         const fields = toArray(m['match-field'])
                         const tgts = toArray(m.target)
-                        return (
+
+
+return (
                           <TableRow key={m.name || `matcher-${idx}`} hover>
                             <TableCell sx={{ fontSize: 12 }}>
                               <Typography variant="caption" sx={{ fontWeight: 600 }}>

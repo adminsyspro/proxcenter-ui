@@ -20,6 +20,7 @@ import { PrismaPg } from "@prisma/adapter-pg"
 // DATABASE_URL is read explicitly so the seed fails fast on misconfig instead
 // of silently connecting to a default localhost:5432.
 const databaseUrl = process.env.DATABASE_URL
+
 if (!databaseUrl) {
   console.error("[seed] DATABASE_URL is not set; nothing to do.")
   process.exit(1)
@@ -118,6 +119,7 @@ interface RoleSeed {
   name: string
   description: string
   color: string
+
   /** "*" expands to every permission id from rbac_permissions. */
   permissions: string[]
 }
@@ -292,6 +294,7 @@ async function seedRoles() {
 
   for (const r of ROLES) {
     const now = new Date()
+
     await prisma.rbacRole.upsert({
       where: { id: r.id },
       update: {

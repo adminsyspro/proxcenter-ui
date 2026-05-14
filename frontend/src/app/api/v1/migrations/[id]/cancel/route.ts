@@ -17,6 +17,7 @@ export async function POST(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
+
     if (denied) return denied
 
     const { id } = await params

@@ -4,8 +4,9 @@
  *
  * Does NOT include the postgres globalSetup so these tests work without a DB.
  */
-import { defineConfig } from 'vitest/config'
 import path from 'path'
+
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   resolve: {
@@ -23,6 +24,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,js}'],
+
     // No globalSetup — pure logic tests only, no DB access.
   },
 })

@@ -15,10 +15,12 @@ export const runtime = "nodejs"
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const prisma = await getSessionPrisma()
+
     // RBAC: Check storage.view permission
     const denied = await checkPermission(PERMISSIONS.STORAGE_VIEW)
 
@@ -71,7 +73,7 @@ export async function GET(req: Request) {
 
             let storageType = config.type || 'unknown'
 
-            const isShared = config.shared === 1 || 
+            const isShared = config.shared === 1 ||
                            ['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'].includes(storageType)
 
             const content = config.content ? String(config.content).split(',') : []
@@ -163,12 +165,12 @@ export async function GET(req: Request) {
           })
         } else {
           const existing = deduplicatedMap.get(key)
-          
+
           // Ajouter les nodes
           if (!existing.allNodes.includes(s.node)) {
             existing.allNodes.push(s.node)
           }
-          
+
           // Ajouter la connexion si nouvelle
           if (!existing.connections.find((c: any) => c.id === s.connId)) {
             existing.connections.push({ id: s.connId, name: s.connectionName })
@@ -211,7 +213,7 @@ export async function GET(req: Request) {
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {
       if (a.shared !== b.shared) return a.shared ? -1 : 1
-      
+
 return b.usedPct - a.usedPct
     })
 
@@ -238,7 +240,7 @@ return b.usedPct - a.usedPct
     })
   } catch (e: any) {
     console.error("[storage] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

@@ -66,7 +66,8 @@ function useTimeAgo(t) {
     if (minutes < 60) return t('time.minutesAgo', { count: minutes })
     if (hours < 24) return t('time.hoursAgo', { count: hours })
     if (days < 7) return t('time.daysAgo', { count: days })
-    return new Date(date).toLocaleDateString()
+
+return new Date(date).toLocaleDateString()
   }
 }
 
@@ -74,7 +75,7 @@ const TypeChip = ({ type }) => {
   if (type === 'vm') return <Chip size='small' color='primary' label='VM' />
   if (type === 'ct') return <Chip size='small' color='secondary' label='CT' />
   if (type === 'host') return <Chip size='small' color='default' label='Host' />
-  
+
 return <Chip size='small' label={type?.toUpperCase() || '?'} variant='outlined' />
 }
 
@@ -98,26 +99,35 @@ const VerifyStateIcon = ({ row, t }) => {
     const tooltip = row.verifiedAt
       ? t('backups.verifiedOn', { date: row.verifiedAt })
       : t('backups.verified')
-    return (
+
+
+return (
       <Tooltip title={tooltip} arrow>
         <i className='ri-checkbox-circle-fill' style={{ fontSize: 18, color: '#4caf50' }} />
       </Tooltip>
     )
   }
+
+
   // verification.state set but not 'ok' → failure path. The state can
   // legitimately be 'failed', 'none', or other PBS-internal markers.
   const failState = row.verification?.state
+
   if (failState && failState !== 'ok') {
     const tooltip = row.verifiedAt
       ? t('backups.verifyFailedOn', { date: row.verifiedAt })
       : t('backups.verifyFailed')
-    return (
+
+
+return (
       <Tooltip title={tooltip} arrow>
         <i className='ri-error-warning-fill' style={{ fontSize: 18, color: '#f44336' }} />
       </Tooltip>
     )
   }
-  return (
+
+
+return (
     <Tooltip title={t('backups.notVerified')} arrow>
       <i className='ri-subtract-line' style={{ fontSize: 18, opacity: 0.35 }} />
     </Tooltip>
@@ -129,31 +139,31 @@ const FileIcon = ({ type, name }) => {
   if (type === 'directory') return <i className='ri-folder-fill' style={{ color: '#FFB74D', fontSize: 20 }} />
   if (type === 'symlink') return <i className='ri-link' style={{ color: '#90CAF9', fontSize: 20 }} />
   if (type === 'archive') return <i className='ri-archive-fill' style={{ color: '#A5D6A7', fontSize: 20 }} />
-  
+
   // Détecter le type par extension
   const ext = name?.split('.').pop()?.toLowerCase()
 
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) 
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext))
     return <i className='ri-image-fill' style={{ color: '#CE93D8', fontSize: 20 }} />
-  if (['mp4', 'mkv', 'avi', 'mov'].includes(ext)) 
+  if (['mp4', 'mkv', 'avi', 'mov'].includes(ext))
     return <i className='ri-video-fill' style={{ color: '#F48FB1', fontSize: 20 }} />
-  if (['mp3', 'wav', 'flac', 'ogg'].includes(ext)) 
+  if (['mp3', 'wav', 'flac', 'ogg'].includes(ext))
     return <i className='ri-music-fill' style={{ color: '#80DEEA', fontSize: 20 }} />
-  if (['pdf'].includes(ext)) 
+  if (['pdf'].includes(ext))
     return <i className='ri-file-pdf-fill' style={{ color: '#EF5350', fontSize: 20 }} />
-  if (['doc', 'docx'].includes(ext)) 
+  if (['doc', 'docx'].includes(ext))
     return <i className='ri-file-word-fill' style={{ color: '#42A5F5', fontSize: 20 }} />
-  if (['xls', 'xlsx'].includes(ext)) 
+  if (['xls', 'xlsx'].includes(ext))
     return <i className='ri-file-excel-fill' style={{ color: '#66BB6A', fontSize: 20 }} />
-  if (['zip', 'tar', 'gz', 'rar', '7z'].includes(ext)) 
+  if (['zip', 'tar', 'gz', 'rar', '7z'].includes(ext))
     return <i className='ri-file-zip-fill' style={{ color: '#FFCA28', fontSize: 20 }} />
-  if (['js', 'ts', 'py', 'sh', 'php', 'rb', 'go', 'rs'].includes(ext)) 
+  if (['js', 'ts', 'py', 'sh', 'php', 'rb', 'go', 'rs'].includes(ext))
     return <i className='ri-code-s-slash-fill' style={{ color: '#4DD0E1', fontSize: 20 }} />
-  if (['conf', 'cfg', 'ini', 'yaml', 'yml', 'json', 'xml'].includes(ext)) 
+  if (['conf', 'cfg', 'ini', 'yaml', 'yml', 'json', 'xml'].includes(ext))
     return <i className='ri-settings-3-fill' style={{ color: '#B0BEC5', fontSize: 20 }} />
-  if (['log', 'txt'].includes(ext)) 
+  if (['log', 'txt'].includes(ext))
     return <i className='ri-file-text-fill' style={{ color: '#90A4AE', fontSize: 20 }} />
-  
+
   return <i className='ri-file-fill' style={{ color: '#B0BEC5', fontSize: 20 }} />
 }
 
@@ -166,6 +176,7 @@ export default function BackupsPage() {
   const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const timeAgo = useTimeAgo(t)
+
   // Tenant-vDC users get a simpler drawer: the Explorer tab exposes raw
   // PBS internals (catalog browse, .blob downloads of the qm config, etc.)
   // that don't map onto the abstraction we sell to tenants. Provider /
@@ -377,14 +388,19 @@ return () => setPageInfo('', '', '')
   const handleVerify = useCallback(async () => {
     if (!selectedBackup || !selectedPbs) return
     setVerifying(true)
+
     try {
       const params = new URLSearchParams()
+
       if (selectedBackup.namespace) params.set('ns', selectedBackup.namespace)
+
       const res = await fetch(
         `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups/${encodeURIComponent(selectedBackup.id)}/verify?${params}`,
         { method: 'POST' }
       )
+
       const json = await res.json().catch(() => ({}))
+
       if (!res.ok) {
         toast.error(json?.error || `HTTP ${res.status}`)
       } else {
@@ -401,19 +417,27 @@ return () => setPageInfo('', '', '')
   // warning-coloured "Confirm delete"; second click actually deletes.
   const handleDelete = useCallback(async () => {
     if (!selectedBackup || !selectedPbs) return
+
     if (!deleteAwaitingConfirm) {
       setDeleteAwaitingConfirm(true)
-      return
+
+return
     }
+
     setDeleting(true)
+
     try {
       const params = new URLSearchParams()
+
       if (selectedBackup.namespace) params.set('ns', selectedBackup.namespace)
+
       const res = await fetch(
         `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups/${encodeURIComponent(selectedBackup.id)}?${params}`,
         { method: 'DELETE' }
       )
+
       const json = await res.json().catch(() => ({}))
+
       if (!res.ok) {
         toast.error(json?.error || `HTTP ${res.status}`)
         setDeleteAwaitingConfirm(false)
@@ -515,6 +539,7 @@ return () => setPageInfo('', '', '')
     if (!selectedPbs) return
 
     const useNoCache = noCacheRef.current
+
     noCacheRef.current = false // Reset immediately so filter/page changes don't bypass cache
 
     const loadBackups = async () => {
@@ -578,10 +603,13 @@ return () => clearTimeout(timer)
   // Exact (datastore, namespace) → vDC mapping for the table column.
   const vdcByPair = useMemo(() => {
     const m = new Map()
+
     for (const b of bindings) {
       m.set(`${b.datastore}|${b.namespace}`, { vdcName: b.vdcName, vdcId: b.vdcId, tenantName: b.tenantName })
     }
-    return m
+
+
+return m
   }, [bindings])
 
   // Group available namespaces by vDC for the filter dropdown. A namespace can
@@ -590,20 +618,27 @@ return () => clearTimeout(timer)
   const dropdownGroups = useMemo(() => {
     const groups = new Map() // vdcName -> Set<namespace>
     const orphans = new Set()
+
     for (const ns of availableNamespaces) {
       const matches = bindings.filter(b => b.namespace === ns)
+
       if (matches.length === 0) {
         orphans.add(ns)
         continue
       }
+
       const vdcNames = new Set(matches.map(m => m.vdcName))
+
       for (const vdcName of vdcNames) {
         const list = groups.get(vdcName) || new Set()
+
         list.add(ns)
         groups.set(vdcName, list)
       }
     }
-    return {
+
+
+return {
       groups: Array.from(groups.entries())
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([vdcName, nss]) => ({
@@ -669,6 +704,7 @@ return () => clearTimeout(timer)
       valueGetter: (_, row) => vdcByPair.get(`${row.datastore}|${row.namespace}`)?.vdcName || '',
       renderCell: params => {
         const info = vdcByPair.get(`${params.row.datastore}|${params.row.namespace}`)
+
         if (!info) {
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -676,8 +712,11 @@ return () => clearTimeout(timer)
             </Box>
           )
         }
+
         const tooltip = info.tenantName ? `${info.vdcName} • ${info.tenantName}` : info.vdcName
-        return (
+
+
+return (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
             <Tooltip title={tooltip} arrow>
               <Chip
@@ -1283,6 +1322,7 @@ return () => clearTimeout(timer)
                             // .img.fidx → "Use file restore" hint (no inline download — the index alone is useless)
                             const isBlob = typeof file.name === 'string' && file.name.endsWith('.blob')
                             const isImgIdx = typeof file.name === 'string' && file.name.endsWith('.img.fidx')
+
                             const handleClick = () => {
                               if (file.browsable) {
                                 browseArchive(file.name, '/')
@@ -1290,11 +1330,14 @@ return () => clearTimeout(timer)
                                 // Trigger the browser download. The route streams
                                 // the bytes with Content-Disposition: attachment.
                                 const params = new URLSearchParams({ file: file.name })
+
                                 if (selectedBackup?.namespace) params.set('ns', selectedBackup.namespace)
                                 const href = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/backups/${encodeURIComponent(selectedBackup.id)}/download?${params}`
+
                                 window.open(href, '_blank', 'noopener')
                               }
                             }
+
                             const secondary = file.browsable
                               ? t('backups.clickToExplore')
                               : isBlob
@@ -1302,12 +1345,15 @@ return () => clearTimeout(timer)
                                 : isImgIdx
                                   ? t('backups.useFileRestore')
                                   : t('backups.notExplorable')
+
                             const trailingIcon = file.browsable
                               ? 'ri-arrow-right-s-line'
                               : isBlob
                                 ? 'ri-download-2-line'
                                 : null
-                            return (
+
+
+return (
                             <ListItem key={idx} disablePadding>
                               <ListItemButton
                                 onClick={handleClick}
@@ -1434,7 +1480,9 @@ return () => clearTimeout(timer)
         // build it client-side: backup/<type>/<id>/<isoTime>.
         const backupPath = `backup/${selectedBackup.backupType}/${selectedBackup.backupId}/${selectedBackup.backupTimeIso}`
         const restoreType = selectedBackup.backupType === 'ct' ? 'lxc' : 'qemu'
-        return (
+
+
+return (
           <RestoreVmDialog
             open
             onClose={() => setRestoreOpen(false)}

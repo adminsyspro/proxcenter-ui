@@ -137,7 +137,9 @@ export function useHardwareHandlers({
     // Any other object: wrap as { diskId: value }
     const hasBusKey = diskConfig && typeof diskConfig === 'object' &&
       Object.keys(diskConfig).some(k => /^(scsi|virtio|sata|ide)\d+$/.test(k))
+
     let body: any
+
     if (typeof diskConfig === 'string') {
       body = { [selectedDisk.id]: diskConfig }
     } else if (diskConfig?.delete || hasBusKey) {
@@ -183,17 +185,23 @@ export function useHardwareHandlers({
     // when you remove a boot-order device via the Hardware panel.
     try {
       const cfgRes = await fetch(configUrl)
+
       if (cfgRes.ok) {
         const cfgData = await cfgRes.json().catch(() => ({}))
         const cfg = cfgData?.data || cfgData || {}
         const bootStr: string = cfg.boot || ''
+
         // Format: "order=scsi0;ide2;net0" — semicolon-separated list after "order="
         const orderMatch = bootStr.match(/order=([^;].*?)$/m) || bootStr.match(/order=(.*)/)
+
         if (orderMatch) {
           const devices = orderMatch[1].split(';').filter(Boolean)
+
           if (devices.includes(selectedDisk.id)) {
             const newDevices = devices.filter(d => d !== selectedDisk.id)
             const newBoot = newDevices.length > 0 ? `order=${newDevices.join(';')}` : 'order='
+
+
             // Update boot order first (remove the device from it)
             await fetch(configUrl, {
               method: 'PUT',
@@ -392,6 +400,7 @@ export function useHardwareHandlers({
   const [replicationLogData, setReplicationLogData] = useState<string[]>([])
   const [replicationLogLoading, setReplicationLogLoading] = useState(false)
   const [replicationLogJob, setReplicationLogJob] = useState<any>(null)
+
   const [replicationFormData, setReplicationFormData] = useState({
     guest: '',
     target: '',
@@ -433,6 +442,7 @@ export function useHardwareHandlers({
   const [backupJobSaving, setBackupJobSaving] = useState(false)
   const [deleteBackupJobDialog, setDeleteBackupJobDialog] = useState<any>(null)
   const [backupJobDeleting, setBackupJobDeleting] = useState(false)
+
   const [backupJobFormData, setBackupJobFormData] = useState({
     enabled: true,
     storage: '',
@@ -512,6 +522,7 @@ export function useHardwareHandlers({
 
   // États pour Rolling Update
   const [nodeUpdates, setNodeUpdates] = useState<Record<string, { count: number; updates: any[]; version: string | null; loading: boolean }>>({})
+
   const [nodeLocalVms, setNodeLocalVms] = useState<Record<string, {
     total: number;
     running: number;
@@ -521,6 +532,7 @@ export function useHardwareHandlers({
     vms: any[];
     loading: boolean
   }>>({})
+
   const [updatesDialogOpen, setUpdatesDialogOpen] = useState(false)
   const [updatesDialogNode, setUpdatesDialogNode] = useState<string | null>(null)
   const [localVmsDialogOpen, setLocalVmsDialogOpen] = useState(false)
@@ -681,6 +693,7 @@ export function useHardwareHandlers({
     if (!selection?.id) return
 
     const connId = selection.id.split(':')[0]
+
     setClusterNotesSaving(true)
 
     try {
@@ -778,6 +791,7 @@ export function useHardwareHandlers({
         setCreateClusterDialogOpen(false)
         setNewClusterName('')
         setNewClusterLinks([])
+
         // Recharger la config
         loadClusterConfig(connId)
       }
@@ -814,6 +828,7 @@ export function useHardwareHandlers({
         setJoinClusterDialogOpen(false)
         setJoinClusterInfo('')
         setJoinClusterPassword('')
+
         // Recharger la config
         loadClusterConfig(connId)
       }
@@ -861,6 +876,7 @@ export function useHardwareHandlers({
 
       if (!json.error) {
         const allVms = (json.data || []).filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
+
         setBackupJobsVms(allVms.map((vm: any) => ({
           vmid: vm.vmid,
           name: vm.name,
@@ -906,6 +922,7 @@ export function useHardwareHandlers({
 
     if (job.all === 1 || job.all === true) {
       selMode = 'all'
+
       if (job.exclude) {
         excludedVmids = String(job.exclude).split(',').map((v: string) => Number.parseInt(v.trim())).filter((v: number) => !Number.isNaN(v))
       }
@@ -1072,6 +1089,7 @@ return
           // Ils ne supportent pas le file-restore (seuls .pxar.fidx le supportent)
           // Le nom peut commencer par / (ex: /drive-scsi0.img.fidx)
           const fileName = (f.name || '').replace(/^\//, '') // Enlever le / initial
+
           // Seuls les .pxar peuvent être explorés (archives de fichiers)
           const isRawDiskImage = fileName && !fileName.includes('.pxar') && (
             fileName.endsWith('.img.fidx') || fileName.endsWith('.img.didx') ||
@@ -1081,6 +1099,7 @@ return
 
           return {
             ...f,
+
             // Garder le browsable de l'API (PVE sait si c'est explorable)
             isRawDiskImage,
           }
@@ -1113,21 +1132,27 @@ return
         // Ajouter la détection des images disques pour le mode PBS aussi
         const files = (json.data?.files || []).map((f: any) => {
           const fileName = (f.name || f.filename || '').replace(/^\//, '')
+
           const isPxarArchive = fileName && (
             fileName.endsWith('.pxar.fidx') || fileName.endsWith('.pxar.didx') || fileName.includes('.pxar')
           )
+
           const isRawDiskImage = !isPxarArchive && fileName && (
             fileName.endsWith('.img.fidx') || fileName.endsWith('.img.didx') ||
             fileName.endsWith('.raw.fidx') || fileName.endsWith('.raw.didx') ||
             fileName.endsWith('.img') || /^drive-.*\.(img|raw)/i.test(fileName)
           )
-          return {
+
+
+return {
             ...f,
+
             // En mode PBS, seuls les pxar sont browsable (pas de file-restore)
             browsable: !isRawDiskImage && (isPxarArchive || f.browsable !== false),
             isRawDiskImage,
           }
         })
+
         setExplorerArchives(files)
         if (json.error) setExplorerError(json.error)
       }
@@ -1163,6 +1188,7 @@ return
 
       // Auto-sélection: exact match unique OU un seul storage compatible
       const exactMatches = compatible.filter((s: any) => s.matchType === 'exact')
+
       if (exactMatches.length === 1) {
         await exploreWithPveStorage(backup, exactMatches[0])
       } else if (compatible.length === 1) {

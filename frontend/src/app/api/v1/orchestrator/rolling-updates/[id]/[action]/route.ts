@@ -15,11 +15,13 @@ export async function POST(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE)
+
     if (denied) return denied
 
     const { id, action } = await ctx.params
 
     const validActions = ["pause", "resume", "cancel", "approve"]
+
     if (!validActions.includes(action)) {
       return NextResponse.json(
         { error: `Invalid action: ${action}. Valid actions: ${validActions.join(", ")}` },
@@ -31,11 +33,14 @@ export async function POST(
     const ruRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
       headers: { "Content-Type": "application/json" },
     })
+
     if (ruRes.ok) {
       const ruData = await ruRes.json()
       const ru = ruData?.data || ruData
+
       if (ru?.connection_id) {
         const tenantConnectionIds = await getTenantConnectionIds()
+
         if (!tenantConnectionIds.has(ru.connection_id)) {
           return NextResponse.json({ error: 'Rolling update not found' }, { status: 404 })
         }
@@ -61,7 +66,9 @@ export async function POST(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error(`Error in rolling update action:`, error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )

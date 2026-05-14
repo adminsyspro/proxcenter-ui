@@ -131,8 +131,10 @@ async function fetchRawInventory(vdcScope?: import('@/lib/vdc/scope').VdcScope |
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }> {
   const prisma = await getSessionPrisma()
+
   // For tenants with vDCs: load connections referenced by vDCs (they belong to the provider tenant)
   const connPrisma = vdcScope ? globalPrisma : prisma
+
   const pveWhere = vdcScope
     ? { type: 'pve' as const, id: { in: [...vdcScope.connectionIds] } }
     : { type: 'pve' as const }
@@ -190,13 +192,16 @@ async function fetchRawInventory(vdcScope?: import('@/lib/vdc/scope').VdcScope |
       const nodeResources: any[] = nodeResourcesResult.status === 'fulfilled' ? nodeResourcesResult.value || [] : []
 
       const nodeHastateMap = new Map<string, string>()
+
       for (const nr of nodeResources) {
         if (nr?.node && nr?.hastate) nodeHastateMap.set(nr.node, nr.hastate)
       }
 
       let cephHealth: string | undefined
+
       if (cephResult.status === 'fulfilled' && cephResult.value) {
         const cephData = cephResult.value
+
         if (typeof cephData.health === 'string') {
           cephHealth = cephData.health
         } else if (cephData.health?.status) {
@@ -219,6 +224,7 @@ async function fetchRawInventory(vdcScope?: import('@/lib/vdc/scope').VdcScope |
           return {
             node: node.node,
             ip: resolveManagementIp(networks),
+
             // Use memory from /nodes/{node}/status (excludes ZFS ARC / kernel caches)
             mem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.used || 0) : undefined,
             maxmem: nodeStatus?.memory?.total > 0 ? Number(nodeStatus.memory.total || 0) : undefined,
@@ -250,8 +256,10 @@ async function fetchRawInventory(vdcScope?: import('@/lib/vdc/scope').VdcScope |
         const extra = nodeIpMap.get(n.node)
         const hastate = nodeHastateMap.get(n.node)
         const maintenance = hastate === 'maintenance' ? 'maintenance' : undefined
+
         nodeMap.set(n.node, {
           ...n,
+
           // Override mem/maxmem with accurate values from /nodes/{node}/status
           ...(extra?.mem !== undefined ? { mem: extra.mem } : {}),
           ...(extra?.maxmem !== undefined ? { maxmem: extra.maxmem } : {}),
@@ -403,6 +411,7 @@ return aId - bId
 
           for (const snap of snapshots) {
             const backupType = snap['backup-type']
+
             if (backupType === 'vm') vmCount++
             else if (backupType === 'ct') ctCount++
             else if (backupType === 'host') hostCount++
@@ -452,7 +461,8 @@ return aId - bId
       }
     } catch (e: any) {
       console.error(`[inventory] Failed to load PBS ${conn.name}:`, e?.message)
-      return {
+
+return {
         id: conn.id,
         name: conn.name,
         type: 'pbs',
@@ -523,12 +533,14 @@ async function blockingFetch(tenantId: string, vdcScope?: import('@/lib/vdc/scop
 
   if (inflight === null) {
     const startTime = Date.now()
+
     inflight = fetchRawInventory(vdcScope)
       .then(result => {
         console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
         setCachedInventory(result, tenantId)
         setInflightFetch(null, tenantId)
-        return result
+
+return result
       })
       .catch(err => {
         setInflightFetch(null, tenantId)
@@ -548,6 +560,7 @@ function triggerBackgroundRevalidation(tenantId: string, vdcScope?: import('@/li
   if (getInflightFetch(tenantId) !== null) return
 
   const startTime = Date.now()
+
   const revalidation = fetchRawInventory(vdcScope)
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
@@ -558,6 +571,7 @@ function triggerBackgroundRevalidation(tenantId: string, vdcScope?: import('@/li
       console.error('[inventory] Background revalidation failed:', err?.message)
       setInflightFetch(null, tenantId)
     })
+
   setInflightFetch(revalidation as any, tenantId)
 }
 
@@ -567,10 +581,12 @@ function triggerBackgroundRevalidation(tenantId: string, vdcScope?: import('@/li
 
 export async function GET(request: NextRequest) {
   const demo = demoResponse(request)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
@@ -616,6 +632,7 @@ export async function GET(request: NextRequest) {
     clusters = await Promise.all(clusters.map(async cluster => {
       // Apply RBAC first
       let filtered = cluster
+
       if (rbacCtx && !rbacCtx.isAdmin) {
         const filteredNodes = await Promise.all(
           cluster.nodes.map(async node => ({
@@ -633,11 +650,14 @@ export async function GET(request: NextRequest) {
             )
           }))
         )
+
         filtered = {
           ...cluster,
           nodes: filteredNodes,
         }
       }
+
+
       // Then apply vDC filter (nodes + pool membership)
       return applyVdcFilter(filtered, vdcScope)
     }))

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -47,8 +48,10 @@ function parseKv(raw: string): { head: string; params: Record<string, string> } 
   const parts = String(raw || '').split(',').map(p => p.trim()).filter(Boolean)
   const params: Record<string, string> = {}
   let head = ''
+
   parts.forEach((p, idx) => {
     const eq = p.indexOf('=')
+
     if (idx === 0 && eq === -1) {
       head = p
     } else if (eq > -1) {
@@ -60,7 +63,8 @@ function parseKv(raw: string): { head: string; params: Record<string, string> } 
       params[p] = '1'
     }
   })
-  return { head, params }
+
+return { head, params }
 }
 
 export function EditOtherHardwareDialog({
@@ -113,11 +117,13 @@ export function EditOtherHardwareDialog({
     switch (hardware.type) {
       case 'usb': {
         const isSpice = head === 'spice' || params['spice'] === '1'
+
         setUsbType(isSpice ? 'spice' : 'device')
         setUsbDeviceId(params['host'] || '')
         setUsbUsb3(params['usb3'] === '1')
         break
       }
+
       case 'pci': {
         setPciDeviceId(head || params['host'] || '')
         setPciPcie(params['pcie'] !== '0')
@@ -125,15 +131,18 @@ export function EditOtherHardwareDialog({
         setPciPrimaryGpu(params['x-vga'] === '1')
         break
       }
+
       case 'serial': {
         setSerialPath(head || hardware.rawValue || 'socket')
         break
       }
+
       case 'audio': {
         setAudioDevice(params['device'] || 'intel-hda')
         setAudioDriver(params['driver'] || 'spice')
         break
       }
+
       case 'rng': {
         setRngSource(params['source'] || '/dev/urandom')
         setRngMaxBytes(params['max_bytes'] ? Number(params['max_bytes']) : 1024)
@@ -149,6 +158,7 @@ export function EditOtherHardwareDialog({
     if (hardware.type !== 'pci' && hardware.type !== 'usb') return
 
     setDevicesLoading(true)
+
     const endpoint = hardware.type === 'pci'
       ? `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/pci`
       : `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/usb`
@@ -157,6 +167,7 @@ export function EditOtherHardwareDialog({
       .then(r => r.json())
       .then(json => {
         const list = json?.data || json || []
+
         if (hardware.type === 'pci') setPciDevices(list)
         else setUsbDevices(list)
       })
@@ -171,27 +182,36 @@ export function EditOtherHardwareDialog({
       case 'usb': {
         if (usbType === 'spice') return `spice${usbUsb3 ? ',usb3=1' : ''}`
         if (!usbDeviceId) throw new Error(t('hardware.usbDeviceRequired'))
-        return `host=${usbDeviceId}${usbUsb3 ? ',usb3=1' : ''}`
+
+return `host=${usbDeviceId}${usbUsb3 ? ',usb3=1' : ''}`
       }
+
       case 'pci': {
         if (!pciDeviceId) throw new Error(t('hardware.pciDeviceRequired'))
         const parts = [pciDeviceId]
+
         if (pciPcie) parts.push('pcie=1')
         if (pciRombar) parts.push('rombar=1')
         if (pciPrimaryGpu) parts.push('x-vga=1')
-        return parts.join(',')
+
+return parts.join(',')
       }
+
       case 'serial': {
         return serialPath || 'socket'
       }
+
       case 'audio': {
         return `device=${audioDevice},driver=${audioDriver}`
       }
+
       case 'rng': {
         const parts = [`source=${rngSource}`]
+
         if (rngMaxBytes > 0) parts.push(`max_bytes=${rngMaxBytes}`)
         if (rngPeriod > 0) parts.push(`period=${rngPeriod}`)
-        return parts.join(',')
+
+return parts.join(',')
       }
     }
   }
@@ -199,8 +219,10 @@ export function EditOtherHardwareDialog({
   const handleSave = async () => {
     setSaving(true)
     setError(null)
+
     try {
       const value = buildValue()
+
       await onSave({ [hardware.id]: value })
       onClose()
     } catch (e: any) {
@@ -213,6 +235,7 @@ export function EditOtherHardwareDialog({
   const handleDelete = async () => {
     setDeleting(true)
     setError(null)
+
     try {
       await onDelete(hardware.id)
       setConfirmDelete(false)

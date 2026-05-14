@@ -43,6 +43,7 @@ export const SCOPE_TYPES = {
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -94,6 +95,7 @@ return NextResponse.json(
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const body = await req.json()

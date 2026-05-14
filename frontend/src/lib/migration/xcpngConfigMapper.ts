@@ -21,7 +21,8 @@ function mapOsType(guestOS: string): string {
       os.includes("suse") || os.includes("oracle") || os.includes("linux") ||
       os.includes("alma") || os.includes("rocky")) return "l26"
   if (os.includes("freebsd")) return "other"
-  return "l26"
+
+return "l26"
 }
 
 /** Detect if the VM is Windows-based */

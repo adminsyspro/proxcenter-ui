@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/firewall/microseg/[connectionId]/generate-base/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -13,21 +14,23 @@ export async function POST(
   try {
     const { connectionId } = await params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
     if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+
     if (denied) return denied
 
     const body = await request.json()
-    
+
     const orchestrator = getOrchestratorClient()
     const response = await orchestrator.post(`/firewall/microseg/${connectionId}/generate-base`, body)
 
-    
+
 return NextResponse.json(response.data)
   } catch (error: any) {
     console.error('Error generating base SGs:', error)
-    
+
 return NextResponse.json(
       { error: error.message || 'Failed to generate' },
       { status: 500 }

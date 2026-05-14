@@ -26,9 +26,11 @@ export default function ClusterSdnZonesPanel({ connId }: Props) {
   const fetchZones = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/connections/${connId}/sdn/zones`, { cache: 'no-store' })
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setZones(body.data?.zones ?? [])
     } catch (e: any) {

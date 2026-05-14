@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -37,11 +38,14 @@ export async function GET(req: Request) {
           { tenantId: DEFAULT_TENANT_ID, isShared: true },
         ],
       }
+
     const customRows = await prisma.customImage.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     }).catch(() => [])
+
     let customImages = customRows.map(customImageToCloudImage)
+
     if (vendor) {
       customImages = customImages.filter(img => img.vendor === vendor)
     }
@@ -51,6 +55,7 @@ export async function GET(req: Request) {
 
     // Build vendor list: built-in vendors + any custom vendors
     const customVendorIds = new Set(customRows.map(r => r.vendor))
+
     const extraVendors = [...customVendorIds]
       .filter(v => !VENDORS.some(bv => bv.id === v))
       .map(v => ({ id: v, name: v.charAt(0).toUpperCase() + v.slice(1), icon: 'ri-image-line' }))

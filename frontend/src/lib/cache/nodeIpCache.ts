@@ -25,19 +25,24 @@ function getStore(): Map<string, NodeIpEntry> {
   if (!(globalThis as any)[CACHE_KEY]) {
     ;(globalThis as any)[CACHE_KEY] = new Map<string, NodeIpEntry>()
   }
-  return (globalThis as any)[CACHE_KEY]
+
+
+return (globalThis as any)[CACHE_KEY]
 }
 
 function getLockStore(): Map<string, FailoverLockEntry> {
   if (!(globalThis as any)[LOCK_KEY]) {
     ;(globalThis as any)[LOCK_KEY] = new Map<string, FailoverLockEntry>()
   }
-  return (globalThis as any)[LOCK_KEY]
+
+
+return (globalThis as any)[LOCK_KEY]
 }
 
 /** Store known node IPs for a connection */
 export function setNodeIps(connId: string, ips: string[], port: number, protocol: string): void {
   const store = getStore()
+
   store.set(connId, { ips, port, protocol, timestamp: Date.now() })
 }
 
@@ -45,17 +50,23 @@ export function setNodeIps(connId: string, ips: string[], port: number, protocol
 export function getNodeIps(connId: string): { ips: string[]; port: number; protocol: string } | null {
   const store = getStore()
   const entry = store.get(connId)
+
   if (!entry) return null
+
   if (Date.now() - entry.timestamp > TTL_MS) {
     store.delete(connId)
-    return null
+
+return null
   }
-  return { ips: entry.ips, port: entry.port, protocol: entry.protocol }
+
+
+return { ips: entry.ips, port: entry.port, protocol: entry.protocol }
 }
 
 /** Clear node IP cache for a specific connection or all */
 export function invalidateNodeIpCache(connId?: string): void {
   const store = getStore()
+
   if (connId) store.delete(connId)
   else store.clear()
 }
@@ -64,46 +75,60 @@ export function invalidateNodeIpCache(connId?: string): void {
 export function getFailoverLock(connId: string): Promise<string | null> | null {
   const locks = getLockStore()
   const entry = locks.get(connId)
+
   if (!entry) return null
+
   if (Date.now() - entry.timestamp > LOCK_TTL_MS) {
     locks.delete(connId)
-    return null
+
+return null
   }
-  return entry.promise
+
+
+return entry.promise
 }
 
 /** Set a failover lock — returns the promise other callers should await */
 export function setFailoverLock(connId: string, promise: Promise<string | null>): void {
   const locks = getLockStore()
+
   locks.set(connId, { promise, timestamp: Date.now() })
+
   // Auto-clean after resolution
   promise.finally(() => {
     const current = locks.get(connId)
+
     if (current?.promise === promise) locks.delete(connId)
   })
 }
 
 const FAILURE_KEY = "__proxcenter_failure_counter__" as const
+
 export const FAILURE_THRESHOLD = 2
 
 function getFailureStore(): Map<string, number> {
   if (!(globalThis as any)[FAILURE_KEY]) {
     ;(globalThis as any)[FAILURE_KEY] = new Map<string, number>()
   }
-  return (globalThis as any)[FAILURE_KEY]
+
+
+return (globalThis as any)[FAILURE_KEY]
 }
 
 /** Increment consecutive failure count. Returns true when threshold is reached. */
 export function incrementFailures(connId: string): boolean {
   const store = getFailureStore()
   const count = (store.get(connId) || 0) + 1
+
   store.set(connId, count)
-  return count >= FAILURE_THRESHOLD
+
+return count >= FAILURE_THRESHOLD
 }
 
 /** Reset failure count (call on any successful request). */
 export function resetFailures(connId: string): void {
   const store = getFailureStore()
+
   store.delete(connId)
 }
 

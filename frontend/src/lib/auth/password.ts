@@ -27,7 +27,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
     if (!salt || !storedHash) {
       resolve(false)
-      
+
 return
     }
 
@@ -36,6 +36,7 @@ return
       const derivedHex = derivedKey.toString("hex")
       const a = Buffer.from(derivedHex, "utf-8")
       const b = Buffer.from(storedHash, "utf-8")
+
       resolve(a.length === b.length && crypto.timingSafeEqual(a, b))
     })
   })
@@ -47,6 +48,7 @@ return
 export function generateRandomPassword(length: number = 16): string {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
   let password = ""
+
   // Use rejection sampling to avoid modulo bias
   const maxValid = 256 - (256 % chars.length)
 

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -24,6 +25,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 
 interface PbsAccessControlTabProps {
@@ -73,7 +75,8 @@ function isEnabled(value: boolean | number | string | undefined): boolean {
   if (value === true) return true
   if (value === 1) return true
   if (typeof value === 'string' && (value === '1' || value.toLowerCase() === 'true')) return true
-  return false
+
+return false
 }
 
 function isPropagate(value: boolean | number | string | undefined): boolean {
@@ -83,7 +86,9 @@ function isPropagate(value: boolean | number | string | undefined): boolean {
 function formatExpire(value: number | string | undefined, neverLabel: string): string {
   if (value === undefined || value === null || value === '' || value === 0 || value === '0') return neverLabel
   const n = typeof value === 'string' ? Number(value) : value
+
   if (!Number.isFinite(n) || n <= 0) return neverLabel
+
   try {
     return new Date((n as number) * 1000).toLocaleString()
   } catch {
@@ -93,18 +98,23 @@ function formatExpire(value: number | string | undefined, neverLabel: string): s
 
 function fullName(u: PbsUser): string {
   const parts = [u.firstname, u.lastname].filter(s => typeof s === 'string' && s.trim().length > 0)
-  return parts.join(' ').trim()
+
+
+return parts.join(' ').trim()
 }
 
 function privsToArray(p: string | string[] | undefined): string[] {
   if (Array.isArray(p)) return p
+
   if (typeof p === 'string' && p.length > 0) {
     return p
       .split(/[,\s]+/)
       .map(s => s.trim())
       .filter(Boolean)
   }
-  return []
+
+
+return []
 }
 
 export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps) {
@@ -123,6 +133,7 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [uRes, rRes, aRes] = await Promise.all([
         fetch(`/api/v1/pbs/${pbsId}/access/users`, { cache: 'no-store' }),
@@ -133,6 +144,7 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
       for (const r of [uRes, rRes, aRes]) {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
+
           throw new Error(body?.error || `HTTP ${r.status}`)
         }
       }
@@ -155,10 +167,13 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
 
   const flatTokens: PbsFlatToken[] = useMemo(() => {
     const out: PbsFlatToken[] = []
+
     for (const u of users) {
       if (!u.userid || !Array.isArray(u.tokens)) continue
+
       for (const tk of u.tokens) {
         const tokenid = tk.tokenid
+
         if (!tokenid) continue
         out.push({
           userid: u.userid,
@@ -169,7 +184,9 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
         })
       }
     }
-    return out
+
+
+return out
   }, [users])
 
   const typeChip = (kind?: string) => {
@@ -178,17 +195,21 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
         <Chip size="small" color="primary" label={t('inventory.pbsAccessTypeUser')} variant="outlined" sx={{ fontSize: 11 }} />
       )
     }
+
     if (kind === 'group') {
       return (
         <Chip size="small" color="secondary" label={t('inventory.pbsAccessTypeGroup')} variant="outlined" sx={{ fontSize: 11 }} />
       )
     }
+
     if (kind === 'token') {
       return (
         <Chip size="small" color="warning" label={t('inventory.pbsAccessTypeToken')} variant="outlined" sx={{ fontSize: 11 }} />
       )
     }
-    return (
+
+
+return (
       <Chip size="small" label={kind || '—'} variant="outlined" sx={{ fontSize: 11 }} />
     )
   }
@@ -349,7 +370,9 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
                     {users.map((u, idx) => {
                       const enabled = isEnabled(u.enable)
                       const tokenCount = Array.isArray(u.tokens) ? u.tokens.length : 0
-                      return (
+
+
+return (
                         <TableRow
                           key={u.userid || `user-${idx}`}
                           hover
@@ -477,7 +500,9 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
                     {roles.map((r, idx) => {
                       const privs = privsToArray(r.privs)
                       const privsStr = privs.join(', ')
-                      return (
+
+
+return (
                         <TableRow key={r.roleid || `role-${idx}`} hover>
                           <TableCell sx={{ fontSize: 12, minWidth: 160 }}>
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -534,7 +559,9 @@ export default function PbsAccessControlTab({ pbsId }: PbsAccessControlTabProps)
                   <TableBody>
                     {acl.map((a, idx) => {
                       const propagate = isPropagate(a.propagate)
-                      return (
+
+
+return (
                         <TableRow key={`${a.path}-${a.ugid}-${a.roleid}-${idx}`} hover>
                           <TableCell sx={{ fontSize: 12 }}>
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>

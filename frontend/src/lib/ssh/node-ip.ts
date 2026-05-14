@@ -29,6 +29,7 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
         where: { connectionId_node: { connectionId: connId, node: nodeName } },
         select: { sshAddress: true, ip: true },
       })
+
       if (host?.sshAddress) return host.sshAddress
       if (host?.ip) return host.ip
     }
@@ -38,6 +39,7 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
   try {
     const networks = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/network`)
     const ip = resolveManagementIp(networks)
+
     if (ip) return ip
   } catch {}
 
@@ -45,6 +47,7 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
   try {
     const dns = await import("dns")
     const resolved = await dns.promises.resolve4(nodeName)
+
     if (resolved?.[0]) return resolved[0]
   } catch {}
 
@@ -52,10 +55,12 @@ export async function getNodeIp(conn: any, nodeName: string): Promise<string> {
   if (!conn.behindProxy) {
     try {
       const host = conn.host || conn.baseUrl || ""
+
       const cleanHost = host
         .replace(/^https?:\/\//, "")
         .replace(/:\d+$/, "")
         .replace(/\/.*$/, "")
+
       if (cleanHost && !cleanHost.includes("/")) return cleanHost
     } catch {}
   }

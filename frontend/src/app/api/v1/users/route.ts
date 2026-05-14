@@ -27,7 +27,9 @@ async function loadProtectedUserIds(): Promise<Set<string>> {
     select: { userId: true },
     distinct: ["userId"],
   })
-  return new Set(rows.map(r => r.userId))
+
+
+return new Set(rows.map(r => r.userId))
 }
 
 // GET /api/v1/users - Liste des utilisateurs
@@ -35,6 +37,7 @@ export async function GET() {
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -79,6 +82,7 @@ export async function GET() {
     // collapse their list to a single "all tenants" chip — they're
     // pinned to every tenant by design (cf. createTenant).
     const visibleUserIds = memberships.map(m => m.userId)
+
     const [allMemberships, superAdminRows] = visibleUserIds.length > 0
       ? await Promise.all([
           prisma.userTenant.findMany({
@@ -96,12 +100,16 @@ export async function GET() {
           }),
         ])
       : [[], []]
+
     const tenantsByUser = new Map<string, Array<{ id: string; name: string; isDefault: boolean }>>()
+
     for (const m of allMemberships) {
       const list = tenantsByUser.get(m.userId) ?? []
+
       list.push({ id: m.tenant.id, name: m.tenant.name, isDefault: m.isDefault })
       tenantsByUser.set(m.userId, list)
     }
+
     const superAdminIds = new Set(superAdminRows.map(r => r.userId))
 
     const users = memberships.map(m => ({
@@ -117,7 +125,8 @@ export async function GET() {
       is_super_admin: superAdminIds.has(m.user.id),
       tenants: (tenantsByUser.get(m.user.id) ?? []).sort((a, b) => {
         if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
-        return a.name.localeCompare(b.name)
+
+return a.name.localeCompare(b.name)
       }),
     }))
 
@@ -132,7 +141,8 @@ export async function GET() {
     })
   } catch (error: any) {
     console.error("Erreur GET users:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }
 
@@ -141,6 +151,7 @@ export async function POST(req: Request) {
   try {
     // RBAC: Check admin.users permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -152,6 +163,7 @@ export async function POST(req: Request) {
 
     // Valider l'email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
     if (email.length > 254 || !emailRegex.test(email)) {
       return NextResponse.json({ error: "Format d'email invalide" }, { status: 400 })
     }
@@ -171,6 +183,7 @@ export async function POST(req: Request) {
       where: { email: normalisedEmail },
       select: { id: true },
     })
+
     if (existing) {
       return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
     }
@@ -191,20 +204,25 @@ export async function POST(req: Request) {
     const isProviderView = callerTenantId === DEFAULT_TENANT_ID
 
     let initialTenantIds: string[]
+
     if (isProviderView && Array.isArray(tenantIds)) {
       initialTenantIds = (tenantIds as unknown[]).filter((x): x is string => typeof x === "string" && x.length > 0)
+
       if (initialTenantIds.length === 0) {
         return NextResponse.json(
           { error: "Au moins un tenant doit être sélectionné" },
           { status: 400 }
         )
       }
+
+
       // Refuse unknown ids up front so we don't half-create the user and
       // then trip an FK violation deep in the transaction.
       const known = await prisma.tenant.findMany({
         where: { id: { in: initialTenantIds } },
         select: { id: true },
       })
+
       if (known.length !== initialTenantIds.length) {
         return NextResponse.json({ error: "Un ou plusieurs tenants sont introuvables" }, { status: 400 })
       }
@@ -240,6 +258,7 @@ export async function POST(req: Request) {
 
     // Audit
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "users",
@@ -263,6 +282,7 @@ export async function POST(req: Request) {
     })
   } catch (error: any) {
     console.error("Erreur POST users:", error)
-    return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })
   }
 }

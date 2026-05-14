@@ -1,8 +1,9 @@
 // src/app/api/v1/templates/deploy/route.ts
 import { NextResponse, after } from "next/server"
+
 import { getServerSession } from "next-auth"
 
-import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { getSessionPrisma, getCurrentTenantId , DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
@@ -18,7 +19,6 @@ import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { getVdcScope } from "@/lib/vdc/scope"
-import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -26,6 +26,7 @@ type DeploymentStatus = "pending" | "downloading" | "creating" | "configuring" |
 
 async function updateDeployment(id: string, status: DeploymentStatus, extra: Record<string, any> = {}) {
   const prisma = await getSessionPrisma()
+
   await prisma.deployment.update({
     where: { id },
     data: {
@@ -41,13 +42,16 @@ export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
     const rawBody = await req.json().catch(() => null)
+
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const parseResult = deploySchema.safeParse(rawBody)
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parseResult.error.flatten() },
@@ -66,9 +70,11 @@ export async function POST(req: Request) {
 
     if (!image) {
       const customRow = await prisma.customImage.findUnique({ where: { tenantId_slug: { tenantId, slug: body.imageSlug } } })
+
       if (!customRow) {
         return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
       }
+
       image = customImageToCloudImage(customRow)
       isCustom = true
       sourceType = customRow.sourceType
@@ -88,14 +94,17 @@ export async function POST(req: Request) {
     // no business creating a VM here.
     const isTenant = tenantId !== DEFAULT_TENANT_ID
     let vdcInfo: Awaited<ReturnType<typeof resolveVdcForTenant>> = null
+
     try {
       vdcInfo = await resolveVdcForTenant(tenantId, body.connectionId, body.node)
     } catch (e: any) {
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
+
     if (isTenant && !vdcInfo) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
     }
@@ -140,16 +149,20 @@ export async function POST(req: Request) {
     // hold against forged payloads too.
     if (isTenant) {
       const scope = await getVdcScope(tenantId)
+
       if (!scope) {
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
+
       const allowedStorages = scope.storagesByConnection.get(body.connectionId) ?? new Set<string>()
+
       if (!allowedStorages.has(body.storage)) {
         return NextResponse.json(
           { error: `Storage "${body.storage}" is not authorised for this tenant.` },
           { status: 403 },
         )
       }
+
       if (body.isoStorage && !allowedStorages.has(body.isoStorage)) {
         return NextResponse.json(
           { error: `ISO storage "${body.isoStorage}" is not authorised for this tenant.` },
@@ -159,6 +172,7 @@ export async function POST(req: Request) {
 
       const allowedBridges = await getAllowedBridgesForTenant(tenantId, body.connectionId)
       const bridge = body.hardware?.networkBridge
+
       if (allowedBridges !== null && bridge && !allowedBridges.has(bridge)) {
         return NextResponse.json(
           { error: `Bridge "${bridge}" is not authorised for this vDC. Allowed: ${Array.from(allowedBridges).join(', ')}` },
@@ -223,6 +237,7 @@ export async function POST(req: Request) {
       // the pipeline throws after we've claimed an IP. `let` inside the
       // try wouldn't be visible from the sibling catch block.
       let ipamAllocation: { subnetId: string; ip: string } | null = null
+
       try {
         // ─────────── ISO branch ───────────────────────────────────────
         // Stops at the "creating" step (no cloud-init, no start). The VM
@@ -240,7 +255,8 @@ export async function POST(req: Request) {
             vdcInfo,
             onIpamAllocation: (alloc) => { ipamAllocation = alloc },
           })
-          return
+
+return
         }
 
         let importVolume: string
@@ -266,6 +282,8 @@ export async function POST(req: Request) {
           const rawFilename = isCustom
             ? `${image.slug}.${image.format}`
             : (image.downloadUrl.split("/").pop() || `${image.slug}.${image.format}`)
+
+
           // PVE import content type requires .qcow2/.raw/.vmdk extension — rename .img to .qcow2
           const urlFilename = rawFilename.replace(/\.img$/, ".qcow2")
 
@@ -274,6 +292,7 @@ export async function POST(req: Request) {
             conn,
             `/storage/${encodeURIComponent(body.storage)}`
           )
+
           const storageType = storageConfig?.type || "dir"
           let downloadStorage = body.storage
 
@@ -292,6 +311,7 @@ export async function POST(req: Request) {
           // 400 — check up front so we surface a readable error instead of
           // the cryptic Proxmox parameter-verification message.
           const storageContent = String(storageConfig?.content || '')
+
           if (!storageContent.split(',').map(s => s.trim()).some(c => c === 'images' || c === 'rootdir')) {
             throw new Error(
               `Storage '${body.storage}' is not configured for VM disk images ` +
@@ -309,12 +329,14 @@ export async function POST(req: Request) {
             ).catch(() => [])
 
             const staging = (nodeStorages || []).find((s: any) => isFileBasedStorage(s.type) && s.enabled !== 0)
+
             if (!staging) {
               throw new Error(
                 `Storage '${body.storage}' is type '${storageType}' which does not support direct image download. ` +
                 `No file-based storage (dir/NFS/CIFS) found on node '${body.node}' to use as staging area.`
               )
             }
+
             downloadStorage = staging.storage
           }
 
@@ -324,9 +346,12 @@ export async function POST(req: Request) {
               conn,
               `/storage/${encodeURIComponent(downloadStorage)}`
             )
+
             const dlContent = String(dlStorageConfig?.content || "")
+
             if (!dlContent.split(",").map((s: string) => s.trim()).includes("import")) {
               const newContent = dlContent ? `${dlContent},import` : "import"
+
               await pveFetch<any>(
                 conn,
                 `/storage/${encodeURIComponent(downloadStorage)}`,
@@ -335,8 +360,10 @@ export async function POST(req: Request) {
             }
           } else {
             const currentContent = String(storageConfig?.content || "")
+
             if (!currentContent.split(",").map((s: string) => s.trim()).includes("import")) {
               const newContent = currentContent ? `${currentContent},import` : "import"
+
               await pveFetch<any>(
                 conn,
                 `/storage/${encodeURIComponent(body.storage)}`,
@@ -374,6 +401,7 @@ export async function POST(req: Request) {
             // If download returned a task UPID, wait for it to complete
             if (downloadResult) {
               const upid = downloadResult
+
               await updateDeployment(deployment.id, "downloading", { taskUpid: String(upid) })
               await waitForTask(conn, body.node, String(upid))
             }
@@ -403,11 +431,15 @@ export async function POST(req: Request) {
         let ipamDns: string[] = []
 
         const subnet = await resolveSubnetForBridge(body.connectionId, hw.networkBridge)
+
         if (subnet) {
           const mac = generatePveMacAddress()
+
+
           // Pin the MAC into the model token so PVE doesn't roll its own
           // and our IPAM record stays in sync across rebuilds.
           netSpec = `${hw.networkModel}=${mac},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`
+
           try {
             // Scan the vDC pool for IPs already deployed in PVE configs but
             // not tracked by our IPAM (CLI-created VMs, restored backups,
@@ -424,7 +456,9 @@ export async function POST(req: Request) {
               subnetId: subnet.subnetId,
               connectionId: body.connectionId,
             })
+
             const externalIps = scannedToIntSet(externalScanned)
+
             const allocated = await allocateIp({
               vdcId: subnet.vdcId,
               subnetId: subnet.subnetId,
@@ -435,9 +469,11 @@ export async function POST(req: Request) {
               hostname: body.vmName || `vm-${body.vmid}`,
               externalIps,
             })
+
             ipamAllocation = { subnetId: subnet.subnetId, ip: allocated.ip }
             const cidrInfo = parseCidr(subnet.cidr)
             const prefix = cidrInfo?.prefix
+
             ipamIpconfig0 = [
               `ip=${allocated.ip}${prefix !== undefined ? `/${prefix}` : ''}`,
               `gw=${subnet.gateway}`,
@@ -447,6 +483,7 @@ export async function POST(req: Request) {
             const msg = err instanceof IpamExhaustedError
               ? `Subnet ${subnet.cidr} is full — no free IP available`
               : `IPAM allocation failed: ${err?.message ?? String(err)}`
+
             await updateDeployment(deployment.id, "failed", { errorMessage: msg })
             throw err
           }
@@ -493,13 +530,16 @@ export async function POST(req: Request) {
 
         if (body.cloudInit) {
           const ci = body.cloudInit
+
           // Build body manually — PVE expects ipconfig values with raw "=" signs.
           // sshkeys must be double-encoded: PVE form-decodes the body, then
           // URL-decodes the sshkeys value internally.
           const ciParts: string[] = []
+
           if (ci.ciuser) ciParts.push(`ciuser=${encodeURIComponent(ci.ciuser)}`)
           if (ci.cipassword) ciParts.push(`cipassword=${encodeURIComponent(ci.cipassword)}`)
           if (ci.sshKeys) ciParts.push(`sshkeys=${encodeURIComponent(encodeURIComponent(ci.sshKeys))}`)
+
           // Resolve ipconfig0: prefer the IPAM-allocated static config when
           // we have one, unless the user explicitly typed a non-default
           // value (anything other than the wizard's `ip=dhcp` default).
@@ -508,14 +548,19 @@ export async function POST(req: Request) {
           const userIpconfig0 = (ci.ipconfig0 || '').trim()
           const userPickedDefault = userIpconfig0 === '' || userIpconfig0 === 'ip=dhcp'
           const effectiveIpconfig0 = ipamIpconfig0 && userPickedDefault ? ipamIpconfig0 : ci.ipconfig0
+
           if (effectiveIpconfig0) {
             // Sanitize: trim spaces around commas (PVE rejects " ip" vs "ip")
             const sanitized = effectiveIpconfig0.split(',').map((s: string) => s.trim()).filter(Boolean).join(',')
+
             ciParts.push(`ipconfig0=${encodeURIComponent(sanitized)}`)
           }
+
+
           // Same logic for DNS — let the subnet's resolvers in unless the
           // user already pointed at a specific server.
           const effectiveNameserver = ci.nameserver || (ipamDns.length > 0 ? ipamDns.join(' ') : '')
+
           if (effectiveNameserver) ciParts.push(`nameserver=${encodeURIComponent(effectiveNameserver)}`)
           if (ci.searchdomain) ciParts.push(`searchdomain=${encodeURIComponent(ci.searchdomain)}`)
 
@@ -534,6 +579,7 @@ export async function POST(req: Request) {
 
         // Step 4: Resize disk if needed
         const diskSizeNum = Number.parseInt(hw.diskSize)
+
         if (diskSizeNum > 0) {
           await pveFetch<any>(
             conn,
@@ -559,6 +605,7 @@ export async function POST(req: Request) {
 
         // Audit
         const { audit } = await import("@/lib/audit")
+
         await audit({
           action: "create",
           category: "templates",
@@ -580,6 +627,7 @@ export async function POST(req: Request) {
             })
           } catch { /* tolerate */ }
         }
+
         await updateDeployment(deployment.id, "failed", { error: err?.message || String(err) })
       }
     })
@@ -609,6 +657,7 @@ async function runIsoDeploy(args: {
   sourceType: string
   volumeId: string | null
   vdcInfo: { poolName?: string | null } | null
+
   /** Optional sink the caller fills in once we've claimed an IP — lets
    *  the parent's try/catch release the reservation if any later step
    *  throws (waitForTask timeout, audit failure, etc.). */
@@ -632,13 +681,16 @@ async function runIsoDeploy(args: {
     const rawFilename = isCustom
       ? `${image.slug}.iso`
       : (image.downloadUrl?.split("/").pop() || `${image.slug}.iso`)
+
     const isoFilename = rawFilename.toLowerCase().endsWith('.iso') ? rawFilename : `${rawFilename}.iso`
 
     const isoStorageConfig = await pveFetch<any>(
       conn,
       `/storage/${encodeURIComponent(isoStorage)}`
     )
+
     const isoContent = String(isoStorageConfig?.content || '')
+
     if (!isoContent.split(',').map((s: string) => s.trim()).includes('iso')) {
       throw new Error(
         `Storage '${isoStorage}' is not configured for ISO images ` +
@@ -665,11 +717,13 @@ async function runIsoDeploy(args: {
         storage: isoStorage,
         "verify-certificates": "0",
       })
+
       const downloadResult = await pveFetch<any>(
         conn,
         `/nodes/${encodeURIComponent(body.node)}/storage/${encodeURIComponent(isoStorage)}/download-url`,
         { method: "POST", body: downloadParams }
       )
+
       if (downloadResult) {
         await updateDeployment(deploymentId, "downloading", { taskUpid: String(downloadResult) })
         await waitForTask(conn, body.node, String(downloadResult))
@@ -695,11 +749,14 @@ async function runIsoDeploy(args: {
   let isoNetSpec = `${hw.networkModel},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`
   let isoIpamAlloc: { subnetId: string; ip: string } | null = null
   const isoSubnet = await resolveSubnetForBridge(body.connectionId, hw.networkBridge)
+
   if (isoSubnet) {
     if (!body.staticIp) {
       throw new Error('Static IP is required when deploying an ISO into an IPAM-managed VNet — pass staticIp in the request body')
     }
+
     const isoMac = body.staticMac || generatePveMacAddress()
+
     const externalScanned = await scanUsedIpsForSubnet({
       conn,
       vdcPoolName: isoSubnet.pvePoolName,
@@ -707,6 +764,7 @@ async function runIsoDeploy(args: {
       subnetId: isoSubnet.subnetId,
       connectionId: body.connectionId,
     })
+
     const allocated = await allocateIp({
       vdcId: isoSubnet.vdcId,
       subnetId: isoSubnet.subnetId,
@@ -718,6 +776,7 @@ async function runIsoDeploy(args: {
       hint: body.staticIp,
       externalIps: scannedToIntSet(externalScanned),
     })
+
     isoIpamAlloc = { subnetId: isoSubnet.subnetId, ip: allocated.ip }
     isoNetSpec = `${hw.networkModel}=${isoMac},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`
     onIpamAllocation?.(isoIpamAlloc)
@@ -732,18 +791,23 @@ async function runIsoDeploy(args: {
     memory: String(hw.memory),
     cpu: hw.cpu,
     scsihw: hw.scsihw,
+
     // Empty data disk (no import-from). Format defaults to qcow2 on
     // file-based storage; on block-based storage PVE picks raw automatically.
     scsi0: `${body.storage}:${diskSizeGb}`,
     net0: isoNetSpec,
+
     // Boot ISO on the secondary IDE bus (PVE convention for install media).
     ide2: `${isoVolume},media=cdrom`,
+
     // CD-ROM first, fall back to the empty disk once the OS is installed.
     boot: 'order=ide2;scsi0',
+
     // Graphical install — VNC console. Serial0/serial0 (used by cloud-init)
     // would leave Windows install with no usable display.
     vga: 'std',
     agent: hw.agent ? "1" : "0",
+
     // q35 is mandatory for OVMF and a sensible default for modern guests
     // (PCIe, NVMe, VirtIO 1.x). Forced silently per spec.
     machine: 'q35',
@@ -751,6 +815,7 @@ async function runIsoDeploy(args: {
 
   if (useUefi) {
     createParams.set('bios', 'ovmf')
+
     // pre-enrolled-keys=1 ships the Microsoft Secure Boot keys into the
     // EFI vars from the start — required for Windows 11 / Server 2025.
     // efitype=4m matches OVMF_VARS_4M used by PVE.
@@ -776,6 +841,7 @@ async function runIsoDeploy(args: {
   await updateDeployment(deploymentId, "completed", { taskUpid: null })
 
   const { audit } = await import("@/lib/audit")
+
   await audit({
     action: "create",
     category: "templates",

@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { Box, Stack, Typography } from '@mui/material'
+
 import ConnectionStatusCard from './ssh-commands/ConnectionStatusCard'
 import AllowlistCard from './ssh-commands/AllowlistCard'
 import SecurityRecommendationsCard from './ssh-commands/SecurityRecommendationsCard'

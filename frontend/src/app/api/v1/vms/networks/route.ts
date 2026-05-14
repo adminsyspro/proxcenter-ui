@@ -87,6 +87,7 @@ function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ 
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const body = await req.json()

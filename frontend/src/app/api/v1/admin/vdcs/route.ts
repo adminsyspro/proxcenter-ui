@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
+
 import { getServerSession } from "next-auth"
+
 import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listVdcs, createVdc } from "@/lib/vdc"
@@ -12,8 +14,10 @@ export const runtime = "nodejs"
 export async function GET(req: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const tenantId = req.nextUrl.searchParams.get("tenantId") || undefined
@@ -29,8 +33,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
@@ -76,6 +82,7 @@ export async function POST(req: NextRequest) {
         description: body.description,
         nodes: body.nodes,
         primaryStorage: body.primaryStorage.trim(),
+
         // Same bug as the PUT route: the body carried sharedBridges but
         // the call site dropped it, so a brand-new vDC was created with
         // an empty uplink list regardless of what the form sent.

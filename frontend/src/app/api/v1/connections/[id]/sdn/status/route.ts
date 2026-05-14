@@ -8,13 +8,16 @@ export const runtime = "nodejs"
 
 function hasPending(arr: any[] | undefined): boolean {
   if (!Array.isArray(arr)) return false
+
   for (const item of arr) {
     if (!item) continue
     if (item.pending) return true
     if (item.pending_changes && Object.keys(item.pending_changes).length > 0) return true
     if (item.state === "new" || item.state === "changed" || item.state === "deleted") return true
   }
-  return false
+
+
+return false
 }
 
 export async function GET(
@@ -24,8 +27,10 @@ export async function GET(
   try {
     const { id } = await ctx.params
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (permError) return permError
     const conn = await getConnectionById(id)
+
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
     const [versionRes, zonesRes, vnetsRes, ipamsRes] = await Promise.allSettled([
@@ -56,6 +61,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Error fetching SDN status:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

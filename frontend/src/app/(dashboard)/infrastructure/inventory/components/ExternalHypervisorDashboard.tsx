@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -14,6 +15,7 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { DetailsPayload, InventorySelection } from '../types'
@@ -247,7 +249,9 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
             const hostRunning = host.vms.filter((v: any) => v.status === 'running').length
             const hostCpu = host.vms.reduce((s: number, v: any) => s + (v.cpu || 0), 0)
             const hostRamGB = host.vms.reduce((s: number, v: any) => s + (v.memory_size_MiB || 0), 0) / 1024
-            return (
+
+
+return (
               <Box
                 key={host.connectionId}
                 onClick={() => onSelect?.({ type: 'ext', id: host.connectionId })}

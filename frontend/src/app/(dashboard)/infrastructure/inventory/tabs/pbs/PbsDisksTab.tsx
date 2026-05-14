@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -20,6 +21,7 @@ import {
   Tabs,
   Typography,
 } from '@mui/material'
+
 import PbsStatusChip from './PbsStatusChip'
 import { formatBytes } from '@/utils/format'
 
@@ -76,6 +78,7 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [dRes, diRes, zRes] = await Promise.all([
         fetch(`/api/v1/pbs/${pbsId}/disks`, { cache: 'no-store' }),
@@ -86,6 +89,7 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
       for (const r of [dRes, diRes, zRes]) {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}))
+
           throw new Error(body?.error || `HTTP ${r.status}`)
         }
       }
@@ -110,13 +114,17 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
     if (type === 'nvme') {
       return <PbsStatusChip color="success" label={t('inventory.pbsDisksTypeNvme')} sx={{ fontSize: 11 }} />
     }
+
     if (type === 'ssd') {
       return <PbsStatusChip color="primary" label={t('inventory.pbsDisksTypeSsd')} sx={{ fontSize: 11 }} />
     }
+
     if (type === 'hdd') {
       return <Chip size="small" label={t('inventory.pbsDisksTypeHdd')} sx={{ fontSize: 11 }} />
     }
-    return <Chip size="small" label={type || '—'} variant="outlined" sx={{ fontSize: 11 }} />
+
+
+return <Chip size="small" label={type || '—'} variant="outlined" sx={{ fontSize: 11 }} />
   }
 
   const usageChip = (used: string | undefined) => {
@@ -129,6 +137,7 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
       lvm: t('inventory.pbsDisksUsageLvm'),
       unused: t('inventory.pbsDisksUsageUnused'),
     }
+
     const colorMap: Record<string, any> = {
       filesystem: 'primary',
       partitions: 'warning',
@@ -151,21 +160,28 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
   const healthChip = (health: string | undefined) => {
     if (!health) return <Typography variant="caption" sx={{ opacity: 0.6 }}>—</Typography>
     const upper = health.toUpperCase()
+
     if (upper === 'PASSED') {
       return <PbsStatusChip color="success" label={t('inventory.pbsDisksHealthPassed')} sx={{ fontSize: 11 }} />
     }
+
     if (upper === 'UNKNOWN') {
       return <Chip size="small" label={t('inventory.pbsDisksHealthUnknown')} variant="outlined" sx={{ fontSize: 11 }} />
     }
-    return <PbsStatusChip color="error" label={health} sx={{ fontSize: 11 }} />
+
+
+return <PbsStatusChip color="error" label={health} sx={{ fontSize: 11 }} />
   }
 
   const wearoutBar = (wearout: number | string | undefined, type: string | undefined) => {
     if (type === 'hdd') return <Typography variant="caption" sx={{ opacity: 0.6 }}>—</Typography>
+
     if (wearout === undefined || wearout === null || wearout === '') {
       return <Typography variant="caption" sx={{ opacity: 0.6 }}>—</Typography>
     }
+
     const n = typeof wearout === 'string' ? Number(wearout) : wearout
+
     if (!Number.isFinite(n)) return <Typography variant="caption" sx={{ opacity: 0.6 }}>—</Typography>
 
     const pct = Math.max(0, Math.min(100, n as number))
@@ -317,7 +333,9 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
                   <TableBody>
                     {disks.map((d, idx) => {
                       const devPath = d['dev-path'] || d.devpath || d.name || '—'
-                      return (
+
+
+return (
                         <TableRow key={d.name || `disk-${idx}`} hover>
                           <TableCell sx={{ fontSize: 12 }}>
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -393,7 +411,9 @@ export default function PbsDisksTab({ pbsId }: PbsDisksTabProps) {
                   <TableBody>
                     {dirs.map((dir, idx) => {
                       const mp = dir.path || dir.mountpoint || dir['mount-point'] || '—'
-                      return (
+
+
+return (
                         <TableRow key={dir.name || `dir-${idx}`} hover>
                           <TableCell sx={{ fontSize: 12 }}>
                             <Typography variant="caption" sx={{ fontWeight: 600 }}>

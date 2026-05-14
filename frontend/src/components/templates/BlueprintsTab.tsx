@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -38,6 +39,7 @@ interface BlueprintsTabProps {
 export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
   const t = useTranslations()
   const { showToast } = useToast()
+
   // Provider manages the blueprint catalogue; tenants can deploy from it but
   // can't create / edit / delete entries (they would pollute the shared list).
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -64,6 +66,7 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
   const handleDelete = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/templates/blueprints/${id}`, { method: 'DELETE' })
+
       if (!res.ok) throw new Error('Delete failed')
       showToast(t('templates.blueprints.deleted'), 'success')
       fetchBlueprints()
@@ -120,7 +123,9 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
       renderCell: (p) => {
         try {
           const hw = JSON.parse(p.value)
-          return (
+
+
+return (
             <Typography variant="caption" sx={{ opacity: 0.7 }}>
               {hw.cores}C / {hw.memory >= 1024 ? `${hw.memory / 1024}GB` : `${hw.memory}MB`} / {hw.diskSize}
             </Typography>
@@ -136,7 +141,8 @@ export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
       width: 160,
       renderCell: (p) => {
         if (!p.value) return null
-        return (
+
+return (
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
             {String(p.value).split(';').filter(Boolean).map(tag => (
               <Chip key={tag} label={tag} size="small" sx={{ height: 18, fontSize: '0.6rem' }} />

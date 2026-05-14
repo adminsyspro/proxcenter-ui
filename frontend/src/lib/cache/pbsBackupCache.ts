@@ -54,14 +54,18 @@ function getCacheStore(): Map<string, CacheEntry> {
   if (!(globalThis as any)[CACHE_KEY]) {
     ;(globalThis as any)[CACHE_KEY] = new Map<string, CacheEntry>()
   }
-  return (globalThis as any)[CACHE_KEY]
+
+
+return (globalThis as any)[CACHE_KEY]
 }
 
 function getInflightStore(): Map<string, Promise<{ data: CachedBackup[]; warnings: string[] }>> {
   if (!(globalThis as any)[INFLIGHT_KEY]) {
     ;(globalThis as any)[INFLIGHT_KEY] = new Map()
   }
-  return (globalThis as any)[INFLIGHT_KEY]
+
+
+return (globalThis as any)[INFLIGHT_KEY]
 }
 
 function cacheKey(pbsId: string, tenantId = 'default', locale = 'en-US'): string {
@@ -75,6 +79,7 @@ type CacheResult =
 
 export function getPbsBackupsFromCache(pbsId: string, tenantId = 'default', locale = 'en-US'): CacheResult {
   const entry = getCacheStore().get(cacheKey(pbsId, tenantId, locale))
+
   if (!entry) return { status: 'miss' }
 
   const age = Date.now() - entry.timestamp
@@ -102,9 +107,11 @@ export function setCachedPbsBackups(
 
 export function invalidatePbsBackupCache(pbsId?: string, tenantId?: string): void {
   const store = getCacheStore()
+
   if (pbsId && tenantId) {
     // Invalidate all locales for this tenant+PBS
     const prefix = `${tenantId}:${pbsId}:`
+
     for (const key of store.keys()) {
       if (key.startsWith(prefix)) store.delete(key)
     }
@@ -112,6 +119,7 @@ export function invalidatePbsBackupCache(pbsId?: string, tenantId?: string): voi
     // Invalidate all tenants and locales for this PBS
     for (const key of store.keys()) {
       const parts = key.split(':')
+
       if (parts[1] === pbsId) store.delete(key)
     }
   } else {
@@ -135,6 +143,7 @@ export function setInflightPbsFetch(
 ): void {
   const store = getInflightStore()
   const key = cacheKey(pbsId, tenantId, locale)
+
   if (p !== null) {
     store.set(key, p)
   } else {

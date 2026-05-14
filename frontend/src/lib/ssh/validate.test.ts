@@ -94,6 +94,7 @@ describe('assertNodeName', () => {
   it('rejects names longer than 63 characters', () => {
     const sixtyThree = 'a' + 'b'.repeat(62)
     const sixtyFour = 'a' + 'b'.repeat(63)
+
     expect(assertNodeName(sixtyThree)).toBe(sixtyThree)
     expect(() => assertNodeName(sixtyFour)).toThrow(InvalidShellArgError)
   })

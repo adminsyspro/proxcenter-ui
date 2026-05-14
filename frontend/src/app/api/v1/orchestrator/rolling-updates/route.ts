@@ -12,6 +12,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 export async function GET(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW)
+
     if (denied) return denied
 
     const { searchParams } = new URL(req.url)
@@ -19,11 +20,13 @@ export async function GET(req: Request) {
 
     // Verify connection belongs to tenant if specified
     const tenantConnectionIds = await getTenantConnectionIds()
+
     if (connectionId && !tenantConnectionIds.has(connectionId)) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
     let url = `${ORCHESTRATOR_URL}/api/v1/rolling-updates`
+
     if (connectionId) {
       url += `?connection_id=${encodeURIComponent(connectionId)}`
     }
@@ -43,9 +46,12 @@ export async function GET(req: Request) {
 
     // Filter results by tenant connections
     const items = Array.isArray(data) ? data : (data?.data || data)
+
     if (Array.isArray(items)) {
       const filtered = items.filter((ru: any) => !ru.connection_id || tenantConnectionIds.has(ru.connection_id))
-      return NextResponse.json({ data: filtered })
+
+
+return NextResponse.json({ data: filtered })
     }
 
     return NextResponse.json({ data })
@@ -53,7 +59,9 @@ export async function GET(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error getting rolling updates:", error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )
@@ -64,6 +72,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -112,6 +121,7 @@ export async function POST(req: Request) {
     })
 
     const sshOverrides: Record<string, string> = {}
+
     for (const h of managedHosts) {
       if (h.sshAddress) sshOverrides[h.node] = h.sshAddress
     }
@@ -131,7 +141,9 @@ export async function POST(req: Request) {
         if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
           console.error("Failed to decrypt SSH key:", e)
         }
-        return NextResponse.json(
+
+
+return NextResponse.json(
           { error: "Failed to decrypt SSH credentials" },
           { status: 500 }
         )
@@ -141,6 +153,7 @@ export async function POST(req: Request) {
     if (connection.sshPassEnc) {
       try {
         const decrypted = decryptSecret(connection.sshPassEnc)
+
         if (connection.sshAuthMethod === "key") {
           sshCredentials.sshPassphrase = decrypted
         } else {
@@ -185,7 +198,9 @@ export async function POST(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error starting rolling update:", error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
     )

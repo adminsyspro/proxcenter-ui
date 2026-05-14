@@ -64,7 +64,8 @@ function rowToVdc(row: VdcRow): Vdc {
 
 function rowToQuota(row: any): VdcQuota | null {
   if (!row) return null
-  return {
+
+return {
     maxVcpus: row.maxVcpus ?? null,
     maxRamMb: row.maxRamMb ?? null,
     maxStorageMb: row.maxStorageMb ?? null,
@@ -77,7 +78,8 @@ function rowToQuota(row: any): VdcQuota | null {
 
 function rowToUsage(row: any): VdcUsage | null {
   if (!row) return null
-  return {
+
+return {
     usedVcpus: row.usedVcpus ?? 0,
     usedRamMb: row.usedRamMb ?? 0,
     usedStorageMb: row.usedStorageMb ?? 0,
@@ -95,8 +97,10 @@ function generatePoolName(tenantSlug: string, vdcSlug: string): string {
 /** Resolve the real owner tenantId of a connection (it may differ from the vDC's tenantId) */
 async function getConnectionOwnerTenantId(connectionId: string): Promise<string> {
   const conn = await prisma.connection.findUnique({ where: { id: connectionId }, select: { tenantId: true } })
+
   if (!conn) throw new Error(`Connection not found: ${connectionId}`)
-  return conn.tenantId
+
+return conn.tenantId
 }
 
 /**
@@ -107,14 +111,18 @@ async function getConnectionOwnerTenantId(connectionId: string): Promise<string>
 function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcWithDetails {
   const vdc = rowToVdc(row)
   const nodes = row.nodes.map((n: any) => n.nodeName)
+
   // VdcWithDetails.storages = primary VM-disk storage + PBS pseudo-storages
   // (kept in vdc_storages as `pbs:<id>` rows by pbsOrchestrator).
   const pbsStorages = row.storages.map((s: any) => s.storageId)
+
   const storages = vdc.primaryStorage
     ? [vdc.primaryStorage, ...pbsStorages.filter((s: string) => s !== vdc.primaryStorage)]
     : pbsStorages
+
   const quota = rowToQuota(row.quota)
   const usage = rowToUsage(row.usageCache)
+
   const sharedBridges = row.sharedBridges.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -122,6 +130,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     label: b.label ?? null,
     createdAt: b.createdAt.toISOString(),
   }))
+
   const vnets = row.vnets.map((v: any) => ({
     id: v.id,
     vdcId: v.vdcId,
@@ -146,6 +155,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     createdBy: v.createdBy ?? null,
     createdAt: v.createdAt.toISOString(),
   }))
+
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -191,11 +201,14 @@ const vdcWithDetailsInclude = {
 /** Fetch a map of connectionId → connection name for a set of PBS connection IDs. */
 async function fetchPbsConnNames(connIds: Set<string>): Promise<Map<string, string>> {
   if (connIds.size === 0) return new Map()
+
   const rows = await prisma.connection.findMany({
     where: { id: { in: [...connIds] } },
     select: { id: true, name: true },
   })
-  return new Map(rows.map(r => [r.id, r.name]))
+
+
+return new Map(rows.map(r => [r.id, r.name]))
 }
 
 export async function listVdcs(tenantId?: string): Promise<VdcWithDetails[]> {
@@ -204,22 +217,32 @@ export async function listVdcs(tenantId?: string): Promise<VdcWithDetails[]> {
     include: vdcWithDetailsInclude,
     orderBy: { name: 'asc' },
   })
+
+
   // Collect all unique PBS connection IDs across all rows, then fetch names in one query.
   const allPbsConnIds = new Set<string>()
+
   for (const row of rows) {
     for (const ns of row.pbsNamespaces) allPbsConnIds.add(ns.pbsConnectionId)
   }
+
   const pbsConnNames = await fetchPbsConnNames(allPbsConnIds)
+
+
   // Sort PBS bindings client-side: connection name → datastore → namespace.
   return rows.map(row => {
     const sortedPbs = [...row.pbsNamespaces].sort((a, b) => {
       const an = pbsConnNames.get(a.pbsConnectionId) ?? a.pbsConnectionId
       const bn = pbsConnNames.get(b.pbsConnectionId) ?? b.pbsConnectionId
+
       if (an !== bn) return an.localeCompare(bn)
       if (a.datastore !== b.datastore) return a.datastore.localeCompare(b.datastore)
-      return a.namespace.localeCompare(b.namespace)
+
+return a.namespace.localeCompare(b.namespace)
     })
-    return buildVdcWithDetails({ ...row, pbsNamespaces: sortedPbs }, pbsConnNames)
+
+
+return buildVdcWithDetails({ ...row, pbsNamespaces: sortedPbs }, pbsConnNames)
   })
 }
 
@@ -236,12 +259,15 @@ export async function getVdcById(id: string): Promise<VdcWithDetails | null> {
   if (!row) return null
 
   const pbsConnNames = await fetchPbsConnNames(new Set(row.pbsNamespaces.map(ns => ns.pbsConnectionId)))
+
   const sortedPbs = [...row.pbsNamespaces].sort((a, b) => {
     const an = pbsConnNames.get(a.pbsConnectionId) ?? a.pbsConnectionId
     const bn = pbsConnNames.get(b.pbsConnectionId) ?? b.pbsConnectionId
+
     if (an !== bn) return an.localeCompare(bn)
     if (a.datastore !== b.datastore) return a.datastore.localeCompare(b.datastore)
-    return a.namespace.localeCompare(b.namespace)
+
+return a.namespace.localeCompare(b.namespace)
   })
 
   return buildVdcWithDetails({ ...row, pbsNamespaces: sortedPbs }, pbsConnNames)
@@ -267,9 +293,11 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     where: { id: input.tenantId },
     select: { slug: true },
   })
+
   if (!tenantRow) {
     throw new Error(`Tenant not found: ${input.tenantId}`)
   }
+
   const tenantSlug = tenantRow.slug
 
   // 2. Check slug uniqueness within tenant + connection
@@ -277,6 +305,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     where: { tenantId: input.tenantId, connectionId: input.connectionId, slug: input.slug },
     select: { id: true },
   })
+
   if (existing) {
     throw new Error(`A vDC with slug "${input.slug}" already exists for this tenant/connection`)
   }
@@ -300,20 +329,24 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     })
   } catch (err: any) {
     const msg = err?.message || ''
+
     if (!msg.includes('already exists')) {
       throw new Error(`Failed to create PVE pool "${poolName}": ${msg}`)
     }
+
     console.warn(`[vdc] PVE pool "${poolName}" already exists, proceeding`)
   }
 
   // 5. Create SDN zone on PVE
   const sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
+
   try {
     await createZone(conn, sdnZoneName)
   } catch (err: any) {
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
     } catch {}
+
     throw new Error(`Failed to create SDN zone: ${err?.message}`)
   }
 
@@ -395,9 +428,11 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   } catch (err: any) {
     // DB transaction failed - rollback PVE resources to avoid orphans
     try { await deleteZone(conn, sdnZoneName) } catch {}
+
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
     } catch {}
+
     throw err
   }
 
@@ -418,6 +453,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
 export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcWithDetails> {
   // Verify vDC exists
   const existing = await prisma.vdc.findUnique({ where: { id }, select: { id: true } })
+
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
   }
@@ -426,6 +462,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
 
   await prisma.$transaction(async tx => {
     const updateData: Record<string, unknown> = { updatedAt: now }
+
     if (input.name !== undefined) updateData.name = input.name
     if (input.description !== undefined) updateData.description = input.description
     if (input.enabled !== undefined) updateData.enabled = input.enabled
@@ -435,6 +472,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
 
     if (input.nodes) {
       await tx.vdcNode.deleteMany({ where: { vdcId: id } })
+
       if (input.nodes.length > 0) {
         await tx.vdcNode.createMany({
           data: input.nodes.map(nodeName => ({ id: randomUUID(), vdcId: id, nodeName })),
@@ -444,6 +482,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
 
     if (input.sharedBridges) {
       await tx.vdcSharedBridge.deleteMany({ where: { vdcId: id } })
+
       if (input.sharedBridges.length > 0) {
         await tx.vdcSharedBridge.createMany({
           data: input.sharedBridges.map(sb => ({
@@ -496,9 +535,11 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
 export async function deleteVdc(id: string): Promise<void> {
   // 1. Load vDC from DB
   const row = await prisma.vdc.findUnique({ where: { id } })
+
   if (!row) {
     throw new Error(`vDC not found: ${id}`)
   }
+
   const vdc = rowToVdc(row as VdcRow)
 
   // 2. Check PVE pool for VMs
@@ -520,13 +561,17 @@ export async function deleteVdc(id: string): Promise<void> {
     if (vmMembers.length > 0) {
       try {
         const liveResources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+
         const validIds = new Set(
           (liveResources || [])
             .filter((r: any) => r?.vmid != null)
             .map((r: any) => `${r.type}/${r.vmid}`),
         )
+
         const ghosts = vmMembers.filter(m => !validIds.has(`${m.type}/${m.vmid}`))
+
         vmMembers = vmMembers.filter(m => validIds.has(`${m.type}/${m.vmid}`))
+
         for (const g of ghosts) {
           try {
             await pveFetch(conn, `/pools/${encodeURIComponent(vdc.pvePoolName)}`, {
@@ -551,9 +596,12 @@ export async function deleteVdc(id: string): Promise<void> {
   } catch (err: any) {
     // If the pool doesn't exist on PVE side, that's fine - proceed with DB cleanup
     const msg = err?.message || ''
+
     if (msg.includes('Cannot delete vDC')) {
       throw err // re-throw our own check error
     }
+
+
     // Pool not found or unreachable - log and continue
     console.warn(`[vdc] Could not check PVE pool "${vdc.pvePoolName}": ${msg}`)
   }
@@ -620,6 +668,7 @@ export async function deleteVdc(id: string): Promise<void> {
         where: { vdcId: id },
         select: { nodeName: true },
       })
+
       const nodeScopeTargets = nodeNames.map(n => `${vdc.connectionId}:${n.nodeName}`)
 
       await tx.rbacUserRole.deleteMany({
@@ -654,9 +703,11 @@ export async function deleteVdc(id: string): Promise<void> {
 export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
   // 1. Load vDC
   const row = await prisma.vdc.findUnique({ where: { id: vdcId } })
+
   if (!row) {
     throw new Error(`vDC not found: ${vdcId}`)
   }
+
   const vdc = rowToVdc(row as VdcRow)
 
   // 2. Get connection (use the connection's owner tenantId, not the vDC's tenantId)
@@ -665,8 +716,10 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
 
   // 3. Fetch pool members
   let members: any[] = []
+
   try {
     const poolData = await pveFetch<{ members?: any[] }>(conn, `/pools/${encodeURIComponent(vdc.pvePoolName)}`)
+
     members = poolData?.members || []
   } catch (err: any) {
     console.warn(`[vdc] Failed to fetch pool members for "${vdc.pvePoolName}": ${err?.message}`)
@@ -686,12 +739,15 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
   if (vmMembers.length > 0) {
     try {
       const liveResources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+
       const validIds = new Set(
         (liveResources || [])
           .filter((r: any) => r?.vmid != null)
           .map((r: any) => `${r.type}/${r.vmid}`),
       )
+
       const ghosts = vmMembers.filter(m => !validIds.has(`${m.type}/${m.vmid}`))
+
       vmMembers = vmMembers.filter(m => validIds.has(`${m.type}/${m.vmid}`))
 
       // Best-effort cleanup of ghost references on the PVE pool.
@@ -733,6 +789,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
         conn,
         `/nodes/${encodeURIComponent(vm.node)}/${vm.type}/${vm.vmid}/snapshot`
       )
+
       if (Array.isArray(snapshots)) {
         usedSnapshots += snapshots.filter((s: any) => s.name !== 'current').length
       }
@@ -743,6 +800,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
 
   // 7. Count backups across the vDC's PBS bindings.
   const vmidSet = new Set(vmMembers.map(vm => String(vm.vmid)))
+
   if (vmidSet.size > 0) {
     const bindings = await prisma.vdcPbsNamespace.findMany({
       where: { vdcId },
@@ -752,8 +810,10 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
     // Group by PBS connection so we authenticate / decrypt once per PBS
     // instead of per binding.
     const byPbs = new Map<string, Array<{ datastore: string; namespace: string }>>()
+
     for (const b of bindings) {
       const list = byPbs.get(b.pbsConnectionId) || []
+
       list.push({ datastore: b.datastore, namespace: b.namespace })
       byPbs.set(b.pbsConnectionId, list)
     }
@@ -764,22 +824,29 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
           where: { id: pbsId },
           select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
         })
+
         if (!pbsConn?.apiTokenEnc || !pbsConn?.baseUrl) continue
+
         const pbsCreds = {
           baseUrl: pbsConn.baseUrl,
           apiToken: decryptSecret(pbsConn.apiTokenEnc),
           insecureDev: !!pbsConn.insecureTLS,
         }
+
         for (const loc of locations) {
           try {
             const nsParam = loc.namespace ? `?ns=${encodeURIComponent(loc.namespace)}` : ''
+
             const snaps = await pbsFetch<any[]>(
               pbsCreds,
               `/admin/datastore/${encodeURIComponent(loc.datastore)}/snapshots${nsParam}`,
             )
+
             if (!Array.isArray(snaps)) continue
+
             for (const snap of snaps) {
               const backupId = String(snap?.['backup-id'] ?? '')
+
               if (vmidSet.has(backupId)) usedBackups += 1
             }
           } catch (err: any) {

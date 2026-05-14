@@ -24,20 +24,26 @@ export async function locateVmInCluster(
   type: GuestType = "qemu"
 ): Promise<LocatedVm | null> {
   let resources: any
+
   try {
     resources = await pveFetch<any>(conn, "/cluster/resources?type=vm")
   } catch {
     return null
   }
+
   if (!Array.isArray(resources)) return null
   const target = Number(vmid)
+
   if (!Number.isFinite(target)) return null
+
   for (const r of resources) {
     if (r?.type === type && Number(r?.vmid) === target && typeof r?.node === "string") {
       return { node: r.node, status: r.status, name: r.name }
     }
   }
-  return null
+
+
+return null
 }
 
 /**
@@ -47,5 +53,7 @@ export async function locateVmInCluster(
  */
 export function isVmConfigNotFoundError(err: unknown): boolean {
   const msg = (err as { message?: string } | null)?.message || ""
-  return msg.includes("Configuration file") && msg.includes("does not exist")
+
+
+return msg.includes("Configuration file") && msg.includes("does not exist")
 }

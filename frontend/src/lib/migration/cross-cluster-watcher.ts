@@ -3,6 +3,7 @@ import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { executeSSHDirect, shellEscape, type SSHResult } from '@/lib/ssh/exec'
+import { assertNodeName, assertVmid, InvalidShellArgError } from '@/lib/ssh/validate'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { safeLog } from '@/lib/log/sanitize'
 
@@ -37,6 +38,7 @@ async function runSshForWatcher(
   timeoutMs = 30_000,
 ): Promise<SSHResult> {
   const prisma = getTenantPrisma(tenantId)
+
   const connection = await prisma.connection.findUnique({
     where: { id: connectionId },
     select: {
@@ -68,9 +70,11 @@ async function runSshForWatcher(
     try { password = decryptSecret(connection.sshPassEnc) } catch { /* decrypt failure falls through */ }
   } else {
     if (connection.sshKeyEnc) { try { key = decryptSecret(connection.sshKeyEnc) } catch { /* ignore */ } }
+
     if (connection.sshPassEnc) {
       try {
         const decrypted = decryptSecret(connection.sshPassEnc)
+
         if (key) passphrase = decrypted
         else password = decrypted
       } catch { /* ignore */ }
@@ -81,6 +85,7 @@ async function runSshForWatcher(
 
   try {
     const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
+
     if (key) body.key = key
     if (password) body.password = password
     if (passphrase) body.passphrase = passphrase
@@ -94,7 +99,9 @@ async function runSshForWatcher(
 
     if (res.ok) {
       const data = await res.json()
-      return { success: data.success !== false, output: data.output, error: data.error }
+
+
+return { success: data.success !== false, output: data.output, error: data.error }
     }
   } catch {
     // orchestrator unreachable, fall through to direct ssh2
@@ -123,6 +130,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
   console.log(`${tag} started (deleteSource=${deleteSource}, upid=${safeLog(upid)})`)
 
   let taskStatus: any = null
+
   for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
     try {
       taskStatus = await pveFetch<any>(
@@ -134,12 +142,14 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       // Transient PVE / network errors — keep polling. Log every ~60s.
       if (i % 30 === 0) console.warn(`${tag} status poll transient error:`, e?.message)
     }
+
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
   }
 
   if (taskStatus?.status !== 'stopped') {
     console.warn(`${tag} timed out waiting for migration task to finish`)
-    return
+
+return
   }
 
   const exitstatus = String(taskStatus?.exitstatus || '')
@@ -154,25 +164,50 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
         sourceConn,
         `/nodes/${encodeURIComponent(sourceNode)}/tasks/${encodeURIComponent(upid)}/log?limit=5000`,
       )
+
       const logText = (logs || []).map((l: any) => l?.t || '').join('\n')
+
       shouldCleanup = logText.includes('migration status: completed') || logText.includes('migration completed')
     } catch { /* couldn't fetch logs, keep shouldCleanup = false */ }
   }
 
   if (!shouldCleanup) {
     console.log(`${tag} migration ended with exit=${exitstatus || 'unknown'}, skipping cleanup`)
-    return
+
+return
   }
 
   let unlocked = false
+
+  // Re-validate before shelling out. The caller is supposed to have done
+  // this at the route boundary, but the watcher runs detached from the
+  // HTTP request and must fail closed if anything ever slips through.
+  let safeVmid: string
+  let safeSourceNode: string
+
+  try {
+    safeVmid = assertVmid(vmid)
+    safeSourceNode = assertNodeName(sourceNode)
+  } catch (e) {
+    if (e instanceof InvalidShellArgError) {
+      console.warn(`${tag} aborting cleanup: ${e.message}`)
+
+return
+    }
+
+    throw e
+  }
+
   try {
     const vmConfig = await pveFetch<any>(
       sourceConn,
-      `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(vmid)}/config`,
+      `/nodes/${encodeURIComponent(safeSourceNode)}/qemu/${encodeURIComponent(safeVmid)}/config`,
     )
+
     if (vmConfig?.lock) {
-      const nodeIp = await getNodeIp(sourceConn, sourceNode)
-      const result = await runSshForWatcher(connectionId, tenantId, nodeIp, `qm unlock ${vmid}`)
+      const nodeIp = await getNodeIp(sourceConn, safeSourceNode)
+      const result = await runSshForWatcher(connectionId, tenantId, nodeIp, `qm unlock ${safeVmid}`)
+
       if (result.success) {
         console.log(`${tag} auto-unlocked VM on ${sourceNode}`)
         unlocked = true
@@ -184,10 +219,13 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     }
   } catch (e: any) {
     const msg = String(e?.message || '')
+
     if (msg.includes('404')) {
       console.log(`${tag} source VM already gone, nothing to clean up`)
-      return
+
+return
     }
+
     console.warn(`${tag} could not read source VM config:`, msg)
   }
 
@@ -195,12 +233,13 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     try {
       await pveFetch(
         sourceConn,
-        `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(vmid)}?purge=1&destroy-unreferenced-disks=1`,
+        `/nodes/${encodeURIComponent(safeSourceNode)}/qemu/${encodeURIComponent(safeVmid)}?purge=1&destroy-unreferenced-disks=1`,
         { method: 'DELETE' },
       )
-      console.log(`${tag} deleted source VM on ${sourceNode}`)
+      console.log(`${tag} deleted source VM on ${safeSourceNode}`)
     } catch (e: any) {
       const msg = String(e?.message || '')
+
       if (msg.includes('404')) {
         console.log(`${tag} source VM already gone`)
       } else {

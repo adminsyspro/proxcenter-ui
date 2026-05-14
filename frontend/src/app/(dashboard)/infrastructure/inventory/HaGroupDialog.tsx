@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -79,13 +80,13 @@ function HaGroupDialog({ open, onClose, group, connId, availableNodes, onSaved }
   const handleSave = async () => {
     if (!name.trim()) {
       setError(t('inventoryPage.groupNameRequired'))
-      
+
 return
     }
 
     if (selectedNodes.length === 0) {
       setError(t('inventoryPage.selectAtLeastOneNode'))
-      
+
 return
     }
 
@@ -94,20 +95,20 @@ return
 
     try {
       const nodesString = selectedNodes.join(',')
-      
+
       const url = group
         ? `/api/v1/connections/${encodeURIComponent(connId)}/ha/groups/${encodeURIComponent(group.group)}`
         : `/api/v1/connections/${encodeURIComponent(connId)}/ha/groups`
-      
+
       const method = group ? 'PUT' : 'POST'
-      
+
       const body: any = {
         nodes: nodesString,
         restricted,
         nofailback,
         comment: comment || undefined
       }
-      
+
       if (!group) {
         body.group = name.trim()
       }
@@ -122,7 +123,7 @@ return
         const err = await res.json()
 
         setError(err.error || t('errors.updateError'))
-        
+
 return
       }
 
@@ -135,8 +136,8 @@ return
   }
 
   const toggleNode = (node: string) => {
-    setSelectedNodes(prev => 
-      prev.includes(node) 
+    setSelectedNodes(prev =>
+      prev.includes(node)
         ? prev.filter(n => n !== node)
         : [...prev, node]
     )
@@ -166,32 +167,32 @@ return
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
           {t('inventoryPage.nodesCount', { selected: selectedNodes.length, total: availableNodes.length })}
         </Typography>
-        
-        <Box sx={{ 
-          border: '1px solid', 
-          borderColor: 'divider', 
-          borderRadius: 1, 
-          maxHeight: 200, 
+
+        <Box sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          maxHeight: 200,
           overflow: 'auto',
           mb: 2
         }}>
           <List dense disablePadding>
             {availableNodes.map(node => (
-              <ListItemButton 
-                key={node} 
+              <ListItemButton
+                key={node}
                 onClick={() => toggleNode(node)}
                 sx={{ py: 0.5 }}
               >
                 <ListItemIcon sx={{ minWidth: 36 }}>
-                  <Switch 
-                    size="small" 
-                    checked={selectedNodes.includes(node)} 
+                  <Switch
+                    size="small"
+                    checked={selectedNodes.includes(node)}
                     onChange={() => toggleNode(node)}
                     onClick={(e) => e.stopPropagation()}
                   />
                 </ListItemIcon>
-                <ListItemText 
-                  primary={node} 
+                <ListItemText
+                  primary={node}
                   primaryTypographyProps={{ variant: 'body2' }}
                 />
               </ListItemButton>
@@ -202,8 +203,8 @@ return
         <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
           <FormControlLabel
             control={
-              <Switch 
-                checked={restricted} 
+              <Switch
+                checked={restricted}
                 onChange={(e) => setRestricted(e.target.checked)}
                 disabled={saving}
               />
@@ -219,8 +220,8 @@ return
           />
           <FormControlLabel
             control={
-              <Switch 
-                checked={nofailback} 
+              <Switch
+                checked={nofailback}
                 onChange={(e) => setNofailback(e.target.checked)}
                 disabled={saving}
               />
@@ -249,8 +250,8 @@ return
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
-        <Button 
-          variant="contained" 
+        <Button
+          variant="contained"
           onClick={handleSave}
           disabled={saving || !name.trim() || selectedNodes.length === 0}
           startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 
@@ -47,7 +48,8 @@ interface CreateJobDialogProps {
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
-  return res.json()
+
+return res.json()
 })
 
 // ── Main Component ─────────────────────────────────────────────────────
@@ -60,12 +62,14 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [selectedVMs, setSelectedVMs] = useState<number[]>([])
   const [targetCluster, setTargetCluster] = useState('')
   const [targetPool, setTargetPool] = useState('')
+
   const [scheduleValue, setScheduleValue] = useState<ScheduleBuilderValue>({
     mode: 'rpo',
     rpoTargetSeconds: 900,
     scheduleSpec: null,
     timezone: defaultTimezone(),
   })
+
   const [vmSearch, setVmSearch] = useState('')
   const [selectionMode, setSelectionMode] = useState<'vms' | 'tags'>('vms')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -78,10 +82,13 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     sourceCluster ? `/api/v1/connections/${sourceCluster}/ceph-vms` : null,
     fetcher
   )
+
   const cephVMMap = useMemo(() => {
     const m = new Map<number, number>()
+
     for (const v of (cephVMsData?.data || [])) m.set(v.vmid, v.cephDiskGb)
-    return m
+
+return m
   }, [cephVMsData])
 
   // SSH connectivity check state
@@ -100,7 +107,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     if (!src || !tgt) {
       setSshCheck('idle')
       setSshError('')
-      return
+
+return
     }
 
     setSshCheck('checking')
@@ -112,6 +120,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source_cluster: src, target_cluster: tgt })
       })
+
       const data = await res.json()
 
       if (data.connected) {
@@ -155,34 +164,41 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   // Collect all unique tags from source VMs
   const allTags = useMemo(() => {
     const tags = new Set<string>()
+
     sourceVMs.forEach(vm => vm.tags?.forEach(t => { if (t.trim()) tags.add(t.trim()) }))
-    return Array.from(tags).sort((a, b) => a.localeCompare(b))
+
+return Array.from(tags).sort((a, b) => a.localeCompare(b))
   }, [sourceVMs])
 
   // Count VMs per tag
   const tagVMCounts = useMemo(() => {
     const counts: Record<string, number> = {}
+
     allTags.forEach(tag => {
       counts[tag] = sourceVMs.filter(v => v.tags?.includes(tag)).length
     })
-    return counts
+
+return counts
   }, [allTags, sourceVMs])
 
   // Total unique VMs matching selected tags
   const matchingTagVMCount = useMemo(() => {
     if (selectedTags.length === 0) return 0
     const ids = new Set<number>()
+
     sourceVMs.forEach(vm => {
       if (vm.tags?.some(t => selectedTags.includes(t))) ids.add(vm.vmid)
     })
-    return ids.size
+
+return ids.size
   }, [selectedTags, sourceVMs])
 
   // Search filter on source VMs (for VM mode only)
   const filteredVMs = useMemo(() =>
     sourceVMs.filter(v => {
       if (!vmSearch) return true
-      return v.name.toLowerCase().includes(vmSearch.toLowerCase()) || String(v.vmid).includes(vmSearch)
+
+return v.name.toLowerCase().includes(vmSearch.toLowerCase()) || String(v.vmid).includes(vmSearch)
     })
   , [sourceVMs, vmSearch])
 
@@ -191,31 +207,44 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     if (selectionMode === 'vms') {
       return selectedVMs.reduce((sum, vmid) => sum + (cephVMMap.get(vmid) || 0), 0) * 1024 * 1024 * 1024
     }
+
     if (selectedTags.length === 0) return 0
     const matched = new Set<number>()
+
     for (const vm of sourceVMs) {
       if (vm.tags?.some(tag => selectedTags.includes(tag))) matched.add(vm.vmid)
     }
+
     let total = 0
+
     matched.forEach(vmid => { total += cephVMMap.get(vmid) || 0 })
-    return total * 1024 * 1024 * 1024
+
+return total * 1024 * 1024 * 1024
   }, [selectionMode, selectedVMs, selectedTags, sourceVMs, cephVMMap])
 
   // Pre-flight checks run once source/target/pool are chosen
   const runPreflight = useCallback(async (src: string, tgt: string, pool: string, sizeBytes: number) => {
     if (!src || !tgt || !pool) {
       setPreflight(null)
-      return
+
+return
     }
+
     setPreflightLoading(true)
+
     try {
       const res = await fetch('/api/v1/orchestrator/replication/preflight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source_cluster: src, target_cluster: tgt, target_pool: pool, estimated_size_bytes: sizeBytes }),
       })
-      if (!res.ok) { setPreflight(null); return }
+
+      if (!res.ok) { setPreflight(null);
+
+return }
+
       const data = await res.json()
+
       setPreflight(data)
     } catch {
       setPreflight(null)
@@ -280,6 +309,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       install_pv: installPv || undefined,
       network_mapping: {},
     }
+
     if (scheduleValue.mode === 'rpo') {
       onSubmit({ ...base, rpo_target: scheduleValue.rpoTargetSeconds })
     } else {
@@ -289,6 +319,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
         timezone: scheduleValue.timezone,
       })
     }
+
     handleClose()
   }
 
@@ -401,7 +432,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                       filteredVMs.map(vm => {
                         const diskGb = cephVMMap.get(vm.vmid)
                         const dotColor = vm.status === 'running' ? '#4caf50' : vm.status === 'paused' ? '#ed6c02' : '#f44336'
-                        return (
+
+
+return (
                           <FormControlLabel
                             key={vm.vmid}
                             control={<Checkbox size='small' checked={selectedVMs.includes(vm.vmid)} onChange={() => toggleVM(vm.vmid)} />}
@@ -435,7 +468,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                   </Box>
                   {selectedVMs.length > 0 && (() => {
                     const totalGb = selectedVMs.reduce((sum, vmid) => sum + (cephVMMap.get(vmid) || 0), 0)
-                    return (
+
+
+return (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                         <Typography variant='caption' sx={{ color: 'primary.main' }}>
                           {t('siteRecovery.createJob.selectedCount', { count: selectedVMs.length })}
@@ -641,7 +676,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 const pct = rawPct <= 1 ? Math.round(rawPct * 100) : Math.min(100, Math.round(rawPct))
                 const hasStats = (p.bytesUsed || 0) > 0 || (p.maxAvail || 0) > 0
                 const barColor = pct >= 90 ? 'error' : pct >= 75 ? 'warning' : 'primary'
-                return (
+
+
+return (
                   <MenuItem key={p.name} value={p.name}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, width: '100%', py: 0.5 }}>
                       <img src='/images/ceph-logo.svg' alt='Ceph' width={16} height={16} style={{ flexShrink: 0 }} />
@@ -687,7 +724,9 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 {(preflight?.checks || []).map(c => {
                   const color = c.status === 'ok' ? 'success.main' : c.status === 'warn' ? 'warning.main' : 'error.main'
                   const icon = c.status === 'ok' ? 'ri-check-line' : c.status === 'warn' ? 'ri-error-warning-line' : 'ri-close-circle-line'
-                  return (
+
+
+return (
                     <Box key={c.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                       <i className={icon} style={{ color: `var(--mui-palette-${c.status === 'ok' ? 'success' : c.status === 'warn' ? 'warning' : 'error'}-main)`, fontSize: 16, marginTop: 2 }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { getDateLocale, formatDateTime, formatDate, formatTime } from './date'
 
 describe('getDateLocale', () => {
@@ -29,12 +30,14 @@ describe('formatDateTime', () => {
 
   it('returns a string for Date input', () => {
     const result = formatDateTime(date, 'en')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
 
   it('returns a string for timestamp input', () => {
     const result = formatDateTime(date.getTime(), 'en')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
@@ -42,6 +45,8 @@ describe('formatDateTime', () => {
   it('produces different output for different locales', () => {
     const en = formatDateTime(date, 'en')
     const fr = formatDateTime(date, 'fr')
+
+
     // Locale formatting differs (month name, date order, etc.)
     expect(typeof en).toBe('string')
     expect(typeof fr).toBe('string')
@@ -53,12 +58,14 @@ describe('formatDate', () => {
 
   it('returns a string for Date input', () => {
     const result = formatDate(date, 'en')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
 
   it('returns a string for timestamp input', () => {
     const result = formatDate(date.getTime(), 'fr')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
@@ -69,12 +76,14 @@ describe('formatTime', () => {
 
   it('returns a string for Date input', () => {
     const result = formatTime(date, 'en')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
 
   it('returns a string for timestamp input', () => {
     const result = formatTime(date.getTime(), 'fr')
+
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })

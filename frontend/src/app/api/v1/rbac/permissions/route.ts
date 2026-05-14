@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/rbac/permissions/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
@@ -11,6 +12,7 @@ import { prisma } from "@/lib/db/prisma"
 // GET /api/v1/rbac/permissions - Liste toutes les permissions disponibles
 export async function GET(req: NextRequest) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
       if (!acc[perm.category]) {
         acc[perm.category] = []
       }
+
       acc[perm.category].push(perm)
 
       return acc

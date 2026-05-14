@@ -20,7 +20,9 @@ export interface Country {
 export function countryFlag(code: string | null | undefined): string {
   if (!code || code.length !== 2) return ''
   const offset = 0x1F1E6 - ('A'.codePointAt(0) as number)
-  return String.fromCodePoint(
+
+
+return String.fromCodePoint(
     ...code.toUpperCase().split('').map(c => (c.codePointAt(0) as number) + offset),
   )
 }
@@ -38,7 +40,9 @@ export function countryFlagUrl(code: string | null | undefined, widthPx = 20): s
   if (!code || code.length !== 2) return null
   const buckets = [20, 40, 80, 160, 320, 640, 1280, 2560]
   const w = buckets.reduce((best, b) => (Math.abs(b - widthPx) < Math.abs(best - widthPx) ? b : best), buckets[0])
-  return `https://flagcdn.com/w${w}/${code.toLowerCase()}.png`
+
+
+return `https://flagcdn.com/w${w}/${code.toLowerCase()}.png`
 }
 
 /**
@@ -48,7 +52,9 @@ export function countryFlagUrl(code: string | null | undefined, widthPx = 20): s
 export function findCountry(code: string | null | undefined): Country | null {
   if (!code) return null
   const upper = code.toUpperCase()
-  return COUNTRIES.find(c => c.code === upper) ?? null
+
+
+return COUNTRIES.find(c => c.code === upper) ?? null
 }
 
 // Curated ISO-3166-1 alpha-2 list (English short names). Sorted alphabetically

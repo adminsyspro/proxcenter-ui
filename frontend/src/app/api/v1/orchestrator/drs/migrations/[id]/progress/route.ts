@@ -28,6 +28,7 @@ export async function GET(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const { id } = await params
@@ -40,6 +41,7 @@ export async function GET(
     const migsRes = await client.getMigrations().catch(() => ({ data: [] }))
     const migs = Array.isArray(migsRes.data) ? migsRes.data : []
     const mig = migs.find((m: any) => m.id === id || m.migration_id === id)
+
     if (mig?.connection_id && !tenantConnectionIds.has(mig.connection_id)) {
       return NextResponse.json({ error: 'Migration not found' }, { status: 404 })
     }
@@ -51,7 +53,7 @@ export async function GET(
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error fetching migration progress:", e)
     }
-    
+
 return NextResponse.json(
       { error: e.message || 'Failed to fetch migration progress' },
       { status: 500 }

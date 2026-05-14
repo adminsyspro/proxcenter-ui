@@ -23,10 +23,13 @@ async function xoFetch(baseUrl: string, path: string, authHeader: string, insecu
     headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
     signal: AbortSignal.timeout(timeout),
   }
+
   if (insecureTLS) {
     opts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
   }
-  return fetch(`${baseUrl}${path}`, opts)
+
+
+return fetch(`${baseUrl}${path}`, opts)
 }
 
 /**
@@ -40,9 +43,11 @@ export async function GET(
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const conn = await prisma.connection.findUnique({
       where: { id },
       select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
@@ -67,12 +72,16 @@ export async function GET(
     if (!res.ok) {
       // Fallback: try without filter param (older XO versions)
       const resFallback = await xoFetch(xoUrl, '/rest/v0/vms?fields=uuid,name_label,power_state,CPUs,memory,os_version', authHeader, conn.insecureTLS)
+
       if (!resFallback.ok) {
         throw new Error(`XO API returned ${resFallback.status}`)
       }
+
       const data = await resFallback.json()
       const vms = parseXoVms(data)
-      return NextResponse.json({ data: { vms, connectionName: conn.name } })
+
+
+return NextResponse.json({ data: { vms, connectionName: conn.name } })
     }
 
     const data = await res.json()

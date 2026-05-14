@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   ReactFlow,
@@ -17,6 +18,7 @@ import '@xyflow/react/dist/style.css'
 import dagre from '@dagrejs/dagre'
 
 import { Box, Chip, CircularProgress, Typography, useTheme } from '@mui/material'
+
 import { formatBytes } from '@/utils/format'
 
 interface IPPair {
@@ -34,14 +36,18 @@ interface DependencyGraphProps {
 
 async function fetchIPPairs(): Promise<IPPair[]> {
   const res = await fetch('/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=50')
+
   if (!res.ok) return []
   const data = await res.json()
-  return Array.isArray(data) ? data : []
+
+
+return Array.isArray(data) ? data : []
 }
 
 // Layout nodes using dagre
 function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
   const g = new dagre.graphlib.Graph()
+
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: direction, ranksep: 100, nodesep: 60 })
 
@@ -57,7 +63,9 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = g.node(node.id)
-    return {
+
+
+return {
       ...node,
       position: {
         x: nodeWithPosition.x - 75,
@@ -86,6 +94,7 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
 
     const interval = setInterval(async () => {
       const data = await fetchIPPairs()
+
       setPairs(data)
     }, 15000)
 
@@ -143,6 +152,7 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
 
     // Create edges
     const maxBytes = Math.max(...pairs.map(p => p.bytes), 1)
+
     const edges: Edge[] = pairs.map((pair, idx) => {
       const thickness = Math.max(1, Math.min(6, (pair.bytes / maxBytes) * 6))
 
@@ -171,7 +181,9 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
 
     // Apply dagre layout
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges)
-    return { initialNodes: layoutedNodes, initialEdges: layoutedEdges }
+
+
+return { initialNodes: layoutedNodes, initialEdges: layoutedEdges }
   }, [pairs, primaryColor, isDark, theme])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)

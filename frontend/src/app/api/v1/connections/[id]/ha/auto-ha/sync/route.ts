@@ -11,6 +11,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   try {
     const { id } = await ctx.params
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE)
+
     if (denied) return denied
 
     // Read Auto-HA settings
@@ -50,6 +51,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
       try {
         const params = new URLSearchParams()
+
         params.append("sid", sid)
         params.append("state", settings.state || "started")
         if (settings.group) params.append("group", settings.group)

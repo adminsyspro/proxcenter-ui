@@ -17,6 +17,7 @@ type RouteContext = {
  */
 export async function POST(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -39,13 +40,13 @@ export async function POST(req: Request, ctx: RouteContext) {
       body: JSON.stringify({ id: jobId })
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: 'Tape backup job started'
     })
   } catch (e: any) {
     console.error("[pbs-tape-jobs] RUN Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

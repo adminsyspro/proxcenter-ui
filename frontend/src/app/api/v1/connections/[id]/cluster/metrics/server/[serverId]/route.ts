@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -9,12 +10,16 @@ export const runtime = "nodejs"
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
+
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
     const conn = await getConnectionById(id)
     const server = await pveFetch<any>(conn, `/cluster/metrics/server/${encodeURIComponent(serverId)}`)
-    return NextResponse.json({ data: server || {} })
+
+
+return NextResponse.json({ data: server || {} })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -24,20 +29,26 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; ser
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
+
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
+
     if (denied) return denied
     const conn = await getConnectionById(id)
     const body = await req.json()
 
     const updateParams = new URLSearchParams()
+
     for (const [k, v] of Object.entries(body)) {
       if (k === 'delete' || k === 'serverId' || k === 'id') continue
       if (v === undefined || v === null || v === '') continue
+
       // PVE rejects JS booleans ('true'/'false'); it wants 1/0 for boolean fields.
       const serialized = typeof v === 'boolean' ? (v ? '1' : '0') : String(v)
+
       updateParams.set(k, serialized)
     }
+
     if (body.delete) updateParams.set('delete', String(body.delete))
 
     await pveFetch<any>(conn, `/cluster/metrics/server/${encodeURIComponent(serverId)}`, {
@@ -45,7 +56,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; ser
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: updateParams.toString(),
     })
-    return NextResponse.json({ data: { success: true } })
+
+return NextResponse.json({ data: { success: true } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -55,12 +67,16 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string; ser
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string; serverId: string }> }) {
   try {
     const { id, serverId } = await ctx.params
+
     if (!id || !serverId) return NextResponse.json({ error: "Missing params" }, { status: 400 })
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
+
     if (denied) return denied
     const conn = await getConnectionById(id)
+
     await pveFetch<any>(conn, `/cluster/metrics/server/${encodeURIComponent(serverId)}`, { method: 'DELETE' })
-    return NextResponse.json({ data: { success: true } })
+
+return NextResponse.json({ data: { success: true } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

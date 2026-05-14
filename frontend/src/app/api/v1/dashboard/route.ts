@@ -95,7 +95,7 @@ async function syncAlertsToDatabase(alerts: any[]) {
     await prisma.alert.updateMany({
       where: {
         status: 'active',
-        ...(currentFingerprints.length > 0 
+        ...(currentFingerprints.length > 0
           ? { fingerprint: { notIn: currentFingerprints } }
           : {}
         ),
@@ -113,6 +113,7 @@ async function syncAlertsToDatabase(alerts: any[]) {
 
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -139,8 +140,10 @@ export async function GET(req: Request) {
       storage_warning: 80,
       storage_critical: 90,
     }
+
     try {
       const stored = await getSetting<any>('alert_thresholds', tenantId)
+
       if (stored && typeof stored === 'object') {
         for (const k of ['cpu_warning', 'cpu_critical', 'memory_warning', 'memory_critical', 'storage_warning', 'storage_critical'] as const) {
           if (typeof stored[k] === 'number') thresholds[k] = stored[k]
@@ -203,18 +206,22 @@ export async function GET(req: Request) {
           const storageResources = resources.filter((r: any) => r.type === 'storage')
           const sharedTypes = new Set(['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'])
           const storageConfigMap = new Map<string, any>()
+
           for (const cfg of storageConfigs) { if (cfg?.storage) storageConfigMap.set(cfg.storage, cfg) }
 
           const seenShared = new Set<string>()
           let connStorageUsed = 0, connStorageMax = 0
+
           for (const s of storageResources) {
             const cfg = storageConfigMap.get(s.storage)
             const sType = cfg?.type || ''
             const isShared = cfg?.shared === 1 || sharedTypes.has(sType)
+
             if (isShared) {
               if (seenShared.has(s.storage)) continue
               seenShared.add(s.storage)
             }
+
             connStorageUsed += Number(s.disk || 0)
             connStorageMax += Number(s.maxdisk || 0)
           }
@@ -229,7 +236,7 @@ export async function GET(req: Request) {
               const nodeStatus = await pveFetch<any>(connData, `/nodes/${encodeURIComponent(node.node)}/status`, { signal: AbortSignal.timeout(10000) })
               const cpuCores = (Number(nodeStatus?.cpuinfo?.cores || 0) * Number(nodeStatus?.cpuinfo?.sockets || 1)) || 0
 
-              
+
 return {
                 node: node.node, status: node.status, cpuCores,
                 cpuUsage: Number(nodeStatus?.cpu || 0),
@@ -247,7 +254,7 @@ return {
           return { conn, clusterName, isCluster: nodes.length > 1, quorum: quorumRow, nodes: nodeStatuses, vms, lxcs, cephStatus, connStorageUsed, connStorageMax }
         } catch (e) {
           console.error(`[dashboard] PVE error ${conn.id}:`, e)
-          
+
 return null
         }
       })),
@@ -256,7 +263,7 @@ return null
       Promise.all(pbsConnections.map(async (conn) => {
         try {
           const connData = await getPbsConnectionById(conn.id)
-          
+
           const pbsTimeout = { signal: AbortSignal.timeout(15000) }
 
           const [datastores, tasks] = await Promise.allSettled([
@@ -291,10 +298,13 @@ return null
               // Count snapshots created in the last 24h
               const recent = snaps.filter((s: any) => {
                 const btime = s['backup-time'] || s.backup_time || s.ctime || 0
-                return btime > cutoff24h
+
+
+return btime > cutoff24h
               })
 
               backupsTotal24h += recent.length
+
               // PBS snapshots that exist are successful (failed backups don't create snapshots)
               backupsOk24h += recent.length
 
@@ -316,9 +326,11 @@ return null
 
           // Count failed backup tasks from task log (tasks with status !== OK)
           const last24h = taskList.filter((t: any) => t.starttime && t.starttime > cutoff24h)
+
           const failedBackupTasks = last24h.filter((t: any) =>
             (t.worker_type === 'backup') && t.status && t.status !== 'OK'
           )
+
           const verifyTasks = last24h.filter((t: any) => t.worker_type === 'verify')
 
           // Add failed tasks to total (they don't create snapshots)
@@ -344,7 +356,7 @@ return null
           }
         } catch (e) {
           console.error(`[dashboard] PBS error ${conn.id}:`, e)
-          
+
 return null
         }
       })),
@@ -377,15 +389,20 @@ return null
       const scopedVms = vdcScope
         ? data.vms.filter((vm: any) => {
             const pool = vm.pool
+
             if (!pool || pool === '') return false
-            return allowedPools?.has(pool) ?? false
+
+return allowedPools?.has(pool) ?? false
           })
         : data.vms
+
       const scopedLxcs = vdcScope
         ? data.lxcs.filter((lxc: any) => {
             const pool = lxc.pool
+
             if (!pool || pool === '') return false
-            return allowedPools?.has(pool) ?? false
+
+return allowedPools?.has(pool) ?? false
           })
         : data.lxcs
 
@@ -685,6 +702,7 @@ return null
     // Compute provisioned resources (allocated to all VMs + LXCs, excluding templates)
     const allGuests = [...filteredVms, ...filteredLxcs].filter((g: any) => g.template !== 1)
     let provCpu = 0, provMem = 0, provDisk = 0
+
     for (const g of allGuests) {
       provCpu += Number(g.maxcpu || 0)
       provMem += Number(g.maxmem || 0)
@@ -713,7 +731,9 @@ return null
 
       for (const g of allGuests as any[]) {
         const cores = Number(g.maxcpu || 0)
+
         sumMaxCpu += cores
+
         // PVE reports cpu as 0..1 utilization of allocated cores
         if (g.status === 'running') sumCpuUsed += Number(g.cpu || 0) * cores
         sumMemUsed += Number(g.mem || 0)
@@ -730,6 +750,7 @@ return null
       outStorageUsed = sumDiskUsed
       outStorageMax = sumMaxDisk
       fStoragePct = sumMaxDisk > 0 ? round1((sumDiskUsed / sumMaxDisk) * 100) : 0
+
       // No cluster capacity to compare against — skip provisioned bars.
       provCpuPct = 0
       provMemPct = 0
@@ -740,6 +761,7 @@ return null
       outMemUsed = fMemUsed
       outMemMax = fMemMax
       fRamPct = fMemMax > 0 ? round1((fMemUsed / fMemMax) * 100) : 0
+
       // Use real storage pool data aggregated from /cluster/resources (not rootfs)
       outStorageUsed = globalStorageUsed
       outStorageMax = globalStorageMax
@@ -759,7 +781,12 @@ return null
     // Recompute top consumers from filtered VMs
     const fRunningVms = filteredVms.filter((v: any) => v.status === 'running')
     const fTopCpu = fRunningVms.map((v: any) => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: round1(Number(v.cpu || 0) * 100) })).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
-    const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0); return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
+
+    const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0);
+
+
+
+return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
 
     // Merge with orchestrator alerts (snapshots, event rules, etc.)
     // Only attempt if orchestrator is explicitly configured (Enterprise edition)
@@ -776,6 +803,7 @@ return null
 
         for (const oa of (Array.isArray(orchAlerts) ? orchAlerts : [])) {
           const key = `${oa.resource_type}:${oa.resource_id || oa.resource}:${oa.type}:${oa.severity}`
+
           if (existingKeys.has(key)) continue
           existingKeys.add(key)
 
@@ -804,9 +832,11 @@ return null
 
     // Filter alerts to only include visible resources
     const visibleNodeNames = new Set(filteredNodes.map((n: any) => n.name))
+
     const filteredAlerts = alerts.filter((a: any) => {
       if (a.entityType === 'node') return visibleNodeNames.has(a.entityId)
-      return filteredNodes.length > 0
+
+return filteredNodes.length > 0
     })
 
     return NextResponse.json({
@@ -882,7 +912,7 @@ return null
     })
   } catch (e: any) {
     console.error("[dashboard] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

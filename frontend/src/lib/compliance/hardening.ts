@@ -47,7 +47,9 @@ const LATEST_PVE_MAJOR = 8
 
 function checkClusterFirewall(data: HardeningData): HardeningCheck {
   const enabled = data.firewallOptions?.enable === 1
-  return {
+
+
+return {
     id: 'cluster_fw_enabled',
     name: 'Cluster firewall enabled',
     category: 'cluster',
@@ -63,7 +65,9 @@ function checkClusterFirewall(data: HardeningData): HardeningCheck {
 function checkPolicyIn(data: HardeningData): HardeningCheck {
   const policy = data.firewallOptions?.policy_in?.toUpperCase()
   const ok = policy === 'DROP' || policy === 'REJECT'
-  return {
+
+
+return {
     id: 'cluster_policy_in',
     name: 'Inbound policy = DROP',
     category: 'cluster',
@@ -79,7 +83,9 @@ function checkPolicyIn(data: HardeningData): HardeningCheck {
 function checkPolicyOut(data: HardeningData): HardeningCheck {
   const policy = data.firewallOptions?.policy_out?.toUpperCase()
   const ok = policy === 'DROP' || policy === 'REJECT'
-  return {
+
+
+return {
     id: 'cluster_policy_out',
     name: 'Outbound policy = DROP',
     category: 'cluster',
@@ -96,7 +102,9 @@ function checkPveVersion(data: HardeningData): HardeningCheck {
   const ver = data.version?.version || ''
   const major = Number.parseInt(ver.split('.')[0], 10)
   const ok = !Number.isNaN(major) && major >= LATEST_PVE_MAJOR
-  return {
+
+
+return {
     id: 'pve_version',
     name: 'PVE version up to date',
     category: 'cluster',
@@ -115,22 +123,27 @@ const SUB_LEVEL_NAMES: Record<string, string> = {
 
 function checkNodeSubscriptions(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
+
   if (nodes.length === 0) {
     return { id: 'node_subscriptions', name: 'Valid subscriptions', category: 'node', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
   }
 
   const failed: string[] = []
   const levels: string[] = []
+
   for (const n of nodes) {
     const sub = data.nodeDetails?.[n.node]?.subscription
     const active = sub?.status === 'Active' || sub?.status === 'active'
+
     if (!active) failed.push(n.node)
     else levels.push(SUB_LEVEL_NAMES[sub?.level?.toLowerCase() || ''] || sub?.level || 'Unknown')
   }
 
   const ok = failed.length === 0
   const levelSummary = [...new Set(levels)].join(', ')
-  return {
+
+
+return {
     id: 'node_subscriptions',
     name: 'Valid subscriptions',
     category: 'node',
@@ -147,11 +160,13 @@ function checkNodeSubscriptions(data: HardeningData): HardeningCheck {
 
 function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
+
   if (nodes.length === 0) {
     return { id: 'apt_repo_consistency', name: 'APT repository consistency', category: 'node', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
   }
 
   const problems: string[] = []
+
   for (const n of nodes) {
     const nd = data.nodeDetails?.[n.node]
     const sub = nd?.subscription
@@ -159,27 +174,36 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
 
     let hasEnterpriseRepo = false
     const repos = nd?.aptRepos
+
     if (repos) {
       const fileList = Array.isArray((repos as any).files) ? (repos as any).files : []
+
       for (const file of fileList) {
         if (file.enabled) {
           const uriList = Array.isArray(file.uris) ? file.uris : []
+
           const isEnterprise = uriList.some(u => {
             try { return new URL(u).hostname === 'enterprise.proxmox.com' || new URL(u).hostname.endsWith('.enterprise.proxmox.com') } catch { return false }
           })
+
           if (isEnterprise) { hasEnterpriseRepo = true; break }
         }
       }
+
       const stdList = Array.isArray((repos as any).standard) ? (repos as any).standard : []
+
       for (const repo of stdList) {
         if (repo?.handle?.includes('enterprise') && repo?.status === 1) { hasEnterpriseRepo = true; break }
       }
     }
+
     if (hasEnterpriseRepo && !active) problems.push(n.node)
   }
 
   const ok = problems.length === 0
-  return {
+
+
+return {
     id: 'apt_repo_consistency',
     name: 'APT repository consistency',
     category: 'node',
@@ -196,6 +220,7 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
 
 function checkTlsCertificates(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
+
   if (nodes.length === 0) {
     return { id: 'tls_certificates', name: 'Valid TLS certificates', category: 'node', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
   }
@@ -208,10 +233,12 @@ function checkTlsCertificates(data: HardeningData): HardeningCheck {
 
   for (const n of nodes) {
     const certs = data.nodeDetails?.[n.node]?.certificates
+
     if (!certs || certs.length === 0) continue
     const pveProxy = certs.find(c => c.filename === 'pveproxy-ssl.pem' || c.filename === '/etc/pve/local/pveproxy-ssl.pem')
     const cert = pveProxy || certs[0]
     const expiry = cert?.notafter || 0
+
     if (expiry < now) expired.push(n.node)
     else if (expiry < now + thirtyDays) expiringSoon.push(n.node)
     else if (cert?.issuer === cert?.subject) selfSigned.push(n.node)
@@ -227,10 +254,12 @@ function checkTlsCertificates(data: HardeningData): HardeningCheck {
     status = 'fail'; earned = 0
     parts.push(`${expired.length} expired: ${expired.slice(0, 3).join(', ')}${expired.length > 3 ? '...' : ''}`)
   }
+
   if (expiringSoon.length > 0) {
     if (!hasIssues) { status = 'warning'; earned = 10 }
     parts.push(`${expiringSoon.length} expiring soon`)
   }
+
   if (selfSigned.length > 0) {
     if (!hasIssues && !hasWarnings) { status = 'warning'; earned = 10 }
     parts.push(`${selfSigned.length} self-signed`)
@@ -251,18 +280,23 @@ function checkTlsCertificates(data: HardeningData): HardeningCheck {
 
 function checkNodeFirewall(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
+
   if (nodes.length === 0) {
     return { id: 'node_firewalls', name: 'Node firewalls enabled', category: 'node', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
   }
 
   const disabled: string[] = []
+
   for (const n of nodes) {
     const fw = data.nodeDetails?.[n.node]?.firewall
+
     if (fw?.enable !== 1) disabled.push(n.node)
   }
 
   const ok = disabled.length === 0
-  return {
+
+
+return {
     id: 'node_firewalls',
     name: 'Node firewalls enabled',
     category: 'node',
@@ -280,7 +314,9 @@ function checkNodeFirewall(data: HardeningData): HardeningCheck {
 function checkRootTfa(data: HardeningData): HardeningCheck {
   const rootUser = data.tfa?.find(u => u.userid === 'root@pam')
   const hasTfa = rootUser && rootUser.type && rootUser.type !== 'none'
-  return {
+
+
+return {
     id: 'root_tfa',
     name: 'TFA for root@pam',
     category: 'access',
@@ -296,6 +332,7 @@ function checkRootTfa(data: HardeningData): HardeningCheck {
 function checkAdminsTfa(data: HardeningData): HardeningCheck {
   // Admins = users that are enabled and not in @pve realm typically, but we check all enabled users
   const enabledUsers = (data.users || []).filter(u => u.enable !== 0 && u.userid !== 'root@pam')
+
   if (enabledUsers.length === 0) {
     return {
       id: 'admins_tfa',
@@ -311,13 +348,18 @@ function checkAdminsTfa(data: HardeningData): HardeningCheck {
   }
 
   const tfaMap = new Map((data.tfa || []).map(t => [t.userid, t]))
+
   const withoutTfa = enabledUsers.filter(u => {
     const t = tfaMap.get(u.userid)
-    return !t || !t.type || t.type === 'none'
+
+
+return !t || !t.type || t.type === 'none'
   })
 
   const allHaveTfa = withoutTfa.length === 0
-  return {
+
+
+return {
     id: 'admins_tfa',
     name: 'TFA for admin users',
     category: 'access',
@@ -335,13 +377,18 @@ function checkAdminsTfa(data: HardeningData): HardeningCheck {
 function checkDefaultApiTokens(data: HardeningData): HardeningCheck {
   const users = data.users || []
   const tokensCount = users.reduce((acc, u) => acc + (u.tokens?.length || 0), 0)
+
   // "default" tokens = tokens with common insecure names
   const suspectNames = ['test', 'default', 'tmp', 'temp']
+
   const defaultTokens = users.flatMap(u =>
     (u.tokens || []).filter(t => suspectNames.some(s => t.tokenid.toLowerCase().includes(s)))
   )
+
   const ok = defaultTokens.length === 0
-  return {
+
+
+return {
     id: 'no_default_tokens',
     name: 'No default API tokens',
     category: 'access',
@@ -358,6 +405,7 @@ function checkDefaultApiTokens(data: HardeningData): HardeningCheck {
 
 function checkVmFirewalls(data: HardeningData): HardeningCheck {
   const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+
   if (vms.length === 0) {
     return {
       id: 'vm_firewalls',
@@ -373,14 +421,21 @@ function checkVmFirewalls(data: HardeningData): HardeningCheck {
   }
 
   const vmFws = data.vmFirewalls || {}
+
   const checked = vms.filter(v => {
     const key = `${v.node}/${v.type}/${v.vmid}`
-    return vmFws[key] !== undefined
+
+
+return vmFws[key] !== undefined
   })
+
   const withFw = checked.filter(v => {
     const key = `${v.node}/${v.type}/${v.vmid}`
-    return vmFws[key]?.enable === 1
+
+
+return vmFws[key]?.enable === 1
   })
+
   const withoutFw = checked.length - withFw.length
   const allEnabled = withoutFw === 0 && checked.length > 0
 
@@ -401,6 +456,7 @@ function checkVmFirewalls(data: HardeningData): HardeningCheck {
 
 function checkVmSecurityGroups(data: HardeningData): HardeningCheck {
   const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+
   if (vms.length === 0) {
     return {
       id: 'vm_security_groups',
@@ -416,14 +472,21 @@ function checkVmSecurityGroups(data: HardeningData): HardeningCheck {
   }
 
   const sgMap = data.vmSecurityGroups || {}
+
   const checked = vms.filter(v => {
     const key = `${v.node}/${v.type}/${v.vmid}`
-    return sgMap[key] !== undefined
+
+
+return sgMap[key] !== undefined
   })
+
   const withSg = checked.filter(v => {
     const key = `${v.node}/${v.type}/${v.vmid}`
-    return sgMap[key] === true
+
+
+return sgMap[key] === true
   })
+
   const withoutSg = checked.length - withSg.length
   const allHaveSg = withoutSg === 0 && checked.length > 0
 
@@ -446,7 +509,9 @@ function checkBackupSchedule(data: HardeningData): HardeningCheck {
   const jobs = data.backupJobs || []
   const enabledJobs = jobs.filter(j => j.enabled !== 0)
   const hasJobs = enabledJobs.length > 0
-  return {
+
+
+return {
     id: 'backup_schedule',
     name: 'Backup jobs configured',
     category: 'cluster',
@@ -464,7 +529,9 @@ function checkBackupSchedule(data: HardeningData): HardeningCheck {
 function checkHaEnabled(data: HardeningData): HardeningCheck {
   const resources = data.haResources || []
   const hasHA = resources.length > 0
-  return {
+
+
+return {
     id: 'ha_enabled',
     name: 'High availability configured',
     category: 'cluster',
@@ -483,7 +550,9 @@ function checkStorageReplication(data: HardeningData): HardeningCheck {
   const jobs = data.replicationJobs || []
   const activeJobs = jobs.filter(j => !j.disable)
   const hasReplication = activeJobs.length > 0
-  return {
+
+
+return {
     id: 'storage_replication',
     name: 'Storage replication configured',
     category: 'cluster',
@@ -502,7 +571,9 @@ function checkPoolIsolation(data: HardeningData): HardeningCheck {
   const pools = data.pools || []
   const nonEmptyPools = pools.filter(p => (p.members?.length || 0) > 0)
   const hasPools = nonEmptyPools.length > 0
-  return {
+
+
+return {
     id: 'pool_isolation',
     name: 'Resource pool isolation',
     category: 'cluster',
@@ -519,24 +590,29 @@ function checkPoolIsolation(data: HardeningData): HardeningCheck {
 
 function checkVmVlanIsolation(data: HardeningData): HardeningCheck {
   const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+
   if (vms.length === 0) {
     return { id: 'vm_vlan_isolation', name: 'VMs use VLAN isolation', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
   }
 
   const configs = data.vmConfigs || {}
   let checked = 0, withVlan = 0
+
   for (const vm of vms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const cfg = configs[key]
+
     if (!cfg) continue
     checked++
     let hasVlan = false
+
     for (const [k, v] of Object.entries(cfg)) {
       if (k.startsWith('net') && typeof v === 'string' && v.includes('tag=')) {
         hasVlan = true
         break
       }
     }
+
     if (hasVlan) withVlan++
   }
 
@@ -563,18 +639,22 @@ function checkVmVlanIsolation(data: HardeningData): HardeningCheck {
 
 function checkVmGuestAgent(data: HardeningData): HardeningCheck {
   const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+
   if (qemuVms.length === 0) {
     return { id: 'vm_guest_agent', name: 'QEMU guest agent enabled', category: 'vm', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
   }
 
   const configs = data.vmConfigs || {}
   let checked = 0, withAgent = 0
+
   for (const vm of qemuVms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const cfg = configs[key]
+
     if (!cfg) continue
     checked++
     const agent = cfg.agent
+
     if (agent && (agent === 1 || String(agent).startsWith('1'))) withAgent++
   }
 
@@ -583,7 +663,9 @@ function checkVmGuestAgent(data: HardeningData): HardeningCheck {
   }
 
   const allEnabled = withAgent / checked >= 0.8
-  return {
+
+
+return {
     id: 'vm_guest_agent',
     name: 'QEMU guest agent enabled',
     category: 'vm',
@@ -598,15 +680,18 @@ function checkVmGuestAgent(data: HardeningData): HardeningCheck {
 
 function checkVmSecureBoot(data: HardeningData): HardeningCheck {
   const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+
   if (qemuVms.length === 0) {
     return { id: 'vm_secure_boot', name: 'UEFI boot enabled', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
   }
 
   const configs = data.vmConfigs || {}
   let checked = 0, withUefi = 0
+
   for (const vm of qemuVms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const cfg = configs[key]
+
     if (!cfg) continue
     checked++
     if (cfg.bios === 'ovmf' || cfg.efidisk0) withUefi++
@@ -635,6 +720,7 @@ function checkVmSecureBoot(data: HardeningData): HardeningCheck {
 
 function checkVmNoUsbPassthrough(data: HardeningData): HardeningCheck {
   const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+
   if (vms.length === 0) {
     return { id: 'vm_no_usb_passthrough', name: 'No USB/PCI passthrough', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
   }
@@ -642,11 +728,14 @@ function checkVmNoUsbPassthrough(data: HardeningData): HardeningCheck {
   const configs = data.vmConfigs || {}
   let checked = 0
   const withUsb: string[] = []
+
   for (const vm of vms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const cfg = configs[key]
+
     if (!cfg) continue
     checked++
+
     for (const k of Object.keys(cfg)) {
       if (/^(usb|hostpci)\d+$/.test(k)) {
         withUsb.push(vm.name || String(vm.vmid))
@@ -660,7 +749,9 @@ function checkVmNoUsbPassthrough(data: HardeningData): HardeningCheck {
   }
 
   const ok = withUsb.length === 0
-  return {
+
+
+return {
     id: 'vm_no_usb_passthrough',
     name: 'No USB/PCI passthrough',
     category: 'vm',
@@ -677,6 +768,7 @@ function checkVmNoUsbPassthrough(data: HardeningData): HardeningCheck {
 
 function checkVmCpuIsolation(data: HardeningData): HardeningCheck {
   const qemuVms = (data.resources || []).filter(r => r.type === 'qemu')
+
   if (qemuVms.length === 0) {
     return { id: 'vm_cpu_isolation', name: 'CPU type isolation', category: 'vm', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'VMs', details: 'No QEMU VMs found' }
   }
@@ -684,11 +776,14 @@ function checkVmCpuIsolation(data: HardeningData): HardeningCheck {
   const configs = data.vmConfigs || {}
   let checked = 0
   const withHostCpu: string[] = []
+
   for (const vm of qemuVms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const cfg = configs[key]
+
     if (!cfg) continue
     checked++
+
     if (cfg.cpu === 'host') {
       withHostCpu.push(vm.name || String(vm.vmid))
     }
@@ -699,7 +794,9 @@ function checkVmCpuIsolation(data: HardeningData): HardeningCheck {
   }
 
   const ok = withHostCpu.length === 0
-  return {
+
+
+return {
     id: 'vm_cpu_isolation',
     name: 'CPU type isolation',
     category: 'vm',
@@ -716,15 +813,18 @@ function checkVmCpuIsolation(data: HardeningData): HardeningCheck {
 
 function checkVmIpFilter(data: HardeningData): HardeningCheck {
   const vms = (data.resources || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+
   if (vms.length === 0) {
     return { id: 'vm_ip_filter', name: 'VM IP filter enabled', category: 'vm', severity: 'high', maxPoints: 15, status: 'skip', earned: 0, entity: 'VMs', details: 'No VMs found' }
   }
 
   const vmFws = data.vmFirewalls || {}
   let checked = 0, withFilter = 0
+
   for (const vm of vms) {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const fw = vmFws[key] as any
+
     if (!fw) continue
     checked++
     if (fw.ipfilter === 1 || fw.ipfilter === true) withFilter++
@@ -754,6 +854,7 @@ function checkVmIpFilter(data: HardeningData): HardeningCheck {
 function checkLeastPrivilegeUsers(data: HardeningData): HardeningCheck {
   const users = data.users || []
   const enabledUsers = users.filter(u => u.enable !== 0)
+
   if (enabledUsers.length === 0) {
     return { id: 'least_privilege_users', name: 'Least privilege access', category: 'access', severity: 'medium', maxPoints: 10, status: 'skip', earned: 0, entity: 'Users', details: 'No users found' }
   }
@@ -778,22 +879,27 @@ function checkLeastPrivilegeUsers(data: HardeningData): HardeningCheck {
 
 function checkNodeFirewallLogging(data: HardeningData): HardeningCheck {
   const nodes = data.nodes || []
+
   if (nodes.length === 0) {
     return { id: 'node_firewall_logging', name: 'Firewall logging enabled', category: 'node', severity: 'low', maxPoints: 5, status: 'skip', earned: 0, entity: 'Nodes', details: 'No nodes found' }
   }
 
   const withoutLogging: string[] = []
+
   for (const n of nodes) {
     const fw = data.nodeDetails?.[n.node]?.firewall as any
     const logIn = fw?.log_level_in
     const logOut = fw?.log_level_out
+
     if ((!logIn || logIn === 'nolog') && (!logOut || logOut === 'nolog')) {
       withoutLogging.push(n.node)
     }
   }
 
   const ok = withoutLogging.length === 0
-  return {
+
+
+return {
     id: 'node_firewall_logging',
     name: 'Firewall logging enabled',
     category: 'node',
@@ -893,8 +999,11 @@ const CHECK_FUNCTIONS: Record<string, (data: HardeningData) => HardeningCheck> =
         if (!data.sshData || data.sshData.nodes.length === 0) {
           return sshSkip(m.id, m.name, m.category, m.severity, m.maxPoints)
         }
+
         const fn = SSH_CHECK_FUNCTIONS[m.id]
-        return fn ? fn(data.sshData) : sshSkip(m.id, m.name, m.category, m.severity, m.maxPoints)
+
+
+return fn ? fn(data.sshData) : sshSkip(m.id, m.name, m.category, m.severity, m.maxPoints)
       },
     ])
   ),
@@ -963,6 +1072,7 @@ export function runChecksWithProfile(
     if (!config.enabled) continue
 
     const checkFn = CHECK_FUNCTIONS[config.checkId]
+
     if (!checkFn) continue
 
     const check = checkFn(data)

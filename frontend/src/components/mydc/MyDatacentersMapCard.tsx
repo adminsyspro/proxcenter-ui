@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useTranslations } from 'next-intl'
+
 import dynamic from 'next/dynamic'
+
+import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Chip, Collapse, IconButton, Paper, Skeleton, Stack, Tooltip, Typography,
@@ -35,6 +37,7 @@ export default function MyDatacentersMapCard({ vdcId }: Props) {
   const [datacenters, setDatacenters] = useState<DcEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
   // Default collapsed: the map is large and most users only need it on demand.
   // If the user has explicitly toggled before, honour their persisted choice.
   const [collapsed, setCollapsed] = useState(true)
@@ -42,26 +45,33 @@ export default function MyDatacentersMapCard({ vdcId }: Props) {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const stored = window.localStorage.getItem(COLLAPSE_KEY)
+
     if (stored !== null) setCollapsed(stored === '1')
   }, [])
 
   const toggleCollapsed = () => {
     setCollapsed(prev => {
       const next = !prev
+
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0')
       }
-      return next
+
+
+return next
     })
   }
 
   useEffect(() => {
     let cancelled = false
+
     const load = async () => {
       try {
         const res = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/datacenters`, { cache: 'no-store' })
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const json = await res.json()
+
         if (!cancelled) {
           setDatacenters(Array.isArray(json?.data) ? json.data : [])
           setError(null)
@@ -72,15 +82,21 @@ export default function MyDatacentersMapCard({ vdcId }: Props) {
         if (!cancelled) setLoading(false)
       }
     }
+
     void load()
     const interval = setInterval(() => { void load() }, REFRESH_MS)
-    return () => { cancelled = true; clearInterval(interval) }
+
+
+return () => { cancelled = true; clearInterval(interval) }
   }, [vdcId])
 
   const totalRunningVms = datacenters.reduce((s, d) => s + d.runningVmCount, 0)
   const totalVms = datacenters.reduce((s, d) => s + d.vmCount, 0)
+
   const statusCounts = datacenters.reduce(
-    (acc, d) => { acc[d.status]++; return acc },
+    (acc, d) => { acc[d.status]++;
+
+return acc },
     { online: 0, degraded: 0, offline: 0 } as Record<DcEntry['status'], number>,
   )
 

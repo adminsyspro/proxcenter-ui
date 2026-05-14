@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -59,7 +60,8 @@ type RepoPayload = {
 function statusChipColor(status: string): 'success' | 'warning' | 'default' {
   if (status === 'configured') return 'success'
   if (status === 'not-configured') return 'warning'
-  return 'default'
+
+return 'default'
 }
 
 export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
@@ -79,13 +81,18 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
   const fetchRepos = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/repositories`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
+
       setPayload(body?.data || null)
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -101,16 +108,20 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
   const runAction = useCallback(
     async (key: string, body: Record<string, any>) => {
       setBusyKey(key)
+
       try {
         const res = await fetch(`/api/v1/pbs/${pbsId}/repositories`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
+
         if (!res.ok) {
           const rb = await res.json().catch(() => ({}))
+
           throw new Error(rb?.error || `HTTP ${res.status}`)
         }
+
         setSnackbar({
           open: true,
           severity: 'success',
@@ -134,6 +145,7 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
 
   const handleToggle = (path: string, index: number, enabled: boolean) => {
     const key = `toggle:${path}:${index}`
+
     runAction(key, {
       op: 'toggle',
       path,
@@ -145,6 +157,7 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
 
   const handleAdd = (handle: string) => {
     const key = `add:${handle}`
+
     runAction(key, {
       op: 'add',
       handle,
@@ -161,7 +174,8 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
   const statusLabel = (status: string): string => {
     if (status === 'configured') return t('inventory.pbsReposStatusConfigured')
     if (status === 'not-configured') return t('inventory.pbsReposStatusNotConfigured')
-    return t('inventory.pbsReposStatusUnknown')
+
+return t('inventory.pbsReposStatusUnknown')
   }
 
   return (
@@ -219,7 +233,9 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
                     typeof e === 'string'
                       ? e
                       : `${e?.path ? `${e.path}: ` : ''}${e?.error || JSON.stringify(e)}`
-                  return (
+
+
+return (
                     <Typography key={idx} variant="caption" sx={{ display: 'block' }}>
                       {txt}
                     </Typography>
@@ -270,7 +286,9 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
                         const status = String(r.status || 'unknown')
                         const key = `add:${r.handle}`
                         const busy = busyKey === key
-                        return (
+
+
+return (
                           <TableRow key={r.handle} hover>
                             <TableCell sx={{ fontSize: 12 }}>{r.handle}</TableCell>
                             <TableCell>
@@ -377,13 +395,17 @@ export default function PbsRepositoriesTab({ pbsId }: PbsRepositoriesTabProps) {
                             const uris = Array.isArray(repo.URIs) ? repo.URIs : []
                             const suites = Array.isArray(repo.Suites) ? repo.Suites : []
                             const comps = Array.isArray(repo.Components) ? repo.Components : []
+
                             const enabled =
                               repo.Enabled === true ||
                               repo.Enabled === 1 ||
                               (typeof repo.Enabled === 'string' && repo.Enabled === '1')
+
                             const key = `toggle:${file.path}:${idx}`
                             const busy = busyKey === key
-                            return (
+
+
+return (
                               <TableRow key={`${file.path}-${idx}`} hover>
                                 <TableCell>
                                   <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>

@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
@@ -23,7 +24,7 @@ function CpuRamTooltip({ active, payload, isDark }) {
   const time = formatTime(payload)
   const c = widgetColors(isDark)
 
-  
+
 return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
       <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -48,7 +49,7 @@ function ScoreRing({ score, size = 56, strokeWidth = 5, isDark = true }) {
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
 
- 
+
 
 return () => clearTimeout(t) }, [])
 
@@ -81,7 +82,7 @@ function ImbalanceGauge({ value, size = 40, strokeWidth = 4, isDark = true }) {
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
 
- 
+
 
 return () => clearTimeout(t) }, [])
 
@@ -103,14 +104,14 @@ return () => clearTimeout(t) }, [])
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  
+
 return '#4caf50'
 }
 
 function getScoreColor(score) {
   if (score >= 80) return '#4caf50'
   if (score >= 50) return '#ff9800'
-  
+
 return '#f44336'
 }
 
@@ -123,7 +124,7 @@ function timeAgo(ts) {
   if (diff < 60) return 'now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`
-  
+
 return `${Math.floor(diff / 86400)}d`
 }
 
@@ -192,7 +193,7 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
           const nodeCpu = Math.round(node.cpu_usage || 0)
           const nodeRam = Math.round(node.memory_usage || 0)
 
-          
+
 return (
             <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', width: 55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
@@ -246,7 +247,7 @@ return (
           {clusterMigrations.map((mig, idx) => {
             const statusColor = mig.status === 'completed' ? '#4caf50' : mig.status === 'running' ? '#3b82f6' : mig.status === 'failed' ? '#f44336' : '#9e9e9e'
 
-            
+
 return (
               <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
                 <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor, flexShrink: 0 }} />
@@ -316,7 +317,7 @@ function DrsStatusWidget({ data, loading, config, timeRange }) {
     const map = {}
 
     for (const c of (data?.clusters || [])) { map[c.id] = c }
-    
+
 return map
   }, [data?.clusters])
 
@@ -370,7 +371,7 @@ return map
             .map(e => ({ t: e.t, cpu: Math.round(e.cpuSum / e.count), ram: Math.round(e.ramSum / e.count) }))
             .sort((a, b) => (a.t > b.t ? 1 : -1))
 
-          
+
 return { connId, series }
         } catch { return null }
       })
@@ -406,7 +407,7 @@ return { connId, series }
     ? Object.keys(metricsData).filter(id => {
         const info = clusterMap[id]
 
-        
+
 return !info || info.isCluster || info.nodes > 1
       })
     : []

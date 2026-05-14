@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -34,7 +35,9 @@ interface FirewallPolicyTableProps {
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
+
+
+return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
 }
 
 function formatService(rule: firewallAPI.FirewallRule): string {
@@ -42,9 +45,11 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   if (rule.macro) return rule.macro
   const proto = rule.proto?.toUpperCase() || ''
   const port = rule.dport || ''
+
   if (!proto && !port) return 'any'
   if (proto && port) return `${proto}/${port}`
-  return proto || port
+
+return proto || port
 }
 
 // ── Column header style ──
@@ -78,6 +83,7 @@ export default function FirewallPolicyTable({
   const handleToggleClusterFirewall = async () => {
     if (!selectedConnection) return
     const newEnable = clusterOptions?.enable === 1 ? 0 : 1
+
     try {
       await firewallAPI.updateClusterOptions(selectedConnection, { enable: newEnable })
       showToast(newEnable === 1 ? t('networkPage.firewallEnabled') : t('networkPage.firewallDisabled'), 'success')
@@ -91,6 +97,7 @@ export default function FirewallPolicyTable({
   // ── Cluster policy change ──
   const handlePolicyChange = async (field: 'policy_in' | 'policy_out', value: string) => {
     if (!selectedConnection) return
+
     try {
       await firewallAPI.updateClusterOptions(selectedConnection, { [field]: value })
       setClusterOptions(prev => prev ? { ...prev, [field]: value } : { [field]: value })
@@ -115,8 +122,10 @@ export default function FirewallPolicyTable({
   // ── Cluster rule reload ──
   const reloadClusterRules = async () => {
     if (!selectedConnection) return
+
     try {
       const rules = await firewallAPI.getClusterRules(selectedConnection)
+
       setClusterRules(Array.isArray(rules) ? rules : [])
     } catch (err) {
       console.error('Error reloading cluster rules:', err)
@@ -146,6 +155,7 @@ export default function FirewallPolicyTable({
   // ── Rule CRUD handlers ──
   const handleRuleSubmit = async () => {
     if (!selectedConnection) return
+
     try {
       if (ruleDialogIsNew) {
         await firewallAPI.addClusterRule(selectedConnection, ruleForm)
@@ -154,6 +164,7 @@ export default function FirewallPolicyTable({
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ruleForm)
         })
       }
+
       showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleModified'), 'success')
       reloadClusterRules()
       setRuleDialogOpen(false)
@@ -166,6 +177,7 @@ export default function FirewallPolicyTable({
   const handleToggleEnable = async (rule: firewallAPI.FirewallRule) => {
     if (!selectedConnection) return
     const newEnable = rule.enable === 1 ? 0 : 1
+
     try {
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
@@ -180,6 +192,7 @@ export default function FirewallPolicyTable({
   // ── Delete rule ──
   const handleDeleteRule = async () => {
     if (!deleteConfirm || !selectedConnection) return
+
     try {
       await firewallAPI.deleteClusterRule(selectedConnection, deleteConfirm.pos)
       reloadClusterRules()
@@ -197,23 +210,30 @@ export default function FirewallPolicyTable({
     e.dataTransfer.setData('text/plain', pos.toString())
     setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
   }
+
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
     setDragState({ draggedPos: null, dragOverPos: null })
   }
+
   const handleDragOver = (e: React.DragEvent, pos: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+
     if (dragState.draggedPos !== null && dragState.draggedPos !== pos) {
       setDragState(prev => ({ ...prev, dragOverPos: pos }))
     }
   }
+
   const handleDragLeave = () => setDragState(prev => ({ ...prev, dragOverPos: null }))
+
   const handleDrop = async (e: React.DragEvent, toPos: number) => {
     e.preventDefault()
     const fromPos = dragState.draggedPos
+
     setDragState({ draggedPos: null, dragOverPos: null })
     if (fromPos === null || fromPos === toPos) return
+
     try {
       await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moveto: toPos })

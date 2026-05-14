@@ -46,6 +46,7 @@ type ResourceSnapshot = {
 type ConnectionPoller = {
   interval: ReturnType<typeof setInterval>
   prevState: Map<string, ResourceSnapshot>
+
   /** True once the first poll has fully populated prevState. Until then we
    *  must NOT emit add/update/remove events — every VM looks "new" because
    *  prevState is empty, but they're not. */
@@ -88,12 +89,14 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
     if (!resources || !Array.isArray(resources)) return events
 
     let poller = pollers.get(connId)
+
     if (!poller) {
       poller = { interval: null as any, prevState: new Map(), firstPollComplete: false }
       pollers.set(connId, poller)
     }
 
     const currentIds = new Set<string>()
+
     // Snapshot at loop entry — used to gate event emission so the first poll
     // (or any poll where prevState is still empty) doesn't fire spurious
     // vm:added for every VM. Reading prevState.size during the loop is wrong:
@@ -105,6 +108,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
 
       if (r.type === 'qemu' || r.type === 'lxc') {
         const id = `${r.type}/${r.vmid}`
+
         currentIds.add(id)
 
         const curr: ResourceSnapshot = {
@@ -125,6 +129,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
         }
 
         const prev = poller.prevState.get(id)
+
         if (!prev) {
           // Genuinely new VM — only emit on subsequent polls. On the first
           // poll every VM has no prev, but that's the bootstrap, not new VMs.
@@ -193,6 +198,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
         poller.prevState.set(id, curr)
       } else if (r.type === 'node') {
         const id = `node/${r.node}`
+
         currentIds.add(id)
 
         const curr: ResourceSnapshot = {
@@ -206,6 +212,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
         }
 
         const prev = poller.prevState.get(id)
+
         if (prev && hasChanged(prev, curr)) {
           events.push({
             event: 'node:update',
@@ -270,7 +277,9 @@ async function pollAll() {
     const results = await Promise.allSettled(
       connections.map(async (conn) => {
         const connConfig = await getConnectionById(conn.id)
-        return pollConnection(conn.id, connConfig)
+
+
+return pollConnection(conn.id, connConfig)
       })
     )
 
@@ -298,15 +307,19 @@ async function pollAll() {
     // Only for connections that have had failures or active failover —
     // healthy connections don't need periodic re-discovery.
     ipRefreshCounter++
+
     if (ipRefreshCounter >= IP_REFRESH_INTERVAL) {
       ipRefreshCounter = 0
+
       const connectionsNeedingDiscovery = connections.filter(
         conn => getFailureCount(conn.id) > 0 || getNodeIps(conn.id) === null
       )
+
       if (connectionsNeedingDiscovery.length > 0) {
         Promise.allSettled(
           connectionsNeedingDiscovery.map(async (conn) => {
             const connConfig = await getConnectionById(conn.id)
+
             if (connConfig.baseUrl && connConfig.apiToken) {
               await discoverNodeIps(connConfig, conn.id)
             }
@@ -327,6 +340,7 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
   // Without this guard the POST /cluster/ha/resources fails with "already
   // defined" on every failover/migration cycle.
   const relocatedKeys = new Set<string>()
+
   for (const ev of events) {
     if (ev.event === 'vm:removed') {
       relocatedKeys.add(`${ev.connId}:${ev.type}/${ev.vmid}`)
@@ -344,8 +358,10 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
 
   // Group by connId
   const byConn = new Map<string, typeof addedVms>()
+
   for (const e of addedVms) {
     const list = byConn.get(e.connId) || []
+
     list.push(e)
     byConn.set(e.connId, list)
   }
@@ -353,14 +369,17 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
   for (const [connId, vms] of byConn) {
     try {
       const settings = await getSetting<any>(`auto_ha:${connId}`)
+
       if (!settings?.enabled) continue
 
       const conn = await getConnectionById(connId)
 
       for (const vm of vms) {
         const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`
+
         try {
           const params = new URLSearchParams()
+
           params.append("sid", sid)
           params.append("state", settings.state || "started")
           if (settings.group) params.append("group", settings.group)
@@ -393,6 +412,7 @@ export function subscribe(fn: Subscriber): () => void {
   // Start master poller if this is the first subscriber
   if (!masterInterval && subscribers.size === 1) {
     console.log('[inventory-poller] Starting (first subscriber)')
+
     // Poll immediately on first subscribe, then every POLL_INTERVAL_MS
     pollAll()
     masterInterval = setInterval(pollAll, POLL_INTERVAL_MS)
@@ -407,6 +427,7 @@ export function subscribe(fn: Subscriber): () => void {
       console.log('[inventory-poller] Stopping (no subscribers)')
       clearInterval(masterInterval)
       masterInterval = null
+
       // Keep poller state for quick restart
     }
   }

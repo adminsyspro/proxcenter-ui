@@ -13,8 +13,9 @@
 // response) and saved settings payloads keep working unchanged. The Prisma
 // client side uses camelCase; mapping happens at the boundary of this file.
 
-import { prisma } from '@/lib/db/prisma'
 import type { Prisma } from '@prisma/client'
+
+import { prisma } from '@/lib/db/prisma'
 
 export interface SecurityPolicies {
   id: string
@@ -62,13 +63,16 @@ export async function getSecurityPolicies(tenantId: string = 'default'): Promise
   let row = await prisma.securityPolicy.findFirst({
     where: { id: 'default', tenantId },
   })
+
   if (!row && tenantId !== 'default') {
     row = await prisma.securityPolicy.findFirst({
       where: { id: 'default', tenantId: 'default' },
     })
   }
+
   if (!row) throw new Error('Security policies not initialized')
-  return rowToPolicies(row)
+
+return rowToPolicies(row)
 }
 
 // Snake-case (frontend / API payload) → camelCase (Prisma) field mapping.
@@ -98,10 +102,12 @@ export async function updateSecurityPolicies(
   for (const [snake, camel] of Object.entries(SNAKE_TO_CAMEL)) {
     if (!(snake in partial)) continue
     const val = partial[snake]
+
     if (typeof val === 'boolean') {
       ;(data as any)[camel] = val
       continue
     }
+
     if (typeof val === 'number') {
       // Reject NaN / negative numeric tunables; drop the field rather than
       // surfacing a 500 from the DB constraint check downstream.
@@ -144,15 +150,19 @@ export async function validatePassword(
   if (password.length < p.password_min_length) {
     errors.push(`min_length:${p.password_min_length}`)
   }
+
   if (p.password_require_uppercase && !/[A-Z]/.test(password)) {
     errors.push('require_uppercase')
   }
+
   if (p.password_require_lowercase && !/[a-z]/.test(password)) {
     errors.push('require_lowercase')
   }
+
   if (p.password_require_numbers && !/\d/.test(password)) {
     errors.push('require_numbers')
   }
+
   if (p.password_require_special && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
     errors.push('require_special')
   }

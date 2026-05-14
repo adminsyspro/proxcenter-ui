@@ -17,16 +17,21 @@ export async function GET(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const data = await orchestratorFetch(`/reports/${id}`)
-    return NextResponse.json(data)
+
+
+return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to get report:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to get report' },
       { status: 500 }
     )
@@ -40,9 +45,11 @@ export async function DELETE(
 ) {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
+
     const data = await orchestratorFetch(`/reports/${id}`, {
       method: 'DELETE'
     })
@@ -52,7 +59,9 @@ export async function DELETE(
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to delete report:', error)
     }
-    return NextResponse.json(
+
+
+return NextResponse.json(
       { error: error.message || 'Failed to delete report' },
       { status: 500 }
     )

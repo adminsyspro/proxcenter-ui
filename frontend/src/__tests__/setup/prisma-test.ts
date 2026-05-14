@@ -17,8 +17,10 @@ const DSN_FILE = path.resolve(__dirname, '..', '..', '..', '.test-dsn')
 function readDsn(): string {
   try {
     const dsn = readFileSync(DSN_FILE, 'utf8').trim()
+
     if (!dsn) throw new Error('empty DSN')
-    return dsn
+
+return dsn
   } catch (err) {
     throw new Error(
       '[test/setup/prisma-test] Could not read the test DSN at ' + DSN_FILE + '. ' +
@@ -45,11 +47,14 @@ function extractSchema(connectionString: string): string {
   try {
     const url = new URL(connectionString)
     const fromQuery = url.searchParams.get('schema')
+
     if (fromQuery && fromQuery.length > 0) return fromQuery
   } catch {
     // fall through
   }
-  return 'public'
+
+
+return 'public'
 }
 
 const schema = extractSchema(dsn)
@@ -70,9 +75,11 @@ export const prismaTest = new PrismaClient({
  */
 export async function truncate(tables: string[]): Promise<void> {
   if (tables.length === 0) return
+
   // $executeRawUnsafe bypasses the PrismaPg adapter's schema rewrite, so the
   // query hits the connection's default search_path (public). Qualify each
   // table name with the test schema so TRUNCATE lands on the right rows.
   const list = tables.map((t) => `"${schema}"."${t}"`).join(', ')
+
   await prismaTest.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`)
 }

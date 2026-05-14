@@ -55,24 +55,32 @@ function rowToCheck(r: any): ComplianceProfileCheck {
 
 export async function listProfiles(tenantId: string, connectionId?: string): Promise<ComplianceProfile[]> {
   const where: any = { tenantId }
+
   if (connectionId) {
     where.OR = [{ connectionId }, { connectionId: null }]
   }
+
   const rows = await prisma.complianceProfile.findMany({
     where,
     orderBy: { createdAt: 'desc' },
   })
-  return rows.map(rowToProfile)
+
+
+return rows.map(rowToProfile)
 }
 
 export async function getProfile(id: string, tenantId: string): Promise<ComplianceProfile | undefined> {
   const r = await prisma.complianceProfile.findFirst({ where: { id, tenantId } })
-  return r ? rowToProfile(r) : undefined
+
+
+return r ? rowToProfile(r) : undefined
 }
 
 export async function getProfileChecks(profileId: string, tenantId: string): Promise<ComplianceProfileCheck[]> {
   const rows = await prisma.complianceProfileCheck.findMany({ where: { profileId, tenantId } })
-  return rows.map(rowToCheck)
+
+
+return rows.map(rowToCheck)
 }
 
 export async function createProfile(data: {
@@ -84,6 +92,7 @@ export async function createProfile(data: {
 }): Promise<ComplianceProfile> {
   const id = crypto.randomUUID()
   const now = new Date()
+
   await prisma.complianceProfile.create({
     data: {
       id,
@@ -98,7 +107,8 @@ export async function createProfile(data: {
       updatedAt: now,
     },
   })
-  return (await getProfile(id, data.tenant_id))!
+
+return (await getProfile(id, data.tenant_id))!
 }
 
 export async function updateProfile(
@@ -107,10 +117,12 @@ export async function updateProfile(
   tenantId: string,
 ): Promise<ComplianceProfile | undefined> {
   const update: Record<string, unknown> = { updatedAt: new Date() }
+
   if (data.name !== undefined) update.name = data.name
   if (data.description !== undefined) update.description = data.description
   await prisma.complianceProfile.updateMany({ where: { id, tenantId }, data: update })
-  return getProfile(id, tenantId)
+
+return getProfile(id, tenantId)
 }
 
 export async function updateProfileChecks(
@@ -125,8 +137,10 @@ export async function updateProfileChecks(
   tenantId: string,
 ): Promise<void> {
   const now = new Date()
+
   await prisma.$transaction(async tx => {
     await tx.complianceProfileCheck.deleteMany({ where: { profileId, tenantId } })
+
     if (checks.length > 0) {
       await tx.complianceProfileCheck.createMany({
         data: checks.map(c => ({
@@ -141,6 +155,7 @@ export async function updateProfileChecks(
         })),
       })
     }
+
     await tx.complianceProfile.updateMany({ where: { id: profileId, tenantId }, data: { updatedAt: now } })
   })
 }
@@ -162,6 +177,7 @@ export async function setActiveProfile(profileId: string, connectionId: string |
         data: { isActive: false },
       })
     }
+
     await tx.complianceProfile.updateMany({
       where: { id: profileId, tenantId },
       data: { isActive: true },
@@ -185,11 +201,16 @@ export async function deactivateProfiles(connectionId: string | undefined, tenan
 
 export async function getActiveProfile(connectionId: string | undefined, tenantId: string): Promise<(ComplianceProfile & { checks: ComplianceProfileCheck[] }) | null> {
   const where: any = { isActive: true, tenantId }
+
   if (connectionId) {
     where.OR = [{ connectionId }, { connectionId: null }]
   }
+
   const profile = await prisma.complianceProfile.findFirst({ where })
+
   if (!profile) return null
   const checks = await getProfileChecks(profile.id, tenantId)
-  return { ...rowToProfile(profile), checks }
+
+
+return { ...rowToProfile(profile), checks }
 }

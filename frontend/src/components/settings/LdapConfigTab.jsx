@@ -27,7 +27,7 @@ import {
 
 /**
  * LdapConfigTab - Configuration LDAP/Active Directory
- * 
+ *
  * L'authentification LDAP est gérée par l'orchestrator Go pour des raisons de sécurité :
  * - Les credentials LDAP ne transitent jamais par le navigateur
  * - Le binding et la recherche sont effectués côté serveur
@@ -35,7 +35,7 @@ import {
  */
 export default function LdapConfigTab() {
   const t = useTranslations()
-  
+
   const [config, setConfig] = useState({
     enabled: false,
     url: '',
@@ -74,8 +74,10 @@ export default function LdapConfigTab() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
+
         setError(errData.error || t('ldap.loadError'))
-        return
+
+return
       }
 
       const data = await res.json()
@@ -83,12 +85,15 @@ export default function LdapConfigTab() {
       if (data.data) {
         // Parse group_role_mapping JSON into array
         let mappings = []
+
         try {
           const mappingObj = typeof data.data.group_role_mapping === 'string'
             ? JSON.parse(data.data.group_role_mapping || '{}')
             : (data.data.group_role_mapping || {})
+
           mappings = Object.entries(mappingObj).map(([group, role]) => ({ group, role }))
         } catch {}
+
         setGroupMappings(mappings)
 
         setConfig(prev => ({
@@ -102,8 +107,10 @@ export default function LdapConfigTab() {
       // Fetch available RBAC roles
       try {
         const rolesRes = await fetch('/api/v1/rbac/roles')
+
         if (rolesRes.ok) {
           const rolesData = await rolesRes.json()
+
           setAvailableRoles(rolesData.data || [])
         }
       } catch {}
@@ -124,6 +131,7 @@ export default function LdapConfigTab() {
     try {
       // Build group_role_mapping JSON from array
       const mappingObj = {}
+
       for (const m of groupMappings) {
         if (m.group && m.role) mappingObj[m.group] = m.role
       }
@@ -141,11 +149,12 @@ export default function LdapConfigTab() {
 
       if (!res.ok) {
         setError(data.error || t('ldap.saveError'))
-        return
+
+return
       }
 
       setSuccess(t('ldap.saveSuccess'))
-      
+
       // Mettre à jour l'indicateur de mot de passe
       if (config.bind_password) {
         setHasBindPassword(true)
@@ -209,8 +218,8 @@ export default function LdapConfigTab() {
       {error && <Alert severity='error' onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity='success' onClose={() => setSuccess('')}>{success}</Alert>}
       {testResult && (
-        <Alert 
-          severity={testResult.success ? 'success' : 'error'} 
+        <Alert
+          severity={testResult.success ? 'success' : 'error'}
           onClose={() => setTestResult(null)}
           icon={testResult.success ? <i className='ri-check-line' /> : <i className='ri-error-warning-line' />}
         >
@@ -414,6 +423,7 @@ export default function LdapConfigTab() {
                 value={mapping.group}
                 onChange={e => {
                   const updated = [...groupMappings]
+
                   updated[index] = { ...updated[index], group: e.target.value }
                   setGroupMappings(updated)
                 }}
@@ -427,6 +437,7 @@ export default function LdapConfigTab() {
                   value={mapping.role}
                   onChange={e => {
                     const updated = [...groupMappings]
+
                     updated[index] = { ...updated[index], role: e.target.value }
                     setGroupMappings(updated)
                   }}
@@ -491,6 +502,7 @@ export default function LdapConfigTab() {
                     value={group}
                     onChange={e => {
                       const updated = [...(config.allowed_groups || [])]
+
                       updated[index] = e.target.value
                       setConfig({ ...config, allowed_groups: updated })
                     }}
@@ -503,6 +515,7 @@ export default function LdapConfigTab() {
                     disabled={!config.enabled}
                     onClick={() => {
                       const updated = (config.allowed_groups || []).filter((_, i) => i !== index)
+
                       setConfig({ ...config, allowed_groups: updated })
                     }}
                   >

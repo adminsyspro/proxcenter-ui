@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
+
 import { getServerSession } from "next-auth"
+
 import { authOptions } from "@/lib/auth/config"
 import { userHasAccessToTenant } from "@/lib/tenant"
 import { audit } from "@/lib/audit"
@@ -15,6 +17,7 @@ import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 // validates the switch and updates the user_tenants default.
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
@@ -36,6 +39,7 @@ export async function POST(req: NextRequest) {
     where: { id: tenantId },
     select: { id: true, name: true, enabled: true },
   })
+
   if (!tenant || !tenant.enabled) {
     return NextResponse.json({ error: "Tenant not found or disabled" }, { status: 404 })
   }

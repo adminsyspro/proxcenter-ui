@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 
 function subscribe(cb: () => void) {
   document.addEventListener('visibilitychange', cb)
-  return () => document.removeEventListener('visibilitychange', cb)
+
+return () => document.removeEventListener('visibilitychange', cb)
 }
 
 function getSnapshot() {

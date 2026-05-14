@@ -13,6 +13,8 @@ export const dynamic = 'force-dynamic'
 async function verifyRuleBelongsToTenant(id: string): Promise<{ rule: any; allowed: boolean }> {
   const rule = await orchestratorFetch(`/alerts/rules/${id}`) as any
   const tenantId = await getCurrentTenantId()
+
+
   // Visibility is derived from alert_rule_owners. A vDC tenant only sees
   // and edits rules they authored; the provider sees everything they own
   // plus pre-migration rules that have no recorded owner.
@@ -27,14 +29,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const { rule, allowed } = await verifyRuleBelongsToTenant(id)
+
     if (!allowed) return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
 
     return NextResponse.json(rule)
@@ -58,6 +63,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -65,10 +71,12 @@ export async function PUT(
     // verifyRuleBelongsToTenant below, which also blocks vDC tenants from
     // touching provider-level (no connection_id) rules.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const { rule, allowed } = await verifyRuleBelongsToTenant(id)
+
     if (!allowed) return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
 
     const body = await req.json()
@@ -113,6 +121,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -120,10 +129,12 @@ export async function DELETE(
     // verifyRuleBelongsToTenant below, which also blocks vDC tenants from
     // touching provider-level (no connection_id) rules.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
     const { allowed } = await verifyRuleBelongsToTenant(id)
+
     if (!allowed) return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
 
     const result = await orchestratorFetch(`/alerts/rules/${id}`, {

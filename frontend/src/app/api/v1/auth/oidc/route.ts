@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const config = await prisma.oidcConfig.findUnique({ where: { id: "default" } })
@@ -31,6 +32,7 @@ export async function GET() {
           claim_groups: "groups",
           auto_provision: true,
           default_role: "viewer",
+
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           group_role_mapping: "{}",
           hasClientSecret: false,
@@ -66,7 +68,8 @@ export async function GET() {
     })
   } catch (error: any) {
     console.error("Error GET OIDC config:", error)
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
 
@@ -74,6 +77,7 @@ export async function GET() {
 export async function PUT(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -100,6 +104,7 @@ export async function PUT(req: Request) {
       if (!issuer_url) {
         return NextResponse.json({ error: "Issuer URL is required" }, { status: 400 })
       }
+
       if (!client_id) {
         return NextResponse.json({ error: "Client ID is required" }, { status: 400 })
       }
@@ -107,6 +112,7 @@ export async function PUT(req: Request) {
 
     // Same normalisation pattern as the LDAP route.
     let mappingObj: Record<string, string> = {}
+
     if (typeof group_role_mapping === "string") {
       try {
         mappingObj = JSON.parse(group_role_mapping || "{}")
@@ -118,6 +124,7 @@ export async function PUT(req: Request) {
     }
 
     const now = new Date()
+
     const baseData = {
       enabled: !!enabled,
       providerName: provider_name || "SSO",
@@ -140,14 +147,17 @@ export async function PUT(req: Request) {
     // a fresh value is submitted, so the form blank-by-default UX preserves
     // the existing secret on every save that doesn't rotate it.
     const update: Record<string, unknown> = { ...baseData }
+
     const create: Record<string, unknown> = {
       id: "default",
       ...baseData,
       createdAt: now,
       clientSecretEnc: null as string | null,
     }
+
     if (client_secret) {
       const enc = encryptSecret(client_secret)
+
       update.clientSecretEnc = enc
       create.clientSecretEnc = enc
     }
@@ -159,6 +169,7 @@ export async function PUT(req: Request) {
     })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update",
       category: "settings",
@@ -177,6 +188,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error PUT OIDC config:", error)
-    return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
+
+return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }

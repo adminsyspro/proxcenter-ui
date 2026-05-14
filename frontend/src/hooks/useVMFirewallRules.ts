@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+
 import * as firewallAPI from '@/lib/api/firewall'
 
 export interface VMFirewallInfo {
@@ -17,24 +18,32 @@ export interface VMFirewallInfo {
 function checkNICFirewallEnabled(config: Record<string, any>): boolean {
   for (let i = 0; i < 10; i++) {
     const netConfig = config[`net${i}`]
+
     if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
       return true
     }
   }
-  return false
+
+
+return false
 }
 
 // Helper: Extract unique VLAN tags from NIC config (tag=XXX)
 function extractVLANs(config: Record<string, any>): number[] {
   const vlans = new Set<number>()
+
   for (let i = 0; i < 10; i++) {
     const netConfig = config[`net${i}`]
+
     if (netConfig && typeof netConfig === 'string') {
       const match = netConfig.match(/tag=(\d+)/)
+
       if (match) vlans.add(Number.parseInt(match[1], 10))
     }
   }
-  return Array.from(vlans).sort((a, b) => a - b)
+
+
+return Array.from(vlans).sort((a, b) => a - b)
 }
 
 interface UseVMFirewallRulesReturn {

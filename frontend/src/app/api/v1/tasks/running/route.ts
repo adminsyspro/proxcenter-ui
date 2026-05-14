@@ -66,7 +66,7 @@ function formatTaskType(type: string): string {
     'hamigrate': 'HA Migrate',
   }
 
-  
+
 return types[type] || type
 }
 
@@ -83,7 +83,7 @@ function getTaskIcon(type: string): string {
   if (type.includes('vnc') || type.includes('spice')) return 'ri-terminal-box-line'
   if (type.includes('download')) return 'ri-download-line'
   if (type.includes('apt') || type.includes('update')) return 'ri-refresh-line'
-  
+
 return 'ri-loader-4-line'
 }
 
@@ -94,12 +94,14 @@ export async function GET() {
     // scoped view of their own nodes' running tasks via the vDC filter
     // below. Super admins see everything.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { getCurrentTenantId } = await import('@/lib/tenant')
     const { getVdcScope } = await import('@/lib/vdc/scope')
     const tenantId = await getCurrentTenantId()
     const vdcScope = await getVdcScope(tenantId)
+
     // For vDC tenants on shared-node clusters the node filter is a no-op
     // (every vDC has every node in scope). Pool-membership is the real
     // boundary — pull the live vmid set per connection.
@@ -134,7 +136,7 @@ export async function GET() {
         try {
           const connection = await getConnectionById(conn.id)
           let tasks: ProxmoxTask[] = []
-          
+
           // Essayer d'abord /cluster/tasks (pour les clusters)
           try {
             const clusterTasks = await pveFetch<ProxmoxTask[]>(
@@ -171,23 +173,28 @@ export async function GET() {
           // Une tâche est "en cours" si elle n'a pas de endtime ET pas de status (ou status vide)
           const allowedNodes = vdcScope?.nodesByConnection.get(conn.id)
           const allowedVmids = vdcVmids?.get(conn.id)
+
           const running = tasks.filter(t => {
             if (t.endtime) return false
             if (t.status && t.status !== '') return false
+
             // Tenant scope: drop tasks whose node is outside the vDC's nodes.
             if (allowedNodes && t.node && !allowedNodes.has(t.node)) return false
+
+
             // vDC tenants on shared-node clusters need pool isolation:
             // VM tasks must target a vmid in the tenant's vDC pools;
             // non-VM tasks (cluster-wide, node-level) are provider-only.
             if (allowedVmids) {
               const vmid = extractTaskVmid(t.id)
+
               if (!vmid) return false
               if (!allowedVmids.has(vmid)) return false
             }
 
 return true
           })
-          
+
           for (const task of running) {
             const duration = Math.floor(Date.now() / 1000) - task.starttime
 
@@ -214,13 +221,13 @@ return true
     // Trier par date de début (plus récent d'abord)
     runningTasks.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: runningTasks,
       count: runningTasks.length
     })
   } catch (error: any) {
     console.error('Erreur API tasks/running:', error)
-    
+
 return NextResponse.json(
       { error: error?.message || 'Erreur serveur' },
       { status: 500 }

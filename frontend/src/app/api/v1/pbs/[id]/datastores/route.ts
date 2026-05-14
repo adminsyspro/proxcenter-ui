@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -20,9 +21,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     const conn = access.kind === 'admin'
@@ -36,10 +39,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const allowedDatastores = access.kind === 'tenant'
       ? new Set(access.allowed.map(a => a.datastore))
       : null
+
     const visibleDatastores = (datastores || []).filter((ds: any) => {
       if (!allowedDatastores) return true
       const name = ds.store || ds.name
-      return name && allowedDatastores.has(name)
+
+
+return name && allowedDatastores.has(name)
     })
 
     // Enrichir chaque datastore avec des infos supplémentaires
@@ -47,7 +53,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       visibleDatastores.map(async (ds) => {
         // PBS utilise "store" comme nom du datastore
         const storeName = ds.store || ds.name
-        
+
         // Essayer de récupérer les stats du datastore
         let status: any = null
 
@@ -83,8 +89,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
           vmCount: ds.counts?.vm || status?.counts?.vm || 0,
           ctCount: ds.counts?.ct || status?.counts?.ct || 0,
           hostCount: ds.counts?.host || status?.counts?.host || 0,
-          backupCount: (ds.counts?.vm || status?.counts?.vm || 0) + 
-                       (ds.counts?.ct || status?.counts?.ct || 0) + 
+          backupCount: (ds.counts?.vm || status?.counts?.vm || 0) +
+                       (ds.counts?.ct || status?.counts?.ct || 0) +
                        (ds.counts?.host || status?.counts?.host || 0),
 
           // GC (Garbage Collection)
@@ -101,7 +107,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     })
   } catch (e: any) {
     console.error("PBS datastores error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

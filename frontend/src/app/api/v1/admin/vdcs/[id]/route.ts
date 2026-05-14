@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+
 import { getServerSession } from "next-auth"
+
 import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getVdcById, updateVdc, deleteVdc } from "@/lib/vdc"
@@ -21,11 +23,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const vdc = await getVdcById(id)
+
     if (!vdc) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
@@ -45,8 +50,10 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
@@ -60,6 +67,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       primaryStorage: typeof body.primaryStorage === 'string' && body.primaryStorage.trim()
         ? body.primaryStorage.trim()
         : undefined,
+
       // Forward sharedBridges so the VdcTab "Shared bridges (uplinks)"
       // checkbox actually persists. Previously dropped here, the next GET
       // returned the old value and the UI rolled back the change.
@@ -100,14 +108,17 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     if (!id) return NextResponse.json({ error: "Missing vDC ID" }, { status: 400 })
 
     const providerGate = await requireProviderTenant()
+
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
 
     // Get vDC name before deletion for audit log
     const existing = await getVdcById(id)
+
     if (!existing) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }

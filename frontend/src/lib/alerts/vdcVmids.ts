@@ -28,24 +28,30 @@ const TTL_MS = 60_000
 export async function getVdcVmidsByConnection(tenantId: string): Promise<Map<string, Set<string>>> {
   const now = Date.now()
   const cached = cache.get(tenantId)
+
   if (cached && cached.expiry > now) return cached.data
 
   const vdcScope = await getVdcScope(tenantId)
   const result = new Map<string, Set<string>>()
+
   if (!vdcScope) {
     cache.set(tenantId, { data: result, expiry: now + TTL_MS })
-    return result
+
+return result
   }
 
   await Promise.all(
     Array.from(vdcScope.poolsByConnection.entries()).map(async ([connId, pools]) => {
       const vmids = new Set<string>()
+
       try {
         const conn = await getConnectionById(connId)
+
         for (const poolName of pools) {
           try {
             const data = await pveFetch<any>(conn, `/pools/${encodeURIComponent(poolName)}`)
             const members: any[] = Array.isArray(data?.members) ? data.members : []
+
             for (const m of members) {
               if (m?.vmid != null) vmids.add(String(m.vmid))
             }
@@ -58,12 +64,14 @@ export async function getVdcVmidsByConnection(tenantId: string): Promise<Map<str
         // Connection lookup failed (e.g. credentials missing) — leave
         // vmids empty so the visibility filter denies on this connection.
       }
+
       result.set(connId, vmids)
     })
   )
 
   cache.set(tenantId, { data: result, expiry: now + TTL_MS })
-  return result
+
+return result
 }
 
 /** Manually invalidate the cache (e.g. after vDC mutations). */

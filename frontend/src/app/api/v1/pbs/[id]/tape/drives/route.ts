@@ -9,7 +9,9 @@ export const runtime = "nodejs"
 
 function isNotSupported(msg: string): boolean {
   const m = msg.toLowerCase()
-  return (
+
+
+return (
     m.includes("404") ||
     m.includes("501") ||
     m.includes("not implemented") ||
@@ -20,6 +22,7 @@ function isNotSupported(msg: string): boolean {
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -29,6 +32,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)
@@ -43,6 +47,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
         return NextResponse.json({ data: Array.isArray(drives) ? drives : [] })
       } catch (inner: any) {
         lastError = inner
+
         if (!isNotSupported(String(inner?.message || inner))) {
           throw inner
         }
@@ -56,6 +61,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     return NextResponse.json({ data: [], notSupported: true })
   } catch (e: any) {
     console.error("PBS tape/drives GET error:", e)
+
     if (isNotSupported(String(e?.message || e))) {
       return NextResponse.json({ data: [], notSupported: true })
     }

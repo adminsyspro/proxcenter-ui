@@ -83,14 +83,19 @@ function detectOsType(xmlLower: string, nameLower: string): string {
   // for the full URL shape first. Do this BEFORE the text-substring checks
   // because libosinfo is the most authoritative signal.
   const libosWin = text.match(/microsoft\.com\/win\/(2k\d+|\d+)/)
+
   if (libosWin) {
     const v = libosWin[1]
+
     if (v === '11' || v === '2k22' || v === '2022' || v === '2k25' || v === '2025') return 'win11'
     if (v === '10' || v === '2k16' || v === '2016' || v === '2k19' || v === '2019') return 'win10'
     if (v === '8' || v === '8.1') return 'win8'
     if (v === '7' || v === '2k8') return 'win7'
-    return 'win10' // unknown Microsoft Windows variant — safe default
+
+return 'win10' // unknown Microsoft Windows variant — safe default
   }
+
+
   // Generic MS Windows signal (covers old/custom libosinfo URLs and the name
   // metadata virt-v2v puts in the domain).
   if (text.includes('microsoft.com/win') || text.includes('microsoft windows')) {
@@ -153,9 +158,11 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
   // --- Memory ---
   const memMatch = xmlString.match(/<memory([^>]*)>(\d+)<\/memory>/)
   let memoryMB = 1024 // default fallback
+
   if (memMatch) {
     const unitAttr = memMatch[1].match(/unit\s*=\s*["']([^"']+)["']/)
     const unit = unitAttr ? unitAttr[1] : 'KiB'
+
     memoryMB = convertMemoryToMB(Number.parseInt(memMatch[2], 10), unit)
   }
 
@@ -174,6 +181,7 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
     xmlString.includes('OVMF_CODE') ||
     xmlString.includes('OVMF_VARS') ||
     /<nvram[^>]*>/i.test(xmlString)
+
   const firmware: 'bios' | 'efi' = isEfi ? 'efi' : 'bios'
 
   // --- OS type ---
@@ -185,15 +193,18 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
   const nics: V2vVmConfig['nics'] = []
   const interfaceRegex = /<interface[^>]*>[\s\S]*?<\/interface>/g
   let ifMatch: RegExpExecArray | null
+
   while ((ifMatch = interfaceRegex.exec(xmlString)) !== null) {
     const block = ifMatch[0]
     const modelMatch = block.match(/<model\s+type\s*=\s*["']([^"']+)["']/)
     const macMatch = block.match(/<mac\s+address\s*=\s*["']([^"']+)["']/)
     const model = modelMatch ? modelMatch[1] : 'virtio'
     const nic: { model: string; mac?: string } = { model }
+
     if (macMatch) {
       nic.mac = macMatch[1]
     }
+
     nics.push(nic)
   }
 
@@ -201,6 +212,7 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
   const disks: V2vVmConfig['disks'] = []
   const diskRegex = /<disk\s+type\s*=\s*["']file["'][^>]*>[\s\S]*?<\/disk>/g
   let diskMatch: RegExpExecArray | null
+
   while ((diskMatch = diskRegex.exec(xmlString)) !== null) {
     const block = diskMatch[0]
     const sourceMatch = block.match(/<source\s+file\s*=\s*["']([^"']+)["']/)
@@ -267,9 +279,11 @@ export function buildPveCreateParams(
   // Network interfaces
   config.nics.forEach((nic, i) => {
     let netValue = `${nic.model},bridge=${networkBridge}`
+
     if (nic.mac) {
       netValue += `,macaddr=${nic.mac}`
     }
+
     netValue += tagSuffix
     params[`net${i}`] = netValue
   })

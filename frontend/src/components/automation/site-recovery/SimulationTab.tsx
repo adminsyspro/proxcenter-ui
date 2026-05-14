@@ -1,9 +1,10 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
-import { useRefreshInterval } from '@/hooks/useRefreshInterval'
+
 
 import {
   Alert,
@@ -30,6 +31,8 @@ import {
 } from '@mui/material'
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ReferenceLine, Cell } from 'recharts'
+
+import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -159,7 +162,8 @@ interface SimStats {
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
-  return res.json()
+
+return res.json()
 })
 
 // ── Sub-components ───────────────────────────────────────────────
@@ -348,6 +352,7 @@ function NodeCard({ node, redistributedVMs, onToggleFail, nodeCount }: {
 function ResourceBar({ label, value, suffix }: { label: string; value: number; suffix: string }) {
   const theme = useTheme()
   const clampedValue = Math.min(value, 100)
+
   const color = value > 85 ? theme.palette.error.main
     : value > 70 ? theme.palette.warning.main
     : theme.palette.success.main
@@ -469,6 +474,7 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
 
   // Per-node RAM chart data (surviving nodes only)
   const survivingAfter = simNodesAfter.filter(n => !n.isFailed)
+
   const chartData = survivingAfter.map(n => ({
     name: n.name,
     ram: n.maxmem > 0 ? Math.round(n.mem / n.maxmem * 100) : 0,
@@ -733,6 +739,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
   // Fetch inventory data (nodes + guests with resource info)
   const inventoryRefreshInterval = useRefreshInterval(30000)
+
   const { data: inventoryData, isLoading: inventoryLoading } = useSWR(
     isEnterprise ? '/api/v1/inventory' : null,
     fetcher,
@@ -754,8 +761,10 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
   const connectionNames = useMemo(() => {
     const m: Record<string, string> = {}
+
     for (const c of connections) m[c.id] = c.name
-    return m
+
+return m
   }, [connections])
 
   // Check if selected cluster has Ceph enabled
@@ -774,44 +783,55 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     const walk = (buckets: CrushBucket[], dcName?: string) => {
       for (const bucket of buckets) {
         const currentDc = bucket.type === 'datacenter' ? bucket.name : dcName
+
         if (bucket.type === 'datacenter') {
           if (!datacenters.has(bucket.name)) datacenters.set(bucket.name, [])
         }
+
         if (bucket.type === 'host' && currentDc) {
           nodeToDatacenter.set(bucket.name, currentDc)
           const hosts = datacenters.get(currentDc) || []
+
           if (!hosts.includes(bucket.name)) hosts.push(bucket.name)
           datacenters.set(currentDc, hosts)
         }
+
         if (bucket.children) walk(bucket.children, currentDc)
       }
     }
+
     walk(cephData.data.crushTree)
 
     if (datacenters.size === 0) return null
-    return { nodeToDatacenter, datacenters }
+
+return { nodeToDatacenter, datacenters }
   }, [cephData])
 
   // Map CRUSH rule ID → failure domain type
   const crushRuleMap = useMemo(() => {
     if (!cephData?.data?.crushRules?.length) return new Map<number, string>()
     const map = new Map<number, string>()
+
     for (const rule of cephData.data.crushRules) {
       // Find the chooseleaf step to determine failure domain
       const chooseleaf = rule.steps.find(s => s.op === 'chooseleaf_firstn' || s.op === 'chooseleaf_indep')
+
       if (chooseleaf && chooseleaf.type) {
         map.set(rule.id, chooseleaf.type)
       } else {
         map.set(rule.id, 'host')
       }
     }
-    return map
+
+
+return map
   }, [cephData])
 
   // Ceph pool replication rules: CRUSH-aware tolerance
   const cephTolerance = useMemo(() => {
     if (!selectedHasCeph || !cephData?.data) return null
     const pools = cephData.data.pools?.list || []
+
     if (pools.length === 0) return null
 
     // Find the strictest pool (lowest tolerance)
@@ -831,8 +851,10 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       // otherwise infer from CRUSH tree structure: if the tree has datacenter
       // buckets and pool.size <= number of DCs, replicas span datacenters
       let domain = crushRuleMap.get(pool.crushRule)
+
       if (!domain || domain === 'host') {
         const dcCount = crushTopology?.datacenters.size || 0
+
         domain = dcCount >= 2 && (pool.size || 3) <= dcCount ? 'datacenter' : 'host'
       }
 
@@ -864,6 +886,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
   // Build simulation nodes from inventory
   const simNodes: SimNode[] = useMemo(() => {
     const cluster = clusters.find(c => c.id === selectedClusterId)
+
     if (!cluster) return []
 
     return cluster.nodes
@@ -910,15 +933,18 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
     // Collect displaced VMs, sort by memory desc (largest first)
     const displacedVMs = failedNodesList.flatMap(n => n.vms)
+
     displacedVMs.sort((a, b) => b.maxmem - a.maxmem)
 
     // Track remaining capacity per surviving node
     const nodeCapacity = new Map<string, { freeMem: number }>()
+
     for (const node of survivingNodes) {
       nodeCapacity.set(node.name, { freeMem: node.maxmem - node.mem })
     }
 
     const nodeLoads = new Map<string, { addedVms: SimVM[]; totalMem: number; totalCpu: number }>()
+
     for (const node of survivingNodes) {
       nodeLoads.set(node.name, { addedVms: [], totalMem: 0, totalCpu: 0 })
     }
@@ -942,6 +968,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
         nodeCapacity.get(bestNode)!.freeMem -= vm.maxmem
 
         const load = nodeLoads.get(bestNode)!
+
         load.addedVms.push(vm)
         load.totalMem += vm.maxmem
         load.totalCpu += vm.maxcpu
@@ -963,13 +990,16 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     return simNodes.map(node => {
       if (node.isFailed) return node
       const extra = simulation.nodeLoads.get(node.name)
+
       if (!extra || extra.totalMem === 0) return node
 
       // Add redistributed VM memory and CPU to this node
       const newMem = node.mem + extra.totalMem
       const addedCpuCores = extra.totalCpu
+
       // Approximate CPU increase: each added vCPU adds load proportional to current avg per-core usage
       const currentCpuPerCore = node.maxcpu > 0 ? node.cpu / node.maxcpu : 0
+
       const newCpu = node.maxcpu > 0
         ? Math.round(((node.cpu / 100 * node.maxcpu) + addedCpuCores * (currentCpuPerCore / 100)) / node.maxcpu * 100)
         : node.cpu
@@ -992,6 +1022,7 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     const survivingAfter = simNodesAfter.filter(n => !n.isFailed)
 
     const totalVMs = allNodes.reduce((acc, n) => acc + n.vms.length, 0)
+
     const activeVMs = survivingNodes.reduce((acc, n) => acc + n.vms.length, 0)
       + (simulation?.redistributed.length || 0)
 
@@ -1009,12 +1040,16 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     // Compute imbalance for health score
     const computeImbalance = (nodes: SimNode[]) => {
       const mems = nodes.map(n => n.maxmem ? n.mem / n.maxmem * 100 : 0)
+
       if (mems.length === 0) return 100
       const avg = mems.reduce((a, b) => a + b, 0) / mems.length
-      return Math.sqrt(mems.reduce((sum, m) => sum + (m - avg) ** 2, 0) / mems.length)
+
+
+return Math.sqrt(mems.reduce((sum, m) => sum + (m - avg) ** 2, 0) / mems.length)
     }
 
     const imbalanceBefore = computeImbalance(allNodes)
+
     const imbalanceAfter = survivingAfter.length > 0
       ? computeImbalance(survivingAfter)
       : 100
@@ -1054,19 +1089,24 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
     const isDcDomain = cephTolerance.failureDomain === 'datacenter' && crushTopology
 
     let failedCount: number
+
     if (isDcDomain) {
       // Count how many distinct datacenters the failed nodes belong to
       const failedDcs = new Set<string>()
+
       for (const nodeName of failedNodes) {
         const dc = crushTopology!.nodeToDatacenter.get(nodeName)
+
         if (dc) failedDcs.add(dc)
       }
+
       failedCount = failedDcs.size
     } else {
       failedCount = failedNodes.size
     }
 
     const suffix = isDcDomain ? 'Dc' : ''
+
     const params = {
       failed: failedCount,
       max: cephTolerance.maxNodeLoss,
@@ -1074,17 +1114,21 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
       size: cephTolerance.poolSize,
       minSize: cephTolerance.poolMinSize,
     }
+
     if (failedCount <= cephTolerance.maxNodeLoss) {
       return { ok: true, message: t(`siteRecovery.simulation.cephOk${suffix}`, params) }
     }
-    return { ok: false, message: t(`siteRecovery.simulation.cephDanger${suffix}`, params) }
+
+
+return { ok: false, message: t(`siteRecovery.simulation.cephDanger${suffix}`, params) }
   }, [selectedHasCeph, cephTolerance, failedNodes, t, crushTopology])
 
   // Ceph warning shown in summary bar (before any node is failed)
   const cephSummaryWarning = useMemo(() => {
     if (!selectedHasCeph || !cephTolerance) return null
     if (failedNodes.size === 0) return null
-    return null // only shown via cephVerdict in the verdict banner
+
+return null // only shown via cephVerdict in the verdict banner
   }, [selectedHasCeph, cephTolerance, failedNodes])
 
   // ── Handlers ───────────────────────────────────────────────────
@@ -1092,18 +1136,22 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
   const toggleFail = (nodeName: string) => {
     setFailedNodes(prev => {
       const next = new Set(prev)
+
       if (next.has(nodeName)) next.delete(nodeName)
       else next.add(nodeName)
-      return next
+
+return next
     })
   }
 
   const toggleDatacenter = (dcName: string) => {
     if (!crushTopology) return
     const dcNodes = crushTopology.datacenters.get(dcName) || []
+
     setFailedNodes(prev => {
       const next = new Set(prev)
       const allFailed = dcNodes.every(n => next.has(n))
+
       if (allFailed) {
         // Reactivate all nodes in this DC
         for (const n of dcNodes) next.delete(n)
@@ -1111,7 +1159,9 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
         // Fail all nodes in this DC
         for (const n of dcNodes) next.add(n)
       }
-      return next
+
+
+return next
     })
   }
 
@@ -1124,11 +1174,13 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
   const verdict = useMemo(() => {
     if (!simulation || !stats) return null
     if (simulation.allDown) return { severity: 'error' as const, key: 'allDown' }
+
     // Ceph data loss = critical even if VMs fit
     if (cephVerdict && !cephVerdict.ok) return { severity: 'error' as const, key: 'overloaded' }
     if (simulation.lost.length > 0) return { severity: 'error' as const, key: 'overloaded' }
     if (stats.healthAfter.score < 50) return { severity: 'warning' as const, key: 'stressed' }
-    return { severity: 'success' as const, key: 'ok' }
+
+return { severity: 'success' as const, key: 'ok' }
   }, [simulation, stats, cephVerdict])
 
   // ── Render ─────────────────────────────────────────────────────
@@ -1220,9 +1272,12 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
               {Array.from(crushTopology.datacenters.entries()).map(([dcName, dcHosts]) => {
                 const dcNodes = simNodesAfter.filter(n => dcHosts.includes(n.name))
+
                 if (dcNodes.length === 0) return null
                 const allFailed = dcNodes.every(n => n.isFailed)
-                return (
+
+
+return (
                   <Box key={dcName}>
                     <Box sx={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1275,8 +1330,10 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
               {(() => {
                 const allDcHosts = new Set(Array.from(crushTopology.datacenters.values()).flat())
                 const orphanNodes = simNodesAfter.filter(n => !allDcHosts.has(n.name))
+
                 if (orphanNodes.length === 0) return null
-                return (
+
+return (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
                     {orphanNodes.map(node => (
                       <NodeCard

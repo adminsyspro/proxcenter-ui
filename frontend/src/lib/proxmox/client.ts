@@ -13,19 +13,25 @@ import { safeLog } from "../log/sanitize"
 const CONNECT_TIMEOUT = 5_000
 
 let defaultAgent: Agent | null = null
+
 export function getDefaultAgent(): Agent {
   if (!defaultAgent) {
     defaultAgent = new Agent({ connect: { timeout: CONNECT_TIMEOUT } })
   }
-  return defaultAgent
+
+
+return defaultAgent
 }
 
 let insecureAgent: Agent | null = null
+
 export function getInsecureAgent(): Agent {
   if (!insecureAgent) {
     insecureAgent = new Agent({ connect: { rejectUnauthorized: false, timeout: CONNECT_TIMEOUT } })
   }
-  return insecureAgent
+
+
+return insecureAgent
 }
 
 export type ProxmoxClientOptions = {
@@ -44,7 +50,9 @@ function isHardNetworkError(err: unknown): boolean {
   const errCode = String((err as any).code || "")
   const cause = (err as any).cause
   const causeCode = String(cause?.code || cause?.message || "")
-  return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
+
+
+return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
 /** Timeout errors - node may just be slow, not dead */
@@ -56,7 +64,9 @@ function isTimeoutError(err: unknown): boolean {
   const errCode = String((err as any).code || "")
   const cause = (err as any).cause
   const causeCode = String(cause?.code || cause?.message || "")
-  return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
+
+
+return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
 /** Any network-level error (hard + timeout) */
@@ -87,22 +97,29 @@ function getFailoverStore(): Map<string, FailoverEntry> {
   if (!(globalThis as any)[FAILOVER_CACHE_KEY]) {
     ;(globalThis as any)[FAILOVER_CACHE_KEY] = new Map<string, FailoverEntry>()
   }
-  return (globalThis as any)[FAILOVER_CACHE_KEY]
+
+
+return (globalThis as any)[FAILOVER_CACHE_KEY]
 }
 
 function getFailoverUrl(connId: string): string | null {
   const entry = getFailoverStore().get(connId)
-  return entry?.url || null
+
+
+return entry?.url || null
 }
 
 function isHalfOpen(connId: string): boolean {
   const entry = getFailoverStore().get(connId)
+
   if (!entry) return false
-  return (Date.now() - entry.cachedAt) >= HALF_OPEN_INTERVAL_MS
+
+return (Date.now() - entry.cachedAt) >= HALF_OPEN_INTERVAL_MS
 }
 
 function refreshFailoverTimestamp(connId: string): void {
   const entry = getFailoverStore().get(connId)
+
   if (entry) {
     entry.cachedAt = Date.now()
   }
@@ -175,6 +192,7 @@ export async function pveFetch<T>(
     // signal from instantly killing failover candidates.
     const callerSignal = (!ignoreCallerSignal && init.signal) ? init.signal : undefined
     const timeoutSignal = AbortSignal.timeout(timeoutMs)
+
     const signal = callerSignal
       ? AbortSignal.any([callerSignal, timeoutSignal])
       : timeoutSignal
@@ -199,6 +217,7 @@ export async function pveFetch<T>(
       // PVE (Perl JSON) encodes NaN/Infinity as bare words which are invalid JSON.
       // Replace them with null before parsing.
       const sanitized = text.replace(/\bNaN\b/g, 'null').replace(/\b-?Infinity\b/g, 'null')
+
       json = JSON.parse(sanitized)
     } catch {
       throw new Error(`PVE invalid JSON (${res.statusCode}): ${text.slice(0, 200)}`)
@@ -219,11 +238,13 @@ export async function pveFetch<T>(
     if (opts.id && isHalfOpen(opts.id)) {
       try {
         const result = await doRequest(opts.baseUrl, 5_000)  // shorter timeout for probe
+
         // Primary is back! Clear failover cache and reset failures
         clearFailoverUrl(opts.id)
         resetFailures(opts.id)
         console.log(`[failover] Primary node recovered for connection ${safeLog(opts.id)}, clearing failover cache`)
-        return result
+
+return result
       } catch (probeErr) {
         // Primary still down, reset timer and use failover
         refreshFailoverTimestamp(opts.id)
@@ -234,7 +255,9 @@ export async function pveFetch<T>(
     // OPEN: use cached failover
     try {
       const result = await doRequest(cachedFailoverUrl, primaryTimeoutMs)
-      return result
+
+
+return result
     } catch (cachedErr) {
       if (!isNetworkError(cachedErr)) {
         // HTTP error (4xx, 5xx) — the failover node IS reachable, this
@@ -242,21 +265,27 @@ export async function pveFetch<T>(
         // Keep the cache intact so other requests still use the failover.
         throw cachedErr
       }
+
+
       // Network error — the failover node itself is unreachable.
       // Clear cache and go directly to failover scan for a new node.
       clearFailoverUrl(opts.id!)
       if (opts.behindProxy) throw cachedErr
+
       // Fall through to failover scan below
     }
   }
 
   // No cached failover — try primary baseUrl first
   let primaryErr: unknown
+
   if (!cachedFailoverUrl) {
     try {
       const result = await doRequest(opts.baseUrl, primaryTimeoutMs)
+
       if (opts.id) resetFailures(opts.id)
-      return result
+
+return result
     } catch (err) {
       primaryErr = err
       if (opts.behindProxy) throw err
@@ -273,11 +302,14 @@ export async function pveFetch<T>(
         if (!hasAlternatives) {
           // No cached alternatives — check DB as last resort
           let dbAlternatives = false
+
           try {
             const { prisma } = await import("../db/prisma")
+
             const altCount = await prisma.managedHost.count({
               where: { connectionId: opts.id, enabled: true, ip: { not: null, notIn: [currentHost] } },
             })
+
             dbAlternatives = altCount > 0
           } catch {}
 
@@ -288,10 +320,12 @@ export async function pveFetch<T>(
         }
 
         const shouldFailover = incrementFailures(opts.id)
+
         if (!shouldFailover) {
           console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${isTimeoutError(err) ? 'timeout' : 'hard error'})`)
           throw err
         }
+
         console.log(`[failover] Connection ${safeLog(opts.id)} reached failure threshold, initiating failover...`)
       } else {
         // Non-network error (HTTP 500, parse error, etc.) - don't failover
@@ -307,8 +341,10 @@ export async function pveFetch<T>(
 
     // Check if another request is already performing failover
     const existingLock = getFailoverLock(connId)
+
     if (existingLock !== null) {
       const newUrl = await existingLock
+
       if (newUrl) return doRequest(newUrl)
       throw err // other failover also failed
     }
@@ -319,15 +355,18 @@ export async function pveFetch<T>(
     if (!cached || cached.ips.length === 0) {
       try {
         const { prisma } = await import("../db/prisma")
+
         const hosts = await prisma.managedHost.findMany({
           where: { connectionId: connId, enabled: true, ip: { not: null } },
           select: { ip: true },
         })
+
         const dbIps = hosts.map(h => h.ip!).filter(Boolean)
 
         if (dbIps.length > 0) {
           const port = extractPortFromUrl(opts.baseUrl)
           const protocol = new URL(opts.baseUrl).protocol.replaceAll(":", "")
+
           setNodeIps(connId, dbIps, port, protocol)
           cached = { ips: dbIps, port, protocol }
         }
@@ -351,20 +390,25 @@ export async function pveFetch<T>(
       for (const ip of cached.ips) {
         if (ip === currentHost) continue
         const candidateUrl = replaceHostInUrl(opts.baseUrl, ip)
+
         try {
           await doRequest(candidateUrl, 5_000, true)
           await updateConnectionBaseUrl(connId, candidateUrl)
-          return candidateUrl
+
+return candidateUrl
         } catch {
           // This node is also down, try next
         }
       }
-      return null
+
+
+return null
     })()
 
     setFailoverLock(connId, failoverPromise)
 
     const newUrl = await failoverPromise
+
     if (newUrl) {
       // Don't reset failures — keep counter high so parallel requests
       // that miss the cache immediately trigger failover instead of

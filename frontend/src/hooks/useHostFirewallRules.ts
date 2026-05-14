@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+
 import * as firewallAPI from '@/lib/api/firewall'
 
 interface UseHostFirewallRulesReturn {

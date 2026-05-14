@@ -1,6 +1,6 @@
 /**
  * ProxCenter Login Background Configuration
- * 
+ *
  * Presets for login page backgrounds including gradients,
  * animated effects, and theme-matched options.
  */
@@ -254,7 +254,7 @@ export const themeToBackgroundMap = {
   oneDark: 'midnight'
 }
 
-export default {
+const loginBackgroundConfig = {
   gradientPresets,
   animatedPresets,
   imagePresets,
@@ -264,3 +264,5 @@ export default {
   getAnimatedPreset,
   themeToBackgroundMap
 }
+
+export default loginBackgroundConfig

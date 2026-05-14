@@ -9,6 +9,7 @@ function clamp(n: number, min: number, max: number) {
 
 export async function GET() {
   const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
   if (denied) return denied
 
   const now = Date.now()

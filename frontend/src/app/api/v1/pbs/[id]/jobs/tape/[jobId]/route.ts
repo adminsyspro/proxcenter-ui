@@ -17,6 +17,7 @@ type RouteContext = {
  */
 export async function PUT(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -52,13 +53,13 @@ export async function PUT(req: Request, ctx: RouteContext) {
       body: JSON.stringify(params)
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: result,
       message: 'Tape backup job updated successfully'
     })
   } catch (e: any) {
     console.error("[pbs-tape-jobs] PUT Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -69,6 +70,7 @@ return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
  */
 export async function DELETE(req: Request, ctx: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -88,12 +90,12 @@ export async function DELETE(req: Request, ctx: RouteContext) {
       method: 'DELETE'
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Tape backup job deleted successfully'
     })
   } catch (e: any) {
     console.error("[pbs-tape-jobs] DELETE Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

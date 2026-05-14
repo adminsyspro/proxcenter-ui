@@ -5,5 +5,7 @@
  */
 export function safeLog(v: unknown): string {
   const s = typeof v === "string" ? v : String(v)
-  return s.replace(/[\r\n\t\v\f\x00-\x1f\x7f]/g, " ").slice(0, 1024)
+
+
+return s.replace(/[\r\n\t\v\f\x00-\x1f\x7f]/g, " ").slice(0, 1024)
 }

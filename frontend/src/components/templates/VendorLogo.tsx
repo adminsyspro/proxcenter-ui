@@ -14,6 +14,7 @@ const VENDOR_LOGOS: Record<string, string> = {
   opensuse: '/images/vendors/opensuse.svg',
   alpine: '/images/vendors/alpine.svg',
   arch: '/images/vendors/arch.svg',
+
   // PNG instead of SVG when the upstream brand kit doesn't ship a vector
   // version we can use freely. <img> handles both transparently.
   centos: '/images/vendors/centos.png',

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -59,9 +60,11 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
 
   const fetchVersionInfo = async () => {
     setLoading(true)
+
     try {
       const res = await fetch('/api/v1/version/check')
       const data = await res.json()
+
       setVersionInfo(data)
     } catch (e) {
       console.error('Failed to check version:', e)
@@ -81,12 +84,15 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
 
   const fetchReleases = async () => {
     setLoadingReleases(true)
+
     try {
       const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`, {
         headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'ProxCenter' }
       })
+
       if (res.ok) {
         const data = await res.json()
+
         setReleases(data.filter((r: any) => !r.draft && !r.prerelease))
       }
     } catch {
@@ -245,7 +251,9 @@ export default function AboutDialog({ open, onClose }: AboutDialogProps) {
 
             {releases.map((release) => {
               const current = isCurrent(release.tag_name)
-              return (
+
+
+return (
                 <Box key={release.tag_name} sx={{ position: 'relative', mb: 2, '&:last-child': { mb: 0 } }}>
                   {/* Dot */}
                   <Box sx={{

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -7,7 +8,7 @@ export const runtime = "nodejs"
 
 /**
  * GET /api/v1/connections/[id]/nodes/[node]/system
- * 
+ *
  * Récupère toutes les informations système pour un node :
  * - Network interfaces
  * - Certificates
@@ -15,7 +16,7 @@ export const runtime = "nodejs"
  * - Hosts file
  * - Options
  * - Time configuration
- * 
+ *
  * Query params:
  * - section: 'all' | 'network' | 'certificates' | 'dns' | 'hosts' | 'options' | 'time'
  */
@@ -27,12 +28,14 @@ export async function GET(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
     if (denied) return denied
 
     const url = new URL(req.url)
     const section = url.searchParams.get('section') || 'all'
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -51,6 +54,7 @@ export async function GET(
     // Network interfaces
     if (section === 'all' || section === 'network') {
       const network = await fetchSafe<any[]>(`/nodes/${encodeURIComponent(node)}/network`)
+
       result.network = Array.isArray(network) ? network.map((iface: any) => ({
         iface: iface.iface,
         type: iface.type, // bridge, bond, eth, vlan, OVSBridge, etc.
@@ -81,13 +85,16 @@ export async function GET(
       })).sort((a: any, b: any) => {
         // Trier: bridges d'abord, puis bonds, puis physiques, puis vlans
         const order: Record<string, number> = { bridge: 0, OVSBridge: 1, bond: 2, eth: 3, vlan: 4 }
-        return (order[a.type] || 5) - (order[b.type] || 5)
+
+
+return (order[a.type] || 5) - (order[b.type] || 5)
       }) : []
     }
 
     // Certificates
     if (section === 'all' || section === 'certificates') {
       const certs = await fetchSafe<any[]>(`/nodes/${encodeURIComponent(node)}/certificates/info`)
+
       result.certificates = Array.isArray(certs) ? certs.map((cert: any) => ({
         filename: cert.filename,
         fingerprint: cert.fingerprint,
@@ -105,6 +112,7 @@ export async function GET(
     // DNS configuration
     if (section === 'all' || section === 'dns') {
       const dns = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/dns`)
+
       result.dns = dns ? {
         search: dns.search,
         dns1: dns.dns1,
@@ -116,6 +124,7 @@ export async function GET(
     // Hosts file
     if (section === 'all' || section === 'hosts') {
       const hosts = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/hosts`)
+
       result.hosts = hosts ? {
         data: hosts.data,
         digest: hosts.digest,
@@ -125,6 +134,7 @@ export async function GET(
     // Options (node config)
     if (section === 'all' || section === 'options') {
       const config = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/config`)
+
       result.options = config ? {
         acme: config.acme,
         acmedomain0: config.acmedomain0,
@@ -138,16 +148,18 @@ export async function GET(
     // Time configuration
     if (section === 'all' || section === 'time') {
       const time = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/time`)
+
       result.time = time ? {
         timezone: time.timezone,
         localtime: time.localtime,
         time: time.time, // Unix timestamp
       } : null
-      
+
       // Liste des timezones disponibles
       // On ne les charge que si demandé spécifiquement pour éviter une grosse réponse
       if (section === 'time') {
         const timezones = await fetchSafe<string[]>(`/nodes/${encodeURIComponent(node)}/time/timezones`)
+
         result.timezones = Array.isArray(timezones) ? timezones : []
       }
     }
@@ -155,13 +167,14 @@ export async function GET(
     return NextResponse.json({ data: result })
   } catch (e: any) {
     console.error("[system/node] Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to fetch system data" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to fetch system data" }, { status: 500 })
   }
 }
 
 /**
  * PUT /api/v1/connections/[id]/nodes/[node]/system
- * 
+ *
  * Met à jour les configurations système
  * Body: { section: 'dns' | 'hosts' | 'time' | 'options', data: {...} }
  */
@@ -173,6 +186,7 @@ export async function PUT(
     const { id, node } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
     if (denied) return denied
 
     const body = await req.json()
@@ -183,6 +197,7 @@ export async function PUT(
     }
 
     const conn = await getConnectionById(id)
+
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -229,6 +244,7 @@ export async function PUT(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error("[system/node] PUT Error:", e?.message)
-    return NextResponse.json({ error: e?.message || "Failed to update system config" }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || "Failed to update system config" }, { status: 500 })
   }
 }

@@ -20,10 +20,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params
@@ -36,6 +38,7 @@ export async function POST(
     const tenantConnectionIds = await getTenantConnectionIds()
     const vdcScope = await getVdcScope(tenantId)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
+
     if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }

@@ -5,6 +5,7 @@ import React from 'react'
 import { Box, Card, CardContent, Typography, useTheme } from '@mui/material'
 import { lighten, alpha } from '@mui/material/styles'
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import type { SeriesPoint } from '../types'
@@ -44,7 +45,8 @@ function AreaPctChart({
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
-                  return (
+
+return (
                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className={icon} style={{ fontSize: 13, color: iconColor }} />
@@ -55,7 +57,9 @@ function AreaPctChart({
                         {payload.map(entry => {
                           const v = Number(entry.value)
                           const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'
-                          return (
+
+
+return (
                             <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
                               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                               <Typography variant="caption" sx={{ flex: 1 }}>{title}</Typography>
@@ -128,7 +132,8 @@ function AreaBpsChart2({
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                 content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
-                  return (
+
+return (
                     <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 180 }}>
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-exchange-line" style={{ fontSize: 13, color: iconColor }} />

@@ -6,7 +6,8 @@ import { Alert, Box, Card, CardContent, Chip, Skeleton, Stack, Typography } from
 
 const fetcher = url => fetch(url).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return r.json()
+
+return r.json()
 })
 
 export default function ConnectionStatusCard() {
@@ -21,6 +22,7 @@ export default function ConnectionStatusCard() {
 
   let chipKey = 'chipRoot'
   let chipColor = 'warning'
+
   if (total === 0) {
     chipKey = 'chipRoot'
     chipColor = 'default'

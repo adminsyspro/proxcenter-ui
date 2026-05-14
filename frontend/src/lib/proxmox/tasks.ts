@@ -13,8 +13,10 @@ import type { ProxmoxClientOptions } from './client'
 import { pveFetch } from './client'
 
 export interface WaitForTaskOptions {
+
   /** Total timeout in ms before we give up. Default 10 min. */
   timeoutMs?: number
+
   /** Polling interval in ms. Default 3 s. */
   intervalMs?: number
 }

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+
+import dynamic from 'next/dynamic'
+
 import { useTranslations } from 'next-intl'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts'
-import ChartContainer from '@/components/ChartContainer'
 
 import {
   Alert,
@@ -36,8 +38,10 @@ import {
   useTheme,
 } from '@mui/material'
 
+import ChartContainer from '@/components/ChartContainer'
+
+
 import { formatBytes } from '@/utils/format'
-import dynamic from 'next/dynamic'
 
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 
@@ -83,8 +87,10 @@ interface TopPort {
 async function fetchSFlow(endpoint: string, params?: Record<string, string>) {
   const query = new URLSearchParams({ endpoint, ...params })
   const res = await fetch(`/api/v1/orchestrator/sflow?${query}`)
+
   if (!res.ok) throw new Error(`sFlow API error: ${res.status}`)
-  return res.json()
+
+return res.json()
 }
 
 // Well-known port → service name
@@ -96,7 +102,9 @@ function portToService(port: number, protocol: string): string {
     6789: 'Ceph MON', 3300: 'Ceph MON', 2049: 'NFS', 445: 'SMB',
     9090: 'Prometheus', 9100: 'Node Exp', 5044: 'Logstash',
   }
-  return services[port] || `${port}/${protocol}`
+
+
+return services[port] || `${port}/${protocol}`
 }
 
 export default function FlowsTab() {
@@ -116,6 +124,7 @@ export default function FlowsTab() {
     node: string; ip: string; connectionId: string; connectionName: string;
     online: boolean; hasOvs: boolean; ovsVersion: string; sflowConfigured: boolean; sflowTarget: string; sflowSampling: number; bridges: string[]
   }>>([])
+
   const [agentsLoading, setAgentsLoading] = useState(true)
   const [agentsExpanded, setAgentsExpanded] = useState(true)
   const [configuringNodes, setConfiguringNodes] = useState(false)
@@ -167,9 +176,12 @@ export default function FlowsTab() {
       // Determine which VMs need fetching (missing or stale)
       const toFetch = top10.filter(t => {
         const existing = sparklineRef.current.get(t.vmid)
+
         if (!existing || existing.length === 0) return true
         const lastPoint = existing[existing.length - 1]?.time || 0
-        return lastPoint < staleThreshold
+
+
+return lastPoint < staleThreshold
       })
 
       if (toFetch.length === 0) return
@@ -181,10 +193,13 @@ export default function FlowsTab() {
             const path = `/nodes/${talker.node}/qemu/${talker.vmid}`
             const res = await fetch(`/api/v1/connections/${talker.connection_id}/rrd?path=${encodeURIComponent(path)}&timeframe=hour`)
             const d = await res.json()
+
             const points = Array.isArray(d?.data)
               ? d.data.filter((p: any) => p.netin != null || p.netout != null).map((p: any) => ({ time: p.time || 0, total: (p.netin || 0) + (p.netout || 0) }))
               : []
-            return [talker.vmid, points] as [number, { time: number; total: number }[]]
+
+
+return [talker.vmid, points] as [number, { time: number; total: number }[]]
           } catch {
             return [talker.vmid, []] as [number, { time: number; total: number }[]]
           }
@@ -195,14 +210,17 @@ export default function FlowsTab() {
 
       // Merge with existing data
       const merged = new Map(sparklineRef.current)
+
       for (const [vmid, points] of results) {
         merged.set(vmid, points)
       }
+
       sparklineRef.current = merged
       setSparklineData(new Map(merged))
     }
 
     fetchMissing()
+
     // Also refresh all sparklines periodically
     sparklineTimerRef.current = window.setInterval(() => {
       sparklineRef.current = new Map() // force full refresh
@@ -217,14 +235,22 @@ export default function FlowsTab() {
 
   // Fetch VM network RRD when VM dialog opens
   useEffect(() => {
-    if (!selectedVM) { setVmTimeSeries([]); return }
-    if (!selectedVM.connection_id || !selectedVM.node) { setVmTimeSeries([]); return }
+    if (!selectedVM) { setVmTimeSeries([]);
+
+return }
+
+    if (!selectedVM.connection_id || !selectedVM.node) { setVmTimeSeries([]);
+
+return }
+
     setVmTsLoading(true)
     const path = `/nodes/${selectedVM.node}/qemu/${selectedVM.vmid}`
+
     fetch(`/api/v1/connections/${selectedVM.connection_id}/rrd?path=${encodeURIComponent(path)}&timeframe=hour`)
       .then(r => r.json())
       .then(d => {
         const points = Array.isArray(d?.data) ? d.data : []
+
         setVmTimeSeries(points.filter((p: any) => p.netin != null || p.netout != null).map((p: any) => ({
           time: p.time || 0,
           bytes_in: p.netin || 0,
@@ -237,10 +263,14 @@ export default function FlowsTab() {
 
   // Fetch IP pair time-series when pair dialog opens
   useEffect(() => {
-    if (!selectedPair) { setPairTimeSeries([]); return }
+    if (!selectedPair) { setPairTimeSeries([]);
+
+return }
+
     setPairTsLoading(true)
     const now = new Date()
     const from = new Date(now.getTime() - 60 * 60 * 1000)
+
     fetchSFlow('timeseries/ip', { src_ip: selectedPair.src_ip, dst_ip: selectedPair.dst_ip, from: from.toISOString(), to: now.toISOString() })
       .then(d => setPairTimeSeries(Array.isArray(d) ? d : []))
       .catch(() => setPairTimeSeries([]))
@@ -252,10 +282,12 @@ export default function FlowsTab() {
     setSelectedPort(port)
     setPortPairs([])
     setPortPairsLoading(true)
+
     try {
       const data = await fetchSFlow('ip-pairs', { n: '200' })
       const pairs = Array.isArray(data) ? data : []
       const filtered = pairs.filter((p: any) => p.dst_port === port.port && p.protocol === port.protocol)
+
       filtered.sort((a: any, b: any) => b.bytes - a.bytes)
       setPortPairs(filtered)
     } catch {
@@ -269,8 +301,10 @@ export default function FlowsTab() {
   const loadAgents = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/orchestrator/sflow/agents')
+
       if (res.ok) {
         const json = await res.json()
+
         setNodeAgents(json.data || [])
       }
     } catch {} finally {
@@ -283,9 +317,11 @@ export default function FlowsTab() {
   // Open configure dialog (all unconfigured nodes)
   const handleOpenConfigDialog = () => {
     setConfigSingleNode(null)
+
     if (!collectorTarget) {
       setCollectorTarget(`${window.location.hostname}:6343`)
     }
+
     setConfigDialogOpen(true)
   }
 
@@ -303,6 +339,7 @@ export default function FlowsTab() {
     setConfigDialogOpen(false)
     setConfigSingleNode(null)
     setConfiguringNodes(true)
+
     try {
       const res = await fetch('/api/v1/orchestrator/sflow/agents', {
         method: 'POST',
@@ -313,6 +350,7 @@ export default function FlowsTab() {
           samplingRate,
         }),
       })
+
       if (res.ok) {
         // Refresh agent list
         await loadAgents()
@@ -325,12 +363,14 @@ export default function FlowsTab() {
   const loadData = useCallback(async () => {
     try {
       setError(null)
+
       const [statusData, talkersData, pairsData, portsData] = await Promise.all([
         fetchSFlow('status'),
         fetchSFlow('top-talkers', { n: '100' }),
         fetchSFlow('ip-pairs', { n: '500' }),
         fetchSFlow('top-ports', { n: '10' }),
       ])
+
       setStatus(statusData)
       setTopTalkers(Array.isArray(talkersData) ? talkersData : [])
       setTopPairs(Array.isArray(pairsData) ? pairsData : [])
@@ -345,7 +385,9 @@ export default function FlowsTab() {
   useEffect(() => {
     loadData()
     const interval = setInterval(loadData, 10000) // Refresh every 10s
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [loadData])
 
   // ── Loading state ──
@@ -488,7 +530,9 @@ export default function FlowsTab() {
                         {Array.from(new Set(nodeAgents.map(a => a.connectionName))).map((connName) => {
                           const connAgents = nodeAgents.filter(a => a.connectionName === connName)
                           const multipleConnections = new Set(nodeAgents.map(a => a.connectionName)).size > 1
-                          return [
+
+
+return [
                             multipleConnections && (
                               <TableRow key={`header-${connName}`}>
                                 <TableCell colSpan={10} sx={{ py: 0.5, border: 0, bgcolor: 'action.hover' }}>
@@ -539,7 +583,9 @@ export default function FlowsTab() {
                                 </TableCell>
                                 {(() => {
                                   const sflowAgent = status?.agents?.find(a => a.agent_ip === agent.ip)
-                                  return (<>
+
+
+return (<>
                                     <TableCell align="right" sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
                                       {sflowAgent ? `${sflowAgent.flow_rate.toFixed(1)} f/s` : '—'}
                                     </TableCell>
@@ -1073,7 +1119,9 @@ export default function FlowsTab() {
                     <TableBody>
                       {portPairs.slice(0, 20).map((pair, i) => {
                         const pct = selectedPort.bytes > 0 ? (pair.bytes / selectedPort.bytes) * 100 : 0
-                        return (
+
+
+return (
                           <TableRow key={i} hover>
                             <TableCell>
                               <Typography variant="body2" fontFamily="JetBrains Mono, monospace" fontSize={12}>

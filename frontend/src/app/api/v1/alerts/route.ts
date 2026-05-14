@@ -15,6 +15,7 @@ export async function GET(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
@@ -65,7 +66,7 @@ export async function GET(req: Request) {
       if (s.status === 'active') statsSummary.active += s._count
       if (s.status === 'acknowledged') statsSummary.acknowledged += s._count
       if (s.status === 'resolved') statsSummary.resolved += s._count
-      
+
       if (s.status === 'active' || s.status === 'acknowledged') {
         if (s.severity === 'crit') statsSummary.bySeverity.crit += s._count
         if (s.severity === 'warn') statsSummary.bySeverity.warn += s._count
@@ -99,7 +100,7 @@ export async function GET(req: Request) {
     })
   } catch (error: any) {
     console.error('[alerts] GET error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
@@ -159,7 +160,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ data: alert })
   } catch (error: any) {
     console.error('[alerts] POST error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
@@ -172,6 +173,7 @@ export async function PATCH(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (permError) return permError
 
     const rawBody = await req.json()
@@ -213,15 +215,15 @@ export async function PATCH(req: Request) {
       data: updateData
     })
 
-    return NextResponse.json({ 
-      data: { 
+    return NextResponse.json({
+      data: {
         updated: result.count,
-        action 
-      } 
+        action
+      }
     })
   } catch (error: any) {
     console.error('[alerts] PATCH error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }
@@ -234,6 +236,7 @@ export async function DELETE(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
@@ -250,15 +253,15 @@ export async function DELETE(req: Request) {
       }
     })
 
-    return NextResponse.json({ 
-      data: { 
+    return NextResponse.json({
+      data: {
         deleted: result.count,
-        message: `Deleted alerts resolved before ${cutoffDate.toISOString()}` 
-      } 
+        message: `Deleted alerts resolved before ${cutoffDate.toISOString()}`
+      }
     })
   } catch (error: any) {
     console.error('[alerts] DELETE error:', error)
-    
+
 return NextResponse.json({ error: error?.message || 'Server error' }, { status: 500 })
   }
 }

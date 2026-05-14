@@ -19,21 +19,27 @@ async function loadJobForTenant(conn: any, connectionId: string, jobId: string) 
   const scope = await getVdcScope(tenantId)
   const allowedPools = await getAllowedJobPools(tenantId, connectionId)
   let job: any
+
   try {
     job = await pveFetch<any>(conn, `/cluster/backup/${encodeURIComponent(jobId)}`)
   } catch (err: any) {
     const msg = String(err?.message || '')
+
     if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
       return { error: NextResponse.json({ error: 'Job not found' }, { status: 404 }) }
     }
+
     throw err
   }
+
   if (allowedPools !== null && !isJobOwnedByTenantPools(job, allowedPools)) {
     // Don't leak the existence of foreign jobs — same 404 shape as a
     // truly missing job so probing is no more useful than guessing.
     return { error: NextResponse.json({ error: 'Job not found' }, { status: 404 }) }
   }
-  return { job, allowedPools, scope }
+
+
+return { job, allowedPools, scope }
 }
 
 export const runtime = "nodejs"
@@ -63,8 +69,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const conn = await getConnectionById(id)
 
     const owned = await loadJobForTenant(conn, id, jobId)
+
     if ('error' in owned) return owned.error
-    return NextResponse.json({ data: owned.job })
+
+return NextResponse.json({ data: owned.job })
   } catch (e: any) {
     console.error("[backup-jobs] GET Error:", e)
 
@@ -95,21 +103,28 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
     // Tenant guard: must own the job before we let any field through.
     const owned = await loadJobForTenant(conn, id, jobId)
+
     if ('error' in owned) return owned.error
+
+
     // And: if the body changes the selection (selectionMode/pool/vmid),
     // re-validate against the tenant's pools to keep them inside their
     // own vDC. Provider has no extra restriction.
     if (owned.allowedPools !== null && (body.selectionMode || body.pool || body.vmids || body.excludedVmids)) {
       const validationError = validateTenantJobBody(body, owned.allowedPools)
+
       if (validationError) {
         return NextResponse.json({ error: validationError }, { status: 403 })
       }
     }
+
+
     // Same guard on infra fields: storage / node / fleecingStorage /
     // namespace can each move the job out of the tenant's vDC if not
     // pinned, so re-validate any field the body actually carries.
     if (owned.allowedPools !== null && owned.scope !== null) {
       const infraError = validateTenantJobInfra(body, owned.scope, id)
+
       if (infraError) {
         return NextResponse.json({ error: infraError }, { status: 403 })
       }
@@ -213,12 +228,14 @@ export async function PUT(req: Request, ctx: RouteContext) {
     // Retention (prune-backups)
     if (!body.keepAll) {
       const parts: string[] = []
+
       if (body.keepLast) parts.push(`keep-last=${body.keepLast}`)
       if (body.keepHourly) parts.push(`keep-hourly=${body.keepHourly}`)
       if (body.keepDaily) parts.push(`keep-daily=${body.keepDaily}`)
       if (body.keepWeekly) parts.push(`keep-weekly=${body.keepWeekly}`)
       if (body.keepMonthly) parts.push(`keep-monthly=${body.keepMonthly}`)
       if (body.keepYearly) parts.push(`keep-yearly=${body.keepYearly}`)
+
       if (parts.length > 0) {
         params.set('prune-backups', parts.join(','))
       }
@@ -240,6 +257,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
     if (body.fleecing) {
       const fleeceParts = ['enabled=1']
+
       if (body.fleecingStorage) fleeceParts.push(`storage=${body.fleecingStorage}`)
       params.set('fleecing', fleeceParts.join(','))
     }
@@ -291,6 +309,7 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     const conn = await getConnectionById(id)
 
     const owned = await loadJobForTenant(conn, id, jobId)
+
     if ('error' in owned) return owned.error
 
     await pveFetch<any>(conn, `/cluster/backup/${encodeURIComponent(jobId)}`, {
@@ -335,6 +354,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       // Note: Proxmox n'a pas d'endpoint direct pour ça, on doit utiliser vzdump
       // avec les mêmes paramètres que le job
       const owned = await loadJobForTenant(conn, id, jobId)
+
       if ('error' in owned) return owned.error
       const job = owned.job
 

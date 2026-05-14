@@ -17,8 +17,10 @@ export interface PveVmCreateParams {
   machine: string
   boot: string
   agent: string
+
   // Network
   net0: string
+
   // EFI disk (only if firmware=efi)
   efidisk0?: string
 }
@@ -37,7 +39,8 @@ function mapOsType(guestId: string, guestOS: string): string {
       id.includes("linux") || id.includes("sles") || id.includes("fedora") || id.includes("oracle") ||
       name.includes("linux") || name.includes("ubuntu") || name.includes("debian")) return "l26"
   if (id.includes("freebsd") || name.includes("freebsd")) return "other"
-  return "l26"
+
+return "l26"
 }
 
 /** Map ESXi NIC type to Proxmox network model */
@@ -54,7 +57,9 @@ function mapNicModel(nicType: string): string {
 export function isWindowsVm(config: EsxiVmConfig): boolean {
   const id = (config.guestId || "").toLowerCase()
   const name = (config.guestOS || "").toLowerCase()
-  return id.includes("windows") || id.includes("win") || name.includes("windows")
+
+
+return id.includes("windows") || id.includes("win") || name.includes("windows")
 }
 
 /**

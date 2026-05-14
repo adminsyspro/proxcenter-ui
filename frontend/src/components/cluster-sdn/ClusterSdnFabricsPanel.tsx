@@ -27,9 +27,11 @@ export default function ClusterSdnFabricsPanel({ connId }: Props) {
   const fetchFabrics = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/connections/${connId}/sdn/fabrics`, { cache: 'no-store' })
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setState(body.data ?? {})
     } catch (e: any) {

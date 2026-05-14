@@ -14,6 +14,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -22,7 +23,8 @@ export async function GET(req: Request, ctx: Ctx) {
     return NextResponse.json({ data })
   } catch (e: any) {
     console.error('Error fetching network interface:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -32,6 +34,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -39,6 +42,8 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     const params = new URLSearchParams()
     const type = body.type
+
+
     // Required field
     params.append('type', type)
 
@@ -51,6 +56,7 @@ export async function PUT(req: Request, ctx: Ctx) {
       delete body.address
       delete body.netmask
     }
+
     if (ipv6IsCidr) {
       body.cidr6 = body.address6
       delete body.address6
@@ -66,6 +72,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     // Type-specific fields
     // Note: bridge_stp and bridge_fd are NOT accepted by the PVE API PUT endpoint
     const bridgeFields = ['bridge_ports', 'bridge_vlan_aware']
+
     // PVE uses mixed naming: bond_mode (underscore), bond-primary (hyphen), bond_xmit_hash_policy (underscore)
     const bondFields = ['bond_mode', 'bond-primary', 'bond_xmit_hash_policy', 'slaves']
     const vlanFields = ['vlan-id', 'vlan-raw-device']
@@ -94,6 +101,7 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     for (const f of fields) {
       if (body[f] === undefined || body[f] === '') continue
+
       if (booleanFields.includes(f)) {
         params.append(f, body[f] ? '1' : '0')
       } else {
@@ -109,7 +117,8 @@ export async function PUT(req: Request, ctx: Ctx) {
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Error updating network interface:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
 
@@ -119,6 +128,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_NETWORK, "node", resourceId)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -130,6 +140,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('Error deleting network interface:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

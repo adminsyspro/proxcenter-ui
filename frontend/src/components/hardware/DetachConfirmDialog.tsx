@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -29,6 +30,7 @@ export function DetachConfirmDialog({ open, diskId, onClose, onConfirm }: Detach
   const handleConfirm = async () => {
     setWorking(true)
     setError(null)
+
     try {
       await onConfirm()
       onClose()

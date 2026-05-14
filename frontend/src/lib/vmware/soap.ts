@@ -9,6 +9,7 @@ export interface SoapSession {
   baseUrl: string
   cookie: string
   insecureTLS: boolean
+
   // Dynamic MORs from ServiceContent (discovered via RetrieveServiceContent)
   sessionManager: string    // "ha-sessionmgr" on ESXi, "SessionManager" on vCenter
   propertyCollector: string  // "ha-property-collector" on ESXi, "propertyCollector" on vCenter
@@ -38,8 +39,10 @@ export async function soapRetrieveServiceContent(
 </soapenv:Envelope>`
 
   const result = await soapRequest(baseUrl, body, "", insecureTLS)
+
   if (result.text.includes("faultstring") && !result.text.includes("returnval")) {
     const fault = result.text.match(/<faultstring>([^<]*)<\/faultstring>/)?.[1] || "Unknown error"
+
     throw new Error(`RetrieveServiceContent failed: ${fault}`)
   }
 
@@ -71,17 +74,24 @@ export async function soapRequest(
     body,
     signal: AbortSignal.timeout(timeoutMs),
   }
+
   if (insecureTLS) {
     opts.dispatcher = new (await import("undici")).Agent({ connect: { rejectUnauthorized: false } })
   }
+
   const res = await fetch(`${baseUrl}/sdk`, opts)
   const text = await res.text()
+
   if (!res.ok && !text.includes("returnval")) {
     const fault = text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1]
+
     throw new Error(`SOAP error ${res.status}: ${fault || text.substring(0, 500)}`)
   }
+
   const rawCookie = res.headers.get("set-cookie") || ""
-  return { text, cookie: rawCookie.split(";")[0] || "" }
+
+
+return { text, cookie: rawCookie.split(";")[0] || "" }
 }
 
 /** Login via SOAP and return a SoapSession */
@@ -110,11 +120,15 @@ export async function soapLogin(
 </soapenv:Envelope>`
 
   const result = await soapRequest(baseUrl, loginBody, "", insecureTLS)
+
   if (result.text.includes("InvalidLogin") || (result.text.includes("faultstring") && !result.text.includes("returnval"))) {
     const fault = result.text.match(/<faultstring>([^<]*)<\/faultstring>/)?.[1] || "Authentication failed"
+
     throw new Error(`VMware login failed: ${fault}`)
   }
-  return {
+
+
+return {
     baseUrl,
     cookie: result.cookie || "",
     insecureTLS,
@@ -131,6 +145,7 @@ export async function soapLogout(session: SoapSession): Promise<void> {
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body><urn:Logout><urn:_this type="SessionManager">${session.sessionManager}</urn:_this></urn:Logout></soapenv:Body>
 </soapenv:Envelope>`
+
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
@@ -139,7 +154,9 @@ export function extractProp(xml: string, propName: string): string {
   const regex = new RegExp(
     `<propSet>\\s*<name>${propName.replaceAll(".", "\\.")}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>\\s*</propSet>`
   )
-  return regex.exec(xml)?.[1] || ""
+
+
+return regex.exec(xml)?.[1] || ""
 }
 
 /** Get full VM config via SOAP PropertyCollector */
@@ -183,10 +200,13 @@ export async function soapGetVmConfig(session: SoapSession, vmid: string): Promi
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, retrieveBody, session.cookie, session.insecureTLS)
+
   if (result.text.includes("ManagedObjectNotFound")) {
     throw new Error("VM not found on ESXi host")
   }
-  return result.text
+
+
+return result.text
 }
 
 /** Power off a VM via SOAP */
@@ -201,8 +221,10 @@ export async function soapPowerOffVm(session: SoapSession, vmid: string): Promis
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring") && !result.text.includes("InvalidPowerState")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+
     throw new Error(`Failed to power off VM: ${fault}`)
   }
 
@@ -210,8 +232,10 @@ export async function soapPowerOffVm(session: SoapSession, vmid: string): Promis
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 2000))
     const xml = await soapGetVmConfig(session, vmid)
+
     if (extractProp(xml, "runtime.powerState") === "poweredOff") return
   }
+
   throw new Error("VM did not power off within 60s")
 }
 
@@ -231,17 +255,21 @@ export async function soapCreateSnapshot(session: SoapSession, vmid: string, nam
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+
     throw new Error(`Failed to create snapshot: ${fault}`)
   }
 
   // Extract task MOR and wait for completion
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+
   if (!taskMor) throw new Error("No task returned from CreateSnapshot_Task")
 
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000))
+
     const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -255,17 +283,24 @@ export async function soapCreateSnapshot(session: SoapSession, vmid: string, nam
     </urn:RetrievePropertiesEx>
   </soapenv:Body>
 </soapenv:Envelope>`
+
     const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+
     if (status.text.includes("success")) {
       // Extract snapshot MOR from result
       const snapMor = status.text.match(/<val[^>]*type="VirtualMachineSnapshot"[^>]*>([^<]+)<\/val>/)?.[1] || ""
-      return snapMor
+
+
+return snapMor
     }
+
     if (status.text.includes("error")) {
       const fault = status.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Unknown error"
+
       throw new Error(`Snapshot creation failed: ${fault}`)
     }
   }
+
   throw new Error("Snapshot creation timed out after 120s")
 }
 
@@ -282,17 +317,21 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+
     throw new Error(`Failed to remove snapshots: ${fault}`)
   }
 
   // Wait for task completion
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+
   if (!taskMor) return
 
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000))
+
     const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -306,7 +345,9 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
     </urn:RetrievePropertiesEx>
   </soapenv:Body>
 </soapenv:Envelope>`
+
     const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+
     if (status.text.includes("success") || status.text.includes("error")) return
   }
 }
@@ -334,9 +375,12 @@ export async function soapGetSnapshotQuiesced(session: SoapSession, snapshotMor:
     </urn:RetrievePropertiesEx>
   </soapenv:Body>
 </soapenv:Envelope>`
+
   try {
     const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
-    return /<val[^>]*>true<\/val>/i.test(result.text)
+
+
+return /<val[^>]*>true<\/val>/i.test(result.text)
   } catch {
     return false
   }
@@ -361,17 +405,21 @@ export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: stri
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
+
     throw new Error(`Failed to remove snapshot ${snapshotMor}: ${fault}`)
   }
 
   // Wait for task completion (up to 2 min: merging a large delta can be slow)
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+
   if (!taskMor) return
 
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000))
+
     const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -385,7 +433,9 @@ export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: stri
     </urn:RetrievePropertiesEx>
   </soapenv:Body>
 </soapenv:Envelope>`
+
     const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+
     if (status.text.includes("success") || status.text.includes("error")) return
   }
 }
@@ -412,13 +462,18 @@ export async function soapExportVm(session: SoapSession, vmid: string): Promise<
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+
     throw new Error(`ExportVm failed: ${fault}`)
   }
+
   const leaseMor = result.text.match(/<returnval type="HttpNfcLease">([^<]+)<\/returnval>/)?.[1]
+
   if (!leaseMor) throw new Error("ExportVm did not return an NFC lease")
-  return leaseMor
+
+return leaseMor
 }
 
 /**
@@ -439,13 +494,18 @@ export async function soapExportSnapshot(session: SoapSession, snapshotMor: stri
 </soapenv:Envelope>`
 
   const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+
   if (result.text.includes("faultstring")) {
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || result.text.substring(0, 500)
+
     throw new Error(`ExportSnapshot failed: ${fault}`)
   }
+
   const leaseMor = result.text.match(/<returnval type="HttpNfcLease">([^<]+)<\/returnval>/)?.[1]
+
   if (!leaseMor) throw new Error("ExportSnapshot did not return an NFC lease")
-  return leaseMor
+
+return leaseMor
 }
 
 /** Wait for an NFC lease to become ready and return device download URLs */
@@ -454,6 +514,7 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
 
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 2000))
+
     const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -482,6 +543,7 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
 
     if (state === "error") {
       const errorMsg = result.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Unknown lease error"
+
       throw new Error(`NFC lease error: ${errorMsg}`)
     }
 
@@ -491,6 +553,7 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
       const infoXml = result.text
       const deviceRegex = /<deviceUrl>([\s\S]*?)<\/deviceUrl>/g
       let match
+
       while ((match = deviceRegex.exec(infoXml)) !== null) {
         const d = match[1]
         const url = d.match(/<url>([^<]*)<\/url>/)?.[1] || ""
@@ -510,10 +573,14 @@ export async function soapWaitForNfcLease(session: SoapSession, leaseMor: string
           })
         }
       }
-      return devices
+
+
+return devices
     }
+
     // state === "initializing" — keep polling
   }
+
   throw new Error("NFC lease did not become ready within 60s")
 }
 
@@ -528,6 +595,7 @@ export async function soapNfcLeaseProgress(session: SoapSession, leaseMor: strin
     </urn:HttpNfcLeaseProgress>
   </soapenv:Body>
 </soapenv:Envelope>`
+
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
@@ -541,6 +609,7 @@ export async function soapNfcLeaseComplete(session: SoapSession, leaseMor: strin
     </urn:HttpNfcLeaseComplete>
   </soapenv:Body>
 </soapenv:Envelope>`
+
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
@@ -557,6 +626,7 @@ export async function soapNfcLeaseAbort(session: SoapSession, leaseMor: string, 
     </urn:HttpNfcLeaseAbort>
   </soapenv:Body>
 </soapenv:Envelope>`
+
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
@@ -588,6 +658,7 @@ export interface EsxiVmConfig {
   firmware: string // "bios" | "efi"
   uuid: string
   vmxVersion: string
+
   /**
    * VMX file path as stored by vSphere. Format: "[Datastore] folder/VmName.vmx".
    * Used by the direct-ESXi virt-v2v pipeline (`-i vmx -it ssh`) to locate the
@@ -599,6 +670,7 @@ export interface EsxiVmConfig {
   disks: EsxiDiskInfo[]
   nics: EsxiNicInfo[]
   snapshotCount: number
+
   /**
    * VMware Tools status as reported by vCenter. Used to preflight live
    * migrations of Windows guests: without running Tools, VSS can't quiesce
@@ -606,6 +678,7 @@ export interface EsxiVmConfig {
    * Possible values: "toolsOk", "toolsOld", "toolsNotRunning", "toolsNotInstalled".
    */
   toolsStatus?: string
+
   /** "guestToolsRunning" | "guestToolsNotRunning" | "guestToolsExecutingScripts". */
   toolsRunningStatus?: string
 }
@@ -637,29 +710,40 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   const controllerKeyMap = new Map<number, string>()
   const scsiCtrlRegex = /xsi:type="Virtual(?:LSILogic|BusLogic|ParaVirtual|LSILogicSAS)(?:Controller)?">([\s\S]*?)(?=<VirtualDevice|$)/g
   let ctrlMatch
+
   while ((ctrlMatch = scsiCtrlRegex.exec(devicesXml)) !== null) {
     const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+
     if (key) controllerKeyMap.set(key, "scsi")
   }
+
   const sataCtrlRegex = /xsi:type="VirtualAHCIController">([\s\S]*?)(?=<VirtualDevice|$)/g
+
   while ((ctrlMatch = sataCtrlRegex.exec(devicesXml)) !== null) {
     const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+
     if (key) controllerKeyMap.set(key, "sata")
   }
+
   const ideCtrlRegex = /xsi:type="VirtualIDEController">([\s\S]*?)(?=<VirtualDevice|$)/g
+
   while ((ctrlMatch = ideCtrlRegex.exec(devicesXml)) !== null) {
     const key = Number.parseInt(ctrlMatch[1].match(/<key>(\d+)<\/key>/)?.[1] || "0", 10)
+
     if (key) controllerKeyMap.set(key, "ide")
   }
 
   const disks: EsxiDiskInfo[] = []
   const diskRegex = /xsi:type="VirtualDisk">([\s\S]*?)(?=<VirtualDevice|$)/g
   let diskMatch
+
   while ((diskMatch = diskRegex.exec(devicesXml)) !== null) {
     const d = diskMatch[1]
     const label = d.match(/<label>([^<]*)<\/label>/)?.[1] || ""
+
     const capacityBytes = Number.parseInt(d.match(/<capacityInBytes>(\d+)<\/capacityInBytes>/)?.[1] || "0", 10) ||
       (Number.parseInt(d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1] || "0", 10) * 1024)
+
     const fileName = d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || ""
     const thinProvisioned = d.includes("<thinProvisioned>true</thinProvisioned>")
 
@@ -678,11 +762,14 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   // NICs
   const nics: EsxiNicInfo[] = []
   const nicTypes = ["Vmxnet3", "E1000e", "E1000", "Vmxnet2", "Vmxnet"]
+
   for (const nicType of nicTypes) {
     const nicRegex = new RegExp(`xsi:type="Virtual${nicType}">([\\s\\S]*?)(?=<VirtualDevice|$)`, "g")
     let nicMatch
+
     while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
       const n = nicMatch[1]
+
       nics.push({
         label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
         type: nicType,
@@ -706,6 +793,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     extractProp(xml, "guest.toolsStatus") ||
     extractProp(xml, "summary.guest.toolsStatus") ||
     undefined
+
   const toolsRunningStatus =
     extractProp(xml, "guest.toolsRunningStatus") ||
     extractProp(xml, "summary.guest.toolsRunningStatus") ||
@@ -731,12 +819,16 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
 export function buildVmdkDownloadUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
   const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
   const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
-  return `https://${host}/folder/${encodeURIComponent(flatPath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
+
+
+return `https://${host}/folder/${encodeURIComponent(flatPath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
 }
 
 export function buildVmdkDescriptorUrl(esxiBaseUrl: string, disk: EsxiDiskInfo, dcPath = "ha-datacenter"): string {
   const host = esxiBaseUrl.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-  return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
+
+
+return `https://${host}/folder/${encodeURIComponent(disk.relativePath).replaceAll("%2F", "/")}?dcPath=${encodeURIComponent(dcPath)}&dsName=${encodeURIComponent(disk.datastoreName)}`
 }
 
 // -- VM listing via SOAP (works on both ESXi and vCenter) --
@@ -752,12 +844,14 @@ export interface VmwareVmSummary {
   committedStorage: number
   uncommittedStorage: number
   template: boolean
+
   /**
    * vCenter only: ManagedObjectReference of the HostSystem currently running this VM.
    * Empty string on standalone ESXi (no inventory hierarchy above the host).
    * Used by soapResolveHostInventoryPaths() to compute the libvirt vpx URI for virt-v2v.
    */
   hostMor: string
+
   /**
    * VMware Tools install + running state, when reported by vCenter.
    * Used by the migration modal to preflight Live migrations: VSS quiesce
@@ -773,12 +867,16 @@ export interface VmwareVmSummary {
  * Used to build the libvirt vpx URI: vpx://USER@VCENTER/{datacenter}/host[/cluster]/{host}
  */
 export interface VmwareHostInventoryPath {
+
   /** Datacenter name (vCenter inventory). */
   datacenter: string
+
   /** Cluster name when the host is part of a ClusterComputeResource; null for standalone hosts. */
   cluster: string | null
+
   /** ESX/ESXi hostname as registered in vCenter (typically the FQDN). */
   host: string
+
   /**
    * Runtime health aggregate for the host, derived from its connectionState
    * and powerState. Used by the UI to render a status pastille in the tree:
@@ -788,8 +886,10 @@ export interface VmwareHostInventoryPath {
    * "unknown" is returned when vCenter didn't expose the fields.
    */
   status: "ok" | "warn" | "crit" | "unknown"
+
   /** Raw connectionState from vCenter (connected, notResponding, disconnected). */
   connectionState?: string
+
   /** Raw powerState from vCenter (poweredOn, poweredOff, standby). */
   powerState?: string
 }
@@ -820,6 +920,7 @@ export async function soapListVMs(
 
   const viewResult = await soapRequest(session.baseUrl, createViewBody, session.cookie, session.insecureTLS)
   const viewRef = viewResult.text.match(/<returnval type="ContainerView">([^<]+)<\/returnval>/)?.[1]
+
   if (!viewRef) return []
 
   // Step 2: RetrievePropertiesEx with TraversalSpec through the ContainerView
@@ -881,6 +982,7 @@ export async function soapListVMs(
     </urn:DestroyView>
   </soapenv:Body>
 </soapenv:Envelope>`
+
   soapRequest(session.baseUrl, destroyBody, session.cookie, session.insecureTLS).catch(() => {})
 
   // Step 3: Parse the response into VM summaries
@@ -891,6 +993,7 @@ export async function soapListVMs(
   while ((match = objRegex.exec(propsResult.text)) !== null) {
     const block = match[1]
     const moId = block.match(/<obj type="VirtualMachine">([^<]+)<\/obj>/)?.[1] || ""
+
     if (!moId) continue
 
     let name = ""
@@ -921,19 +1024,23 @@ export async function soapListVMs(
         case "config.hardware.numCPU": cpu = Number.parseInt(propVal, 10) || 0; break
         case "config.hardware.memoryMB": memoryMB = Number.parseInt(propVal, 10) || 0; break
         case "config.template": template = propVal === "true"; break
+
         case "storage.perDatastoreUsage": {
           const c = propVal.match(/<committed>(\d+)<\/committed>/)
           const u = propVal.match(/<uncommitted>(\d+)<\/uncommitted>/)
+
           if (c) committedStorage += Number.parseInt(c[1], 10) || 0
           if (u) uncommittedStorage += Number.parseInt(u[1], 10) || 0
           break
         }
+
         case "runtime.host": {
           // <val type="HostSystem">host-22</val>; the inner text IS the MOR id.
           // Standalone ESXi sessions return an empty/"ha-host" value which we ignore later.
           hostMor = propVal.trim()
           break
         }
+
         case "guest.toolsStatus":
         case "summary.guest.toolsStatus":
           if (!toolsStatus) toolsStatus = propVal
@@ -980,8 +1087,10 @@ function xmlEscape(s: string): string {
 }
 
 interface PropValue {
+
   /** Inner text of <val>...</val>, trimmed. */
   value: string
+
   /** The xsi:type-style attribute on the val element (present for ManagedObjectReference values). */
   refType?: string
 }
@@ -1001,11 +1110,13 @@ async function soapBatchProps(
   paths: string[],
 ): Promise<Map<string, Record<string, PropValue>>> {
   const out = new Map<string, Record<string, PropValue>>()
+
   if (mors.length === 0) return out
 
   const objSpecs = mors
     .map(mor => `<urn:objectSet><urn:obj type="${xmlEscape(baseType)}">${xmlEscape(mor)}</urn:obj></urn:objectSet>`)
     .join("")
+
   const pathTags = paths.map(p => `<urn:pathSet>${xmlEscape(p)}</urn:pathSet>`).join("")
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1033,23 +1144,30 @@ async function soapBatchProps(
   for (const objBlock of result.text.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
     const block = objBlock[1]
     const morMatch = block.match(/<obj\b[^>]*>([^<]+)<\/obj>/)
+
     if (!morMatch) continue
     const mor = morMatch[1].trim()
 
     const props: Record<string, PropValue> = {}
+
     for (const pm of block.matchAll(/<propSet>\s*<name>([^<]+)<\/name>\s*<val\b([^>]*)>([\s\S]*?)<\/val>\s*<\/propSet>/g)) {
       const name = pm[1]
       const attrs = pm[2] || ""
       const value = pm[3].trim()
+
       // ManagedObjectReference vals carry BOTH xsi:type="ManagedObjectReference"
       // (the schema type) and type="HostSystem" (the MOR target type). We want the
       // latter, so the lookbehind skips colon-prefixed attribute names like xsi:type.
       const typeAttr = attrs.match(/(?<![\w:])type=(?:"([^"]*)"|'([^']*)')/)
+
       props[name] = { value, refType: typeAttr ? (typeAttr[1] || typeAttr[2]) : undefined }
     }
+
     out.set(mor, props)
   }
-  return out
+
+
+return out
 }
 
 /**
@@ -1069,9 +1187,11 @@ export async function soapResolveHostInventoryPaths(
   hostMors: string[],
 ): Promise<Map<string, VmwareHostInventoryPath>> {
   const out = new Map<string, VmwareHostInventoryPath>()
+
   if (!session.isVcenter) return out
 
   const uniqueHosts = [...new Set(hostMors.filter(m => m && m !== "ha-host"))]
+
   if (uniqueHosts.length === 0) return out
 
   // Step 1: HostSystem -> { name, parent (CR or CCR), connectionState, powerState }.
@@ -1083,6 +1203,7 @@ export async function soapResolveHostInventoryPaths(
     "runtime.connectionState",
     "runtime.powerState",
   ])
+
   console.log(`[soapResolveHostInventoryPaths] step1 HostSystem (${uniqueHosts.length} unique hosts requested):`,
     JSON.stringify([...hostProps.entries()].map(([k, v]) => [k, { name: v.name?.value, parent: v.parent }])))
 
@@ -1091,12 +1212,16 @@ export async function soapResolveHostInventoryPaths(
   // base type returns both kinds; the actual subtype lives on the <obj> element and
   // is preserved in the parent PropValue.refType from step 1.
   const parentByHost = new Map<string, { mor: string; type: string }>()
+
   for (const [hostMor, props] of hostProps) {
     const p = props["parent"]
+
     if (p?.value && p.refType) parentByHost.set(hostMor, { mor: p.value, type: p.refType })
   }
+
   const uniqueParents = [...new Set([...parentByHost.values()].map(p => p.mor))]
   const parentProps = await soapBatchProps(session, "ComputeResource", uniqueParents, ["name", "parent"])
+
   console.log(`[soapResolveHostInventoryPaths] step2 ComputeResource (${uniqueParents.length} unique parents):`,
     JSON.stringify([...parentProps.entries()].map(([k, v]) => [k, { name: v.name?.value, parent: v.parent }])))
 
@@ -1104,24 +1229,31 @@ export async function soapResolveHostInventoryPaths(
   // We assume the folder's parent IS the datacenter; nested host folders are uncommon
   // in practice. If we hit one we'll return a partial path and skip the host.
   const folderByParent = new Map<string, string>()
+
   for (const [parentMor, props] of parentProps) {
     const p = props["parent"]
+
     if (p?.value) folderByParent.set(parentMor, p.value)
   }
+
   const uniqueFolders = [...new Set(folderByParent.values())]
   const folderProps = await soapBatchProps(session, "Folder", uniqueFolders, ["parent"])
+
   console.log(`[soapResolveHostInventoryPaths] step3 Folder (${uniqueFolders.length} unique folders):`,
     JSON.stringify([...folderProps.entries()].map(([k, v]) => [k, { parent: v.parent }])))
 
   const dcByFolder = new Map<string, string>()
+
   for (const [folderMor, props] of folderProps) {
     const p = props["parent"]
+
     if (p?.value && p.refType === "Datacenter") dcByFolder.set(folderMor, p.value)
   }
 
   // Step 4: resolve datacenter names.
   const uniqueDcs = [...new Set(dcByFolder.values())]
   const dcProps = await soapBatchProps(session, "Datacenter", uniqueDcs, ["name"])
+
   console.log(`[soapResolveHostInventoryPaths] step4 Datacenter (${uniqueDcs.length} unique DCs):`,
     JSON.stringify([...dcProps.entries()].map(([k, v]) => [k, { name: v.name?.value }])))
 
@@ -1129,20 +1261,26 @@ export async function soapResolveHostInventoryPaths(
   for (const hostMor of uniqueHosts) {
     const hp = hostProps.get(hostMor)
     const hostName = hp?.["name"]?.value
+
     if (!hostName) continue
 
     const parentInfo = parentByHost.get(hostMor)
+
     if (!parentInfo) continue
     const pp = parentProps.get(parentInfo.mor)
+
     if (!pp) continue
     const isCluster = parentInfo.type === "ClusterComputeResource"
     const clusterName = pp["name"]?.value || null
 
     const folderMor = folderByParent.get(parentInfo.mor)
+
     if (!folderMor) continue
     const dcMor = dcByFolder.get(folderMor)
+
     if (!dcMor) continue
     const dcName = dcProps.get(dcMor)?.["name"]?.value
+
     if (!dcName) continue
 
     // Derive an aggregate health status from vCenter's connection + power state.
@@ -1151,6 +1289,7 @@ export async function soapResolveHostInventoryPaths(
     const connectionState = hp?.["runtime.connectionState"]?.value
     const powerState = hp?.["runtime.powerState"]?.value
     let status: "ok" | "warn" | "crit" | "unknown" = "unknown"
+
     if (!connectionState && !powerState) {
       status = "unknown"
     } else if (connectionState === "disconnected" || powerState === "poweredOff") {

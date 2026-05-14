@@ -18,11 +18,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     // Relaxed from ALERTS_MANAGE; ownership is verified per-rule below.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
@@ -30,6 +32,7 @@ export async function POST(
     // Visibility derives from alert_rule_owners — same scoping as the
     // [id] GET/PUT/DELETE route. 404 on mismatch to avoid existence leak.
     const tenantId = await getCurrentTenantId()
+
     if (!(await ruleVisibleToTenant(id, tenantId))) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }

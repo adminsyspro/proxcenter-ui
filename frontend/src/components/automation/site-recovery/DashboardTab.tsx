@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -9,6 +10,7 @@ import {
 } from '@mui/material'
 
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, Legend, CartesianGrid } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import EmptyState from '@/components/EmptyState'
@@ -55,6 +57,7 @@ const KPICard = ({ icon, label, value, subtitle, color = 'default' }: {
   color?: 'default' | 'primary' | 'success' | 'error' | 'warning'
 }) => {
   const theme = useTheme()
+
   const colorMap: Record<string, string> = {
     default: theme.palette.text.primary,
     primary: theme.palette.primary.main,
@@ -62,6 +65,7 @@ const KPICard = ({ icon, label, value, subtitle, color = 'default' }: {
     error: theme.palette.error.main,
     warning: theme.palette.warning.main
   }
+
   const bgMap: Record<string, string> = {
     default: alpha(theme.palette.text.primary, 0.04),
     primary: alpha(theme.palette.primary.main, 0.08),
@@ -103,6 +107,7 @@ const KPICard = ({ icon, label, value, subtitle, color = 'default' }: {
 
 const RPOGauge = ({ compliance, t }: { compliance: number; t: any }) => {
   const theme = useTheme()
+
   const color = compliance >= 90
     ? theme.palette.success.main
     : compliance >= 60
@@ -256,6 +261,7 @@ const ProtectionCoverage = ({ protectedVMs, unprotectedVMs, t }: {
 
 const ActivityItem = ({ activity }: { activity: ReplicationActivity }) => {
   const theme = useTheme()
+
   const iconMap: Record<string, string> = {
     sync: 'ri-refresh-line',
     failover: 'ri-shield-star-line',
@@ -264,6 +270,7 @@ const ActivityItem = ({ activity }: { activity: ReplicationActivity }) => {
     job_created: 'ri-add-circle-line',
     plan_tested: 'ri-test-tube-line'
   }
+
   const colorMap: Record<string, string> = {
     info: theme.palette.info.main,
     warning: theme.palette.warning.main,
@@ -300,7 +307,9 @@ const ActivityItem = ({ activity }: { activity: ReplicationActivity }) => {
 
 function useThemePalette() {
   const theme = useTheme()
-  return useMemo(() => [
+
+
+return useMemo(() => [
     theme.palette.primary.main,
     theme.palette.success.main,
     theme.palette.warning.main,
@@ -318,7 +327,9 @@ function formatBps(bps: number): string {
   if (!bps || bps <= 0) return '0 B/s'
   const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
   const i = Math.min(Math.floor(Math.log(bps) / Math.log(1024)), units.length - 1)
-  return `${(bps / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+
+
+return `${(bps / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
 function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; name: string }[]) {
@@ -327,26 +338,33 @@ function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; n
   // Re-read localStorage every 15s
   useEffect(() => {
     const iv = setInterval(() => setTick(n => n + 1), 5_000)
-    return () => clearInterval(iv)
+
+
+return () => clearInterval(iv)
   }, [])
 
   return useMemo(() => {
     // Build connection name map
     const connMap: Record<string, string> = {}
+
     for (const c of connections || []) connMap[c.id] = c.name
 
     // Build job → cluster pair map
     const jobPairMap: Record<string, string> = {}
+
     for (const j of jobs || []) {
       const src = connMap[j.source_cluster] || j.source_cluster
       const dst = connMap[j.target_cluster] || j.target_cluster
+
       jobPairMap[j.id] = `${src} → ${dst}`
     }
 
     // Read localStorage
     let raw: Record<string, { ts: number; bps: number }[]> = {}
+
     try {
       const stored = localStorage.getItem('sr-throughput-history')
+
       if (stored) raw = JSON.parse(stored)
     } catch { /* ignore */ }
 
@@ -356,11 +374,13 @@ function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; n
 
     for (const [jobId, points] of Object.entries(raw)) {
       const pair = jobPairMap[jobId]
+
       if (!pair || !points?.length) continue
       if (!pairBuckets[pair]) pairBuckets[pair] = {}
 
       for (const p of points) {
         const bucket = Math.floor(p.ts / BUCKET_SIZE_MS) * BUCKET_SIZE_MS
+
         allBucketKeys.add(bucket)
         if (!pairBuckets[pair][bucket]) pairBuckets[pair][bucket] = { sum: 0, count: 0 }
         pairBuckets[pair][bucket].sum += p.bps
@@ -373,11 +393,15 @@ function useBandwidthData(jobs?: ReplicationJob[], connections?: { id: string; n
 
     const chartData = sortedBuckets.map(bucket => {
       const row: Record<string, any> = { time: bucket }
+
       for (const pair of seriesKeys) {
         const b = pairBuckets[pair]?.[bucket]
+
         row[pair] = b ? Math.round(b.sum / b.count) : 0
       }
-      return row
+
+
+return row
     })
 
     return { chartData, seriesKeys }
@@ -428,7 +452,9 @@ const BandwidthChart = ({ jobs, connections, t }: {
                   domain={['dataMin', 'dataMax']}
                   tickFormatter={(ts: number) => {
                     const d = new Date(ts)
-                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+
+
+return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
                   }}
                   tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
                   stroke={theme.palette.divider}
@@ -449,7 +475,9 @@ const BandwidthChart = ({ jobs, connections, t }: {
                   }}
                   labelFormatter={(ts: number) => {
                     const d = new Date(ts)
-                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+
+
+return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
                   }}
                   formatter={(value: number) => [formatBps(value), undefined]}
                 />
@@ -484,11 +512,15 @@ const BandwidthChart = ({ jobs, connections, t }: {
 
 const SiteEndpoint = ({ site, t }: { site: SiteInfo; t: any }) => {
   const theme = useTheme()
+
   const statusColor = site.status === 'online' ? theme.palette.success.main
     : site.status === 'degraded' ? theme.palette.warning.main
       : theme.palette.error.main
+
   const roleLabel = site.role === 'primary' ? t('siteRecovery.dashboard.primarySite') : t('siteRecovery.dashboard.drSite')
-  return (
+
+
+return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, textAlign: 'center' }}>
       <Box sx={{ position: 'relative', display: 'inline-flex' }}>
         <img src='/images/ceph-logo.svg' alt='Ceph' width={36} height={36} />
@@ -535,14 +567,17 @@ const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
   const errors = jobs.filter(j => j.status === 'error')
   const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
   let latestSync: number | null = null
+
   for (const j of jobs) {
     if (j.last_sync) {
       const ts = new Date(j.last_sync).getTime()
+
       if (latestSync === null || ts > latestSync) latestSync = ts
     }
   }
 
   const pairState = errors.length > 0 ? 'error' : syncing.length > 0 ? 'syncing' : 'idle'
+
   const linkColor = pairState === 'error' ? theme.palette.error.main
     : pairState === 'syncing' ? theme.palette.primary.main
       : theme.palette.success.main
@@ -552,7 +587,9 @@ const PairRow = ({ source, target, jobs, sitesMap, connectionsMap, t }: {
       : site.status === 'online' ? theme.palette.success.main
       : site.status === 'degraded' ? theme.palette.warning.main
       : theme.palette.error.main
-    return c
+
+
+return c
   }
 
   return (
@@ -624,25 +661,33 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
   // Detect source→target pairs from jobs (a "replication couple")
   const pairs = useMemo(() => {
     const map = new Map<string, { source: string; target: string; jobs: ReplicationJob[] }>()
+
     for (const j of (jobs || [])) {
       if (!j.source_cluster || !j.target_cluster) continue
       const key = `${j.source_cluster}::${j.target_cluster}`
+
       if (!map.has(key)) map.set(key, { source: j.source_cluster, target: j.target_cluster, jobs: [] })
       map.get(key)!.jobs.push(j)
     }
-    return Array.from(map.values())
+
+
+return Array.from(map.values())
   }, [jobs])
 
   const sitesMap = useMemo(() => {
     const m = new Map<string, SiteInfo>()
+
     for (const s of (sites || [])) m.set(s.cluster_id, s)
-    return m
+
+return m
   }, [sites])
 
   const connectionsMap = useMemo(() => {
     const m = new Map<string, string>()
+
     for (const c of (connections || [])) m.set(c.id, c.name)
-    return m
+
+return m
   }, [connections])
 
   // Aggregated link stats across syncing jobs (used by the single-pair view below)
@@ -651,13 +696,17 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
     const syncing = list.filter(j => j.status === 'syncing')
     const totalBps = syncing.reduce((sum, j) => sum + (j.throughput_bps || 0), 0)
     let latestSync: number | null = null
+
     for (const j of list) {
       if (j.last_sync) {
         const ts = new Date(j.last_sync).getTime()
+
         if (latestSync === null || ts > latestSync) latestSync = ts
       }
     }
-    return {
+
+
+return {
       activeCount: syncing.length,
       totalJobs: list.length,
       totalBps,
@@ -671,7 +720,9 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
   // Compact pair-by-pair list when 2+ pairs exist (MSP / multi-couple scaling)
   if (pairs.length >= 2) {
     const visiblePairs = showAll ? pairs : pairs.slice(0, 5)
-    return (
+
+
+return (
       <Card variant='outlined' sx={{ borderRadius: 2 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -711,6 +762,7 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
   const linkColor = connectivity === 'connected' ? theme.palette.success.main
     : connectivity === 'degraded' ? theme.palette.warning.main
       : theme.palette.error.main
+
   const isSyncing = stats.activeCount > 0
   const animDuration = isSyncing ? 1.2 : 3
   const linkOpacity = connectivity === 'disconnected' ? 0.3 : 1
@@ -837,8 +889,10 @@ const FailedJobsWidget = ({ jobs, vmNameMap, onSyncJob, t }: {
     () => (jobs || []).filter(j => j.status === 'error').slice(0, 5),
     [jobs]
   )
+
   if (failed.length === 0) return null
-  return (
+
+return (
     <Card variant='outlined' sx={{ borderRadius: 2, borderColor: 'error.main' }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
@@ -857,10 +911,13 @@ const FailedJobsWidget = ({ jobs, vmNameMap, onSyncJob, t }: {
                 ? j.tags.map(tag => `#${tag}`).join(', ')
                 : (j.vm_ids || []).slice(0, 2).map(id => vmNameMap?.[id] || `VM ${id}`).join(', ')
             )
+
             const retryInfo = j.next_retry_at && (j.retry_count || 0) < 3
               ? t('siteRecovery.dashboard.retryIn', { in: Math.max(0, Math.round((new Date(j.next_retry_at).getTime() - Date.now()) / 1000 / 60)) })
               : null
-            return (
+
+
+return (
               <Box key={j.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant='body2' sx={{ fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

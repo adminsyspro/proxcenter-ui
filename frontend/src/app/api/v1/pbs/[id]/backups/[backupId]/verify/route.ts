@@ -24,23 +24,28 @@ export async function POST(
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
     const rawBackupId = (params as any)?.backupId
+
     if (!id || !rawBackupId) {
       return NextResponse.json({ error: 'Missing params' }, { status: 400 })
     }
 
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW, 'pbs', id)
+
     if (denied) return denied
 
     const access = await assertVdcPbsAccess(id)
+
     if (access instanceof Response) return access
 
     // Same anchor-on-the-end parsing used elsewhere — sub-namespaces have
     // '/' so a left-aligned split misassigns the type/id/time tail.
     const decoded = decodeURIComponent(rawBackupId)
     const parts = decoded.split('/')
+
     if (parts.length < 4) {
       return NextResponse.json({ error: 'Invalid backupId format' }, { status: 400 })
     }
+
     const datastore = parts[0]
     const timestamp = parts[parts.length - 1]
     const vmid = parts[parts.length - 2]
@@ -63,6 +68,7 @@ export async function POST(
       'backup-id': vmid,
       'backup-time': Number(timestamp),
     }
+
     if (ns) body.ns = ns
 
     const upid = await pbsFetch<string>(
@@ -74,6 +80,7 @@ export async function POST(
     return NextResponse.json({ data: upid, success: true })
   } catch (e: any) {
     console.error('PBS verify error:', e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

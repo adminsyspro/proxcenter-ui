@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
@@ -21,7 +22,7 @@ function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme 
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
 
- 
+
 
 return () => clearTimeout(t) }, [])
 
@@ -51,7 +52,7 @@ return () => clearTimeout(t) }, [])
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  
+
 return '#4caf50'
 }
 
@@ -61,7 +62,7 @@ function formatBytes(bytes) {
 
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)}T`
   if (gb >= 1) return `${gb.toFixed(1)}G`
-  
+
 return `${(bytes / (1024 * 1024)).toFixed(0)}M`
 }
 
@@ -71,7 +72,7 @@ function formatUptime(seconds) {
   const hours = Math.floor((seconds % 86400) / 3600)
 
   if (days > 0) return `${days}d ${hours}h`
-  
+
 return `${hours}h`
 }
 
@@ -87,7 +88,7 @@ function computeNodeScore(node) {
   const storagePct = node._storageMax > 0 ? (node._storageUsed / node._storageMax) * 100 : 0
 
   if (storagePct > 90) score -= 15; else if (storagePct > 80) score -= 8
-  
+
 return Math.max(0, Math.min(100, score))
 }
 
@@ -96,14 +97,14 @@ function formatRate(bytes) {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  
+
 return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
 function getScoreColor(score) {
   if (score >= 80) return '#4caf50'
   if (score >= 50) return '#ff9800'
-  
+
 return '#f44336'
 }
 
@@ -128,7 +129,7 @@ function buildSeries(raw) {
     out.push({ t, cpu, ram, netin: p.netin ?? 0, netout: p.netout ?? 0, iowait: p.iowait != null ? Math.round(p.iowait * 100 * 10) / 10 : 0 })
   }
 
-  
+
 return out.sort((a, b) => a.t - b.t)
 }
 
@@ -304,7 +305,7 @@ function NodeFilter({ nodes, selected, onChange }) {
           const key = `${n.connId}:${n.node || n.name}`
           const checked = allSelected || selected.includes(key)
 
-          
+
 return (
             <MenuItem key={key} dense onClick={() => handleToggle(key)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
@@ -373,7 +374,7 @@ function NodesGaugesWidget({ data, loading, config, onUpdateSettings, timeRange 
             if (Array.isArray(json)) raw = json
             else if (Array.isArray(json?.data)) raw = json.data
             else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-            
+
 return { key: `${connId}:${name}`, series: sliceToRange(buildSeries(raw), timeRange) }
           } catch { return null }
         })

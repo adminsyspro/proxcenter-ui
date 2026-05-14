@@ -13,6 +13,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function GET(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_VIEW)
+
     if (denied) return denied
 
     const { id } = await params
@@ -55,6 +56,7 @@ return NextResponse.json(
 export async function PUT(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params
@@ -123,6 +125,7 @@ return NextResponse.json(
 export async function PATCH(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params
@@ -155,6 +158,7 @@ return NextResponse.json(
 export async function DELETE(req: Request, { params }: Params) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const { id } = await params

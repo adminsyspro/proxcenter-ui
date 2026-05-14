@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -42,9 +43,10 @@ type GroupedVmsViewProps = {
 
 function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds }: GroupedVmsViewProps) {
   const t = useTranslations()
+
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  
+
   const toggleGroup = (key: string) => {
     setExpanded(prev => {
       const next = new Set(prev)
@@ -55,14 +57,14 @@ function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, on
         next.add(key)
       }
 
-      
+
 return next
     })
   }
-  
+
   const expandAll = () => setExpanded(new Set(groups.map(g => g.key)))
   const collapseAll = () => setExpanded(new Set())
-  
+
   // Convertir AllVmItem en VmRow
   const toVmRow = (vm: AllVmItem): VmRow => ({
     id: `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`,
@@ -90,16 +92,16 @@ return next
     osInfo: vm.osInfo,
     lock: vm.lock,
   })
-  
+
   return (
     <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontSize: 13 }}>
       <Card variant="outlined" sx={{ width: '100%', flex: 1, minHeight: 0, borderRadius: 0, border: 'none', display: 'flex', flexDirection: 'column' }}>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Header */}
-          <Box sx={{ 
-            px: 2, 
-            py: 1.5, 
-            borderBottom: '1px solid', 
+          <Box sx={{
+            px: 2,
+            py: 1.5,
+            borderBottom: '1px solid',
             borderColor: 'divider',
             display: 'flex',
             alignItems: 'center',
@@ -122,13 +124,13 @@ return next
               </MuiTooltip>
             </Stack>
           </Box>
-          
+
           {/* Groups */}
           <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             {groups.map(group => {
               const isExpanded = expanded.has(group.key)
               const runningCount = group.vms.filter(v => v.status === 'running').length
-              
+
               return (
                 <Box key={group.key}>
                   {/* Group Header */}
@@ -147,9 +149,9 @@ return next
                       '&:hover': { bgcolor: 'action.selected' }
                     }}
                   >
-                    <i 
-                      className={isExpanded ? 'ri-subtract-line' : 'ri-add-line'} 
-                      style={{ fontSize: 18, opacity: 0.7 }} 
+                    <i
+                      className={isExpanded ? 'ri-subtract-line' : 'ri-add-line'}
+                      style={{ fontSize: 18, opacity: 0.7 }}
                     />
                     {group.icon}
                     {group.color && (
@@ -175,7 +177,7 @@ return next
                       sx={{ height: 20, fontSize: 11 }}
                     />
                   </Box>
-                  
+
                   {/* VMs Table - seulement si expanded (les trends ne se chargent que si visible) */}
                   {isExpanded && (
                     <Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>

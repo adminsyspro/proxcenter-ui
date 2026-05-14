@@ -12,12 +12,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const blueprint = await prisma.blueprint.findUnique({ where: { id } })
+
     if (!blueprint) return NextResponse.json({ error: "Blueprint not found" }, { status: 404 })
 
     return NextResponse.json({ data: blueprint })
@@ -31,15 +34,19 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const rawBody = await req.json().catch(() => null)
+
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const parseResult = createBlueprintSchema.safeParse(rawBody)
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parseResult.error.flatten() },
@@ -63,6 +70,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
     })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "update",
       category: "templates",
@@ -83,9 +91,11 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
+
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const blueprint = await prisma.blueprint.findUnique({ where: { id }, select: { name: true } })
@@ -93,6 +103,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await prisma.blueprint.delete({ where: { id } })
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "delete",
       category: "templates",

@@ -1,10 +1,12 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
+
+import { getServerSession } from "next-auth"
+
 import { checkPermission, PERMISSIONS, isUserSuperAdmin } from "@/lib/rbac"
 import { getTenantUsers, addUserToTenant, removeUserFromTenant, TenantMembershipError, requireProviderTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -12,20 +14,26 @@ type Ctx = { params: Promise<{ id: string }> }
 // GET /api/v1/tenants/:id/users
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
   const users = await getTenantUsers(id)
-  return NextResponse.json({ data: users })
+
+
+return NextResponse.json({ data: users })
 }
 
 // POST /api/v1/tenants/:id/users — add user to tenant
 export async function POST(req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -46,6 +54,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const roleAssignId = `tenant_add_${id}_${body.userId}_${Date.now()}`
 
   const targetIsSuperAdmin = await isUserSuperAdmin(body.userId)
+
   const existingRole = await prisma.rbacUserRole.findFirst({
     where: { userId: body.userId, tenantId: id },
     select: { id: true },
@@ -82,8 +91,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 // DELETE /api/v1/tenants/:id/users — remove user from tenant
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
+
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -99,8 +110,11 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   } catch (e) {
     if (e instanceof TenantMembershipError) {
       const status = e.code === "LAST_TENANT" ? 409 : e.code === "SUPER_ADMIN_PROTECTED" ? 403 : 404
-      return NextResponse.json({ error: e.message, code: e.code }, { status })
+
+
+return NextResponse.json({ error: e.message, code: e.code }, { status })
     }
+
     throw e
   }
 

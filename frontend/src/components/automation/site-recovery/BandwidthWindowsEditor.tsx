@@ -29,6 +29,7 @@ export default function BandwidthWindowsEditor({ value, onChange, staticRateMbps
 
   const updateAt = (idx: number, patch: Partial<BandwidthWindow>) => {
     const next = value.slice()
+
     next[idx] = { ...next[idx], ...patch }
     onChange(next)
   }
@@ -37,6 +38,7 @@ export default function BandwidthWindowsEditor({ value, onChange, staticRateMbps
     const w = value[idx]
     const has = w.days.includes(day)
     const days = has ? w.days.filter(d => d !== day) : [...w.days, day].sort((a, b) => a - b)
+
     updateAt(idx, { days })
   }
 
@@ -74,7 +76,9 @@ export default function BandwidthWindowsEditor({ value, onChange, staticRateMbps
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
                 {DAY_KEYS.map((key, dayIdx) => {
                   const on = w.days.includes(dayIdx)
-                  return (
+
+
+return (
                     <Button
                       key={key}
                       size='small'

@@ -113,6 +113,7 @@ export function useVmActions({
   // Keep a ref to latest data/setData so closures always see current values
   const dataRef = useRef(data)
   const setDataRef = useRef(setData)
+
   useEffect(() => { dataRef.current = data }, [data])
   useEffect(() => { setDataRef.current = setData }, [setData])
 
@@ -120,9 +121,11 @@ export function useVmActions({
 
   const [tableMigrateVm, setTableMigrateVm] = useState<TableMigrateVm>(null)
   const [tableCloneVm, setTableCloneVm] = useState<TableCloneVm>(null)
+
   const [bulkActionDialog, setBulkActionDialog] = useState<BulkActionDialogState>({
     open: false, action: null, node: null, targetNode: '',
   })
+
   const [creationPending, setCreationPending] = useState<CreationPending>(null)
   const [highlightedVmId, setHighlightedVmId] = useState<string | null>(null)
 
@@ -293,6 +296,7 @@ export function useVmActions({
 
     const json = await res.json()
     const upid = json.data
+
     if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
       trackTask({
         upid,
@@ -432,6 +436,7 @@ export function useVmActions({
 
     const json = await res.json()
     const upid = json.data
+
     if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
       trackTask({
         upid,
@@ -465,11 +470,13 @@ export function useVmActions({
       storage: 0,
       vms: host.vms.length,
     }
+
     setBulkActionDialog({ open: true, action, node: nodeRow, targetNode: '' })
   }, [])
 
   const executeBulkAction = useCallback(async () => {
     const { action, node, targetNode } = bulkActionDialog
+
     if (!action || !node || !data?.allVms) return
 
     const nodeVms = (data.allVms as any[]).filter((vm: any) =>
@@ -479,7 +486,8 @@ export function useVmActions({
     if (nodeVms.length === 0) {
       toast.warning(t('common.noData'))
       setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })
-      return
+
+return
     }
 
     let vmsToProcess: any[] = []
@@ -505,8 +513,10 @@ export function useVmActions({
       case 'migrate-all':
         if (!targetNode) {
           toast.error(t('bulkActions.selectTargetNode'))
-          return
+
+return
         }
+
         vmsToProcess = nodeVms.filter((vm: any) => vm.status !== 'stopped' || true) // All VMs
         apiAction = 'migrate'
         description = t('bulkActions.migratingVms')
@@ -516,7 +526,8 @@ export function useVmActions({
     if (vmsToProcess.length === 0) {
       toast.info(t('common.noData'))
       setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })
-      return
+
+return
     }
 
     setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })
@@ -613,12 +624,16 @@ export function useVmActions({
               reboot: 'running', reset: 'running', suspend: 'paused',
               hibernate: 'stopped', resume: 'running',
             }
+
             if (optimisticStatus[action]) {
               onOptimisticVmStatus?.(connId, vmid, optimisticStatus[action])
+
+
               // Also update the detail panel immediately
               if (dataRef.current) {
                 const s = optimisticStatus[action]
                 const mappedStatus = (s === 'running' ? 'ok' : s === 'paused' ? 'warn' : 'crit') as any
+
                 setDataRef.current({ ...dataRef.current, status: mappedStatus, vmRealStatus: s })
               }
             }
@@ -631,6 +646,7 @@ export function useVmActions({
             }
 
             const upid = json.data
+
             if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
               trackTask({
                 upid,
@@ -657,6 +673,7 @@ export function useVmActions({
           } catch (e: any) {
             onVmActionEnd?.(connId, vmid)
             const errorMsg = e?.message || e
+
             toast.error(`${t('common.error')} (${action}): ${errorMsg}`)
           } finally {
             setConfirmActionLoading(false)
@@ -686,11 +703,14 @@ export function useVmActions({
         reboot: 'running', reset: 'running', suspend: 'paused',
         hibernate: 'stopped', resume: 'running',
       }
+
       if (optimisticStatus[action]) {
         onOptimisticVmStatus?.(connId, vmid, optimisticStatus[action])
+
         if (dataRef.current) {
           const s = optimisticStatus[action]
           const mappedStatus = (s === 'running' ? 'ok' : s === 'paused' ? 'warn' : 'crit') as any
+
           setDataRef.current({ ...dataRef.current, status: mappedStatus, vmRealStatus: s })
         }
       }
@@ -703,6 +723,7 @@ export function useVmActions({
       }
 
       const upid = json.data
+
       if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
         trackTask({
           upid,
@@ -727,6 +748,7 @@ export function useVmActions({
     } catch (e: any) {
       onVmActionEnd?.(connId, vmid)
       const errorMsg = e?.message || e
+
       toast.error(`${t('common.error')} (${action}): ${errorMsg}`)
     } finally {
       setActionBusy(false)
@@ -793,6 +815,7 @@ export function useVmActions({
             }
 
             const upid = json.data
+
             if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
               trackTask({
                 upid,
@@ -811,6 +834,7 @@ export function useVmActions({
             setConfirmAction(null)
           } catch (e: any) {
             const errorMsg = e?.message || e
+
             toast.error(`${t('common.error')} (${apiAction}): ${errorMsg}`)
           } finally {
             setConfirmActionLoading(false)
@@ -832,6 +856,7 @@ export function useVmActions({
       }
 
       const upid = json.data
+
       if (upid && typeof upid === 'string' && upid.startsWith('UPID:')) {
         trackTask({
           upid,
@@ -848,6 +873,7 @@ export function useVmActions({
       }
     } catch (e: any) {
       const errorMsg = e?.message || e
+
       toast.error(`${t('common.error')} (${apiAction}) ${vm.name}: ${errorMsg}`)
     }
   }, [onSelect, t, toast, trackTask, setConfirmAction, setConfirmActionLoading])

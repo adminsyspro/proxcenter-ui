@@ -18,18 +18,22 @@ export async function GET(_req: Request, ctx: RouteContext) {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
+
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
     const denied = await checkPermission("sdn.vnet.view")
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
+
     const row = await prisma.vdcVnet.findFirst({
       where: { vdcId, displayName, vdc: { tenantId } },
       include: { subnet: true },
     })
 
     if (!row) return NextResponse.json({ error: "VNet not found" }, { status: 404 })
+
     if (!row.subnet) {
       return NextResponse.json({ error: "VNet has no subnet — DB migration required" }, { status: 500 })
     }
@@ -71,12 +75,15 @@ export async function PUT(req: Request, ctx: RouteContext) {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
+
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
     const denied = await checkPermission("sdn.vnet.edit")
+
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))
+
     const patch: {
       description?: string
       firewall?: boolean
@@ -84,15 +91,19 @@ export async function PUT(req: Request, ctx: RouteContext) {
         dnsServers?: string[]
       }
     } = {}
+
     if (typeof body?.description === "string") patch.description = body.description.trim()
     if (typeof body?.firewall === "boolean") patch.firewall = body.firewall
+
     if (body?.subnet && typeof body.subnet === "object") {
       const s: any = {}
+
       if (Array.isArray(body.subnet.dnsServers)) {
         s.dnsServers = body.subnet.dnsServers.map((x: any) => String(x).trim()).filter(Boolean)
       } else if (typeof body.subnet.dnsServers === "string") {
         s.dnsServers = body.subnet.dnsServers.split(",").map((x: string) => x.trim()).filter(Boolean)
       }
+
       if (Object.keys(s).length > 0) patch.subnet = s
     }
 
@@ -100,12 +111,16 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
     try {
       const vnet = await updateVnetForTenant(vdcId, tenantId, displayName, patch)
-      return NextResponse.json({ data: vnet })
+
+
+return NextResponse.json({ data: vnet })
     } catch (err: any) {
       const msg = err?.message || String(err)
+
       if (msg.includes("vDC not found") || (msg.includes("VNet") && msg.includes("not found"))) {
         return NextResponse.json({ error: msg }, { status: 404 })
       }
+
       throw err
     }
   } catch (e: any) {
@@ -119,28 +134,37 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
     const displayName = (params as any)?.pveName
+
     if (!vdcId || !displayName) return NextResponse.json({ error: "Missing params" }, { status: 400 })
 
     const denied = await checkPermission("sdn.vnet.delete")
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
 
     try {
       const result = await deleteVnetForTenant(vdcId, tenantId, displayName)
+
       if (result.deleted === false) {
         const count = result.attachmentCount
-        return NextResponse.json(
+
+
+return NextResponse.json(
           { error: `VNet in use by ${count} NIC(s)`, attachmentCount: count },
           { status: 409 }
         )
       }
-      return NextResponse.json({ success: true })
+
+
+return NextResponse.json({ success: true })
     } catch (err: any) {
       const msg = err?.message || String(err)
+
       if (msg.includes("vDC not found") || (msg.includes("VNet") && msg.includes("not found"))) {
         return NextResponse.json({ error: msg }, { status: 404 })
       }
+
       throw err
     }
   } catch (e: any) {

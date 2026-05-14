@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -65,6 +66,7 @@ export function useWhatsNew() {
 
     if (seen !== latestVersion) {
       setHasUnseen(true)
+
       // Small delay so the app renders first
       const timer = setTimeout(() => setOpen(true), 1500)
 

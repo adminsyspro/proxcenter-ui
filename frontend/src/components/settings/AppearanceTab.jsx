@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -123,7 +124,7 @@ export default function AppearanceTab() {
   // Filter themes by category
   const filteredThemes = useMemo(() => {
     if (selectedCategory === 'all') return globalThemesConfig
-    
+
 return globalThemesConfig.filter(t => t.category === selectedCategory)
   }, [selectedCategory])
 
@@ -250,7 +251,7 @@ return globalThemesConfig.filter(t => t.category === selectedCategory)
             {lightBackgroundConfig.map((bg) => {
               const isSelected = (settings.lightBackground || 'neutral') === bg.id
 
-              
+
 return (
                 <Box key={bg.id} onClick={() => handleLightBackgroundChange(bg.id)} sx={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, p: 1, borderRadius: 2, border: '2px solid', borderColor: isSelected ? 'primary.main' : 'transparent', backgroundColor: isSelected ? alpha(theme.palette.primary.main, 0.04) : 'transparent', transition: 'all 0.2s', '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.08) } }}>
                   <Box sx={{ width: 48, height: 48, borderRadius: 2, border: '1px solid', borderColor: 'divider', overflow: 'hidden', position: 'relative', boxShadow: isSelected ? `0 0 0 2px ${theme.palette.primary.main}` : 'none' }}>
@@ -312,20 +313,20 @@ return (
                   {t('settings.fontSize')}
                 </Typography>
                 <Box sx={{ px: 1 }}>
-                  <Slider 
-                    value={settings.fontSize ?? 14} 
-                    onChange={(e, v) => updateSettings({ fontSize: v })} 
-                    min={12} 
-                    max={18} 
-                    step={1} 
+                  <Slider
+                    value={settings.fontSize ?? 14}
+                    onChange={(e, v) => updateSettings({ fontSize: v })}
+                    min={12}
+                    max={18}
+                    step={1}
                     marks={[
                       { value: 12, label: '12' },
                       { value: 14, label: '14' },
                       { value: 16, label: '16' },
                       { value: 18, label: '18' }
-                    ]} 
-                    valueLabelDisplay='auto' 
-                    valueLabelFormat={(v) => `${v}px`} 
+                    ]}
+                    valueLabelDisplay='auto'
+                    valueLabelFormat={(v) => `${v}px`}
                   />
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
@@ -343,19 +344,19 @@ return (
                   {t('settings.uiScale')}
                 </Typography>
                 <Box sx={{ px: 1 }}>
-                  <Slider 
-                    value={settings.uiScale ?? 100} 
-                    onChange={(e, v) => updateSettings({ uiScale: v })} 
-                    min={80} 
-                    max={120} 
-                    step={5} 
+                  <Slider
+                    value={settings.uiScale ?? 100}
+                    onChange={(e, v) => updateSettings({ uiScale: v })}
+                    min={80}
+                    max={120}
+                    step={5}
                     marks={[
                       { value: 80, label: '80%' },
                       { value: 100, label: '100%' },
                       { value: 120, label: '120%' }
-                    ]} 
-                    valueLabelDisplay='auto' 
-                    valueLabelFormat={(v) => `${v}%`} 
+                    ]}
+                    valueLabelDisplay='auto'
+                    valueLabelFormat={(v) => `${v}%`}
                   />
                 </Box>
                 <Typography variant='caption' color='text.secondary'>{t('settings.uiScaleDesc')}</Typography>
@@ -382,15 +383,15 @@ return (
               <Box sx={{ mb: 3 }}>
                 <Typography variant='body2' fontWeight={500} sx={{ mb: 1.5 }}>{t('settings.borderRadiusGlobal')}</Typography>
                 <Box sx={{ px: 1 }}>
-                  <Slider 
-                    value={settings.customBorderRadius ?? currentThemeConfig.styles.card.borderRadius} 
-                    onChange={handleCustomBorderRadiusChange} 
-                    min={0} 
-                    max={24} 
-                    step={1} 
-                    marks={borderRadiusPresets.map(p => ({ value: p.value, label: p.value === 0 || p.value === 24 ? `${p.value}px` : '' }))} 
-                    valueLabelDisplay='auto' 
-                    valueLabelFormat={(v) => `${v}px`} 
+                  <Slider
+                    value={settings.customBorderRadius ?? currentThemeConfig.styles.card.borderRadius}
+                    onChange={handleCustomBorderRadiusChange}
+                    min={0}
+                    max={24}
+                    step={1}
+                    marks={borderRadiusPresets.map(p => ({ value: p.value, label: p.value === 0 || p.value === 24 ? `${p.value}px` : '' }))}
+                    valueLabelDisplay='auto'
+                    valueLabelFormat={(v) => `${v}px`}
                   />
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
@@ -409,15 +410,15 @@ return (
                       <Chip label='Glassmorphism' size='small' color='info' sx={{ height: 18, fontSize: 10 }} />
                     </Typography>
                     <Box sx={{ px: 1 }}>
-                      <Slider 
-                        value={settings.blurIntensity ?? 12} 
-                        onChange={handleBlurIntensityChange} 
-                        min={0} 
-                        max={24} 
-                        step={1} 
-                        marks={[{ value: 0, label: '0' }, { value: 12, label: '12' }, { value: 24, label: '24' }]} 
-                        valueLabelDisplay='auto' 
-                        valueLabelFormat={(v) => `${v}px`} 
+                      <Slider
+                        value={settings.blurIntensity ?? 12}
+                        onChange={handleBlurIntensityChange}
+                        min={0}
+                        max={24}
+                        step={1}
+                        marks={[{ value: 0, label: '0' }, { value: 12, label: '12' }, { value: 24, label: '24' }]}
+                        valueLabelDisplay='auto'
+                        valueLabelFormat={(v) => `${v}px`}
                       />
                     </Box>
                     <Typography variant='caption' color='text.secondary'>{t('settings.blurIntensityDesc')}</Typography>

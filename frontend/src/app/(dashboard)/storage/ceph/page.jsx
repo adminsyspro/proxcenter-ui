@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+
 import Link from 'next/link'
+
 import { useLocale, useTranslations } from 'next-intl'
 
 import {
@@ -31,6 +33,7 @@ import {
 
 import { DataGrid } from '@mui/x-data-grid'
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { getDateLocale } from '@/lib/i18n/date'
@@ -67,7 +70,7 @@ return s || t('cephPage.healthUnknown')
     if (s === 'HEALTH_OK') return 'ri-checkbox-circle-fill'
     if (s === 'HEALTH_WARN') return 'ri-alert-fill'
     if (s === 'HEALTH_ERR') return 'ri-close-circle-fill'
-    
+
 return 'ri-question-fill'
   }
 
@@ -77,7 +80,7 @@ return 'ri-question-fill'
       label={getLabel(status)}
       color={getColor(status)}
       size={size === 'large' ? 'medium' : 'small'}
-      sx={{ 
+      sx={{
         fontWeight: 700,
         fontSize: size === 'large' ? 14 : 12,
         py: size === 'large' ? 2.5 : 0,
@@ -92,10 +95,10 @@ const CapacityBar = ({ usedPct, height = 8 }) => {
   const getColor = (pct) => {
     if (pct >= 85) return '#f44336'
     if (pct >= 70) return '#ff9800'
-    
+
 return '#4caf50'
   }
-  
+
   return (
     <LinearProgress
       variant='determinate'
@@ -118,7 +121,7 @@ const OsdStatusChip = ({ up, inCluster, status }) => {
   // Utiliser le status string si disponible
   const statusLower = (status || '').toLowerCase()
   const isUp = up || statusLower === 'up' || statusLower.includes('up')
-  
+
   const t = useTranslations()
 
   if (isUp && inCluster) {
@@ -142,20 +145,20 @@ const DeviceClassChip = ({ deviceClass }) => {
   const getColor = (dc) => {
     if (dc === 'ssd' || dc === 'nvme') return '#2196f3'
     if (dc === 'hdd') return '#607d8b'
-    
+
 return '#9e9e9e'
   }
-  
+
   return (
-    <Chip 
-      size='small' 
-      label={deviceClass?.toUpperCase() || 'N/A'} 
-      sx={{ 
-        fontWeight: 600, 
+    <Chip
+      size='small'
+      label={deviceClass?.toUpperCase() || 'N/A'}
+      sx={{
+        fontWeight: 600,
         fontSize: 10,
         bgcolor: `${getColor(deviceClass)}20`,
         color: getColor(deviceClass)
-      }} 
+      }}
     />
   )
 }
@@ -166,8 +169,8 @@ function KpiCard({ title, value, subtitle, icon, color, children }) {
     <Card variant='outlined'>
       <CardContent sx={{ py: 2, px: 2.5, '&:last-child': { pb: 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ 
-            width: 48, height: 48, borderRadius: 2, 
+          <Box sx={{
+            width: 48, height: 48, borderRadius: 2,
             bgcolor: color ? `${color}18` : 'action.hover',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
@@ -216,7 +219,8 @@ export default function CephPage() {
 
   useEffect(() => {
     setPageInfo(t('storage.ceph'), t('storage.distributed'), 'ri-stack-line')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
   const primaryColor = theme.palette.primary.main
 
@@ -253,7 +257,7 @@ export default function CephPage() {
         const res = await fetch('/api/v1/connections?type=pve&hasCeph=true')
         const json = await res.json()
         const list = Array.isArray(json?.data) ? json.data : []
-        
+
         // Ces connexions ont déjà hasCeph=true, on vérifie juste le health
         const cephChecks = await Promise.all(
           list.map(async (conn) => {
@@ -261,7 +265,7 @@ export default function CephPage() {
               const cephRes = await fetch(`/api/v1/connections/${encodeURIComponent(conn.id)}/ceph`)
               const cephJson = await cephRes.json()
 
-              
+
 return {
                 ...conn,
                 hasCeph: cephRes.ok && cephJson?.data?.hasCeph === true,
@@ -278,7 +282,7 @@ return {
         const withCeph = cephChecks.filter(c => c.hasCeph)
 
         setCephConnections(withCeph)
-        
+
         // Sélectionner la première connexion avec Ceph
         if (withCeph.length > 0) {
           setConnId(withCeph[0].id)
@@ -296,21 +300,21 @@ return {
   // Charger les données Ceph
   const loadCeph = async () => {
     if (!connId) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`)
       const json = await res.json()
-      
+
       if (!res.ok) {
         setError(json.error || t('ceph.errorStatus', { status: res.status }))
         setCephData(null)
-        
+
 return
       }
-      
+
       setCephData(json.data)
     } catch (e) {
       setError(e?.message || String(e))
@@ -329,7 +333,7 @@ return
   // Charger les données RRD pour les graphiques
   const loadRrd = async () => {
     if (!connId) return
-    
+
     setRrdLoading(true)
 
     try {
@@ -338,7 +342,7 @@ return
       )
 
       const json = await res.json()
-      
+
       if (res.ok && json?.data) {
         setRrdData(json.data)
       }
@@ -361,7 +365,7 @@ return
     if (cephData?.performance) {
       const now = new Date()
       const timeFormatted = now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      
+
       // Historique IOPS
       const newIopsPoint = {
         time: now.getTime(),
@@ -374,10 +378,10 @@ return
       setIopsHistory(prev => {
         const updated = [...prev, newIopsPoint]
 
-        
+
 return updated.slice(-30)
       })
-      
+
       // Historique Throughput (bytes/sec)
       const newThroughputPoint = {
         time: now.getTime(),
@@ -389,7 +393,7 @@ return updated.slice(-30)
       setThroughputHistory(prev => {
         const updated = [...prev, newThroughputPoint]
 
-        
+
 return updated.slice(-30)
       })
     }
@@ -703,8 +707,8 @@ return updated.slice(-30)
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {c.name}
                   {c.cephHealth && (
-                    <Chip 
-                      size='small' 
+                    <Chip
+                      size='small'
                       label={c.cephHealth === 'HEALTH_OK' ? 'OK' : c.cephHealth === 'HEALTH_WARN' ? 'WARN' : 'ERR'}
                       color={c.cephHealth === 'HEALTH_OK' ? 'success' : c.cephHealth === 'HEALTH_WARN' ? 'warning' : 'error'}
                       sx={{ fontSize: 9, height: 18 }}
@@ -804,19 +808,19 @@ return updated.slice(-30)
                 </Typography>
                 <Stack spacing={1}>
                   {(cephData.health?.checks || []).map((check, idx) => (
-                    <Box 
-                      key={idx} 
-                      sx={{ 
-                        p: 1.5, 
-                        borderRadius: 1, 
+                    <Box
+                      key={idx}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: 1,
                         bgcolor: check.severity === 'HEALTH_ERR' ? 'error.dark' : 'warning.dark',
                         opacity: 0.9
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Chip 
-                          size='small' 
-                          label={check.severity} 
+                        <Chip
+                          size='small'
+                          label={check.severity}
                           color={check.severity === 'HEALTH_ERR' ? 'error' : 'warning'}
                           sx={{ fontSize: 10, height: 20 }}
                         />
@@ -876,11 +880,11 @@ return updated.slice(-30)
                     }}
                     size='small'
                   >
-                    <ToggleButton 
-                      value='live' 
-                      sx={{ 
-                        px: 1.5, 
-                        py: 0.25, 
+                    <ToggleButton
+                      value='live'
+                      sx={{
+                        px: 1.5,
+                        py: 0.25,
                         fontSize: 11,
                         color: liveMode ? '#4caf50' : 'inherit',
                         '&.Mui-selected': {
@@ -894,18 +898,18 @@ return updated.slice(-30)
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         {liveMode && (
-                          <Box 
-                            sx={{ 
-                              width: 6, 
-                              height: 6, 
-                              borderRadius: '50%', 
+                          <Box
+                            sx={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
                               bgcolor: '#4caf50',
                               animation: 'pulse 1.5s infinite',
                               '@keyframes pulse': {
                                 '0%, 100%': { opacity: 1 },
                                 '50%': { opacity: 0.4 }
                               }
-                            }} 
+                            }}
                           />
                         )}
                         {t('cephPage.live')}
@@ -927,20 +931,20 @@ return updated.slice(-30)
                         {t('cephPage.iopsCeph')}
                       </Typography>
                       {liveMode && (
-                        <Chip 
-                          size='small' 
-                          label='LIVE' 
-                          color='success' 
-                          sx={{ 
-                            fontSize: 9, 
-                            height: 18, 
+                        <Chip
+                          size='small'
+                          label='LIVE'
+                          color='success'
+                          sx={{
+                            fontSize: 9,
+                            height: 18,
                             fontWeight: 700,
                             animation: 'pulse 2s infinite',
                             '@keyframes pulse': {
                               '0%, 100%': { opacity: 1 },
                               '50%': { opacity: 0.6 }
                             }
-                          }} 
+                          }}
                         />
                       )}
                     </Box>
@@ -975,7 +979,7 @@ return updated.slice(-30)
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                             <XAxis dataKey='timeFormatted' tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} width={45} />
-                            <RTooltip 
+                            <RTooltip
                               contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
                               formatter={(value, name) => [value.toLocaleString(), name === 'readIops' ? t('cephPage.readLabel') : t('cephPage.writeLabel')]}
                             />
@@ -1024,20 +1028,20 @@ return updated.slice(-30)
                         {liveMode ? t('ceph.throughputCeph') : t('ceph.nodeNetwork')}
                       </Typography>
                       {liveMode && (
-                        <Chip 
-                          size='small' 
-                          label='LIVE' 
-                          color='success' 
-                          sx={{ 
-                            fontSize: 9, 
-                            height: 18, 
+                        <Chip
+                          size='small'
+                          label='LIVE'
+                          color='success'
+                          sx={{
+                            fontSize: 9,
+                            height: 18,
                             fontWeight: 700,
                             animation: 'pulse 2s infinite',
                             '@keyframes pulse': {
                               '0%, 100%': { opacity: 1 },
                               '50%': { opacity: 0.6 }
                             }
-                          }} 
+                          }}
                         />
                       )}
                     </Box>
@@ -1072,7 +1076,7 @@ return updated.slice(-30)
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                             <XAxis dataKey='timeFormatted' tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={55} />
-                            <RTooltip 
+                            <RTooltip
                               contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
                               formatter={(value) => [`${formatBytes(value)}/s`]}
                             />
@@ -1105,10 +1109,10 @@ return updated.slice(-30)
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                             <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={60} />
-                            <RTooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(0,0,0,0.85)', 
-                                border: 'none', 
+                            <RTooltip
+                              contentStyle={{
+                                backgroundColor: 'rgba(0,0,0,0.85)',
+                                border: 'none',
                                 borderRadius: 8,
                                 fontSize: 12
                               }}
@@ -1139,10 +1143,10 @@ return updated.slice(-30)
                           <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                           <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                           <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={40} />
-                          <RTooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'rgba(0,0,0,0.85)', 
-                              border: 'none', 
+                          <RTooltip
+                            contentStyle={{
+                              backgroundColor: 'rgba(0,0,0,0.85)',
+                              border: 'none',
                               borderRadius: 8,
                               fontSize: 12
                             }}
@@ -1170,24 +1174,24 @@ return updated.slice(-30)
                   </Typography>
                   <Box sx={{ height: 180 }}>
                     <ChartContainer>
-                      <BarChart 
-                        data={(rrdData?.osds?.length > 0 ? rrdData.osds : cephData?.osds?.list || []).slice(0, 24)} 
+                      <BarChart
+                        data={(rrdData?.osds?.length > 0 ? rrdData.osds : cephData?.osds?.list || []).slice(0, 24)}
                         margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                         <XAxis dataKey='name' tick={{ fontSize: 9 }} interval={0} angle={-45} textAnchor='end' height={50} />
                         <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}ms`} width={45} />
-                        <RTooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'rgba(0,0,0,0.85)', 
-                            border: 'none', 
+                        <RTooltip
+                          contentStyle={{
+                            backgroundColor: 'rgba(0,0,0,0.85)',
+                            border: 'none',
                             borderRadius: 8,
                             fontSize: 12
                           }}
                           formatter={(value) => [`${value} ms`, t('ceph.latency')]}
                         />
-                        <Bar 
-                          dataKey='commitLatencyMs' 
+                        <Bar
+                          dataKey='commitLatencyMs'
                           name={t('cephPage.commitLatency')}
                           fill={primaryColor}
                           radius={[4, 4, 0, 0]}
@@ -1270,8 +1274,8 @@ return updated.slice(-30)
 
           {/* Tabs for detailed views */}
           <Card variant='outlined'>
-            <Tabs 
-              value={activeTab} 
+            <Tabs
+              value={activeTab}
               onChange={(e, v) => setActiveTab(v)}
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
@@ -1341,11 +1345,11 @@ return updated.slice(-30)
                 </Typography>
                 <Stack spacing={1}>
                   {(cephData.mds?.list || []).map((mds, idx) => (
-                    <Box 
+                    <Box
                       key={idx}
-                      sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
                         justifyContent: 'space-between',
                         p: 1.5,
                         borderRadius: 1,
@@ -1356,9 +1360,9 @@ return updated.slice(-30)
                         <Typography variant='body2' sx={{ fontWeight: 700 }}>{mds.name}</Typography>
                         <Typography variant='caption' sx={{ opacity: 0.6 }}>{mds.host}</Typography>
                       </Box>
-                      <Chip 
-                        size='small' 
-                        label={mds.state} 
+                      <Chip
+                        size='small'
+                        label={mds.state}
                         color={mds.state === 'active' ? 'success' : 'default'}
                         sx={{ fontSize: 11 }}
                       />

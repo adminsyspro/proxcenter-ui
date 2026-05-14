@@ -23,6 +23,7 @@ function getUserId(session: any, url?: URL) {
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -106,6 +107,7 @@ export async function GET(req: Request) {
  */
 export async function PUT(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -152,6 +154,7 @@ export async function PUT(req: Request) {
  */
 export async function POST(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -222,6 +225,7 @@ export async function POST(req: Request) {
  */
 export async function DELETE(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -278,6 +282,7 @@ export async function DELETE(req: Request) {
  */
 export async function PATCH(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {

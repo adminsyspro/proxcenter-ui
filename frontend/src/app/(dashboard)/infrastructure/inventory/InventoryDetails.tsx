@@ -1,19 +1,10 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
-import { isSharedStorage } from '@/lib/proxmox/storage'
 
-import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
-import { useHostsByConnection } from '@/hooks/useHosts'
-import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
-import { useFavorites } from './hooks/useFavorites'
-import { useSnapshots } from './hooks/useSnapshots'
-import { useTasks } from './hooks/useTasks'
-import { useNotes } from './hooks/useNotes'
-import { useHA } from './hooks/useHA'
-import { formatBytes } from '@/utils/format'
-import { getDateLocale } from '@/lib/i18n/date'
+import { useRouter } from 'next/navigation'
+
+import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Accordion,
@@ -73,9 +64,27 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { lighten, alpha } from '@mui/material/styles'
-// RemixIcon replacements for @mui/icons-material
+
 import { AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, Legend } from 'recharts'
+
+import { isSharedStorage } from '@/lib/proxmox/storage'
+
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { useHostsByConnection } from '@/hooks/useHosts'
+import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
+import { useFavorites } from './hooks/useFavorites'
+import { useSnapshots } from './hooks/useSnapshots'
+import { useTasks } from './hooks/useTasks'
+import { useNotes } from './hooks/useNotes'
+import { useHA } from './hooks/useHA'
+import { formatBytes } from '@/utils/format'
+import { getDateLocale } from '@/lib/i18n/date'
+
+
+// RemixIcon replacements for @mui/icons-material
+
 import ChartContainer from '@/components/ChartContainer'
 
 import VmsTable, { VmRow } from '@/components/VmsTable'
@@ -90,7 +99,6 @@ import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, R
 import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails } from './helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
-import { useRouter } from 'next/navigation'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import RootInventoryView from './RootInventoryView'
 import StorageDashboard from './StorageDashboard'
@@ -131,7 +139,7 @@ import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 /* Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function InventoryDetails({ 
+export default function InventoryDetails({
   selection,
   onSelect,
   onBack,
@@ -199,10 +207,12 @@ export default function InventoryDetails({
   // Load PVE tag color overrides for all connections present in allVms
   React.useEffect(() => {
     const connIds = new Set(allVms.map((vm: any) => vm.connId).filter(Boolean))
+
     connIds.forEach(id => loadConnection(id))
   }, [allVms, loadConnection])
   const { hasFeature, isEnterprise, loading: licenseLoading } = useLicense()
   const toast = useToast()
+
   // LXC sharing the host kernel doesn't give strong-enough multi-tenant
   // isolation. Tenants on a shared cluster see only "Create VM" — the
   // provider keeps the LXC option for lightweight workloads on dedicated
@@ -238,7 +248,7 @@ export default function InventoryDetails({
   const [rrdLoading, setRrdLoading] = useState(false)
   const [rrdError, setRrdError] = useState<string | null>(null)
   const [series, setSeries] = useState<SeriesPoint[]>([])
-  
+
   // État pour le mode tableau VMs étendu
   const [expandedVmsTable, setExpandedVmsTable] = useState(false)
 
@@ -272,12 +282,14 @@ export default function InventoryDetails({
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
   const [migNetworkBridge, setMigNetworkBridge] = useState('')
+
   // Optional user-picked target VMID. Empty string = let PVE pick the next
   // free id (default behavior). The dialog runs a debounced availability
   // check and surfaces the result inline; the migration POST forwards the
   // value as `targetVmid` when set.
   const [migTargetVmid, setMigTargetVmid] = useState('')
   const [migTargetVmidStatus, setMigTargetVmidStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
+
   // Optional 802.1Q VLAN tag applied to the created VM's NIC. Empty string means
   // "no tag" (access port on the bridge's native VLAN). Stored as string so the
   // input renders cleanly when blank; coerced + validated server-side.
@@ -287,6 +299,7 @@ export default function InventoryDetails({
   const [migDiskPaths, setMigDiskPaths] = useState('')
   const [migTempStorage, setMigTempStorage] = useState('/tmp')
   const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot'>('cold')
+
   // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
   // Kept in state for the payload contract; no longer user-selectable in the UI.
   const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs' | 'auto'>('auto')
@@ -300,10 +313,12 @@ export default function InventoryDetails({
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
   const migLogsRef = useRef<HTMLDivElement>(null)
+
   // Bulk migration state
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
+
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
   // match the dispatcher in InventoryDialogs.tsx or the two will fight each
@@ -313,8 +328,10 @@ export default function InventoryDetails({
   const [bulkMigLogsExpanded, setBulkMigLogsExpanded] = useState(false)
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
+
   bulkMigJobsRef.current = bulkMigJobs
   const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>(null)
+
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -324,6 +341,7 @@ export default function InventoryDetails({
   // État pour le lock de la VM
   const [vmLock, setVmLock] = useState<{ locked: boolean; lockType?: string }>({ locked: false })
   const [unlocking, setUnlocking] = useState(false)
+
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
     open: boolean
     error: string
@@ -360,18 +378,27 @@ export default function InventoryDetails({
   // Compute default connId/node from current selection for Create dialogs
   const createDefaults = useMemo(() => {
     if (!selection) return {}
+
     if (selection.type === 'node') {
       const { connId, node } = parseNodeId(selection.id)
-      return { connId, node }
+
+
+return { connId, node }
     }
+
     if (selection.type === 'cluster') {
       return { connId: selection.id }
     }
+
     if (selection.type === 'vm') {
       const { connId, node } = parseVmId(selection.id)
-      return { connId, node }
+
+
+return { connId, node }
     }
-    return {}
+
+
+return {}
   }, [selection])
 
   // External dialog request (e.g. from tree context menu)
@@ -382,16 +409,19 @@ export default function InventoryDetails({
     if (externalDialogRequest && externalDialogRequest.ts !== lastHandledTs.current) {
       lastHandledTs.current = externalDialogRequest.ts
       setExternalCreateDefaults({ connId: externalDialogRequest.connId, node: externalDialogRequest.node })
+
       if (externalDialogRequest.type === 'createVm') {
         setActiveDialog('createVm')
       } else {
         setActiveDialog('createLxc')
       }
+
       onExternalDialogHandled?.()
     }
   }, [externalDialogRequest, onExternalDialogHandled])
 
   const lastNodeActionTs = useRef(0)
+
   useEffect(() => {
     if (nodeActionRequest && nodeActionRequest.ts !== lastNodeActionTs.current) {
       lastNodeActionTs.current = nodeActionRequest.ts
@@ -405,26 +435,32 @@ export default function InventoryDetails({
 
   // Check which running VMs are on local storage when node action dialog opens
   const emptySet = useMemo(() => new Set<string>(), [])
+
   useEffect(() => {
     if (!nodeActionDialog) return
     const connId = nodeActionDialog.connId || ''
     const nodeName = nodeActionDialog.node || ''
+
     if (!connId || !nodeName) return
 
     // Only for cluster nodes
     const hasOtherNodes = hosts.filter(h => h.connId === connId && h.node !== nodeName).length > 0
+
     if (!hasOtherNodes) return
 
     const runningVms = allVms.filter(vm =>
       vm.connId === connId && vm.node === nodeName && vm.status === 'running' && !vm.template
     )
+
     if (runningVms.length === 0) return
 
     // Build shared storage set from clusterStorages
     const cs = clusterStorages.find(c => c.connId === connId)
     const sharedSet = new Set<string>()
+
     if (cs) {
       for (const s of cs.sharedStorages) sharedSet.add(s.storage)
+
       for (const n of cs.nodes) {
         for (const s of n.storages) {
           if (isSharedStorage(s)) sharedSet.add(s.storage)
@@ -433,22 +469,28 @@ export default function InventoryDetails({
     }
 
     let alive = true
+
     setNodeActionStorageLoading(true)
 
     ;(async () => {
       const localKeys = new Set<string>()
       const batchSize = 5
+
       for (let i = 0; i < runningVms.length; i += batchSize) {
         const batch = runningVms.slice(i, i + batchSize)
+
         await Promise.all(batch.map(async (vm) => {
           try {
             const res = await fetch(`/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/config`)
+
             if (!res.ok) return
             const json = await res.json()
             const config = json.data || {}
+
             for (const [key, val] of Object.entries(config)) {
               if (/^(scsi|virtio|ide|sata|efidisk)\d+$/.test(key) && typeof val === 'string' && !val.includes('media=cdrom') && val !== 'none') {
                 const storageName = val.split(':')[0]
+
                 if (storageName && storageName !== 'none' && !sharedSet.has(storageName)) {
                   localKeys.add(`${vm.connId}:${vm.vmid}`)
                   break
@@ -458,6 +500,7 @@ export default function InventoryDetails({
           } catch { /* ignore */ }
         }))
       }
+
       if (!alive) return
       setNodeActionLocalVms(localKeys)
       setNodeActionStorageLoading(false)
@@ -469,7 +512,8 @@ export default function InventoryDetails({
   // Merge createDefaults with external overrides
   const effectiveCreateDefaults = useMemo(() => {
     if (externalCreateDefaults.connId) return externalCreateDefaults
-    return createDefaults
+
+return createDefaults
   }, [createDefaults, externalCreateDefaults])
 
   // Clear external defaults when dialog closes
@@ -480,7 +524,7 @@ export default function InventoryDetails({
   const [selectedDisk, setSelectedDisk] = useState<any>(null)
   const [editDiskInitialTab, setEditDiskInitialTab] = useState<number>(0)
   const [selectedNetwork, setSelectedNetwork] = useState<any>(null)
-  
+
   // État pour le dialog de confirmation d'action VM
   const [confirmAction, setConfirmAction] = useState<{
     action: string
@@ -532,7 +576,7 @@ export default function InventoryDetails({
   const [backupNote, setBackupNote] = useState('')
   const [creatingBackup, setCreatingBackup] = useState(false)
   const [backupStorages, setBackupStorages] = useState<any[]>([])
-  
+
   const deleteVmDialogOpen = activeDialog === 'deleteVm'
   const setDeleteVmDialogOpen = useCallback((v: boolean) => setActiveDialog(v ? 'deleteVm' : 'none'), [])
   const [deleteVmConfirmText, setDeleteVmConfirmText] = useState('')
@@ -545,22 +589,23 @@ export default function InventoryDetails({
   const [convertingTemplate, setConvertingTemplate] = useState(false)
 
   // État pour l'édition d'option VM
-  const [editOptionDialog, setEditOptionDialog] = useState<{ 
-    key: string; 
-    label: string; 
-    value: any; 
+  const [editOptionDialog, setEditOptionDialog] = useState<{
+    key: string;
+    label: string;
+    value: any;
     type: 'text' | 'boolean' | 'select' | 'hotplug';
     options?: { value: string; label: string }[];
   } | null>(null)
 
   const [editOptionValue, setEditOptionValue] = useState<any>('')
   const [editOptionSaving, setEditOptionSaving] = useState(false)
-  
+
   // PBS storage backup panel states (search/pagination for storage view)
   const [pbsStorageSearch, setPbsStorageSearch] = useState('')
   const [pbsStoragePage, setPbsStoragePage] = useState(0)
   const [pbsStorageSort, setPbsStorageSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'ctime', dir: 'desc' })
   const [expandedStorageBackupGroups, setExpandedStorageBackupGroups] = useState<Set<string>>(new Set())
+
   // Ref to PbsServerPanel for calling restore/file-restore from storage panel
   const pbsPanelRef = React.useRef<PbsServerPanelHandle>(null)
   const [storageUploadOpen, setStorageUploadOpen] = useState(false)
@@ -576,16 +621,16 @@ export default function InventoryDetails({
   // Handler pour sauvegarder une option VM
   const handleSaveOption = useCallback(async () => {
     if (!editOptionDialog || !selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
+
     setEditOptionSaving(true)
 
     try {
       const body: Record<string, any> = {}
 
       body[editOptionDialog.key] = editOptionValue
-      
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
         {
@@ -594,13 +639,13 @@ export default function InventoryDetails({
           body: JSON.stringify(body)
         }
       )
-      
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
 
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
-      
+
       // Recharger les données
       const payload = await fetchDetails(selection)
 
@@ -619,6 +664,7 @@ export default function InventoryDetails({
   // Fetch PVE connections + all their nodes when migration dialog opens
   // Builds a flat list of { connId, connName, isCluster, node, status, ip } for the unified selector
   const [migNodeOptions, setMigNodeOptions] = useState<any[]>([])
+
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
     setMigTargetConn(''); setMigTargetNode(''); setMigTargetStorage('')
@@ -627,15 +673,19 @@ export default function InventoryDetails({
     if (esxiMigrateVm) { setMigJobId(null); setMigJob(null) }
     fetch('/api/v1/connections').then(r => r.json()).then(async (d) => {
       const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
+
       setMigPveConnections(pveConns)
+
       // Fetch nodes for each connection in parallel
       const allOptions: any[] = []
+
       await Promise.all(pveConns.map(async (conn: any) => {
         try {
           const res = await fetch(`/api/v1/connections/${conn.id}/nodes`)
           const nd = await res.json()
           const nodes = nd.data || nd || []
           const isCluster = (conn.hosts?.length || nodes.length) > 1
+
           for (const n of nodes) {
             allOptions.push({
               connId: conn.id,
@@ -650,6 +700,8 @@ export default function InventoryDetails({
         } catch {}
       }))
       setMigNodeOptions(allOptions)
+
+
       // Auto-select if only one node across all connections
       if (allOptions.length === 1) {
         setMigTargetConn(allOptions[0].connId)
@@ -661,16 +713,23 @@ export default function InventoryDetails({
 
   // Fetch storages, bridges, and check sshfs when node is selected
   useEffect(() => {
-    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null); return }
+    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null);
+
+return }
+
     const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
     const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
+
     if (!fetchNode || fetchNode === '__auto__') return
+
     // Check sshfs availability on target node
     setMigSshfsAvailable(null)
     setVcenterPreflight(null)
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/check-sshfs`).then(r => r.json()).then(d => {
       setMigSshfsAvailable(d.data?.installed ?? false)
     }).catch(() => setMigSshfsAvailable(false))
+
+
     // Run the virt-v2v preflight across the relevant node(s) for the migration
     // target. In Auto mode, the batch may land on ANY node of the cluster, so we
     // must check deps on EVERY online node; if any single node is missing a tool,
@@ -681,10 +740,13 @@ export default function InventoryDetails({
     const nodesToCheck = migTargetNode === '__auto__'
       ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
       : [migTargetNode]
+
     if (nodesToCheck.length === 0) {
       setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] })
-      return
+
+return
     }
+
     Promise.all(nodesToCheck.map(async (node: string) => {
       try {
         const r = await fetch('/api/v1/migrations/preflight', {
@@ -692,8 +754,11 @@ export default function InventoryDetails({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, vmName: esxiMigrateVm?.name, sourceType: esxiMigrateVm?.hostType }),
         })
+
         const d = await r.json()
-        return { node, ...d }
+
+
+return { node, ...d }
       } catch {
         return { node, _error: true }
       }
@@ -705,20 +770,25 @@ export default function InventoryDetails({
       const allGuestfsTools = results.every(r => !!r.guestfsToolsInstalled)
       const allOvmf = results.every(r => !!r.ovmfInstalled)
       const allVirtioWin = results.every(r => !!r.virtioWinInstalled)
+
       // tempStorages: when targeting multiple nodes we take the INTERSECTION by
       // path (a temp dir is only useful if it exists on every node the batch
       // may land on — otherwise some jobs would fail at the SSHFS/mkdir step).
       // Single-node mode simply takes the one node's list.
       let aggregatedTempStorages: any[] = []
+
       if (results.length === 1) {
         aggregatedTempStorages = results[0].tempStorages || []
       } else {
         const pathCount = new Map<string, { count: number; sample: any }>()
+
         for (const r of results) {
           for (const ts of (r.tempStorages || [])) {
             const existing = pathCount.get(ts.path)
+
             if (existing) {
               existing.count++
+
               // Keep the smallest availableBytes across nodes (pessimistic
               // estimate — the batch can only rely on space that every node has).
               if (ts.availableBytes < existing.sample.availableBytes) existing.sample = ts
@@ -727,22 +797,29 @@ export default function InventoryDetails({
             }
           }
         }
+
         aggregatedTempStorages = [...pathCount.values()]
           .filter(v => v.count === results.length)
           .map(v => v.sample)
           .sort((a, b) => b.availableBytes - a.availableBytes)
       }
+
+
       // Union of errors across nodes, prefixed with the node name so the user
       // can tell which node is the blocker.
       const allErrors: string[] = []
+
       for (const r of results) {
         for (const err of (r.errors || [])) {
           allErrors.push(results.length > 1 ? `[${r.node}] ${err}` : err)
         }
       }
+
+
       // detectedDisks: only honour when single-node; in bulk auto we don't want
       // to auto-populate a disk path based on one specific node's /mnt/hyperv view.
       const detectedDisks = results.length === 1 ? (results[0].detectedDisks || []) : []
+
       setVcenterPreflight({
         checked: true,
         ok: !anyError && allErrors.length === 0,
@@ -757,6 +834,7 @@ export default function InventoryDetails({
         detectedDisks,
         tempStorages: aggregatedTempStorages,
       })
+
       if (detectedDisks.length > 0) {
         setMigDiskPaths(detectedDisks.join('\n'))
       }
@@ -764,20 +842,29 @@ export default function InventoryDetails({
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
       const storages = (d.data || d || []).filter((s: any) => {
         const content = s.content || ''
-        return content.includes('images')
+
+
+return content.includes('images')
       })
+
       setMigStorages(storages)
+
       if (storages.length > 0) {
         const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
+
         setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
       }
     }).catch(() => {})
+
     // Also fetch network bridges
     fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/network`).then(r => r.json()).then(d => {
       const bridges = (d.data || d || []).filter((iface: any) => iface.type === 'bridge' || iface.type === 'OVSBridge')
+
       setMigBridges(bridges)
+
       if (bridges.length > 0) {
         const vmbr0 = bridges.find((b: any) => b.iface === 'vmbr0')
+
         setMigNetworkBridge(vmbr0 ? 'vmbr0' : bridges[0].iface)
       }
     }).catch(() => {})
@@ -787,11 +874,14 @@ export default function InventoryDetails({
   useEffect(() => {
     if (!migJobId) return
     const taskId = `migration-${migJobId}`
-    return () => { unregisterOnRestore(taskId) }
+
+
+return () => { unregisterOnRestore(taskId) }
   }, [migJobId, unregisterOnRestore])
 
   // Refs to avoid stale closures in polling interval
   const updatePCTaskRef = useRef(updatePCTask)
+
   updatePCTaskRef.current = updatePCTask
 
   // Poll migration job status + sync to TasksBar.
@@ -803,12 +893,15 @@ export default function InventoryDetails({
   useEffect(() => {
     if (!migJobId) return
     const taskId = `migration-${migJobId}`
+
     const interval = setInterval(() => {
       fetch(`/api/v1/migrations/${migJobId}`).then(r => r.json()).then(d => {
         setMigJob(d.data)
+
         if (d.data) {
           const j = d.data
           const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
+
           const stepFallback = j.status === 'transferring' ? `Transferring${speed}`
             : j.status === 'configuring' ? 'Configuring'
             : j.status === 'creating_vm' ? 'Creating VM'
@@ -817,6 +910,7 @@ export default function InventoryDetails({
             : j.status === 'failed' ? (j.error || 'Failed')
             : j.status === 'cancelled' ? 'Cancelled'
             : j.status
+
           updatePCTaskRef.current(taskId, {
             progress: j.progress || 0,
             detail: j.currentStep || stepFallback,
@@ -824,12 +918,15 @@ export default function InventoryDetails({
             ...(j.status === 'failed' ? { error: j.error } : {}),
           })
         }
+
         if (d.data?.status === 'completed' || d.data?.status === 'failed' || d.data?.status === 'cancelled') {
           clearInterval(interval)
         }
       }).catch(() => {})
     }, 3000)
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [migJobId])
 
   // Fetch active migration job for the currently selected ESXi VM
@@ -837,7 +934,9 @@ export default function InventoryDetails({
   useEffect(() => {
     if (bulkMigJobs.length === 0) return
     const hasWork = bulkMigJobs.some(j => j.status === 'queued' || (j.jobId && !['completed', 'failed', 'cancelled'].includes(j.status)))
+
     if (!hasWork) return
+
     const interval = setInterval(async () => {
       const updates = [...bulkMigJobsRef.current]
       let changed = false
@@ -845,21 +944,26 @@ export default function InventoryDetails({
       // Poll active (running) jobs
       for (const job of updates) {
         if (!job.jobId || ['completed', 'failed', 'cancelled', 'queued'].includes(job.status)) continue
+
         try {
           const res = await fetch(`/api/v1/migrations/${job.jobId}`)
           const d = await res.json()
+
           if (d.data) {
             const j = d.data
             const logsChanged = (j.logs?.length || 0) !== (job.logs?.length || 0)
+
             if (j.progress !== job.progress || j.status !== job.status || logsChanged) {
               job.progress = j.progress || 0
               job.status = j.status
               job.error = j.error
               if (j.logs) job.logs = j.logs
               changed = true
+
               // Sync to PCTask — prefer j.currentStep (live virt-v2v phase)
               const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
               const stepFallback = j.status === 'transferring' ? `Transferring${speed}` : j.status === 'completed' ? 'Completed' : j.status === 'failed' ? (j.error || 'Failed') : j.status
+
               updatePCTaskRef.current(`migration-${job.jobId}`, {
                 progress: j.progress || 0,
                 detail: j.currentStep || stepFallback,
@@ -873,13 +977,17 @@ export default function InventoryDetails({
 
       // Start queued jobs if slots are available
       const cfg = bulkMigConfigRef.current
+
       if (cfg) {
         const runningCount = updates.filter(j => j.jobId && !['completed', 'failed', 'cancelled', 'queued'].includes(j.status)).length
         const slotsAvailable = BULK_MIG_CONCURRENCY - runningCount
+
         if (slotsAvailable > 0) {
           const queued = updates.filter(j => j.status === 'queued')
+
           for (let i = 0; i < Math.min(slotsAvailable, queued.length); i++) {
             const job = queued[i]
+
             try {
               const res = await fetch('/api/v1/migrations', {
                 method: 'POST',
@@ -896,6 +1004,7 @@ export default function InventoryDetails({
                   migrationType: cfg.migrationType,
                   transferMode: cfg.transferMode,
                   startAfterMigration: cfg.startAfterMigration,
+
                   // vCenter inventory path was captured per-VM when the bulk job was
                   // enqueued (see InventoryDialogs.tsx bulk-launch handler). Forward it
                   // here too, otherwise queued vCenter migrations would lose the path
@@ -906,7 +1015,9 @@ export default function InventoryDetails({
                   ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
                 }),
               })
+
               const d = await res.json()
+
               if (d.data?.jobId) {
                 job.jobId = d.data.jobId
                 job.status = 'pending'
@@ -935,32 +1046,47 @@ export default function InventoryDetails({
       }
 
       if (changed) setBulkMigJobs([...updates])
+
+
       // Stop polling only when no active or queued jobs remain
       if (updates.every(j => j.status !== 'queued' && (!j.jobId || ['completed', 'failed', 'cancelled'].includes(j.status)))) {
         clearInterval(interval)
       }
     }, 3000)
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [bulkMigJobs.length > 0 ? bulkMigJobs.map(j => `${j.jobId}:${j.status}`).join(',') : ''])
 
   useEffect(() => {
-    if (selection?.type !== 'extvm') { setVmMigJob(null); return }
+    if (selection?.type !== 'extvm') { setVmMigJob(null);
+
+return }
+
     const vmid = selection.id.split(':')[1]
+
     if (!vmid) return
+
     // Fetch all jobs and find the latest one for this VM
     fetch('/api/v1/migrations').then(r => r.json()).then(d => {
       const jobs = d.data || []
       const match = jobs.find((j: any) => j.sourceVmId === vmid && !['cancelled'].includes(j.status))
+
       setVmMigJob(match || null)
     }).catch(() => {})
   }, [selection])
 
   // Fetch migration history for external host dashboard
   useEffect(() => {
-    if (selection?.type !== 'ext') { setExtHostMigrations([]); return }
+    if (selection?.type !== 'ext') { setExtHostMigrations([]);
+
+return }
+
     const connId = selection.id
+
     fetch('/api/v1/migrations').then(r => r.json()).then(d => {
       const jobs = (d.data || []).filter((j: any) => j.sourceConnectionId === connId)
+
       setExtHostMigrations(jobs)
     }).catch(() => {})
   }, [selection])
@@ -968,15 +1094,19 @@ export default function InventoryDetails({
   // Poll active VM migration job
   useEffect(() => {
     if (!vmMigJob || ['completed', 'failed', 'cancelled'].includes(vmMigJob.status)) return
+
     const interval = setInterval(() => {
       fetch(`/api/v1/migrations/${vmMigJob.id}`).then(r => r.json()).then(d => {
         if (d.data) setVmMigJob(d.data)
+
         if (d.data?.status === 'completed' || d.data?.status === 'failed' || d.data?.status === 'cancelled') {
           clearInterval(interval)
         }
       }).catch(() => {})
     }, 3000)
-    return () => clearInterval(interval)
+
+
+return () => clearInterval(interval)
   }, [vmMigJob?.id, vmMigJob?.status])
 
   // Auto-scroll migration logs to bottom
@@ -992,10 +1122,13 @@ export default function InventoryDetails({
   // Mapping vmid → name pour affichage dans storage content
   const vmNamesMap = useMemo(() => {
     const map: Record<string, string> = {}
+
     for (const vm of allVms) {
       if (vm.name) map[String(vm.vmid)] = vm.name
     }
-    return map
+
+
+return map
   }, [allVms])
 
   // ==================== HARDWARE HANDLERS (extracted to useHardwareHandlers) ====================
@@ -1301,8 +1434,8 @@ export default function InventoryDetails({
     if (!selectedBackup || !selection || !selectedPveStorage || !explorerArchive) return
 
     const { connId } = parseVmId(selection.id)
-    
-    const fullPath = explorerPath === '/' 
+
+    const fullPath = explorerPath === '/'
       ? `/${explorerArchive}${explorerPath}${fileName}`
       : `/${explorerArchive}${explorerPath}/${fileName}`
 
@@ -1339,7 +1472,7 @@ export default function InventoryDetails({
     const textExts = ['.txt', '.log', '.conf', '.cfg', '.ini', '.yaml', '.yml', '.json', '.xml', '.sh', '.py', '.js', '.md', '.csv', '.env', '.sql', '.html', '.css']
     const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico']
 
-    
+
 return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith('.')
   }, [])
 
@@ -1355,11 +1488,13 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   useEffect(() => {
     setEntityTags([])
     if (!selection) return
+
     if (selection.type === 'cluster') {
       fetch(`/api/v1/connections/${encodeURIComponent(selection.id)}`)
         .then(r => r.ok ? r.json() : null)
         .then(json => {
           const tags = json?.data?.tags
+
           setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
         })
         .catch(() => {})
@@ -1368,6 +1503,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       const hosts = hostsData?.data?.hosts || []
       const host = hosts.find((h: any) => h.node === node)
       const tags = host?.managedHost?.tags || host?.tags
+
       setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
     }
   }, [selection?.id, selection?.type, hostsData])
@@ -1387,6 +1523,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     setBackupsError(null)
     setBackupsWarnings([])
     setBackupsPreloaded(false)
+
     // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
     setGuestInfo(null)
     setHeaderCollapsed(false)
@@ -1426,7 +1563,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   // Mémoriser maxMem pour éviter les re-renders inutiles
   const maxMem = data?.metrics?.ram?.max
   const maxMemRef = React.useRef<number | undefined>(undefined)
-  
+
   // Mettre à jour la ref seulement si maxMem change vraiment
   React.useEffect(() => {
     if (maxMem !== undefined && maxMem !== maxMemRef.current) {
@@ -1441,6 +1578,7 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
     async function runRrd() {
       if (!alive) return
+
       if (!isFirstLoad) {
         // Silent refresh: don't show loading spinner or clear errors
       } else {
@@ -1502,6 +1640,8 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     }
 
     document.addEventListener('visibilitychange', onVis)
+
+
     // Start refresh interval after initial load delay
     const refreshTimer = setTimeout(() => {
       if (document.visibilityState === 'visible') startRefresh()
@@ -1524,14 +1664,17 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   useEffect(() => {
     if (selection?.type !== 'vm') {
       backupsLoadedForIdRef.current = null
-      return
+
+return
     }
 
     const currentSelectionId = selection.id
+
     if (backupsLoadedForIdRef.current === currentSelectionId) return
     backupsLoadedForIdRef.current = currentSelectionId
 
     const { type, vmid } = parseVmId(selection.id)
+
     loadBackups(vmid, type)
     setBackupsPreloaded(true)
   }, [selection?.type, selection?.id, loadBackups])
@@ -1542,25 +1685,25 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   useEffect(() => {
     if (selection?.type !== 'vm') {
       setGuestInfo(null)
-      
+
 return
     }
-    
+
     const loadGuestInfo = async () => {
       const { connId, type, node, vmid } = parseVmId(selection.id)
 
       setGuestInfoLoading(true)
-      
+
       try {
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/guest`,
           { cache: 'no-store' }
         )
-        
+
         if (res.ok) {
           const json = await res.json()
           const data = json.data || {}
-          
+
           setGuestInfo({
             ip: data.ip,
             uptime: data.uptime,
@@ -1578,7 +1721,7 @@ return
         setGuestInfoLoading(false)
       }
     }
-    
+
     loadGuestInfo()
   }, [selection?.type, selection?.id])
 
@@ -1586,9 +1729,9 @@ return
   useEffect(() => {
     if (selection?.type === 'vm') {
       const { connId, node, type, vmid } = parseVmId(selection.id)
-      
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`, { 
-        cache: 'no-store' 
+
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`, {
+        cache: 'no-store'
       })
         .then(res => res.ok ? res.json() : null)
         .then(json => {
@@ -1612,7 +1755,7 @@ return
     if (detailTab === 7 && selection?.type === 'vm' && !replicationLoaded && !replicationLoading) {
       setReplicationLoading(true)
       const { connId, node, vmid } = parseVmId(selection.id)
-      
+
       // Charger les jobs de réplication, les nœuds disponibles et vérifier Ceph
       Promise.all([
         fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication?guest=${vmid}`, { cache: 'no-store' }).catch(() => null),
@@ -1622,33 +1765,37 @@ return
         let jobs: any[] = []
         let nodes: string[] = []
         let hasCeph = false
-        
+
         if (replicationRes?.ok) {
           try {
             const json = await replicationRes.json()
+
             jobs = (json.data?.jobs || []).filter((j: any) => String(j.guest) === String(vmid))
           } catch {}
         }
-        
+
         if (nodesRes?.ok) {
           try {
             const json = await nodesRes.json()
             const allNodes = json.data || json || []
+
             nodes = allNodes
               .filter((n: any) => n.node !== node && n.status === 'online')
               .map((n: any) => n.node)
           } catch {}
         }
-        
+
         // Vérifier si Ceph est disponible sur ce cluster
         if (cephRes?.ok) {
           try {
             const json = await cephRes.json()
+
+
             // Si on a un statut Ceph valide (health défini), Ceph est disponible
             hasCeph = !!(json.data?.health || json.health)
           } catch {}
         }
-        
+
         setReplicationJobs(jobs)
         setAvailableTargetNodes(nodes)
         setSourceCephAvailable(hasCeph)
@@ -1666,14 +1813,14 @@ return
     if (addCephReplicationDialogOpen && !cephClustersLoading && cephClusters.length === 0) {
       setCephClustersLoading(true)
       const { connId } = parseVmId(selection?.id || '')
-      
+
       // Récupérer toutes les connexions et filtrer celles avec Ceph
       fetch('/api/v1/connections', { cache: 'no-store' })
         .then(async (res) => {
           if (!res.ok) return
           const json = await res.json()
           const connections = json.data || json || []
-          
+
           // Pour chaque connexion (sauf la source), vérifier si Ceph est disponible
           const cephChecks = await Promise.all(
             connections
@@ -1681,19 +1828,24 @@ return
               .map(async (c: any) => {
                 try {
                   const cephRes = await fetch(`/api/v1/connections/${encodeURIComponent(c.id)}/ceph/status`, { cache: 'no-store' })
+
                   if (cephRes.ok) {
                     const cephJson = await cephRes.json()
                     const healthData = cephJson.data?.health || cephJson.health
                     const hasCeph = !!healthData
+
                     if (hasCeph) {
                       // S'assurer que cephHealth est une string
                       let healthStatus = 'Unknown'
+
                       if (typeof healthData === 'string') {
                         healthStatus = healthData
                       } else if (typeof healthData === 'object' && healthData.status) {
                         healthStatus = healthData.status
                       }
-                      return {
+
+
+return {
                         id: c.id,
                         name: c.name || c.id,
                         host: c.host,
@@ -1702,10 +1854,12 @@ return
                     }
                   }
                 } catch {}
-                return null
+
+
+return null
               })
           )
-          
+
           setCephClusters(cephChecks.filter(Boolean))
           setCephClustersLoading(false)
         })
@@ -1747,7 +1901,8 @@ return
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     if (trend === 'up') return <i className="ri-arrow-up-line" style={{ color: '#4caf50', fontSize: 14 }} />
     if (trend === 'down') return <i className="ri-arrow-down-line" style={{ color: '#f44336', fontSize: 14 }} />
-    return <i className="ri-arrow-right-line" style={{ color: '#9e9e9e', fontSize: 14 }} />
+
+return <i className="ri-arrow-right-line" style={{ color: '#9e9e9e', fontSize: 14 }} />
   }
 
   // Charger la config du cluster pour les nodes standalone quand on sélectionne l'onglet Cluster
@@ -1774,9 +1929,11 @@ return
     if (selection?.type !== 'node') return
     const isInCluster = !!data?.clusterName
     const updatesTabIndex = isInCluster ? 10 : 11
+
     if (nodeTab !== updatesTabIndex) return
 
     const { connId, node } = parseNodeId(selection.id)
+
     if (nodeUpdates[node] !== undefined) return // Already loaded or loading
 
     setNodeUpdates(prev => ({
@@ -1789,6 +1946,7 @@ return
     const fetchAndSet = (json: any, permError?: string) => {
       const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
       const pveVersion = pvePkg?.currentVersion || null
+
       setNodeUpdates(prev => ({
         ...prev,
         [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false, permissionError: permError || null }
@@ -1804,14 +1962,19 @@ return
             .then(async (postRes) => {
               if (postRes.status === 403) {
                 const postJson = await postRes.json()
+
                 fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
-                return
+
+return
               }
+
               const res = await fetch(aptUrl)
               const freshJson = await res.json()
+
               fetchAndSet(freshJson)
             })
         }
+
         fetchAndSet(json)
       })
       .catch(() => {
@@ -1826,6 +1989,8 @@ return
   useEffect(() => {
     if (selection?.type === 'cluster' && clusterTab === 12 && data?.nodesData?.length > 0) {
       const connId = selection.id || ''
+
+
       // Charger les mises à jour et les VMs locales pour chaque nœud
       data.nodesData.forEach((node: any) => {
         // Charger les mises à jour
@@ -1840,6 +2005,7 @@ return
           const fetchAndSet = (json: any, permError?: string) => {
             const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
             const pveVersion = pvePkg?.currentVersion || node.pveversion || null
+
             setNodeUpdates(prev => ({
               ...prev,
               [node.node]: {
@@ -1860,14 +2026,19 @@ return
                   .then(async (postRes) => {
                     if (postRes.status === 403) {
                       const postJson = await postRes.json()
+
                       fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
-                      return
+
+return
                     }
+
                     const res = await fetch(aptUrl)
                     const freshJson = await res.json()
+
                     fetchAndSet(freshJson)
                   })
               }
+
               fetchAndSet(json)
             })
             .catch(() => {
@@ -1877,14 +2048,14 @@ return
               }))
             })
         }
-        
+
         // Charger les VMs avec stockage local
         if (node.status === 'online' && !nodeLocalVms[node.node]?.loading && nodeLocalVms[node.node] === undefined) {
           setNodeLocalVms(prev => ({
             ...prev,
             [node.node]: { total: 0, running: 0, blockingMigration: 0, withReplication: 0, canMigrate: true, vms: [], loading: true }
           }))
-          
+
           fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/local-vms`)
             .then(res => res.json())
             .then(json => {
@@ -1941,18 +2112,24 @@ return
   // Poll Ceph perf when viewing a Ceph (rbd/cephfs) storage
   useEffect(() => {
     const isCephStorage = selection?.type === 'storage' && data?.storageInfo && (data.storageInfo.type === 'rbd' || data.storageInfo.type === 'cephfs')
+
     if (!isCephStorage) {
       setStorageCephPerf(null)
       setStorageCephPerfHistory([])
-      return
+
+return
     }
+
     const connId = data.storageInfo.connId
+
     const fetchPerf = async () => {
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store' })
         const json = await res.json()
+
         if (json.data?.pgmap) {
           const now = Date.now()
+
           const pt = {
             time: now,
             read_bytes_sec: json.data.pgmap.read_bytes_sec || 0,
@@ -1960,20 +2137,26 @@ return
             read_op_per_sec: json.data.pgmap.read_op_per_sec || 0,
             write_op_per_sec: json.data.pgmap.write_op_per_sec || 0,
           }
+
           setStorageCephPerf(pt)
           setStorageCephPerfHistory(prev => {
             const cutoff = now - 300000 // 5 min
-            return [...prev, pt].filter(p => p.time > cutoff)
+
+
+return [...prev, pt].filter(p => p.time > cutoff)
           })
         }
       } catch { /* ignore */ }
     }
+
     fetchPerf()
 
     let iv: ReturnType<typeof setInterval> | null = null
 
     function start() { if (iv !== null) return; iv = setInterval(fetchPerf, 3000) }
+
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
+
     function onVis() { if (document.visibilityState === 'visible') { fetchPerf(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
@@ -1986,8 +2169,10 @@ return
   useEffect(() => {
     if (selection?.type !== 'storage' || !data?.storageInfo) {
       setStorageRrdHistory([])
-      return
+
+return
     }
+
     const si = data.storageInfo
     const path = `/nodes/${encodeURIComponent(si.node)}/storage/${encodeURIComponent(si.storage)}`
     let cancelled = false
@@ -1995,26 +2180,34 @@ return
     const load = async () => {
       try {
         const raw = await fetchRrd(si.connId, path, storageRrdTimeframe)
+
         if (cancelled) return
+
         const points = (Array.isArray(raw) ? raw : [])
           .filter((p: any) => p.time || p.t || p.timestamp)
           .map((p: any) => {
             const t = Math.round(pickNumber(p, ['time', 't', 'timestamp']) || 0) * 1000
             const total = pickNumber(p, ['total', 'maxdisk']) || 0
             const used = pickNumber(p, ['used', 'disk']) || 0
-            return { time: t, used, total, usedPct: total > 0 ? Math.round((used / total) * 100) : 0 }
+
+
+return { time: t, used, total, usedPct: total > 0 ? Math.round((used / total) * 100) : 0 }
           })
           .filter((p: any) => p.time > 0 && p.total > 0)
+
         setStorageRrdHistory(points)
       } catch { setStorageRrdHistory([]) }
     }
+
     load()
 
     // Auto-refresh every 30s with visibility pause
     let iv: ReturnType<typeof setInterval> | null = null
 
     function start() { if (iv !== null) return; iv = setInterval(load, 30000) }
+
     function stop() { if (iv !== null) { clearInterval(iv); iv = null } }
+
     function onVis() { if (document.visibilityState === 'visible') { load(); start() } else { stop() } }
 
     document.addEventListener('visibilitychange', onVis)
@@ -2058,19 +2251,20 @@ return (
   // Sauvegarder la configuration CPU
   const saveCpuConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
+
     // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
     const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingCpu(true)
 
     try {
       // Build cpu field with flags: "host,flags=+aes;-pcid"
       const activeFlags = Object.entries(cpuFlags).filter(([, v]) => v === '+' || v === '-')
       let cpuField = cpuType
+
       if (activeFlags.length > 0) {
         cpuField += ',flags=' + activeFlags.map(([k, v]) => `${v}${k}`).join(';')
       }
@@ -2087,7 +2281,7 @@ return (
       } else {
         configUpdate.cpulimit = 0
       }
-      
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
         {
@@ -2096,19 +2290,19 @@ return (
           body: JSON.stringify(configUpdate)
         }
       )
-      
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
 
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
-      
+
       // Recharger les données
       const payload = await fetchDetails(selection)
 
       setData(payload)
       setLocalTags(payload.tags || [])
-      
+
       // Message de succès avec avertissement si VM était running
       if (wasRunning) {
         setConfirmAction({
@@ -2137,13 +2331,13 @@ return (
   // Sauvegarder la configuration RAM
   const saveMemoryConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
+
     // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
     const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingMemory(true)
 
     try {
@@ -2160,7 +2354,7 @@ return (
           configUpdate.balloon = 0
         }
       }
-      
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
         {
@@ -2169,19 +2363,19 @@ return (
           body: JSON.stringify(configUpdate)
         }
       )
-      
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
 
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
-      
+
       // Recharger les données
       const payload = await fetchDetails(selection)
 
       setData(payload)
       setLocalTags(payload.tags || [])
-      
+
       // Message de succès avec avertissement si VM était running (LXC applique les changements immédiatement)
       if (wasRunning && type !== 'lxc') {
         setConfirmAction({
@@ -2228,20 +2422,24 @@ return (
 
   const onUnlock = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
+
     setUnlocking(true)
+
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`,
         { method: 'POST' }
       )
-      
+
       if (res.ok) {
         const json = await res.json()
+
         if (json.data?.unlocked) {
           setVmLock({ locked: false })
+
+
           // Rafraîchir les données
           if (onRefresh) {
             await onRefresh()
@@ -2249,6 +2447,7 @@ return (
         }
       } else {
         const err = await res.json().catch(() => ({}))
+
         setUnlockErrorDialog({
           open: true,
           error: err?.error || res.statusText,
@@ -2272,12 +2471,16 @@ return (
   }
 
   const onClone = () => setCloneDialogOpen(true)
+
   const onConvertTemplate = () => {
     const status = data?.vmRealStatus || data?.status
+
     if (status === 'running') {
       alert(t('inventory.vmRunningWarning'))
-      return
+
+return
     }
+
     setConvertTemplateDialogOpen(true)
   }
 
@@ -2296,6 +2499,7 @@ return (
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
 
@@ -2360,16 +2564,16 @@ return (
   // Fonction de suppression effective de la VM
   const handleDeleteVm = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
     const vmName = data?.title || vmid
     const confirmTarget = `${vmid}` // On peut aussi utiliser le nom
-    
+
     // Vérifier que le texte de confirmation correspond
     if (deleteVmConfirmText !== confirmTarget && deleteVmConfirmText !== vmName) {
       return // Le bouton sera disabled de toute façon
     }
-    
+
     setDeletingVm(true)
 
     try {
@@ -2379,7 +2583,7 @@ return (
         params.append('purge', '1')
         params.append('destroy-unreferenced-disks', '1')
       }
-      
+
       const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}?${params.toString()}`
       const res = await fetch(url, { method: 'DELETE' })
 
@@ -2450,14 +2654,18 @@ return (
   const selectedVmFromList = useMemo(() => {
     if (!selection || selection.type !== 'vm') return null
     const { connId, vmid } = parseVmId(selection.id)
-    return allVms.find(v => v.connId === connId && String(v.vmid) === String(vmid)) || null
+
+
+return allVms.find(v => v.connId === connId && String(v.vmid) === String(vmid)) || null
   }, [selection, allVms])
 
   useEffect(() => {
     if (!selectedVmFromList || !data) return
     const liveStatus = selectedVmFromList.status
+
     if (liveStatus && liveStatus !== data.vmRealStatus) {
       const mappedStatus = (liveStatus === 'running' ? 'ok' : liveStatus === 'paused' ? 'warn' : 'crit') as any
+
       setData({ ...data, status: mappedStatus, vmRealStatus: liveStatus })
     }
   }, [selectedVmFromList?.status])
@@ -2472,14 +2680,14 @@ return (
     if (!selection || selection.type !== 'vm') return false
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const vm = allVms.find(v => 
-      v.connId === connId && 
-      v.node === node && 
-      v.type === type && 
+    const vm = allVms.find(v =>
+      v.connId === connId &&
+      v.node === node &&
+      v.type === type &&
       v.vmid === vmid
     )
 
-    
+
 return vm?.isCluster ?? false
   }, [selection, allVms])
 
@@ -2741,10 +2949,10 @@ return vm?.isCluster ?? false
             <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', borderRadius: 2 }}>
               <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 0, '&:last-child': { pb: 0 } }}>
                 {/* Header */}
-                <Box sx={{ 
-                  px: 2, 
-                  py: 1.5, 
-                  borderBottom: '1px solid', 
+                <Box sx={{
+                  px: 2,
+                  py: 1.5,
+                  borderBottom: '1px solid',
                   borderColor: 'divider',
                   display: 'flex',
                   alignItems: 'center',
@@ -2814,27 +3022,27 @@ return vm?.isCluster ?? false
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <svg 
-                width={48} 
-                height={37} 
-                viewBox="0 0 220 170" 
-                fill="none" 
+              <svg
+                width={48}
+                height={37}
+                viewBox="0 0 220 170"
+                fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <path 
-                  d="M 174.30 158.91 C160.99,140.34 155.81,133.18 151.52,127.42 C149.04,124.08 147.00,120.78 147.00,120.10 C147.00,119.42 148.91,116.47 151.25,113.55 C153.59,110.63 157.44,105.71 159.81,102.62 C162.18,99.53 164.71,97.00 165.44,97.00 C166.58,97.00 182.93,119.09 200.79,144.77 C203.71,148.95 208.32,155.38 211.04,159.06 C213.77,162.74 216.00,166.03 216.00,166.37 C216.00,166.72 207.92,167.00 198.05,167.00 L 180.10 167.00 Z M 164.11 69.62 C161.87,67.24 159.22,63.61 151.44,52.29 L 147.85 47.07 L 153.79 39.29 C157.05,35.00 161.25,29.62 163.11,27.32 C164.98,25.02 169.65,19.08 173.50,14.11 L 180.50 5.08 L 199.25 5.04 C209.56,5.02 218.00,5.23 218.00,5.51 C218.00,5.79 214.51,10.42 210.25,15.81 C205.99,21.19 199.80,29.11 196.50,33.41 C193.20,37.71 189.15,42.92 187.50,44.98 C183.18,50.39 169.32,68.18 167.76,70.30 C166.52,72.01 166.33,71.98 164.11,69.62 Z" 
+                <path
+                  d="M 174.30 158.91 C160.99,140.34 155.81,133.18 151.52,127.42 C149.04,124.08 147.00,120.78 147.00,120.10 C147.00,119.42 148.91,116.47 151.25,113.55 C153.59,110.63 157.44,105.71 159.81,102.62 C162.18,99.53 164.71,97.00 165.44,97.00 C166.58,97.00 182.93,119.09 200.79,144.77 C203.71,148.95 208.32,155.38 211.04,159.06 C213.77,162.74 216.00,166.03 216.00,166.37 C216.00,166.72 207.92,167.00 198.05,167.00 L 180.10 167.00 Z M 164.11 69.62 C161.87,67.24 159.22,63.61 151.44,52.29 L 147.85 47.07 L 153.79 39.29 C157.05,35.00 161.25,29.62 163.11,27.32 C164.98,25.02 169.65,19.08 173.50,14.11 L 180.50 5.08 L 199.25 5.04 C209.56,5.02 218.00,5.23 218.00,5.51 C218.00,5.79 214.51,10.42 210.25,15.81 C205.99,21.19 199.80,29.11 196.50,33.41 C193.20,37.71 189.15,42.92 187.50,44.98 C183.18,50.39 169.32,68.18 167.76,70.30 C166.52,72.01 166.33,71.98 164.11,69.62 Z"
                   fill="currentColor"
                 />
-                <path 
-                  d="M 0.03 164.75 C0.05,162.18 2.00,159.04 9.28,149.83 C19.92,136.37 45.56,103.43 54.84,91.32 L 61.17 83.05 L 58.87 79.77 C49.32,66.18 11.10,12.77 8.83,9.86 C7.28,7.85 6.00,5.94 6.00,5.61 C6.00,5.27 14.21,5.01 24.25,5.03 L 42.50 5.06 L 53.50 20.63 C59.55,29.20 65.44,37.40 66.58,38.85 C72.16,45.97 97.33,81.69 97.70,83.02 C98.13,84.59 95.40,88.27 63.50,129.06 C53.05,142.42 42.77,155.64 40.66,158.43 C32.84,168.76 34.77,168.00 16.33,168.00 L 0.00 168.00 L 0.03 164.75 Z M 55.56 167.09 C55.25,166.59 56.95,163.78 59.33,160.84 C61.71,157.90 66.10,152.33 69.08,148.46 C72.06,144.59 81.47,132.50 90.00,121.60 C98.53,110.69 106.38,100.58 107.46,99.13 C108.54,97.69 111.81,93.49 114.72,89.80 L 120.00 83.10 L 115.25 76.47 C112.64,72.82 109.82,68.83 109.00,67.61 C108.18,66.38 105.73,62.93 103.57,59.94 C101.41,56.95 96.88,50.67 93.51,46.00 C77.15,23.36 65.00,6.12 65.00,5.57 C65.00,5.23 73.21,5.08 83.24,5.23 L 101.49 5.50 L 124.77 38.00 C137.58,55.88 150.09,73.37 152.58,76.88 C155.08,80.39 156.91,83.79 156.66,84.44 C156.41,85.09 153.55,88.97 150.30,93.06 C147.06,97.15 137.93,108.82 130.02,119.00 C122.12,129.18 110.29,144.36 103.75,152.75 L 91.85 168.00 L 73.98 168.00 C64.16,168.00 55.87,167.59 55.56,167.09 Z" 
+                <path
+                  d="M 0.03 164.75 C0.05,162.18 2.00,159.04 9.28,149.83 C19.92,136.37 45.56,103.43 54.84,91.32 L 61.17 83.05 L 58.87 79.77 C49.32,66.18 11.10,12.77 8.83,9.86 C7.28,7.85 6.00,5.94 6.00,5.61 C6.00,5.27 14.21,5.01 24.25,5.03 L 42.50 5.06 L 53.50 20.63 C59.55,29.20 65.44,37.40 66.58,38.85 C72.16,45.97 97.33,81.69 97.70,83.02 C98.13,84.59 95.40,88.27 63.50,129.06 C53.05,142.42 42.77,155.64 40.66,158.43 C32.84,168.76 34.77,168.00 16.33,168.00 L 0.00 168.00 L 0.03 164.75 Z M 55.56 167.09 C55.25,166.59 56.95,163.78 59.33,160.84 C61.71,157.90 66.10,152.33 69.08,148.46 C72.06,144.59 81.47,132.50 90.00,121.60 C98.53,110.69 106.38,100.58 107.46,99.13 C108.54,97.69 111.81,93.49 114.72,89.80 L 120.00 83.10 L 115.25 76.47 C112.64,72.82 109.82,68.83 109.00,67.61 C108.18,66.38 105.73,62.93 103.57,59.94 C101.41,56.95 96.88,50.67 93.51,46.00 C77.15,23.36 65.00,6.12 65.00,5.57 C65.00,5.23 73.21,5.08 83.24,5.23 L 101.49 5.50 L 124.77 38.00 C137.58,55.88 150.09,73.37 152.58,76.88 C155.08,80.39 156.91,83.79 156.66,84.44 C156.41,85.09 153.55,88.97 150.30,93.06 C147.06,97.15 137.93,108.82 130.02,119.00 C122.12,129.18 110.29,144.36 103.75,152.75 L 91.85 168.00 L 73.98 168.00 C64.16,168.00 55.87,167.59 55.56,167.09 Z"
                   fill="currentColor"
                   opacity="0.5"
                 />
               </svg>
-              <Typography 
-                variant="h4" 
-                fontWeight={900} 
-                sx={{ 
+              <Typography
+                variant="h4"
+                fontWeight={900}
+                sx={{
                   letterSpacing: -1,
                   color: 'text.secondary'
                 }}
@@ -2842,9 +3050,9 @@ return vm?.isCluster ?? false
                 ProxCenter
               </Typography>
             </Box>
-            <Typography 
-              variant="body2" 
-              sx={{ 
+            <Typography
+              variant="body2"
+              sx={{
                 color: 'text.secondary',
                 textAlign: 'center',
                 maxWidth: 300
@@ -3048,7 +3256,7 @@ return vm?.isCluster ?? false
                   <i className="ri-arrow-left-line" style={{ fontSize: 18 }} />
                 </IconButton>
               )}
-              
+
               {data.kindLabel === 'HOST' ? (
                 <NodeIcon status={data.status === 'crit' ? 'offline' : 'online'} maintenance={data.hostInfo?.maintenance} size={22} />
               ) : data.kindLabel === 'CLUSTER' ? (
@@ -3164,8 +3372,12 @@ return vm?.isCluster ?? false
                       <Divider orientation="vertical" flexItem />
                       <NodeActions
                         disabled={nodeActionBusy}
-                        onReboot={() => { const { connId, node } = parseNodeId(selection!.id); setNodeActionDialog({ action: 'reboot', nodeName: data.title, connId, node }) }}
-                        onShutdown={() => { const { connId, node } = parseNodeId(selection!.id); setNodeActionDialog({ action: 'shutdown', nodeName: data.title, connId, node }) }}
+                        onReboot={() => { const { connId, node } = parseNodeId(selection!.id);
+
+ setNodeActionDialog({ action: 'reboot', nodeName: data.title, connId, node }) }}
+                        onShutdown={() => { const { connId, node } = parseNodeId(selection!.id);
+
+ setNodeActionDialog({ action: 'shutdown', nodeName: data.title, connId, node }) }}
                       />
                     </>
                   )}
@@ -3260,15 +3472,20 @@ return vm?.isCluster ?? false
                     startIcon={exitMaintenanceBusy ? <CircularProgress size={16} /> : undefined}
                     onClick={async () => {
                       const { connId, node } = parseNodeId(selection!.id)
+
                       setExitMaintenanceBusy(true)
                       setExitMaintenanceError(null)
+
                       try {
                         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { method: 'DELETE' })
                         const data = await res.json().catch(() => ({}))
+
                         if (!res.ok) {
                           setExitMaintenanceError(data?.error || res.statusText)
-                          return
+
+return
                         }
+
                         setExitMaintenanceDialogOpen(false)
                         refreshData()
                         if (onRefresh) await onRefresh()
@@ -3309,6 +3526,7 @@ return vm?.isCluster ?? false
             onRefreshSubscription={async () => {
               if (selection) {
                 const payload = await fetchDetails(selection)
+
                 setData(payload)
               }
             }}
@@ -3534,6 +3752,7 @@ return vm?.isCluster ?? false
             const migFailed = extHostMigrations.filter((j: any) => j.status === 'failed').length
             const migRunning = extHostMigrations.filter((j: any) => !['completed', 'failed', 'cancelled'].includes(j.status)).length
             const migTotal = extHostMigrations.length
+
             const totalMigratedGB = extHostMigrations
               .filter((j: any) => j.status === 'completed' && j.totalBytes)
               .reduce((s: number, j: any) => s + Number(j.totalBytes), 0) / 1073741824
@@ -3640,7 +3859,9 @@ return vm?.isCluster ?? false
             const isHypervHost = data.esxiHostInfo.hostType === 'hyperv'
             const isNutanixHost = data.esxiHostInfo.hostType === 'nutanix'
             const extVmIcon = isNutanixHost ? '/images/nutanix-logo.svg' : isXcpng ? '/images/xcpng-logo.svg' : '/images/esxi-vm.svg'
-            return (
+
+
+return (
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                 {data.esxiHostInfo.vms.length === 0 ? (
@@ -3671,7 +3892,10 @@ return vm?.isCluster ?? false
                         sx={{ textTransform: 'none', fontSize: 11, height: 28 }}
                         startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />}
                         onClick={() => {
-                          if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
+                          if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true);
+
+return }
+
                           setBulkMigHostInfo(data.esxiHostInfo)
                           setBulkMigOpen(true)
                         }}
@@ -3723,9 +3947,11 @@ return vm?.isCluster ?? false
                                 onChange={(e) => {
                                   setBulkMigSelected(prev => {
                                     const next = new Set(prev)
+
                                     if (e.target.checked) next.add(vm.vmid)
                                     else next.delete(vm.vmid)
-                                    return next
+
+return next
                                   })
                                 }}
                               />
@@ -3767,20 +3993,27 @@ return vm?.isCluster ?? false
                                 sx={{ textTransform: 'none', fontSize: 10, height: 24, minWidth: 0, px: 1.5 }}
                                 startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} />}
                                 onClick={() => {
-                                  if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
+                                  if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true);
+
+return }
+
                                   const ht = data.esxiHostInfo!.hostType
+
                                   if (ht === 'vcenter' || ht === 'hyperv' || ht === 'nutanix') setMigType('cold')
                                   setEsxiMigrateVm({
                                     vmid: vm.vmid, name: vm.name || vm.vmid, connId: data.esxiHostInfo!.connectionId,
                                     connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
                                     committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
                                     hostType: ht,
+
                                     // Forwarded to the modal so cold-vs-running guards can
                                     // disable the migrate button when the VM isn't off.
                                     status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
+
                                     // VMware Tools state, needed by the Live-on-Windows guard.
                                     toolsStatus: (vm as any).toolsStatus,
                                     toolsRunningStatus: (vm as any).toolsRunningStatus,
+
                                     // vCenter inventory path resolved server-side via SOAP
                                     // (soapResolveHostInventoryPaths). Undefined for standalone ESXi.
                                     vcenterDatacenter: (vm as any).vcenterDatacenter,
@@ -3890,28 +4123,41 @@ return vm?.isCluster ?? false
                         sx={{ textTransform: 'none', fontSize: 11, height: 28, minWidth: 0, px: 1.5, whiteSpace: 'nowrap', flexShrink: 0 }}
                         startIcon={<img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />}
                         onClick={() => {
-                          if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
+                          if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true);
+
+return }
+
                           const ht = vm.hostType || data.esxiVmInfo?.hostType
+
                           if (ht === 'vcenter' || ht === 'hyperv' || ht === 'nutanix') setMigType('cold')
+
+
                           // Pre-fill disk paths for Hyper-V (convert Windows paths to /mnt/hyperv/ linux paths)
                           if (ht === 'hyperv' && (vm as any).diskPaths?.length > 0) {
                             const linuxPaths = ((vm as any).diskPaths as string[]).map((p: string) => {
                               // "C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"
                               const fileName = p.split('\\').pop() || p.split('/').pop() || p
-                              return `/mnt/hyperv/${fileName}`
+
+
+return `/mnt/hyperv/${fileName}`
                             })
+
                             setMigDiskPaths(linuxPaths.join('\n'))
                           }
+
                           setEsxiMigrateVm({
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
                             hostType: ht, diskPaths: (vm as any).diskPaths,
+
                             // Power state for cold-migration guard (disable Start button + warn).
                             status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
+
                             // VMware Tools state for the Live-on-Windows guard.
                             toolsStatus: (vm as any).toolsStatus,
                             toolsRunningStatus: (vm as any).toolsRunningStatus,
+
                             // Forward vCenter inventory path if the source endpoint resolved it.
                             vcenterDatacenter: (vm as any).vcenterDatacenter,
                             vcenterCluster: (vm as any).vcenterCluster,
@@ -4024,16 +4270,21 @@ return vm?.isCluster ?? false
                           {vmMigJob.logs?.length > 1 && (() => {
                             const logs = vmMigJob.logs as { ts: string; msg: string; level: string }[]
                             const startTime = new Date(logs[0].ts).getTime()
+
                             const chartData = logs.map((l: any, idx: number) => {
                               const elapsed = (new Date(l.ts).getTime() - startTime) / 1000
-                              return {
+
+
+return {
                                 elapsed,
                                 pct: typeof l.progress === 'number' ? l.progress : Math.round((idx / (logs.length - 1)) * 100),
                                 time: new Date(l.ts).toLocaleTimeString(),
                                 msg: l.msg,
                               }
                             })
-                            return (
+
+
+return (
                               <Box sx={{ mt: 2 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, mb: 0.5, display: 'block' }}>{t('inventoryPage.esxiMigration.progressOverTime')}</Typography>
                                 <ChartContainer height={70}>
@@ -4050,7 +4301,9 @@ return vm?.isCluster ?? false
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.[0]) return null
                                         const d = payload[0].payload
-                                        return (
+
+
+return (
                                           <Box sx={{
                                             px: 1, py: 0.5, borderRadius: 1, fontSize: 11,
                                             bgcolor: theme.palette.mode === 'dark' ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
@@ -4096,6 +4349,7 @@ return vm?.isCluster ?? false
                         <MuiTooltip title={t('common.copy')}>
                           <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
                             const text = vmMigJob.logs.map((l: any) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '⚠' : '·'} ${l.msg}`).join('\n')
+
                             navigator.clipboard.writeText(text)
                           }}>
                             <i className="ri-file-copy-line" style={{ fontSize: 14 }} />

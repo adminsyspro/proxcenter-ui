@@ -7,8 +7,9 @@
 // read and accepts plain JS values on write — no JSON.stringify/parse needed
 // at the call sites.
 
-import { prisma } from "@/lib/db/prisma"
 import type { Prisma } from "@prisma/client"
+
+import { prisma } from "@/lib/db/prisma"
 
 const DEFAULT_TENANT = "default"
 
@@ -30,6 +31,8 @@ export async function getSetting<T = unknown>(
   let row = await prisma.setting.findUnique({
     where: { key_tenantId: { key, tenantId } },
   })
+
+
   // Fall back to the default-tenant row when the caller is in a sub-tenant
   // that hasn't customised this key. Skipped when we're already in 'default'
   // so we don't double-query for the same primary key.
@@ -38,8 +41,10 @@ export async function getSetting<T = unknown>(
       where: { key_tenantId: { key, tenantId: DEFAULT_TENANT } },
     })
   }
+
   if (!row) return null
-  return row.value as unknown as T
+
+return row.value as unknown as T
 }
 
 /**
@@ -52,6 +57,7 @@ export async function setSetting(
   value: unknown,
 ): Promise<void> {
   const json = (value ?? null) as Prisma.InputJsonValue
+
   await prisma.setting.upsert({
     where: { key_tenantId: { key, tenantId } },
     update: { value: json, updatedAt: new Date() },

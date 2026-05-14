@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useLocale, useTranslations } from 'next-intl'
 import {
   Alert,
@@ -38,6 +39,7 @@ type PbsSubscription = {
 
 function formatDate(value: unknown, locale: string): string {
   if (value === undefined || value === null || value === '') return '—'
+
   if (typeof value === 'number' && Number.isFinite(value)) {
     try {
       return new Date(value * 1000).toLocaleString(locale)
@@ -45,9 +47,11 @@ function formatDate(value: unknown, locale: string): string {
       return String(value)
     }
   }
+
   if (typeof value === 'string') {
     // Accept YYYY-MM-DD
     const parsed = Date.parse(value)
+
     if (!Number.isNaN(parsed)) {
       try {
         return new Date(parsed).toLocaleDateString(locale)
@@ -55,16 +59,21 @@ function formatDate(value: unknown, locale: string): string {
         return value
       }
     }
-    return value
+
+
+return value
   }
-  return String(value)
+
+
+return String(value)
 }
 
 function maskKey(key: string, show: boolean): string {
   if (!key) return '—'
   if (show) return key
   if (key.length <= 8) return key
-  return key.slice(0, 8) + '••••••••'
+
+return key.slice(0, 8) + '••••••••'
 }
 
 export default function PbsSubscriptionTab({ pbsId }: PbsSubscriptionTabProps) {
@@ -79,13 +88,18 @@ export default function PbsSubscriptionTab({ pbsId }: PbsSubscriptionTabProps) {
   const fetchSubscription = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/subscription`, { cache: 'no-store' })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const body = await res.json()
+
       setSub((body?.data as PbsSubscription) || null)
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -100,16 +114,21 @@ export default function PbsSubscriptionTab({ pbsId }: PbsSubscriptionTabProps) {
 
   const statusInfo = useMemo(() => {
     const s = String(sub?.status || '').toLowerCase()
+
     if (s === 'active') {
       return { color: 'success' as const, label: t('inventory.pbsSubscriptionStatusActive') }
     }
+
     if (s === 'expired') {
       return { color: 'warning' as const, label: t('inventory.pbsSubscriptionStatusExpired') }
     }
+
     if (s === 'notfound' || s === 'not found' || s === '') {
       return { color: 'default' as const, label: t('inventory.pbsSubscriptionStatusNotfound') }
     }
-    return { color: 'default' as const, label: t('inventory.pbsSubscriptionStatusInactive') }
+
+
+return { color: 'default' as const, label: t('inventory.pbsSubscriptionStatusInactive') }
   }, [sub?.status, t])
 
   const isNotFound =

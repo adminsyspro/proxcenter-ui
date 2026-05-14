@@ -1,10 +1,8 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { useRBAC } from '@/contexts/RBACContext'
-import { useTenant } from '@/contexts/TenantContext'
-import { getOsSvgIcon } from '@/lib/utils/osIcons'
 
 import {
   Alert,
@@ -38,7 +36,13 @@ import {
   Typography,
   useTheme,
 } from '@mui/material'
+
 import { alpha } from '@mui/material/styles'
+
+import { useRBAC } from '@/contexts/RBACContext'
+import { useTenant } from '@/contexts/TenantContext'
+import { getOsSvgIcon } from '@/lib/utils/osIcons'
+
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
@@ -56,11 +60,14 @@ type DiskConfig = {
   ioThread: boolean
   ssd: boolean
   backup: boolean
+
   /** When true, import an existing disk image instead of creating an empty one.
    *  Uses PVE 8.2+ import-from syntax: `target:0,import-from=source:volid`. */
   importMode: boolean
+
   /** Source storage containing the disk image to import (e.g. "local", "nfs-images"). */
   importStorage: string
+
   /** Full volume ID to import (e.g. "local:iso/myvm.qcow2" or "nfs:images/disk.raw"). */
   importVolume: string
 }
@@ -170,6 +177,7 @@ function CreateVmDialog({
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin } = useRBAC()
+
   // Tenants other than the provider get the cloud abstraction: no node
   // picker, smart auto-placement on the least-loaded node.
   const { currentTenant, loading: tenantLoading } = useTenant()
@@ -180,7 +188,7 @@ function CreateVmDialog({
   const [activeTab, setActiveTab] = useState(0)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Données dynamiques
   const [connections, setConnections] = useState<any[]>([])
   const [nodes, setNodes] = useState<any[]>([])
@@ -190,7 +198,7 @@ function CreateVmDialog({
   const [bridges, setBridges] = useState<any[]>([])
   const [pools, setPools] = useState<any[]>([])
   const [loadingData, setLoadingData] = useState(false)
-  
+
   // Formulaire - Général
   const [selectedConnection, setSelectedConnection] = useState('')
   const [selectedNodeValue, setSelectedNodeValue] = useState('')  // valeur du Select (peut être "cluster:xxx" ou "pve1")
@@ -204,14 +212,14 @@ function CreateVmDialog({
   const [startupOrder, setStartupOrder] = useState('')
   const [startupDelay, setStartupDelay] = useState('')
   const [shutdownTimeout, setShutdownTimeout] = useState('')
-  
+
   // Formulaire - OS
   const [osMediaType, setOsMediaType] = useState<'iso' | 'none'>('iso')
   const [isoStorage, setIsoStorage] = useState('')
   const [isoImage, setIsoImage] = useState('')
   const [guestOsType, setGuestOsType] = useState('Linux')
   const [guestOsVersion, setGuestOsVersion] = useState('l26')
-  
+
   // Formulaire - System
   const [graphicCard, setGraphicCard] = useState('default')
   const [machine, setMachine] = useState('i440fx')
@@ -219,13 +227,14 @@ function CreateVmDialog({
   const [scsiController, setScsiController] = useState('virtio-scsi-single')
   const [qemuAgent, setQemuAgent] = useState(false)
   const [addTpm, setAddTpm] = useState(false)
-  
+
   // Formulaire - Disks (array-based)
   const [disks, setDisks] = useState<DiskConfig[]>([createDefaultDisk()])
   const [expandedDisks, setExpandedDisks] = useState<Set<number>>(new Set([0]))
+
   // Cache of fetched volume lists per disk index + source storage, keyed as "idx:storage"
   const [importVolumes, setImportVolumes] = useState<Record<string, { volid: string; format?: string; size?: number }[]>>({})
-  
+
   // Formulaire - CPU
   const [cpuSockets, setCpuSockets] = useState(1)
   const [cpuCores, setCpuCores] = useState(1)
@@ -233,7 +242,7 @@ function CreateVmDialog({
   const [cpuUnits, setCpuUnits] = useState(100)
   const [cpuLimit, setCpuLimit] = useState(0)
   const [enableNuma, setEnableNuma] = useState(false)
-  
+
   // Formulaire - Memory
   const [memorySize, setMemorySize] = useState(2048)
   const [minMemory, setMinMemory] = useState(2048)
@@ -243,7 +252,7 @@ function CreateVmDialog({
   // through unchecked). Fetched when dialog opens + connection resolved.
   const [vdcQuota, setVdcQuota] = useState<{ maxVcpus: number | null; maxRamMb: number | null; maxStorageMb: number | null; maxVms: number | null } | null>(null)
   const [vdcUsage, setVdcUsage] = useState<{ usedVcpus: number; usedRamMb: number; usedStorageMb: number; usedVms: number } | null>(null)
-  
+
   // UI collapse states
   const [bootSectionExpanded, setBootSectionExpanded] = useState(false)
   const [cpuAdvancedExpanded, setCpuAdvancedExpanded] = useState(false)
@@ -259,20 +268,26 @@ function CreateVmDialog({
   const loadNextVmid = async (connId: string) => {
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/nextid`)
+
       if (res.ok) {
         const json = await res.json()
+
         if (json.data) {
           setVmid(String(json.data))
           setVmidError(null)
-          return
+
+return
         }
       }
     } catch (e) {
       console.error('Error loading next VMID from API:', e)
     }
+
+
     // Fallback: client-side computation
     const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
     let nextId = 100
+
     while (usedVmids.has(nextId)) nextId++
     setVmid(String(nextId))
     setVmidError(null)
@@ -284,11 +299,14 @@ function CreateVmDialog({
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/network-choices?node=${encodeURIComponent(node)}`
       )
+
       if (res.ok) {
         const json = await res.json()
         const choices = Array.isArray(json.data) ? json.data : []
+
         const bridgeList = choices.map((c: any) => ({
           iface: c.name,
+
           // VNets carry a hashed iface (the actual PVE ID) but a friendly
           // display name from the user. Surface displayName as label so the
           // picker shows "lan" instead of "v8a3f9e2b".
@@ -296,7 +314,9 @@ function CreateVmDialog({
           label: c.kind === 'vnet' ? (c.displayName ?? null) : (c.label ?? null),
           vdc: c.vdc ?? null,
         }))
+
         setBridges(bridgeList)
+
         // Sync nic state with what the server actually authorises: valid
         // picks stay, invalid ones (e.g. the default 'vmbr0' when the tenant
         // has no bridge) fall back to the first valid choice — or to '' if
@@ -319,9 +339,11 @@ function CreateVmDialog({
       const bus = 'scsi'
       const usedIndices = prev.filter(d => d.bus === bus).map(d => d.index)
       let nextIndex = 0
+
       while (usedIndices.includes(nextIndex)) nextIndex++
       setExpandedDisks(s => new Set(s).add(prev.length))
-      return [...prev, { ...createDefaultDisk(), bus, index: nextIndex, storage: prev[0]?.storage || '' }]
+
+return [...prev, { ...createDefaultDisk(), bus, index: nextIndex, storage: prev[0]?.storage || '' }]
     })
   }
 
@@ -332,14 +354,19 @@ function CreateVmDialog({
   const updateDisk = (idx: number, updates: Partial<DiskConfig>) => {
     setDisks(prev => {
       const updated = [...prev]
+
       updated[idx] = { ...updated[idx], ...updates }
+
       if (updates.bus && updates.bus !== prev[idx].bus) {
         const usedIndices = prev.filter((d, i) => i !== idx && d.bus === updates.bus).map(d => d.index)
         let nextIndex = 0
+
         while (usedIndices.includes(nextIndex)) nextIndex++
         updated[idx].index = nextIndex
       }
-      return updated
+
+
+return updated
     })
   }
 
@@ -347,7 +374,8 @@ function CreateVmDialog({
   const addNic = () => {
     setNics(prev => {
       setExpandedNics(s => new Set(s).add(prev.length))
-      return [...prev, { ...createDefaultNic(), bridge: prev[0]?.bridge || 'vmbr0' }]
+
+return [...prev, { ...createDefaultNic(), bridge: prev[0]?.bridge || 'vmbr0' }]
     })
   }
 
@@ -358,8 +386,10 @@ function CreateVmDialog({
   const updateNic = (idx: number, updates: Partial<NicConfig>) => {
     setNics(prev => {
       const updated = [...prev]
+
       updated[idx] = { ...updated[idx], ...updates }
-      return updated
+
+return updated
     })
   }
 
@@ -409,17 +439,26 @@ function CreateVmDialog({
     if (!open || !selectedConnection) {
       setVdcQuota(null)
       setVdcUsage(null)
-      return
+
+return
     }
+
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
-        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
+
+        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ;
+
+return }
+
         const json = await res.json()
         const vdcs: any[] = Array.isArray(json?.data) ? json.data : []
         const match = vdcs.find(v => v.connectionId === selectedConnection || v.connection_id === selectedConnection)
+
         if (cancelled) return
+
         if (match?.quota) {
           setVdcQuota({
             maxVcpus: match.quota.maxVcpus ?? null,
@@ -441,14 +480,17 @@ function CreateVmDialog({
         if (!cancelled) { setVdcQuota(null); setVdcUsage(null) }
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, selectedConnection])
 
   // Charger les pools de ressources quand la connexion change
   useEffect(() => {
     if (!open || !selectedConnection) {
       setPools([])
-      return
+
+return
     }
 
     const loadPools = async () => {
@@ -481,38 +523,38 @@ function CreateVmDialog({
     const numericValue = value.replace(/[^0-9]/g, '')
 
     setVmid(numericValue)
-    
+
     // Vérifier si le VMID est valide
     if (!numericValue) {
       setVmidError(null)
-      
+
 return
     }
-    
+
     const vmidNum = Number.parseInt(numericValue, 10)
-    
+
     // Vérifier les limites Proxmox (100-999999999)
     if (vmidNum < 100) {
       setVmidError(t('inventory.createVm.vmIdMin'))
-      
+
 return
     }
 
     if (vmidNum > 999999999) {
       setVmidError(t('inventory.createVm.vmIdMax'))
-      
+
 return
     }
-    
+
     // Vérifier si le VMID est déjà utilisé
     const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === vmidNum)
 
     if (isUsed) {
       setVmidError(t('inventory.createVm.vmIdInUse', { id: vmidNum }))
-      
+
 return
     }
-    
+
     setVmidError(null)
   }
 
@@ -523,6 +565,7 @@ return
     } else {
       const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
       let nextId = 100
+
       while (usedVmids.has(nextId)) nextId++
       setVmid(String(nextId))
       setVmidError(null)
@@ -555,6 +598,7 @@ return
             nodesList.forEach((node: any) => {
               const cpuPct = node.maxcpu ? (node.cpu || 0) * 100 : 0
               const memPct = node.maxmem ? ((node.mem || 0) / node.maxmem) * 100 : 0
+
               allNodes.push({
                 ...node,
                 connId: conn.id,
@@ -578,12 +622,15 @@ return
         if (pool.length === 0) return null
         const online = pool.filter(n => n.status === 'online')
         const candidates = online.length > 0 ? online : pool
+
         const scored = candidates.map(n => ({
           node: n,
           score: (n.cpuPct ?? 0) + 1.5 * (n.memPct ?? 0),
         }))
+
         scored.sort((a, b) => a.score - b.score)
-        return scored[0].node
+
+return scored[0].node
       }
 
       // 3. Sélectionner le node par défaut. For tenants we always go through
@@ -596,7 +643,9 @@ return
           const pool = defaultConnId
             ? allNodes.filter((n: any) => n.connId === defaultConnId)
             : allNodes
+
           const target = pickBestNode(pool.length > 0 ? pool : allNodes)
+
           if (target) {
             setSelectedNodeValue(target.node)
             setResolvedNode(target.node)
@@ -606,12 +655,14 @@ return
         } else if (defaultConnId && defaultNode) {
           const match = allNodes.find((n: any) => n.connId === defaultConnId && n.node === defaultNode)
           const target = match || allNodes[0]
+
           setSelectedNodeValue(target.node)
           setResolvedNode(target.node)
           setSelectedConnection(target.connId)
           loadNextVmid(target.connId)
         } else if (defaultConnId) {
           const clusterNodes = allNodes.filter((n: any) => n.connId === defaultConnId)
+
           if (clusterNodes.length > 0) {
             setPendingClusterSelect(defaultConnId)
             setSelectedConnection(defaultConnId)
@@ -650,10 +701,12 @@ return
 
     // Grouper par connexion
     const connMap = new Map<string, any[]>()
+
     nodes.forEach(n => {
       if (!connMap.has(n.connId)) {
         connMap.set(n.connId, [])
       }
+
       connMap.get(n.connId)!.push(n)
     })
 
@@ -661,9 +714,11 @@ return
     connMap.forEach((nodeList, connId) => {
       const connName = nodeList[0]?.connName || connId
       const onlineNodes = nodeList.filter(n => n.status === 'online')
+
       const avgCpu = onlineNodes.length > 0
         ? onlineNodes.reduce((sum, n) => sum + (n.cpuPct || 0), 0) / onlineNodes.length
         : 0
+
       const avgMem = onlineNodes.length > 0
         ? onlineNodes.reduce((sum, n) => sum + (n.memPct || 0), 0) / onlineNodes.length
         : 0
@@ -684,16 +739,20 @@ return
   // Trouver le meilleur node d'un cluster (moins de charge CPU+RAM)
   const findBestNode = (connId: string): string | null => {
     const group = groupedNodes.find(g => g.connId === connId)
+
     if (!group) return null
 
     const onlineNodes = group.nodes.filter(n => n.status === 'online')
+
     if (onlineNodes.length === 0) return null
 
     // Score = CPU% + RAM%, le plus bas est le meilleur
     const bestNode = onlineNodes.reduce((best, node) => {
       const score = (node.cpuPct || 0) + (node.memPct || 0)
       const bestScore = (best.cpuPct || 0) + (best.memPct || 0)
-      return score < bestScore ? node : best
+
+
+return score < bestScore ? node : best
     })
 
     return bestNode.node
@@ -703,14 +762,17 @@ return
   useEffect(() => {
     if (pendingClusterSelect && groupedNodes.length > 0) {
       const group = groupedNodes.find(g => g.connId === pendingClusterSelect)
+
       if (group && group.isCluster) {
         handleNodeChange(`cluster:${pendingClusterSelect}`)
       } else if (group) {
         const nodeName = group.nodes[0]?.node || ''
+
         setSelectedNodeValue(nodeName)
         setResolvedNode(nodeName)
         setSelectedConnection(pendingClusterSelect)
       }
+
       setPendingClusterSelect(null)
     }
   }, [pendingClusterSelect, groupedNodes])
@@ -718,9 +780,11 @@ return
   // Quand on sélectionne un node ou cluster
   const handleNodeChange = (value: string) => {
     setSelectedNodeValue(value)
+
     if (value.startsWith('cluster:')) {
       const connId = value.replaceAll('cluster:', '')
       const bestNode = findBestNode(connId)
+
       if (bestNode) {
         setResolvedNode(bestNode)
         setSelectedConnection(connId)
@@ -729,6 +793,7 @@ return
     } else {
       setResolvedNode(value)
       const nodeData = nodes.find(n => n.node === value)
+
       if (nodeData) {
         setSelectedConnection(nodeData.connId)
         loadNextVmid(nodeData.connId)
@@ -740,14 +805,16 @@ return
     try {
       const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`)
       const storagesJson = await storagesRes.json()
-      
+
       const allStorages = storagesJson.data || []
+
       setStorages(allStorages)
 
       // Auto-select defaults from filtered storages (only shared + local for resolvedNode)
       const filteredIso = allStorages.filter((s: any) =>
         s.content?.includes('iso') && (s.shared || s.node === resolvedNode)
       )
+
       const filteredDisk = allStorages.filter((s: any) =>
         (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)
       )
@@ -760,10 +827,14 @@ return
         setDisks(prev => {
           if (prev.length > 0 && !prev[0].storage) {
             const updated = [...prev]
+
             updated[0] = { ...updated[0], storage: filteredDisk[0].storage }
-            return updated
+
+return updated
           }
-          return prev
+
+
+return prev
         })
       }
     } catch (e) {
@@ -791,7 +862,7 @@ return
   const handleCreate = async () => {
     setCreating(true)
     setError(null)
-    
+
     try {
       const payload: any = {
         vmid: Number.parseInt(vmid, 10),
@@ -830,6 +901,7 @@ return
           // target-storage:0 means "auto-allocate from source size"
           // import-from=<source-volid> points to the existing disk image
           let diskConfig = `${disk.storage}:0,import-from=${disk.importVolume}`
+
           if (disk.format !== 'raw') diskConfig += `,format=${disk.format}`
           if (disk.cache !== 'none') diskConfig += `,cache=${disk.cache}`
           if (disk.discard) diskConfig += ',discard=on'
@@ -840,6 +912,7 @@ return
         } else if (disk.storage) {
           // Create new empty disk
           let diskConfig = `${disk.storage}:${disk.size}`
+
           if (disk.format !== 'raw') diskConfig += `,format=${disk.format}`
           if (disk.cache !== 'none') diskConfig += `,cache=${disk.cache}`
           if (disk.discard) diskConfig += ',discard=on'
@@ -859,10 +932,12 @@ return
       if (!noNetwork) {
         nics.forEach((nic, i) => {
           const selectedBridge = bridges.find((b: any) => b.iface === nic.bridge)
+
           // Skip the 802.1Q tag on VXLAN SDN VNets — the VNI already carries
           // isolation, tagging on top is virtually never intended.
           const skipVlanTag = selectedBridge?.type === 'vnet'
           let netStr = `${nic.model},bridge=${nic.bridge}`
+
           if (nic.vlanTag && !skipVlanTag) netStr += `,tag=${nic.vlanTag}`
           if (nic.macAddress && nic.macAddress !== 'auto') netStr += `,macaddr=${nic.macAddress}`
           if (nic.firewall) netStr += ',firewall=1'
@@ -927,12 +1002,13 @@ return
     t('inventory.createVm.tabs.network'),
     t('inventory.createVm.tabs.confirm'),
   ]
-  
+
   // Filtrer les storages selon leur contenu ET le node sélectionné
   const isoStoragesList = useMemo(() =>
     storages.filter(s => s.content?.includes('iso') && (s.shared || s.node === resolvedNode)),
     [storages, resolvedNode]
   )
+
   const diskStoragesList = useMemo(() =>
     storages.filter(s => (s.content?.includes('images') || s.content?.includes('rootdir')) && (s.shared || s.node === resolvedNode)),
     [storages, resolvedNode]
@@ -1000,6 +1076,7 @@ return
                       </Box>
                     </MenuItem>
                   ),
+
                   // Nodes du groupe
                   ...group.nodes.map(n => {
                     const isMaintenance = n.hastate === 'maintenance'
@@ -1167,7 +1244,9 @@ return
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
                   {osPresets.map((p) => {
                     const isActive = selectedOsPreset === p.id
-                    return (
+
+
+return (
                       <Box
                         key={p.id}
                         onClick={() => { setGuestOsType(p.type); setGuestOsVersion(p.version); setSelectedOsPreset(p.id) }}
@@ -1392,9 +1471,17 @@ return
           <Stack spacing={1.5}>
             {disks.map((disk, diskIdx) => {
               const isExpanded = expandedDisks.has(diskIdx)
-              const toggleExpand = () => setExpandedDisks(s => { const n = new Set(s); n.has(diskIdx) ? n.delete(diskIdx) : n.add(diskIdx); return n })
+
+              const toggleExpand = () => setExpandedDisks(s => { const n = new Set(s);
+
+ n.has(diskIdx) ? n.delete(diskIdx) : n.add(diskIdx);
+
+return n })
+
               const storageName = diskStoragesList.find(s => s.storage === disk.storage)
-              return (
+
+
+return (
                 <Box key={diskIdx} sx={{ border: '1px solid', borderColor: isExpanded ? 'primary.main' : 'divider', borderRadius: 2, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                   {/* Compact header line */}
                   <Box
@@ -1453,6 +1540,7 @@ return
 
                       {/* Essential fields */}
                       {disk.importMode ? (
+
                         /* ── Import mode: bus + target storage + source storage + volume picker ── */
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
                           <FormControl size="small">
@@ -1466,14 +1554,20 @@ return
                           </FormControl>
                           <FormControl size="small">
                             <InputLabel>{t('inventory.createVm.storage')} ({t('inventory.createVm.target')})</InputLabel>
-                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={`${t('inventory.createVm.storage')} (${t('inventory.createVm.target')})`} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
+                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={`${t('inventory.createVm.storage')} (${t('inventory.createVm.target')})`} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val);
+
+
+
+return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
                               {diskStoragesList.map(s => {
                                 const total = s.total || 0
                                 const used = s.used || 0
                                 const avail = s.avail ?? (total - used)
                                 const usagePct = total > 0 ? Math.round((used / total) * 100) : 0
                                 const usageColor = usagePct > 90 ? 'error' : usagePct > 75 ? 'warning' : 'primary'
-                                return (
+
+
+return (
                                   <MenuItem key={s.id || s.storage} value={s.storage}>
                                     <Box sx={{ width: '100%' }}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
@@ -1493,19 +1587,26 @@ return
                               value={disk.importStorage}
                               onChange={(e) => {
                                 updateDisk(diskIdx, { importStorage: e.target.value, importVolume: '' })
+
+
                                 // Fetch available volumes from the source storage
                                 if (e.target.value && selectedConnection && resolvedNode) {
                                   fetch(`/api/v1/connections/${encodeURIComponent(selectedConnection)}/nodes/${encodeURIComponent(resolvedNode)}/storage/${encodeURIComponent(e.target.value)}/content?content=images,import`)
                                     .then(r => r.json())
                                     .then(d => {
                                       const vols = (d.data || []).map((v: any) => ({ volid: v.volid, format: v.format, size: v.size }))
+
                                       setImportVolumes(prev => ({ ...prev, [`${diskIdx}:${e.target.value}`]: vols }))
                                     })
                                     .catch(() => {})
                                 }
                               }}
                               label={t('inventory.createVm.sourceStorage')}
-                              renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}` : String(val) }}
+                              renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val);
+
+
+
+return s ? `${s.storage}` : String(val) }}
                             >
                               {diskStoragesList.map(s => (
                                 <MenuItem key={s.id || s.storage} value={s.storage}>
@@ -1535,6 +1636,7 @@ return
                           </FormControl>
                         </Box>
                       ) : (
+
                         /* ── New disk mode: bus + storage + size ── */
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5, mb: 2 }}>
                           <FormControl size="small">
@@ -1548,7 +1650,11 @@ return
                           </FormControl>
                           <FormControl size="small" error={diskStoragesList.length === 0}>
                             <InputLabel>{t('inventory.createVm.storage')}</InputLabel>
-                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={t('inventory.createVm.storage')} disabled={diskStoragesList.length === 0} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val); return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
+                            <Select value={disk.storage} onChange={(e) => updateDisk(diskIdx, { storage: e.target.value })} label={t('inventory.createVm.storage')} disabled={diskStoragesList.length === 0} renderValue={(val) => { const s = diskStoragesList.find(x => x.storage === val);
+
+
+
+return s ? `${s.storage}${!s.shared && s.node ? ` — ${s.node}` : ''}` : String(val) }}>
                               {diskStoragesList.length === 0 ? (
                                 <MenuItem value="" disabled>
                                   {storages.length === 0
@@ -1562,7 +1668,9 @@ return
                                   const avail = s.avail ?? (total - used)
                                   const usagePct = total > 0 ? Math.round((used / total) * 100) : 0
                                   const usageColor = usagePct > 90 ? 'error' : usagePct > 75 ? 'warning' : 'primary'
-                                  return (
+
+
+return (
                                     <MenuItem key={s.id || s.storage} value={s.storage}>
                                       <Box sx={{ width: '100%' }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
@@ -1587,6 +1695,7 @@ return
                             value={disk.size === 0 ? '' : disk.size}
                             onChange={(e) => {
                               const n = Number.parseInt(e.target.value, 10)
+
                               updateDisk(diskIdx, { size: Number.isFinite(n) ? n : 0 })
                             }}
                             size="small"
@@ -1646,7 +1755,9 @@ return
         {
           const totalVcpus = cpuSockets * cpuCores
           const cpuPresets = [1, 2, 4, 8, 16, 32]
-          return (
+
+
+return (
             <Stack spacing={2}>
               {/* Quick presets */}
               <Box>
@@ -1773,19 +1884,27 @@ return
       case 5: // Memory
         {
           const memoryMarks = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
+
           const memoryToSlider = (mib: number) => {
             for (let i = memoryMarks.length - 1; i >= 0; i--) {
               if (mib >= memoryMarks[i]) return i + (mib - memoryMarks[i]) / (memoryMarks[Math.min(i + 1, memoryMarks.length - 1)] - memoryMarks[i])
             }
-            return 0
+
+
+return 0
           }
+
           const sliderToMemory = (val: number) => {
             const idx = Math.floor(val)
             const frac = val - idx
+
             if (idx >= memoryMarks.length - 1) return memoryMarks[memoryMarks.length - 1]
             const raw = memoryMarks[idx] + frac * (memoryMarks[idx + 1] - memoryMarks[idx])
-            return Math.round(raw / 128) * 128 || 128
+
+
+return Math.round(raw / 128) * 128 || 128
           }
+
           const formatGib = (mib: number) => mib >= 1024 ? `${(mib / 1024).toFixed(mib % 1024 === 0 ? 0 : 1)} GiB` : `${mib} MiB`
 
           return (
@@ -1882,8 +2001,15 @@ return
 
             {!noNetwork && nics.map((nic, nicIdx) => {
               const isExpanded = expandedNics.has(nicIdx)
-              const toggleExpand = () => setExpandedNics(s => { const n = new Set(s); n.has(nicIdx) ? n.delete(nicIdx) : n.add(nicIdx); return n })
-              return (
+
+              const toggleExpand = () => setExpandedNics(s => { const n = new Set(s);
+
+ n.has(nicIdx) ? n.delete(nicIdx) : n.add(nicIdx);
+
+return n })
+
+
+return (
                 <Box key={nicIdx} sx={{ border: '1px solid', borderColor: isExpanded ? 'primary.main' : 'divider', borderRadius: 2, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                   {/* Compact header */}
                   <Box
@@ -1925,12 +2051,16 @@ return
                                   b.type === 'vnet' ? 'VNet'
                                   : b.type === 'shared' ? 'Shared'
                                   : b.type === 'OVSBridge' ? 'OVS' : null
+
+
                                 // For VNets the iface is the hashed PVE ID and
                                 // b.label is the friendly display name — lead
                                 // with the friendly part, demote the hash.
                                 const primary = b.type === 'vnet' && b.label ? b.label : b.iface
                                 const showHash = b.type === 'vnet' && b.label && b.label !== b.iface
-                                return (
+
+
+return (
                                   <MenuItem key={b.iface} value={b.iface}>
                                     {primary}{tag ? ` (${tag})` : ''}
                                     {showHash && (
@@ -1964,11 +2094,14 @@ return
                         </FormControl>
                         {(() => {
                           const selectedBridge = bridges.find((b: any) => b.iface === nic.bridge)
+
                           // VXLAN SDN VNets carry their own isolation via the
                           // VNI — an 802.1Q tag on top would be VLAN-in-VXLAN,
                           // almost never what the user wants. Hide the input.
                           const isVnet = selectedBridge?.type === 'vnet'
-                          return (
+
+
+return (
                             <TextField
                               label={t('inventory.createVm.vlanTag')}
                               value={isVnet ? '' : nic.vlanTag}
@@ -2036,6 +2169,7 @@ return
       case 7: // Confirm
         {
           const formatGibConfirm = (mib: number) => mib >= 1024 ? `${(mib / 1024).toFixed(mib % 1024 === 0 ? 0 : 1)} GiB` : `${mib} MiB`
+
           const confirmCard = (icon: string, title: string, items: React.ReactNode) => (
             <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
@@ -2045,15 +2179,19 @@ return
               {items}
             </Box>
           )
+
           const blockers: string[] = []
+
           if (!vmid) blockers.push(t('inventory.createVm.confirmStep.noVmid'))
           if (vmidError) blockers.push(t('inventory.createVm.confirmStep.invalidVmid', { error: vmidError }))
           if (!resolvedNode) blockers.push(t('inventory.createVm.confirmStep.noNode'))
+
           if (quotaViolations.length > 0) {
             for (const v of quotaViolations) {
               blockers.push(t('inventory.createVm.confirmStep.quotaViolation', { violation: v }))
             }
           }
+
           if (networkBlocked) {
             const nicDetails = nics
               .map((n, i) => !bridges.some((b: any) => b.iface === n.bridge)
@@ -2061,14 +2199,18 @@ return
                 : null)
               .filter(Boolean)
               .join(', ')
+
             blockers.push(
               bridges.length === 0
                 ? t('inventory.createVm.confirmStep.noBridgeBlocker')
                 : t('inventory.createVm.confirmStep.invalidBridgeBlocker', { nicDetails })
             )
           }
+
           const canCreate = blockers.length === 0
-          return (
+
+
+return (
             <Box>
               {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
               {canCreate ? (
@@ -2174,6 +2316,7 @@ return
   // Format MB as GB with 1 decimal so fractional sizes (1.5 GB, 1.8 GB)
   // render accurately in the donut instead of being rounded up to the same %.
   const formatMbAsGb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`
+
   // Gives immediate feedback as the user tweaks sliders, instead of a 409
   // after they hit Create. Violations are computed in the server's native
   // units (MB, vcpu counts) so GB rounding in the donut labels never masks
@@ -2183,24 +2326,30 @@ return
   const requestedStorageMb = disks.reduce((s, d) => s + (d.storage ? (d.size || 0) * 1024 : 0), 0)
 
   const quotaViolations: string[] = []
+
   if (vdcQuota) {
     const usedVcpus = vdcUsage?.usedVcpus ?? 0
     const usedRamMb = vdcUsage?.usedRamMb ?? 0
     const usedStorageMb = vdcUsage?.usedStorageMb ?? 0
     const usedVms = vdcUsage?.usedVms ?? 0
+
     if (vdcQuota.maxVcpus != null && usedVcpus + requestedVcpus > vdcQuota.maxVcpus) {
       quotaViolations.push(t('inventory.createVm.quotaBanner.violations.vcpus', { projected: usedVcpus + requestedVcpus, max: vdcQuota.maxVcpus }))
     }
+
     if (vdcQuota.maxRamMb != null && usedRamMb + requestedRamMb > vdcQuota.maxRamMb) {
       quotaViolations.push(t('inventory.createVm.quotaBanner.violations.ramGb', { projected: Math.round((usedRamMb + requestedRamMb) / 1024), max: Math.round(vdcQuota.maxRamMb / 1024) }))
     }
+
     if (vdcQuota.maxStorageMb != null && usedStorageMb + requestedStorageMb > vdcQuota.maxStorageMb) {
       quotaViolations.push(t('inventory.createVm.quotaBanner.violations.storageGb', { projected: Math.round((usedStorageMb + requestedStorageMb) / 1024), max: Math.round(vdcQuota.maxStorageMb / 1024) }))
     }
+
     if (vdcQuota.maxVms != null && usedVms + 1 > vdcQuota.maxVms) {
       quotaViolations.push(t('inventory.createVm.quotaBanner.violations.vms', { projected: usedVms + 1, max: vdcQuota.maxVms }))
     }
   }
+
   const quotaBlocked = quotaViolations.length > 0
 
   // Structured quota state for the visual banner: one row per resource with
@@ -2219,21 +2368,28 @@ return
     pct: number
     over: boolean
   }
+
   const quotaItems: QuotaItem[] = vdcQuota ? (() => {
     const fmtNum = (v: number) => String(v)
+
     const raw = [
       { resource: 'vcpus' as const, icon: 'ri-cpu-line', label: t('inventory.createVm.quotaBanner.labels.vcpus'), used: vdcUsage?.usedVcpus ?? 0, requested: requestedVcpus, max: vdcQuota.maxVcpus, format: fmtNum },
       { resource: 'ram' as const, icon: 'ri-ram-2-line', label: t('inventory.createVm.quotaBanner.labels.ram'), used: vdcUsage?.usedRamMb ?? 0, requested: requestedRamMb, max: vdcQuota.maxRamMb, format: formatMbAsGb },
       { resource: 'storage' as const, icon: 'ri-hard-drive-2-line', label: t('inventory.createVm.quotaBanner.labels.storage'), used: vdcUsage?.usedStorageMb ?? 0, requested: requestedStorageMb, max: vdcQuota.maxStorageMb, format: formatMbAsGb },
       { resource: 'vms' as const, icon: 'ri-computer-line', label: t('inventory.createVm.quotaBanner.labels.vms'), used: vdcUsage?.usedVms ?? 0, requested: 1, max: vdcQuota.maxVms, format: fmtNum },
     ]
-    return raw.map(i => {
+
+
+return raw.map(i => {
       const projected = i.used + i.requested
       const pct = i.max != null && i.max > 0 ? Math.round((projected / i.max) * 100) : 0
       const over = i.max != null && projected > i.max
-      return { ...i, projected, pct, over }
+
+
+return { ...i, projected, pct, over }
     })
   })() : []
+
   const overItems = quotaItems.filter(i => i.over)
   const tightItems = quotaItems.filter(i => !i.over && i.pct >= 90)
   const quotaTight = !quotaBlocked && tightItems.length > 0
@@ -2256,27 +2412,27 @@ return
       >
         Create: Virtual Machine
       </AppDialogTitle>
-      
+
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs 
-          value={activeTab} 
+        <Tabs
+          value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           variant="scrollable"
           scrollButtons="auto"
         >
           {tabs.map((label, idx) => (
-            <Tab 
-              key={label} 
-              label={label} 
-              sx={{ 
+            <Tab
+              key={label}
+              label={label}
+              sx={{
                 minWidth: 80,
                 fontWeight: activeTab === idx ? 700 : 400,
-              }} 
+              }}
             />
           ))}
         </Tabs>
       </Box>
-      
+
       <DialogContent sx={{ minHeight: 350, pt: 3 }}>
         {vdcQuota && (() => {
           // Glassmorphism accent colour follows the quota state so the banner
@@ -2284,7 +2440,9 @@ return
           const accent = quotaBlocked ? theme.palette.error.main
             : quotaTight ? theme.palette.warning.main
             : theme.palette.success.main
-          return (
+
+
+return (
           <Box
             sx={{
               mb: 2,
@@ -2377,7 +2535,9 @@ return
               >
                 {overItems.map(item => {
                   const overAmount = item.max != null ? item.projected - item.max : 0
-                  return (
+
+
+return (
                     <Stack key={item.resource} direction="row" alignItems="center" spacing={1.5}>
                       <Box
                         component="i"
@@ -2422,12 +2582,12 @@ return
           renderTabContent()
         )}
       </DialogContent>
-      
+
       <DialogActions sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
         <Button onClick={onClose} disabled={creating}>Cancel</Button>
         <Box sx={{ flex: 1 }} />
-        <Button 
-          onClick={() => setActiveTab(prev => Math.max(0, prev - 1))} 
+        <Button
+          onClick={() => setActiveTab(prev => Math.max(0, prev - 1))}
           disabled={activeTab === 0 || creating}
         >
           Back

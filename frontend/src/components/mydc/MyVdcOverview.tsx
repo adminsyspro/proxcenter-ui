@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import { Box, CircularProgress, IconButton, Paper, Tooltip, Typography } from '@mui/material'
@@ -97,6 +98,7 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
             sx={{
               display: 'grid',
               gap: 2,
+
               // 7 quota donuts now (vCPU, RAM, Storage, VMs, VNets,
               // Snapshots, Backups). 2 cols on phones, 4 on tablets,
               // a single row of 7 on desktop so the cockpit fits in one

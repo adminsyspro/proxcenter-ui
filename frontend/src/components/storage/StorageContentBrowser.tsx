@@ -91,20 +91,27 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
 
   const filtered = useMemo(() => {
     let items = group.items
+
     if (search.trim()) {
       const q = search.toLowerCase()
+
       items = items.filter((item) => {
         const volid = String(item.volid || '').toLowerCase()
         const vmid = item.vmid ? String(item.vmid) : ''
-        return volid.includes(q) || vmid.includes(q)
+
+
+return volid.includes(q) || vmid.includes(q)
       })
     }
+
     if (sortDir) {
       items = [...items].sort((a, b) =>
         sortDir === 'asc' ? (a.size || 0) - (b.size || 0) : (b.size || 0) - (a.size || 0)
       )
     }
-    return items
+
+
+return items
   }, [group.items, search, sortDir])
 
   const handleDelete = async () => {
@@ -114,6 +121,7 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
 
     try {
       const volid = encodeURIComponent(deleteTarget.volid)
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content/${volid}`,
         { method: 'DELETE' }
@@ -121,6 +129,7 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
+
         throw new Error(json.error || `HTTP ${res.status}`)
       }
 
@@ -136,7 +145,9 @@ function ContentGroupCard({ group, connId, node, storage, readOnly, onDeleted, o
   const getFileName = (volid: string) => {
     const parts = String(volid || '').split(':')
     const volPath = parts.length > 1 ? parts.slice(1).join(':') : volid
-    return volPath?.split('/')?.pop() || volPath
+
+
+return volPath?.split('/')?.pop() || volPath
   }
 
   return (
@@ -347,6 +358,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
         const urlObj = new URL(downloadUrl)
         const path = urlObj.pathname
         const name = path.split('/').pop() || ''
+
         if (name && (name.endsWith('.iso') || name.endsWith('.img') || name.endsWith('.tar.gz') || name.endsWith('.tar.xz') || name.endsWith('.tar.zst'))) {
           setUrlFilename(name)
         }
@@ -371,6 +383,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
     const uploadId = typeof crypto?.randomUUID === 'function'
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
     uploadIdRef.current = uploadId
 
     let pollInterval: ReturnType<typeof setInterval> | null = null
@@ -419,10 +432,12 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
 
         if (!res.ok) {
           const json = await res.json().catch(() => ({}))
+
           throw new Error(json.error || `Chunk ${i} failed: HTTP ${res.status}`)
         }
 
         const pct = Math.round(((i + 1) / totalChunks) * 100)
+
         setProgress(pct)
         updateTask(uploadId, { progress: Math.round(pct / 2) })
       }
@@ -433,10 +448,13 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
       pollInterval = setInterval(async () => {
         try {
           const res = await fetch(`/api/v1/upload-progress/${uploadId}`)
+
           if (res.ok) {
             const data = await res.json()
+
             if (data.totalBytes > 0) {
               const pct = Math.round((data.bytesSent / data.totalBytes) * 100)
+
               setTransferProgress(pct)
               updateTask(uploadId, { progress: 50 + Math.round(pct / 2) })
             }
@@ -451,6 +469,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
 
       if (!finalRes.ok) {
         const json = await finalRes.json().catch(() => ({}))
+
         throw new Error(json.error || `Finalize failed: HTTP ${finalRes.status}`)
       }
 
@@ -487,6 +506,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
 
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
+
         throw new Error(json.error || `HTTP ${res.status}`)
       }
 
@@ -575,6 +595,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
           </Box>
 
           {mode === 'file' ? (
+
             /* File picker */
             <Box>
               <Typography variant="caption" sx={{ fontWeight: 700, opacity: 0.7, mb: 1, display: 'block' }}>
@@ -614,6 +635,7 @@ export function UploadDialog({ open, onClose, onOpen, connId, node, storage, con
               </Button>
             </Box>
           ) : (
+
             /* URL input */
             <Stack spacing={2}>
               <TextField
@@ -759,6 +781,7 @@ export default function StorageContentBrowser({
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
+
       setItems(json?.data || [])
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -776,19 +799,27 @@ export default function StorageContentBrowser({
   // Group items by content type
   const groups = useMemo(() => {
     const g: Record<string, ContentGroup> = {}
+
     for (const item of items) {
       const ct = item.content || 'other'
+
       if (!g[ct]) {
         const cfg = CONTENT_MAP[ct] || { label: ct, icon: 'ri-file-line', uploadable: false }
+
         g[ct] = { label: cfg.label, icon: cfg.icon, contentType: ct, items: [] }
       }
+
       g[ct].items.push(item)
     }
+
+
     // Sort items in each group by creation time (newest first)
     for (const group of Object.values(g)) {
       group.items.sort((a, b) => (b.ctime || 0) - (a.ctime || 0))
     }
-    return g
+
+
+return g
   }, [items])
 
   const handleDeleted = () => {

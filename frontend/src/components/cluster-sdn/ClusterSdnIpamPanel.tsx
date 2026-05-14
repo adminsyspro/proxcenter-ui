@@ -33,15 +33,19 @@ export default function ClusterSdnIpamPanel({ connId }: Props) {
   // Load IPAM backends list once on mount.
   useEffect(() => {
     let cancelled = false
+
     ;(async () => {
       setLoadingBackends(true)
       setError(null)
+
       try {
         const res = await fetch(`/api/v1/connections/${connId}/sdn/ipams`, { cache: 'no-store' })
         const body = await res.json()
+
         if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
         if (cancelled) return
         const list: SdnIpam[] = body.data?.ipams ?? []
+
         setBackends(list)
         if (list.length > 0) setSelected(list[0].ipam)
       } catch (e: any) {
@@ -50,19 +54,24 @@ export default function ClusterSdnIpamPanel({ connId }: Props) {
         if (!cancelled) setLoadingBackends(false)
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [connId])
 
   const fetchAllocations = useCallback(async (ipam: string) => {
     if (!ipam) return
     setLoadingAllocs(true)
     setError(null)
+
     try {
       const res = await fetch(
         `/api/v1/connections/${connId}/sdn/ipams/${encodeURIComponent(ipam)}/status`,
         { cache: 'no-store' },
       )
+
       const body = await res.json()
+
       if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
       setAllocations(body.data?.allocations ?? [])
     } catch (e: any) {
@@ -92,6 +101,7 @@ export default function ClusterSdnIpamPanel({ connId }: Props) {
   if (loadingBackends) {
     return <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
   }
+
   if (backends.length === 0) {
     return <Box sx={{ p: 2 }}><Alert severity="info">{t('sdn.ipamPanel.noBackends')}</Alert></Box>
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+
 import { useLocale, useTranslations } from 'next-intl'
 import {
   Alert,
@@ -45,21 +46,29 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 function toMillis(value: unknown): number | null {
   if (value === undefined || value === null || value === '') return null
+
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value * 1000
   }
+
   if (typeof value === 'string') {
     const n = Number(value)
+
     if (Number.isFinite(n) && n > 0) return n * 1000
     const parsed = Date.parse(value)
+
     if (!Number.isNaN(parsed)) return parsed
   }
-  return null
+
+
+return null
 }
 
 function formatCertDate(value: unknown, locale: string): string {
   const ms = toMillis(value)
+
   if (ms === null) return '—'
+
   try {
     return new Date(ms).toLocaleString(locale)
   } catch {
@@ -69,11 +78,14 @@ function formatCertDate(value: unknown, locale: string): string {
 
 function getStatus(notafter: unknown): CertStatus {
   const ms = toMillis(notafter)
+
   if (ms === null) return 'valid'
   const now = Date.now()
+
   if (ms < now) return 'expired'
   if (ms < now + 30 * DAY_MS) return 'expiring'
-  return 'valid'
+
+return 'valid'
 }
 
 export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
@@ -93,18 +105,24 @@ export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
     setLoading(true)
     setError(null)
     setForbidden(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/certificates`, { cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
+
       if (res.status === 403 && body?.forbidden) {
         setForbidden({ requiredPriv: body?.requiredPriv })
         setCerts([])
-        return
+
+return
       }
+
       if (!res.ok) {
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       const data: PbsCertInfo[] = Array.isArray(body?.data) ? body.data : []
+
       setCerts(data)
       setLastUpdated(new Date())
     } catch (e: any) {
@@ -122,7 +140,8 @@ export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
     (s: CertStatus): string => {
       if (s === 'valid') return t('inventory.pbsCertsStatusValid')
       if (s === 'expiring') return t('inventory.pbsCertsStatusExpiring')
-      return t('inventory.pbsCertsStatusExpired')
+
+return t('inventory.pbsCertsStatusExpired')
     },
     [t]
   )
@@ -130,7 +149,8 @@ export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
   const statusColor = (s: CertStatus): 'success' | 'warning' | 'error' => {
     if (s === 'valid') return 'success'
     if (s === 'expiring') return 'warning'
-    return 'error'
+
+return 'error'
   }
 
   const rows = useMemo(() => certs, [certs])
@@ -233,7 +253,9 @@ export default function PbsCertificatesTab({ pbsId }: PbsCertificatesTabProps) {
             <TableBody>
               {rows.map((cert, idx) => {
                 const status = getStatus(cert.notafter)
-                return (
+
+
+return (
                   <TableRow
                     key={`${cert.filename || 'cert'}-${idx}`}
                     hover

@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic"
+
 // src/app/api/v1/rbac/roles/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
@@ -20,6 +21,7 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
   if (typeof raw !== "object") return null
 
   const hidden = (raw as any).hidden
+
   if (!Array.isArray(hidden)) return null
 
   const clean = Array.from(new Set(
@@ -43,7 +45,8 @@ async function denyIfProtectedRoleAndCallerIsNot(
 ): Promise<NextResponse | null> {
   if (!(PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) return null
   if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
+
+return NextResponse.json({ error: "Rôle non trouvé" }, { status: 404 })
 }
 
 /** A role is reachable from the current tenant if it is global (system role,
@@ -56,6 +59,7 @@ function isRoleReachableFromTenant(role: { tenantId: string | null }, currentTen
 // GET /api/v1/rbac/roles/[id] - Détails d'un rôle
 export async function GET(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -67,6 +71,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
     const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, session.user.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const tenantId = await getCurrentTenantId()
@@ -138,6 +143,7 @@ return NextResponse.json(
 // PATCH /api/v1/rbac/roles/[id] - Modifier un rôle
 export async function PATCH(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -156,6 +162,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
     const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, session.user.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const role = await prisma.rbacRole.findUnique({ where: { id } })
@@ -207,9 +214,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     } = {
       updatedAt: now,
     }
+
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (color !== undefined) updateData.color = color
+
+
     // Prisma Json? distinguishes "skip" (undefined) from "set to SQL NULL"
     // (Prisma.DbNull) — sending JS null here would either be rejected by
     // TypeScript or fail at runtime depending on the client version.
@@ -226,6 +236,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
       if (replacePermissions) {
         await tx.rbacRolePermission.deleteMany({ where: { roleId: id } })
+
         if (permIds.length > 0) {
           await tx.rbacRolePermission.createMany({
             data: permIds.map(permissionId => ({ roleId: id, permissionId })),
@@ -292,6 +303,7 @@ return NextResponse.json(
 // DELETE /api/v1/rbac/roles/[id] - Supprimer un rôle
 export async function DELETE(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -310,6 +322,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
     const { id } = await context.params
     const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, session.user.id)
+
     if (superAdminBlock) return superAdminBlock
 
     const role = await prisma.rbacRole.findUnique({ where: { id } })

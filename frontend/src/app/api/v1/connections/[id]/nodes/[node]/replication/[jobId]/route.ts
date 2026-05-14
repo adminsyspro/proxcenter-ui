@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -13,11 +14,13 @@ export async function GET(
   const { id, node, jobId } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
+
   if (denied) return denied
   const url = new URL(req.url)
   const limit = url.searchParams.get('limit') || '50'
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -34,13 +37,15 @@ export async function GET(
     const formattedLogs = Array.isArray(logs) ? logs.map((entry: any) => {
       if (typeof entry === 'string') return entry
       if (entry.t && typeof entry.t === 'string') return entry.t
-      return JSON.stringify(entry)
+
+return JSON.stringify(entry)
     }) : []
 
     return NextResponse.json({ data: formattedLogs })
   } catch (error: any) {
     console.error(`Error fetching replication logs:`, String(error?.message || error).replace(/[\r\n]/g, ''))
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to fetch replication logs",
       data: []
     }, { status: 500 })
@@ -55,9 +60,11 @@ export async function POST(
   const { id, node, jobId } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -73,7 +80,8 @@ export async function POST(
     return NextResponse.json({ success: true, data: result })
   } catch (error: any) {
     console.error(`Error scheduling replication job:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to schedule replication job"
     }, { status: 500 })
   }
@@ -87,9 +95,11 @@ export async function DELETE(
   const { id, node, jobId } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -105,7 +115,8 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error(`Error deleting replication job:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to delete replication job"
     }, { status: 500 })
   }

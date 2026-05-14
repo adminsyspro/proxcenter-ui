@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -13,9 +14,11 @@ export async function GET(
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
+
   if (denied) return denied
 
   const conn = await getConnectionById(id)
+
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
@@ -59,7 +62,7 @@ export async function GET(
     // Vérifier chaque VM QEMU
     for (const vm of qemuVms) {
       if (vm.template === 1) continue // Ignorer les templates
-      
+
       try {
         const config = await pveFetch<any>(
           conn,
@@ -67,15 +70,19 @@ export async function GET(
         )
 
         const localDisks: string[] = []
-        
+
         // Vérifier tous les disques (scsi0-31, virtio0-15, ide0-3, sata0-5)
         const diskPrefixes = ['scsi', 'virtio', 'ide', 'sata', 'efidisk', 'tpmstate']
+
         for (const key of Object.keys(config || {})) {
           const isDisc = diskPrefixes.some(prefix => key.startsWith(prefix))
+
           if (isDisc && typeof config[key] === 'string') {
             const diskValue = config[key] as string
+
             // Format: storage:vm-vmid-disk-N ou storage:size
             const storageName = diskValue.split(':')[0]
+
             if (localStorages.has(storageName)) {
               localDisks.push(`${key}: ${storageName}`)
             }
@@ -85,11 +92,13 @@ export async function GET(
         if (localDisks.length > 0) {
           // Vérifier si la réplication est configurée
           let hasReplication = false
+
           try {
             const replication = await pveFetch<any[]>(
               conn,
               `/nodes/${encodeURIComponent(node)}/replication`
             )
+
             hasReplication = replication?.some((r: any) => r.guest === vm.vmid) || false
           } catch {
             // Ignorer les erreurs de réplication
@@ -112,7 +121,7 @@ export async function GET(
     // Vérifier chaque conteneur LXC
     for (const ct of lxcContainers) {
       if (ct.template === 1) continue // Ignorer les templates
-      
+
       try {
         const config = await pveFetch<any>(
           conn,
@@ -120,13 +129,15 @@ export async function GET(
         )
 
         const localDisks: string[] = []
-        
+
         // Vérifier rootfs et les mount points (mp0-255)
         for (const key of Object.keys(config || {})) {
           if (key === 'rootfs' || key.startsWith('mp')) {
             const diskValue = config[key] as string
+
             if (typeof diskValue === 'string') {
               const storageName = diskValue.split(':')[0]
+
               if (localStorages.has(storageName)) {
                 localDisks.push(`${key}: ${storageName}`)
               }
@@ -168,7 +179,8 @@ export async function GET(
     })
   } catch (error: any) {
     console.error(`Error fetching local VMs for node ${node}:`, error)
-    return NextResponse.json({ 
+
+return NextResponse.json({
       error: error.message || "Failed to fetch local VMs",
       data: { localVms: [], summary: { total: 0, running: 0, withReplication: 0, blockingMigration: 0, canMigrate: true } }
     }, { status: 500 })

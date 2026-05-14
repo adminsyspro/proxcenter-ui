@@ -32,6 +32,7 @@ export const menuData = (t = (key) => key) => [
         icon: 'ri-mind-map',
         href: '/infrastructure/topology',
         permissions: ['vm.view', 'node.view'],
+
         // Cluster-wide layout (nodes / shared storages / SDN graph) is a
         // provider concern — tenants don't manage placement and it would
         // re-leak the node names we hide elsewhere.
@@ -58,6 +59,7 @@ export const menuData = (t = (key) => key) => [
       {
         label: t('navigation.templates'),
         icon: 'ri-instance-line',
+
         // Tenants need to see the catalogue to deploy cloud images into their
         // vDC. Provider keeps automation.view for full management (upload,
         // delete, blueprints). Tenants only need vm.create to use the wizard.
@@ -133,6 +135,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.changes'),
         icon: 'ri-git-commit-line',
         href: '/operations/changes',
+
         // Permissions removed to expose the page in vDC tenant menus for
         // scoping evaluation. API still enforces CONNECTION_VIEW at runtime.
         requiredFeature: 'change_tracking'
@@ -141,6 +144,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.alerts'),
         icon: 'ri-notification-3-line',
         href: '/operations/alerts',
+
         // Permissions removed to expose the page in vDC tenant menus for
         // scoping evaluation. API still enforces ALERTS_VIEW at runtime.
         requiredFeature: 'alerts'
@@ -156,6 +160,7 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.reports'),
         icon: 'ri-file-chart-line',
         href: '/operations/reports',
+
         // Permissions removed to expose the page in vDC tenant menus for
         // scoping evaluation. API still enforces REPORTS_VIEW at runtime.
         requiredFeature: 'reports'
@@ -167,6 +172,7 @@ export const menuData = (t = (key) => key) => [
     isSection: true,
     label: t('navigation.securityAccess'),
     icon: 'ri-shield-keyhole-line',
+
     // Section gate removed so the Audit item can appear for vDC tenants
     // (scoping evaluation). Each child still enforces its own permissions,
     // so users/rbac/compliance stay admin-only as before.

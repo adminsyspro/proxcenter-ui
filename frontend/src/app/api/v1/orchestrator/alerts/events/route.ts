@@ -14,10 +14,12 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+
     if (denied) return denied
 
     const events = await req.json()
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
 
     // Filter events to only include those from tenant's connections
     const tenantConnectionIds = await getTenantConnectionIds()
+
     const filteredEvents = events.filter(
       (e: any) => !e.connectionId || tenantConnectionIds.has(e.connectionId)
     )
@@ -45,7 +48,7 @@ export async function POST(req: Request) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/events] POST error:', error)
     }
-    
+
     // Si l'orchestrator n'est pas disponible, ignorer silencieusement
     if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout')) {
       return NextResponse.json({ status: 'skipped', reason: 'orchestrator unavailable' })

@@ -24,9 +24,11 @@ export async function DELETE(
     const { id, node, storage, volid } = await ctx.params
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (denied) return denied
 
     const storageBlock = await guardTenantStorageWrite(id, storage)
+
     if (storageBlock) return storageBlock
 
     const conn = await getConnectionById(id)
@@ -40,13 +42,16 @@ export async function DELETE(
     // match `custom-<tenantSlug>-*`. Super admins (scope===null) skip this.
     const tenantId = await getCurrentTenantId()
     const scope = await getVdcScope(tenantId)
+
     if (scope) {
       const m = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
       const itemContent = m?.[1] || ''
       const filename = m?.[2] || ''
+
       if (TENANT_FILTERED_CONTENT.has(itemContent)) {
         const row = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
         const tenantSlug = row?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
+
         if (!filename.startsWith(`custom-${tenantSlug}-`)) {
           return NextResponse.json({ error: "Volume not accessible" }, { status: 403 })
         }
@@ -60,6 +65,7 @@ export async function DELETE(
     )
 
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "delete" as any,
       category: "storage",
@@ -71,6 +77,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error("Error deleting storage content:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

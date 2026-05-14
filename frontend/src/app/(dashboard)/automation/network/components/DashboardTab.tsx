@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -14,6 +15,7 @@ import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import DeploymentWizard from './DeploymentWizard'
 
 interface DashboardTabProps {
+
   // Data
   securityGroups: firewallAPI.SecurityGroup[]
   clusterOptions: firewallAPI.ClusterOptions | null
@@ -28,8 +30,10 @@ interface DashboardTabProps {
   totalRules: number
   totalIPSetEntries: number
   nodesList: string[]
+
   // Handlers
   reload: () => void
+
   // Navigation
   onNavigateTab: (tab: number) => void
   onNavigateRulesSubTab: (subTab: number) => void
@@ -346,6 +350,7 @@ export default function DashboardTab({
                 description: t('network.activateFirewall'), action: t('networkPage.viewDetails'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(0) }
               })
             }
+
             if (currentOptions?.policy_in !== 'DROP') {
               recommendations.push({
                 severity: 'warning', icon: 'ri-arrow-down-line',
@@ -353,7 +358,9 @@ export default function DashboardTab({
                 description: t('network.switchToDropZeroTrust'), action: t('microseg.configure'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(1) }
               })
             }
+
             const unprotectedVMs = vmFirewallData.filter(v => !v.firewallEnabled)
+
             if (unprotectedVMs.length > 0) {
               recommendations.push({
                 severity: 'warning', icon: 'ri-computer-line',
@@ -361,6 +368,7 @@ export default function DashboardTab({
                 description: t('network.enableFirewallVms'), action: t('firewall.viewVms'), onClick: () => { onNavigateTab(1); onNavigateRulesSubTab(2) }
               })
             }
+
             if (recommendations.length === 0) {
               recommendations.push({
                 severity: 'success', icon: 'ri-checkbox-circle-line',
@@ -370,7 +378,9 @@ export default function DashboardTab({
 
             return recommendations.map((rec, idx) => {
               const severityColor = rec.severity === 'error' ? '#ef4444' : rec.severity === 'warning' ? '#f59e0b' : rec.severity === 'success' ? '#22c55e' : '#3b82f6'
-              return (
+
+
+return (
                 <Box key={idx} sx={{ p: 1.5, borderRadius: 1.5, flex: '1 1 280px', bgcolor: alpha(severityColor, 0.1), border: `1px solid ${alpha(severityColor, 0.3)}`, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(severityColor, 0.22) }}>
                     <i className={rec.icon} style={{ fontSize: 16, color: severityColor }} />

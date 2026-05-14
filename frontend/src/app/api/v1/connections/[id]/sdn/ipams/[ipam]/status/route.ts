@@ -13,16 +13,22 @@ export async function GET(
   try {
     const { id, ipam } = await ctx.params
     const permError = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
+
     if (permError) return permError
     const conn = await getConnectionById(id)
+
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+
     const allocations = await pveFetch<any[]>(
       conn,
       `/cluster/sdn/ipams/${encodeURIComponent(ipam)}/status`
     )
-    return NextResponse.json({ data: { allocations: allocations ?? [] } })
+
+
+return NextResponse.json({ data: { allocations: allocations ?? [] } })
   } catch (e: any) {
     console.error("Error fetching IPAM allocations:", e)
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
+
+return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })
   }
 }

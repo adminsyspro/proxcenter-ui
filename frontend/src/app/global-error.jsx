@@ -10,7 +10,9 @@ const translations = {
 function getLocale() {
   if (typeof document === 'undefined') return 'fr'
   const match = document.cookie.match(/NEXT_LOCALE=(\w+)/)
-  return match?.[1] === 'en' ? 'en' : 'fr'
+
+
+return match?.[1] === 'en' ? 'en' : 'fr'
 }
 
 // Logo SVG ProxCenter (inline car on ne peut pas utiliser les composants normaux ici)

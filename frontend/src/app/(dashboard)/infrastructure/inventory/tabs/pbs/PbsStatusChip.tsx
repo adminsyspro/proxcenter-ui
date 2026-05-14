@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+
 import { Chip, alpha, useTheme, type ChipProps } from '@mui/material'
 
 /**
@@ -22,6 +23,7 @@ export default function PbsStatusChip({ color = 'default', withDot = false, sx, 
   const bg = palette
     ? alpha(theme.palette[palette].main, 0.16)
     : alpha(theme.palette.text.primary, 0.08)
+
   const fg = palette ? theme.palette[palette].main : theme.palette.text.secondary
 
   return (

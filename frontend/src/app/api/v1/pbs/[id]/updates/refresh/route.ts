@@ -12,6 +12,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> | { id: string } }
 ) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
@@ -21,6 +22,7 @@ export async function POST(
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "pbs", id)
+
     if (denied) return denied
 
     const conn = await getPbsConnectionById(id)

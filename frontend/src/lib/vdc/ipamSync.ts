@@ -56,9 +56,11 @@ import type { ProxmoxClientOptions } from '@/lib/proxmox/client'
 export type PveConfigShape = Record<string, any>
 
 export interface SyncIpamArgs {
+
   /** PVE config before the mutation, or null if the VM didn't exist
    *  (clone target, restore target). */
   before: PveConfigShape | null
+
   /** PVE config the caller is about to push (or has just received from
    *  PVE in the case of clone/restore). All netN/ipconfigN slots that
    *  matter must be present here. */
@@ -70,10 +72,12 @@ export interface SyncIpamArgs {
 }
 
 export interface SyncIpamResult {
+
   /** Map of `ipconfigN` (or other) keys to overwrite in the PUT body
    *  before sending to PVE. Empty when the after-snapshot's ipconfigN
    *  already matches the IPAM-allocated IP. */
   bodyOverrides: Record<string, string>
+
   /** Compensating action — invoke if the caller's PVE write fails after
    *  the sync. Replays the IPAM mutations in reverse order so the DB
    *  ends up consistent with the unchanged PVE config. */
@@ -94,23 +98,31 @@ interface NicSlot {
 function readNicSlot(cfg: PveConfigShape | null, index: number): NicSlot {
   if (!cfg) return { index, bridge: null, mac: null, ipFromIpconfig: null }
   const netVal = cfg[`net${index}`]
+
   if (netVal == null || String(netVal) === '') return { index, bridge: null, mac: null, ipFromIpconfig: null }
   const { bridge, mac } = parseNetLine(String(netVal))
   const { ip } = parseIpconfigLine(String(cfg[`ipconfig${index}`] ?? ''))
-  return { index, bridge, mac, ipFromIpconfig: ip }
+
+
+return { index, bridge, mac, ipFromIpconfig: ip }
 }
 
 function nicSlotIndexes(cfg: PveConfigShape | null): number[] {
   if (!cfg) return []
   const out: number[] = []
+
   for (const key of Object.keys(cfg)) {
     const m = /^net(\d+)$/.exec(key)
+
     if (m) out.push(Number(m[1]))
   }
-  return out
+
+
+return out
 }
 
 interface JournalEntry {
+
   /** Inverse op recorded at apply time. Idempotent. Async because the
    *  underlying release/allocate helpers became async after the Postgres
    *  cutover. */
@@ -167,7 +179,9 @@ function undoRelease(args: {
 function buildIpconfigValue(ip: string, cidr: string, gateway: string): string {
   const prefix = parseCidr(cidr)?.prefix
   const ipPart = prefix !== undefined ? `${ip}/${prefix}` : ip
-  return `ip=${ipPart},gw=${gateway}`
+
+
+return `ip=${ipPart},gw=${gateway}`
 }
 
 /** Cache scan results inside one sync call so we don't refetch for slots
@@ -179,7 +193,9 @@ async function scanSubnetOnce(
 ): Promise<Set<number>> {
   const key = args.subnet.subnetId
   const hit = memo.get(key)
+
   if (hit) return hit
+
   const scanned = await scanUsedIpsForSubnet({
     conn: args.conn,
     vdcPoolName: args.subnet.pvePoolName,
@@ -187,9 +203,12 @@ async function scanSubnetOnce(
     subnetId: args.subnet.subnetId,
     connectionId: args.connectionId,
   })
+
   const set = scannedToIntSet(scanned)
+
   memo.set(key, set)
-  return set
+
+return set
 }
 
 // ---------------------------------------------------------------------------
@@ -225,18 +244,22 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
   // PVE config).
   const existingAllocs = await findAllocationsForVm(args.connectionId, args.vmid)
   const allocByMac = new Map<string, IpamAllocation>()
+
   for (const a of existingAllocs) allocByMac.set(a.mac.toUpperCase(), a)
 
   // No external trigger and no allocations to reconcile → nothing to do.
   if (existingAllocs.length === 0) {
     let anyIpamRelevantSlot = false
+
     for (const idx of allIdx) {
       const beforeSlot = readNicSlot(args.before, idx)
       const afterSlot = readNicSlot(args.after, idx)
       const beforeSubnet = beforeSlot.bridge ? await resolveSubnetForBridge(args.connectionId, beforeSlot.bridge) : null
       const afterSubnet = afterSlot.bridge ? await resolveSubnetForBridge(args.connectionId, afterSlot.bridge) : null
+
       if (beforeSubnet || afterSubnet) { anyIpamRelevantSlot = true; break }
     }
+
     if (!anyIpamRelevantSlot) {
       return { bodyOverrides, rollback: async () => undefined }
     }
@@ -267,6 +290,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
       const macAfter = afterSlot.mac?.toUpperCase() ?? null
 
       const wasIpamManaged = !!beforeSubnet && !!macBefore
+
       const stillSameAllocation =
         wasIpamManaged &&
         !!afterSubnet &&
@@ -277,6 +301,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
         // Find the row we're about to nuke so we can remember its IP for
         // the rollback (re-allocate with hint=ip recreates the same row).
         const stale = allocByMac.get(macBefore!)
+
         if (stale && stale.subnetId === beforeSubnet!.subnetId) {
           await releaseByMac({ subnetId: beforeSubnet!.subnetId, mac: macBefore! })
           journal.push(undoRelease({
@@ -307,6 +332,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
         // re-call wouldn't honour the new hint; we explicitly clear it.
         if (stillSameAllocation && afterSlot.ipFromIpconfig && allocByMac.get(macAfter!)?.ip !== afterSlot.ipFromIpconfig) {
           const old = allocByMac.get(macAfter!)
+
           if (old) {
             await releaseByMac({ subnetId: afterSubnet.subnetId, mac: macAfter! })
             journal.push(undoRelease({
@@ -323,6 +349,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
         }
 
         const hint = afterSlot.ipFromIpconfig ?? undefined
+
         const allocated = await allocateIp({
           vdcId: afterSubnet.vdcId,
           subnetId: afterSubnet.subnetId,
@@ -334,6 +361,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
           hint,
           externalIps,
         })
+
         journal.push(undoAllocate(args.connectionId, afterSubnet.subnetId, allocated.ip))
 
         // If the IP we got differs from what the after-snapshot says

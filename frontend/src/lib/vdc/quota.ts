@@ -54,7 +54,9 @@ function formatMb(mb: number): string {
   if (mb >= 1024) {
     return `${(mb / 1024).toFixed(1)} GB`
   }
-  return `${mb} MB`
+
+
+return `${mb} MB`
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +102,7 @@ export async function resolveVdcForTenant(
   // 5. If node provided, verify it's in the authorized node list
   if (node && vdc.nodes.length > 0) {
     const authorizedNodes = new Set(vdc.nodes.map(n => n.nodeName))
+
     if (!authorizedNodes.has(node)) {
       throw new Error('NODE_NOT_AUTHORIZED')
     }
@@ -155,6 +158,7 @@ export async function checkVdcQuota(
     where: { id: connectionId },
     select: { tenantId: true },
   })
+
   if (!connRecord) {
     throw new Error(`Connection not found: ${connectionId}`)
   }
@@ -164,11 +168,13 @@ export async function checkVdcQuota(
 
   // 4. Fetch pool members from PVE
   let members: any[] = []
+
   try {
     const poolData = await pveFetch<{ members?: any[] }>(
       conn,
       `/pools/${encodeURIComponent(poolName)}`
     )
+
     members = poolData?.members || []
   } catch (err: any) {
     // Pool doesn't exist yet (race condition) or unreachable - treat as 0 usage
@@ -198,19 +204,25 @@ export async function checkVdcQuota(
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).
   let snapshots = 0
+
   if (operation.type === 'snapshot' && quota.maxSnapshots !== null) {
     const snapPromises = vmMembers.map(async (vm: any) => {
       try {
         const resType = vm.type === 'lxc' ? 'lxc' : 'qemu'
+
         const list = await pveFetch<any[]>(
           conn,
           `/nodes/${encodeURIComponent(vm.node)}/${resType}/${encodeURIComponent(String(vm.vmid))}/snapshot`
         )
+
+
         // PVE includes a synthetic "current" entry — exclude it.
         return (list || []).filter((s: any) => s.name !== 'current').length
       } catch { return 0 }
     })
+
     const counts = await Promise.all(snapPromises)
+
     snapshots = counts.reduce((acc, n) => acc + n, 0)
   }
 
@@ -257,6 +269,7 @@ export async function checkVdcQuota(
   }
 
   const addSnapshots = operation.addSnapshots ?? 0
+
   if (quota.maxSnapshots !== null && addSnapshots > 0) {
     if (snapshots + addSnapshots > quota.maxSnapshots) {
       violations.push(

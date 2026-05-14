@@ -5,6 +5,7 @@ import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import { assertNodeName, assertVmid, InvalidShellArgError } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -15,6 +16,7 @@ const CACHE_TTL = 5_000 // 5 seconds
 // Cleanup old cache entries periodically
 setInterval(() => {
   const now = Date.now()
+
   for (const [key, val] of screenshotCache) {
     if (now - val.timestamp > CACHE_TTL * 2) screenshotCache.delete(key)
   }
@@ -30,11 +32,26 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> }
 ) {
-  const { id, type, node, vmid } = await ctx.params
+  const { id, type, node: rawNode, vmid: rawVmid } = await ctx.params
 
   // Only QEMU VMs have a framebuffer
   if (type !== 'qemu') {
     return NextResponse.json({ data: null, reason: 'lxc' })
+  }
+
+  // Strictly validate URL segments before they flow into a shell command.
+  let node: string
+  let vmid: string
+
+  try {
+    node = assertNodeName(rawNode)
+    vmid = assertVmid(rawVmid)
+  } catch (e) {
+    if (e instanceof InvalidShellArgError) {
+      return NextResponse.json({ data: null, reason: 'invalid_args', error: e.message }, { status: 400 })
+    }
+
+    throw e
   }
 
   // RBAC: Check vm.console permission
@@ -73,6 +90,7 @@ export async function GET(
     // and retry once before surfacing the failure.
     if (!sshResult.success) {
       const located = await locateVmInCluster(conn, vmid, "qemu")
+
       if (located && located.node !== resolvedNode) {
         resolvedNode = located.node
         movedTo = located.node
@@ -88,7 +106,9 @@ export async function GET(
     // Cache the result under the resolved node so subsequent calls coming
     // through the stale node URL still hit the cache.
     const b64Data = sshResult.output.trim()
+
     screenshotCache.set(`${id}:${resolvedNode}:${vmid}`, { data: b64Data, timestamp: Date.now() })
+
     if (resolvedNode !== node) {
       screenshotCache.set(cacheKey, { data: b64Data, timestamp: Date.now() })
     }

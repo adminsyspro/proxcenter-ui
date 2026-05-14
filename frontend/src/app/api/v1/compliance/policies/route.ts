@@ -1,5 +1,6 @@
 // GET/PUT /api/v1/compliance/policies
 import { NextResponse } from 'next/server'
+
 import { getServerSession } from 'next-auth'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -13,30 +14,38 @@ export const runtime = 'nodejs'
 
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
     const policies = await getSecurityPolicies(tenantId)
-    return NextResponse.json({ data: policies })
+
+
+return NextResponse.json({ data: policies })
   } catch (e: any) {
     console.error('Error fetching security policies:', e)
-    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PUT(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
@@ -57,6 +66,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ data: updated })
   } catch (e: any) {
     console.error('Error updating security policies:', e)
-    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
+
+return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }

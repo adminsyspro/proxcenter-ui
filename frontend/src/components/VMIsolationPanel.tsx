@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -138,25 +139,25 @@ interface Props {
 export default function VMIsolationPanel({ connectionId, networkFilter, excludePatterns = [] }: Props) {
   const theme = useTheme()
   const t = useTranslations()
-  
+
   const [loading, setLoading] = useState(true)
   const [vmList, setVmList] = useState<VMListForSegmentation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  
+
   const [selectedVM, setSelectedVM] = useState<VMSegmentationSummary | null>(null)
   const [vmStatus, setVmStatus] = useState<VMSegmentationStatus | null>(null)
   const [simulation, setSimulation] = useState<ImpactSimulation | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [isolating, setIsolating] = useState(false)
-  
+
   const [selectedInterfaces, setSelectedInterfaces] = useState<Record<string, boolean>>({})
-  
+
   // Security level: 'standard' (OUT=ACCEPT) or 'reinforced' (OUT=DROP + gateway only)
   const [securityLevel, setSecurityLevel] = useState<'standard' | 'reinforced'>('standard')
-  
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ 
-    open: false, message: '', severity: 'success' 
+
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false, message: '', severity: 'success'
   })
 
   const loadVMList = useCallback(async () => {
@@ -164,7 +165,7 @@ export default function VMIsolationPanel({ connectionId, networkFilter, excludeP
     setError(null)
 
     try {
-      const url = networkFilter 
+      const url = networkFilter
         ? `/api/v1/firewall/microseg/${connectionId}/vms?network=${encodeURIComponent(networkFilter)}`
         : `/api/v1/firewall/microseg/${connectionId}/vms`
 
@@ -187,8 +188,8 @@ export default function VMIsolationPanel({ connectionId, networkFilter, excludeP
 
   const isNetworkExcluded = (networkName: string) => {
     if (!networkName) return false
-    
-return excludePatterns.some(pattern => 
+
+return excludePatterns.some(pattern =>
       networkName.toLowerCase().includes(pattern.toLowerCase())
     )
   }
@@ -199,7 +200,7 @@ return excludePatterns.some(pattern =>
     setSimulation(null)
     setSelectedInterfaces({})
     setLoadingDetail(true)
-    
+
     try {
       const statusRes = await fetch(
         `/api/v1/firewall/microseg/${connectionId}/vm/${vm.node}/${vm.type}/${vm.vmid}`
@@ -209,7 +210,7 @@ return excludePatterns.some(pattern =>
         const statusData = await statusRes.json()
 
         setVmStatus(statusData)
-        
+
         const initialSelection: Record<string, boolean> = {}
 
         statusData.networks?.forEach((net: VMNetworkInfo) => {
@@ -219,7 +220,7 @@ return excludePatterns.some(pattern =>
         })
         setSelectedInterfaces(initialSelection)
       }
-      
+
       const simRes = await fetch(
         `/api/v1/firewall/microseg/${connectionId}/vm/${vm.node}/${vm.type}/${vm.vmid}/simulate`
       )
@@ -246,7 +247,7 @@ return excludePatterns.some(pattern =>
 
   const handleIsolateVM = async () => {
     if (!selectedVM || !vmStatus) return
-    
+
     const selectedBaseSGs: string[] = []
 
     vmStatus.networks?.forEach(net => {
@@ -256,13 +257,13 @@ return excludePatterns.some(pattern =>
         }
       }
     })
-    
+
     if (selectedBaseSGs.length === 0) {
       setSnackbar({ open: true, message: t('vmIsolation.selectInterface'), severity: 'error' })
 
 return
     }
-    
+
     setIsolating(true)
 
     try {
@@ -283,7 +284,7 @@ return
       )
 
       if (!res.ok) throw new Error('Failed to isolate VM')
-      
+
       const levelLabel = securityLevel === 'reinforced' ? t('vmIsolation.levelReinforced') : t('vmIsolation.levelStandard')
 
       setSnackbar({
@@ -306,14 +307,14 @@ return
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
 
-      if (!vm.name.toLowerCase().includes(term) && 
+      if (!vm.name.toLowerCase().includes(term) &&
           !vm.vmid.toString().includes(term) &&
           !vm.node.toLowerCase().includes(term)) {
         return false
       }
     }
 
-    
+
 return true
   }) || []
 
@@ -387,17 +388,17 @@ return true
           </TableHead>
           <TableBody>
             {filteredVMs.map((vm) => (
-              <TableRow 
-                key={`${vm.node}-${vm.vmid}`} 
+              <TableRow
+                key={`${vm.node}-${vm.vmid}`}
                 hover
                 sx={{ cursor: 'pointer', bgcolor: selectedVM?.vmid === vm.vmid ? alpha(theme.palette.primary.main, 0.08) : undefined }}
                 onClick={() => loadVMDetails(vm)}
               >
                 <TableCell>
-                  <Chip 
-                    size="small" 
+                  <Chip
+                    size="small"
                     label={vm.vmid}
-                    sx={{ 
+                    sx={{
                       fontWeight: 600, minWidth: 50,
                       bgcolor: vm.type === 'lxc' ? alpha('#8b5cf6', 0.1) : alpha('#3b82f6', 0.1),
                       color: vm.type === 'lxc' ? '#8b5cf6' : '#3b82f6'
@@ -415,9 +416,9 @@ return true
                   {vm.networks?.length > 0 ? (
                     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                       {vm.networks.slice(0, 2).map(net => (
-                        <Chip 
-                          key={net} size="small" label={net} variant="outlined" 
-                          sx={{ height: 22, fontSize: 11, opacity: isNetworkExcluded(net) ? 0.5 : 1, textDecoration: isNetworkExcluded(net) ? 'line-through' : 'none' }} 
+                        <Chip
+                          key={net} size="small" label={net} variant="outlined"
+                          sx={{ height: 22, fontSize: 11, opacity: isNetworkExcluded(net) ? 0.5 : 1, textDecoration: isNetworkExcluded(net) ? 'line-through' : 'none' }}
                         />
                       ))}
                       {vm.networks.length > 2 && <Chip size="small" label={`+${vm.networks.length - 2}`} sx={{ height: 22, fontSize: 11 }} />}
@@ -476,7 +477,7 @@ return true
             ? <Chip icon={<i className="ri-shield-check-line" />} label={t('vmIsolation.isolatedStatus')} color="success" />
             : <Chip icon={<i className="ri-shield-cross-line" />} label={t('vmIsolation.notIsolatedStatus')} color="warning" />}
         </DialogTitle>
-        
+
         <DialogContent>
           {loadingDetail ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
@@ -566,12 +567,12 @@ return true
                       const isExcluded = isNetworkExcluded(net.network)
                       const hasBaseSG = !!net.base_sg
                       const isSelected = selectedInterfaces[net.interface] || false
-                      
+
                       return (
-                        <Paper 
-                          key={net.interface} 
-                          sx={{ 
-                            p: 1.5, 
+                        <Paper
+                          key={net.interface}
+                          sx={{
+                            p: 1.5,
                             bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : alpha(theme.palette.divider, 0.03),
                             border: `1px solid ${isSelected ? alpha(theme.palette.primary.main, 0.3) : alpha(theme.palette.divider, 0.1)}`,
                             opacity: isExcluded ? 0.6 : 1
@@ -689,11 +690,11 @@ return true
                     }
                   }
 
-                  
+
 return true
                 })
 
-                
+
 return filteredWarnings.length > 0 ? (
                   <Alert severity="warning">
                     <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{t('vmIsolation.warnings')}</Typography>
@@ -760,7 +761,7 @@ return filteredWarnings.length > 0 ? (
             </Stack>
           )}
         </DialogContent>
-        
+
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => { setSelectedVM(null); setVmStatus(null); setSimulation(null); }}>{t('common.close')}</Button>
           {selectedVM && !selectedVM.is_isolated && (

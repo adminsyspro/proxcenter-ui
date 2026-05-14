@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -55,6 +56,7 @@ const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY', 'SEK
 
 export default function DatacenterDialog({ open, initial, onClose, onSaved }: Props) {
   const t = useTranslations()
+
   const [form, setForm] = useState<DatacenterValues>({
     name: '', locationLabel: '', country: '',
     latitude: null, longitude: null,
@@ -64,6 +66,7 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
     comment: '',
     isDefault: false,
   })
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<AssignmentState>({ clusters: new Set(), nodes: new Set() })
@@ -82,7 +85,9 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
         isDefault: false,
       })
     }
+
     setError(null)
+
     // Reset assignments — they'll be repopulated below for an existing DC.
     setAssignments({ clusters: new Set(), nodes: new Set() })
     setInitialAssignments({ clusters: new Set(), nodes: new Set() })
@@ -92,18 +97,22 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
   useEffect(() => {
     if (!open || !initial?.id) return
     let cancelled = false
+
     ;(async () => {
       try {
         const res = await fetch(`/api/v1/admin/datacenters/${encodeURIComponent(initial.id!)}/assignments`)
+
         if (!res.ok) return
         const json = await res.json()
         const data = json?.data ?? {}
+
         const next: AssignmentState = {
           clusters: new Set<string>(Array.isArray(data.clusters) ? data.clusters : []),
           nodes: new Set<string>(
             Array.isArray(data.nodes) ? data.nodes.map((n: any) => `${n.connectionId}|${n.nodeName}`) : [],
           ),
         }
+
         if (cancelled) return
         setAssignments(next)
         setInitialAssignments({
@@ -114,11 +123,14 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
         // ignore — empty state is harmless
       }
     })()
-    return () => { cancelled = true }
+
+
+return () => { cancelled = true }
   }, [open, initial?.id])
 
   const handleCountryPreset = (preset: string) => {
     const found = CO2_COUNTRY_PRESETS.find(p => p.key === preset)
+
     setForm(s => ({
       ...s,
       co2CountryPreset: preset,
@@ -129,11 +141,14 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
   const handleSave = async () => {
     setSaving(true)
     setError(null)
+
     try {
       const url = initial?.id
         ? `/api/v1/admin/datacenters/${encodeURIComponent(initial.id)}`
         : `/api/v1/admin/datacenters`
+
       const method = initial?.id ? 'PUT' : 'POST'
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -155,13 +170,16 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
           isDefault: !!form.isDefault,
         }),
       })
+
       const json = await res.json()
+
       if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
 
       // Persist assignments after the DC row is in place. We always have an
       // ID at this point — either from the freshly inserted row or from the
       // existing edit target.
       const dcId = (json.data?.id ?? initial?.id) as string | undefined
+
       if (dcId) {
         const assignRes = await fetch(`/api/v1/admin/datacenters/${encodeURIComponent(dcId)}/assignments`, {
           method: 'PUT',
@@ -170,12 +188,16 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
             clusters: [...assignments.clusters],
             nodes: [...assignments.nodes].map(k => {
               const [connectionId, nodeName] = k.split('|')
-              return { connectionId, nodeName }
+
+
+return { connectionId, nodeName }
             }),
           }),
         })
+
         if (!assignRes.ok) {
           const j = await assignRes.json().catch(() => ({}))
+
           throw new Error(j?.error || `Assignments HTTP ${assignRes.status}`)
         }
       }

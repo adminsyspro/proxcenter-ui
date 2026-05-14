@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -98,7 +99,9 @@ export function AddOtherHardwareDialog({
         const list = (json?.data || json || []).filter((s: any) =>
           s.content?.includes('images') || s.type === 'zfspool' || s.type === 'lvmthin' || s.type === 'lvm' || s.type === 'dir' || s.type === 'nfs' || s.type === 'cifs'
         )
+
         setStorages(list)
+
         if (list.length > 0) {
           if (!ciStorage) setCiStorage(list[0].storage)
         }
@@ -110,8 +113,10 @@ export function AddOtherHardwareDialog({
   // Load PCI/USB devices when those types are selected
   useEffect(() => {
     if (!open || !connId || !node) return
+
     if (hwType === 'pci' || hwType === 'usb') {
       setDevicesLoading(true)
+
       const endpoint = hwType === 'pci'
         ? `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/pci`
         : `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/hardware/usb`
@@ -120,6 +125,7 @@ export function AddOtherHardwareDialog({
         .then(r => r.json())
         .then(json => {
           const list = json?.data || json || []
+
           if (hwType === 'pci') setPciDevices(list)
           else setUsbDevices(list)
         })
@@ -141,32 +147,41 @@ export function AddOtherHardwareDialog({
     for (let i = 0; i <= max; i++) {
       if (!existingHardware.includes(`${prefix}${i}`)) return i
     }
-    return -1
+
+
+return -1
   }
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
+
     try {
       let config: Record<string, string> = {}
 
       switch (hwType) {
         case 'usb': {
           const idx = nextIndex('usb', 4)
+
           if (idx < 0) throw new Error('Maximum USB devices reached (5)')
+
           if (usbType === 'spice') {
             config = { [`usb${idx}`]: `spice${usbUsb3 ? ',usb3=1' : ''}` }
           } else {
             if (!usbDeviceId) throw new Error('Please select a USB device')
             config = { [`usb${idx}`]: `host=${usbDeviceId}${usbUsb3 ? ',usb3=1' : ''}` }
           }
+
           break
         }
+
         case 'pci': {
           const idx = nextIndex('hostpci', 15)
+
           if (idx < 0) throw new Error('Maximum PCI devices reached (16)')
           if (!pciDeviceId) throw new Error('Please enter a PCI device ID')
           const parts = [pciDeviceId]
+
           if (pciPcie) parts.push('pcie=1')
           if (pciRombar) parts.push('rombar=1')
           if (pciAllFunctions) parts.push('x-vga=0')
@@ -174,17 +189,22 @@ export function AddOtherHardwareDialog({
           config = { [`hostpci${idx}`]: parts.join(',') }
           break
         }
+
         case 'serial': {
           const idx = nextIndex('serial', 3)
+
           if (idx < 0) throw new Error('Maximum serial ports reached (4)')
           config = { [`serial${idx}`]: serialPath || 'socket' }
           break
         }
+
         case 'cloudinit': {
           if (!ciStorage) throw new Error('Please select a storage')
+
           // Find next available disk slot for the chosen bus
           const busPrefix = ciBus
           let slotIdx = 2 // ide2 is typical for cloudinit
+
           if (busPrefix === 'ide') {
             for (let i = 0; i <= 3; i++) {
               if (!existingHardware.includes(`ide${i}`)) { slotIdx = i; break }
@@ -194,15 +214,19 @@ export function AddOtherHardwareDialog({
               if (!existingHardware.includes(`${busPrefix}${i}`)) { slotIdx = i; break }
             }
           }
+
           config = { [`${busPrefix}${slotIdx}`]: `${ciStorage}:cloudinit` }
           break
         }
+
         case 'audio': {
           config = { audio0: `device=${audioDevice},driver=${audioDriver}` }
           break
         }
+
         case 'rng': {
           const parts = [`source=${rngSource}`]
+
           if (rngMaxBytes > 0) parts.push(`max_bytes=${rngMaxBytes}`)
           if (rngPeriod > 0) parts.push(`period=${rngPeriod}`)
           config = { rng0: parts.join(',') }

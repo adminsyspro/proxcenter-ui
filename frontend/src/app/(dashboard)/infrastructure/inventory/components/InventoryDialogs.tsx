@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import dynamic from 'next/dynamic'
-import { useTranslations } from 'next-intl'
 
-import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import dynamic from 'next/dynamic'
+
+import { useTranslations } from 'next-intl'
 
 import {
   Alert,
@@ -36,6 +36,9 @@ import {
   useTheme,
 } from '@mui/material'
 
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+
+
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 
 // Dynamic imports for HardwareModals (code-split, loaded on demand)
@@ -47,6 +50,7 @@ const EditScsiControllerDialog = dynamic(() => import('@/components/HardwareModa
 const AddOtherHardwareDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddOtherHardwareDialog })), { ssr: false })
 const EditOtherHardwareDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.EditOtherHardwareDialog })), { ssr: false })
 const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.CloneVmDialog })), { ssr: false })
+
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 
 import { BULK_MIG_CONCURRENCY } from '../bulkMigrationConfig'
@@ -66,6 +70,7 @@ import { useToast } from '@/contexts/ToastContext'
 /* ------------------------------------------------------------------ */
 
 export interface InventoryDialogsProps {
+
   // Core data
   selection: InventorySelection | null
   data: any
@@ -312,6 +317,7 @@ export interface InventoryDialogsProps {
  */
 function CopyableCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
+
   const handleCopy = async () => {
     try {
       // navigator.clipboard is the modern API; falls back to a no-op if the
@@ -325,7 +331,9 @@ function CopyableCommand({ command }: { command: string }) {
       // swallow — user can still select + copy manually
     }
   }
-  return (
+
+
+return (
     <Box sx={{ position: 'relative' }}>
       <Box
         component="pre"
@@ -423,39 +431,53 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
   React.useEffect(() => {
     if (!migTargetVmid) {
       setMigTargetVmidStatus('idle')
-      return
+
+return
     }
+
     const trimmed = migTargetVmid.trim()
     const n = Number(trimmed)
+
     if (!/^\d+$/.test(trimmed) || !Number.isInteger(n) || n < 100 || n > 999999999) {
       setMigTargetVmidStatus('invalid')
-      return
+
+return
     }
+
     if (!migTargetConn) {
       // Connection not picked yet — can't check, leave idle.
       setMigTargetVmidStatus('idle')
-      return
+
+return
     }
+
     setMigTargetVmidStatus('checking')
     const controller = new AbortController()
+
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(migTargetConn)}/cluster/nextid?vmid=${encodeURIComponent(trimmed)}`,
           { signal: controller.signal }
         )
+
         if (!res.ok) {
           setMigTargetVmidStatus('invalid')
-          return
+
+return
         }
+
         const json = await res.json()
+
         setMigTargetVmidStatus(json?.available ? 'available' : 'taken')
       } catch (err: any) {
         if (err?.name === 'AbortError') return
         setMigTargetVmidStatus('invalid')
       }
     }, 400)
-    return () => {
+
+
+return () => {
       clearTimeout(timer)
       controller.abort()
     }
@@ -519,6 +541,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // and aggregates results with AND semantics.
   const runV2vInstall = React.useCallback(async (nodes: string[]) => {
     setVcenterPreflight(prev => prev ? { ...prev, installing: true, installError: undefined } : prev)
+
     try {
       const installResponses = await Promise.all(nodes.map(async (node: string) => {
         const r = await fetch('/api/v1/migrations/preflight', {
@@ -526,8 +549,11 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node, action: 'install' }),
         })
+
         const json = await r.json().catch(() => ({}))
-        return { node, ok: r.ok && json.success !== false, output: String(json.output || ''), error: String(json.error || '') }
+
+
+return { node, ok: r.ok && json.success !== false, output: String(json.output || ''), error: String(json.error || '') }
       }))
 
       const failedInstalls = installResponses.filter(r => !r.ok)
@@ -536,6 +562,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       if (failedInstalls.length > 0) {
         const aggregated = failedInstalls.map(f => `=== ${f.node} ===\n${f.error || '(no error string)'}\n${f.output.slice(-2000)}`).join('\n\n')
         const looks401Enterprise = /\b401\b/i.test(aggregated) && aggregated.toLowerCase().includes('enterprise.proxmox.com')
+
         installError = {
           output: aggregated,
           hintKey: looks401Enterprise ? '401_enterprise' : undefined,
@@ -548,11 +575,14 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node }),
         })
-        return r2.json()
+
+
+return r2.json()
       }))
 
       const firstWithDisks = results.find((r: any) => r.detectedDisks && r.detectedDisks.length > 0)
       const firstWithStorages = results[0]
+
       setVcenterPreflight({
         checked: true,
         ok: results.every((r: any) => !(r.errors || []).length),
@@ -579,20 +609,28 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // through v2v-pipeline which uses NFC and handles vSAN natively, so we skip the check for them.
   const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
   const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
+
   React.useEffect(() => {
-    if (!esxiMigrateVm) { setSourceDatastores([]); return }
+    if (!esxiMigrateVm) { setSourceDatastores([]);
+
+return }
+
     if (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') {
       setSourceDatastores([])
-      return
+
+return
     }
+
     setSourceDatastoresLoading(true)
     fetch(`/api/v1/vmware/${esxiMigrateVm.connId}/vms/${esxiMigrateVm.vmid}`)
       .then(r => r.json())
       .then(d => {
         const disks = (d?.data?.disks || []) as { fileName?: string }[]
+
         const names = [...new Set(disks
           .map(disk => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
           .filter((n): n is string => !!n))]
+
         setSourceDatastores(names)
       })
       .catch(() => setSourceDatastores([]))
@@ -605,6 +643,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     const installNodes = migTargetNode === '__auto__'
       ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
       : [migTargetNode]
+
     if (installNodes.length === 0) return
 
     // Start background download on all target nodes
@@ -617,6 +656,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
 
     // Poll progress every 2s (check first node as representative)
     const pollNode = installNodes[0]
+
     virtioWinPollRef.current = setInterval(async () => {
       try {
         const r = await fetch('/api/v1/migrations/preflight', {
@@ -624,12 +664,17 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: pollNode, action: 'check-virtio-win' }),
         })
+
         const d = await r.json()
+
         setVirtioWinProgress({ downloading: d.downloading, percent: d.percent || 0, sizeBytes: d.sizeBytes || 0 })
+
         if (d.done) {
           if (virtioWinPollRef.current) clearInterval(virtioWinPollRef.current)
           virtioWinPollRef.current = null
           setVirtioWinProgress(null)
+
+
           // Re-run preflight to update checklist
           const results = await Promise.all(installNodes.map(async (node: string) => {
             const r2 = await fetch('/api/v1/migrations/preflight', {
@@ -637,8 +682,11 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: node }),
             })
-            return r2.json()
+
+
+return r2.json()
           }))
+
           setVcenterPreflight({
             checked: true,
             ok: results.every((r: any) => !(r.errors || []).length),
@@ -663,6 +711,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // freeze the page and look like a JS popup, which contradicts the rule
   // that all user-facing modals must be MUI components.
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' })
+
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setSnackbar({ open: true, message, severity })
   }
@@ -673,14 +722,19 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       {(() => {
         const resolvedConnId = nodeActionDialog?.connId || (selection?.type === 'node' ? parseNodeId(selection.id).connId : '')
         const resolvedNode = nodeActionDialog?.node || (selection?.type === 'node' ? parseNodeId(selection.id).node : '')
+
         const runningVmsOnNode = allVms.filter(vm =>
           vm.connId === resolvedConnId && vm.node === resolvedNode && vm.status === 'running' && !vm.template
         )
+
         const otherOnlineNodes = hosts.filter(h =>
           h.connId === resolvedConnId && h.node !== resolvedNode
         )
+
         const isClusterNode = otherOnlineNodes.length > 0
-        return (
+
+
+return (
                 <Dialog
                   open={nodeActionDialog !== null}
                   onClose={() => { if (!nodeActionBusy) { setNodeActionDialog(null); setNodeActionStep(null); setNodeActionMigrateTarget(''); setNodeActionFailedVms([]); setNodeActionShutdownFailed(false); setNodeActionShutdownLocal(false) } }}
@@ -707,7 +761,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         ? t('inventory.confirmNodeReboot')
                         : t('inventory.confirmNodeShutdown')}
                     </DialogContentText>
-  
+
                     {/* Running VMs info */}
                     {runningVmsOnNode.length > 0 ? (() => {
                       const sharedVms = isClusterNode ? runningVmsOnNode.filter(vm => !nodeActionLocalVms.has(`${vm.connId}:${vm.vmid}`)) : []
@@ -827,14 +881,14 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         <Typography variant="body2">{t('inventory.nodeActionNoRunningVms')}</Typography>
                       </Alert>
                     )}
-  
+
                     {/* Maintenance mode info */}
                     {isClusterNode && (
                       <Alert severity="info" icon={<i className="ri-tools-line" style={{ fontSize: 20 }} />} sx={{ mt: 0 }}>
                         <Typography variant="body2">{t('inventory.nodeActionMaintenanceAuto')}</Typography>
                       </Alert>
                     )}
-  
+
                     {/* Progress steps */}
                     {nodeActionStep && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
@@ -857,13 +911,17 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                       disabled={(() => {
                         if (nodeActionBusy || nodeActionStorageLoading) return true
                         if (nodeActionFailedVms.length > 0 && !nodeActionShutdownFailed) return true
+
                         if (isClusterNode && runningVmsOnNode.length > 0) {
                           const hasShared = runningVmsOnNode.length > nodeActionLocalVms.size
                           const hasLocal = nodeActionLocalVms.size > 0
+
                           if (hasShared && !nodeActionMigrateTarget) return true
                           if (hasLocal && !nodeActionShutdownLocal) return true
                         }
-                        return false
+
+
+return false
                       })()}
                       startIcon={nodeActionBusy ? <CircularProgress size={16} /> : undefined}
                       onClick={async () => {
@@ -871,7 +929,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         setNodeActionBusy(true)
                         const connId = resolvedConnId
                         const node = resolvedNode
-  
+
                         try {
                           // Step 1: Handle running VMs
                           if (runningVmsOnNode.length > 0) {
@@ -885,43 +943,54 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                                 let done = 0
                                 const failed: { vmid: string; name: string; connId: string; type: string; node: string; error: string }[] = []
                                 const batchSize = 3
+
                                 for (let i = 0; i < sharedVms.length; i += batchSize) {
                                   const batch = sharedVms.slice(i, i + batchSize)
+
                                   await Promise.all(batch.map(async (vm) => {
                                     try {
                                       const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/migrate`
+
                                       const res = await fetch(url, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ target: nodeActionMigrateTarget, online: true }),
                                       })
+
                                       if (!res.ok) {
                                         const err = await res.json().catch(() => ({}))
+
                                         failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: err?.error || `HTTP ${res.status}` })
                                       }
                                     } catch (e: any) {
                                       failed.push({ vmid: vm.vmid, name: vm.name, connId: vm.connId, type: vm.type, node: vm.node, error: e?.message || 'Unknown error' })
                                     }
+
                                     done++
                                     setNodeActionStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length }))
                                   }))
                                 }
+
                                 if (failed.length > 0) {
                                   setNodeActionFailedVms(failed)
                                   setNodeActionStep(null)
                                   setNodeActionBusy(false)
-                                  return
+
+return
                                 }
                               } else if (nodeActionFailedVms.length > 0 && nodeActionShutdownFailed) {
                                 // Shutdown VMs that failed migration
                                 setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: nodeActionFailedVms.length }))
                                 let done = 0
+
                                 for (const vm of nodeActionFailedVms) {
                                   const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
+
                                   await fetch(url, { method: 'POST' }).catch(() => {})
                                   done++
                                   setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: nodeActionFailedVms.length }))
                                 }
+
                                 setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
                                 await new Promise(resolve => setTimeout(resolve, 5000))
                               }
@@ -930,12 +999,15 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                               if (localVms.length > 0 && nodeActionShutdownLocal) {
                                 setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: localVms.length }))
                                 let done = 0
+
                                 for (const vm of localVms) {
                                   const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
+
                                   await fetch(url, { method: 'POST' }).catch(() => {})
                                   done++
                                   setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: localVms.length }))
                                 }
+
                                 setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
                                 await new Promise(resolve => setTimeout(resolve, 5000))
                               }
@@ -944,23 +1016,28 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                               setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: runningVmsOnNode.length }))
                               let done = 0
                               const batchSize = 5
+
                               for (let i = 0; i < runningVmsOnNode.length; i += batchSize) {
                                 const batch = runningVmsOnNode.slice(i, i + batchSize)
+
                                 await Promise.all(batch.map(async (vm) => {
                                   const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/shutdown`
+
                                   await fetch(url, { method: 'POST' }).catch(() => {})
                                   done++
                                   setNodeActionStep(t('inventory.nodeActionShutdownVmsStep', { done, total: runningVmsOnNode.length }))
                                 }))
                               }
+
                               setNodeActionStep(t('inventory.nodeActionWaitingVmsStop'))
                               await new Promise(resolve => setTimeout(resolve, 5000))
                             }
                           }
-  
+
                           // Step 2: Enter maintenance mode (cluster only)
                           if (isClusterNode) {
                             setNodeActionStep(t('inventory.nodeActionMaintenanceStep'))
+
                             try {
                               await fetch(
                                 `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
@@ -970,16 +1047,19 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                               // Non-blocking
                             }
                           }
-  
+
                           // Step 3: Execute reboot/shutdown
                           setNodeActionStep(t('inventory.nodeActionExecuteStep', { action: nodeActionDialog.action }))
+
                           const res = await fetch(
                             `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`,
                             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: nodeActionDialog.action }) }
                           )
+
                           const json = await res.json()
+
                           if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`)
-  
+
                           toast.success(nodeActionDialog.action === 'reboot' ? t('inventory.nodeRebootSuccess') : t('inventory.nodeShutdownSuccess'))
                           setNodeActionDialog(null)
                           setNodeActionStep(null)
@@ -1027,7 +1107,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         const { connId, node, vmid, type } = parseVmId(selection.id)
         const existingDisks = data?.disksInfo?.map((d: any) => d.id) || []
         const existingNets = data?.networkInfo?.map((n: any) => n.id) || []
-        
+
         return (
           <>
             <AddDiskDialog
@@ -1039,7 +1119,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               vmid={vmid}
               existingDisks={existingDisks}
             />
-            
+
             <AddNetworkDialog
               open={addNetworkDialogOpen}
               onClose={() => setAddNetworkDialogOpen(false)}
@@ -1050,14 +1130,14 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               vmType={data?.vmType}
               existingNets={existingNets}
             />
-            
+
             <EditScsiControllerDialog
               open={editScsiControllerDialogOpen}
               onClose={() => setEditScsiControllerDialogOpen(false)}
               onSave={handleSaveScsiController}
               currentController={data?.optionsInfo?.scsihw || 'virtio-scsi-single'}
             />
-            
+
             <EditDiskDialog
               open={editDiskDialogOpen}
               onClose={() => {
@@ -1130,7 +1210,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               vmType={type as 'qemu' | 'lxc'}
               isCluster={selectedVmIsCluster}
             />
-            
+
             {/* Dialog de clonage */}
             <CloneVmDialog
               open={cloneDialogOpen}
@@ -1147,7 +1227,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           </>
         )
       })()}
-      
+
       {/* Dialog de migration depuis la table (hors du contexte VM sélectionnée) */}
       {tableMigrateVm && (
         <MigrateVmDialog
@@ -1164,7 +1244,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           isCluster={tableMigrateVm.isCluster}
         />
       )}
-      
+
       {/* Dialog de clonage depuis la table (hors du contexte VM sélectionnée) */}
       {tableCloneVm && (
         <CloneVmDialog
@@ -1180,7 +1260,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           pools={[]}
         />
       )}
-      
+
       {/* Dialog d'édition d'option VM */}
       <Dialog open={!!editOptionDialog} onClose={() => setEditOptionDialog(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1204,7 +1284,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
             {editOptionDialog?.type === 'boolean' && (
               <FormControlLabel
                 control={
-                  <Switch 
+                  <Switch
                     checked={editOptionValue === true || editOptionValue === '1' || editOptionValue === 1}
                     onChange={(e) => setEditOptionValue(e.target.checked ? 1 : 0)}
                   />
@@ -1231,11 +1311,15 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               const fieldLabels: Record<string, string> = { disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }
               const raw = typeof editOptionValue === 'string' ? editOptionValue.toLowerCase() : ''
               const current = raw.split(',').map((s: string) => s.trim()).filter(Boolean)
+
               const toggle = (field: string) => {
                 const next = current.includes(field) ? current.filter((f: string) => f !== field) : [...current, field]
+
                 setEditOptionValue(next.join(','))
               }
-              return (
+
+
+return (
                 <Stack spacing={1}>
                   {fields.map(field => (
                     <FormControlLabel
@@ -1257,23 +1341,32 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               const memoryCapable = MEMORY_CAPABLE.has(vgaType)
               const memoryValue = memoryCapable ? (Number.isFinite(memory) ? memory : 16) : undefined
               const clipboardMatch = parts.slice(1).find((p: string) => p.startsWith('clipboard='))
+
               // MUI Select doesn't handle empty-string values cleanly, so we use
               // "default" as the sentinel for "no explicit clipboard" (which
               // means SPICE if the display is SPICE, per PVE).
               const clipboard = clipboardMatch ? clipboardMatch.split('=')[1] : 'default'
+
+
               // Build the PVE VGA string. Omit `memory=16` (PVE default) and
               // `clipboard=default` (our sentinel) to keep configs clean.
               const buildValue = (nextType: string, nextMemory: number | undefined, nextClipboard: string): string => {
                 const segments = [nextType]
+
                 if (MEMORY_CAPABLE.has(nextType) && typeof nextMemory === 'number' && nextMemory !== 16) {
                   segments.push(`memory=${nextMemory}`)
                 }
+
                 if (MEMORY_CAPABLE.has(nextType) && nextClipboard && nextClipboard !== 'default') {
                   segments.push(`clipboard=${nextClipboard}`)
                 }
-                return segments.join(',')
+
+
+return segments.join(',')
               }
-              return (
+
+
+return (
                 <Stack spacing={2}>
                   <FormControl fullWidth size="small">
                     <InputLabel>{editOptionDialog.label}</InputLabel>
@@ -1283,6 +1376,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         const nextType = String(e.target.value)
                         const nextMem = MEMORY_CAPABLE.has(nextType) ? (memoryValue ?? 16) : undefined
                         const nextClip = MEMORY_CAPABLE.has(nextType) ? clipboard : ''
+
                         setEditOptionValue(buildValue(nextType, nextMem, nextClip))
                       }}
                       label={editOptionDialog.label}
@@ -1305,11 +1399,13 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         value={memoryValue ?? ''}
                         onChange={(e) => {
                           const n = Number.parseInt(e.target.value, 10)
+
                           if (Number.isFinite(n)) setEditOptionValue(buildValue(vgaType, n, clipboard))
                         }}
                         onBlur={(e) => {
                           const n = Number.parseInt(e.target.value, 10)
                           const clamped = Number.isFinite(n) ? Math.max(4, Math.min(512, n)) : 16
+
                           setEditOptionValue(buildValue(vgaType, clamped, clipboard))
                         }}
                       />
@@ -1336,8 +1432,8 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setEditOptionDialog(null)} disabled={editOptionSaving}>{t('common.cancel')}</Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             onClick={handleSaveOption}
             disabled={editOptionSaving}
             startIcon={editOptionSaving ? <CircularProgress size={16} /> : <i className="ri-save-line" />}
@@ -1367,8 +1463,8 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       )}
 
       {/* Dialog Supprimer Groupe HA */}
-      <Dialog 
-        open={!!deleteHaGroupDialog} 
+      <Dialog
+        open={!!deleteHaGroupDialog}
         onClose={() => setDeleteHaGroupDialog(null)}
         maxWidth="xs"
         fullWidth
@@ -1387,8 +1483,8 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteHaGroupDialog(null)}>{t('common.cancel')}</Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             color="error"
             onClick={async () => {
               if (!selection || !deleteHaGroupDialog) return
@@ -1442,8 +1538,8 @@ return
       )}
 
       {/* Dialog Supprimer Affinity Rule */}
-      <Dialog 
-        open={!!deleteHaRuleDialog} 
+      <Dialog
+        open={!!deleteHaRuleDialog}
         onClose={() => setDeleteHaRuleDialog(null)}
         maxWidth="xs"
         fullWidth
@@ -1462,8 +1558,8 @@ return
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteHaRuleDialog(null)}>{t('common.cancel')}</Button>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             color="error"
             onClick={async () => {
               if (!selection || !deleteHaRuleDialog) return
@@ -1495,8 +1591,8 @@ return
       </Dialog>
 
       {/* Dialog de confirmation d'action VM */}
-      <Dialog 
-        open={!!confirmAction} 
+      <Dialog
+        open={!!confirmAction}
         onClose={() => !confirmActionLoading && setConfirmAction(null)}
         maxWidth="xs"
         fullWidth
@@ -1526,13 +1622,13 @@ return
               {t('common.cancel')}
             </Button>
           )}
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             color={
-              confirmAction?.action === 'stop' || confirmAction?.action === 'delete-snapshot' 
-                ? 'error' 
-                : confirmAction?.action === 'info' 
-                  ? 'primary' 
+              confirmAction?.action === 'stop' || confirmAction?.action === 'delete-snapshot'
+                ? 'error'
+                : confirmAction?.action === 'info'
+                  ? 'primary'
                   : 'warning'
             }
             onClick={confirmAction?.onConfirm}
@@ -1571,7 +1667,7 @@ return
                 ))}
               </Select>
             </FormControl>
-            
+
             <FormControl fullWidth size="small">
               <InputLabel>{t('inventory.backupMode')}</InputLabel>
               <Select
@@ -1584,7 +1680,7 @@ return
                 <MenuItem value="stop">{t('audit.actions.stop')}</MenuItem>
               </Select>
             </FormControl>
-            
+
             <FormControl fullWidth size="small">
               <InputLabel>{t('inventory.backupCompression')}</InputLabel>
               <Select
@@ -1598,7 +1694,7 @@ return
                 <MenuItem value="none">{t('common.none')}</MenuItem>
               </Select>
             </FormControl>
-            
+
             <TextField
               fullWidth
               size="small"
@@ -1608,7 +1704,7 @@ return
               multiline
               rows={2}
             />
-            
+
             {data?.vmRealStatus === 'running' && backupMode === 'stop' && (
               <Alert severity="warning">
                 {t('common.warning')}
@@ -1625,9 +1721,9 @@ return
             disabled={creatingBackup || !backupStorage}
             onClick={async () => {
               if (!selection || selection.type !== 'vm' || !backupStorage) return
-              
+
               const { connId, node, type, vmid } = parseVmId(selection.id)
-              
+
               setCreatingBackup(true)
 
               try {
@@ -1639,7 +1735,7 @@ return
                 }
 
                 if (backupNote) params.notes = backupNote
-                
+
                 const res = await fetch(
                   `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/vzdump`,
                   {
@@ -1648,16 +1744,16 @@ return
                     body: JSON.stringify(params)
                   }
                 )
-                
+
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}))
 
                   throw new Error(err?.error || `HTTP ${res.status}`)
                 }
-                
+
                 setCreateBackupDialogOpen(false)
                 showSnackbar(t('backups.backupStarted'), 'success')
-                
+
                 // Recharger les backups après un délai
                 setTimeout(() => {
                   if (selection?.type === 'vm') {
@@ -1706,7 +1802,7 @@ return
               {data?.title || 'VM'} <Typography component="span" variant="body2" sx={{ opacity: 0.6 }}>(ID: {selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''})</Typography>
             </Typography>
           </Box>
-          
+
           <FormControlLabel
             control={
               <Switch
@@ -1717,7 +1813,7 @@ return
             label={t('inventory.deleteVmDisks')}
             sx={{ mb: 3 }}
           />
-          
+
           <Typography variant="body2" sx={{ mb: 1 }}>
             {t('common.confirm')}: <strong>{selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''}</strong> / <strong>{data?.title}</strong>
           </Typography>
@@ -1739,8 +1835,8 @@ return
             variant="contained"
             color="error"
             disabled={
-              deletingVm || 
-              (deleteVmConfirmText !== (selection?.type === 'vm' ? parseVmId(selection.id).vmid : '') && 
+              deletingVm ||
+              (deleteVmConfirmText !== (selection?.type === 'vm' ? parseVmId(selection.id).vmid : '') &&
                deleteVmConfirmText !== data?.title)
             }
             onClick={handleDeleteVm}
@@ -1967,6 +2063,7 @@ return
                       onChange={e => {
                         const val = e.target.value as string
                         const [connId, node] = val.split('::')
+
                         setMigTargetConn(connId || '')
                         setMigTargetNode(node || '')
                         setMigTargetStorage('')
@@ -1979,8 +2076,10 @@ return
                         const opt = migNodeOptions.find((o: any) => o.connId === connId && o.node === node)
                         const isCluster = conn?.hosts?.length > 1
                         const isDarkRv = theme.palette.mode === 'dark'
+
                         if (!conn) return ''
-                        return (
+
+return (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
                               <img src={isDarkRv ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
@@ -1996,7 +2095,9 @@ return
                         const isDark = theme.palette.mode === 'dark'
                         const connNodes = migNodeOptions.filter((o: any) => o.connId === conn.id)
                         const items: React.ReactNode[] = []
+
                         if (connIdx > 0) items.push(<Divider key={`div-${conn.id}`} />)
+
                         if (isCluster) {
                           // Cluster: header + indented nodes
                           items.push(
@@ -2027,6 +2128,7 @@ return
                         } else {
                           // Standalone: single selectable row with connection name
                           const node = connNodes[0]
+
                           if (node) {
                             items.push(
                               <MenuItem key={`${conn.id}::${node.node}`} value={`${conn.id}::${node.node}`}>
@@ -2042,7 +2144,9 @@ return
                             )
                           }
                         }
-                        return items
+
+
+return items
                       })}
                     </Select>
                   </FormControl>
@@ -2054,8 +2158,10 @@ return
                       label={t('inventoryPage.esxiMigration.targetStorage')}
                       renderValue={(val) => {
                         const s = migStorages.find((s: any) => s.storage === val)
+
                         if (!s) return ''
-                        return (
+
+return (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.7 }} />
                             <Typography variant="body2" fontWeight={500}>{s.storage}</Typography>
@@ -2066,7 +2172,9 @@ return
                     >
                       {migStorages.map((s: any) => {
                         const usedPct = s.total && s.avail ? Math.round(((s.total - s.avail) / s.total) * 100) : 0
-                        return (
+
+
+return (
                           <MenuItem key={s.storage} value={s.storage}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                               <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.7 }} />
@@ -2095,8 +2203,10 @@ return
                         label={t('inventoryPage.esxiMigration.networkBridge')}
                         renderValue={(val) => {
                           const b = migBridges.find((b: any) => b.iface === val)
+
                           if (!b) return ''
-                          return (
+
+return (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <i className="ri-router-line" style={{ fontSize: 14, opacity: 0.7 }} />
                               <Typography variant="body2" fontWeight={500}>{b.iface}</Typography>
@@ -2241,17 +2351,24 @@ return
                     const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                     const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                     const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
-                    return (isV2vVcenter || isDirectEsxiWinCold) && vcenterPreflight?.checked
+
+
+return (isV2vVcenter || isDirectEsxiWinCold) && vcenterPreflight?.checked
                   })() && (() => {
                     const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+
                     // Describe the scope of the preflight check so the user understands
                     // that the dep status is aggregated across ALL nodes the batch
                     // could land on when Auto is selected, not just a single node.
                     const isAuto = migTargetNode === '__auto__'
+
                     const checkedNodes = isAuto
                       ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').length
                       : 1
+
                     const scopeLabel = isAuto ? `all ${checkedNodes} online nodes of the cluster` : 'the target node'
+
+
                     // Split the dep list into "apt-installable" (what the Install button
                     // covers) and "manual" (virtio-win — a proprietary Red Hat ISO not
                     // packaged in Debian repos, the user must fetch it themselves). The
@@ -2264,11 +2381,13 @@ return
                       { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
                       { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
                     ]
+
                     const virtioWinMissing = !vcenterPreflight.virtioWinInstalled
                     const virtioWinRequired = isWindowsGuest
                     const missingApt = aptChecklist.some(d => !d.installed)
                     const allAptOk = !missingApt
                     const allOk = allAptOk && (!virtioWinRequired || !virtioWinMissing)
+
                     if (allOk) {
                       return (
                         <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
@@ -2276,12 +2395,16 @@ return
                         </Alert>
                       )
                     }
+
+
                     // Build the full checklist for display (apt + virtio-win info line).
                     const checklist: { label: string; installed: boolean; required: boolean; note?: string; manual?: boolean }[] = [
                       ...aptChecklist,
                       { label: 'virtio-win ISO', installed: vcenterPreflight.virtioWinInstalled, required: virtioWinRequired, note: virtioWinRequired ? 'Windows guest drivers — MANUAL install' : 'Windows guest drivers (not needed for Linux VMs)', manual: true },
                     ]
-                    return (
+
+
+return (
                       <>
                       {installErrorAlert}
                       {missingApt && <Alert
@@ -2332,6 +2455,7 @@ return
                             const installNodes = migTargetNode === '__auto__'
                               ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
                               : [migTargetNode]
+
                             await runV2vInstall(installNodes)
                           }}
                           sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
@@ -2404,23 +2528,30 @@ return
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
                           const vmDiskBytes = esxiMigrateVm?.committed || 0
                           const requiredBytes = vmDiskBytes * 2 // source + converted
+
                           if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
+
                           if (sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required`
-                          return `${availGB} GB available (${sel.filesystem})`
+
+return `${availGB} GB available (${sel.filesystem})`
                         })()}
                         error={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
                           const vmDiskBytes = esxiMigrateVm?.committed || 0
-                          return sel ? sel.availableBytes < vmDiskBytes * 2 : false
+
+
+return sel ? sel.availableBytes < vmDiskBytes * 2 : false
                         })()}
                       >
                         {vcenterPreflight.tempStorages.map(s => {
                           const usedPct = Math.round(((s.totalBytes - s.availableBytes) / s.totalBytes) * 100)
                           const availGB = (s.availableBytes / 1073741824).toFixed(1)
                           const totalGB = (s.totalBytes / 1073741824).toFixed(1)
-                          return (
+
+
+return (
                             <MenuItem key={s.path} value={s.path}>
                               <Box sx={{ width: '100%' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
@@ -2459,7 +2590,9 @@ return
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                           {esxiMigrateVm.diskPaths.map((disk: string) => {
                             const fileName = disk.split('\\').pop() || disk.split('/').pop() || disk
-                            return (
+
+
+return (
                               <Box key={disk} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}>
                                 <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: theme.palette.success.main }} />
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -2504,7 +2637,9 @@ return
               {/* SSH warning — not needed for vCenter (virt-v2v handles connection) */}
               {esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && migTargetConn && (() => {
                 const selectedConn = migPveConnections.find((c: any) => c.id === migTargetConn)
-                return selectedConn && !selectedConn.sshEnabled ? (
+
+
+return selectedConn && !selectedConn.sshEnabled ? (
                   <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
                     {t('inventoryPage.esxiMigration.sshRequired')}
                   </Alert>
@@ -2718,6 +2853,7 @@ return
                 disabled={(() => {
                   // Base requirements (always apply)
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || migStarting) return true
+
                   // Block migration when the user picked a VMID that conflicts
                   // or is malformed. `idle`, `available` and `checking` all
                   // pass — `checking` only locks the button while debounced
@@ -2727,10 +2863,12 @@ return
                   if (migTargetVmid && (migTargetVmidStatus === 'taken' || migTargetVmidStatus === 'invalid')) return true
                   const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                   const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+
                   // Direct-ESXi Windows Cold is auto-routed through virt-v2v by the API
                   // for automatic driver injection, so we gate on the same deps as vCenter.
                   const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
                   const needsV2vDeps = isV2vVcenter || isDirectEsxiWinCold
+
                   // Power-state gates: cold needs the VM off, live needs it on.
                   // Applies to every source type. Auto-power-off/on is intentionally
                   // NOT done here - the user toggles VM state on the source hypervisor
@@ -2738,12 +2876,15 @@ return
                   // on a stopped VM is pointless (it becomes just a cold run with an
                   // orphan snapshot attempt).
                   const isRunning = esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn'
+
                   if (migType === 'cold' && isRunning) return true
                   if (migType === 'live' && esxiMigrateVm && !isRunning) return true
+
                   // Live + Windows needs running VMware Tools for VSS quiesce,
                   // otherwise virt-v2v will fail on a dirty NTFS. Fail fast in
                   // the UI rather than 10 min into the migration.
                   if (migType === 'live' && esxiMigrateVm && (esxiMigrateVm.guestOS || '').toLowerCase().includes('windows') && esxiMigrateVm.toolsRunningStatus !== 'guestToolsRunning') return true
+
                   if (needsV2vDeps) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
                     if (!vcenterPreflight.virtV2vInstalled) return true
@@ -2751,32 +2892,42 @@ return
                     if (!vcenterPreflight.nbdcopyInstalled) return true
                     if (!vcenterPreflight.guestfsToolsInstalled) return true
                     if (!vcenterPreflight.ovmfInstalled) return true
+
                     // virtio-win is required for Windows guests — without it the
                     // VM will likely BSOD with INACCESSIBLE_BOOT_DEVICE.
                     if (isWindowsGuest && !vcenterPreflight.virtioWinInstalled) return true
+
                     // Temp storage must have at least 2x the source VM's committed
                     // space (rough heuristic: NFC download + virt-v2v converted output).
                     if (!migTempStorage) return true
                     const sel = vcenterPreflight.tempStorages?.find(s => s.path === migTempStorage)
+
                     if (!sel || sel.availableBytes < (esxiMigrateVm?.committed || 0) * 2) return true
+
                     // Direct-ESXi via v2v also requires SSH + key on the source connection
                     // (virt-v2v -it ssh doesn't do password auth).
                     if (isDirectEsxiWinCold && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
-                    return false
+
+return false
                   }
+
+
                   // ESXi-direct path: SSH must be configured on the target Proxmox
                   // connection and sshfs/pv must be available when those modes selected.
                   if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                   if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
+
                   // vSAN source on direct-ESXi: blocked because vSAN objects need NFC via vCenter.
                   if (vsanBlocksMigration) return true
-                  return false
+
+return false
                 })()}
                 sx={{ textTransform: 'none' }}
                 startIcon={migStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
                 onClick={async () => {
                   if (!esxiMigrateVm) return
                   setMigStarting(true)
+
                   try {
                     const res = await fetch('/api/v1/migrations', {
                       method: 'POST',
@@ -2792,18 +2943,21 @@ return
                           targetVmid: Number(migTargetVmid.trim()),
                         }),
                         networkBridge: migNetworkBridge,
+
                         // 802.1Q VLAN tag (1-4094). Empty input means untagged
                         // access port — omit from the payload so the server-side
                         // schema treats it as undefined rather than Number.NaN.
                         ...(migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
                           vlanTag: Number(migVlanTag),
                         }),
+
                         // vCenter supports cold + live via the v2v pipeline
                         // (NFC-on-snapshot). Hyper-V / Nutanix are still cold only.
                         migrationType: (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'cold'
                           : (esxiMigrateVm.hostType === 'vcenter' ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                         transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
+
                         // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
                         // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
                         ...(migTempStorage !== '/tmp' && {
@@ -2812,6 +2966,7 @@ return
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
                           diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
                         }),
+
                         // vCenter inventory path resolved server-side via SOAP and threaded
                         // down through esxiMigrateVm. Required by libvirt's vpx driver to
                         // locate the VM in the vCenter inventory hierarchy.
@@ -2833,14 +2988,19 @@ return
                         }),
                       }),
                     })
+
                     const d = await res.json()
+
                     if (d.data?.jobId) {
                       const jobId = d.data.jobId
+
                       setMigJobId(jobId)
+
                       // Add task to ProxCenter TasksBar
                       const taskId = `migration-${jobId}`
                       const vmLabel = esxiMigrateVm.name || esxiMigrateVm.vmid
                       const sourceType = esxiMigrateVm.hostType === 'xcpng' ? 'XCP-ng' : esxiMigrateVm.hostType === 'vcenter' ? 'vCenter' : esxiMigrateVm.hostType === 'hyperv' ? 'Hyper-V' : esxiMigrateVm.hostType === 'nutanix' ? 'Nutanix' : 'ESXi'
+
                       addPCTask({
                         id: taskId,
                         type: 'generic',
@@ -2850,8 +3010,10 @@ return
                         status: 'running',
                         createdAt: Date.now(),
                       })
+
                       // Register restore callback to reopen dialog
                       const savedVm = { ...esxiMigrateVm }
+
                       registerOnRestore(taskId, () => {
                         setEsxiMigrateVm(savedVm)
                         setMigJobId(jobId)
@@ -2878,6 +3040,7 @@ return
                     onClick={async () => {
                       const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
                       const d = await res.json().catch(() => ({}))
+
                       if (d.data) setMigJob(d.data)
                     }}
                   >
@@ -2897,6 +3060,7 @@ return
                   onClick={async () => {
                     const res = await fetch(`/api/v1/migrations/${migJobId}/retry`, { method: 'POST' })
                     const d = await res.json()
+
                     if (d.data?.jobId) setMigJobId(d.data.jobId)
                   }}
                 >
@@ -2944,13 +3108,18 @@ return
                   xcpng: undefined,
                   nutanix: undefined,
                 }
+
                 const vmIconSrc = vmIconByType[bulkMigHostInfo?.hostType || ''] || undefined
-                return (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid)).map((vm: any) => {
+
+
+return (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid)).map((vm: any) => {
                   const dotColor =
                     vm.status === 'running' ? '#4caf50' :
                     vm.status === 'paused' || vm.status === 'suspended' ? '#ed6c02' :
                     '#f44336'
-                  return (
+
+
+return (
                     <Box key={vm.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.3 }}>
                       <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, flexShrink: 0 }}>
                         {vmIconSrc
@@ -2985,6 +3154,7 @@ return
                     <FormControl fullWidth size="small">
                       <InputLabel>{t('inventoryPage.esxiMigration.targetNode')}</InputLabel>
                       <Select
+
                         /*
                          * Value encoding: "<connId>::<node>" for a specific node,
                          * "<connId>::__auto__" for cluster-wide round-robin auto.
@@ -2998,6 +3168,7 @@ return
                         onChange={e => {
                           const val = e.target.value as string
                           const [connId, node] = val.split('::')
+
                           setMigTargetConn(connId || '')
                           setMigTargetNode(node || '')
                           setMigTargetStorage('')
@@ -3010,7 +3181,9 @@ return
                           const opt = migNodeOptions.find((o: any) => o.connId === connId && o.node === node)
                           const isCluster = conn?.hosts?.length > 1
                           const isDarkRv = theme.palette.mode === 'dark'
+
                           if (!conn) return ''
+
                           // Auto mode tied to a cluster: show a clear label that
                           // makes the scope obvious ("Auto across <cluster>") so
                           // the user knows the batch lands only on that cluster's
@@ -3023,7 +3196,8 @@ return
                               </Typography>
                             </Box>
                           )
-                          return (
+
+return (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
                                 <img src={isDarkRv ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
@@ -3039,7 +3213,9 @@ return
                           const isDark = theme.palette.mode === 'dark'
                           const connNodes = migNodeOptions.filter((o: any) => o.connId === conn.id)
                           const items: React.ReactNode[] = []
+
                           if (connIdx > 0) items.push(<Divider key={`div-${conn.id}`} />)
+
                           if (isCluster) {
                             items.push(
                               <MenuItem key={`header-${conn.id}`} disabled sx={{ opacity: '1 !important', py: 0.5, minHeight: 32, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
@@ -3052,6 +3228,7 @@ return
                                 </Box>
                               </MenuItem>
                             )
+
                             // Per-cluster Auto entry: round-robin across THIS cluster's
                             // nodes only. Previously there was a single global Auto that
                             // silently bound to the first connection — unusable in multi-
@@ -3088,6 +3265,7 @@ return
                             })
                           } else {
                             const node = connNodes[0]
+
                             if (node) {
                               items.push(
                                 <MenuItem key={`${conn.id}::${node.node}`} value={`${conn.id}::${node.node}`}>
@@ -3103,7 +3281,9 @@ return
                               )
                             }
                           }
-                          return items
+
+
+return items
                         })}
                       </Select>
                     </FormControl>
@@ -3117,8 +3297,10 @@ return
                             label={t('inventoryPage.esxiMigration.targetStorage')}
                             renderValue={(val) => {
                               const s = migStorages.find((s: any) => s.storage === val)
+
                               if (!s) return ''
-                              return (
+
+return (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.7 }} />
                                   <Typography variant="body2" fontWeight={500}>{s.storage}</Typography>
@@ -3129,7 +3311,9 @@ return
                           >
                             {migStorages.map((s: any) => {
                               const usedPct = s.total && s.avail ? Math.round(((s.total - s.avail) / s.total) * 100) : 0
-                              return (
+
+
+return (
                                 <MenuItem key={s.storage} value={s.storage}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                                     <i className="ri-hard-drive-2-line" style={{ fontSize: 14, opacity: 0.7 }} />
@@ -3159,8 +3343,10 @@ return
                               label={t('inventoryPage.esxiMigration.networkBridge')}
                               renderValue={(val) => {
                                 const b = migBridges.find((b: any) => b.iface === val)
+
                                 if (!b) return ''
-                                return (
+
+return (
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-router-line" style={{ fontSize: 14, opacity: 0.7 }} />
                                     <Typography variant="body2" fontWeight={500}>{b.iface}</Typography>
@@ -3272,10 +3458,13 @@ return
                     below and does NOT block the Start Migration button. */}
                 {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && vcenterPreflight?.checked && (() => {
                   const isAutoBulk = migTargetNode === '__auto__'
+
                   const checkedNodesBulk = isAutoBulk
                     ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').length
                     : 1
+
                   const scopeLabelBulk = isAutoBulk ? `all ${checkedNodesBulk} online nodes of the cluster` : 'the target node'
+
                   // Detect whether the user has any Windows VMs in the selected
                   // batch by looking at the Guest OS string each hypervisor
                   // reports (same field shown in the "Guest OS" table column).
@@ -3283,10 +3472,14 @@ return
                   // hide both the checklist row and the manual install block to
                   // avoid noise. Mixed Linux+Windows batches still show it.
                   const selectedVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+
                   const hasWindowsInBatch = selectedVms.some((vm: any) => {
                     const os = (vm.guest_OS || vm.guestOS || '').toString().toLowerCase()
-                    return os.includes('win')
+
+
+return os.includes('win')
                   })
+
                   const aptChecklistBulk = [
                     { label: 'virt-v2v', installed: vcenterPreflight.virtV2vInstalled, required: true, note: 'VM OS conversion + driver injection' },
                     { label: 'nbdkit', installed: vcenterPreflight.nbdkitInstalled, required: true, note: 'needed by virt-v2v -i disk on vSAN VMs' },
@@ -3294,8 +3487,11 @@ return
                     { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
                     { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
                   ]
+
                   const virtioWinMissingBulk = !vcenterPreflight.virtioWinInstalled && hasWindowsInBatch
                   const missingAptBulk = aptChecklistBulk.some(d => !d.installed)
+
+
                   // Only include the virtio-win row in the checklist when the
                   // batch actually contains a Windows guest — no point showing
                   // it otherwise.
@@ -3305,6 +3501,7 @@ return
                       { label: 'virtio-win ISO', installed: vcenterPreflight.virtioWinInstalled, required: false, note: 'Windows guest drivers — MANUAL install, optional' },
                     ]
                     : aptChecklistBulk
+
                   if (!missingAptBulk && !virtioWinMissingBulk) {
                     return (
                       <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
@@ -3312,7 +3509,9 @@ return
                       </Alert>
                     )
                   }
-                  return (
+
+
+return (
                     <>
                     {installErrorAlert}
                     {missingAptBulk && <Alert
@@ -3353,6 +3552,7 @@ return
                           const installNodes = migTargetNode === '__auto__'
                             ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
                             : [migTargetNode]
+
                           await runV2vInstall(installNodes)
                         }}
                         sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
@@ -3365,9 +3565,13 @@ return
                     {virtioWinMissingBulk && (() => {
                       const windowsCount = selectedVms.filter((vm: any) => {
                         const os = (vm.guest_OS || vm.guestOS || '').toString().toLowerCase()
-                        return os.includes('win')
+
+
+return os.includes('win')
                       }).length
-                      return (
+
+
+return (
                         <Alert severity="info" sx={{ fontSize: 11, mt: 1, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                           <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                             virtio-win ISO ({windowsCount} Windows VM{windowsCount === 1 ? '' : 's'} in the batch)
@@ -3413,11 +3617,14 @@ return
                     hang or fail with "no space left on device". */}
                 {vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
                   const selectedBulkVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+
                   // Peak disk usage in bulk = biggest committed disk × 2 (source + converted).
                   // Sequential runs (BULK_MIG_CONCURRENCY=1) so only one VM occupies tempStorage at a time.
                   const maxCommitted = selectedBulkVms.reduce((m: number, vm: any) => Math.max(m, vm.committed || 0), 0)
                   const requiredBytes = maxCommitted * 2
-                  return (
+
+
+return (
                     <Box>
                       <TextField
                         select
@@ -3428,24 +3635,31 @@ return
                         onChange={(e) => setMigTempStorage(e.target.value)}
                         helperText={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+
                           if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
+
                           if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for largest VM in batch`
-                          return requiredBytes > 0
+
+return requiredBytes > 0
                             ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed per VM`
                             : `${availGB} GB available (${sel.filesystem})`
                         })()}
                         error={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
-                          return sel && requiredBytes > 0 ? sel.availableBytes < requiredBytes : false
+
+
+return sel && requiredBytes > 0 ? sel.availableBytes < requiredBytes : false
                         })()}
                       >
                         {vcenterPreflight.tempStorages.map(s => {
                           const usedPct = Math.round(((s.totalBytes - s.availableBytes) / s.totalBytes) * 100)
                           const availGB = (s.availableBytes / 1073741824).toFixed(1)
                           const totalGB = (s.totalBytes / 1073741824).toFixed(1)
-                          return (
+
+
+return (
                             <MenuItem key={s.path} value={s.path}>
                               <Box sx={{ width: '100%' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
@@ -3489,7 +3703,9 @@ return
 
                 {migType === 'cold' && bulkMigHostInfo?.vms && (() => {
                   const runningVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))
-                  return runningVms.length > 0 ? (
+
+
+return runningVms.length > 0 ? (
                     <Alert severity="warning" sx={{ fontSize: 12 }}>
                       {t('inventoryPage.esxiMigration.coldMigrationRunningVms')}
                       <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
@@ -3502,7 +3718,9 @@ return
                 })()}
                 {migType === 'live' && bulkMigHostInfo?.vms && (() => {
                   const stoppedVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status !== 'running' && vm.status !== 'poweredOn')
-                  return stoppedVms.length > 0 ? (
+
+
+return stoppedVms.length > 0 ? (
                     <Alert severity="warning" sx={{ fontSize: 12 }}>
                       Live migration requires the source VM to be running (so VMware can snapshot + quiesce the guest).
                       The following selected VM(s) are not running. Start them first, or switch the batch to Offline migration:
@@ -3525,7 +3743,9 @@ return
                     (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('windows') &&
                     vm.toolsRunningStatus !== 'guestToolsRunning'
                   )
-                  return winNoTools.length > 0 ? (
+
+
+return winNoTools.length > 0 ? (
                     <Alert severity="warning" sx={{ fontSize: 12 }}>
                       Live migration of Windows guests requires VMware Tools installed AND running
                       (VSS quiesce is the only way to capture a clean NTFS snapshot while the VM keeps running).
@@ -3549,11 +3769,14 @@ return
               const failedCount = bulkMigJobs.filter(j => j.status === 'failed').length
               const globalProgress = bulkMigJobs.length > 0 ? Math.round(bulkMigJobs.reduce((sum, j) => sum + j.progress, 0) / bulkMigJobs.length) : 0
               const allDone = bulkMigJobs.every(j => ['completed', 'failed', 'cancelled'].includes(j.status))
+
               const allLogs = (bulkMigLogsFilter
                 ? bulkMigJobs.filter(j => j.jobId === bulkMigLogsFilter)
                 : bulkMigJobs
               ).flatMap(j => (j.logs || []).map(l => ({ ...l, vmName: j.name }))).sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime())
-              return (
+
+
+return (
                 <Stack spacing={1}>
                   {/* Global progress header — collapsible */}
                   <Box
@@ -3590,15 +3813,20 @@ return
                       bulkMigHostInfo?.hostType === 'nutanix' ? '/images/nutanix-logo.svg' :
                       bulkMigHostInfo?.hostType === 'xcpng' ? '/images/xcpng-logo.svg' :
                       '/images/esxi-logo.svg'
+
                     const dstLogo = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
-                    return (
+
+
+return (
                       <Box sx={{ pl: 1 }}>
                         {bulkMigJobs.map((job) => {
                           const isDone = job.status === 'completed'
                           const isFailed = job.status === 'failed' || job.status === 'cancelled'
                           const isQueued = job.status === 'queued'
                           const isActive = !isDone && !isFailed && !isQueued
-                          return (
+
+
+return (
                             <Box key={job.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
                               {/* Source hypervisor logo */}
                               <Box sx={{
@@ -3752,6 +3980,7 @@ return
                 disabled={(() => {
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting) return true
                   const isV2vSource = bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix'
+
                   if (isV2vSource) {
                     if (vcenterPreflight?.checked) {
                       if (!vcenterPreflight.virtV2vInstalled) return true
@@ -3759,11 +3988,14 @@ return
                       if (!vcenterPreflight.nbdcopyInstalled) return true
                       if (!vcenterPreflight.guestfsToolsInstalled) return true
                       if (!vcenterPreflight.ovmfInstalled) return true
+
+
                       // In bulk, block if batch contains Windows VMs and virtio-win is missing
                       if (!vcenterPreflight.virtioWinInstalled) {
                         const hasWin = (bulkMigHostInfo?.vms || [])
                           .filter((vm: any) => bulkMigSelected.has(vm.vmid))
                           .some((vm: any) => (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('win'))
+
                         if (hasWin) return true
                       }
                     }
@@ -3771,12 +4003,15 @@ return
                     if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                     if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
                   }
+
+
                   // Batch-wide power-state gates. The inner Alerts list the offending
                   // VMs individually; here we just return true so the button is disabled
                   // whenever the batch mixes the chosen migrationType with an incompatible
                   // VM state.
                   if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))) return true
                   if (migType === 'live' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && vm.status !== 'running' && vm.status !== 'poweredOn')) return true
+
                   // Live + Windows in the batch without running VMware Tools: block
                   // (symmetric with the individual modal check).
                   if (migType === 'live' && bulkMigHostInfo?.vms?.some((vm: any) =>
@@ -3785,7 +4020,8 @@ return
                     (vm.guest_OS || vm.guestOS || '').toString().toLowerCase().includes('windows') &&
                     vm.toolsRunningStatus !== 'guestToolsRunning'
                   )) return true
-                  return false
+
+return false
                 })()}
                 sx={{ textTransform: 'none' }}
                 startIcon={bulkMigStarting ? <CircularProgress size={16} color="inherit" /> : <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} />}
@@ -3793,6 +4029,7 @@ return
                   if (!bulkMigHostInfo) return
                   setBulkMigStarting(true)
                   const vmsToMigrate = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid))
+
                   // Build node list for round-robin distribution.
                   // - Auto mode: spread across every online node of the CHOSEN cluster
                   //   (migTargetConn). We filter migNodeOptions by connId + online
@@ -3800,10 +4037,13 @@ return
                   //   jobs round-robined to it.
                   // - Manual mode: single target node, every job lands there.
                   let nodeList: string[]
+
                   if (migTargetNode === '__auto__') {
                     const clusterNodes = migNodeOptions
                       .filter((o: any) => o.connId === migTargetConn && o.status === 'online')
                       .map((o: any) => o.node)
+
+
                     // Fallback: if status info missing/empty, take all nodes of the
                     // cluster so we at least try instead of skipping the whole batch.
                     nodeList = clusterNodes.length > 0
@@ -3812,9 +4052,11 @@ return
                   } else {
                     nodeList = [migTargetNode]
                   }
+
                   if (nodeList.length === 0) {
                     setBulkMigStarting(false)
-                    return
+
+return
                   }
 
                   // Create all jobs, first N as 'pending' (will be started), rest as 'queued'.
@@ -3838,8 +4080,10 @@ return
                   const isHypervBulk = bulkMigHostInfo.hostType === 'hyperv'
                   const isNutanixBulk = bulkMigHostInfo.hostType === 'nutanix'
                   const sourceType = bulkMigHostInfo.hostType === 'xcpng' ? 'XCP-ng' : isVcenterBulk ? 'vCenter' : isHypervBulk ? 'Hyper-V' : isNutanixBulk ? 'Nutanix' : 'ESXi'
+
                   for (let idx = 0; idx < Math.min(BULK_MIG_CONCURRENCY, jobs.length); idx++) {
                     const job = jobs[idx]
+
                     try {
                       const res = await fetch('/api/v1/migrations', {
                         method: 'POST',
@@ -3852,11 +4096,13 @@ return
                           targetNode: job.targetNode,
                           targetStorage: migTargetStorage,
                           networkBridge: migNetworkBridge,
+
                           // 802.1Q VLAN tag (1-4094); applied to every VM in the
                           // batch since they all land on the same target bridge.
                           ...(migVlanTag !== '' && Number(migVlanTag) >= 1 && Number(migVlanTag) <= 4094 && {
                             vlanTag: Number(migVlanTag),
                           }),
+
                           // vCenter supports cold + live (NFC-on-snapshot); Hyper-V /
                           // Nutanix still force cold since their pipelines don't have a
                           // snapshot-based transfer path. sshfs_boot is ESXi-direct only.
@@ -3864,6 +4110,7 @@ return
                             : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                           transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
                           startAfterMigration: migStartAfter,
+
                           // vCenter inventory path required by libvirt vpx URI (auto-discovered
                           // server-side via SOAP). Bulk jobs may target different ESXi hosts
                           // inside the same vCenter, so the path is per-VM. Same rationale
@@ -3878,6 +4125,7 @@ return
                           ...((job as any).vcenterHost && {
                             vcenterHost: (job as any).vcenterHost,
                           }),
+
                           // tempStorage lets the user pick where virt-v2v writes
                           // temp files (vcenter/hyperv/nutanix) OR where the
                           // direct-ESXi pipeline mounts SSHFS + writes VMDK dumps.
@@ -3889,7 +4137,9 @@ return
                           }),
                         }),
                       })
+
                       const d = await res.json()
+
                       if (d.data?.jobId) {
                         job.jobId = d.data.jobId
                         job.status = 'pending'
@@ -3925,6 +4175,7 @@ return
                     transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                     startAfterMigration: migStartAfter,
                     sourceType,
+
                     // Persisted across the queued-job poller so retries use the
                     // same temp storage the user selected when starting the batch.
                     // Applies to every source type (virt-v2v and direct-ESXi both honour it).

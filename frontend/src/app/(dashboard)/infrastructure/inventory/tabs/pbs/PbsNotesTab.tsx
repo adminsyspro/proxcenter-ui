@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 import {
   Alert,
@@ -41,23 +42,31 @@ export default function PbsNotesTab({ pbsId }: PbsNotesTabProps) {
     setError(null)
     setNotSupported(false)
     setForbidden(null)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/notes`, { cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
+
       if (res.status === 403 && body?.forbidden) {
         setForbidden({ requiredPriv: body?.requiredPriv })
-        return
+
+return
       }
+
       if (!res.ok) {
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       if (body?.data?.notSupported) {
         setNotSupported(true)
         setOriginal('')
         setValue('')
-        return
+
+return
       }
+
       const notes = String(body?.data?.notes || '')
+
       setOriginal(notes)
       setValue(notes)
     } catch (e: any) {
@@ -76,16 +85,20 @@ export default function PbsNotesTab({ pbsId }: PbsNotesTabProps) {
   const handleSave = useCallback(async () => {
     if (!dirty || saving) return
     setSaving(true)
+
     try {
       const res = await fetch(`/api/v1/pbs/${pbsId}/notes`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: value }),
       })
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+
         throw new Error(body?.error || `HTTP ${res.status}`)
       }
+
       setOriginal(value)
       setSnackbar({
         open: true,
@@ -117,8 +130,10 @@ export default function PbsNotesTab({ pbsId }: PbsNotesTabProps) {
         saveRef.current()
       }
     }
+
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+
+return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const handleSnackbarClose = () => setSnackbar(s => ({ ...s, open: false }))

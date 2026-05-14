@@ -72,7 +72,9 @@ export function useSnapshots({
           `/api/v1/guests/${encodeURIComponent(vmKey)}/features?feature=snapshot`,
           { cache: 'no-store' }
         )
+
         const featureJson = await featureRes.json()
+
         setSnapshotFeatureAvailable(featureJson.data?.hasFeature ?? false)
       } else {
         setSnapshotFeatureAvailable(true)
@@ -137,6 +139,7 @@ export function useSnapshots({
       }
     } catch (e: any) {
       const errorMsg = e.message || t('errors.addError')
+
       setSnapshotsError(errorMsg)
       toast.error(errorMsg)
     } finally {
@@ -178,6 +181,7 @@ export function useSnapshots({
           setConfirmAction(null)
         } catch (e: any) {
           const errorMsg = e.message || t('errors.deleteError')
+
           setSnapshotsError(errorMsg)
           toast.error(errorMsg)
         } finally {
@@ -222,6 +226,7 @@ export function useSnapshots({
           }
         } catch (e: any) {
           const errorMsg = e.message || t('errors.updateError')
+
           setSnapshotsError(errorMsg)
           toast.error(errorMsg)
         } finally {

@@ -15,11 +15,14 @@ export const runtime = "nodejs"
  */
 export async function POST(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
   if (denied) return denied
 
   triggerPoll()
-  return NextResponse.json({ ok: true })
+
+return NextResponse.json({ ok: true })
 }

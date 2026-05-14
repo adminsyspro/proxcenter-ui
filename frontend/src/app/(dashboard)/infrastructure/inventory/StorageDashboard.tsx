@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo } from 'react'
+
 import {
   Box,
   Card,
@@ -13,6 +14,7 @@ import {
   useTheme,
 } from '@mui/material'
 import { PieChart, Pie, Cell, Tooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
@@ -34,7 +36,9 @@ const TYPE_COLORS: Record<string, string> = {
 
 function getTypeColor(type: string): string {
   const key = type.toLowerCase()
-  return TYPE_COLORS[key] ?? TYPE_COLORS.other
+
+
+return TYPE_COLORS[key] ?? TYPE_COLORS.other
 }
 
 function getTypeLabel(type: string): string {
@@ -49,7 +53,9 @@ function getTypeLabel(type: string): string {
     dir: 'Dir',
     btrfs: 'Btrfs',
   }
-  return map[type.toLowerCase()] ?? type
+
+
+return map[type.toLowerCase()] ?? type
 }
 
 function storageIcon(type: string): string {
@@ -57,14 +63,16 @@ function storageIcon(type: string): string {
   if (type === 'zfspool' || type === 'zfs') return 'ri-stack-fill'
   if (type === 'lvm' || type === 'lvmthin') return 'ri-hard-drive-2-fill'
   if (type === 'dir') return 'ri-folder-fill'
-  return 'ri-hard-drive-fill'
+
+return 'ri-hard-drive-fill'
 }
 
 function storageIconColor(type: string): string {
   if (type === 'nfs' || type === 'cifs') return '#3498db'
   if (type === 'zfspool' || type === 'zfs') return '#2ecc71'
   if (type === 'lvm' || type === 'lvmthin') return '#e67e22'
-  return '#95a5a6'
+
+return '#95a5a6'
 }
 
 interface StorageDashboardProps {
@@ -88,15 +96,19 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
       for (const nodeEntry of cluster.nodes) {
         for (const s of nodeEntry.storages) {
           const key = `${cluster.connId}:${s.node}:${s.storage}`
+
           if (!seen.has(key)) {
             seen.add(key)
             result.push({ ...s, connId: cluster.connId })
           }
         }
       }
+
+
       // Shared storages (may overlap with node storages — deduplicate by storage name only for shared)
       for (const s of cluster.sharedStorages) {
         const key = `${cluster.connId}:${s.node}:${s.storage}`
+
         if (!seen.has(key)) {
           seen.add(key)
           result.push({ ...s, connId: cluster.connId })
@@ -116,11 +128,15 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
   // Donut chart data: group by type, sum total capacity
   const chartData = useMemo(() => {
     const grouped = new Map<string, number>()
+
     for (const s of allStorages) {
       const typeKey = s.type.toLowerCase()
+
       grouped.set(typeKey, (grouped.get(typeKey) ?? 0) + (s.total || 0))
     }
-    return Array.from(grouped.entries())
+
+
+return Array.from(grouped.entries())
       .map(([type, value]) => ({ name: getTypeLabel(type), value, color: getTypeColor(type) }))
       .sort((a, b) => b.value - a.value)
   }, [allStorages])
@@ -188,7 +204,8 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                   wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
-                    return (
+
+return (
                       <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                         <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(theme.palette.primary.main, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                           <i className="ri-pie-chart-line" style={{ fontSize: 13, color: theme.palette.primary.main }} />
@@ -250,7 +267,8 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                     wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null
-                      return (
+
+return (
                         <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(theme.palette.info.main, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-donut-chart-line" style={{ fontSize: 13, color: theme.palette.info.main }} />
@@ -311,6 +329,7 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
               <Stack spacing={0.75}>
                 {allStorages.map((s, idx) => {
                   const typeColor = getTypeColor(s.type)
+
                   const barColor =
                     s.usedPct > 85
                       ? theme.palette.error.main

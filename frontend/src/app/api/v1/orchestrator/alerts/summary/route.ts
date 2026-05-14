@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
@@ -23,7 +24,9 @@ function buildOrchestratorFingerprint(alert: {
 }): string {
   const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
   const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}|${alert.rule_id || ''}`
-  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
+
+
+return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
 }
 
 /**
@@ -32,12 +35,14 @@ function buildOrchestratorFingerprint(alert: {
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
+
   if (demo) return demo
 
   try {
     // Same baseline as the alerts list endpoint — vDC tenants need the
     // summary cards even without alerts.view in their default role.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+
     if (denied) return denied
 
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -49,14 +54,17 @@ export async function GET(req: Request) {
     const allAlerts = response.data?.data || response.data || []
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
     const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids }
+
     // isAlertVisibleToTenant became async in the Postgres cutover; resolve
     // each alert's visibility up-front before filtering, otherwise the
     // filter sees a Promise (truthy) and lets every alert through.
     let filtered: any[] = []
+
     if (Array.isArray(allAlerts)) {
       const visible = await Promise.all(
         allAlerts.map((a: any) => isAlertVisibleToTenant(a, visibilityCtx)),
       )
+
       filtered = allAlerts.filter((_: any, i: number) => visible[i])
     }
 
@@ -66,6 +74,7 @@ export async function GET(req: Request) {
     try {
       const prisma = await getSessionPrisma()
       const now = new Date()
+
       const silences = await prisma.alertSilence.findMany({
         where: {
           OR: [
@@ -75,6 +84,8 @@ export async function GET(req: Request) {
         },
         select: { fingerprint: true, reason: true },
       })
+
+
       // Both muted and dismissed alerts are excluded from counts
       silencedFingerprints = new Set(silences.map(s => s.fingerprint))
     } catch {
@@ -83,13 +94,16 @@ export async function GET(req: Request) {
 
     // Deduplicate by fingerprint before counting
     const dedupMap = new Map<string, any>()
+
     for (const a of filtered) {
       const fp = buildOrchestratorFingerprint(a)
       const existing = dedupMap.get(fp)
+
       if (!existing || new Date(a.last_seen_at) > new Date(existing.last_seen_at)) {
         dedupMap.set(fp, { ...a, _fp: fp })
       }
     }
+
     const deduped = Array.from(dedupMap.values())
 
     const visible = deduped.filter((a: any) => !silencedFingerprints.has(a._fp))

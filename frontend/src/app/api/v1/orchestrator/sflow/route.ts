@@ -11,12 +11,14 @@ export async function GET(request: NextRequest) {
     const endpoint = searchParams.get("endpoint") || "status"
 
     const allowed = ["status", "top-talkers", "top-pairs", "top-ports", "top-sources", "top-destinations", "ip-pairs", "timeseries/vm", "timeseries/all-vms", "timeseries/ip", "agents"]
+
     if (!allowed.includes(endpoint)) {
       return NextResponse.json({ error: "Invalid endpoint" }, { status: 400 })
     }
 
     // Forward query params (n, window, etc.)
     const params = new URLSearchParams()
+
     for (const [key, value] of searchParams.entries()) {
       if (key !== "endpoint") {
         params.set(key, value)

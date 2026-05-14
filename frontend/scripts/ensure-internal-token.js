@@ -30,6 +30,7 @@ if (process.env.INTERNAL_API_TOKEN) {
 }
 
 let existing = ''
+
 try {
   existing = fs.readFileSync(ENV_LOCAL, 'utf8')
 } catch (err) {
@@ -49,6 +50,7 @@ const block = `${needsLeadingNewline ? '\n' : ''}# Auto-generated for the ws-pro
 
 try {
   fs.appendFileSync(ENV_LOCAL, block, { mode: 0o600 })
+
   // Tighten permissions even if the file pre-existed with looser mode.
   try { fs.chmodSync(ENV_LOCAL, 0o600) } catch {}
   console.log('[ensure-internal-token] Generated INTERNAL_API_TOKEN in .env.local')

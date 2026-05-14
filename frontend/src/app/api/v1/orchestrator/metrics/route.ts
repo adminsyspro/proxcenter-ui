@@ -11,6 +11,7 @@ export const runtime = "nodejs"
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
+
     if (denied) return denied
 
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -19,14 +20,18 @@ export async function GET() {
 
     // Filter metrics to only include tenant's connections
     const allMetrics = response.data || {}
+
     if (typeof allMetrics === 'object' && !Array.isArray(allMetrics)) {
       const filtered: Record<string, any> = {}
+
       for (const [key, value] of Object.entries(allMetrics)) {
         if (tenantConnectionIds.has(key)) {
           filtered[key] = value
         }
       }
-      return NextResponse.json(filtered)
+
+
+return NextResponse.json(filtered)
     }
 
     return NextResponse.json(allMetrics)

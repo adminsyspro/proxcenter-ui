@@ -21,7 +21,7 @@ function parseVmKey(vmKey: string) {
     throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
   }
 
-  
+
 return {
     connId: parts[0],
     type: parts[1],
@@ -94,7 +94,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Snapshots list error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
@@ -140,13 +140,16 @@ export async function POST(
 
     // ── vDC quota: enforce maxSnapshots across the tenant's pool ──
     const tenantId = await getCurrentTenantId()
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, connId, node)
+
       if (vdcInfo) {
         const quotaCheck = await checkVdcQuota(connId, vdcInfo.poolName, vdcInfo.quota, {
           type: 'snapshot',
           addSnapshots: 1,
         })
+
         if (!quotaCheck.allowed) {
           return NextResponse.json({
             error: 'Quota exceeded',
@@ -158,11 +161,12 @@ export async function POST(
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot`
-    
+
     const formData = new URLSearchParams()
 
     formData.append('snapname', name)
@@ -235,7 +239,7 @@ export async function DELETE(
     }
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}`
-    
+
     const result = await pveFetch<string>(conn, apiPath, {
       method: 'DELETE',
     })

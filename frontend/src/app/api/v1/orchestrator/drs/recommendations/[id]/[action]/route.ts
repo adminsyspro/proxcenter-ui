@@ -20,6 +20,7 @@ export async function POST(req: Request, ctx: Params) {
       : PERMISSIONS.AUTOMATION_MANAGE
 
     const denied = await checkPermission(permission, "global", "*")
+
     if (denied) return denied
 
     // Verify recommendation belongs to tenant
@@ -27,8 +28,10 @@ export async function POST(req: Request, ctx: Params) {
     const recsRes = await client.getRecommendations(false)
     const recs = Array.isArray(recsRes.data) ? recsRes.data : []
     const rec = recs.find((r: any) => r.id === id)
+
     if (rec?.connection_id) {
       const tenantConnectionIds = await getTenantConnectionIds()
+
       if (!tenantConnectionIds.has(rec.connection_id)) {
         return NextResponse.json({ error: 'Recommendation not found' }, { status: 404 })
       }
@@ -43,6 +46,7 @@ export async function POST(req: Request, ctx: Params) {
       case 'reject':
         response = await client.rejectRecommendation(id)
         break
+
       case 'execute': {
         // Safety guard: check active migrations before executing
         try {
@@ -52,8 +56,10 @@ export async function POST(req: Request, ctx: Params) {
 
           // Get max_concurrent_migrations from settings (default 2)
           let maxConcurrent = 2
+
           try {
             const settingsRes = await client.get('/drs/settings')
+
             maxConcurrent = settingsRes.data?.max_concurrent_migrations || 2
           } catch {}
 
@@ -71,6 +77,7 @@ export async function POST(req: Request, ctx: Params) {
         response = await client.executeRecommendation(id)
         break
       }
+
       default:
         return NextResponse.json(
           { error: `Unknown action: ${action}` },
@@ -83,7 +90,7 @@ export async function POST(req: Request, ctx: Params) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error executing recommendation action:", e)
     }
-    
+
 return NextResponse.json(
       { error: e?.message || "Action failed" },
       { status: 500 }

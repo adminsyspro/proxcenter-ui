@@ -8,6 +8,7 @@ export const runtime = "nodejs"
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()
@@ -17,7 +18,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
     await prisma.managedHost.delete({ where: { id } })
-    
+
 return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
@@ -27,6 +28,7 @@ return NextResponse.json({ ok: true })
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+
     if (denied) return denied
 
     const prisma = await getSessionPrisma()

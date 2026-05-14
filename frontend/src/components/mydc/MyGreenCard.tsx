@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -51,14 +52,19 @@ export default function MyGreenCard({ vdcId }: Props) {
 
   useEffect(() => {
     let cancelled = false
+
     const load = async () => {
       try {
         const r = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/green`, { cache: 'no-store' })
+
         if (!r.ok) {
           if (!cancelled) setResp(null)
-          return
+
+return
         }
+
         const json = await r.json()
+
         if (!cancelled) setResp(json)
       } catch {
         if (!cancelled) setResp(null)
@@ -66,9 +72,12 @@ export default function MyGreenCard({ vdcId }: Props) {
         if (!cancelled) setLoading(false)
       }
     }
+
     void load()
     const interval = setInterval(() => { void load() }, REFRESH_MS)
-    return () => { cancelled = true; clearInterval(interval) }
+
+
+return () => { cancelled = true; clearInterval(interval) }
   }, [vdcId])
 
   if (loading) {

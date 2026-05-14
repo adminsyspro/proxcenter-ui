@@ -72,27 +72,28 @@ export async function GET(
 
     // Verify connection belongs to tenant
     const tenantConnectionIds = await getTenantConnectionIds()
+
     if (!tenantConnectionIds.has(connectionId)) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
     const client = getOrchestratorClient()
-    
+
     // Construire le path avec les query params (inclure target_node si fourni)
     let path = `/drs/check-migration/${vmid}?connection_id=${encodeURIComponent(connectionId)}&node=${encodeURIComponent(node)}&type=${encodeURIComponent(type)}`
-    
+
     if (targetNode) {
       path += `&target_node=${encodeURIComponent(targetNode)}`
     }
-    
+
     const response = await client.get<MigrationCheckResult>(path)
-    
+
     return NextResponse.json(response.data)
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error checking migration:", e)
     }
-    
+
     // Retourner une réponse par défaut en cas d'erreur (migration possible mais non vérifiée)
     return NextResponse.json({
       can_migrate: true,

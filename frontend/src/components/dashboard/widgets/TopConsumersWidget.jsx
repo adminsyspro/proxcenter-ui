@@ -12,7 +12,7 @@ import { widgetColors } from './themeColors'
 function getBarColor(value) {
   if (value >= 80) return '#ef4444'
   if (value >= 50) return '#f59e0b'
-  
+
 return '#22c55e'
 }
 
@@ -22,6 +22,7 @@ function TopConsumersWidget({ data, loading }) {
   const router = useRouter()
   const isDark = theme.palette.mode === 'dark'
   const c = widgetColors(isDark)
+
   const [mode, setMode] = useState(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('dashboard-top-consumers-mode') || 'cpu'
 

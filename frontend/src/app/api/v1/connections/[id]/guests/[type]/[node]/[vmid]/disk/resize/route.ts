@@ -11,13 +11,16 @@ export const runtime = "nodejs"
 
 function parseSizeDeltaMb(size: string): number {
   const match = size.match(/^\+?(\d+(?:\.\d+)?)\s*(G|M|T|K)?/i)
+
   if (!match) return 0
   const value = Number.parseFloat(match[1])
   const unit = (match[2] || 'G').toUpperCase()
+
   if (unit === 'T') return Math.round(value * 1024 * 1024)
   if (unit === 'G') return Math.round(value * 1024)
   if (unit === 'K') return Math.round(value / 1024)
-  return Math.round(value) // MB
+
+return Math.round(value) // MB
 }
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/resize
@@ -48,6 +51,7 @@ export async function POST(
     const { disk, size } = parseResult.data
 
     const tenantId = await getCurrentTenantId()
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
@@ -73,25 +77,26 @@ export async function POST(
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
       }
+
       throw e
     }
 
     const conn = await getConnectionById(id)
-    
+
     // Déterminer le type de ressource pour l'API Proxmox
     const resourceType = type === 'lxc' ? 'lxc' : 'qemu'
-    
+
     // Construire les paramètres
     const resizeParams: Record<string, any> = {
       disk,
       size,
     }
-    
+
     // Appeler l'API Proxmox
-    const endpoint = resourceType === 'qemu' 
+    const endpoint = resourceType === 'qemu'
       ? `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/resize`
       : `/nodes/${encodeURIComponent(node)}/lxc/${encodeURIComponent(vmid)}/resize`
-    
+
     const result = await pveFetch<string>(
       conn,
       endpoint,
@@ -105,7 +110,7 @@ export async function POST(
         },
       }
     )
-    
+
     // Audit
     const { audit } = await import("@/lib/audit")
 

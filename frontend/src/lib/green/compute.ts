@@ -50,8 +50,10 @@ const DEFAULT_GREEN_CONFIG: GreenConfig = {
 export async function loadGreenSettingsForTenant(tenantId: string): Promise<GreenConfig | null> {
   try {
     const parsed = await getSetting<any>('green', tenantId)
+
     if (!parsed) return null
-    return {
+
+return {
       tdpPerCore: parsed.serverSpecs?.tdpPerCore ?? DEFAULT_GREEN_CONFIG.tdpPerCore,
       wattsPerGbRam: parsed.serverSpecs?.wattsPerGbRam ?? DEFAULT_GREEN_CONFIG.wattsPerGbRam,
       pue: parsed.pue ?? DEFAULT_GREEN_CONFIG.pue,
@@ -90,14 +92,19 @@ export interface GreenMetrics {
 }
 
 export interface VmGreenInput {
+
   /** vCPU count provisioned to the VM. */
   vcpus: number
+
   /** RAM provisioned to the VM (bytes). */
   ramBytes: number
+
   /** PVE returns 'running', 'stopped', etc. */
   status: string
+
   /** Current CPU usage as a fraction 0..1 (PVE's `cpu` field). */
   cpuPct: number
+
   /**
    * Optional per-VM config override. When set, this VM's contribution to
    * power / CO₂ / cost uses these values instead of the function-level
@@ -194,6 +201,7 @@ export function computeGreenMetricsForVms(vms: VmGreenInput[], fallback: GreenCo
   // weighted-average PUE across the fleet (single-DC fleets reduce to the
   // legacy formula).
   let score = 100
+
   if (avgCpuPct < 10) score -= 20
   else if (avgCpuPct < 20) score -= 10
   else if (avgCpuPct < 30) score -= 5
@@ -208,6 +216,8 @@ export function computeGreenMetricsForVms(vms: VmGreenInput[], fallback: GreenCo
 
   const kwUsed = totalWatts / 1000
   const vmPerKw = kwUsed > 0 ? Math.round((runningVms / kwUsed) * 10) / 10 : 0
+
+
   // Currency is reported as the fallback's; mixing currencies across DCs in
   // the same display would be a UX smell to address separately.
   void primaryCurrency

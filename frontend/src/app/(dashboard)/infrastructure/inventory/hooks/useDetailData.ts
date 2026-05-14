@@ -36,11 +36,14 @@ export function useDetailData(selection: InventorySelection | null) {
         const payload = await fetchDetails(selection)
 
         if (!alive) return
+
         if (!payload) {
           // root selection — no details to display
           setLoading(false)
-          return
+
+return
         }
+
         setData(payload)
         setLocalTags(payload.tags || [])
       } catch (e: any) {
@@ -68,6 +71,7 @@ export function useDetailData(selection: InventorySelection | null) {
     if (!selection || !data) return
     const isVm = selection.type === 'vm'
     const isNode = selection.type === 'node'
+
     if (!isVm && !isNode) return
 
     // Only for running VMs or online nodes
@@ -79,15 +83,19 @@ export function useDetailData(selection: InventorySelection | null) {
 
     const poll = async () => {
       if (!pollAliveRef.current) return
+
       try {
         if (isVm) {
           const { connId, node, type, vmid } = parseVmId(selection.id)
+
           const res = await fetch(
             `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`,
             { cache: 'no-store' }
           )
+
           const json = await res.json()
           const g = json?.data
+
           if (!g || !pollAliveRef.current) return
           setData(prev => prev ? {
             ...prev,
@@ -99,18 +107,22 @@ export function useDetailData(selection: InventorySelection | null) {
           } : prev)
         } else {
           const { connId, node } = parseNodeId(selection.id)
+
           const res = await fetch(
             `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`,
             { cache: 'no-store' }
           )
+
           const json = await res.json()
           const n = json?.data
+
           if (!n || !pollAliveRef.current) return
           const cpu = n.cpu
           const mem = n.memory?.used ?? n.mem
           const maxmem = n.memory?.total ?? n.maxmem
           const disk = n.rootfs?.used ?? n.disk
           const maxdisk = n.rootfs?.total ?? n.maxdisk
+
           setData(prev => prev ? {
             ...prev,
             metrics: {
@@ -158,8 +170,10 @@ export function useDetailData(selection: InventorySelection | null) {
   const refreshData = useCallback(async () => {
     if (!selection || refreshing) return
     setRefreshing(true)
+
     try {
       const payload = await fetchDetails(selection)
+
       if (payload) {
         setData(payload)
         setLocalTags(payload.tags || [])
@@ -176,6 +190,7 @@ export function useDetailData(selection: InventorySelection | null) {
   // hardware tab and the "pending restart" flag come from /config, so without
   // this a reboot leaves the panel stale until the user clicks Refresh.
   const refreshDataRef = useRef(refreshData)
+
   useEffect(() => {
     refreshDataRef.current = refreshData
   }, [refreshData])

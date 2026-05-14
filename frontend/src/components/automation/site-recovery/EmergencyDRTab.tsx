@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -36,8 +37,10 @@ function destinationVMID(prefix: number, vmid: number): number {
   if (!prefix) return vmid
   const digits = String(vmid).length
   let multiplier = 1
+
   for (let i = 0; i < digits; i++) multiplier *= 10
-  return prefix * multiplier + vmid
+
+return prefix * multiplier + vmid
 }
 
 interface DRReadyVM {
@@ -75,14 +78,17 @@ export default function EmergencyDRTab({
   const tc = useTranslations('common')
   const [loadingVMs, setLoadingVMs] = useState<Record<string, 'starting'>>({})
   const [deletePlanId, setDeletePlanId] = useState<string | null>(null)
+
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
 
   const connMap = useMemo(() => {
     const m: Record<string, string> = {}
+
     for (const c of connections) m[c.id] = c.name
-    return m
+
+return m
   }, [connections])
 
   // Build DR-ready VM list
@@ -107,10 +113,12 @@ export default function EmergencyDRTab({
 
     // Attach plan info
     const vmInPlan = new Set<number>()
+
     for (const plan of plans) {
       for (const pvm of (plan.vms || [])) {
         vmInPlan.add(pvm.vm_id)
         const drvm = allDRVMs.find(v => v.vmId === pvm.vm_id)
+
         if (drvm) {
           drvm.planId = plan.id
           drvm.planName = plan.name
@@ -125,12 +133,16 @@ export default function EmergencyDRTab({
 
     // Group by plan
     const groups: Record<string, { plan: RecoveryPlan; vms: DRReadyVM[] }> = {}
+
     for (const vm of pVMs) {
       if (!vm.planId) continue
+
       if (!groups[vm.planId]) {
         const plan = plans.find(p => p.id === vm.planId)!
+
         groups[vm.planId] = { plan, vms: [] }
       }
+
       groups[vm.planId].vms.push(vm)
     }
 
@@ -148,14 +160,20 @@ export default function EmergencyDRTab({
 
   const handleStartVM = async (vm: DRReadyVM) => {
     const key = `${vm.vmId}`
+
     setLoadingVMs(prev => ({ ...prev, [key]: 'starting' }))
+
     try {
       await onStartVM(vm.vmId, vm.targetCluster, vm.jobId)
       setSnackbar({ open: true, message: t('emergencyDR.vmStarted', { name: vm.vmName, vmid: vm.targetVmId }), severity: 'success' })
     } catch (e: any) {
       setSnackbar({ open: true, message: e?.message || 'Failed to start VM', severity: 'error' })
     } finally {
-      setLoadingVMs(prev => { const n = { ...prev }; delete n[key]; return n })
+      setLoadingVMs(prev => { const n = { ...prev };
+
+ delete n[key];
+
+return n })
     }
   }
 
@@ -180,17 +198,21 @@ export default function EmergencyDRTab({
     const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
       synced: 'success', syncing: 'info', paused: 'warning', error: 'error', pending: 'default',
     }
-    return <Chip size="small" label={status} color={colorMap[status] || 'default'} sx={{ textTransform: 'capitalize' }} />
+
+
+return <Chip size="small" label={status} color={colorMap[status] || 'default'} sx={{ textTransform: 'capitalize' }} />
   }
 
   const formatLastSync = (ls: string | null) => {
     if (!ls) return '-'
     const d = new Date(ls)
     const ago = Math.floor((Date.now() - d.getTime()) / 1000)
+
     if (ago < 60) return `${ago}s ago`
     if (ago < 3600) return `${Math.floor(ago / 60)}m ago`
     if (ago < 86400) return `${Math.floor(ago / 3600)}h ago`
-    return `${Math.floor(ago / 86400)}d ago`
+
+return `${Math.floor(ago / 86400)}d ago`
   }
 
   if (loading) {
@@ -235,7 +257,9 @@ export default function EmergencyDRTab({
           {vms.map(vm => {
             const key = `${vm.vmId}`
             const vmLoading = loadingVMs[key]
-            return (
+
+
+return (
               <TableRow key={key} hover>
                 <TableCell>
                   <Typography variant="body2" fontWeight={500}>{vm.vmName}</Typography>
@@ -419,6 +443,7 @@ export default function EmergencyDRTab({
               if (deletePlanId && onDeletePlan) {
                 onDeletePlan(deletePlanId)
               }
+
               setDeletePlanId(null)
             }}
           >

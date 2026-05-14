@@ -2,8 +2,9 @@
 
 import { useEffect } from 'react'
 
-import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
+
+import { useTranslations } from 'next-intl'
 import { Alert, Box, Button, CircularProgress } from '@mui/material'
 
 import WidgetGrid from '@/components/dashboard/WidgetGrid'

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -94,25 +95,32 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             {/* VM list with per-VM status + noVNC console button */}
             {(() => {
               const resultsByVMID: Record<number, RecoveryVMResult> = {}
+
               for (const r of (execution?.vm_results || [])) resultsByVMID[r.vm_id] = r
               const sortedVMs = [...plan.vms].sort((a, b) => (a.boot_order || 0) - (b.boot_order || 0))
-              return (
+
+
+return (
                 <Stack spacing={0.5} sx={{ maxHeight: 260, overflow: 'auto' }}>
                   {sortedVMs.map(vm => {
                     const res = resultsByVMID[vm.vm_id]
+
                     const statusIcon = res
                       ? res.status === 'completed' ? { icon: 'ri-check-line', color: 'success.main' }
                         : res.status === 'failed' ? { icon: 'ri-close-line', color: 'error.main' }
                         : res.status === 'running' ? { icon: 'ri-loader-4-line', color: 'primary.main' }
                         : { icon: 'ri-time-line', color: 'text.disabled' }
                       : null
+
                     const canConsole = type === 'test'
                       && targetConnId
                       && res
                       && res.target_node
                       && res.target_vmid != null
                       && (res.status === 'running' || res.status === 'completed')
-                    return (
+
+
+return (
                       <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, px: 0.75, borderRadius: 0.5, '&:hover': { bgcolor: 'action.hover' } }}>
                         {statusIcon && (
                           <Box sx={{ width: 16, textAlign: 'center', color: statusIcon.color, fontSize: 14, display: 'inline-flex', justifyContent: 'center' }}>
@@ -179,7 +187,9 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           {/* Cleanup result */}
           {cleanupResult && (() => {
             const errs = cleanupResult.errors || []
-            return (
+
+
+return (
               <Alert severity={errs.length > 0 ? 'warning' : 'success'}>
                 <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
                   {t('siteRecovery.failover.cleanupDone')}

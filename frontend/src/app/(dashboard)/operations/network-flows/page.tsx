@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -23,7 +24,8 @@ export default function NetworkFlowsPage() {
 
   useEffect(() => {
     setPageInfo(t('networkFlows.title'), t('networkFlows.subtitle'), 'ri-flow-chart')
-    return () => setPageInfo('', '', '')
+
+return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
   if (connectionsData && connections.length === 0) {

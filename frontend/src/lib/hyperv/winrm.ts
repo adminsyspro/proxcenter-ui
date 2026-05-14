@@ -57,7 +57,9 @@ const SIGNAL_TERMINATE = "http://schemas.microsoft.com/wbem/wsman/1/windows/shel
 /** Encode a PowerShell command as Base64 UTF-16LE (for -EncodedCommand) */
 function encodePSCommand(cmd: string): string {
   const buf = Buffer.from(cmd, "utf16le")
-  return buf.toString("base64")
+
+
+return buf.toString("base64")
 }
 
 /** Extract the text content of the first XML tag matching a local name. */
@@ -65,21 +67,27 @@ function xmlTag(xml: string, localName: string): string | null {
   // Matches <prefix:localName ...>content</prefix:localName> or <localName ...>content</localName>
   const re = new RegExp(`<(?:[a-zA-Z0-9_]+:)?${localName}[^>]*>([\\s\\S]*?)<\\/(?:[a-zA-Z0-9_]+:)?${localName}>`)
   const m = xml.match(re)
-  return m ? m[1] : null
+
+
+return m ? m[1] : null
 }
 
 /** Extract an attribute value from the first element matching a local name. */
 function xmlAttr(xml: string, localName: string, attrName: string): string | null {
   const re = new RegExp(`<(?:[a-zA-Z0-9_]+:)?${localName}[^>]*?${attrName}="([^"]*)"`)
   const m = xml.match(re)
-  return m ? m[1] : null
+
+
+return m ? m[1] : null
 }
 
 /** Check if response contains a SOAP Fault */
 function checkFault(xml: string): void {
   const fault = xmlTag(xml, "Fault")
+
   if (fault) {
     const reason = xmlTag(fault, "Text") || xmlTag(fault, "faultstring") || fault.slice(0, 500)
+
     throw new Error(`WinRM SOAP Fault: ${reason.trim()}`)
   }
 }
@@ -96,8 +104,10 @@ export class WinRMClient {
   constructor(private conn: WinRMConnection) {
     const protocol = conn.useSSL ? "https" : "http"
     const port = conn.port ?? (conn.useSSL ? 5986 : 5985)
+
     // Strip any protocol prefix the user may have included in the host field
     const host = conn.host.replace(/^https?:\/\//, "").replace(/\/+$/, "").split(":")[0]
+
     this.endpoint = `${protocol}://${host}:${port}/wsman`
     this.authHeader = `Basic ${Buffer.from(`${conn.username}:${conn.password}`).toString("base64")}`
     this.timeout = conn.timeout ?? 30_000
@@ -117,6 +127,7 @@ export class WinRMClient {
     try {
       const commandId = await this.runCommand(shellId, psCommand)
       const { stdout, stderr } = await this.receiveOutput(shellId, commandId)
+
       await this.signalTerminate(shellId, commandId)
 
       // If we got nothing on stdout but have stderr, treat as error
@@ -139,7 +150,9 @@ export class WinRMClient {
     const ps = `@{Hostname=$env:COMPUTERNAME; Version=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').ProductName} | ConvertTo-Json`
     const raw = await this.execute(ps)
     const data = JSON.parse(raw.trim())
-    return {
+
+
+return {
       hostname: data.Hostname || "unknown",
       version: data.Version || "unknown",
     }
@@ -152,7 +165,9 @@ export class WinRMClient {
   /** Build a common SOAP header block. */
   private soapHeader(action: string, resourceUri: string, extras = ""): string {
     const messageId = `uuid:${randomUUID()}`
-    return `
+
+
+return `
       <s:Header>
         <wsa:To>${this.endpoint}</wsa:To>
         <wsman:ResourceURI s:mustUnderstand="true">${resourceUri}</wsman:ResourceURI>
@@ -189,6 +204,7 @@ export class WinRMClient {
         <wsman:Option Name="WINRS_CODEPAGE">65001</wsman:Option>
       </wsman:OptionSet>`
     )
+
     const body = `
       <rsp:Shell>
         <rsp:InputStreams>stdin</rsp:InputStreams>
@@ -197,10 +213,13 @@ export class WinRMClient {
 
     const xml = await this.post(this.soapEnvelope(header, body))
     const shellId = xmlTag(xml, "ShellId")
+
     if (!shellId) {
       throw new Error(`WinRM: failed to create shell. Response: ${xml.slice(0, 1000)}`)
     }
-    return shellId.trim()
+
+
+return shellId.trim()
   }
 
   // -----------------------------------------------------------------------
@@ -211,6 +230,7 @@ export class WinRMClient {
     const encoded = encodePSCommand(psCommand)
     const selectorHeader = `<wsman:SelectorSet><wsman:Selector Name="ShellId">${shellId}</wsman:Selector></wsman:SelectorSet>`
     const header = this.soapHeader(COMMAND_ACTION, SHELL_URI, selectorHeader)
+
     const body = `
       <rsp:CommandLine>
         <rsp:Command>powershell.exe</rsp:Command>
@@ -219,10 +239,13 @@ export class WinRMClient {
 
     const xml = await this.post(this.soapEnvelope(header, body))
     const commandId = xmlTag(xml, "CommandId")
+
     if (!commandId) {
       throw new Error(`WinRM: failed to run command. Response: ${xml.slice(0, 1000)}`)
     }
-    return commandId.trim()
+
+
+return commandId.trim()
   }
 
   // -----------------------------------------------------------------------
@@ -241,6 +264,7 @@ export class WinRMClient {
     for (let i = 0; i < maxPolls; i++) {
       const selectorHeader = `<wsman:SelectorSet><wsman:Selector Name="ShellId">${shellId}</wsman:Selector></wsman:SelectorSet>`
       const header = this.soapHeader(RECEIVE_ACTION, SHELL_URI, selectorHeader)
+
       const body = `
         <rsp:Receive>
           <rsp:DesiredStream CommandId="${commandId}">stdout stderr</rsp:DesiredStream>
@@ -251,10 +275,13 @@ export class WinRMClient {
       // Extract Stream elements with Name="stdout" or Name="stderr"
       // containing base64-encoded output
       const streams = xml.matchAll(/<(?:[a-zA-Z0-9_]+:)?Stream[^>]*Name="(stdout|stderr)"[^>]*>([^<]*)<\/(?:[a-zA-Z0-9_]+:)?Stream>/g)
+
       for (const m of streams) {
         const b64 = m[2].trim()
+
         if (b64) {
           const decoded = Buffer.from(b64, "base64").toString("utf8")
+
           if (m[1] === "stdout") stdoutParts.push(decoded)
           else stderrParts.push(decoded)
         }
@@ -262,6 +289,7 @@ export class WinRMClient {
 
       // Check if the command is done
       const state = xmlAttr(xml, "CommandState", "State")
+
       if (state && state.includes("Done")) {
         break
       }
@@ -283,6 +311,7 @@ export class WinRMClient {
   private async signalTerminate(shellId: string, commandId: string): Promise<void> {
     const selectorHeader = `<wsman:SelectorSet><wsman:Selector Name="ShellId">${shellId}</wsman:Selector></wsman:SelectorSet>`
     const header = this.soapHeader(SIGNAL_ACTION, SHELL_URI, selectorHeader)
+
     const body = `
       <rsp:Signal CommandId="${commandId}">
         <rsp:Code>${SIGNAL_TERMINATE}</rsp:Code>
@@ -326,6 +355,7 @@ export class WinRMClient {
     if (this.conn.useSSL) {
       try {
         const { Agent } = await import("undici")
+
         fetchOpts.dispatcher = new Agent({ connect: { rejectUnauthorized: false } })
       } catch {
         // undici not available; proceed without custom dispatcher
@@ -338,12 +368,14 @@ export class WinRMClient {
     if (!res.ok) {
       // Try to extract a meaningful error from the SOAP fault
       const faultText = xmlTag(text, "Text") || xmlTag(text, "faultstring") || ""
+
       throw new Error(
         `WinRM HTTP ${res.status}: ${faultText || text.slice(0, 500)}`
       )
     }
 
     checkFault(text)
-    return text
+
+return text
   }
 }

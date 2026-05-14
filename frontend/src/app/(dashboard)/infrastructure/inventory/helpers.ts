@@ -101,7 +101,8 @@ const osTypeLabels: Record<string, string> = {
 
 export function formatOsType(code: string | undefined): string {
   if (!code) return 'Other'
-  return osTypeLabels[code] || code
+
+return osTypeLabels[code] || code
 }
 
 export function formatBytes(bytes: number) {
@@ -166,12 +167,17 @@ export function parseMarkdown(md: string): string {
   // Collect protected blocks (HTML tags, code blocks) so inline markdown
   // transforms (bold, italic…) cannot touch URLs or code content.
   const shields: string[] = []
-  const shield = (s: string) => { shields.push(s); return `\uFFFF${shields.length - 1}\uFFFF` }
+
+  const shield = (s: string) => { shields.push(s);
+
+return `\uFFFF${shields.length - 1}\uFFFF` }
 
   // 1. Protect fenced code blocks
   let html = md.replaceAll(/```(\w*)\n?([\s\S]*?)```/g, (_, _lang, code) => {
     const escaped = code.replaceAll("&", '&amp;').replaceAll("<", '&lt;').replaceAll(">", '&gt;')
-    return shield(`<pre><code>${escaped}</code></pre>`)
+
+
+return shield(`<pre><code>${escaped}</code></pre>`)
   })
 
   // 2. Protect existing HTML tags (e.g. <img src='…'/>, <a href='…'>…</a>)
@@ -188,9 +194,12 @@ export function parseMarkdown(md: string): string {
       const thCells = headers.map(h => `<th>${h}</th>`).join('')
 
       const rows = bodyRows.trim().split('\n')
+
       const tbodyRows = rows.map(row => {
         const cells = parseRow(row)
-        return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`
+
+
+return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`
       }).join('')
 
       return `<table><thead><tr>${thCells}</tr></thead><tbody>${tbodyRows}</tbody></table>`
@@ -209,11 +218,13 @@ export function parseMarkdown(md: string): string {
     .replaceAll(/_([^_]+)_/g, '<em>$1</em>')
     .replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
       if (/^https?:\/\//i.test(url)) return `<a href="${url}" target="_blank" rel="noopener">${text}</a>`
-      return text
+
+return text
     })
     .replaceAll(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => {
       if (/^https?:\/\//i.test(url)) return `<img src="${url}" alt="${alt}" style="max-width: 100%;" />`
-      return alt
+
+return alt
     })
     .replaceAll(/^---$/gm, '<hr />')
     .replaceAll(/^\*\*\*$/gm, '<hr />')
@@ -408,10 +419,13 @@ export async function fetchRrdBatch(
   // For a single path, fall back to the regular endpoint
   if (paths.length === 1) {
     const data = await fetchRrd(connectionId, paths[0], timeframe, signal)
-    return new Map([[paths[0], data]])
+
+
+return new Map([[paths[0], data]])
   }
 
   const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/rrd/batch`
+
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -419,6 +433,7 @@ export async function fetchRrdBatch(
     cache: 'no-store',
     signal,
   })
+
   const json = await res.json()
 
   if (!res.ok) {
@@ -427,10 +442,13 @@ export async function fetchRrdBatch(
 
   const dataMap = new Map<string, any[]>()
   const rawMap = json?.data || {}
+
   for (const [path, data] of Object.entries(rawMap)) {
     dataMap.set(path, asArray<any>(safeJson<any>({ data })))
   }
-  return dataMap
+
+
+return dataMap
 }
 
 export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
@@ -454,6 +472,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     try {
       if (connR.ok) {
         const connData = await connR.json()
+
         connName = connData?.data?.name || connData?.name || sel.id
       }
     } catch {}
@@ -462,6 +481,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       try {
         const cephData = await cephR.json()
         const healthData = cephData.data?.health || cephData.health
+
         if (typeof healthData === 'string') {
           cephHealth = healthData
         } else if (healthData?.status) {
@@ -473,13 +493,16 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     let nodesJson: any
     let nodes: any[]
     let guests: any[]
+
     try {
       nodesJson = await nodesR.json()
       nodes = asArray<any>(safeJson(nodesJson))
     } catch {
       throw new Error('Failed to load cluster data — please retry')
     }
+
     const connectedNode = nodesJson?.connectedNode || null
+
     try {
       guests = asArray<any>(safeJson(await resourcesR.json()))
     } catch {
@@ -499,6 +522,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
 
     for (const n of nodes) {
       const cores = Number(n.maxcpu ?? 0)
+
       totalCpuWeighted += Number(n.cpu ?? 0) * cores
       totalCpuCores += cores
       totalMem += Number(n.mem ?? 0)
@@ -510,6 +534,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       try {
         const storageJson = await storageR.json()
         const storageList = storageJson.data || []
+
         for (const s of storageList) {
           totalDisk += Number(s.used ?? 0)
           totalMaxDisk += Number(s.total ?? 0)
@@ -600,11 +625,13 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     // First: fetch nodes list to check if node is online
     const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' })
     let nodes: any[]
+
     try {
       nodes = asArray<any>(safeJson(await nodesR.json()))
     } catch {
       throw new Error('Failed to load node data — please retry')
     }
+
     const n = nodes.find((x: any) => String(x.node) === String(node))
 
     if (!n) throw new Error('Node not found')
@@ -696,6 +723,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     if (subscriptionR && subscriptionR.ok) {
       try {
         const subResponse = await subscriptionR.json()
+
         subscriptionData = subResponse?.data || null
       } catch {}
     }
@@ -705,6 +733,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     if (updatesR && updatesR.ok) {
       try {
         const updResponse = await updatesR.json()
+
         updatesData = updResponse?.data || []
       } catch {}
     }
@@ -714,6 +743,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     if (maintenanceR && maintenanceR.ok) {
       try {
         const maintData = await maintenanceR.json()
+
         maintenanceValue = maintData?.data?.maintenance || undefined
       } catch {}
     }
@@ -775,8 +805,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (isPartOfCluster) {
       try {
         const clusterStatusR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster`, { cache: 'no-store' })
+
         if (clusterStatusR.ok) {
           const clusterData = await clusterStatusR.json()
+
           clusterName = clusterData?.data?.name || 'Cluster'
         }
       } catch {
@@ -833,11 +865,13 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     let resources: any[]
     let nodes: any[]
+
     try {
       resources = asArray<any>(safeJson(await resourcesR.json()))
     } catch {
       resources = []
     }
+
     try {
       nodes = asArray<any>(safeJson(await nodesR.json()))
     } catch {
@@ -852,29 +886,36 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       (x: any) => String(x.node) === String(node) && String(x.type) === String(type) && String(x.vmid) === String(vmid)
     )
     let effectiveNode = node
+
     if (!g) {
       const moved = resources.find(
         (x: any) => String(x.type) === String(type) && String(x.vmid) === String(vmid) && typeof x.node === 'string'
       )
+
       if (moved) {
         g = moved
         effectiveNode = String(moved.node)
       }
     }
+
     if (!g) throw new Error('VM not found')
 
     let nodeStatusData: any = null
+
     if (effectiveNode === node && nodeStatusR && nodeStatusR.ok) {
       try {
         const json = await nodeStatusR.json()
+
         nodeStatusData = json?.data || json
       } catch {}
     } else if (effectiveNode !== node) {
       // VM moved — refetch the host node status for the new location.
       try {
         const r = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(effectiveNode)}/status`, { cache: 'no-store' })
+
         if (r.ok) {
           const json = await r.json()
+
           nodeStatusData = json?.data || json
         }
       } catch {}
@@ -884,6 +925,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     const hostNode = nodes.find((n: any) => n.node === effectiveNode)
     const nodeCpuInfo = nodeStatusData?.cpuinfo || {}
+
     const nodeCapacity = {
       maxCpu: hostNode?.maxcpu || 128,
       maxMem: hostNode?.maxmem || 128 * 1024 * 1024 * 1024,
@@ -918,6 +960,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         description = config.description || ''
 
         const pending = config.pending || {}
+
         pendingKeys = Object.keys(pending).filter(k => k !== 'delete')
 
         // Parse CPU type and flags from cpu field (e.g. "host,flags=+aes;-pcid")
@@ -926,6 +969,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         const cpuTypeVal = cpuParts[0] || 'kvm64'
         const cpuFlagsMap: Record<string, '+' | '-'> = {}
         const flagsPart = cpuParts.find((p: string) => p.startsWith('flags='))
+
         if (flagsPart) {
           flagsPart.replaceAll('flags=', '').split(';').forEach((f: string) => {
             if (f.startsWith('+') || f.startsWith('-')) {
@@ -1022,12 +1066,14 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
               else if (k === 'link_down') netInfoItem.linkDown = v === '1'
               else if (k === 'rate') netInfoItem.rate = Number(v)
               else if (k === 'mtu') netInfoItem.mtu = Number(v)
+
               // QEMU-only
               else if (k === 'queues') netInfoItem.queues = Number(v)
               else if (['virtio', 'e1000', 'e1000e', 'rtl8139', 'vmxnet3'].includes(k)) {
                 netInfoItem.model = k
                 netInfoItem.macaddr = v
               }
+
               // LXC-only
               else if (k === 'name') netInfoItem.name = v
               else if (k === 'hwaddr') netInfoItem.macaddr = v
@@ -1059,9 +1105,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         // Parse EFI disk and TPM state as disks (they are stored on storage)
         Object.keys(config).forEach(key => {
           const val = String(config[key])
+
           if (/^efidisk\d+$/.test(key)) {
             const storagePart = val.split(',')[0].split(':')
             const sizeMatch = val.match(/size=(\d+[KMG]?)/)
+
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
@@ -1073,6 +1121,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           } else if (/^tpmstate\d+$/.test(key)) {
             const storagePart = val.split(',')[0].split(':')
             const versionMatch = val.match(/version=v(\d+\.\d+)/)
+
             disksInfo.push({
               id: key,
               storage: storagePart[0] || 'unknown',
@@ -1087,9 +1136,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         // Parse other hardware: USB, PCI passthrough, serial ports, audio, RNG
         Object.keys(config).forEach(key => {
           const val = String(config[key])
+
           if (/^usb\d+$/.test(key)) {
             const hostMatch = val.match(/host=([^,]+)/)
             const isSpice = val.includes('spice')
+
             otherHardwareInfo.push({
               id: key,
               type: 'usb',
@@ -1098,6 +1149,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             })
           } else if (/^hostpci\d+$/.test(key)) {
             const deviceMatch = val.match(/^([^,]+)/)
+
             otherHardwareInfo.push({
               id: key,
               type: 'pci',
@@ -1114,6 +1166,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           } else if (/^audio\d+$/.test(key)) {
             const deviceMatch = val.match(/device=([^,]+)/)
             const driverMatch = val.match(/driver=([^,]+)/)
+
             otherHardwareInfo.push({
               id: key,
               type: 'audio',
@@ -1161,8 +1214,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           spiceEnhancements: config.spice_enhancements || 'none',
           vmStateStorage: config.vmstatestorage || 'Automatic',
           amdSEV: config.sev ? 'enabled' : 'default',
+
           // Pending keys specific to options (for the revert button in Options tab)
           pendingKeys: optionsPendingKeys,
+
           // Raw pending values so the Options tab can show old→new indicators
           // per row (strikethrough old + orange new, like Proxmox native UI).
           pendingValues: optionsPendingKeys.length > 0
@@ -1180,12 +1235,14 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         if (config.nameserver !== undefined) { ciFields.nameserver = config.nameserver; hasCloudInit = true }
         if (config.searchdomain !== undefined) { ciFields.searchdomain = config.searchdomain; hasCloudInit = true }
         if (config.cicustom !== undefined) { ciFields.cicustom = config.cicustom; hasCloudInit = true }
+
         if (config.sshkeys !== undefined) {
           try { ciFields.sshkeys = decodeURIComponent(config.sshkeys) } catch { ciFields.sshkeys = config.sshkeys }
           hasCloudInit = true
         }
 
         const ipconfigs: Record<string, string> = {}
+
         Object.keys(config).forEach(key => {
           if (/^ipconfig\d+$/.test(key)) {
             ipconfigs[key] = config[key]
@@ -1196,6 +1253,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
         // Detect cloud-init drive in disks
         const allDiskKeys = Object.keys(config).filter(k => /^(scsi|ide|sata|virtio)\d+$/.test(k))
+
         for (const dk of allDiskKeys) {
           if (String(config[dk]).includes('cloudinit')) {
             ciFields.drive = dk
@@ -1261,6 +1319,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (connR && connR.ok) {
       try {
         const json = await connR.json()
+
         connName = json?.name || json?.data?.name || pbsId
       } catch {}
     }
@@ -1268,6 +1327,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (statusR && statusR.ok) {
       try {
         const json = await statusR.json()
+
         statusData = json?.data || json
       } catch {}
     }
@@ -1275,15 +1335,19 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (datastoresR && datastoresR.ok) {
       try {
         const json = await datastoresR.json()
+
         datastoresData = json?.data || []
       } catch {}
     }
 
     let rrdData: any[] = []
+
     try {
       const rrdR = await fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/rrd?timeframe=hour`, { cache: 'no-store' })
+
       if (rrdR.ok) {
         const json = await rrdR.json()
+
         rrdData = json?.data || []
       }
     } catch {}
@@ -1350,6 +1414,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (connR && connR.ok) {
       try {
         const json = await connR.json()
+
         connName = json?.name || json?.data?.name || pbsId
       } catch {}
     }
@@ -1358,6 +1423,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       try {
         const json = await datastoresR.json()
         const datastores = json?.data || []
+
         datastoreData = datastores.find((ds: any) => ds.name === datastoreName) || null
       } catch {}
     }
@@ -1365,18 +1431,22 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     if (backupsR && backupsR.ok) {
       try {
         const json = await backupsR.json()
+
         backupsData = json?.data || null
       } catch {}
     }
 
     let rrdData: any[] = []
+
     try {
       const rrdR = await fetch(
         `/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores/${encodeURIComponent(datastoreName)}/rrd?timeframe=hour`,
         { cache: 'no-store' }
       )
+
       if (rrdR.ok) {
         const json = await rrdR.json()
+
         rrdData = json?.data || []
       }
     } catch {}
@@ -1440,7 +1510,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         try {
           const vmsR = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`, { cache: 'no-store' })
           const vmsData = vmsR.ok ? await vmsR.json().catch(() => ({})) : {}
-          return {
+
+
+return {
             connectionId: conn.id,
             connectionName: conn.name || conn.id,
             baseUrl: conn.baseUrl || '',
@@ -1488,6 +1560,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
   // External hypervisor host (VMware ESXi, Hyper-V, XCP-ng)
   if (sel.type === 'ext') {
     const connId = sel.id
+
     // First fetch the connection to know its type
     const connR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' })
     const connData = await connR.json().catch(() => ({}))
@@ -1527,6 +1600,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       esxiHostInfo: {
         connectionId: connId,
         connectionName: conn.name || connId,
+
         // vCenter is stored as type=vmware + subType=vcenter in the DB. The UI uses
         // hostType='vcenter' as the discriminator everywhere (e.g. enabling v2v code
         // paths, showing temp storage selector, hiding sshfs option), so promote
@@ -1551,6 +1625,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     // Determine API prefix from connection type
     const connTypeR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' }).catch(() => null)
     const connTypeData = connTypeR?.ok ? await connTypeR.json().catch(() => ({})) : {}
+
     // Same vCenter-disambiguation rule as in the host panel above (sel.type === 'ext'):
     // promote subType='vcenter' to hostType='vcenter' so all UI gates that key off
     // hostType behave consistently between the host dashboard and the per-VM panel.
@@ -1563,9 +1638,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' }),
       fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store' }).catch(() => null),
     ])
+
     const vmJson = await vmR.json().catch(() => ({}))
     const vm = vmJson?.data || {}
     const statusJson = statusR?.ok ? await statusR.json().catch(() => ({})) : {}
+
     vm.licenseFull = statusJson?.data?.licenseFull ?? false
 
     if (vmR.status === 404) {
@@ -1632,18 +1709,23 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     ])
 
     let connName = connId
+
     if (connR?.ok) {
       try {
         const json = await connR.json()
+
         connName = json?.name || json?.data?.name || connId
       } catch {}
     }
 
     let storageData: any = null
+
     if (storageR?.ok) {
       try {
         const json = await storageR.json()
         const storages = json?.data || []
+
+
         // Match by storage name (+ node for local storages)
         storageData = storages.find((s: any) =>
           s.storage === storageName && (nodeHint ? s.node === nodeHint : s.shared)
@@ -1653,25 +1735,30 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     // Determine a node to use for content listing
     let contentNode = nodeHint
+
     if (!contentNode && nodesR?.ok) {
       try {
         const json = await nodesR.json()
         const nodes = asArray<any>(safeJson(json))
         const onlineNode = nodes.find((n: any) => n.status === 'online')
+
         contentNode = onlineNode?.node || nodes[0]?.node || null
       } catch {}
     }
 
     // Fetch storage content (volumes, ISOs, etc.)
     let contentItems: any[] = []
+
     if (contentNode) {
       try {
         const contentR = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(contentNode)}/storage/${encodeURIComponent(storageName)}/content`,
           { cache: 'no-store' }
         )
+
         if (contentR.ok) {
           const json = await contentR.json()
+
           contentItems = json?.data || []
         }
       } catch {}

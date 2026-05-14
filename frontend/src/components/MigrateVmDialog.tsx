@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+
 import { useTranslations } from 'next-intl'
-import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import {
   Dialog,
@@ -32,6 +32,9 @@ import {
   IconButton,
   useTheme,
 } from '@mui/material'
+
+import { isSharedStorage } from '@/lib/proxmox/storage'
+
 
 import { useLicense, Features } from '@/contexts/LicenseContext'
 
@@ -177,11 +180,11 @@ export function MigrateVmDialog({
 
   // Tab state: 0 = Local Migration, 1 = Cross-Cluster Migration
   const [activeTab, setActiveTab] = useState(0)
-  
+
   // Common states
   const [migrating, setMigrating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   // ========== LOCAL MIGRATION STATES ==========
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [nodesLoading, setNodesLoading] = useState(false)
@@ -191,12 +194,12 @@ export function MigrateVmDialog({
   const [storages, setStorages] = useState<StorageInfo[]>([])
   const [storagesLoading, setStoragesLoading] = useState(false)
   const [selectedStorage, setSelectedStorage] = useState<string>('__current__')
-  
+
   // CPU Compatibility states
   const [nodesCpuInfo, setNodesCpuInfo] = useState<Record<string, NodeCpuInfo>>({})
   const [vmCpuType, setVmCpuType] = useState<string>('')
   const [cpuInfoLoading, setCpuInfoLoading] = useState(false)
-  
+
   // ========== CROSS-CLUSTER MIGRATION STATES ==========
   const [sourceSSHEnabled, setSourceSSHEnabled] = useState<boolean | null>(null)
   const [remoteConnections, setRemoteConnections] = useState<RemoteConnection[]>([])
@@ -215,14 +218,14 @@ export function MigrateVmDialog({
   const [deleteSourceAfter, setDeleteSourceAfter] = useState(false)
   const [bwLimit, setBwLimit] = useState<number | ''>('')
   const [showAdvanced, setShowAdvanced] = useState(false)
-  
+
   // ========== HA STATE ==========
   const [isHaManaged, setIsHaManaged] = useState(false)
   const [haState, setHaState] = useState<string>('')
   const [haGroup, setHaGroup] = useState<string>('')
   const [haLoading, setHaLoading] = useState(false)
   const [haRemoving, setHaRemoving] = useState(false)
-  
+
   // ========== PRE-MIGRATION VALIDATION ==========
   type ValidationIssue = {
     type: 'error' | 'warning'
@@ -233,18 +236,20 @@ export function MigrateVmDialog({
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([])
   const [validationLoading, setValidationLoading] = useState(false)
   const [validationDone, setValidationDone] = useState(false)
-  
+
   // Calculer les stockages actuels uniques
   const currentStorageNames = useMemo(() => {
     const names = [...new Set(vmDisks.map(d => d.storage))]
-    return names.sort((a, b) => a.localeCompare(b))
+
+
+return names.sort((a, b) => a.localeCompare(b))
   }, [vmDisks])
-  
+
   // Vérifier si la VM a des disques locaux
   const hasLocalDisks = useMemo(() => {
     return vmDisks.some(d => d.isLocal)
   }, [vmDisks])
-  
+
   // Reset states when dialog opens
   useEffect(() => {
     if (open) {
@@ -277,15 +282,15 @@ export function MigrateVmDialog({
   // ========== LOCAL MIGRATION: Load nodes ==========
   useEffect(() => {
     if (!open || !connId || activeTab !== 0) return
-    
+
     const loadNodes = async () => {
       setNodesLoading(true)
       setError(null)
-      
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`)
         const json = await res.json()
-        
+
         if (json.data && Array.isArray(json.data)) {
           const availableNodes = json.data
             .filter((n: any) => n.node !== currentNode && n.status === 'online' && n.hastate !== 'maintenance')
@@ -302,6 +307,7 @@ export function MigrateVmDialog({
 
           if (availableNodes.length > 0) {
             const recommended = getRecommendedNode(availableNodes)
+
             setSelectedNode(recommended.node)
           }
         }
@@ -315,34 +321,39 @@ export function MigrateVmDialog({
 
     loadNodes()
   }, [open, connId, currentNode, activeTab])
-  
+
   // ========== LOCAL MIGRATION: Load VM config to detect disks ==========
   useEffect(() => {
     if (!open || !connId || !vmid || !currentNode) return
-    
+
     const loadVmConfig = async () => {
       try {
         let configRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/config`)
-        
+
         if (!configRes.ok) {
           setVmDisks([])
-          return
+
+return
         }
-        
+
         const configJson = await configRes.json()
         const config = configJson.data || {}
-        
+
         const foundDisks: LocalDiskInfo[] = []
-        const diskPatterns = vmType === 'qemu' 
+
+        const diskPatterns = vmType === 'qemu'
           ? /^(scsi|virtio|ide|sata|efidisk|tpmstate)\d+$/
           : /^(rootfs|mp\d+)$/
-        
+
         // Load source node storages to determine which are shared
         const sharedStorages = new Set<string>()
+
         try {
           const storagesRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(currentNode)}/storages`)
+
           if (storagesRes.ok) {
             const storagesJson = await storagesRes.json()
+
             for (const s of (storagesJson.data || [])) {
               if (isSharedStorage(s)) sharedStorages.add(s.storage)
             }
@@ -358,6 +369,7 @@ export function MigrateVmDialog({
               const storageName = storageMatch[1]
               const sizeMatch = diskStr.match(/size=(\d+(?:\.\d+)?)(G|T|M)?/)
               let sizeGB = 0
+
               if (sizeMatch) {
                 sizeGB = Number.parseFloat(sizeMatch[1])
                 if (sizeMatch[2] === 'T') sizeGB *= 1024
@@ -377,12 +389,13 @@ export function MigrateVmDialog({
             }
           }
         }
-        
+
         setVmDisks(foundDisks)
-        
+
         // Also get CPU type
         const cpuConfig = config.cpu || ''
         const cpuTypeMatch = cpuConfig.match(/^([^,]+)/)
+
         if (cpuTypeMatch) {
           setVmCpuType(cpuTypeMatch[1])
         } else if (vmType === 'lxc') {
@@ -393,33 +406,34 @@ export function MigrateVmDialog({
         setVmDisks([])
       }
     }
-    
+
     loadVmConfig()
   }, [open, connId, vmid, currentNode, vmType])
-  
+
   // ========== LOAD HA STATUS ==========
   useEffect(() => {
     if (!open || !connId || !vmid) return
-    
+
     const loadHaStatus = async () => {
       setHaLoading(true)
-      
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`)
-        
+
         if (!res.ok) {
           setIsHaManaged(false)
-          return
+
+return
         }
-        
+
         const json = await res.json()
         const resources = json.data?.resources || []
-        
+
         // Chercher si cette VM est dans les ressources HA
         // Le format du sid est "vm:VMID" ou "ct:VMID"
         const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
         const haResource = resources.find((r: any) => r.sid === vmSid)
-        
+
         if (haResource) {
           setIsHaManaged(true)
           setHaState(haResource.state || 'unknown')
@@ -436,29 +450,32 @@ export function MigrateVmDialog({
         setHaLoading(false)
       }
     }
-    
+
     loadHaStatus()
   }, [open, connId, vmid, vmType])
-  
+
   // ========== LOCAL MIGRATION: Load storages for selected node ==========
   useEffect(() => {
     if (!open || !connId || !selectedNode || activeTab !== 0) {
       setStorages([])
-      return
+
+return
     }
-    
+
     const loadStorages = async () => {
       setStoragesLoading(true)
-      
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(selectedNode)}/storages`)
         const json = await res.json()
-        
+
         if (json.data && Array.isArray(json.data)) {
           const diskStorages = json.data
             .filter((s: StorageInfo) => {
               const content = s.content || ''
-              return content.includes('images') || content.includes('rootdir')
+
+
+return content.includes('images') || content.includes('rootdir')
             })
             .map((s: StorageInfo) => ({
               storage: s.storage,
@@ -468,7 +485,7 @@ export function MigrateVmDialog({
               shared: s.shared,
               content: s.content
             }))
-          
+
           setStorages(diskStorages)
         }
       } catch (e) {
@@ -478,26 +495,27 @@ export function MigrateVmDialog({
         setStoragesLoading(false)
       }
     }
-    
+
     loadStorages()
     setSelectedStorage('__current__')
   }, [open, connId, selectedNode, activeTab])
-  
+
   // ========== CROSS-CLUSTER: Load available connections ==========
   useEffect(() => {
     if (!open || activeTab !== 1) return
-    
+
     const loadConnections = async () => {
       setRemoteConnectionsLoading(true)
-      
+
       try {
         // Only fetch PVE connections (not PBS)
         const res = await fetch('/api/v1/connections?type=pve')
         const json = await res.json()
-        
+
         if (json.data && Array.isArray(json.data)) {
           // Check if source connection has SSH enabled
           const sourceConn = json.data.find((c: any) => c.id === connId)
+
           if (sourceConn) setSourceSSHEnabled(!!sourceConn.sshEnabled && !!sourceConn.sshConfigured)
 
           // Filter out current connection and ensure only PVE type
@@ -520,24 +538,25 @@ export function MigrateVmDialog({
         setRemoteConnectionsLoading(false)
       }
     }
-    
+
     loadConnections()
   }, [open, activeTab, connId])
-  
+
   // ========== CROSS-CLUSTER: Load nodes from selected remote connection ==========
   useEffect(() => {
     if (!open || !selectedRemoteConn || activeTab !== 1) {
       setRemoteNodes([])
-      return
+
+return
     }
-    
+
     const loadRemoteNodes = async () => {
       setRemoteNodesLoading(true)
-      
+
       try {
         const res = await fetch(`/api/v1/connections/${encodeURIComponent(selectedRemoteConn)}/nodes`)
         const json = await res.json()
-        
+
         if (json.data && Array.isArray(json.data)) {
           const availableNodes = json.data
             .filter((n: any) => n.status === 'online' && n.hastate !== 'maintenance')
@@ -563,52 +582,57 @@ export function MigrateVmDialog({
         setRemoteNodesLoading(false)
       }
     }
-    
+
     loadRemoteNodes()
   }, [open, selectedRemoteConn, activeTab])
-  
+
   // ========== CROSS-CLUSTER: Load storages and bridges from remote node ==========
   useEffect(() => {
     if (!open || !selectedRemoteConn || !selectedRemoteNode || activeTab !== 1) {
       setRemoteStorages([])
       setRemoteBridges([])
-      return
+
+return
     }
-    
+
     const loadRemoteResources = async () => {
       setRemoteStoragesLoading(true)
       setRemoteBridgesLoading(true)
       setSelectedRemoteStorage('')
       setSelectedRemoteBridge('')
-      
+
       try {
         // Load storages
         const storageRes = await fetch(`/api/v1/connections/${encodeURIComponent(selectedRemoteConn)}/nodes/${encodeURIComponent(selectedRemoteNode)}/storages`)
         const storageJson = await storageRes.json()
-        
+
         if (storageJson.data && Array.isArray(storageJson.data)) {
           const diskStorages = storageJson.data
             .filter((s: StorageInfo) => {
               const content = s.content || ''
-              return content.includes('images') || content.includes('rootdir')
+
+
+return content.includes('images') || content.includes('rootdir')
             })
+
           setRemoteStorages(diskStorages)
-          
+
           if (diskStorages.length > 0 && !selectedRemoteStorage) {
             setSelectedRemoteStorage(diskStorages[0].storage)
           }
         }
-        
+
         // Load network bridges
         const networkRes = await fetch(`/api/v1/connections/${encodeURIComponent(selectedRemoteConn)}/nodes/${encodeURIComponent(selectedRemoteNode)}/network`)
         const networkJson = await networkRes.json()
-        
+
         if (networkJson.data && Array.isArray(networkJson.data)) {
           const bridges = networkJson.data
             .filter((n: any) => n.type === 'bridge' || n.type === 'OVSBridge')
             .map((n: any) => n.iface)
+
           setRemoteBridges(bridges)
-          
+
           if (bridges.length > 0 && !selectedRemoteBridge) {
             // Default to vmbr0 if exists
             setSelectedRemoteBridge(bridges.includes('vmbr0') ? 'vmbr0' : bridges[0])
@@ -621,64 +645,76 @@ export function MigrateVmDialog({
         setRemoteBridgesLoading(false)
       }
     }
-    
+
     loadRemoteResources()
   }, [open, selectedRemoteConn, selectedRemoteNode, activeTab])
-  
+
   // Helper functions
   const getRecommendedNode = (nodeList: NodeInfo[]): NodeInfo => {
     return nodeList.reduce((best, current) => {
       const bestScore = calculateNodeScore(best)
       const currentScore = calculateNodeScore(current)
-      return currentScore > bestScore ? current : best
+
+
+return currentScore > bestScore ? current : best
     }, nodeList[0])
   }
-  
+
   const calculateNodeScore = (node: NodeInfo): number => {
     const cpuFree = node.maxcpu ? (1 - (node.cpu || 0)) * 100 : 50
     const memFree = node.maxmem && node.mem ? ((node.maxmem - node.mem) / node.maxmem) * 100 : 50
-    return cpuFree * 0.4 + memFree * 0.6
+
+
+return cpuFree * 0.4 + memFree * 0.6
   }
-  
+
   const formatMemory = (bytes?: number): string => {
     if (!bytes) return '—'
     const gb = bytes / 1024 / 1024 / 1024
-    return `${gb.toFixed(1)} GB`
+
+
+return `${gb.toFixed(1)} GB`
   }
-  
+
   const formatCpu = (cpu?: number): string => {
     if (cpu === undefined) return '—'
-    return `${(cpu * 100).toFixed(0)}%`
+
+return `${(cpu * 100).toFixed(0)}%`
   }
-  
+
   const getMemoryPercent = (node: NodeInfo): number => {
     if (!node.maxmem || !node.mem) return 0
-    return (node.mem / node.maxmem) * 100
+
+return (node.mem / node.maxmem) * 100
   }
-  
+
   const getCpuPercent = (node: NodeInfo): number => {
     return (node.cpu || 0) * 100
   }
-  
+
   const isRecommended = (node: NodeInfo): boolean => {
     if (nodes.length === 0) return false
     const recommended = getRecommendedNode(nodes)
-    return recommended.node === node.node
+
+
+return recommended.node === node.node
   }
-  
+
   // Handle local migration
   const handleLocalMigrate = async () => {
     if (!selectedNode) {
       setError(t('hardware.selectDestinationNode'))
-      return
+
+return
     }
-    
+
     setMigrating(true)
     setError(null)
-    
+
     try {
       const targetStorage = selectedStorage !== '__current__' ? selectedStorage : undefined
       const withLocalDisks = hasLocalDisks || !!targetStorage
+
       await onMigrate(selectedNode, onlineMigration, targetStorage, withLocalDisks)
       onClose()
     } catch (e: any) {
@@ -687,22 +723,24 @@ export function MigrateVmDialog({
       setMigrating(false)
     }
   }
-  
+
   // Handle cross-cluster migration
   const handleCrossClusterMigrate = async () => {
     if (!selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge) {
       setError('Please fill all required fields')
-      return
+
+return
     }
-    
+
     if (!onCrossClusterMigrate) {
       setError('Cross-cluster migration is not configured')
-      return
+
+return
     }
-    
+
     setMigrating(true)
     setError(null)
-    
+
     try {
       await onCrossClusterMigrate({
         targetConnectionId: selectedRemoteConn,
@@ -721,35 +759,38 @@ export function MigrateVmDialog({
       setMigrating(false)
     }
   }
-  
+
   // Handle HA removal
   const handleRemoveHa = async () => {
     setHaRemoving(true)
     setError(null)
-    
+
     try {
       const sid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
+
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(sid)}`,
         { method: 'DELETE' }
       )
-      
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+
         throw new Error(err?.error || `HTTP ${res.status}`)
       }
-      
+
       // Rafraîchir le statut HA après suppression
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       // Recharger le statut HA
       const haRes = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`)
+
       if (haRes.ok) {
         const haJson = await haRes.json()
         const resources = haJson.data?.resources || []
         const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
         const haResource = resources.find((r: any) => r.sid === vmSid)
-        
+
         if (haResource) {
           setIsHaManaged(true)
           setHaState(haResource.state || 'unknown')
@@ -766,16 +807,16 @@ export function MigrateVmDialog({
       setHaRemoving(false)
     }
   }
-  
+
   // Validate cross-cluster migration compatibility
   const validateCrossClusterMigration = async () => {
     if (!selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge) {
       return
     }
-    
+
     setValidationLoading(true)
     setValidationIssues([])
-    
+
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/remote-migrate/check`,
@@ -790,9 +831,10 @@ export function MigrateVmDialog({
           })
         }
       )
-      
+
       if (res.ok) {
         const data = await res.json()
+
         setValidationIssues(data.issues || [])
         setValidationDone(true)
       }
@@ -802,29 +844,32 @@ export function MigrateVmDialog({
       setValidationLoading(false)
     }
   }
-  
+
   // Auto-validate when all required fields are filled
   useEffect(() => {
     if (activeTab === 1 && selectedRemoteConn && selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge) {
       setValidationDone(false)
+
       const timer = setTimeout(() => {
         validateCrossClusterMigration()
       }, 500) // Debounce
-      return () => clearTimeout(timer)
+
+
+return () => clearTimeout(timer)
     }
   }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge])
-  
+
   const isVmRunning = vmStatus === 'running'
   const hasValidationErrors = validationIssues.some(i => i.type === 'error')
   const hasValidationWarnings = validationIssues.some(i => i.type === 'warning')
   const selectedRemoteConnInfo = remoteConnections.find(c => c.id === selectedRemoteConn)
-  
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <AppDialogTitle onClose={onClose} icon={<i className="ri-swap-box-line" style={{ fontSize: 22 }} />}>
         {t('hardware.migrateTitle', { vmName, vmid })}
       </AppDialogTitle>
-      
+
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
         {isCluster ? (
           <Tabs
@@ -871,6 +916,7 @@ export function MigrateVmDialog({
             />
           </Tabs>
         ) : (
+
           /* Standalone: only cross-cluster migration available */
           <Box sx={{ py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
             <i className="ri-global-line" style={{ fontSize: 18 }} />
@@ -893,10 +939,10 @@ export function MigrateVmDialog({
           </Box>
         )}
       </Box>
-      
+
       <DialogContent sx={{ minHeight: 400 }}>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        
+
         {/* ========== TAB 0: LOCAL MIGRATION ========== */}
         <TabPanel value={activeTab} index={0}>
           <Stack spacing={2}>
@@ -908,7 +954,7 @@ export function MigrateVmDialog({
               </Box>
               <Typography variant="body2" fontWeight={600}>{currentNode}</Typography>
             </Box>
-            
+
             {/* Warning for local disks */}
             {hasLocalDisks && (
               <Alert severity="warning" icon={<i className="ri-alert-line" />}>
@@ -922,11 +968,11 @@ export function MigrateVmDialog({
                 ))}
               </Alert>
             )}
-            
+
             <Typography variant="subtitle2">
               {t('hardware.selectDestinationNodeLabel')}
             </Typography>
-            
+
             {nodesLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
                 <CircularProgress size={32} />
@@ -996,14 +1042,14 @@ export function MigrateVmDialog({
                 })}
               </Stack>
             )}
-            
+
             {/* Storage selector */}
             {nodes.length > 0 && selectedNode && (
               <>
                 <Typography variant="subtitle2" sx={{ mt: 2 }}>
                   {t('hardware.targetStorageLabel')}
                 </Typography>
-                
+
                 {storagesLoading ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
                     <CircularProgress size={16} />
@@ -1025,7 +1071,7 @@ export function MigrateVmDialog({
                           </Typography>
                         </Box>
                       </MenuItem>
-                      
+
                       {storages.length > 0 && <Divider sx={{ my: 0.5 }} />}
 
                       {storages.map((storage) => {
@@ -1074,16 +1120,16 @@ export function MigrateVmDialog({
                 )}
               </>
             )}
-            
+
             {nodes.length > 0 && (
               <>
                 <Divider sx={{ my: 1 }} />
-                
+
                 <FormControlLabel
                   control={
-                    <Checkbox 
-                      checked={onlineMigration} 
-                      onChange={(e) => setOnlineMigration(e.target.checked)} 
+                    <Checkbox
+                      checked={onlineMigration}
+                      onChange={(e) => setOnlineMigration(e.target.checked)}
                       size="small"
                       disabled={!isVmRunning}
                     />
@@ -1103,7 +1149,7 @@ export function MigrateVmDialog({
             )}
           </Stack>
         </TabPanel>
-        
+
         {/* ========== TAB 1: CROSS-CLUSTER MIGRATION ========== */}
         <TabPanel value={activeTab} index={1}>
           <Stack spacing={2.5}>
@@ -1133,7 +1179,7 @@ export function MigrateVmDialog({
                 </Typography>
               </Alert>
             )}
-            
+
             {/* Warning for HA-managed VMs */}
             {isHaManaged && (
               <Alert severity="error" icon={<i className="ri-shield-check-line" />}>
@@ -1164,8 +1210,8 @@ export function MigrateVmDialog({
                     onClick={handleRemoveHa}
                     disabled={haRemoving}
                     startIcon={haRemoving ? <CircularProgress size={14} /> : <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />}
-                    sx={{ 
-                      height: 26, 
+                    sx={{
+                      height: 26,
                       fontSize: '0.7rem',
                       textTransform: 'none',
                       minWidth: 'auto',
@@ -1177,7 +1223,7 @@ export function MigrateVmDialog({
                 </Box>
               </Alert>
             )}
-            
+
             {/* Source info */}
             <Box sx={{ p: 1.5, bgcolor: 'action.hover', borderRadius: 1.5 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
@@ -1215,18 +1261,18 @@ export function MigrateVmDialog({
                 )}
               </Box>
             </Box>
-            
+
             <Box sx={{ display: 'flex', justifyContent: 'center', my: -1 }}>
               <i className="ri-arrow-down-line" style={{ fontSize: 24, opacity: 0.3 }} />
             </Box>
-            
+
             {/* Target Cluster Selection */}
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-global-line" style={{ fontSize: 16 }} />
                 {t('hardware.crossCluster.targetCluster')}
               </Typography>
-              
+
               {remoteConnectionsLoading ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
                   <CircularProgress size={20} />
@@ -1268,7 +1314,7 @@ export function MigrateVmDialog({
                 </FormControl>
               )}
             </Box>
-            
+
             {/* Target Node Selection */}
             {selectedRemoteConn && (
               <Box>
@@ -1276,7 +1322,7 @@ export function MigrateVmDialog({
                   <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.7 }} />
                   {t('hardware.crossCluster.targetNode')}
                 </Typography>
-                
+
                 {remoteNodesLoading ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
                     <CircularProgress size={16} />
@@ -1301,7 +1347,9 @@ export function MigrateVmDialog({
                       {remoteNodes.map((node) => {
                         const cpuPct = (node.cpu || 0) * 100
                         const memPct = node.maxmem && node.mem ? (node.mem / node.maxmem) * 100 : 0
-                        return (
+
+
+return (
                         <MenuItem key={node.node} value={node.node}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                             <Box component="span" sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
@@ -1334,7 +1382,7 @@ export function MigrateVmDialog({
                 )}
               </Box>
             )}
-            
+
             {/* Target Storage and Bridge */}
             {selectedRemoteNode && (
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
@@ -1343,7 +1391,7 @@ export function MigrateVmDialog({
                     <i className="ri-hard-drive-2-line" style={{ fontSize: 16 }} />
                     {t('hardware.crossCluster.targetStorage')}
                   </Typography>
-                  
+
                   {remoteStoragesLoading ? (
                     <CircularProgress size={16} />
                   ) : (
@@ -1366,13 +1414,13 @@ export function MigrateVmDialog({
                     </FormControl>
                   )}
                 </Box>
-                
+
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                     <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
                     {t('hardware.crossCluster.targetBridge')}
                   </Typography>
-                  
+
                   {remoteBridgesLoading ? (
                     <CircularProgress size={16} />
                   ) : (
@@ -1394,7 +1442,7 @@ export function MigrateVmDialog({
                 </Box>
               </Box>
             )}
-            
+
             {/* Validation Results */}
             {selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge && (
               <Box sx={{ mt: 1 }}>
@@ -1408,8 +1456,8 @@ export function MigrateVmDialog({
                 ) : validationDone && validationIssues.length > 0 ? (
                   <Stack spacing={1}>
                     {validationIssues.map((issue, idx) => (
-                      <Alert 
-                        key={idx} 
+                      <Alert
+                        key={idx}
                         severity={issue.type === 'error' ? 'error' : 'warning'}
                         sx={{ py: 0.5 }}
                         icon={<i className={issue.type === 'error' ? 'ri-close-circle-line' : 'ri-alert-line'} style={{ fontSize: 18 }} />}
@@ -1434,16 +1482,16 @@ export function MigrateVmDialog({
                 ) : null}
               </Box>
             )}
-            
+
             {/* Advanced Options */}
             {selectedRemoteNode && (
               <>
-                <Box 
+                <Box
                   onClick={() => setShowAdvanced(!showAdvanced)}
-                  sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 1, 
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
                     cursor: 'pointer',
                     opacity: 0.8,
                     '&:hover': { opacity: 1 }
@@ -1452,7 +1500,7 @@ export function MigrateVmDialog({
                   <i className={showAdvanced ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
                   <Typography variant="body2" fontWeight={500}>{t('hardware.crossCluster.advancedOptions')}</Typography>
                 </Box>
-                
+
                 <Collapse in={showAdvanced}>
                   <Stack spacing={2} sx={{ pl: 2, pt: 1 }}>
                     <TextField
@@ -1464,7 +1512,7 @@ export function MigrateVmDialog({
                       helperText={t('hardware.crossCluster.targetVmIdHelp')}
                       inputProps={{ min: 100, max: 999999999 }}
                     />
-                    
+
                     <TextField
                       label={t('hardware.crossCluster.bandwidthLimit')}
                       type="number"
@@ -1476,7 +1524,7 @@ export function MigrateVmDialog({
                         endAdornment: <InputAdornment position="end">KiB/s</InputAdornment>
                       }}
                     />
-                    
+
                     <FormControlLabel
                       control={
                         <Checkbox
@@ -1504,17 +1552,17 @@ export function MigrateVmDialog({
                 </Collapse>
               </>
             )}
-            
+
             {/* Online migration option */}
             {selectedRemoteNode && (
               <>
                 <Divider />
-                
+
                 <FormControlLabel
                   control={
-                    <Checkbox 
-                      checked={onlineMigration} 
-                      onChange={(e) => setOnlineMigration(e.target.checked)} 
+                    <Checkbox
+                      checked={onlineMigration}
+                      onChange={(e) => setOnlineMigration(e.target.checked)}
                       size="small"
                       disabled={!isVmRunning}
                     />
@@ -1530,7 +1578,7 @@ export function MigrateVmDialog({
                     </Box>
                   }
                 />
-                
+
                 {isVmRunning && onlineMigration && (
                   <Alert severity="info" sx={{ py: 0.5 }}>
                     <Typography variant="caption">
@@ -1543,25 +1591,25 @@ export function MigrateVmDialog({
           </Stack>
         </TabPanel>
       </DialogContent>
-      
+
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={migrating}>
           {t('hardware.cancel')}
         </Button>
-        
+
         {activeTab === 0 ? (
-          <Button 
-            variant="contained" 
-            onClick={handleLocalMigrate} 
+          <Button
+            variant="contained"
+            onClick={handleLocalMigrate}
             disabled={migrating || !selectedNode || nodes.length === 0}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-swap-box-line" />}
           >
             {migrating ? t('hardware.migrating') : t('hardware.migrate')}
           </Button>
         ) : (
-          <Button 
-            variant="contained" 
-            onClick={handleCrossClusterMigrate} 
+          <Button
+            variant="contained"
+            onClick={handleCrossClusterMigrate}
             disabled={migrating || !selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge || vmType === 'lxc' || isHaManaged || hasValidationErrors || validationLoading}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-global-line" />}
             color={hasValidationWarnings && !hasValidationErrors ? 'warning' : 'primary'}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
 import {
   Box,
   Card,
@@ -14,6 +15,7 @@ import {
   IconButton,
 } from '@mui/material'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
 import { buildSeriesFromRrd } from './helpers'
@@ -55,7 +57,9 @@ const TF_OPTIONS: { label: string; value: RrdTimeframe }[] = [
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   const theme = useTheme()
-  return (
+
+
+return (
     <Card variant="outlined" sx={{ flex: 1, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
       <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
         <Typography variant="caption" sx={{ opacity: 0.6 }}>{label}</Typography>
@@ -68,30 +72,38 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 function getUsageColor(pct: number): string {
   if (pct >= 90) return '#f44336'
   if (pct >= 70) return '#ff9800'
-  return '#4caf50'
+
+return '#4caf50'
 }
 
 function formatTime(ts: number): string {
   const d = new Date(ts)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+
+return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatNetworkValue(bps: number): string {
   if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} Gb/s`
   if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} Mb/s`
   if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} Kb/s`
-  return `${bps.toFixed(0)} b/s`
+
+return `${bps.toFixed(0)} b/s`
 }
 
 async function fetchPbsRrd(connId: string, timeframe: RrdTimeframe, signal?: AbortSignal) {
   const url = `/api/v1/pbs/${encodeURIComponent(connId)}/rrd?timeframe=${encodeURIComponent(timeframe)}`
   const res = await fetch(url, { cache: 'no-store', signal })
   const json = await res.json()
+
   if (!res.ok) throw new Error(json?.error || `PBS RRD HTTP ${res.status}`)
+
   // Unwrap nested data
   let data = json
+
   while (data && typeof data === 'object' && 'data' in data) data = data.data
-  return Array.isArray(data) ? data : []
+
+return Array.isArray(data) ? data : []
 }
 
 // ── Graph component (reusable for all 4 metric types) ──
@@ -154,7 +166,9 @@ function MetricGraph({
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
                 const sorted = [...payload].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
-                return (
+
+
+return (
                   <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className={icon} style={{ fontSize: 13, color: iconColor }} />
@@ -243,7 +257,8 @@ function NetworkGraph({
               wrapperStyle={{ zIndex: 10 }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
-                return (
+
+return (
                   <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 220 }}>
                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
@@ -255,7 +270,9 @@ function NetworkGraph({
                         const name = String(entry.dataKey)
                         const isIn = name.startsWith('netIn_')
                         const serverName = name.replace(/^net(In|Out)_/, '')
-                        return (
+
+
+return (
                           <Box key={String(entry.dataKey)} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.25 }}>
                             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
                             <Typography variant="caption" sx={{ flex: 1 }}>{serverName} {isIn ? 'IN' : 'OUT'}</Typography>
@@ -298,21 +315,27 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
 
   const serverColors = useMemo(() => {
     const map: Record<string, string> = {}
+
     rrdServerNames.forEach((name, i) => { map[name] = PALETTE[i % PALETTE.length] })
-    return map
+
+return map
   }, [rrdServerNames])
 
   const toggleServer = useCallback((name: string) => {
     setRrdHidden(prev => {
       const allOthersHidden = rrdServerNames.every(n => n === name || prev.has(n))
+
       if (allOthersHidden) return new Set()
-      return new Set(rrdServerNames.filter(n => n !== name))
+
+return new Set(rrdServerNames.filter(n => n !== name))
     })
   }, [rrdServerNames])
 
   // Stable key for PBS server list
   const pbsRef = useRef(pbsServers)
+
   pbsRef.current = pbsServers
+
   const pbsKey = useMemo(() =>
     pbsServers.filter(s => s.status === 'online').map(s => s.connId).sort((a, b) => a.localeCompare(b)).join(','),
     [pbsServers]
@@ -321,10 +344,12 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
   // Fetch and merge RRD data from all online PBS servers
   useEffect(() => {
     const servers = pbsRef.current.filter(s => s.status === 'online')
+
     if (servers.length === 0) {
       setRrdSeries([])
       setRrdServerNames([])
-      return
+
+return
     }
 
     const ac = new AbortController()
@@ -335,6 +360,7 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
       await Promise.allSettled(servers.map(async (s) => {
         try {
           const raw = await fetchPbsRrd(s.connId, rrdTf, ac.signal)
+
           if (!ac.signal.aborted) {
             perServer[s.name] = buildSeriesFromRrd(raw)
           }
@@ -346,21 +372,26 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
       if (ac.signal.aborted) return
 
       const names = Object.keys(perServer).sort((a, b) => a.localeCompare(b))
+
       setRrdServerNames(names)
 
       // Merge into unified time series
       const resolutionMs: Record<string, number> = {
         hour: 60_000, day: 1_800_000, week: 10_800_000, month: 43_200_000, year: 604_800_000,
       }
+
       const snapRes = resolutionMs[rrdTf] || 60_000
 
       const timeMap = new Map<number, Record<string, number>>()
+
       for (const [serverName, series] of Object.entries(perServer)) {
         for (const point of series) {
           if (!point.t) continue
           const snapped = Math.round(point.t / snapRes) * snapRes
+
           if (!timeMap.has(snapped)) timeMap.set(snapped, { t: snapped })
           const entry = timeMap.get(snapped)!
+
           if (point.cpuPct != null) entry[`cpu_${serverName}`] = point.cpuPct
           if (point.ramPct != null) entry[`ram_${serverName}`] = point.ramPct
           if (point.netInBps != null) entry[`netIn_${serverName}`] = point.netInBps
@@ -374,13 +405,16 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
       // Forward-fill + backward-fill
       const keys = names.flatMap(name => ['cpu_', 'ram_', 'netIn_', 'netOut_', 'load_'].map(p => `${p}${name}`))
       const lastKnown: Record<string, number> = {}
+
       for (const slot of merged) {
         for (const key of keys) {
           if (slot[key] != null) lastKnown[key] = slot[key]
           else if (lastKnown[key] != null) slot[key] = lastKnown[key]
         }
       }
+
       const firstKnown: Record<string, number> = {}
+
       for (let i = merged.length - 1; i >= 0; i--) {
         for (const key of keys) {
           if (merged[i][key] != null) firstKnown[key] = merged[i][key]
@@ -408,6 +442,7 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
   const totalBackups = pbsServers.reduce((sum, s) => sum + s.stats.backupCount, 0)
   const totalSize = pbsServers.reduce((sum, s) => sum + (s.stats.totalSize ?? 0), 0)
   const allDatastores = pbsServers.flatMap(s => s.datastores)
+
   const avgUsage = allDatastores.length > 0
     ? Math.round(allDatastores.reduce((sum, d) => sum + d.usagePercent, 0) / allDatastores.length)
     : 0
@@ -520,7 +555,9 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
         <Stack spacing={1.5}>
           {pbsServers.map(server => {
             const isOnline = server.status === 'online'
-            return (
+
+
+return (
               <Card key={server.connId} variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
                 <CardContent
                   onClick={() => onPbsClick?.({ type: 'pbs', id: server.connId })}
@@ -560,7 +597,9 @@ export default function BackupDashboard({ pbsServers, onPbsClick, onDatastoreCli
                       const pct = Math.min(Math.max(ds.usagePercent, 0), 100)
                       const color = getUsageColor(pct)
                       const dsId = `${server.connId}:${ds.name}`
-                      return (
+
+
+return (
                         <Box
                           key={ds.name}
                           onClick={(e) => { e.stopPropagation(); onDatastoreClick?.({ type: 'pbs-datastore', id: dsId }) }}

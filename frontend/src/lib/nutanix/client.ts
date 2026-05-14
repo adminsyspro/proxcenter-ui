@@ -84,6 +84,7 @@ export class NutanixClient {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "")
+
       throw new Error(`Nutanix API GET ${path} failed: ${res.status} ${res.statusText} ${body}`)
     }
 
@@ -92,8 +93,10 @@ export class NutanixClient {
 
   private async post<T = any>(path: string, body: Record<string, any>): Promise<T> {
     const opts = await this.fetchOpts()
+
     opts.method = "POST"
     opts.body = JSON.stringify(body)
+
     // POST operations (image creation, snapshots) can take longer
     opts.signal = AbortSignal.timeout(120_000)
 
@@ -102,6 +105,7 @@ export class NutanixClient {
 
     if (!res.ok) {
       const text = await res.text().catch(() => "")
+
       throw new Error(`Nutanix API POST ${path} failed: ${res.status} ${res.statusText} ${text}`)
     }
 
@@ -125,10 +129,12 @@ export class NutanixClient {
     }
 
     const cluster = entities[0]
+
     const version =
       cluster.status?.resources?.config?.software_map?.NOS?.version ||
       cluster.status?.resources?.config?.build?.version ||
       "unknown"
+
     const clusterName =
       cluster.status?.name ||
       cluster.spec?.name ||
@@ -155,6 +161,7 @@ export class NutanixClient {
       })
 
       const entities: any[] = data.entities || []
+
       if (entities.length === 0) break
 
       for (const entity of entities) {
@@ -162,6 +169,7 @@ export class NutanixClient {
       }
 
       const totalMatches = data.metadata?.total_matches ?? 0
+
       offset += entities.length
       if (offset >= totalMatches) break
     }
@@ -174,7 +182,9 @@ export class NutanixClient {
    */
   async getVM(uuid: string): Promise<NutanixVm> {
     const entity = await this.get<any>(`/vms/${uuid}`)
-    return this.parseVmEntity(entity)
+
+
+return this.parseVmEntity(entity)
   }
 
   /**
@@ -186,17 +196,21 @@ export class NutanixClient {
 
     // Get VM details to inspect disk_list
     let vmDiskList: any[] = []
+
     try {
       const vm = await this.get<any>(`/vms/${vmUuid}`)
+
       vmDiskList = vm.status?.resources?.disk_list || vm.spec?.resources?.disk_list || []
     } catch {}
 
     // Pre-fetch Volume Groups (needed if any disk is type VOLUME_GROUP)
     let vgMap = new Map<string, any>() // vgUuid -> vg entity
     const hasVgDisks = vmDiskList.some((d: any) => d.device_properties?.device_type === "VOLUME_GROUP")
+
     if (hasVgDisks) {
       try {
         const vgData = await this.post<any>("/volume_groups/list", { kind: "volume_group", length: 100 })
+
         for (const vg of (vgData.entities || [])) {
           vgMap.set(vg.metadata?.uuid, vg)
         }
@@ -205,13 +219,16 @@ export class NutanixClient {
 
     for (const disk of vmDiskList) {
       const deviceType = disk.device_properties?.device_type
+
       if (deviceType === "CDROM") continue
 
       if (deviceType === "VOLUME_GROUP" && disk.volume_group_reference?.uuid) {
         // Resolve actual disks from the Volume Group
         const vg = vgMap.get(disk.volume_group_reference.uuid)
+
         if (vg) {
           const vgDisks: any[] = vg.status?.resources?.disk_list || vg.spec?.resources?.disk_list || []
+
           for (const vgDisk of vgDisks) {
             disks.push({
               uuid: vgDisk.uuid || "",
@@ -257,6 +274,7 @@ export class NutanixClient {
     _isVolumeGroupDisk?: boolean
   ): Promise<{ imageUuid: string; taskUuid: string }> {
     console.log(`[nutanix] createDiskImage: vmUuid=${vmUuid}, diskUuid=${diskUuid}, imageName=${imageName}`)
+
     const body = {
       spec: {
         name: imageName,
@@ -300,6 +318,7 @@ export class NutanixClient {
 
       if (status === "FAILED" || status === "ABORTED") {
         const errMsg = task.error_detail || task.error_code || "unknown error"
+
         throw new Error(`Nutanix task ${taskUuid} failed: ${errMsg}`)
       }
 
@@ -315,6 +334,7 @@ export class NutanixClient {
    */
   async deleteImage(imageUuid: string): Promise<void> {
     const opts = await this.fetchOpts()
+
     opts.method = "DELETE"
 
     const url = `${this.baseUrl}/api/nutanix/v3/images/${imageUuid}`
@@ -355,6 +375,7 @@ export class NutanixClient {
     const dataDisks = diskList.filter((d: any) => d.device_properties?.device_type !== "CDROM")
 
     let diskSizeBytes = 0
+
     for (const d of dataDisks) {
       diskSizeBytes += d.disk_size_bytes || (d.disk_size_mib ? d.disk_size_mib * 1048576 : 0)
     }
@@ -369,6 +390,7 @@ export class NutanixClient {
 
     // Guest OS
     const guestTools = resources.guest_tools || {}
+
     const osType = resources.guest_customization?.cloud_init?.meta_data
       ? undefined
       : guestTools.nutanix_guest_tools?.guest_os_version || undefined

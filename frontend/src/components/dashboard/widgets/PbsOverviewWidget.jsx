@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, Tooltip as RTooltip } from 'recharts'
+
 import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
@@ -20,7 +21,7 @@ function CircularGauge({ value, label, size = 50, strokeWidth = 4, color, sublab
 
   useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
 
- 
+
 
 return () => clearTimeout(t) }, [])
 
@@ -53,7 +54,7 @@ function IoTooltip({ active, payload, isDark }) {
   const time = formatTime(payload)
   const c = widgetColors(isDark)
 
-  
+
 return (
     <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
       <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -75,7 +76,7 @@ return (
 function getGaugeColor(value) {
   if (value >= 90) return '#f44336'
   if (value >= 75) return '#ff9800'
-  
+
 return '#4caf50'
 }
 
@@ -85,7 +86,7 @@ function formatBytes(bytes) {
 
   if (gb >= 1024) return `${(gb / 1024).toFixed(1)} TB`
   if (gb >= 1) return `${gb.toFixed(1)} GB`
-  
+
 return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
 }
 
@@ -94,7 +95,7 @@ function formatRate(bytes) {
   if (bytes < 1024) return `${Math.round(bytes)} B/s`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`
-  
+
 return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB/s`
 }
 
@@ -230,7 +231,7 @@ function PbsOverviewWidget({ data, loading, timeRange }) {
           const json = await res.json()
           const points = sliceToRange((json?.data || []).filter(p => p && p.time), timeRange)
 
-          
+
 return { id: server.id, data: points }
         } catch { return null }
       })

@@ -1,5 +1,6 @@
 // src/app/api/v1/templates/custom-images/route.ts
 import { NextResponse } from "next/server"
+
 import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
@@ -22,6 +23,7 @@ export async function GET(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const images = await prisma.customImage.findMany({
@@ -38,13 +40,16 @@ export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
+
     if (denied) return denied
 
     const session = await getServerSession(authOptions)
     const rawBody = await req.json().catch(() => null)
+
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
     const parseResult = createCustomImageSchema.safeParse(rawBody)
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: "Invalid input", details: parseResult.error.flatten() },
@@ -69,15 +74,19 @@ export async function POST(req: Request) {
     const tenantRow = !isShared
       ? await basePrisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } })
       : null
+
     const tenantSlug = tenantRow?.slug || tenantId.replace(/[^a-z0-9-]/gi, '').toLowerCase()
 
     // Generate unique slug
     const nameSlug = slugify(body.name) || 'custom-image'
+
     const baseSlug = isShared
       ? `custom-${nameSlug}`
       : `custom-${tenantSlug}-${nameSlug}`
+
     let slug = baseSlug
     let suffix = 0
+
     while (await prisma.customImage.findUnique({ where: { tenantId_slug: { tenantId, slug } } })) {
       suffix++
       slug = `${baseSlug}-${suffix}`
@@ -109,6 +118,7 @@ export async function POST(req: Request) {
 
     // Audit
     const { audit } = await import("@/lib/audit")
+
     await audit({
       action: "create",
       category: "templates",

@@ -20,6 +20,7 @@ export async function GET(
     // Use VM_VIEW without resource context so scoped users (node/vm/tag/pool) pass.
     // The actual filtering happens below with filterVmsByPermission.
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
+
     if (denied) return denied
 
     const conn = await getConnectionById(id)
@@ -32,19 +33,23 @@ export async function GET(
 
     // Apply RBAC scope filtering so scoped users only see their permitted VMs
     const rbacCtx = await getRBACContext()
+
     if (rbacCtx && !rbacCtx.isAdmin) {
       const withMeta = guests.map(g => ({
         ...g,
         connId: id,
         vmid: String(g.vmid),
       }))
+
       const filtered = await filterVmsByPermission(
         rbacCtx.userId,
         withMeta,
         PERMISSIONS.VM_VIEW,
         rbacCtx.tenantId
       )
+
       const allowed = new Set(filtered.map(g => g.vmid))
+
       guests = guests.filter(g => allowed.has(String(g.vmid)))
     }
 

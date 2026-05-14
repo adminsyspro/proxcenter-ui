@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+
 import { useTranslations } from 'next-intl'
 
 import {
@@ -32,6 +33,7 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
+
 import * as firewallAPI from '@/lib/api/firewall'
 
 import { useFirewallState } from './firewall/useFirewallState'
@@ -86,9 +88,11 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   // Autocomplete options for source/dest (aliases + ipsets)
   const autocompleteOptions = useMemo(() => {
     const opts: { label: string; secondary?: string }[] = []
+
     for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
     for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    return opts
+
+return opts
   }, [aliases, ipsets])
 
   // Load VM-specific data (aliases, ipsets, nics) alongside the shared data
@@ -157,6 +161,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
 
     try {
       const data = await firewallAPI.getVMFirewallLog(connectionId, node, vmType, vmid, 50)
+
       setLogs(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to load firewall logs:', err)
@@ -223,6 +228,7 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
   // Wrap update rule to clean source/dest
   const handleUpdateRule = () => {
     if (!fw.editingRule) return
+
     const payload: firewallAPI.CreateRuleRequest = {
       ...fw.editingRule,
       source: cleanSourceDest(fw.editingRule.source) || undefined,

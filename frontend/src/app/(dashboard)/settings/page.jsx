@@ -111,7 +111,8 @@ const DatacentersSection = dynamic(() => import('@/components/settings/green/Dat
 
 function MainTabPanel({ value, index, children }) {
   if (value !== index) return null
-  return <Box>{children}</Box>
+
+return <Box>{children}</Box>
 }
 
 function SubTabPanel({ value, index, children }) {
@@ -132,12 +133,15 @@ async function fetchJson(url, init) {
   if (!r.ok) {
     // Build a useful error message from Zod validation details if present
     let msg = json?.error || text || `HTTP ${r.status}`
+
     if (json?.details?.fieldErrors) {
       const fields = Object.entries(json.details.fieldErrors)
         .filter(([, v]) => v?.length)
         .map(([k, v]) => `${k}: ${v.join(', ')}`)
+
       if (fields.length) msg += ' — ' + fields.join('; ')
     }
+
     throw new Error(msg)
   }
 
@@ -223,6 +227,7 @@ function ConnectionVersion({ connection }) {
 
   useEffect(() => {
     if (!connection?.id) return
+
     const endpoint = connection.type === 'pbs'
       ? `/api/v1/pbs/${connection.id}/status`
       : `/api/v1/connections/${connection.id}/version`
@@ -234,6 +239,7 @@ function ConnectionVersion({ connection }) {
         const data = json.data || json
         const ver = data.version || ''
         const rel = data.release ? `-${data.release}` : ''
+
         if (ver) setVersion(`${ver}${rel}`)
       })
       .catch(() => {})
@@ -349,10 +355,12 @@ function ConnectionsTab() {
 
   const handleDetectCeph = async (connId) => {
     setDetectingCephId(connId)
+
     try {
       await fetch(`/api/v1/connections/${connId}/detect-ceph`, { method: 'POST' })
       await loadPveConnections()
     } catch { /* ignore */ }
+
     setDetectingCephId(null)
   }
 
@@ -370,27 +378,34 @@ function ConnectionsTab() {
 
   const handleSaveConnection = async (formData) => {
     const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng' || addConnType === 'nutanix' || addConnType === 'hyperv'
+
     const payload = {
       name: formData.name.trim(),
       type: addConnType,
       baseUrl: formData.baseUrl.trim(),
       behindProxy: isExtHypervisor ? false : !!formData.behindProxy,
       insecureTLS: !!formData.insecureTLS,
+
       // Location fields
       latitude: formData.latitude !== '' && !Number.isNaN(Number.parseFloat(formData.latitude)) ? Number.parseFloat(formData.latitude) : null,
       longitude: formData.longitude !== '' && !Number.isNaN(Number.parseFloat(formData.longitude)) ? Number.parseFloat(formData.longitude) : null,
       locationLabel: formData.locationLabel?.trim() || null,
       country: formData.country?.trim().toUpperCase() || null,
+
       // PVE/PBS: API token
       ...(!isExtHypervisor && formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
+
       // VMware/XCP-ng: username + password
       ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : addConnType === 'hyperv' ? 'Administrator' : addConnType === 'nutanix' ? 'admin' : 'root') }),
       ...(isExtHypervisor && formData.vmwarePassword && { vmwarePassword: formData.vmwarePassword }),
+
       // VMware sub-type and datacenter
       ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
       ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
+
       // Hyper-V SMB share name
       ...(addConnType === 'hyperv' && { hypervShareName: formData.hypervShareName?.trim() || 'VMs' }),
+
       // SSH fields (PVE + VMware — not XCP-ng)
       ...(addConnType !== 'xcpng' && addConnType !== 'hyperv' && addConnType !== 'nutanix' && {
         sshEnabled: formData.sshEnabled,
@@ -416,6 +431,7 @@ function ConnectionsTab() {
       if (!isExtHypervisor && !formData.apiToken.trim()) {
         throw new Error('API Token is required')
       }
+
       await fetchJson('/api/v1/connections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -481,13 +497,16 @@ function ConnectionsTab() {
 
   const deleteConnection = (id, type) => {
     const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : type === 'nutanix' ? 'Nutanix' : type === 'hyperv' ? 'Hyper-V' : 'PVE'
+
     setDeleteConnectionDialog({ id, type, typeName })
   }
 
   const confirmDeleteConnection = async () => {
     if (!deleteConnectionDialog) return
     const { id, type } = deleteConnectionDialog
+
     setDeletingConnection(true)
+
     try {
       await fetchJson(`/api/v1/connections/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
@@ -504,6 +523,7 @@ function ConnectionsTab() {
       } else if (type === 'hyperv') {
         await loadHypervConnections()
       }
+
       setDeleteConnectionDialog(null)
     } finally {
       setDeletingConnection(false)
@@ -564,7 +584,9 @@ function ConnectionsTab() {
         sortable: false,
         valueGetter: (value, row) => {
           const hosts = row.hosts
-          return hosts && hosts.length > 1 ? 'cluster' : 'standalone'
+
+
+return hosts && hosts.length > 1 ? 'cluster' : 'standalone'
         },
         renderCell: params => (
           <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -583,6 +605,7 @@ function ConnectionsTab() {
         sortable: false,
         renderCell: params => {
           const hosts = params.value
+
           if (!hosts || hosts.length === 0) {
             return (
               <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -590,7 +613,9 @@ function ConnectionsTab() {
               </Box>
             )
           }
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%', flexWrap: 'wrap' }}>
               {hosts.map(host => (
                 <Tooltip key={host.id} title={host.ip || t('settings.noIp')} arrow>
@@ -614,7 +639,9 @@ function ConnectionsTab() {
         width: 110,
         renderCell: params => {
           const isDetecting = detectingCephId === params.row.id
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
               {params.value ? (
                 <Chip size='small' label={t('common.yes')} color='info' variant='outlined' />
@@ -669,6 +696,7 @@ function ConnectionsTab() {
         renderCell: params => {
           const country = params.row.country
           const country3 = findCountry(country)?.code
+
           if (!params.value && !country3) {
             return (
               <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -676,7 +704,9 @@ function ConnectionsTab() {
               </Box>
             )
           }
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: '100%', overflow: 'hidden' }}>
               {country3 && <CountryFlag code={country3} size={18} />}
               {params.value ? (
@@ -769,6 +799,7 @@ function ConnectionsTab() {
         renderCell: params => {
           const country = params.row.country
           const country3 = findCountry(country)?.code
+
           if (!params.value && !country3) {
             return (
               <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -776,7 +807,9 @@ function ConnectionsTab() {
               </Box>
             )
           }
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: '100%', overflow: 'hidden' }}>
               {country3 && <CountryFlag code={country3} size={18} />}
               {params.value ? (
@@ -932,6 +965,7 @@ function ConnectionsTab() {
         renderCell: params => {
           const country = params.row.country
           const country3 = findCountry(country)?.code
+
           if (!params.value && !country3) {
             return (
               <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -939,7 +973,9 @@ function ConnectionsTab() {
               </Box>
             )
           }
-          return (
+
+
+return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: '100%', overflow: 'hidden' }}>
               {country3 && <CountryFlag code={country3} size={18} />}
               {params.value ? (
@@ -1609,8 +1645,10 @@ function LicenseTab() {
   // Build feature lookup from features array
   const featureMap = useMemo(() => {
     const map = {}
+
     for (const f of features) map[f.id] = f
-    return map
+
+return map
   }, [features])
 
   const enabledCount = features.filter(f => f.enabled).length
@@ -1753,7 +1791,9 @@ function LicenseTab() {
                 const startDate = licenseStatus.activated_at ? new Date(licenseStatus.activated_at) : new Date(expiresAt.getTime() - 365 * 24 * 60 * 60 * 1000)
                 const totalDays = Math.max(1, Math.ceil((expiresAt - startDate) / (1000 * 60 * 60 * 24)))
                 const remainPct = Math.max(0, Math.min(100, Math.round((daysRemaining / totalDays) * 100)))
-                return (
+
+
+return (
                   <Box sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                       <i className='ri-calendar-check-line' style={{ fontSize: 18, opacity: 0.6 }} />
@@ -2533,7 +2573,8 @@ export default function SettingsPage() {
     if (tab.providerOnly && !(isSuperAdmin && isProviderTenant)) return acc
     if (!licenseLoading && tab.requiredFeature && !hasFeature(tab.requiredFeature)) return acc
     acc.push(idx)
-    return acc
+
+return acc
   }, [])
 
   const tabs = visibleIndices.map(i => allTabs[i])
@@ -2543,7 +2584,9 @@ export default function SettingsPage() {
   const resolveTabIndex = () => {
     if (!tabParam) return 0
     const idx = tabNames.indexOf(tabParam)
-    return idx >= 0 ? idx : 0
+
+
+return idx >= 0 ? idx : 0
   }
 
   const [mainTab, setMainTab] = useState(resolveTabIndex)
@@ -2552,6 +2595,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (tabParam) {
       const idx = tabNames.indexOf(tabParam)
+
       if (idx >= 0 && idx !== mainTab) setMainTab(idx)
     }
   }, [tabParam])
@@ -2561,6 +2605,7 @@ export default function SettingsPage() {
     setMainTab(newIndex)
     const name = tabNames[newIndex] || 'connections'
     const params = new URLSearchParams(searchParams.toString())
+
     params.set('tab', name)
     router.replace(`/settings?${params.toString()}`, { scroll: false })
   }
@@ -2624,7 +2669,9 @@ export default function SettingsPage() {
             {tabs.map((tab, idx) => {
               if (mainTab !== idx) return null
               const TabComponent = tab.component
-              return (
+
+
+return (
                 <Box key={idx}>
                   <TabComponent />
                 </Box>

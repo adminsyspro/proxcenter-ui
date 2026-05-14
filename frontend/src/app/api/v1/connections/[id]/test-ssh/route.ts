@@ -35,6 +35,17 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", id)
     if (denied) return denied
 
+    // Optional form overrides — allow testing SSH against unsaved edits in the
+    // connection dialog. Missing fields fall back to the stored DB values so
+    // users can test without re-entering an already-configured key/password.
+    let body: any = null
+    try {
+      const text = await req.text()
+      if (text) body = JSON.parse(text)
+    } catch {
+      body = null
+    }
+
     // Get connection with SSH credentials from database
     const connection = await prisma.connection.findUnique({
       where: { id },
@@ -56,48 +67,85 @@ export async function POST(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    if (!connection.sshEnabled) {
+    const effectiveSshEnabled = typeof body?.sshEnabled === 'boolean' ? body.sshEnabled : connection.sshEnabled
+    const effectiveSshPort = Number(body?.sshPort) > 0 ? Number(body.sshPort) : (connection.sshPort || 22)
+    const effectiveSshUser = (typeof body?.sshUser === 'string' && body.sshUser.trim()) ? body.sshUser.trim() : (connection.sshUser || 'root')
+    const effectiveAuthMethod = (body?.sshAuthMethod === 'key' || body?.sshAuthMethod === 'password')
+      ? body.sshAuthMethod
+      : connection.sshAuthMethod
+
+    if (!effectiveSshEnabled) {
       return NextResponse.json({
         success: false,
         error: "SSH is not enabled for this connection"
       }, { status: 400 })
     }
 
-    // Decrypt SSH credentials
+    // Resolve SSH credentials: prefer form-provided values, fall back to stored
+    // (decrypted) values — but only fall back when the stored auth method
+    // matches the effective auth method, to avoid feeding a stored passphrase
+    // to a password login (or vice versa).
     let sshKey: string | undefined
     let sshPassword: string | undefined
     let sshPassphrase: string | undefined
 
-    if (connection.sshKeyEnc) {
-      try {
-        sshKey = decryptSecret(connection.sshKeyEnc)
-      } catch (e: any) {
-        console.error('[test-ssh] Failed to decrypt SSH key:', e)
-        return NextResponse.json({
-          success: false,
-          error: "Failed to decrypt SSH key: " + e.message
-        }, { status: 500 })
+    const bodyKey = typeof body?.sshKey === 'string' && body.sshKey.trim() ? body.sshKey : undefined
+    const bodyPassword = typeof body?.sshPassword === 'string' && body.sshPassword ? body.sshPassword : undefined
+    const bodyPassphrase = typeof body?.sshPassphrase === 'string' && body.sshPassphrase ? body.sshPassphrase : undefined
+
+    if (effectiveAuthMethod === 'key') {
+      if (bodyKey) {
+        sshKey = bodyKey
+      } else if (connection.sshKeyEnc && connection.sshAuthMethod === 'key') {
+        try {
+          sshKey = decryptSecret(connection.sshKeyEnc)
+        } catch (e: any) {
+          console.error('[test-ssh] Failed to decrypt SSH key:', e)
+          return NextResponse.json({
+            success: false,
+            error: "Failed to decrypt SSH key: " + e.message
+          }, { status: 500 })
+        }
+      }
+      if (bodyPassphrase) {
+        sshPassphrase = bodyPassphrase
+      } else if (!bodyKey && connection.sshPassEnc && connection.sshAuthMethod === 'key') {
+        try {
+          sshPassphrase = decryptSecret(connection.sshPassEnc)
+        } catch (e: any) {
+          console.error('[test-ssh] Failed to decrypt SSH passphrase:', e)
+        }
+      }
+    } else if (effectiveAuthMethod === 'password') {
+      if (bodyPassword) {
+        sshPassword = bodyPassword
+      } else if (connection.sshPassEnc && connection.sshAuthMethod === 'password') {
+        try {
+          sshPassword = decryptSecret(connection.sshPassEnc)
+        } catch (e: any) {
+          console.error('[test-ssh] Failed to decrypt SSH password:', e)
+        }
       }
     }
 
-    if (connection.sshPassEnc) {
-      try {
-        const decrypted = decryptSecret(connection.sshPassEnc)
-        if (connection.sshAuthMethod === 'key') {
-          sshPassphrase = decrypted
-        } else {
-          sshPassword = decrypted
-        }
-      } catch (e: any) {
-        console.error('[test-ssh] Failed to decrypt SSH passphrase/password:', e)
-      }
+    if (effectiveAuthMethod === 'key' && !sshKey) {
+      return NextResponse.json({
+        success: false,
+        error: "Missing SSH private key — enter a key in the form or save the connection first."
+      }, { status: 400 })
+    }
+    if (effectiveAuthMethod === 'password' && !sshPassword) {
+      return NextResponse.json({
+        success: false,
+        error: "Missing SSH password — enter a password in the form or save the connection first."
+      }, { status: 400 })
     }
 
     // For non-PVE connections (VMware ESXi, XCP-ng), test SSH directly to the host
     if (connection.type !== 'pve' && connection.type !== 'pbs') {
       const host = connection.baseUrl.replace(/^https?:\/\//, '').replace(/[:\/].*$/, '')
-      const port = connection.sshPort || 22
-      const user = connection.sshUser || 'root'
+      const port = effectiveSshPort
+      const user = effectiveSshUser
 
       try {
         const result = await executeSSHDirect({
@@ -135,10 +183,10 @@ export async function POST(
     // 1. Try orchestrator first (PVE/PBS only)
     try {
       const sshCredentials: Record<string, unknown> = {
-        sshEnabled: connection.sshEnabled,
-        sshPort: connection.sshPort || 22,
-        sshUser: connection.sshUser || 'root',
-        sshAuthMethod: connection.sshAuthMethod,
+        sshEnabled: effectiveSshEnabled,
+        sshPort: effectiveSshPort,
+        sshUser: effectiveSshUser,
+        sshAuthMethod: effectiveAuthMethod,
       }
       if (sshKey) sshCredentials.sshKey = sshKey
       if (sshPassword) sshCredentials.sshPassword = sshPassword
@@ -196,8 +244,8 @@ export async function POST(
       managedHosts.filter(h => h.sshAddress).map(h => [h.node, h.sshAddress!])
     )
 
-    const port = connection.sshPort || 22
-    const user = connection.sshUser || 'root'
+    const port = effectiveSshPort
+    const user = effectiveSshUser
 
     const results = await Promise.all(
       (nodes || []).map(async (n: any) => {

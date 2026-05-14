@@ -263,17 +263,32 @@ export default function ConnectionDialog({
 
   const handleTestSSH = async () => {
     if (!initialData?.id) return
-    
+
     setTestingSSH(true)
     setSshTestResult(null)
-    
+
+    // Send the current (possibly unsaved) form values so the user can test
+    // before saving. The API merges these with any DB-stored credentials —
+    // empty key/password/passphrase fields fall back to what's already saved.
+    const payload: Record<string, unknown> = {
+      sshEnabled: form.sshEnabled,
+      sshPort: form.sshPort,
+      sshUser: form.sshUser,
+      sshAuthMethod: form.sshAuthMethod,
+    }
+    if (form.sshKey.trim()) payload.sshKey = form.sshKey
+    if (form.sshPassphrase) payload.sshPassphrase = form.sshPassphrase
+    if (form.sshPassword) payload.sshPassword = form.sshPassword
+
     try {
       const res = await fetch(`/api/v1/connections/${initialData.id}/test-ssh`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       })
-      
+
       const json = await res.json()
-      
+
       if (res.ok) {
         setSshTestResult(json)
       } else {

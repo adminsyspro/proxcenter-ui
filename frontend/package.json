@@ -4,9 +4,10 @@
   "license": "Commercial",
   "private": true,
   "scripts": {
-    "predev": "prisma generate",
+    "predev": "prisma generate && node scripts/ensure-internal-token.js",
     "dev": "concurrently \"next dev --turbopack\" \"node ws-proxy.js\"",
     "build": "next build",
+    "prestart": "node scripts/ensure-internal-token.js",
     "start": "concurrently \"next start\" \"node ws-proxy.js\"",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",

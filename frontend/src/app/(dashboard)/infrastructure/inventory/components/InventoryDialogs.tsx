@@ -561,7 +561,13 @@ return { node, ok: r.ok && json.success !== false, output: String(json.output ||
 
       if (failedInstalls.length > 0) {
         const aggregated = failedInstalls.map(f => `=== ${f.node} ===\n${f.error || '(no error string)'}\n${f.output.slice(-2000)}`).join('\n\n')
-        const looks401Enterprise = /\b401\b/i.test(aggregated) && aggregated.toLowerCase().includes('enterprise.proxmox.com')
+        // Match the full URL form ("https://enterprise.proxmox.com") rather
+        // than the bare substring so an apt error mentioning a third-party
+        // mirror that happens to contain "enterprise.proxmox.com" in a path
+        // (e.g. evil.example.com/enterprise.proxmox.com/...) does not trigger
+        // the subscription-required hint.
+        const looks401Enterprise = /\b401\b/i.test(aggregated)
+          && /https?:\/\/enterprise\.proxmox\.com\b/i.test(aggregated)
 
         installError = {
           output: aggregated,

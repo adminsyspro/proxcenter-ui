@@ -4,7 +4,7 @@ set -e
 # ============================================
 # ProxCenter Community Installation Script
 # ============================================
-# Usage: curl -fsSL https://get.proxcenter.io/community | sudo bash
+# Usage: curl -fsSL https://proxcenter.io/install/community | sudo bash
 # ============================================
 
 # Colors

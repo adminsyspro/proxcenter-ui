@@ -4,7 +4,7 @@ set -e
 # ============================================
 # ProxCenter Enterprise Installation Script
 # ============================================
-# Usage: curl -fsSL https://get.proxcenter.io/enterprise | sudo bash -s -- --token YOUR_GHCR_TOKEN
+# Usage: curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_GHCR_TOKEN
 # ============================================
 
 # Colors
@@ -542,7 +542,7 @@ print_summary() {
     echo -e "      ${DIM}docker compose -f $INSTALL_DIR/docker-compose.yml down${NC}        ${DIM}# Stop${NC}"
     echo ""
     echo -e "    ${DIM}Upgrade (refreshes docker-compose.yml and pulls latest images):${NC}"
-    echo -e "      ${DIM}curl -fsSL https://get.proxcenter.io/enterprise | sudo bash -s -- --token \$GHCR_TOKEN --upgrade${NC}"
+    echo -e "      ${DIM}curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token \$GHCR_TOKEN --upgrade${NC}"
     echo ""
     echo -e "    ${DIM}Support: support@proxcenter.io${NC}"
     echo ""

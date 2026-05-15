@@ -20,7 +20,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
-import { executeSSH } from "@/lib/ssh/exec"
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
@@ -180,6 +180,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
   let storageTempDir = ''
+  // Block volumes pvesm-alloc'd during the run. Lifted to function scope
+  // (was previously declared inside the main try) so the catch block can
+  // free orphan LVM/RBD allocations when streaming fails before attach
+  // (issue #312). pvesm-alloc.ts:18 documents this cleanup contract.
+  // `attached` is set by attachBlockDisk() after a successful PVE config
+  // update so the cleanup only frees true orphans, never volumes the VM
+  // already references (the VM-level DELETE handles those).
+  const allocatedVolumes: { volumeId: string, devicePath: string, rbdMapped?: boolean, attached?: boolean }[] = []
   // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
   // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
   // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
@@ -439,9 +447,6 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Temp directory: ${storageTempDir} (on target storage)`)
     }
 
-    // Track allocated block volumes (for cleanup on error)
-    const allocatedVolumes: { volumeId: string, devicePath: string, rbdMapped?: boolean }[] = []
-
     // Allocate a raw volume on block storage and return the device path
     async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string }> {
       // Find next available disk number by checking VM config + already allocated volumes
@@ -517,6 +522,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
           { method: "PUT", body: attachBody }
         )
+        // Record the attachment so the failure-path cleanup in
+        // runMigrationPipeline does NOT pvesm-free this volume: it is
+        // now referenced by the VM config and the VM-level DELETE
+        // (destroy-unreferenced-disks=1) is the right tool for it.
+        const entry = allocatedVolumes.find(v => v.volumeId === volumeId)
+        if (entry) entry.attached = true
         await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -544,11 +555,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const pidFile = `${ctrlPrefix}.pid`
       const dlScript = `${ctrlPrefix}.dl.sh`
       const progressFile = `${ctrlPrefix}.progress`
+      // curl stderr was previously sent to /dev/null, which left every
+      // "Streaming failed: curl/dd exit code N" without the underlying
+      // cause (issue #312). Capture it so the failure thrown below can
+      // include the real curl message (HTTP code, TLS error, NFC lease
+      // expired, RST, ...).
+      const stderrFile = `${ctrlPrefix}.stderr`
 
       // Build streaming script: curl pipes directly to dd on block device
       // status=progress makes dd write periodic progress to stderr
       await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk --fail -b '${safeCookie}' '${vmdkUrl}' 2>/dev/null | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\nCURL_EXIT=\${PIPESTATUS[0]}\nDD_EXIT=\${PIPESTATUS[1]}\nif [ \$CURL_EXIT -ne 0 ]; then echo \$CURL_EXIT > "${pidFile}.exit"; else echo \$DD_EXIT > "${pidFile}.exit"; fi\nDLEOF`
+        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk --fail -b '${safeCookie}' '${vmdkUrl}' 2>"${stderrFile}" | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\nCURL_EXIT=\${PIPESTATUS[0]}\nDD_EXIT=\${PIPESTATUS[1]}\nif [ \$CURL_EXIT -ne 0 ]; then echo \$CURL_EXIT > "${pidFile}.exit"; else echo \$DD_EXIT > "${pidFile}.exit"; fi\nDLEOF`
       )
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,
@@ -566,7 +583,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       while (true) {
         if (isCancelled(jobId)) {
-          await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${stderrFile}"`)
           throw new Error("Migration cancelled")
         }
         await new Promise(r => setTimeout(r, 3000))
@@ -594,9 +611,27 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         if (!isRunning) {
           const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}"`)
+          // Read curl + dd diagnostic files BEFORE removing them so a
+          // failure message can quote the actual upstream error. The
+          // outer catch in runMigrationPipeline still receives the
+          // thrown Error verbatim, so users see the curl/dd reason.
+          let curlStderr = ""
+          let ddTail = ""
           if (exitCode !== 0) {
-            throw new Error(`Streaming failed: curl/dd exit code ${exitCode}`)
+            const errCap = await executeSSH(config.targetConnectionId, nodeIp, `cat "${stderrFile}" 2>/dev/null | tr -d '\\000' | tail -c 500`).catch(() => ({ output: "" }))
+            curlStderr = (errCap.output || "").trim()
+            const ddCap = await executeSSH(config.targetConnectionId, nodeIp, `tail -c 500 "${progressFile}" 2>/dev/null | tr '\\r' '\\n' | tail -n 3`).catch(() => ({ output: "" }))
+            ddTail = (ddCap.output || "").trim()
+          }
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${stderrFile}"`)
+          if (exitCode !== 0) {
+            const detail = [
+              curlStderr ? `curl: ${curlStderr.replaceAll("\n", " ")}` : "",
+              ddTail ? `dd: ${ddTail.replaceAll("\n", " ")}` : "",
+            ].filter(Boolean).join(" | ")
+            throw new Error(
+              `Streaming failed: curl/dd exit code ${exitCode}${detail ? ` (${detail})` : ""}`,
+            )
           }
           break
         }
@@ -2607,6 +2642,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await pveFetch<any>(pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
           { method: "PUT", body: reconfigBody })
+        // SSHFS Boot does an atomic grouped PUT instead of per-disk
+        // calls through attachBlockDisk(), so we must mark the entries
+        // here ourselves. Without this, a failure further down (e.g.
+        // the VM restart at status/start) would have the catch-path
+        // cleanup pvesm-free volumes that are already in qm config.
+        for (const vol of localVolumes) {
+          const entry = allocatedVolumes.find(v => v.volumeId === vol.volumeId)
+          if (entry) entry.attached = true
+        }
         for (let di = 0; di < localVolumes.length; di++) {
           await appendLog(jobId, `Disk ${di} attached as ${slotPerDisk[di]} (${localVolumes[di].volumeId})`, "success")
         }
@@ -2879,6 +2923,40 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         `fusermount -uz /tmp/proxcenter-sshfs-${jobId} 2>/dev/null; fusermount -uz /tmp/proxcenter-sshfs-${jobId}-* 2>/dev/null; rmdir /tmp/proxcenter-sshfs-${jobId}* 2>/dev/null; rm -f /tmp/proxcenter-sshfs-${jobId}.esxi-key 2>/dev/null`)
     } catch {
       // Best effort cleanup
+    }
+
+    // Targeted free of any pvesm-allocated volumes that never made it
+    // into the VM config (streaming failed before attachBlockDisk). The
+    // VM-level DELETE below uses destroy-unreferenced-disks=1 which
+    // covers most plugins, but LVM in particular does not always
+    // recognise unattached vm-<vmid>-disk-<N> volumes — leaving them as
+    // orphans the user has to wipe by hand. Targeted pvesm free is
+    // deterministic for the volumes we know we allocated (#312).
+    //
+    // We deliberately skip volumes flagged as `attached`: those are
+    // already in qm config, so freeing them out from under PVE would
+    // either fail (volume in use) or, worse, leave the VM pointing at a
+    // missing disk. They get cleaned up by the VM DELETE just below.
+    const orphans = allocatedVolumes.filter(v => !v.attached)
+    if (orphans.length > 0 && config.targetConnectionId) {
+      try {
+        const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
+          (await getConnectionById(config.targetConnectionId)).baseUrl)
+        for (const vol of orphans) {
+          if (vol.rbdMapped) {
+            await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${vol.devicePath}" 2>/dev/null`).catch(() => {})
+          }
+          const freed = await executeSSH(config.targetConnectionId, nodeIp,
+            `pvesm free ${shellEscape(vol.volumeId)} 2>&1`).catch((e: any) => ({ success: false, output: "", error: e?.message }))
+          if (freed.success) {
+            await appendLog(jobId, `Freed orphan volume ${vol.volumeId}`, "warn")
+          } else {
+            await appendLog(jobId, `Could not free ${vol.volumeId}: ${(freed.output || freed.error || "").trim()}`, "warn")
+          }
+        }
+      } catch {
+        // Best effort cleanup
+      }
     }
 
     // Cleanup: if we created a VM, try to destroy it

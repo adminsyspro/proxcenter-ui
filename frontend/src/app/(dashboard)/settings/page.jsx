@@ -2053,7 +2053,9 @@ function AITab() {
               {settings.provider === 'ollama' && (
                 <Box>
                   <Alert severity='info' sx={{ mb: 2 }}>
-                    <Typography variant='body2' dangerouslySetInnerHTML={{ __html: t('settings.ollamaInfo') }} />
+                    <Typography variant='body2'>
+                      {t.rich('settings.ollamaInfo', { b: chunks => <b>{chunks}</b> })}
+                    </Typography>
                   </Alert>
 
                   <TextField

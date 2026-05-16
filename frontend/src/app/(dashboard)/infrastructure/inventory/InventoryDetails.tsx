@@ -1786,12 +1786,13 @@ return
 
     const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`
 
-    const fetchAndSet = (json: any, permError?: string) => {
+    const fetchAndSet = (json: any, permErrorOverride?: string) => {
       const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-      const pveVersion = pvePkg?.currentVersion || null
+      const pveVersion = pvePkg?.currentVersion || json.nodeVersion || null
+      const permError = permErrorOverride || json.permissionError || null
       setNodeUpdates(prev => ({
         ...prev,
-        [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false, permissionError: permError || null }
+        [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false, permissionError: permError }
       }))
     }
 
@@ -1799,12 +1800,12 @@ return
       .then(res => res.json())
       .then(json => {
         if (json.needsRefresh) {
-          // Package list stale (e.g. apt update never ran) - trigger apt update then re-fetch
           return fetch(aptUrl, { method: 'POST' })
             .then(async (postRes) => {
               if (postRes.status === 403) {
                 const postJson = await postRes.json()
-                fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
+                const refreshed = await fetch(aptUrl).then(r => r.json()).catch(() => ({ data: [], count: 0 }))
+                fetchAndSet(refreshed, postJson.requiredPermission || 'Sys.Modify')
                 return
               }
               const res = await fetch(aptUrl)
@@ -1837,9 +1838,10 @@ return
 
           const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/apt`
 
-          const fetchAndSet = (json: any, permError?: string) => {
+          const fetchAndSet = (json: any, permErrorOverride?: string) => {
             const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-            const pveVersion = pvePkg?.currentVersion || node.pveversion || null
+            const pveVersion = pvePkg?.currentVersion || json.nodeVersion || null
+            const permError = permErrorOverride || json.permissionError || null
             setNodeUpdates(prev => ({
               ...prev,
               [node.node]: {
@@ -1847,7 +1849,7 @@ return
                 updates: json.data || [],
                 version: pveVersion,
                 loading: false,
-                permissionError: permError || null
+                permissionError: permError
               }
             }))
           }
@@ -1860,7 +1862,8 @@ return
                   .then(async (postRes) => {
                     if (postRes.status === 403) {
                       const postJson = await postRes.json()
-                      fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
+                      const refreshed = await fetch(aptUrl).then(r => r.json()).catch(() => ({ data: [], count: 0 }))
+                      fetchAndSet(refreshed, postJson.requiredPermission || 'Sys.Modify')
                       return
                     }
                     const res = await fetch(aptUrl)

@@ -28,28 +28,31 @@ export async function GET(
 
     const conn = await getConnectionById(id)
 
-    // Proxmox: GET /nodes/{node}/apt/update
-    // Note: Cette API retourne les mises à jour disponibles après un apt update
-    // Note: Le nom du node doit correspondre exactement (sensible à la casse)
-    let updates: any[] = []
-    
-    try {
-      updates = await pveFetch<any[]>(
-        conn,
-        `/nodes/${encodeURIComponent(node)}/apt/update`,
-        { method: "GET" }
-      ) || []
-    } catch (aptError: any) {
-      // Si l'erreur est liée aux permissions ou à l'absence de liste de paquets,
-      // retourner une liste vide plutôt qu'une erreur 500
-      const errMsg = aptError?.message || String(aptError)
+    // Fetch updates and node status in parallel.
+    // Node status gives us pveversion (always available with Sys.Audit), so the
+    // Version column stays populated even when no updates are pending.
+    const [updatesRes, statusRes] = await Promise.allSettled([
+      pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/apt/update`, { method: "GET" }),
+      pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/status`, { method: "GET" }),
+    ])
+
+    let nodeVersion: string | null = null
+    if (statusRes.status === 'fulfilled') {
+      const raw = statusRes.value?.pveversion as string | undefined
+      if (raw) {
+        const parts = raw.split('/')
+        nodeVersion = parts.length >= 2 ? parts[1] : raw
+      }
+    }
+
+    if (updatesRes.status === 'rejected') {
+      const errMsg = updatesRes.reason?.message || String(updatesRes.reason)
       if (errMsg.includes('no package') || errMsg.includes('apt update') || errMsg.includes('596')) {
-        // 596 = Proxmox "apt update not run yet" — package lists are stale/empty
-        // Tell the frontend to trigger an apt update first
         return NextResponse.json({
           data: [],
           count: 0,
           needsRefresh: true,
+          nodeVersion,
           warning: 'Package list not available. Run apt update first.'
         })
       }
@@ -57,14 +60,17 @@ export async function GET(
         return NextResponse.json({
           data: [],
           count: 0,
+          nodeVersion,
+          permissionError: 'Sys.Modify',
           warning: 'Insufficient permissions to check updates.'
         })
       }
-      throw aptError
+      throw updatesRes.reason
     }
 
-    // Formater les données pour le frontend
-    const formattedData = (updates || []).map((pkg: any) => ({
+    const updates = updatesRes.value || []
+
+    const formattedData = updates.map((pkg: any) => ({
       package: pkg.Package || pkg.package || 'Unknown',
       title: pkg.Title || pkg.title || null,
       description: pkg.Description || pkg.description || null,
@@ -75,9 +81,10 @@ export async function GET(
       section: pkg.Section || pkg.section || null,
     }))
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: formattedData,
-      count: formattedData.length 
+      count: formattedData.length,
+      nodeVersion,
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

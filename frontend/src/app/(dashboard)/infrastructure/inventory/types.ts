@@ -204,6 +204,7 @@ export type DetailsPayload = {
     vms?: number
     uptime?: number
     ip?: string
+    pveversion?: string
   }>
   vmsData?: Array<{
     id: string

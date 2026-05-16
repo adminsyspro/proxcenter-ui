@@ -1840,7 +1840,7 @@ return
 
           const fetchAndSet = (json: any, permErrorOverride?: string) => {
             const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-            const pveVersion = pvePkg?.currentVersion || json.nodeVersion || null
+            const pveVersion = pvePkg?.currentVersion || json.nodeVersion || node.pveversion || null
             const permError = permErrorOverride || json.permissionError || null
             setNodeUpdates(prev => ({
               ...prev,

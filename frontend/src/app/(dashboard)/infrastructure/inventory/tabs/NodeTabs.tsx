@@ -3423,13 +3423,20 @@ export default function NodeTabs(props: any) {
                                 [nodeName]: { count: 0, updates: [], version: null, loading: true }
                               }))
                               try {
-                                // Trigger apt update first, then fetch fresh list
                                 const postRes = await fetch(aptUrl, { method: 'POST' })
                                 if (postRes.status === 403) {
                                   const postJson = await postRes.json()
+                                  const refreshed = await fetch(aptUrl).then(r => r.json()).catch(() => ({ data: [], count: 0 }))
+                                  const pvePkgRefreshed = (refreshed.data || []).find((p: any) => p.package === 'pve-manager')
                                   setNodeUpdates((prev: any) => ({
                                     ...prev,
-                                    [nodeName]: { count: 0, updates: [], version: null, loading: false, permissionError: postJson.requiredPermission || 'Sys.Modify' }
+                                    [nodeName]: {
+                                      count: refreshed.count || 0,
+                                      updates: refreshed.data || [],
+                                      version: pvePkgRefreshed?.currentVersion || refreshed.nodeVersion || null,
+                                      loading: false,
+                                      permissionError: postJson.requiredPermission || 'Sys.Modify'
+                                    }
                                   }))
                                   return
                                 }
@@ -3438,7 +3445,13 @@ export default function NodeTabs(props: any) {
                                 const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
                                 setNodeUpdates((prev: any) => ({
                                   ...prev,
-                                  [nodeName]: { count: json.count || 0, updates: json.data || [], version: pvePkg?.currentVersion || null, loading: false, permissionError: null }
+                                  [nodeName]: {
+                                    count: json.count || 0,
+                                    updates: json.data || [],
+                                    version: pvePkg?.currentVersion || json.nodeVersion || null,
+                                    loading: false,
+                                    permissionError: json.permissionError || null
+                                  }
                                 }))
                               } catch {
                                 setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
@@ -3541,7 +3554,7 @@ export default function NodeTabs(props: any) {
                                     </Box>
                                     {/* Rows */}
                                     {nodeUpdate.updates.map((upd: any, idx: number) => {
-                                      const pkgName = upd.Package || upd.package || ''
+                                      const pkgName = upd.package || ''
                                       const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
                                       return (
                                         <Box
@@ -3567,11 +3580,11 @@ export default function NodeTabs(props: any) {
                                               {pkgName}
                                             </Typography>
                                           </Box>
-                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {upd.OldVersion || upd.old_version || '—'}
+                                          <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.currentVersion || '—'}
                                           </Typography>
-                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {upd.Version || upd.version || upd.new_version || '—'}
+                                          <Typography variant="body2" sx={{ fontSize: 11, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.newVersion || '—'}
                                           </Typography>
                                         </Box>
                                       )

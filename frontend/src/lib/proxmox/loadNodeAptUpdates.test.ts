@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { loadNodeAptUpdates, type AptUpdateEntry } from './loadNodeAptUpdates'
+import {
+  aggregatePermissionErrors,
+  loadNodeAptUpdates,
+  type AptUpdateEntry,
+} from './loadNodeAptUpdates'
 
 function makeSetter() {
   const state: Record<string, AptUpdateEntry> = {}
@@ -182,6 +186,40 @@ describe('loadNodeAptUpdates', () => {
     expect(fetcher).toHaveBeenCalledExactlyOnceWith(
       '/api/v1/connections/conn%20with%20space/nodes/pve%2F01/apt',
     )
+  })
+
+  describe('aggregatePermissionErrors', () => {
+    it('returns null when no node has a permission error', () => {
+      const result = aggregatePermissionErrors({
+        pve1: { permissionError: null },
+        pve2: { permissionError: undefined },
+        pve3: {},
+      })
+      expect(result).toBeNull()
+    })
+
+    it('returns null on an empty map', () => {
+      expect(aggregatePermissionErrors({})).toBeNull()
+    })
+
+    it('skips undefined entries (e.g. nodes still loading)', () => {
+      const result = aggregatePermissionErrors({
+        pve1: undefined,
+        pve2: { permissionError: 'Sys.Modify' },
+      })
+      expect(result).toEqual({ nodes: ['pve2'], permission: 'Sys.Modify' })
+    })
+
+    it('collects every affected node name and picks the first permission as representative', () => {
+      const result = aggregatePermissionErrors({
+        pve1: { permissionError: 'Sys.Modify' },
+        pve2: { permissionError: null },
+        pve3: { permissionError: 'Sys.Audit' },
+        pve4: { permissionError: 'Sys.Modify' },
+      })
+      expect(result?.nodes).toEqual(['pve1', 'pve3', 'pve4'])
+      expect(result?.permission).toBe('Sys.Modify')
+    })
   })
 
   describe('forceRefresh', () => {

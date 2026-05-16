@@ -1,3 +1,26 @@
+/**
+ * Reduce the per-node update map to a single description of which nodes
+ * have an outstanding API-token permission problem (typically Sys.Modify),
+ * so the cluster Rolling Update tab can render a single aggregated alert
+ * instead of a banner per node. Returns null when no node is affected.
+ */
+export function aggregatePermissionErrors(
+  nodeUpdates: Record<string, { permissionError?: string | null } | undefined>,
+): { nodes: string[]; permission: string } | null {
+  const affected: { node: string; permission: string }[] = []
+  for (const [node, entry] of Object.entries(nodeUpdates)) {
+    const perm = entry?.permissionError
+    if (perm) {
+      affected.push({ node, permission: perm })
+    }
+  }
+  if (affected.length === 0) return null
+  return {
+    nodes: affected.map(a => a.node),
+    permission: affected[0].permission,
+  }
+}
+
 export interface AptUpdateEntry {
   count: number
   updates: any[]

@@ -77,6 +77,7 @@ import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { useRBAC } from '@/contexts/RBACContext'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
+import { aggregatePermissionErrors } from '@/lib/proxmox/loadNodeAptUpdates'
 
 function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
@@ -3251,21 +3252,18 @@ export default function ClusterTabs(props: any) {
 
                       {/* Erreur de permission API token */}
                       {(() => {
-                        const affected = Object.entries(nodeUpdates)
-                          .filter(([, u]: any) => u?.permissionError)
-                          .map(([n, u]: any) => ({ node: n, perm: u.permissionError as string }))
-                        if (affected.length === 0) return null
-                        const perm = affected[0].perm
+                        const agg = aggregatePermissionErrors(nodeUpdates)
+                        if (!agg) return null
                         return (
                           <Alert severity="warning" icon={<i className="ri-shield-keyhole-line" />}>
                             <Typography variant="body2" fontWeight={600}>
                               {t('updates.permissionError')}
                             </Typography>
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                              {t('updates.permissionErrorDesc', { permission: perm })}
+                              {t('updates.permissionErrorDesc', { permission: agg.permission })}
                             </Typography>
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
-                              {affected.map(a => a.node).join(', ')}
+                              {agg.nodes.join(', ')}
                             </Typography>
                           </Alert>
                         )

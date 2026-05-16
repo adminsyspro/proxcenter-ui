@@ -61,6 +61,7 @@ import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
+import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -3417,45 +3418,16 @@ export default function NodeTabs(props: any) {
                             startIcon={<i className="ri-refresh-line" />}
                             onClick={async () => {
                               const { connId } = parseNodeId(selection?.id || '')
-                              const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt`
                               setNodeUpdates((prev: any) => ({
                                 ...prev,
                                 [nodeName]: { count: 0, updates: [], version: null, loading: true }
                               }))
-                              try {
-                                const postRes = await fetch(aptUrl, { method: 'POST' })
-                                if (postRes.status === 403) {
-                                  const postJson = await postRes.json()
-                                  const refreshed = await fetch(aptUrl).then(r => r.json()).catch(() => ({ data: [], count: 0 }))
-                                  const pvePkgRefreshed = (refreshed.data || []).find((p: any) => p.package === 'pve-manager')
-                                  setNodeUpdates((prev: any) => ({
-                                    ...prev,
-                                    [nodeName]: {
-                                      count: refreshed.count || 0,
-                                      updates: refreshed.data || [],
-                                      version: pvePkgRefreshed?.currentVersion || refreshed.nodeVersion || null,
-                                      loading: false,
-                                      permissionError: postJson.requiredPermission || 'Sys.Modify'
-                                    }
-                                  }))
-                                  return
-                                }
-                                const res = await fetch(aptUrl)
-                                const json = await res.json()
-                                const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-                                setNodeUpdates((prev: any) => ({
-                                  ...prev,
-                                  [nodeName]: {
-                                    count: json.count || 0,
-                                    updates: json.data || [],
-                                    version: pvePkg?.currentVersion || json.nodeVersion || null,
-                                    loading: false,
-                                    permissionError: json.permissionError || null
-                                  }
-                                }))
-                              } catch {
-                                setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
-                              }
+                              await loadNodeAptUpdates({
+                                connId,
+                                nodeName,
+                                setNodeUpdates,
+                                forceRefresh: true,
+                              })
                             }}
                           >
                             {t('updates.refresh')}

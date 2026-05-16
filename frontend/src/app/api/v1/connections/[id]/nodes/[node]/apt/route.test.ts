@@ -31,12 +31,12 @@ beforeEach(() => {
 
 async function importGET() {
   const mod = await import('./route')
-  return mod.GET
+  return mod.GET as Parameters<typeof callRoute>[0]
 }
 
 async function importPOST() {
   const mod = await import('./route')
-  return mod.POST
+  return mod.POST as Parameters<typeof callRoute>[0]
 }
 
 describe('GET /api/v1/connections/[id]/nodes/[node]/apt', () => {

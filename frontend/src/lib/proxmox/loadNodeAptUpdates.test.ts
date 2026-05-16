@@ -183,4 +183,76 @@ describe('loadNodeAptUpdates', () => {
       '/api/v1/connections/conn%20with%20space/nodes/pve%2F01/apt',
     )
   })
+
+  describe('forceRefresh', () => {
+    it('POSTs first then GETs, skipping the initial GET', async () => {
+      const { state, setter } = makeSetter()
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ data: ['upid'] }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            data: [{ package: 'pve-manager', currentVersion: '9.1.1', newVersion: '9.1.9' }],
+            count: 1,
+            nodeVersion: '9.1.1',
+          }),
+        )
+
+      await loadNodeAptUpdates({
+        connId: 'c1',
+        nodeName: 'pve1',
+        setNodeUpdates: setter,
+        forceRefresh: true,
+        fetcher,
+      })
+
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(fetcher.mock.calls[0]).toEqual(['/api/v1/connections/c1/nodes/pve1/apt', { method: 'POST' }])
+      expect(fetcher.mock.calls[1]).toEqual(['/api/v1/connections/c1/nodes/pve1/apt'])
+      expect(state.pve1).toMatchObject({ count: 1, version: '9.1.1', permissionError: null })
+    })
+
+    it('sets permissionError and keeps version when the POST is rejected with 403', async () => {
+      const { state, setter } = makeSetter()
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ requiredPermission: 'Sys.Modify' }, 403))
+        .mockResolvedValueOnce(jsonResponse({ data: [], count: 0, nodeVersion: '9.1.1' }))
+
+      await loadNodeAptUpdates({
+        connId: 'c1',
+        nodeName: 'pve1',
+        setNodeUpdates: setter,
+        forceRefresh: true,
+        fetcher,
+      })
+
+      expect(state.pve1).toMatchObject({
+        count: 0,
+        version: '9.1.1',
+        permissionError: 'Sys.Modify',
+      })
+    })
+
+    it('resets the entry when the POST itself throws', async () => {
+      const { state, setter } = makeSetter()
+      const fetcher = vi.fn().mockRejectedValueOnce(new Error('network'))
+
+      await loadNodeAptUpdates({
+        connId: 'c1',
+        nodeName: 'pve1',
+        setNodeUpdates: setter,
+        forceRefresh: true,
+        fetcher,
+      })
+
+      expect(state.pve1).toEqual({
+        count: 0,
+        updates: [],
+        version: null,
+        loading: false,
+        permissionError: null,
+      })
+    })
+  })
 })

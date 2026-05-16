@@ -21,6 +21,12 @@ export interface LoadNodeAptUpdatesOptions {
    * cached on data.nodesData.
    */
   versionFallback?: string | null
+  /**
+   * When true, trigger an apt update (POST) before reading the package
+   * list (GET). The default flow GETs first and only POSTs when the route
+   * signals needsRefresh. Used by the per-node Refresh button.
+   */
+  forceRefresh?: boolean
   /** Test injection seam. */
   fetcher?: typeof fetch
 }
@@ -30,6 +36,7 @@ export async function loadNodeAptUpdates({
   nodeName,
   setNodeUpdates,
   versionFallback = null,
+  forceRefresh = false,
   fetcher = fetch,
 }: LoadNodeAptUpdatesOptions): Promise<void> {
   const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt`
@@ -50,20 +57,28 @@ export async function loadNodeAptUpdates({
     }))
   }
 
+  const refreshFromPost = async (): Promise<void> => {
+    const postRes = await fetcher(aptUrl, { method: 'POST' })
+    if (postRes.status === 403) {
+      const postJson = await postRes.json()
+      const refreshed = await fetcher(aptUrl)
+        .then(r => r.json())
+        .catch(() => ({ data: [], count: 0 }))
+      apply(refreshed, postJson.requiredPermission || 'Sys.Modify')
+      return
+    }
+    const fresh = await fetcher(aptUrl).then(r => r.json())
+    apply(fresh)
+  }
+
   try {
+    if (forceRefresh) {
+      await refreshFromPost()
+      return
+    }
     const json = await fetcher(aptUrl).then(r => r.json())
     if (json.needsRefresh) {
-      const postRes = await fetcher(aptUrl, { method: 'POST' })
-      if (postRes.status === 403) {
-        const postJson = await postRes.json()
-        const refreshed = await fetcher(aptUrl)
-          .then(r => r.json())
-          .catch(() => ({ data: [], count: 0 }))
-        apply(refreshed, postJson.requiredPermission || 'Sys.Modify')
-        return
-      }
-      const fresh = await fetcher(aptUrl).then(r => r.json())
-      apply(fresh)
+      await refreshFromPost()
       return
     }
     apply(json)

@@ -213,6 +213,20 @@ export async function runV2vPreflight(
       storages.sort((a, b) => b.availableBytes - a.availableBytes)
       if (storages.length > 0) {
         result.tempStorages = storages
+      } else if (result.diskSpaceAvailableBytes > 1073741824) {
+        // Single-disk Proxmox layout (no /var/lib/vz or /mnt/* mount): the awk
+        // filter above excludes "/" by design (so we don't propose writing at
+        // root), but /tmp lives on / and is the implicit virt-v2v default.
+        // Surface it explicitly so the UI selector renders and the Migrate
+        // button gate finds a valid entry. diskSpaceAvailableBytes was already
+        // measured against /tmp at step 4 (df -B1 /tmp), so the >1 GiB guard
+        // is the same threshold we use for the rich-layout case.
+        result.tempStorages = [{
+          path: '/tmp',
+          availableBytes: result.diskSpaceAvailableBytes,
+          totalBytes: result.diskSpaceAvailableBytes,
+          filesystem: 'rootfs',
+        }]
       }
     }
   } catch {}

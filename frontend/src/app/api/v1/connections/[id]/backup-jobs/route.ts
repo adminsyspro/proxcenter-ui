@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { extractKeepLastFromPruneBackups, translateMaxfilesToPruneBackups } from "@/lib/backups/prune"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -138,18 +139,7 @@ return job.namespace || ''
         // route translates) come back with maxfiles undefined. Surface the
         // keep-last value (if any) as maxfiles so the legacy edit form
         // shows the configured retention instead of falling back to 1.
-        maxfiles: (() => {
-          if (job.maxfiles !== undefined && job.maxfiles !== null) return job.maxfiles
-          const prune = job['prune-backups']
-          if (typeof prune === 'string') {
-            const m = prune.match(/keep-last=(\d+)/)
-            if (m) return Number.parseInt(m[1], 10)
-          } else if (prune && typeof prune === 'object' && 'keep-last' in prune) {
-            const v = Number((prune as any)['keep-last'])
-            if (Number.isFinite(v)) return v
-          }
-          return undefined
-        })(),
+        maxfiles: job.maxfiles ?? extractKeepLastFromPruneBackups(job['prune-backups']),
         pruneBackups: job['prune-backups'] || null,
 
         // Protection
@@ -389,17 +379,12 @@ export async function POST(req: Request, ctx: RouteContext) {
       }
     }
 
-    // Legacy retention (maxfiles) translation. PVE 8.x removed `maxfiles` from
-    // the schema, so forwarding it triggers a 400. Convert to the equivalent
-    // `prune-backups=keep-last=N` when the modern UI didn't already provide a
-    // keep-* breakdown. Treat maxfiles<=0 as "no legacy retention" (old PVE
-    // accepted 0 to mean "keep all", and the right translation for that is to
-    // leave prune-backups unset, since PVE default keeps all).
-    if (body.maxfiles !== undefined && !params.has('prune-backups')) {
-      const legacy = Number.parseInt(String(body.maxfiles), 10)
-      if (Number.isFinite(legacy) && legacy > 0) {
-        params.set('prune-backups', `keep-last=${legacy}`)
-      }
+    // Legacy retention translation: convert maxfiles to prune-backups so
+    // PVE 8.x doesn't 400 on the removed parameter. Skipped when the modern
+    // UI already supplied a keep-* breakdown above.
+    if (!params.has('prune-backups')) {
+      const translated = translateMaxfilesToPruneBackups(body.maxfiles)
+      if (translated) params.set('prune-backups', translated)
     }
 
     // Note template

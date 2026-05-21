@@ -55,7 +55,7 @@
     "next-auth": "^4.24.13",
     "next-intl": "^4.11.2",
     "pg": "^8.20.0",
-    "prisma": "^7.6.0",
+    "prisma": "^7.8.0",
     "react": "19.2.4",
     "react-colorful": "5.6.1",
     "react-dom": "19.2.4",

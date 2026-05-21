@@ -9,15 +9,15 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 // remaining threat is a compromised admin pivoting to cloud metadata; closing
 // these specific IPs cuts that. Loopback and RFC1918 stay allowed because
 // they cover the legitimate "Ollama running on the same host / same LAN" use.
+// SonarCloud's typescript:S1313 (hardcoded IPs) is suppressed inline below:
+// these IPs ARE the policy. They are vendor-published well-known constants,
+// not configuration, and replacing them with env vars would defeat the
+// purpose by making the SSRF allowlist user-controllable.
 const BLOCKED_HOSTS = new Set([
-  // AWS / Azure / GCP / OpenStack IMDS v1 + v2
-  '169.254.169.254',
-  // Alibaba Cloud
-  '100.100.100.200',
-  // AWS IMDS over IPv6
-  'fd00:ec2::254',
-  // Oracle Cloud Infrastructure
-  '192.0.0.192',
+  '169.254.169.254',   // NOSONAR(typescript:S1313): AWS / Azure / GCP / OpenStack IMDS v1+v2 (RFC 6890 link-local, cloud metadata)
+  '100.100.100.200',   // NOSONAR(typescript:S1313): Alibaba Cloud IMDS
+  'fd00:ec2::254',     // NOSONAR(typescript:S1313): AWS IMDS over IPv6 (Unique Local Address)
+  '192.0.0.192',       // NOSONAR(typescript:S1313): Oracle Cloud Infrastructure IMDS
 ])
 
 /** Validate and reconstruct a user-provided URL (SSRF protection) */

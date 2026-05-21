@@ -93,11 +93,11 @@ ARG GIT_SHA=""
 WORKDIR /app
 
 # Patch npm to a version whose bundled dependencies clear the latest
-# CVE round (ip-address < 10.1.1 / CVE-2026-42338, etc.). Pinning the
-# version keeps the build reproducible; bump this line when a newer
-# bundle becomes available. The npm cache is wiped afterwards so the
-# layer does not grow.
-RUN npm install -g npm@11.14.1 && npm cache clean --force
+# CVE round (ip-address < 10.1.1 / CVE-2026-42338, brace-expansion <
+# 5.0.6 / CVE-2026-45149, etc.). Pinning the version keeps the build
+# reproducible; bump this line when a newer bundle becomes available.
+# The npm cache is wiped afterwards so the layer does not grow.
+RUN npm install -g npm@11.15.0 && npm cache clean --force
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

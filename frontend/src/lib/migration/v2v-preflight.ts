@@ -196,8 +196,8 @@ export async function runV2vPreflight(
     // Get mount points with significant space (excluding tmpfs, devtmpfs, squashfs, etc.)
     const dfAllResult = await executeSSH(targetConnectionId, nodeIp,
       `df -B1 --output=target,avail,size,fstype | tail -n +2 | awk '$4 !~ /tmpfs|devtmpfs|squashfs|overlay/ && $1 !~ /^\\/mnt\\/hyperv/ && $1 != "/" && $2 > 1073741824 {print $1"|"$2"|"$3"|"$4}'`)
+    const storages: TempStorageOption[] = []
     if (dfAllResult.success && dfAllResult.output?.trim()) {
-      const storages: TempStorageOption[] = []
       for (const line of dfAllResult.output.trim().split('\n')) {
         const [path, avail, total, fs] = line.split('|')
         if (path && avail && total) {
@@ -209,25 +209,24 @@ export async function runV2vPreflight(
           })
         }
       }
-      // Sort by available space descending
       storages.sort((a, b) => b.availableBytes - a.availableBytes)
-      if (storages.length > 0) {
-        result.tempStorages = storages
-      } else if (result.diskSpaceAvailableBytes > 1073741824) {
-        // Single-disk Proxmox layout (no /var/lib/vz or /mnt/* mount): the awk
-        // filter above excludes "/" by design (so we don't propose writing at
-        // root), but /tmp lives on / and is the implicit virt-v2v default.
-        // Surface it explicitly so the UI selector renders and the Migrate
-        // button gate finds a valid entry. diskSpaceAvailableBytes was already
-        // measured against /tmp at step 4 (df -B1 /tmp), so the >1 GiB guard
-        // is the same threshold we use for the rich-layout case.
-        result.tempStorages = [{
-          path: '/tmp',
-          availableBytes: result.diskSpaceAvailableBytes,
-          totalBytes: result.diskSpaceAvailableBytes,
-          filesystem: 'rootfs',
-        }]
-      }
+    }
+    // Fallback path: when df returns NO usable mount (single-disk Proxmox
+    // layout, output empty), we still have /tmp on / and the diskSpace
+    // check at step 4 already validated it. The previous structure placed
+    // this else-if inside `if (output?.trim())`, so an empty df output
+    // skipped the whole block and the fallback never fired — the very
+    // case the fallback was meant to handle. Now the fallback is outside
+    // that guard so a totally empty df still produces a usable /tmp entry.
+    if (storages.length > 0) {
+      result.tempStorages = storages
+    } else if (result.diskSpaceAvailableBytes > 1073741824) {
+      result.tempStorages = [{
+        path: '/tmp',
+        availableBytes: result.diskSpaceAvailableBytes,
+        totalBytes: result.diskSpaceAvailableBytes,
+        filesystem: 'rootfs',
+      }]
     }
   } catch {}
 

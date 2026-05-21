@@ -2,46 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-
-// Cloud provider instance metadata endpoints. Reachable from any host in the
-// VPC by IP without auth and historically used to exfiltrate IAM credentials
-// via SSRF. The AI test endpoint requires ADMIN_SETTINGS so the realistic
-// remaining threat is a compromised admin pivoting to cloud metadata; closing
-// these specific IPs cuts that. Loopback and RFC1918 stay allowed because
-// they cover the legitimate "Ollama running on the same host / same LAN" use.
-// SonarCloud's typescript:S1313 (hardcoded IPs) is suppressed inline below:
-// these IPs ARE the policy. They are vendor-published well-known constants,
-// not configuration, and replacing them with env vars would defeat the
-// purpose by making the SSRF allowlist user-controllable.
-const BLOCKED_HOSTS = new Set([
-  '169.254.169.254',   // NOSONAR(typescript:S1313): AWS / Azure / GCP / OpenStack IMDS v1+v2 (RFC 6890 link-local, cloud metadata)
-  '100.100.100.200',   // NOSONAR(typescript:S1313): Alibaba Cloud IMDS
-  'fd00:ec2::254',     // NOSONAR(typescript:S1313): AWS IMDS over IPv6 (Unique Local Address)
-  '192.0.0.192',       // NOSONAR(typescript:S1313): Oracle Cloud Infrastructure IMDS
-])
-
-/** Validate and reconstruct a user-provided URL (SSRF protection) */
-function validateAIUrl(input) {
-  const parsed = new URL(input)
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Only http and https URLs are allowed')
-  }
-  // Refuse cloud metadata endpoints. parsed.hostname strips brackets from
-  // IPv6 literals, so the lowercased comparison is enough; URL parsing
-  // already rejects %-encoded variants that would round-trip back to the
-  // literal IP at fetch time.
-  const host = parsed.hostname.toLowerCase()
-  if (BLOCKED_HOSTS.has(host)) {
-    throw new Error(`Host ${host} is blocked (cloud metadata endpoint)`)
-  }
-  // Return origin + pathname to cut taint flow from user input.
-  // Trim trailing slashes so callers can safely append a sub-path
-  // (e.g. `${base}/api/generate`) without producing `//api/...` which
-  // Ollama 301-redirects to a GET and breaks POST endpoints.
-  let url = `${parsed.origin}${parsed.pathname}`
-  while (url.endsWith('/')) url = url.slice(0, -1)
-  return url
-}
+import { validateAIUrl } from "@/lib/ai/url-guard"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -58,7 +19,7 @@ export async function POST(request) {
     
     if (settings.provider === 'ollama') {
       // Test Ollama
-      const ollamaBase = validateAIUrl(settings.ollamaUrl)
+      const ollamaBase = await validateAIUrl(settings.ollamaUrl)
       const response = await fetch(`${ollamaBase}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,7 +49,7 @@ return NextResponse.json({
     } else if (settings.provider === 'openai') {
       // Test OpenAI
       const openaiRaw = settings.openaiBaseUrl || 'https://api.openai.com/v1'
-      const openaiBase = validateAIUrl(openaiRaw)
+      const openaiBase = await validateAIUrl(openaiRaw)
       const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
         headers: {

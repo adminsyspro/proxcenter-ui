@@ -35,6 +35,9 @@ export function extractGroupsFromClaim(claim: unknown): string[] {
   if (!Array.isArray(claim)) return []
   const out: string[] = []
   for (const raw of claim) {
+    // Skip null / undefined before String() so we don't end up with the
+    // literal "null" / "undefined" as a group name.
+    if (raw == null) continue
     const g = String(raw).trim()
     if (g) out.push(g)
   }

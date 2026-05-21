@@ -25,12 +25,7 @@ import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloa
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
-
-// PVE `PUT /qemu/{vmid}/config` is synchronous and can take ~10s on slow storage
-// (e.g. ZFS-over-iSCSI). pveFetch's 8s default fires before the metadata write
-// commits, and the abort then trips the failover circuit breaker, surfacing as a
-// fake "all cluster nodes unreachable". Issue #332.
-const PVE_CONFIG_PUT_TIMEOUT_MS = 120_000
+import { PVE_CONFIG_PUT_TIMEOUT_MS } from "./pve-timeouts"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 

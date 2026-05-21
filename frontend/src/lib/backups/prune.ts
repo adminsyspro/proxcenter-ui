@@ -74,3 +74,22 @@ export function translateMaxfilesToPruneBackups(
   if (!foundKeepLast) parts.push(`keep-last=${legacy}`)
   return parts.join(',')
 }
+
+/**
+ * Mutate `params` to translate legacy `maxfiles` into a `prune-backups`
+ * value. Skipped when `prune-backups` is already set (the modern UI keep-*
+ * breakdown took precedence) or when maxfiles has no useful value.
+ *
+ * Folding the `has/set` dance into the helper keeps each call site to a
+ * single line, so the create + update routes do not carry near-identical
+ * blocks that trip the new-code duplication metric.
+ */
+export function applyMaxfilesTranslation(
+  params: URLSearchParams,
+  maxfiles: unknown,
+  existingPruneBackups?: unknown,
+): void {
+  if (params.has('prune-backups')) return
+  const translated = translateMaxfilesToPruneBackups(maxfiles, existingPruneBackups)
+  if (translated) params.set('prune-backups', translated)
+}

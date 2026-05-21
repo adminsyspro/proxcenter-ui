@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { extractKeepLastFromPruneBackups, translateMaxfilesToPruneBackups } from "@/lib/backups/prune"
+import { applyMaxfilesTranslation, extractKeepLastFromPruneBackups } from "@/lib/backups/prune"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -379,13 +379,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       }
     }
 
-    // Legacy retention translation: convert maxfiles to prune-backups so
-    // PVE 8.x doesn't 400 on the removed parameter. Skipped when the modern
-    // UI already supplied a keep-* breakdown above.
-    if (!params.has('prune-backups')) {
-      const translated = translateMaxfilesToPruneBackups(body.maxfiles)
-      if (translated) params.set('prune-backups', translated)
-    }
+    applyMaxfilesTranslation(params, body.maxfiles)
 
     // Note template
     if (body.notesTemplate) {

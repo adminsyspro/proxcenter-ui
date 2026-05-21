@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { translateMaxfilesToPruneBackups } from "@/lib/backups/prune"
+import { applyMaxfilesTranslation } from "@/lib/backups/prune"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -225,15 +225,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       }
     }
 
-    // Legacy retention translation: convert maxfiles to prune-backups so
-    // PVE 8.x doesn't 400 on the removed parameter. Pass the existing job's
-    // prune-backups so a richer policy (keep-daily, keep-weekly, ns=, etc.)
-    // configured via the modern UI or PVE GUI is preserved when a legacy
-    // edit only carries maxfiles.
-    if (!params.has('prune-backups')) {
-      const translated = translateMaxfilesToPruneBackups(body.maxfiles, owned.job?.['prune-backups'])
-      if (translated) params.set('prune-backups', translated)
-    }
+    applyMaxfilesTranslation(params, body.maxfiles, owned.job?.['prune-backups'])
 
     // Note template
     if (body.notesTemplate) {

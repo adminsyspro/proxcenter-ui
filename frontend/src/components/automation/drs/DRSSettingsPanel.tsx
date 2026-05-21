@@ -74,6 +74,24 @@ const HelpTip = ({ text }: { text: string }) => (
   </Tooltip>
 )
 
+// SubsectionHeader factorises the "icon + bold subtitle (+ optional help
+// tooltip)" pattern used to introduce each block in the Advanced section.
+// Three repeated blocks were tripping SonarCloud's duplication detector.
+interface SubsectionHeaderProps {
+  icon: string
+  label: string
+  help?: string
+  mb?: number
+}
+
+const SubsectionHeader = ({ icon, label, help, mb = 1.5 }: SubsectionHeaderProps) => (
+  <Typography variant="subtitle2" sx={{ mb, fontWeight: 600 }}>
+    <i className={icon} style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
+    {label}
+    {help && <HelpTip text={help} />}
+  </Typography>
+)
+
 // LabeledSlider factorises the "title + ? tooltip + bounded slider" pattern
 // used several times in the Advanced section. Without this, each repeated
 // block was tripping SonarCloud's duplication detector.
@@ -815,10 +833,7 @@ export default function DRSSettingsPanel({
 
   const renderAdvanced = () => (
     <>
-      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
-        <i className="ri-speed-up-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
-        {t('drsPage.sectionMigrationLimits')}
-      </Typography>
+      <SubsectionHeader icon="ri-speed-up-line" label={t('drsPage.sectionMigrationLimits')} />
       <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
           <LabeledSlider
@@ -847,10 +862,7 @@ export default function DRSSettingsPanel({
 
       <Divider sx={{ my: 2 }} />
 
-      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
-        <i className="ri-tools-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
-        {t('drsPage.sectionMigrationBehavior')}
-      </Typography>
+      <SubsectionHeader icon="ri-tools-line" label={t('drsPage.sectionMigrationBehavior')} />
       <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
           <LabeledSlider
@@ -890,11 +902,7 @@ export default function DRSSettingsPanel({
 
       <Divider sx={{ my: 2 }} />
 
-      <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
-        <i className="ri-scales-3-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
-        {t('drsPage.resourceWeights')}
-        <HelpTip text={t('drsPage.helpResourceWeights')} />
-      </Typography>
+      <SubsectionHeader icon="ri-scales-3-line" label={t('drsPage.resourceWeights')} help={t('drsPage.helpResourceWeights')} mb={0.5} />
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
         {t('drsPage.helpResourceWeightsDesc')}
       </Typography>

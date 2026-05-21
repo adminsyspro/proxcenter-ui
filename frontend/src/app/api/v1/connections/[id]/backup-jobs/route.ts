@@ -133,8 +133,23 @@ export async function GET(_req: Request, ctx: RouteContext) {
 return job.namespace || ''
         })(),
 
-        // Retention
-        maxfiles: job.maxfiles,
+        // Retention. PVE 8.x dropped `maxfiles` in favor of `prune-backups`,
+        // so jobs created on modern clusters (including those our create
+        // route translates) come back with maxfiles undefined. Surface the
+        // keep-last value (if any) as maxfiles so the legacy edit form
+        // shows the configured retention instead of falling back to 1.
+        maxfiles: (() => {
+          if (job.maxfiles !== undefined && job.maxfiles !== null) return job.maxfiles
+          const prune = job['prune-backups']
+          if (typeof prune === 'string') {
+            const m = prune.match(/keep-last=(\d+)/)
+            if (m) return Number.parseInt(m[1], 10)
+          } else if (prune && typeof prune === 'object' && 'keep-last' in prune) {
+            const v = Number((prune as any)['keep-last'])
+            if (Number.isFinite(v)) return v
+          }
+          return undefined
+        })(),
         pruneBackups: job['prune-backups'] || null,
 
         // Protection
@@ -374,8 +389,17 @@ export async function POST(req: Request, ctx: RouteContext) {
       }
     }
 
-    if (body.maxfiles !== undefined) {
-      params.set('maxfiles', String(body.maxfiles))
+    // Legacy retention (maxfiles) translation. PVE 8.x removed `maxfiles` from
+    // the schema, so forwarding it triggers a 400. Convert to the equivalent
+    // `prune-backups=keep-last=N` when the modern UI didn't already provide a
+    // keep-* breakdown. Treat maxfiles<=0 as "no legacy retention" (old PVE
+    // accepted 0 to mean "keep all", and the right translation for that is to
+    // leave prune-backups unset, since PVE default keeps all).
+    if (body.maxfiles !== undefined && !params.has('prune-backups')) {
+      const legacy = Number.parseInt(String(body.maxfiles), 10)
+      if (Number.isFinite(legacy) && legacy > 0) {
+        params.set('prune-backups', `keep-last=${legacy}`)
+      }
     }
 
     // Note template

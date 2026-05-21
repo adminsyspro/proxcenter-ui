@@ -226,14 +226,42 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
     // Legacy retention (maxfiles) translation. PVE 8.x removed `maxfiles` from
     // the schema, so forwarding it triggers a 400. Convert to the equivalent
-    // `prune-backups=keep-last=N` when the modern UI didn't already provide a
-    // keep-* breakdown. Treat maxfiles<=0 as "no legacy retention" (old PVE
-    // accepted 0 to mean "keep all", and the right translation for that is to
-    // leave prune-backups unset, since PVE default keeps all).
+    // keep-last when the modern UI didn't already provide a keep-* breakdown.
+    // Treat maxfiles<=0 as "no legacy retention" (old PVE accepted 0 to mean
+    // "keep all", and the right translation for that is to leave prune-backups
+    // unset, since PVE default keeps all). When the existing job already has
+    // a richer prune policy (keep-daily, keep-weekly, etc.) configured via
+    // the modern UI or PVE GUI, merge instead of overwriting so a legacy
+    // edit that only carries maxfiles doesn't silently drop those rules.
     if (body.maxfiles !== undefined && !params.has('prune-backups')) {
       const legacy = Number.parseInt(String(body.maxfiles), 10)
       if (Number.isFinite(legacy) && legacy > 0) {
-        params.set('prune-backups', `keep-last=${legacy}`)
+        const existing = owned.job?.['prune-backups']
+        const parts: string[] = []
+        let foundKeepLast = false
+        if (typeof existing === 'string') {
+          for (const seg of existing.split(',')) {
+            const trimmed = seg.trim()
+            if (!trimmed) continue
+            if (trimmed.startsWith('keep-last=')) {
+              parts.push(`keep-last=${legacy}`)
+              foundKeepLast = true
+            } else {
+              parts.push(trimmed)
+            }
+          }
+        } else if (existing && typeof existing === 'object') {
+          for (const [k, v] of Object.entries(existing as Record<string, unknown>)) {
+            if (k === 'keep-last') {
+              parts.push(`keep-last=${legacy}`)
+              foundKeepLast = true
+            } else {
+              parts.push(`${k}=${v}`)
+            }
+          }
+        }
+        if (!foundKeepLast) parts.push(`keep-last=${legacy}`)
+        params.set('prune-backups', parts.join(','))
       }
     }
 

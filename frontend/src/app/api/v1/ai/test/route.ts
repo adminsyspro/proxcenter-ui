@@ -3,11 +3,36 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
+// Cloud provider instance metadata endpoints. Reachable from any host in the
+// VPC by IP without auth and historically used to exfiltrate IAM credentials
+// via SSRF. The AI test endpoint requires ADMIN_SETTINGS so the realistic
+// remaining threat is a compromised admin pivoting to cloud metadata; closing
+// these specific IPs cuts that. Loopback and RFC1918 stay allowed because
+// they cover the legitimate "Ollama running on the same host / same LAN" use.
+const BLOCKED_HOSTS = new Set([
+  // AWS / Azure / GCP / OpenStack IMDS v1 + v2
+  '169.254.169.254',
+  // Alibaba Cloud
+  '100.100.100.200',
+  // AWS IMDS over IPv6
+  'fd00:ec2::254',
+  // Oracle Cloud Infrastructure
+  '192.0.0.192',
+])
+
 /** Validate and reconstruct a user-provided URL (SSRF protection) */
 function validateAIUrl(input) {
   const parsed = new URL(input)
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http and https URLs are allowed')
+  }
+  // Refuse cloud metadata endpoints. parsed.hostname strips brackets from
+  // IPv6 literals, so the lowercased comparison is enough; URL parsing
+  // already rejects %-encoded variants that would round-trip back to the
+  // literal IP at fetch time.
+  const host = parsed.hostname.toLowerCase()
+  if (BLOCKED_HOSTS.has(host)) {
+    throw new Error(`Host ${host} is blocked (cloud metadata endpoint)`)
   }
   // Return origin + pathname to cut taint flow from user input.
   // Trim trailing slashes so callers can safely append a sub-path

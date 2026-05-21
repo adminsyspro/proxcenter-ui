@@ -18,6 +18,13 @@
  * break the exact-match lookup at login time. Entries whose key is
  * empty after trim are dropped.
  */
+// Keys that, written via bracket assignment on a normal object literal, would
+// mutate the prototype chain instead of creating an own property. We harden
+// twice: by initialising the result with `Object.create(null)` (no prototype
+// to walk) and by skipping these names explicitly. Belt and suspenders so a
+// future refactor that loses the null-proto trick still stays safe.
+const PROTOTYPE_POLLUTION_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 export function normalizeGroupRoleMapping(input: unknown): Record<string, string> {
   let raw: Record<string, string> = {}
   if (typeof input === 'string') {
@@ -30,10 +37,11 @@ export function normalizeGroupRoleMapping(input: unknown): Record<string, string
     raw = input as Record<string, string>
   }
 
-  const cleaned: Record<string, string> = {}
+  const cleaned: Record<string, string> = Object.create(null)
   for (const [k, v] of Object.entries(raw)) {
     const key = String(k).trim()
-    if (key) cleaned[key] = v
+    if (!key || PROTOTYPE_POLLUTION_KEYS.has(key)) continue
+    cleaned[key] = v
   }
   return cleaned
 }

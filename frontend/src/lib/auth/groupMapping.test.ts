@@ -48,4 +48,16 @@ describe('normalizeGroupRoleMapping', () => {
     const out = normalizeGroupRoleMapping({ admin: 'role_old', ' admin': 'role_new' })
     expect(out).toEqual({ admin: 'role_new' })
   })
+
+  it('drops prototype-pollution keys', () => {
+    // __proto__ / constructor / prototype must never make it through, even
+    // when JSON.parse hands us a payload that includes them as own
+    // properties. The result must also keep Object.prototype clean.
+    const out = normalizeGroupRoleMapping('{"__proto__":"role_pwn","constructor":"role_pwn","prototype":"role_pwn","admin":"role_admin"}')
+    expect(out.admin).toBe('role_admin')
+    expect((out as any).__proto__).not.toBe('role_pwn')
+    expect((out as any).constructor).not.toBe('role_pwn')
+    expect((out as any).prototype).toBeUndefined()
+    expect((Object.prototype as any).role_pwn).toBeUndefined()
+  })
 })

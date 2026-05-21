@@ -5044,11 +5044,7 @@
     "helpPreventOverprov": "Wenn aktiviert, migriert DRS keine VM auf einen Node, wenn dieser dadurch seine Kapazität überschreiten würde (zugewiesen > verfügbar). Verhindert Überallokation von Ressourcen.",
     "helpResourceWeights": "Wie stark jeder Ressourcentyp den Balancing-Score beeinflusst.",
     "helpResourceWeightsDesc": "Auf 0 setzen, um eine Ressource zu ignorieren. Auf 2 für maximale Priorität. Beispiel: Memory=1 CPU=0.3 Storage=0 bedeutet, DRS konzentriert sich hauptsächlich auf Speicher-Balance.",
-    "excludedFromDRS": "Vom DRS ausgeschlossen",
-    "metricsSmoothing": "Metrik-Glättung",
-    "metricsSmoothingDesc": "DRS uses Exponential Weighted Moving Average (EWMA) over the last 30 minutes of collected metrics to smooth out transient CPU and memory spikes. This prevents unnecessary Migrations triggered by short-lived load bursts.",
-    "metricsSmoothingFormula": "S(t) = α × X(t) + (1-α) × S(t-1), α = 0.3",
-    "metricsSmoothingFormulaDesc": "Jeder neue Datenpunkt trägt 30% zum geglätteten Wert bei. Aktuelle Messungen haben mehr Gewicht, aber ältere Werte dämpfen plötzliche Änderungen."
+    "excludedFromDRS": "Vom DRS ausgeschlossen"
   },
   "usersPage": {
     "rbacRoles": "RBAC-Rollen",

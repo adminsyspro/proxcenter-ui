@@ -53,7 +53,9 @@ const defaultSettings = {
   cpu_weight: 1.0,
   memory_weight: 1.0,
   storage_weight: 0.5,
-  max_concurrent_migrations: 2,
+  max_concurrent_migrations: 2, // Legacy, unused by the engine. Kept for back-compat.
+  max_concurrent_migrations_per_cluster: 2,
+  max_target_inflow_per_cycle: 0,
   migration_cooldown: '5m',
   max_pending_recommendations: 10,
   balance_larger_first: false,

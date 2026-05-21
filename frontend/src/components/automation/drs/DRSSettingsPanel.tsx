@@ -40,7 +40,34 @@ const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fon
 
 // Help tooltip component
 const HelpTip = ({ text }: { text: string }) => (
-  <Tooltip title={text} arrow placement="top">
+  <Tooltip
+    title={text}
+    arrow
+    placement="top"
+    slotProps={{
+      tooltip: {
+        sx: {
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1.5,
+          boxShadow: 3,
+          fontSize: 12,
+          maxWidth: 320,
+        },
+      },
+      arrow: {
+        sx: {
+          color: 'background.paper',
+          '&::before': {
+            border: '1px solid',
+            borderColor: 'divider',
+          },
+        },
+      },
+    }}
+  >
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', ml: 0.5, cursor: 'help', opacity: 0.5, '&:hover': { opacity: 1 } }}>
       <i className="ri-question-line" style={{ fontSize: 16 }} />
     </Box>
@@ -73,6 +100,13 @@ export interface DRSSettings {
   memory_weight: number
   storage_weight: number
   max_concurrent_migrations: number
+  // 0 = disabled (only the global cap applies). >0 caps how many migrations
+  // can be active for one cluster at once, preventing a single hot cluster
+  // from monopolizing the global slot pool.
+  max_concurrent_migrations_per_cluster: number
+  // 0 = disabled. >0 caps how many migrations may target the same node in
+  // one Rebalance cycle, preventing target flooding.
+  max_target_inflow_per_cycle: number
   migration_cooldown: string
   max_pending_recommendations: number
   balance_larger_first: boolean
@@ -124,7 +158,9 @@ export const defaultDRSSettings: DRSSettings = {
   cpu_weight: 1.0,
   memory_weight: 1.0,
   storage_weight: 0.5,
-  max_concurrent_migrations: 2,
+  max_concurrent_migrations: 2, // Legacy field, kept for back-compat. Engine ignores it; use per-cluster instead.
+  max_concurrent_migrations_per_cluster: 2,
+  max_target_inflow_per_cycle: 0,
   migration_cooldown: '5m',
   max_pending_recommendations: 10,
   balance_larger_first: false,
@@ -142,7 +178,7 @@ export const defaultDRSSettings: DRSSettings = {
 
 type SectionKey = 'general' | 'thresholds' | 'affinity' | 'advanced'
 
-const validIntervalOptions = ['1h', '2h', '3h', '4h', '6h', '8h', '12h', '24h']
+const validIntervalOptions = ['15m', '30m', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '24h']
 
 const SECTIONS: { key: SectionKey; icon: string; colorKey: string }[] = [
   { key: 'general', icon: 'ri-speed-line', colorKey: 'primary.main' },
@@ -177,7 +213,10 @@ export default function DRSSettingsPanel({
   const pve8Clusters = clusterVersions.filter(v => v.version < 9)
 
   useEffect(() => {
-    // Clamp legacy sub-1h interval values to 1h
+    // Fall back to 1h when the persisted value is not one of the options we
+    // expose. Sub-1h was once clamped here but is now a first-class choice;
+    // this guard now only catches genuinely unknown values (typos, removed
+    // options) so the Select doesn't render with an empty/uncontrolled value.
     const normalized = { ...initialSettings }
     if (!validIntervalOptions.includes(normalized.rebalance_interval)) {
       normalized.rebalance_interval = '1h'
@@ -471,6 +510,8 @@ export default function DRSSettingsPanel({
                   label={t('drsPage.rebalanceEvery')}
                   onChange={(e) => handleChange('rebalance_interval', e.target.value)}
                 >
+                  <MenuItem value="15m">15 min</MenuItem>
+                  <MenuItem value="30m">30 min</MenuItem>
                   <MenuItem value="1h">1 h</MenuItem>
                   <MenuItem value="2h">2 h</MenuItem>
                   <MenuItem value="3h">3 h</MenuItem>
@@ -737,13 +778,20 @@ export default function DRSSettingsPanel({
 
   const renderAdvanced = () => (
     <>
-      <Grid container spacing={2}>
+      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+        <i className="ri-speed-up-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
+        {t('drsPage.sectionMigrationLimits')}
+      </Typography>
+      <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.maxConcurrentMigrations')}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            {t('drsPage.maxConcurrentPerCluster')}
+            <HelpTip text={t('drsPage.helpMaxConcurrentPerCluster')} />
+          </Typography>
           <Box sx={{ px: 1 }}>
             <Slider
-              value={settings.max_concurrent_migrations}
-              onChange={(_, val) => handleChange('max_concurrent_migrations', val as number)}
+              value={settings.max_concurrent_migrations_per_cluster || 2}
+              onChange={(_, val) => handleChange('max_concurrent_migrations_per_cluster', val as number)}
               min={1}
               max={10}
               step={1}
@@ -752,10 +800,40 @@ export default function DRSSettingsPanel({
               size="small"
             />
           </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpMaxConcurrent')}</Typography>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.cooldownBetweenMigrations')}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            {t('drsPage.maxTargetInflowPerCycle')}
+            <HelpTip text={t('drsPage.helpMaxTargetInflow')} />
+          </Typography>
+          <Box sx={{ px: 1 }}>
+            <Slider
+              value={settings.max_target_inflow_per_cycle}
+              onChange={(_, val) => handleChange('max_target_inflow_per_cycle', val as number)}
+              min={0}
+              max={5}
+              step={1}
+              marks={[{ value: 0, label: 'off' }, { value: 1, label: '1' }, { value: 3, label: '3' }, { value: 5, label: '5' }]}
+              valueLabelDisplay="auto"
+              valueLabelFormat={(v) => (v === 0 ? 'off' : String(v))}
+              size="small"
+            />
+          </Box>
+        </Grid>
+      </Grid>
+
+      <Divider sx={{ my: 2 }} />
+
+      <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+        <i className="ri-tools-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
+        {t('drsPage.sectionMigrationBehavior')}
+      </Typography>
+      <Grid container spacing={2.5} sx={{ mb: 1 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            {t('drsPage.cooldownBetweenMigrations')}
+            <HelpTip text={t('drsPage.helpCooldown')} />
+          </Typography>
           <Box sx={{ px: 1 }}>
             <Slider
               value={(() => {
@@ -780,10 +858,12 @@ export default function DRSSettingsPanel({
               size="small"
             />
           </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpCooldown')}</Typography>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.maxPendingRecommendations')}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+            {t('drsPage.maxPendingRecommendations')}
+            <HelpTip text={t('drsPage.helpMaxPending')} />
+          </Typography>
           <Box sx={{ px: 1 }}>
             <Slider
               value={settings.max_pending_recommendations}
@@ -796,42 +876,20 @@ export default function DRSSettingsPanel({
               size="small"
             />
           </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpMaxPending')}</Typography>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.balance_larger_first}
-                onChange={(e) => handleChange('balance_larger_first', e.target.checked)}
-              />
-            }
-            label={<>{t('drsPage.migrateLargerFirst')}<HelpTip text={t('drsPage.helpLargerFirst')} /></>}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.prevent_overprovisioning}
-                onChange={(e) => handleChange('prevent_overprovisioning', e.target.checked)}
-              />
-            }
-            label={<>{t('drsPage.preventOverprovisioning')}<HelpTip text={t('drsPage.helpPreventOverprov')} /></>}
-          />
         </Grid>
       </Grid>
 
       <Divider sx={{ my: 2 }} />
 
-      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+      <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 600 }}>
+        <i className="ri-scales-3-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
         {t('drsPage.resourceWeights')}
         <HelpTip text={t('drsPage.helpResourceWeights')} />
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
         {t('drsPage.helpResourceWeightsDesc')}
       </Typography>
-      <Grid container spacing={2}>
+      <Grid container spacing={2.5}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Typography variant="caption">{t('drsPage.cpuWeight', { value: settings.cpu_weight.toFixed(1) })}</Typography>
           <Slider
@@ -866,26 +924,6 @@ export default function DRSSettingsPanel({
           />
         </Grid>
       </Grid>
-
-      <Divider sx={{ my: 2 }} />
-
-      <Alert severity="info" icon={<InfoIcon />} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-          <i className="ri-line-chart-line" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />
-          {t('drsPage.metricsSmoothing')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {t('drsPage.metricsSmoothingDesc')}
-        </Typography>
-        <Box sx={{ bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 1, fontFamily: 'JetBrains Mono, monospace' }}>
-          <Typography variant="body2" sx={{ fontFamily: 'inherit', fontWeight: 600 }}>
-            {t('drsPage.metricsSmoothingFormula')}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'inherit' }}>
-            {t('drsPage.metricsSmoothingFormulaDesc')}
-          </Typography>
-        </Box>
-      </Alert>
     </>
   )
 

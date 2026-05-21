@@ -74,6 +74,43 @@ const HelpTip = ({ text }: { text: string }) => (
   </Tooltip>
 )
 
+// LabeledSlider factorises the "title + ? tooltip + bounded slider" pattern
+// used several times in the Advanced section. Without this, each repeated
+// block was tripping SonarCloud's duplication detector.
+interface LabeledSliderProps {
+  label: string
+  help: string
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  step?: number
+  marks: { value: number; label: string }[]
+  valueLabelFormat?: (v: number) => string
+}
+
+const LabeledSlider = ({ label, help, value, onChange, min, max, step = 1, marks, valueLabelFormat }: LabeledSliderProps) => (
+  <>
+    <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+      {label}
+      <HelpTip text={help} />
+    </Typography>
+    <Box sx={{ px: 1 }}>
+      <Slider
+        value={value}
+        onChange={(_, val) => onChange(val as number)}
+        min={min}
+        max={max}
+        step={step}
+        marks={marks}
+        valueLabelDisplay="auto"
+        valueLabelFormat={valueLabelFormat}
+        size="small"
+      />
+    </Box>
+  </>
+)
+
 // ============================================
 // Types
 // ============================================
@@ -784,41 +821,27 @@ export default function DRSSettingsPanel({
       </Typography>
       <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('drsPage.maxConcurrentPerCluster')}
-            <HelpTip text={t('drsPage.helpMaxConcurrentPerCluster')} />
-          </Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={settings.max_concurrent_migrations_per_cluster || 2}
-              onChange={(_, val) => handleChange('max_concurrent_migrations_per_cluster', val as number)}
-              min={1}
-              max={10}
-              step={1}
-              marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }]}
-              valueLabelDisplay="auto"
-              size="small"
-            />
-          </Box>
+          <LabeledSlider
+            label={t('drsPage.maxConcurrentPerCluster')}
+            help={t('drsPage.helpMaxConcurrentPerCluster')}
+            value={settings.max_concurrent_migrations_per_cluster || 2}
+            onChange={(v) => handleChange('max_concurrent_migrations_per_cluster', v)}
+            min={1}
+            max={10}
+            marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }]}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('drsPage.maxTargetInflowPerCycle')}
-            <HelpTip text={t('drsPage.helpMaxTargetInflow')} />
-          </Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={settings.max_target_inflow_per_cycle}
-              onChange={(_, val) => handleChange('max_target_inflow_per_cycle', val as number)}
-              min={0}
-              max={5}
-              step={1}
-              marks={[{ value: 0, label: 'off' }, { value: 1, label: '1' }, { value: 3, label: '3' }, { value: 5, label: '5' }]}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(v) => (v === 0 ? 'off' : String(v))}
-              size="small"
-            />
-          </Box>
+          <LabeledSlider
+            label={t('drsPage.maxTargetInflowPerCycle')}
+            help={t('drsPage.helpMaxTargetInflow')}
+            value={settings.max_target_inflow_per_cycle}
+            onChange={(v) => handleChange('max_target_inflow_per_cycle', v)}
+            min={0}
+            max={5}
+            marks={[{ value: 0, label: 'off' }, { value: 1, label: '1' }, { value: 3, label: '3' }, { value: 5, label: '5' }]}
+            valueLabelFormat={(v) => (v === 0 ? 'off' : String(v))}
+          />
         </Grid>
       </Grid>
 
@@ -830,52 +853,38 @@ export default function DRSSettingsPanel({
       </Typography>
       <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('drsPage.cooldownBetweenMigrations')}
-            <HelpTip text={t('drsPage.helpCooldown')} />
-          </Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={(() => {
-                const s = settings.migration_cooldown || '5m'
-                // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
-                let totalMinutes = 0
-                const hMatch = s.match(/(\d+)h/)
-                const mMatch = s.match(/(\d+)m/)
-                const sMatch = s.match(/^(\d+)s$/)
-                if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
-                if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
-                if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
-                return totalMinutes || 5
-              })()}
-              onChange={(_, val) => handleChange('migration_cooldown', `${val as number}m`)}
-              min={1}
-              max={30}
-              step={1}
-              marks={[{ value: 1, label: '1m' }, { value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }]}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(v) => `${v}m`}
-              size="small"
-            />
-          </Box>
+          <LabeledSlider
+            label={t('drsPage.cooldownBetweenMigrations')}
+            help={t('drsPage.helpCooldown')}
+            value={(() => {
+              const s = settings.migration_cooldown || '5m'
+              // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
+              let totalMinutes = 0
+              const hMatch = s.match(/(\d+)h/)
+              const mMatch = s.match(/(\d+)m/)
+              const sMatch = s.match(/^(\d+)s$/)
+              if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
+              if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
+              if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
+              return totalMinutes || 5
+            })()}
+            onChange={(v) => handleChange('migration_cooldown', `${v}m`)}
+            min={1}
+            max={30}
+            marks={[{ value: 1, label: '1m' }, { value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }]}
+            valueLabelFormat={(v) => `${v}m`}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-            {t('drsPage.maxPendingRecommendations')}
-            <HelpTip text={t('drsPage.helpMaxPending')} />
-          </Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={settings.max_pending_recommendations}
-              onChange={(_, val) => handleChange('max_pending_recommendations', val as number)}
-              min={1}
-              max={20}
-              step={1}
-              marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
-              valueLabelDisplay="auto"
-              size="small"
-            />
-          </Box>
+          <LabeledSlider
+            label={t('drsPage.maxPendingRecommendations')}
+            help={t('drsPage.helpMaxPending')}
+            value={settings.max_pending_recommendations}
+            onChange={(v) => handleChange('max_pending_recommendations', v)}
+            min={1}
+            max={20}
+            marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
+          />
         </Grid>
       </Grid>
 

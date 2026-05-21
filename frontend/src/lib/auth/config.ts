@@ -223,13 +223,17 @@ export const authOptions: NextAuthOptions = {
         const ldapConfigForRestriction = await getLdapConfig()
         if (ldapConfigForRestriction?.requireGroup && ldapConfigForRestriction.allowedGroups.length > 0) {
           const userGroups = ldapUser.groups || []
-          const isAllowed = ldapConfigForRestriction.allowedGroups.some(allowedGroup => {
-            return userGroups.some(userGroup => {
+          const isAllowed = ldapConfigForRestriction.allowedGroups.some(rawAllowed => {
+            const allowedGroup = String(rawAllowed).trim()
+            if (!allowedGroup) return false
+            return userGroups.some(rawUser => {
+              const userGroup = String(rawUser).trim()
+              if (!userGroup) return false
               // Exact DN match
               if (userGroup === allowedGroup) return true
               // CN extraction for simplified match
               const cnMatch = userGroup.match(/^CN=([^,]+)/i)
-              return cnMatch && cnMatch[1] === allowedGroup
+              return cnMatch ? cnMatch[1].trim() === allowedGroup : false
             })
           })
 
@@ -396,7 +400,10 @@ export const authOptions: NextAuthOptions = {
         const sub = (profile as any).sub as string
         const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
         const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
-        const groups: string[] = (profile as any)[oidcConfig.claimGroups || 'groups'] || []
+        const rawGroups = (profile as any)[oidcConfig.claimGroups || 'groups']
+        const groups: string[] = Array.isArray(rawGroups)
+          ? rawGroups.map((g: unknown) => String(g).trim()).filter(Boolean)
+          : []
 
         if (!email) return false
 

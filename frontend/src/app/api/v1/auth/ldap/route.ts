@@ -123,7 +123,19 @@ export async function PUT(req: Request) {
       mappingObj = group_role_mapping as Record<string, string>
     }
 
-    const allowedGroupsArr: string[] = Array.isArray(allowed_groups) ? allowed_groups : []
+    // Trim whitespace on group names. Admins often paste from AD or IdP docs
+    // and pick up a leading/trailing space that breaks the exact-match lookup
+    // at login time. Drop entries whose key is empty after trim.
+    const cleanedMapping: Record<string, string> = {}
+    for (const [k, v] of Object.entries(mappingObj)) {
+      const key = String(k).trim()
+      if (key) cleanedMapping[key] = v
+    }
+    mappingObj = cleanedMapping
+
+    const allowedGroupsArr: string[] = Array.isArray(allowed_groups)
+      ? allowed_groups.map((g: unknown) => String(g).trim()).filter(Boolean)
+      : []
 
     const now = new Date()
     const baseData = {

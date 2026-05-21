@@ -26,6 +26,12 @@ import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
 
+// PVE `PUT /qemu/{vmid}/config` is synchronous and can take ~10s on slow storage
+// (e.g. ZFS-over-iSCSI). pveFetch's 8s default fires before the metadata write
+// commits, and the abort then trips the failover circuit breaker, surfacing as a
+// fake "all cluster nodes unreachable". Issue #332.
+const PVE_CONFIG_PUT_TIMEOUT_MS = 120_000
+
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
 interface MigrationConfig {
@@ -520,7 +526,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
+          { method: "PUT", body: attachBody },
+          { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
         )
         // Record the attachment so the failure-path cleanup in
         // runMigrationPipeline does NOT pvesm-free this volume: it is
@@ -1368,7 +1375,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Attach disk
       const attachBody = new URLSearchParams({ [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}` })
       try {
-        await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`, { method: "PUT", body: attachBody })
+        await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`, { method: "PUT", body: attachBody }, { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS })
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -1817,7 +1824,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
+          { method: "PUT", body: attachBody },
+          { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
         )
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
@@ -2641,7 +2649,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveFetch<any>(pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: reconfigBody })
+          { method: "PUT", body: reconfigBody },
+          { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS })
         // SSHFS Boot does an atomic grouped PUT instead of per-disk
         // calls through attachBlockDisk(), so we must mark the entries
         // here ourselves. Without this, a failure further down (e.g.
@@ -2851,7 +2860,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await pveFetch<any>(
         pveConn,
         `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-        { method: "PUT", body: new URLSearchParams({ boot: `order=${finalBootSlot}` }) }
+        { method: "PUT", body: new URLSearchParams({ boot: `order=${finalBootSlot}` }) },
+        { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
       )
 
       // For Windows VMs: advise on post-migration driver work. The boot chain is correct

@@ -33,6 +33,12 @@ import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
 
+// PVE `PUT /qemu/{vmid}/config` is synchronous and can take ~10s on slow storage
+// (e.g. ZFS-over-iSCSI). pveFetch's 8s default fires before the metadata write
+// commits, and the abort then trips the failover circuit breaker, surfacing as a
+// fake "all cluster nodes unreachable". Issue #332.
+const PVE_CONFIG_PUT_TIMEOUT_MS = 120_000
+
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
 interface MigrationConfig {
@@ -462,7 +468,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
+          { method: "PUT", body: attachBody },
+          { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
         )
         await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
       } catch (attachErr: any) {
@@ -690,7 +697,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         await pveFetch<any>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
+          { method: "PUT", body: attachBody },
+          { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
         )
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
@@ -845,7 +853,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await pveFetch<any>(
       pveConn,
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      { method: "PUT", body: new URLSearchParams({ boot: "order=scsi0" }) }
+      { method: "PUT", body: new URLSearchParams({ boot: "order=scsi0" }) },
+      { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS }
     )
 
     if (isWindowsXoVm(vmConfig)) {

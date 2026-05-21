@@ -66,6 +66,16 @@ export async function soapRequest(
     headers: {
       "Content-Type": "text/xml; charset=utf-8",
       SOAPAction: '"urn:vim25/8.0"',
+      // Ask vCenter for uncompressed responses. The custom undici Agent
+      // instantiated below (for insecureTLS) doesn't always advertise
+      // Accept-Encoding the way the default fetch does, so vCenter
+      // sometimes sends a compressed/binary body while we read it via
+      // .text(), which produces replacement characters and breaks XML
+      // parsing (observed live on v1.4.1 after the node 22-alpine to
+      // 26-alpine bump shipped a newer undici). Identity sidesteps the
+      // whole content-encoding negotiation; SOAP payloads are small
+      // enough that the extra bytes on the wire are not a concern.
+      "Accept-Encoding": "identity",
       ...(cookie ? { Cookie: cookie } : {}),
     },
     body,

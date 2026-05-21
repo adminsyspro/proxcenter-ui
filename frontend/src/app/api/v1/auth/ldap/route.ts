@@ -1,6 +1,7 @@
 // src/app/api/v1/auth/ldap/route.ts
 import { NextResponse } from "next/server"
 
+import { normalizeGroupRoleMapping } from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -109,29 +110,7 @@ export async function PUT(req: Request) {
       }
     }
 
-    // group_role_mapping arrives either as a JSON string (current frontend
-    // pattern) or as a parsed object (forward-compat). Normalise to an object
-    // for the JSONB column so callers can later `WHERE settings->>'x'` query.
-    let mappingObj: Record<string, string> = {}
-    if (typeof group_role_mapping === "string") {
-      try {
-        mappingObj = JSON.parse(group_role_mapping || "{}")
-      } catch {
-        mappingObj = {}
-      }
-    } else if (group_role_mapping && typeof group_role_mapping === "object") {
-      mappingObj = group_role_mapping as Record<string, string>
-    }
-
-    // Trim whitespace on group names. Admins often paste from AD or IdP docs
-    // and pick up a leading/trailing space that breaks the exact-match lookup
-    // at login time. Drop entries whose key is empty after trim.
-    const cleanedMapping: Record<string, string> = {}
-    for (const [k, v] of Object.entries(mappingObj)) {
-      const key = String(k).trim()
-      if (key) cleanedMapping[key] = v
-    }
-    mappingObj = cleanedMapping
+    const mappingObj = normalizeGroupRoleMapping(group_role_mapping)
 
     const allowedGroupsArr: string[] = Array.isArray(allowed_groups)
       ? allowed_groups.map((g: unknown) => String(g).trim()).filter(Boolean)

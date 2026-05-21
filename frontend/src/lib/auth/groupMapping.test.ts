@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 
-import { normalizeGroupRoleMapping } from './groupMapping'
+import {
+  extractGroupsFromClaim,
+  isLdapGroupAllowed,
+  normalizeGroupRoleMapping,
+} from './groupMapping'
 
 describe('normalizeGroupRoleMapping', () => {
   it('returns an empty object for missing / null / empty inputs', () => {
@@ -59,5 +63,60 @@ describe('normalizeGroupRoleMapping', () => {
     expect((out as any).constructor).not.toBe('role_pwn')
     expect((out as any).prototype).toBeUndefined()
     expect((Object.prototype as any).role_pwn).toBeUndefined()
+  })
+})
+
+describe('extractGroupsFromClaim', () => {
+  it('returns [] for non-array inputs', () => {
+    expect(extractGroupsFromClaim(undefined)).toEqual([])
+    expect(extractGroupsFromClaim(null)).toEqual([])
+    expect(extractGroupsFromClaim('admin')).toEqual([])
+    expect(extractGroupsFromClaim({ admin: true })).toEqual([])
+  })
+
+  it('returns the array unchanged when nothing needs trimming or dropping', () => {
+    expect(extractGroupsFromClaim(['admin', 'ops'])).toEqual(['admin', 'ops'])
+  })
+
+  it('trims whitespace and drops empty entries', () => {
+    expect(extractGroupsFromClaim([' admin ', '', '   ', 'ops'])).toEqual(['admin', 'ops'])
+  })
+
+  it('coerces non-string entries via String()', () => {
+    expect(extractGroupsFromClaim(['admin', 42, null, 'ops'])).toEqual(['admin', '42', 'ops'])
+  })
+})
+
+describe('isLdapGroupAllowed', () => {
+  it('returns false when the allowed list is empty or missing', () => {
+    expect(isLdapGroupAllowed(['admin'], [])).toBe(false)
+    expect(isLdapGroupAllowed(['admin'], undefined)).toBe(false)
+    expect(isLdapGroupAllowed(['admin'], null)).toBe(false)
+  })
+
+  it('returns false when the user has no groups', () => {
+    expect(isLdapGroupAllowed([], ['admin'])).toBe(false)
+    expect(isLdapGroupAllowed(undefined, ['admin'])).toBe(false)
+    expect(isLdapGroupAllowed(null, ['admin'])).toBe(false)
+  })
+
+  it('matches by exact name', () => {
+    expect(isLdapGroupAllowed(['admin', 'ops'], ['admin'])).toBe(true)
+    expect(isLdapGroupAllowed(['user'], ['admin'])).toBe(false)
+  })
+
+  it('matches an allowed plain name against a user DN by extracting CN', () => {
+    expect(isLdapGroupAllowed(['CN=admin,OU=Groups,DC=example,DC=com'], ['admin'])).toBe(true)
+    expect(isLdapGroupAllowed(['CN=ops,OU=Groups,DC=example,DC=com'], ['admin'])).toBe(false)
+  })
+
+  it('trims whitespace on both sides', () => {
+    expect(isLdapGroupAllowed([' admin '], [' admin '])).toBe(true)
+    expect(isLdapGroupAllowed(['  '], ['admin'])).toBe(false)
+    expect(isLdapGroupAllowed(['admin'], ['   '])).toBe(false)
+  })
+
+  it('trims the extracted CN before comparing', () => {
+    expect(isLdapGroupAllowed(['CN= admin ,OU=Groups'], ['admin'])).toBe(true)
   })
 })

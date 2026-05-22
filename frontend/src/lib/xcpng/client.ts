@@ -14,6 +14,7 @@
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 
 export interface XoConnectionInfo {
   baseUrl: string
@@ -78,21 +79,14 @@ export async function getXoConnectionInfo(connectionId: string): Promise<XoConne
  * Fetch from XO REST API
  */
 async function xoFetch<T = any>(xo: XoConnectionInfo, path: string): Promise<T> {
-  const fetchOpts: any = {
+  const res = await fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
     headers: {
       Authorization: xo.authHeader,
       Accept: "application/json",
     },
     signal: AbortSignal.timeout(30000),
-  }
-
-  if (xo.insecureTLS) {
-    fetchOpts.dispatcher = new (await import("undici")).Agent({
-      connect: { rejectUnauthorized: false },
-    })
-  }
-
-  const res = await fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
+    insecureTLS: xo.insecureTLS,
+  })
 
   if (!res.ok) {
     throw new Error(`XO API error: ${res.status} ${res.statusText}`)
@@ -197,57 +191,45 @@ export function buildXoAuthHeader(creds: string): string {
  * POST to XO REST API (actions, snapshot creation, etc.)
  */
 async function xoPost<T = any>(xo: XoConnectionInfo, path: string, body?: Record<string, any>): Promise<T> {
-  const fetchOpts: any = {
+  const res = await fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
     method: "POST",
     headers: {
       Authorization: xo.authHeader,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
+    body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(120000),
-  }
-
-  if (body) fetchOpts.body = JSON.stringify(body)
-
-  if (xo.insecureTLS) {
-    fetchOpts.dispatcher = new (await import("undici")).Agent({
-      connect: { rejectUnauthorized: false },
-    })
-  }
-
-  const res = await fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
+    insecureTLS: xo.insecureTLS,
+  })
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "")
-    throw new Error(`XO API POST ${path} failed: ${res.status} ${res.statusText} ${text}`)
+    const errText = await res.text().catch(() => "")
+    throw new Error(`XO API POST ${path} failed: ${res.status} ${res.statusText} ${errText}`)
   }
 
-  const contentType = res.headers.get("content-type") || ""
-  if (contentType.includes("application/json")) {
-    return res.json()
-  }
-  // Some XO actions return the UUID as plain text
+  // Parse from the body, not from Content-Type: on Node 26 + undici 8.x with a
+  // custom dispatcher, response headers can come back empty so Content-Type is
+  // unreliable. XO endpoints return either JSON or a plain-text UUID/task path.
   const text = await res.text()
-  return text.trim() as unknown as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return text.trim() as unknown as T
+  }
 }
 
 /**
  * DELETE on XO REST API
  */
 async function xoDelete(xo: XoConnectionInfo, path: string): Promise<void> {
-  const fetchOpts: any = {
+  const res = await fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
     method: "DELETE",
     headers: { Authorization: xo.authHeader },
     signal: AbortSignal.timeout(60000),
-  }
+    insecureTLS: xo.insecureTLS,
+  })
 
-  if (xo.insecureTLS) {
-    fetchOpts.dispatcher = new (await import("undici")).Agent({
-      connect: { rejectUnauthorized: false },
-    })
-  }
-
-  const res = await fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
   if (!res.ok && res.status !== 404) {
     throw new Error(`XO API DELETE ${path} failed: ${res.status} ${res.statusText}`)
   }

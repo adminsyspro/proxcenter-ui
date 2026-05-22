@@ -64,6 +64,9 @@ export class NutanixClient {
         Authorization: this.authHeader,
         "Content-Type": "application/json",
         Accept: "application/json",
+        // Defeat brotli/zstd decode regressions on Node 26 + undici 8.x when
+        // a custom dispatcher is attached (see lib/http/insecure-fetch.ts).
+        "Accept-Encoding": "identity",
       },
       signal: AbortSignal.timeout(30_000),
     }

@@ -317,6 +317,9 @@ export class WinRMClient {
       headers: {
         "Content-Type": "application/soap+xml;charset=UTF-8",
         Authorization: this.authHeader,
+        // Defeat brotli/zstd decode regressions on Node 26 + undici 8.x when
+        // a custom dispatcher is attached (see lib/http/insecure-fetch.ts).
+        "Accept-Encoding": "identity",
       },
       body: soapXml,
       signal: AbortSignal.timeout(this.timeout),

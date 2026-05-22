@@ -29,6 +29,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapshot, xoDeleteSnapshot } from "@/lib/xcpng/client"
+import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
@@ -739,17 +740,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const downtimeStart = Date.now()
       await appendLog(jobId, "Shutting down source VM for cutover (downtime starts now)...", "warn")
       try {
-        const xoFetchInternal = async (path: string, opts: RequestInit = {}) => {
-          const fetchOpts: any = {
+        const xoFetchInternal = (path: string, opts: RequestInit = {}) =>
+          fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
             ...opts,
             headers: { Authorization: xo.authHeader, "Content-Type": "application/json", ...opts.headers },
             signal: AbortSignal.timeout(30000),
-          }
-          if (xo.insecureTLS) {
-            fetchOpts.dispatcher = new (await import("undici")).Agent({ connect: { rejectUnauthorized: false } })
-          }
-          return fetch(`${xo.baseUrl}/rest/v0${path}`, fetchOpts)
-        }
+            insecureTLS: xo.insecureTLS,
+          })
 
         const shutRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/clean_shutdown`, { method: "POST" })
         if (!shutRes.ok) {

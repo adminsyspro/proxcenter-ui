@@ -176,14 +176,16 @@ export function resolveLdapRole(groups: string[], config: LdapConfig): string | 
     return null
   }
 
-  for (const group of groups) {
+  for (const rawGroup of groups) {
+    const group = String(rawGroup).trim()
+    if (!group) continue
     if (config.groupRoleMapping[group]) {
       return config.groupRoleMapping[group]
     }
     const cnMatch = group.match(/^CN=([^,]+)/i)
     if (cnMatch) {
-      const cn = cnMatch[1]
-      if (config.groupRoleMapping[cn]) {
+      const cn = cnMatch[1].trim()
+      if (cn && config.groupRoleMapping[cn]) {
         return config.groupRoleMapping[cn]
       }
     }

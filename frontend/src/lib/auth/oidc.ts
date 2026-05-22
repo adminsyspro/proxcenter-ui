@@ -87,7 +87,9 @@ export function resolveOidcRole(
     return config.defaultRole
   }
 
-  for (const group of groups) {
+  for (const rawGroup of groups) {
+    const group = String(rawGroup).trim()
+    if (!group) continue
     const mappedRole = config.groupRoleMapping[group]
     if (mappedRole) {
       return mappedRole

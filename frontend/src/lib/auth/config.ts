@@ -7,6 +7,7 @@ import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
+import { extractGroupsFromClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole } from "./ldap"
 import { getOidcConfig, resolveOidcRole } from "./oidc"
 
@@ -222,18 +223,7 @@ export const authOptions: NextAuthOptions = {
         // Check group restriction BEFORE creating/updating user
         const ldapConfigForRestriction = await getLdapConfig()
         if (ldapConfigForRestriction?.requireGroup && ldapConfigForRestriction.allowedGroups.length > 0) {
-          const userGroups = ldapUser.groups || []
-          const isAllowed = ldapConfigForRestriction.allowedGroups.some(allowedGroup => {
-            return userGroups.some(userGroup => {
-              // Exact DN match
-              if (userGroup === allowedGroup) return true
-              // CN extraction for simplified match
-              const cnMatch = userGroup.match(/^CN=([^,]+)/i)
-              return cnMatch && cnMatch[1] === allowedGroup
-            })
-          })
-
-          if (!isAllowed) {
+          if (!isLdapGroupAllowed(ldapUser.groups, ldapConfigForRestriction.allowedGroups)) {
             throw new Error("Access denied: your LDAP account is not in an authorized group")
           }
         }
@@ -396,7 +386,7 @@ export const authOptions: NextAuthOptions = {
         const sub = (profile as any).sub as string
         const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
         const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
-        const groups: string[] = (profile as any)[oidcConfig.claimGroups || 'groups'] || []
+        const groups = extractGroupsFromClaim((profile as any)[oidcConfig.claimGroups || 'groups'])
 
         if (!email) return false
 

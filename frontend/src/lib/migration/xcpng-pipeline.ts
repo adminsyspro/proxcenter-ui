@@ -32,6 +32,7 @@ import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapsh
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+import { pveSetVmConfig } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -459,11 +460,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const scsiSlot = `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
-        )
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -687,11 +684,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
       try {
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
-        )
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -842,11 +835,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await updateJob(jobId, "configuring", { progress: 90 })
     await appendLog(jobId, "Configuring VM (boot order, agent)...")
 
-    await pveFetch<any>(
-      pveConn,
-      `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      { method: "PUT", body: new URLSearchParams({ boot: "order=scsi0" }) }
-    )
+    await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: "order=scsi0" }))
 
     if (isWindowsXoVm(vmConfig)) {
       await appendLog(jobId, "Windows VM detected — using LSI SCSI + e1000 NIC for initial boot compatibility. Install VirtIO drivers for best performance.", "warn")

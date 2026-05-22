@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { applyMaxfilesTranslation } from "@/lib/backups/prune"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -224,9 +225,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       }
     }
 
-    if (body.maxfiles !== undefined) {
-      params.set('maxfiles', String(body.maxfiles))
-    }
+    applyMaxfilesTranslation(params, body.maxfiles, owned.job?.['prune-backups'])
 
     // Note template
     if (body.notesTemplate) {

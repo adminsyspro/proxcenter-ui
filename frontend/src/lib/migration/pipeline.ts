@@ -25,6 +25,7 @@ import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloa
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+import { pveSetVmConfig } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -517,11 +518,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
-        )
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         // Record the attachment so the failure-path cleanup in
         // runMigrationPipeline does NOT pvesm-free this volume: it is
         // now referenced by the VM config and the VM-level DELETE
@@ -1368,7 +1365,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Attach disk
       const attachBody = new URLSearchParams({ [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}` })
       try {
-        await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`, { method: "PUT", body: attachBody })
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -1814,11 +1811,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
       })
       try {
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: attachBody }
-        )
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
       } catch (attachErr: any) {
         await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
@@ -2639,9 +2632,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskOpts}`)
         }
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
-        await pveFetch<any>(pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          { method: "PUT", body: reconfigBody })
+        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, reconfigBody)
         // SSHFS Boot does an atomic grouped PUT instead of per-disk
         // calls through attachBlockDisk(), so we must mark the entries
         // here ourselves. Without this, a failure further down (e.g.
@@ -2848,11 +2839,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Set boot order — honour the EFI SATA rule applied in convertAndImportDisk/attachBlockDisk.
       const finalBootSlot = pveParams.bios === "ovmf" ? "sata0" : "scsi0"
-      await pveFetch<any>(
-        pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-        { method: "PUT", body: new URLSearchParams({ boot: `order=${finalBootSlot}` }) }
-      )
+      await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: `order=${finalBootSlot}` }))
 
       // For Windows VMs: advise on post-migration driver work. The boot chain is correct
       // out of the box (EFI guests get their boot disk on SATA — OVMF can boot it; BIOS

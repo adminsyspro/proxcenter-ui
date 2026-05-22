@@ -5049,11 +5049,7 @@
     "helpPreventOverprov": "启用后，DRS 不会将 VM 迁移到会导致节点超出容量（已分配 > 可用）的节点。防止资源过度分配。",
     "helpResourceWeights": "每种资源类型对平衡评分的影响程度。",
     "helpResourceWeightsDesc": "设为 0 以忽略某种资源。设为 2 获得最高优先级。例如，内存=1 CPU=0.3 存储=0 意味着 DRS 主要关注内存平衡。",
-    "excludedFromDRS": "已从 DRS 排除",
-    "metricsSmoothing": "指标平滑",
-    "metricsSmoothingDesc": "DRS 使用指数加权移动平均（EWMA）对最近 30 分钟的采集指标进行平滑处理，以过滤瞬时的 CPU 和内存峰值。这可以防止短暂负载突发触发不必要的迁移。",
-    "metricsSmoothingFormula": "S(t) = α × X(t) + (1-α) × S(t-1), α = 0.3",
-    "metricsSmoothingFormulaDesc": "每个新数据点贡献 30% 的平滑值。近期测量值权重更高，但历史值仍能抑制突变。"
+    "excludedFromDRS": "已从 DRS 排除"
   },
   "usersPage": {
     "rbacRoles": "RBAC 角色",

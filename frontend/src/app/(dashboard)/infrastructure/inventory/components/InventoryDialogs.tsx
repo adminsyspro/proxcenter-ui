@@ -2394,6 +2394,29 @@ return
                     )
                   })()}
 
+                  {/* Defensive: when virt-v2v is required but preflight returned no
+                      tempStorages at all (degenerate node layout where even /tmp has
+                      <1 GiB free), surface the cause explicitly instead of leaving the
+                      Migrate button silently disabled. The backend already synthesizes
+                      /tmp as a fallback when it lives on /, so reaching this branch
+                      means the target node genuinely has no qualifying mount. */}
+                  {(() => {
+                    const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                    const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
+                    const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
+                    const needsV2vDeps = isV2vVcenter || isDirectEsxiWinCold
+                    const noTempStorage = !vcenterPreflight?.tempStorages || vcenterPreflight.tempStorages.length === 0
+                    if (!(needsV2vDeps && vcenterPreflight?.checked && noTempStorage)) return null
+                    return (
+                      <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                        <Typography variant="body2" fontWeight={600}>No usable temporary storage detected on the target node</Typography>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                          virt-v2v needs at least 1 GiB free on a non-tmpfs mount point to stage the converted disk. Free up space on /tmp or mount a data volume on the node, then reopen this dialog to re-run the preflight.
+                        </Typography>
+                      </Alert>
+                    )
+                  })()}
+
                   {/* Temporary storage — used by virt-v2v for vcenter/hyperv/nutanix sources,
                       and by the direct-ESXi pipeline for SSHFS mount root + VMDK dumps + clone
                       targets. /tmp is often a tiny tmpfs on PVE; offering the selector lets the

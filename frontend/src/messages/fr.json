@@ -5007,7 +5007,11 @@
     "tagAffinity": "Garder ensemble sur le même nœud",
     "tagAntiAffinity": "Séparer sur des nœuds différents",
     "advancedOptions": "Options avancées",
+    "sectionMigrationLimits": "Limites de migration",
+    "sectionMigrationBehavior": "Comportement des migrations",
     "maxConcurrentMigrations": "Migrations simultanées max",
+    "maxConcurrentPerCluster": "Migrations simultanées max par cluster",
+    "maxTargetInflowPerCycle": "Migrations max vers un même node par cycle",
     "cooldownBetweenMigrations": "Cooldown entre migrations",
     "cooldownExample": "Ex: 5m, 10m, 1h",
     "migrateLargerFirst": "Migrer les gros guests en premier",
@@ -5091,6 +5095,8 @@
     "helpEnableAffinity": "Lorsqu'activé, DRS prend en compte les règles d'affinité (tags Proxmox ou règles manuelles) lors de la génération des recommandations. Les VMs avec des contraintes d'affinité seront placées en conséquence.",
     "helpEnforceAffinity": "Lorsqu'imposé, DRS ne recommandera jamais une migration qui viole une règle d'affinité, même si elle améliorerait l'équilibre. Sinon, les règles sont préférées mais pas obligatoires.",
     "helpMaxConcurrent": "Nombre maximum de migrations de VMs pouvant s'exécuter simultanément. Plus de migrations = équilibrage plus rapide mais plus de charge réseau.",
+    "helpMaxConcurrentPerCluster": "Limite le nombre de migrations actives en parallèle pour un même cluster. Mettre à 0 pour désactiver. Empêche qu'un cluster monopolise tous les slots disponibles quand plusieurs clusters ont besoin d'être rééquilibrés.",
+    "helpMaxTargetInflow": "Limite combien de migrations peuvent cibler le même node dans un seul cycle de rebalance. Mettre à 0 pour désactiver. Empêche que plusieurs migrations affluent simultanément vers le node le moins chargé.",
     "helpCooldown": "Temps d'attente minimum entre deux migrations de la même VM. Empêche une VM d'être migrée en boucle.",
     "maxPendingRecommendations": "Max recommandations en attente",
     "helpMaxPending": "Nombre maximum de recommandations en attente. Les plus anciennes sont automatiquement supprimées au-delà de cette limite.",
@@ -5100,11 +5106,7 @@
     "helpPreventOverprov": "Lorsqu'activé, DRS ne migrera pas une VM vers un nœud si cela causerait un dépassement de capacité (alloué > disponible). Empêche le surprovisionnement.",
     "helpResourceWeights": "L'influence de chaque type de ressource sur le score d'équilibrage.",
     "helpResourceWeightsDesc": "Mettre à 0 pour ignorer une ressource. Mettre à 2 pour priorité maximale. Exemple : Mémoire=1 CPU=0.3 Stockage=0 signifie que DRS se concentre principalement sur l'équilibre mémoire.",
-    "excludedFromDRS": "Exclu du DRS",
-    "metricsSmoothing": "Lissage des métriques",
-    "metricsSmoothingDesc": "DRS utilise une Moyenne Mobile Exponentielle Pondérée (EWMA) sur les 30 dernières minutes de métriques collectées pour lisser les pics transitoires de CPU et mémoire. Cela évite les migrations inutiles déclenchées par des pics de charge éphémères.",
-    "metricsSmoothingFormula": "S(t) = α × X(t) + (1-α) × S(t-1), α = 0.3",
-    "metricsSmoothingFormulaDesc": "Chaque nouveau point de données contribue à 30% de la valeur lissée. Les mesures récentes ont plus de poids, mais les anciennes valeurs atténuent les changements brusques."
+    "excludedFromDRS": "Exclu du DRS"
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

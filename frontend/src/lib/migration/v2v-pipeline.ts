@@ -47,6 +47,7 @@ import {
   soapPowerOffVm,
 } from "@/lib/vmware/soap"
 import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/soap"
+import { pveSetVmConfig } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -2458,11 +2459,7 @@ export async function runV2vMigrationPipeline(
           [diskSlot]: `${diskVolume},discard=on`,
         })
         try {
-          await pveFetch<any>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-            { method: "PUT", body: attachBody }
-          )
+          await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
           await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
         } catch (attachErr: any) {
           await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
@@ -2593,11 +2590,7 @@ export async function runV2vMigrationPipeline(
           [diskSlot]: volumeId,
         })
         try {
-          await pveFetch<any>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-            { method: "PUT", body: attachBody }
-          )
+          await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
           await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
         } catch (attachErr: any) {
           await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
@@ -2613,11 +2606,7 @@ export async function runV2vMigrationPipeline(
     //   - Windows-without-block-driver → virtio0 (viostor/virtio-blk fallback)
     //   - Everything else (Linux, etc.) → scsi0
     const bootSlot = useWinSataBoot ? "sata0" : (useVirtioBlk ? "virtio0" : "scsi0")
-    await pveFetch<any>(
-      pveConn,
-      `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      { method: "PUT", body: new URLSearchParams({ boot: `order=${bootSlot}` }) }
-    )
+    await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: `order=${bootSlot}` }))
     await appendLog(jobId, `Boot order set to ${bootSlot}`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")

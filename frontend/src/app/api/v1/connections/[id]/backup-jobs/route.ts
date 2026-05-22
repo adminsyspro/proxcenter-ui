@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { applyMaxfilesTranslation, extractKeepLastFromPruneBackups } from "@/lib/backups/prune"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -133,8 +134,12 @@ export async function GET(_req: Request, ctx: RouteContext) {
 return job.namespace || ''
         })(),
 
-        // Retention
-        maxfiles: job.maxfiles,
+        // Retention. PVE 8.x dropped `maxfiles` in favor of `prune-backups`,
+        // so jobs created on modern clusters (including those our create
+        // route translates) come back with maxfiles undefined. Surface the
+        // keep-last value (if any) as maxfiles so the legacy edit form
+        // shows the configured retention instead of falling back to 1.
+        maxfiles: job.maxfiles ?? extractKeepLastFromPruneBackups(job['prune-backups']),
         pruneBackups: job['prune-backups'] || null,
 
         // Protection
@@ -374,9 +379,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       }
     }
 
-    if (body.maxfiles !== undefined) {
-      params.set('maxfiles', String(body.maxfiles))
-    }
+    applyMaxfilesTranslation(params, body.maxfiles)
 
     // Note template
     if (body.notesTemplate) {

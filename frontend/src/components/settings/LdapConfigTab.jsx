@@ -122,10 +122,13 @@ export default function LdapConfigTab() {
     setTestResult(null)
 
     try {
-      // Build group_role_mapping JSON from array
+      // Build group_role_mapping JSON from array. Trim group names so a
+      // copy-paste from AD with a stray leading space doesn't silently
+      // break the mapping at login time.
       const mappingObj = {}
       for (const m of groupMappings) {
-        if (m.group && m.role) mappingObj[m.group] = m.role
+        const key = (m.group || '').trim()
+        if (key && m.role) mappingObj[key] = m.role
       }
 
       const res = await fetch('/api/v1/auth/ldap', {

@@ -122,10 +122,13 @@ export default function OidcConfigTab() {
     setTestResult(null)
 
     try {
-      // Build group_role_mapping from array
+      // Build group_role_mapping from array. Trim group names so a stray
+      // leading/trailing space pasted from the IdP doesn't silently break
+      // the mapping at login time.
       const mapping = {}
       groupMappings.forEach(({ group, role }) => {
-        if (group && role) mapping[group] = role
+        const key = (group || '').trim()
+        if (key && role) mapping[key] = role
       })
 
       const res = await fetch('/api/v1/auth/oidc', {

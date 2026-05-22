@@ -2,16 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-
-/** Validate and reconstruct a user-provided URL (SSRF protection) */
-function validateAIUrl(input) {
-  const parsed = new URL(input)
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Only http and https URLs are allowed')
-  }
-  // Return origin + pathname to cut taint flow from user input
-  return `${parsed.origin}${parsed.pathname}`
-}
+import { validateAIUrl } from "@/lib/ai/url-guard"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -28,7 +19,7 @@ export async function POST(request) {
     
     if (settings.provider === 'ollama') {
       // Test Ollama
-      const ollamaBase = validateAIUrl(settings.ollamaUrl)
+      const ollamaBase = await validateAIUrl(settings.ollamaUrl)
       const response = await fetch(`${ollamaBase}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -58,7 +49,7 @@ return NextResponse.json({
     } else if (settings.provider === 'openai') {
       // Test OpenAI
       const openaiRaw = settings.openaiBaseUrl || 'https://api.openai.com/v1'
-      const openaiBase = validateAIUrl(openaiRaw)
+      const openaiBase = await validateAIUrl(openaiRaw)
       const response = await fetch(`${openaiBase}/chat/completions`, {
         method: 'POST',
         headers: {

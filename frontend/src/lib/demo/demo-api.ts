@@ -1258,6 +1258,8 @@ const EXTRA_MOCKS: MockDataMap = {
     memory_weight: 1.0,
     storage_weight: 0.5,
     max_concurrent_migrations: 2,
+    max_concurrent_migrations_per_cluster: 0,
+    max_target_inflow_per_cycle: 0,
     migration_cooldown: '5m',
     balance_larger_first: false,
     prevent_overprovisioning: true,

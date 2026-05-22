@@ -544,6 +544,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
         vms: vmCount,
         uptime: Number(n.uptime ?? 0),
         ip: n.ip || undefined,
+        pveversion: n.pveversion || undefined,
       }
     })
 

@@ -61,6 +61,7 @@ import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
+import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -3417,32 +3418,16 @@ export default function NodeTabs(props: any) {
                             startIcon={<i className="ri-refresh-line" />}
                             onClick={async () => {
                               const { connId } = parseNodeId(selection?.id || '')
-                              const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/apt`
                               setNodeUpdates((prev: any) => ({
                                 ...prev,
                                 [nodeName]: { count: 0, updates: [], version: null, loading: true }
                               }))
-                              try {
-                                // Trigger apt update first, then fetch fresh list
-                                const postRes = await fetch(aptUrl, { method: 'POST' })
-                                if (postRes.status === 403) {
-                                  const postJson = await postRes.json()
-                                  setNodeUpdates((prev: any) => ({
-                                    ...prev,
-                                    [nodeName]: { count: 0, updates: [], version: null, loading: false, permissionError: postJson.requiredPermission || 'Sys.Modify' }
-                                  }))
-                                  return
-                                }
-                                const res = await fetch(aptUrl)
-                                const json = await res.json()
-                                const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-                                setNodeUpdates((prev: any) => ({
-                                  ...prev,
-                                  [nodeName]: { count: json.count || 0, updates: json.data || [], version: pvePkg?.currentVersion || null, loading: false, permissionError: null }
-                                }))
-                              } catch {
-                                setNodeUpdates((prev: any) => { const next = {...prev}; delete next[nodeName]; return next })
-                              }
+                              await loadNodeAptUpdates({
+                                connId,
+                                nodeName,
+                                setNodeUpdates,
+                                forceRefresh: true,
+                              })
                             }}
                           >
                             {t('updates.refresh')}
@@ -3541,7 +3526,7 @@ export default function NodeTabs(props: any) {
                                     </Box>
                                     {/* Rows */}
                                     {nodeUpdate.updates.map((upd: any, idx: number) => {
-                                      const pkgName = upd.Package || upd.package || ''
+                                      const pkgName = upd.package || ''
                                       const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
                                       return (
                                         <Box
@@ -3567,11 +3552,11 @@ export default function NodeTabs(props: any) {
                                               {pkgName}
                                             </Typography>
                                           </Box>
-                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {upd.OldVersion || upd.old_version || '—'}
+                                          <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.currentVersion || '—'}
                                           </Typography>
-                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {upd.Version || upd.version || upd.new_version || '—'}
+                                          <Typography variant="body2" sx={{ fontSize: 11, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {upd.newVersion || '—'}
                                           </Typography>
                                         </Box>
                                       )

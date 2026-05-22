@@ -5,6 +5,7 @@ import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { defaultDRSSettings } from '@/components/automation/drs/drsSettings'
 
 export const runtime = "nodejs"
 
@@ -31,39 +32,10 @@ async function saveFrontendSettings(data: Record<string, any>): Promise<void> {
   } catch (e) { console.error('[drs/settings] Failed to save frontend settings:', e) }
 }
 
-// Default settings that match the frontend DRSSettings interface
-const defaultSettings = {
-  enabled: true,
-  mode: 'manual',
-  balancing_method: 'memory',
-  balancing_mode: 'used',
-  balance_types: ['vm', 'ct'],
-  maintenance_nodes: [],
-  excluded_clusters: [],
-  excluded_nodes: {},
-  cluster_modes: {},
-  cpu_high_threshold: 80,
-  cpu_low_threshold: 20,
-  memory_high_threshold: 85,
-  memory_low_threshold: 25,
-  storage_high_threshold: 90,
-  imbalance_threshold: 5,
-  homogenization_enabled: true,
-  max_load_spread: 10,
-  cpu_weight: 1.0,
-  memory_weight: 1.0,
-  storage_weight: 0.5,
-  max_concurrent_migrations: 2,
-  migration_cooldown: '5m',
-  max_pending_recommendations: 10,
-  balance_larger_first: false,
-  prevent_overprovisioning: true,
-  enable_affinity_rules: true,
-  enforce_affinity: false,
-  rebalance_schedule: 'interval',
-  rebalance_interval: '15m',
-  rebalance_time: '10:00',
-}
+// Default settings come from the shared module so the client panel and the
+// API route can't drift. The legacy alias `defaultSettings` is kept inline
+// for the rest of this file's existing references.
+const defaultSettings = defaultDRSSettings
 
 // GET /api/v1/orchestrator/drs/settings
 export async function GET() {

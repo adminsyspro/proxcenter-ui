@@ -427,6 +427,23 @@ refresh_compose() {
         printf '\n# Postgres (added by upgrade)\nPOSTGRES_PASSWORD=%s\n' "$pg_pass" >> .env
         log_info "Added POSTGRES_PASSWORD to .env (fresh Postgres on first boot)"
     fi
+
+    # Backfill ORCHESTRATOR_API_KEY when missing OR still set to the
+    # .env.example placeholder. Pre-v1.4.0 installs didn't write this
+    # variable, and operators that bootstrapped from .env.example end up
+    # with `your-orchestrator-api-key-change-me` — both leave the frontend
+    # and orchestrator unable to authenticate against each other.
+    if ! grep -q '^ORCHESTRATOR_API_KEY=' .env; then
+        local orch_key
+        orch_key=$(openssl rand -hex 32)
+        printf '\n# Orchestrator (added by upgrade)\nORCHESTRATOR_API_KEY=%s\n' "$orch_key" >> .env
+        log_info "Added ORCHESTRATOR_API_KEY to .env"
+    elif grep -q '^ORCHESTRATOR_API_KEY=your-orchestrator-api-key-change-me' .env; then
+        local orch_key
+        orch_key=$(openssl rand -hex 32)
+        sed -i "s|^ORCHESTRATOR_API_KEY=your-orchestrator-api-key-change-me|ORCHESTRATOR_API_KEY=$orch_key|" .env
+        log_info "Replaced placeholder ORCHESTRATOR_API_KEY in .env"
+    fi
 }
 
 # ============================================

@@ -77,6 +77,7 @@ import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { useRBAC } from '@/contexts/RBACContext'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
+import { aggregatePermissionErrors } from '@/lib/proxmox/loadNodeAptUpdates'
 
 function HaResourceChips({ resources, allVms }: { resources: string; allVms: any[] }) {
   if (!resources) return <Typography variant="body2" sx={{ opacity: 0.4 }}>-</Typography>
@@ -3249,6 +3250,25 @@ export default function ClusterTabs(props: any) {
                         </Typography>
                       </Alert>
 
+                      {/* Erreur de permission API token */}
+                      {(() => {
+                        const agg = aggregatePermissionErrors(nodeUpdates)
+                        if (!agg) return null
+                        return (
+                          <Alert severity="warning" icon={<i className="ri-shield-keyhole-line" />}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {t('updates.permissionError')}
+                            </Typography>
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                              {t('updates.permissionErrorDesc', { permission: agg.permission })}
+                            </Typography>
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
+                              {agg.nodes.join(', ')}
+                            </Typography>
+                          </Alert>
+                        )
+                      })()}
+
                       {/* Statut des nœuds */}
                       <Card variant="outlined">
                         <CardContent>
@@ -3318,7 +3338,7 @@ export default function ClusterTabs(props: any) {
                                         {nodeUpdate?.loading ? (
                                           <CircularProgress size={14} />
                                         ) : (
-                                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                          <Typography variant="body2" sx={{ fontSize: 12 }}>
                                             {nodeUpdate?.version || '—'}
                                           </Typography>
                                         )}
@@ -3694,13 +3714,13 @@ export default function ClusterTabs(props: any) {
                               </Box>
                               {/* Rows */}
                               {nodeUpdates[updatesDialogNode]?.updates.map((upd: any, idx: number) => {
-                                const pkgName = upd.Package || upd.package || ''
+                                const pkgName = upd.package || ''
                                 const isKernel = pkgName.toLowerCase().includes('kernel') || pkgName.toLowerCase().includes('linux-image')
                                 return (
-                                  <Box 
+                                  <Box
                                     key={idx}
-                                    sx={{ 
-                                      display: 'grid', 
+                                    sx={{
+                                      display: 'grid',
                                       gridTemplateColumns: '1fr 140px 140px',
                                       gap: 1,
                                       px: 1.5,
@@ -3720,11 +3740,11 @@ export default function ClusterTabs(props: any) {
                                         {pkgName}
                                       </Typography>
                                     </Box>
-                                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.6, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {upd.OldVersion || upd.old_version || '—'}
+                                    <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {upd.currentVersion || '—'}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 10, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {upd.Version || upd.version || upd.new_version || '—'}
+                                    <Typography variant="body2" sx={{ fontSize: 11, color: 'success.main', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {upd.newVersion || '—'}
                                     </Typography>
                                   </Box>
                                 )

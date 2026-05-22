@@ -72,6 +72,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
       let ip: string | null = null
       let accurateMem: { used: number; total: number } | null = null
+      let pveversion: string | null = null
 
       try {
         // Fetch network and node status in parallel for each node
@@ -100,6 +101,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
             total: Number(nodeStatus.memory.total || 0),
           }
         }
+
+        const rawPveVersion = nodeStatus?.pveversion as string | undefined
+        if (rawPveVersion) {
+          const parts = rawPveVersion.split('/')
+          pveversion = parts.length >= 2 ? parts[1] : rawPveVersion
+        }
       } catch {
         // Pas d'accès aux interfaces réseau ou au status
       }
@@ -108,6 +115,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         ...node,
         ...(accurateMem ? { mem: accurateMem.used, maxmem: accurateMem.total } : {}),
         ip,
+        pveversion,
         hastate: hastateMap[nodeName] || null,
         bridges: (node as any)._bridges || null,
       }

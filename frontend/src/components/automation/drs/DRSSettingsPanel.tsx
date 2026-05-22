@@ -40,55 +40,102 @@ const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fon
 
 // Help tooltip component
 const HelpTip = ({ text }: { text: string }) => (
-  <Tooltip title={text} arrow placement="top">
+  <Tooltip
+    title={text}
+    arrow
+    placement="top"
+    slotProps={{
+      tooltip: {
+        sx: {
+          bgcolor: 'background.paper',
+          color: 'text.primary',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1.5,
+          boxShadow: 3,
+          fontSize: 12,
+          maxWidth: 320,
+        },
+      },
+      arrow: {
+        sx: {
+          color: 'background.paper',
+          '&::before': {
+            border: '1px solid',
+            borderColor: 'divider',
+          },
+        },
+      },
+    }}
+  >
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', ml: 0.5, cursor: 'help', opacity: 0.5, '&:hover': { opacity: 1 } }}>
       <i className="ri-question-line" style={{ fontSize: 16 }} />
     </Box>
   </Tooltip>
 )
 
-// ============================================
-// Types
-// ============================================
-
-export interface DRSSettings {
-  enabled: boolean
-  mode: 'manual' | 'partial' | 'automatic'
-  balancing_method: 'memory' | 'cpu' | 'disk'
-  balancing_mode: 'used' | 'assigned' | 'psi'
-  balance_types: ('vm' | 'ct')[]
-  maintenance_nodes: string[]
-  excluded_clusters: string[]
-  excluded_nodes: Record<string, string[]>
-  cluster_modes: Record<string, string>
-  cpu_high_threshold: number
-  cpu_low_threshold: number
-  memory_high_threshold: number
-  memory_low_threshold: number
-  storage_high_threshold: number
-  imbalance_threshold: number
-  homogenization_enabled: boolean
-  max_load_spread: number
-  cpu_weight: number
-  memory_weight: number
-  storage_weight: number
-  max_concurrent_migrations: number
-  migration_cooldown: string
-  max_pending_recommendations: number
-  balance_larger_first: boolean
-  prevent_overprovisioning: boolean
-  enable_affinity_rules: boolean
-  enforce_affinity: boolean
-  rebalance_schedule: 'interval' | 'daily'
-  rebalance_interval: string
-  rebalance_time: string
+// SubsectionHeader factorises the "icon + bold subtitle (+ optional help
+// tooltip)" pattern used to introduce each block in the Advanced section.
+// Three repeated blocks were tripping SonarCloud's duplication detector.
+interface SubsectionHeaderProps {
+  icon: string
+  label: string
+  help?: string
+  mb?: number
 }
 
-export interface ClusterVersionInfo {
-  connectionId: string
-  name: string
-  version: number // Major version (8 or 9)
+const SubsectionHeader = ({ icon, label, help, mb = 1.5 }: SubsectionHeaderProps) => (
+  <Typography variant="subtitle2" sx={{ mb, fontWeight: 600 }}>
+    <i className={icon} style={{ fontSize: 18, marginRight: 8, verticalAlign: 'middle' }} />
+    {label}
+    {help && <HelpTip text={help} />}
+  </Typography>
+)
+
+// LabeledSlider factorises the "title + ? tooltip + bounded slider" pattern
+// used several times in the Advanced section. Without this, each repeated
+// block was tripping SonarCloud's duplication detector.
+interface LabeledSliderProps {
+  label: string
+  help: string
+  value: number
+  onChange: (v: number) => void
+  min: number
+  max: number
+  step?: number
+  marks: { value: number; label: string }[]
+  valueLabelFormat?: (v: number) => string
 }
+
+const LabeledSlider = ({ label, help, value, onChange, min, max, step = 1, marks, valueLabelFormat }: LabeledSliderProps) => (
+  <>
+    <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+      {label}
+      <HelpTip text={help} />
+    </Typography>
+    <Box sx={{ px: 1 }}>
+      <Slider
+        value={value}
+        onChange={(_, val) => onChange(val as number)}
+        min={min}
+        max={max}
+        step={step}
+        marks={marks}
+        valueLabelDisplay="auto"
+        valueLabelFormat={valueLabelFormat}
+        size="small"
+      />
+    </Box>
+  </>
+)
+
+// ============================================
+// Types (shared with the API route — see ./drsSettings)
+// ============================================
+
+import { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings } from './drsSettings'
+// Re-export so existing consumers of DRSSettingsPanel keep working.
+export { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings }
 
 interface DRSSettingsPanelProps {
   settings: DRSSettings
@@ -100,49 +147,12 @@ interface DRSSettingsPanelProps {
 }
 
 // ============================================
-// Default settings
-// ============================================
-
-export const defaultDRSSettings: DRSSettings = {
-  enabled: true,
-  mode: 'manual',
-  balancing_method: 'memory',
-  balancing_mode: 'used',
-  balance_types: ['vm', 'ct'],
-  maintenance_nodes: [],
-  excluded_clusters: [],
-  excluded_nodes: {},
-  cluster_modes: {},
-  cpu_high_threshold: 80,
-  cpu_low_threshold: 20,
-  memory_high_threshold: 85,
-  memory_low_threshold: 25,
-  storage_high_threshold: 90,
-  imbalance_threshold: 5,
-  homogenization_enabled: true,
-  max_load_spread: 10,
-  cpu_weight: 1.0,
-  memory_weight: 1.0,
-  storage_weight: 0.5,
-  max_concurrent_migrations: 2,
-  migration_cooldown: '5m',
-  max_pending_recommendations: 10,
-  balance_larger_first: false,
-  prevent_overprovisioning: true,
-  enable_affinity_rules: true,
-  enforce_affinity: false,
-  rebalance_schedule: 'interval',
-  rebalance_interval: '1h',
-  rebalance_time: '10:00',
-}
-
-// ============================================
 // Section definitions
 // ============================================
 
 type SectionKey = 'general' | 'thresholds' | 'affinity' | 'advanced'
 
-const validIntervalOptions = ['1h', '2h', '3h', '4h', '6h', '8h', '12h', '24h']
+const validIntervalOptions = ['15m', '30m', '1h', '2h', '3h', '4h', '6h', '8h', '12h', '24h']
 
 const SECTIONS: { key: SectionKey; icon: string; colorKey: string }[] = [
   { key: 'general', icon: 'ri-speed-line', colorKey: 'primary.main' },
@@ -177,7 +187,10 @@ export default function DRSSettingsPanel({
   const pve8Clusters = clusterVersions.filter(v => v.version < 9)
 
   useEffect(() => {
-    // Clamp legacy sub-1h interval values to 1h
+    // Fall back to 1h when the persisted value is not one of the options we
+    // expose. Sub-1h was once clamped here but is now a first-class choice;
+    // this guard now only catches genuinely unknown values (typos, removed
+    // options) so the Select doesn't render with an empty/uncontrolled value.
     const normalized = { ...initialSettings }
     if (!validIntervalOptions.includes(normalized.rebalance_interval)) {
       normalized.rebalance_interval = '1h'
@@ -471,6 +484,8 @@ export default function DRSSettingsPanel({
                   label={t('drsPage.rebalanceEvery')}
                   onChange={(e) => handleChange('rebalance_interval', e.target.value)}
                 >
+                  <MenuItem value="15m">15 min</MenuItem>
+                  <MenuItem value="30m">30 min</MenuItem>
                   <MenuItem value="1h">1 h</MenuItem>
                   <MenuItem value="2h">2 h</MenuItem>
                   <MenuItem value="3h">3 h</MenuItem>
@@ -737,101 +752,80 @@ export default function DRSSettingsPanel({
 
   const renderAdvanced = () => (
     <>
-      <Grid container spacing={2}>
+      <SubsectionHeader icon="ri-speed-up-line" label={t('drsPage.sectionMigrationLimits')} />
+      <Grid container spacing={2.5} sx={{ mb: 1 }}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.maxConcurrentMigrations')}</Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={settings.max_concurrent_migrations}
-              onChange={(_, val) => handleChange('max_concurrent_migrations', val as number)}
-              min={1}
-              max={10}
-              step={1}
-              marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }]}
-              valueLabelDisplay="auto"
-              size="small"
-            />
-          </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpMaxConcurrent')}</Typography>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.cooldownBetweenMigrations')}</Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={(() => {
-                const s = settings.migration_cooldown || '5m'
-                // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
-                let totalMinutes = 0
-                const hMatch = s.match(/(\d+)h/)
-                const mMatch = s.match(/(\d+)m/)
-                const sMatch = s.match(/^(\d+)s$/)
-                if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
-                if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
-                if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
-                return totalMinutes || 5
-              })()}
-              onChange={(_, val) => handleChange('migration_cooldown', `${val as number}m`)}
-              min={1}
-              max={30}
-              step={1}
-              marks={[{ value: 1, label: '1m' }, { value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }]}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(v) => `${v}m`}
-              size="small"
-            />
-          </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpCooldown')}</Typography>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{t('drsPage.maxPendingRecommendations')}</Typography>
-          <Box sx={{ px: 1 }}>
-            <Slider
-              value={settings.max_pending_recommendations}
-              onChange={(_, val) => handleChange('max_pending_recommendations', val as number)}
-              min={1}
-              max={20}
-              step={1}
-              marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
-              valueLabelDisplay="auto"
-              size="small"
-            />
-          </Box>
-          <Typography variant="caption" color="text.secondary">{t('drsPage.helpMaxPending')}</Typography>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.balance_larger_first}
-                onChange={(e) => handleChange('balance_larger_first', e.target.checked)}
-              />
-            }
-            label={<>{t('drsPage.migrateLargerFirst')}<HelpTip text={t('drsPage.helpLargerFirst')} /></>}
+          <LabeledSlider
+            label={t('drsPage.maxConcurrentPerCluster')}
+            help={t('drsPage.helpMaxConcurrentPerCluster')}
+            value={settings.max_concurrent_migrations_per_cluster || 2}
+            onChange={(v) => handleChange('max_concurrent_migrations_per_cluster', v)}
+            min={1}
+            max={10}
+            marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }]}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={settings.prevent_overprovisioning}
-                onChange={(e) => handleChange('prevent_overprovisioning', e.target.checked)}
-              />
-            }
-            label={<>{t('drsPage.preventOverprovisioning')}<HelpTip text={t('drsPage.helpPreventOverprov')} /></>}
+          <LabeledSlider
+            label={t('drsPage.maxTargetInflowPerCycle')}
+            help={t('drsPage.helpMaxTargetInflow')}
+            value={settings.max_target_inflow_per_cycle}
+            onChange={(v) => handleChange('max_target_inflow_per_cycle', v)}
+            min={0}
+            max={5}
+            marks={[{ value: 0, label: 'off' }, { value: 1, label: '1' }, { value: 3, label: '3' }, { value: 5, label: '5' }]}
+            valueLabelFormat={(v) => (v === 0 ? 'off' : String(v))}
           />
         </Grid>
       </Grid>
 
       <Divider sx={{ my: 2 }} />
 
-      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-        {t('drsPage.resourceWeights')}
-        <HelpTip text={t('drsPage.helpResourceWeights')} />
-      </Typography>
+      <SubsectionHeader icon="ri-tools-line" label={t('drsPage.sectionMigrationBehavior')} />
+      <Grid container spacing={2.5} sx={{ mb: 1 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <LabeledSlider
+            label={t('drsPage.cooldownBetweenMigrations')}
+            help={t('drsPage.helpCooldown')}
+            value={(() => {
+              const s = settings.migration_cooldown || '5m'
+              // Parse Go duration format: "5m", "5m0s", "1h30m", "30s"
+              let totalMinutes = 0
+              const hMatch = s.match(/(\d+)h/)
+              const mMatch = s.match(/(\d+)m/)
+              const sMatch = s.match(/^(\d+)s$/)
+              if (hMatch) totalMinutes += Number.parseInt(hMatch[1]) * 60
+              if (mMatch) totalMinutes += Number.parseInt(mMatch[1])
+              if (sMatch) totalMinutes = Math.max(1, Math.round(Number.parseInt(sMatch[1]) / 60))
+              return totalMinutes || 5
+            })()}
+            onChange={(v) => handleChange('migration_cooldown', `${v}m`)}
+            min={1}
+            max={30}
+            marks={[{ value: 1, label: '1m' }, { value: 5, label: '5m' }, { value: 15, label: '15m' }, { value: 30, label: '30m' }]}
+            valueLabelFormat={(v) => `${v}m`}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <LabeledSlider
+            label={t('drsPage.maxPendingRecommendations')}
+            help={t('drsPage.helpMaxPending')}
+            value={settings.max_pending_recommendations}
+            onChange={(v) => handleChange('max_pending_recommendations', v)}
+            min={1}
+            max={20}
+            marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }, { value: 20, label: '20' }]}
+          />
+        </Grid>
+      </Grid>
+
+      <Divider sx={{ my: 2 }} />
+
+      <SubsectionHeader icon="ri-scales-3-line" label={t('drsPage.resourceWeights')} help={t('drsPage.helpResourceWeights')} mb={0.5} />
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
         {t('drsPage.helpResourceWeightsDesc')}
       </Typography>
-      <Grid container spacing={2}>
+      <Grid container spacing={2.5}>
         <Grid size={{ xs: 12, md: 4 }}>
           <Typography variant="caption">{t('drsPage.cpuWeight', { value: settings.cpu_weight.toFixed(1) })}</Typography>
           <Slider
@@ -866,26 +860,6 @@ export default function DRSSettingsPanel({
           />
         </Grid>
       </Grid>
-
-      <Divider sx={{ my: 2 }} />
-
-      <Alert severity="info" icon={<InfoIcon />} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-          <i className="ri-line-chart-line" style={{ fontSize: 16, marginRight: 6, verticalAlign: 'middle' }} />
-          {t('drsPage.metricsSmoothing')}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {t('drsPage.metricsSmoothingDesc')}
-        </Typography>
-        <Box sx={{ bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 1, fontFamily: 'JetBrains Mono, monospace' }}>
-          <Typography variant="body2" sx={{ fontFamily: 'inherit', fontWeight: 600 }}>
-            {t('drsPage.metricsSmoothingFormula')}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'inherit' }}>
-            {t('drsPage.metricsSmoothingFormulaDesc')}
-          </Typography>
-        </Box>
-      </Alert>
     </>
   )
 

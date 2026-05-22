@@ -126,6 +126,7 @@ import ClusterTabs from './tabs/ClusterTabs'
 import NodeTabs from './tabs/NodeTabs'
 import { UploadDialog } from '@/components/storage/StorageContentBrowser'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
+import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 
 /* ------------------------------------------------------------------ */
 /* Main component                                                     */
@@ -1784,42 +1785,7 @@ return
       [node]: { count: 0, updates: [], version: null, loading: true }
     }))
 
-    const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`
-
-    const fetchAndSet = (json: any, permError?: string) => {
-      const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-      const pveVersion = pvePkg?.currentVersion || null
-      setNodeUpdates(prev => ({
-        ...prev,
-        [node]: { count: json.count || 0, updates: json.data || [], version: pveVersion, loading: false, permissionError: permError || null }
-      }))
-    }
-
-    fetch(aptUrl)
-      .then(res => res.json())
-      .then(json => {
-        if (json.needsRefresh) {
-          // Package list stale (e.g. apt update never ran) - trigger apt update then re-fetch
-          return fetch(aptUrl, { method: 'POST' })
-            .then(async (postRes) => {
-              if (postRes.status === 403) {
-                const postJson = await postRes.json()
-                fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
-                return
-              }
-              const res = await fetch(aptUrl)
-              const freshJson = await res.json()
-              fetchAndSet(freshJson)
-            })
-        }
-        fetchAndSet(json)
-      })
-      .catch(() => {
-        setNodeUpdates(prev => ({
-          ...prev,
-          [node]: { count: 0, updates: [], version: null, loading: false, permissionError: null }
-        }))
-      })
+    loadNodeAptUpdates({ connId, nodeName: node, setNodeUpdates })
   }, [selection?.type, selection?.id, nodeTab, data?.clusterName, nodeUpdates])
 
   // Charger les mises à jour quand on sélectionne l'onglet Rolling Update
@@ -1835,47 +1801,12 @@ return
             [node.node]: { count: 0, updates: [], version: null, loading: true }
           }))
 
-          const aptUrl = `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node.node)}/apt`
-
-          const fetchAndSet = (json: any, permError?: string) => {
-            const pvePkg = (json.data || []).find((p: any) => p.package === 'pve-manager')
-            const pveVersion = pvePkg?.currentVersion || node.pveversion || null
-            setNodeUpdates(prev => ({
-              ...prev,
-              [node.node]: {
-                count: json.count || 0,
-                updates: json.data || [],
-                version: pveVersion,
-                loading: false,
-                permissionError: permError || null
-              }
-            }))
-          }
-
-          fetch(aptUrl)
-            .then(res => res.json())
-            .then(json => {
-              if (json.needsRefresh) {
-                return fetch(aptUrl, { method: 'POST' })
-                  .then(async (postRes) => {
-                    if (postRes.status === 403) {
-                      const postJson = await postRes.json()
-                      fetchAndSet({ data: [], count: 0 }, postJson.requiredPermission || 'Sys.Modify')
-                      return
-                    }
-                    const res = await fetch(aptUrl)
-                    const freshJson = await res.json()
-                    fetchAndSet(freshJson)
-                  })
-              }
-              fetchAndSet(json)
-            })
-            .catch(() => {
-              setNodeUpdates(prev => ({
-                ...prev,
-                [node.node]: { count: 0, updates: [], version: null, loading: false, permissionError: null }
-              }))
-            })
+          loadNodeAptUpdates({
+            connId,
+            nodeName: node.node,
+            setNodeUpdates,
+            versionFallback: node.pveversion || null,
+          })
         }
         
         // Charger les VMs avec stockage local

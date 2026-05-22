@@ -511,7 +511,7 @@ export function useHardwareHandlers({
   const [clusterFirewallLoaded, setClusterFirewallLoaded] = useState(false)
 
   // États pour Rolling Update
-  const [nodeUpdates, setNodeUpdates] = useState<Record<string, { count: number; updates: any[]; version: string | null; loading: boolean }>>({})
+  const [nodeUpdates, setNodeUpdates] = useState<Record<string, { count: number; updates: any[]; version: string | null; loading: boolean; permissionError?: string | null }>>({})
   const [nodeLocalVms, setNodeLocalVms] = useState<Record<string, {
     total: number;
     running: number;

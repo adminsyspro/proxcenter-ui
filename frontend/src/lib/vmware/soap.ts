@@ -53,7 +53,20 @@ export async function soapRetrieveServiceContent(
   return { sessionManager, propertyCollector, rootFolder, isVcenter, apiVersion }
 }
 
-/** Send a SOAP request to the ESXi /sdk endpoint */
+/** Send a SOAP request to the ESXi /sdk endpoint.
+ *
+ * Uses undici's lower-level `request()` API rather than the WHATWG fetch
+ * wrapper. Reason: in node 26-alpine (undici 8.x) the WHATWG Response
+ * returned by `fetch()` exposes an EMPTY Headers object whenever a custom
+ * `dispatcher` is passed (the path we take for `insecureTLS=true`). The
+ * body still parses fine, but Set-Cookie is gone, so the vCenter session
+ * cookie never makes it back to the caller and every subsequent SOAP
+ * call fails with "The session is not authenticated." (observed live
+ * 2026-05-21 on the prod v1.4.1 image). Undici `request()` returns
+ * headers as a plain object indexed by lowercased name, and Set-Cookie
+ * comes through as a string array, so we read the session cookie
+ * directly without going through the broken Headers proxy.
+ */
 export async function soapRequest(
   baseUrl: string,
   body: string,
@@ -61,36 +74,39 @@ export async function soapRequest(
   insecureTLS: boolean,
   timeoutMs = 30000
 ): Promise<{ text: string; cookie?: string }> {
-  const opts: any = {
+  const { request, Agent } = await import("undici")
+  const headers: Record<string, string> = {
+    "Content-Type": "text/xml; charset=utf-8",
+    SOAPAction: '"urn:vim25/8.0"',
+    // See header comment on the previous fetch-based version: forcing identity
+    // sidesteps brotli decompression edge cases on newer undici.
+    "Accept-Encoding": "identity",
+  }
+  if (cookie) headers.Cookie = cookie
+  const res = await request(`${baseUrl}/sdk`, {
     method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=utf-8",
-      SOAPAction: '"urn:vim25/8.0"',
-      // Ask vCenter for uncompressed responses. The custom undici Agent
-      // instantiated below (for insecureTLS) doesn't always advertise
-      // Accept-Encoding the way the default fetch does, so vCenter
-      // sometimes sends a compressed/binary body while we read it via
-      // .text(), which produces replacement characters and breaks XML
-      // parsing (observed live on v1.4.1 after the node 22-alpine to
-      // 26-alpine bump shipped a newer undici). Identity sidesteps the
-      // whole content-encoding negotiation; SOAP payloads are small
-      // enough that the extra bytes on the wire are not a concern.
-      "Accept-Encoding": "identity",
-      ...(cookie ? { Cookie: cookie } : {}),
-    },
+    headers,
     body,
     signal: AbortSignal.timeout(timeoutMs),
-  }
-  if (insecureTLS) {
-    opts.dispatcher = new (await import("undici")).Agent({ connect: { rejectUnauthorized: false } })
-  }
-  const res = await fetch(`${baseUrl}/sdk`, opts)
-  const text = await res.text()
-  if (!res.ok && !text.includes("returnval")) {
+    dispatcher: insecureTLS
+      ? new Agent({ connect: { rejectUnauthorized: false } })
+      : undefined,
+  })
+  const text = await res.body.text()
+  if (res.statusCode >= 400 && !text.includes("returnval")) {
     const fault = text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1]
-    throw new Error(`SOAP error ${res.status}: ${fault || text.substring(0, 500)}`)
+    throw new Error(`SOAP error ${res.statusCode}: ${fault || text.substring(0, 500)}`)
   }
-  const rawCookie = res.headers.get("set-cookie") || ""
+  // `request()` returns headers as `Record<string, string | string[]>`
+  // keyed by lowercased name. Set-Cookie is the canonical repeating
+  // header so it comes through as a string[] when there are multiple.
+  const setCookieRaw = res.headers["set-cookie"]
+  const setCookieArr = Array.isArray(setCookieRaw)
+    ? setCookieRaw
+    : typeof setCookieRaw === "string"
+      ? [setCookieRaw]
+      : []
+  const rawCookie = setCookieArr[0] || ""
   return { text, cookie: rawCookie.split(";")[0] || "" }
 }
 

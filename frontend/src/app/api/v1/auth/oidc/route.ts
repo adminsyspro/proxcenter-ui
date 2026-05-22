@@ -1,6 +1,7 @@
 // src/app/api/v1/auth/oidc/route.ts
 import { NextResponse } from "next/server"
 
+import { normalizeGroupRoleMapping } from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -105,17 +106,7 @@ export async function PUT(req: Request) {
       }
     }
 
-    // Same normalisation pattern as the LDAP route.
-    let mappingObj: Record<string, string> = {}
-    if (typeof group_role_mapping === "string") {
-      try {
-        mappingObj = JSON.parse(group_role_mapping || "{}")
-      } catch {
-        mappingObj = {}
-      }
-    } else if (group_role_mapping && typeof group_role_mapping === "object") {
-      mappingObj = group_role_mapping as Record<string, string>
-    }
+    const mappingObj = normalizeGroupRoleMapping(group_role_mapping)
 
     const now = new Date()
     const baseData = {

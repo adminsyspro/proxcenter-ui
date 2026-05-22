@@ -131,6 +131,7 @@
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
     "fast-uri": ">=3.1.2",
-    "postcss": "$postcss"
+    "postcss": "$postcss",
+    "js-cookie": "^3.0.7"
   }
 }

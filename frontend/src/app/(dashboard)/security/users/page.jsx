@@ -145,6 +145,7 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [password, setPassword] = useState('')
   const [enabled, setEnabled] = useState(true)
   const [selectedRole, setSelectedRole] = useState(null)
+  const [initialRoleId, setInitialRoleId] = useState(null)
   const [selectedTenants, setSelectedTenants] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -174,7 +175,9 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
       // Divergent roles → leave the picker empty so the operator must
       // pick a role explicitly (and acknowledge the propagation).
       const distinctIds = new Set((user.roles || []).map(r => r.id).filter(Boolean))
-      setSelectedRole(distinctIds.size > 1 ? null : (user.roles?.[0] || null))
+      const initialRole = distinctIds.size > 1 ? null : (user.roles?.[0] || null)
+      setSelectedRole(initialRole)
+      setInitialRoleId(initialRole?.id ?? null)
       setSelectedTenants(Array.isArray(user.tenants) ? user.tenants.map(t2 => t2.id) : [])
       setPassword('')
     } else {
@@ -259,7 +262,13 @@ return
             enabled: enabled ? 1 : 0,
             ...(password ? { password } : {}),
             ...(enableTenantMgmt && !tenantPickerDisabled ? { tenantIds: selectedTenants } : {}),
-            ...(enableTenantMgmt && showRbac && !isSelf ? { roleId: selectedRole?.id ?? null } : {}),
+            // Only include roleId when the operator actually changed it.
+            // This avoids re-sending a protected role (super_admin /
+            // provider_admin) the backend would refuse, when the dialog is
+            // just being used to edit other fields.
+            ...(enableTenantMgmt && showRbac && !isSelf && (selectedRole?.id ?? null) !== initialRoleId
+              ? { roleId: selectedRole?.id ?? null }
+              : {}),
           }
         : {
             email,
@@ -410,9 +419,13 @@ return
                 : (user?.tenants?.map(tn => tn.id) ?? []))
             : [currentSessionTenantId]
           const hasNonDefaultTarget = targetTenantIds.some(id => id !== 'default')
-          const visibleRoles = hasNonDefaultTarget
+          // PROTECTED_ROLE_IDS (super_admin, provider_admin) are managed
+          // exclusively from Security > RBAC > Assignments — the backend
+          // PATCH /users/[id] refuses them. Hide them from this dropdown
+          // so the operator doesn't pick something the API rejects.
+          const visibleRoles = (hasNonDefaultTarget
             ? rbacRoles.filter(r => !TENANT_FORBIDDEN_ROLE_IDS.has(r.id))
-            : rbacRoles
+            : rbacRoles).filter(r => r.id !== 'role_super_admin' && r.id !== 'role_provider_admin')
 
           return (
           <Autocomplete

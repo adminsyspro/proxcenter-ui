@@ -240,14 +240,58 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const grantedById = session?.user?.id || null
       const now = new Date()
 
+      // Safety net: if this PATCH would strip the target's protected grants
+      // (super_admin / provider_admin) AND the target is currently the last
+      // active holder of role_super_admin, refuse — the platform would lock
+      // itself out. Provider_admin is co-equivalent in blast radius but is
+      // not a hard floor; we only guard super_admin here.
+      const wouldStripProtected =
+        // explicit demotion: a non-protected role was picked → all grants drop
+        typeof roleId === "string" && roleId.length > 0 &&
+        !(PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)
+      if (wouldStripProtected) {
+        const isTargetSuperAdmin = await prisma.rbacUserRole.findFirst({
+          where: {
+            userId: id,
+            roleId: "role_super_admin",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+          select: { id: true },
+        })
+        if (isTargetSuperAdmin) {
+          const otherSuperAdmins = await prisma.rbacUserRole.findFirst({
+            where: {
+              userId: { not: id },
+              roleId: "role_super_admin",
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+            select: { id: true },
+          })
+          if (!otherSuperAdmins) {
+            return NextResponse.json(
+              {
+                error: "Cannot demote the last super_admin. Grant role_super_admin to another user first.",
+                code: "LAST_SUPER_ADMIN",
+              },
+              { status: 409 }
+            )
+          }
+        }
+      }
+
       await prisma.$transaction(async tx => {
-        // Drop every non-protected grant — protected ones (super_admin,
-        // provider_admin) stay untouched so we don't accidentally demote
-        // a super-admin via the user dialog.
+        // When the admin picks a non-protected role, fully replace every
+        // existing grant — including protected ones — so the resulting
+        // state matches what they selected. The last-super-admin safety
+        // check above blocks the only scenario where this could lock the
+        // platform out. When the admin clears the role (null / empty
+        // string) we keep protected grants intact: the dialog has no UI
+        // to demote a super_admin to "no role at all", that action goes
+        // through Security > RBAC > Assignments.
         await tx.rbacUserRole.deleteMany({
           where: {
             userId: id,
-            roleId: { notIn: [...PROTECTED_ROLE_IDS] },
+            ...(wouldStripProtected ? {} : { roleId: { notIn: [...PROTECTED_ROLE_IDS] } }),
           },
         })
         if (typeof roleId === "string" && roleId.length > 0) {

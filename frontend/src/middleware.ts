@@ -20,6 +20,22 @@ const publicRoutes = [
   "/reset-password",
 ]
 
+// Routes that bypass the 2FA enrollment redirect entirely, even when the
+// JWT carries mustEnroll2fa: true. Either the enrollment page itself, the
+// routes the wizard calls, or session machinery.
+const ENROLL_BYPASS = [
+  "/profile/2fa/enrollment",
+  "/api/v1/auth/2fa/enroll",
+  "/api/v1/auth/me",
+  "/api/auth",
+  "/login",
+  "/logout",
+]
+
+function isEnrollBypass(pathname: string): boolean {
+  return ENROLL_BYPASS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+}
+
 // Routes API publiques
 const publicApiRoutes = [
   "/api/auth",
@@ -180,6 +196,10 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
 
+    if (token.mustEnroll2fa && !isEnrollBypass(pathname)) {
+      return NextResponse.redirect(new URL("/profile/2fa/enrollment", request.url))
+    }
+
     return response
   }
 
@@ -207,6 +227,16 @@ export async function middleware(request: NextRequest) {
     loginUrl.searchParams.set("callbackUrl", pathname)
 
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (token.mustEnroll2fa && !isEnrollBypass(pathname)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "ENROLLMENT_REQUIRED", redirect: "/profile/2fa/enrollment" },
+        { status: 403 }
+      )
+    }
+    return NextResponse.redirect(new URL("/profile/2fa/enrollment", request.url))
   }
 
   // Utilisateur authentifié, continuer

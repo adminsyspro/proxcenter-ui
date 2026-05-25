@@ -6271,7 +6271,8 @@
     "deactivateAll": "Alle deaktivieren",
     "confirmDeleteProfile": "sind Sie sicher you want to löschen this Profil?",
     "noProfiles": "Noch keine Profile vorhanden. Erstellen Sie eines, um anzupassen, welche Prüfungen durchgeführt und wie sie gewichtet werden.",
-    "recommendation": "Empfehlung"
+    "recommendation": "Empfehlung",
+    "twoFactorPolicy": "Zwei-Faktor-Authentifizierungsrichtlinie"
   },
   "changes": {
     "title": "Änderungsverfolgung",

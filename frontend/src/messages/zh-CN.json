@@ -6274,7 +6274,8 @@
     "deactivateAll": "全部停用",
     "confirmDeleteProfile": "确定要删除此配置文件吗？",
     "noProfiles": "暂无配置文件。创建一个以自定义运行的检查项及其权重。",
-    "recommendation": "建议"
+    "recommendation": "建议",
+    "twoFactorPolicy": "双因素身份验证策略"
   },
   "changes": {
     "title": "变更追踪",

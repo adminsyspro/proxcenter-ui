@@ -6347,7 +6347,8 @@
     "deactivateAll": "Tout désactiver",
     "confirmDeleteProfile": "Êtes-vous sûr de vouloir supprimer ce profil ?",
     "noProfiles": "Aucun profil. Créez-en un pour personnaliser les vérifications exécutées et leur pondération.",
-    "recommendation": "Recommandation"
+    "recommendation": "Recommandation",
+    "twoFactorPolicy": "Politique d'authentification a deux facteurs"
   },
   "changes": {
     "title": "Suivi des changements",

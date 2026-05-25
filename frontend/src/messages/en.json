@@ -6346,7 +6346,8 @@
     "deactivateAll": "Deactivate all",
     "confirmDeleteProfile": "Are you sure you want to delete this profile?",
     "noProfiles": "No profiles yet. Create one to customize which checks are run and their weights.",
-    "recommendation": "Recommendation"
+    "recommendation": "Recommendation",
+    "twoFactorPolicy": "Two-Factor Authentication Policy"
   },
   "changes": {
     "title": "Change Tracking",

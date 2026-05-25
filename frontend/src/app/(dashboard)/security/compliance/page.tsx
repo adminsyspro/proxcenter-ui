@@ -982,6 +982,7 @@ function PoliciesTab() {
   const [form, setForm] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [policy2faError, setPolicy2faError] = useState<string | null>(null)
 
   useEffect(() => {
     if (policies && !form) {
@@ -997,6 +998,7 @@ function PoliciesTab() {
     if (!form) return
     setSaving(true)
     setToast(null)
+    setPolicy2faError(null)
     try {
       const res = await fetch('/api/v1/compliance/policies', {
         method: 'PUT',
@@ -1005,9 +1007,14 @@ function PoliciesTab() {
       })
       if (!res.ok) {
         const err = await res.json()
+        if (err.code === 'E_NEED_OWN_2FA') {
+          setPolicy2faError(t('twoFactor.policyNeedOwn2fa'))
+          return
+        }
         throw new Error(err.error || 'Failed to save')
       }
       mutate()
+      setPolicy2faError(null)
       setToast({ type: 'success', message: t('compliance.policiesSaved') })
     } catch (e: any) {
       setToast({ type: 'error', message: e?.message || 'Error' })
@@ -1160,6 +1167,39 @@ function PoliciesTab() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Two-Factor Authentication Policy */}
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <i className="ri-shield-keyhole-line" style={{ fontSize: 20 }} />
+            <Typography variant="h6">{t('compliance.twoFactorPolicy')}</Typography>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={!!form.require_2fa_for_super_admin}
+                  onChange={(e) => {
+                    setPolicy2faError(null)
+                    handleChange('require_2fa_for_super_admin', e.target.checked)
+                  }}
+                />
+              }
+              label={t('twoFactor.policyToggleLabel')}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ pl: '42px' }}>
+              {t('twoFactor.policyToggleHelp')}
+            </Typography>
+            {policy2faError && (
+              <Alert severity="error" sx={{ mt: 1 }}>
+                {policy2faError}
+              </Alert>
+            )}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* Save button */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

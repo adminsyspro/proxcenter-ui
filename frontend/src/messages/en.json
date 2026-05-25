@@ -6934,6 +6934,13 @@
     "adminDisableMenu": "Disable 2FA",
     "adminDisableConfirmTitle": "Disable 2FA for {email}",
     "adminDisableConfirmBody": "Type the user's email to confirm.",
+    "adminRequireMenu": "Require 2FA",
+    "adminClearRequirementMenu": "Cancel 2FA requirement",
+    "adminRequireConfirmTitle": "Require 2FA for {email}",
+    "adminRequireConfirmBody": "This user will be redirected to the enrollment wizard on their next sign-in and must complete it before regaining access.",
+    "adminClearRequirementConfirmTitle": "Cancel 2FA requirement for {email}",
+    "adminClearRequirementConfirmBody": "This user will no longer be forced to enroll. If they have already enrolled, their TOTP stays active.",
+    "requirementPending": "2FA enrollment required at next sign-in",
     "policyToggleLabel": "Require 2FA for super_admin accounts",
     "policyToggleHelp": "Once enabled, super_admin users without 2FA will be forced to enroll on their next login. You must already have 2FA enabled on your own account to turn this on.",
     "policyNeedOwn2fa": "Enable 2FA on your own account before enforcing this policy."

@@ -662,6 +662,73 @@ function Disable2FADialog({ open, onClose, user, onSuccess, t }) {
 }
 
 /* --------------------------------
+   Require / Cancel 2FA-requirement Dialog
+   (non-destructive — simple confirm, no email typing)
+-------------------------------- */
+
+function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const isRequire = mode === 'require'
+  const titleKey = isRequire ? 'twoFactor.adminRequireConfirmTitle' : 'twoFactor.adminClearRequirementConfirmTitle'
+  const bodyKey = isRequire ? 'twoFactor.adminRequireConfirmBody' : 'twoFactor.adminClearRequirementConfirmBody'
+  const path = isRequire ? 'require' : 'clear-requirement'
+
+  const handleConfirm = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/v1/admin/users/${user.id}/2fa/${path}`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        onSuccess(user.id, isRequire)
+        onClose()
+        return
+      }
+      let data = {}
+      try { data = await res.json() } catch (_) {}
+      setError(data.error || t('common.error'))
+    } catch (_) {
+      setError(t('errors.connectionError'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClose = () => {
+    setError('')
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <i className={isRequire ? 'ri-shield-keyhole-line' : 'ri-shield-cross-line'} />
+        {t(titleKey, { email: user?.email || '' })}
+      </DialogTitle>
+      <DialogContent>
+        {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+        <Typography>{t(bodyKey)}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose}>{t('common.cancel')}</Button>
+        <Button
+          variant='contained'
+          color={isRequire ? 'info' : 'inherit'}
+          onClick={handleConfirm}
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={16} /> : null}
+        >
+          {t('common.confirm')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+/* --------------------------------
    Main Page
 -------------------------------- */
 
@@ -765,6 +832,32 @@ return () => setPageInfo('', '', '')
       return {
         ...prev,
         data: prev.data.map(u => u.id === userId ? { ...u, totp_enabled: false } : u),
+      }
+    }, false)
+  }, [mutateUsers])
+
+  const [require2FADialogOpen, setRequire2FADialogOpen] = useState(false)
+  const [require2FADialogMode, setRequire2FADialogMode] = useState('require') // 'require' | 'clear'
+  const [userToRequire2FA, setUserToRequire2FA] = useState(null)
+
+  const handleRequire2FA = (user) => {
+    setUserToRequire2FA(user)
+    setRequire2FADialogMode('require')
+    setRequire2FADialogOpen(true)
+  }
+
+  const handleClearRequire2FA = (user) => {
+    setUserToRequire2FA(user)
+    setRequire2FADialogMode('clear')
+    setRequire2FADialogOpen(true)
+  }
+
+  const handle2FARequirementChanged = useCallback((userId, isRequired) => {
+    mutateUsers(prev => {
+      if (!prev?.data) return prev
+      return {
+        ...prev,
+        data: prev.data.map(u => u.id === userId ? { ...u, require_2fa_enrollment: isRequired } : u),
       }
     }, false)
   }, [mutateUsers])
@@ -877,30 +970,42 @@ return () => setPageInfo('', '', '')
         headerName: t('twoFactor.columnHeader'),
         width: 70,
         sortable: true,
-        renderCell: params => params.row.totp_enabled ? (
-          <Tooltip
-            title={t('twoFactor.statusEnabled')}
-            slotProps={{
-              tooltip: {
-                sx: {
-                  bgcolor: 'background.paper',
-                  color: 'text.primary',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  boxShadow: 1,
-                },
+        renderCell: params => {
+          const tooltipSlot = {
+            tooltip: {
+              sx: {
+                bgcolor: 'background.paper',
+                color: 'text.primary',
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: 1,
               },
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-              <i className='ri-shield-check-line' style={{ fontSize: 18, color: '#22c55e' }} />
-            </Box>
-          </Tooltip>
-        ) : (
-          <Typography variant='body2' sx={{ opacity: 0.35, textAlign: 'center', width: '100%' }}>
-            {'–'}
-          </Typography>
-        ),
+            },
+          }
+          if (params.row.totp_enabled) {
+            return (
+              <Tooltip title={t('twoFactor.statusEnabled')} slotProps={tooltipSlot}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                  <i className='ri-shield-check-line' style={{ fontSize: 18, color: '#22c55e' }} />
+                </Box>
+              </Tooltip>
+            )
+          }
+          if (params.row.require_2fa_enrollment) {
+            return (
+              <Tooltip title={t('twoFactor.requirementPending')} slotProps={tooltipSlot}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+                  <i className='ri-time-line' style={{ fontSize: 18, color: '#f59e0b' }} />
+                </Box>
+              </Tooltip>
+            )
+          }
+          return (
+            <Typography variant='body2' sx={{ opacity: 0.35, textAlign: 'center', width: '100%' }}>
+              {'–'}
+            </Typography>
+          )
+        },
       },
       {
         field: 'enabled',
@@ -959,6 +1064,30 @@ return () => setPageInfo('', '', '')
                 </IconButton>
               </Tooltip>
             )}
+            {/* Require 2FA: only visible when the row has NO 2FA AND no pending requirement AND is not the current session user */}
+            {!params.row.totp_enabled && !params.row.require_2fa_enrollment && params.row.id !== session?.user?.id && (
+              <Tooltip title={t('twoFactor.adminRequireMenu')}>
+                <IconButton
+                  size='small'
+                  color='info'
+                  onClick={() => handleRequire2FA(params.row)}
+                >
+                  <i className='ri-shield-keyhole-line' />
+                </IconButton>
+              </Tooltip>
+            )}
+            {/* Cancel 2FA requirement: only visible when the row has a pending requirement (and no 2FA yet) */}
+            {!params.row.totp_enabled && params.row.require_2fa_enrollment && params.row.id !== session?.user?.id && (
+              <Tooltip title={t('twoFactor.adminClearRequirementMenu')}>
+                <IconButton
+                  size='small'
+                  color='inherit'
+                  onClick={() => handleClearRequire2FA(params.row)}
+                >
+                  <i className='ri-shield-cross-line' />
+                </IconButton>
+              </Tooltip>
+            )}
             {/* Hide delete on your own row — self-delete is refused by the backend */}
             {params.row.id !== session?.user?.id && (
               <Tooltip title={t('common.delete')}>
@@ -975,7 +1104,7 @@ return () => setPageInfo('', '', '')
         ),
       },
     ],
-    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA]
+    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA, handleRequire2FA, handleClearRequire2FA]
   )
 
   return (
@@ -1071,6 +1200,15 @@ return () => setPageInfo('', '', '')
         onClose={() => setDisable2FADialogOpen(false)}
         user={userToDisable2FA}
         onSuccess={handle2FADisabled}
+        t={t}
+      />
+
+      <Require2FADialog
+        open={require2FADialogOpen}
+        mode={require2FADialogMode}
+        onClose={() => setRequire2FADialogOpen(false)}
+        user={userToRequire2FA}
+        onSuccess={handle2FARequirementChanged}
         t={t}
       />
     </Box>

@@ -6793,6 +6793,13 @@
     "adminDisableMenu": "禁用 2FA",
     "adminDisableConfirmTitle": "为 {email} 禁用 2FA",
     "adminDisableConfirmBody": "请输入用户的邮箱以确认。",
+    "adminRequireMenu": "强制启用 2FA",
+    "adminClearRequirementMenu": "取消 2FA 强制要求",
+    "adminRequireConfirmTitle": "对 {email} 强制启用 2FA",
+    "adminRequireConfirmBody": "该用户下次登录时将被重定向到 2FA 绑定流程,并必须完成绑定才能继续使用。",
+    "adminClearRequirementConfirmTitle": "取消对 {email} 的 2FA 强制要求",
+    "adminClearRequirementConfirmBody": "该用户将不再被强制启用 2FA。如果已经绑定,其 TOTP 将保持有效。",
+    "requirementPending": "下次登录时将强制启用 2FA",
     "policyToggleLabel": "强制 super_admin 账户启用 2FA",
     "policyToggleHelp": "启用后,未启用 2FA 的 super_admin 用户在下次登录时将被强制完成绑定。您必须先在自己的账户上启用 2FA,才能开启此策略。",
     "policyNeedOwn2fa": "在强制此策略之前,请先在您自己的账户上启用 2FA。"

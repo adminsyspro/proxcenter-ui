@@ -6935,6 +6935,13 @@
     "adminDisableMenu": "Désactiver la 2FA",
     "adminDisableConfirmTitle": "Désactiver la 2FA pour {email}",
     "adminDisableConfirmBody": "Tapez l'email de l'utilisateur pour confirmer.",
+    "adminRequireMenu": "Exiger la 2FA",
+    "adminClearRequirementMenu": "Annuler l'exigence 2FA",
+    "adminRequireConfirmTitle": "Exiger la 2FA pour {email}",
+    "adminRequireConfirmBody": "Cet utilisateur sera redirigé vers l'assistant d'enrôlement à sa prochaine connexion et devra le compléter avant de regagner l'accès.",
+    "adminClearRequirementConfirmTitle": "Annuler l'exigence 2FA pour {email}",
+    "adminClearRequirementConfirmBody": "Cet utilisateur ne sera plus forcé à s'enrôler. S'il a déjà activé la 2FA, son TOTP reste actif.",
+    "requirementPending": "Enrôlement 2FA exigé à la prochaine connexion",
     "policyToggleLabel": "Exiger la 2FA pour les comptes super_admin",
     "policyToggleHelp": "Une fois activé, les comptes super_admin sans 2FA seront forcés de l'activer à leur prochaine connexion. Vous devez avoir la 2FA active sur votre propre compte pour activer cette policy.",
     "policyNeedOwn2fa": "Activez la 2FA sur votre propre compte avant d'imposer cette policy."

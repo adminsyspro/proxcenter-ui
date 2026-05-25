@@ -6789,6 +6789,13 @@
     "adminDisableMenu": "2FA deaktivieren",
     "adminDisableConfirmTitle": "2FA für {email} deaktivieren",
     "adminDisableConfirmBody": "Geben Sie zur Bestätigung die E-Mail-Adresse des Benutzers ein.",
+    "adminRequireMenu": "2FA verlangen",
+    "adminClearRequirementMenu": "2FA-Anforderung aufheben",
+    "adminRequireConfirmTitle": "2FA für {email} verlangen",
+    "adminRequireConfirmBody": "Dieser Benutzer wird bei der nächsten Anmeldung zum Aktivierungs-Assistenten weitergeleitet und muss diesen abschließen, bevor er wieder Zugriff erhält.",
+    "adminClearRequirementConfirmTitle": "2FA-Anforderung für {email} aufheben",
+    "adminClearRequirementConfirmBody": "Dieser Benutzer wird nicht mehr zur Aktivierung gezwungen. Falls er bereits aktiviert hat, bleibt sein TOTP aktiv.",
+    "requirementPending": "2FA-Aktivierung wird bei nächster Anmeldung verlangt",
     "policyToggleLabel": "2FA für super_admin-Konten verlangen",
     "policyToggleHelp": "Sobald aktiviert, müssen sich super_admin-Nutzer ohne 2FA bei der nächsten Anmeldung registrieren. Sie müssen 2FA auf Ihrem eigenen Konto bereits aktiviert haben, um diese Richtlinie zu aktivieren.",
     "policyNeedOwn2fa": "Aktivieren Sie zuerst 2FA auf Ihrem eigenen Konto, bevor Sie diese Richtlinie durchsetzen."

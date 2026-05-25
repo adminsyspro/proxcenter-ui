@@ -582,6 +582,86 @@ return
 }
 
 /* --------------------------------
+   Disable 2FA Confirm Dialog
+-------------------------------- */
+
+function Disable2FADialog({ open, onClose, user, onSuccess, t }) {
+  const [emailInput, setEmailInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const expectedEmail = user?.email || ''
+  const canConfirm = emailInput === expectedEmail
+
+  const handleDisable = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/v1/admin/users/${user.id}/2fa/disable`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        onSuccess(user.id)
+        onClose()
+        return
+      }
+      let data = {}
+      try { data = await res.json() } catch (_) {}
+      if (res.status === 409 && data.code === 'POLICY_LOCK') {
+        setError(t('twoFactor.policyLockError'))
+      } else {
+        setError(data.error || t('common.error'))
+      }
+    } catch (_) {
+      setError(t('errors.connectionError'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClose = () => {
+    setEmailInput('')
+    setError('')
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <i className='ri-lock-unlock-line' style={{ color: '#ef4444' }} />
+        {t('twoFactor.adminDisableConfirmTitle', { email: expectedEmail })}
+      </DialogTitle>
+      <DialogContent>
+        {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+        <Typography sx={{ mb: 2 }}>
+          {t('twoFactor.adminDisableConfirmBody')}
+        </Typography>
+        <TextField
+          fullWidth
+          label={t('usersPage.emailLabel')}
+          type='email'
+          value={emailInput}
+          onChange={e => setEmailInput(e.target.value)}
+          autoComplete='off'
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose}>{t('common.cancel')}</Button>
+        <Button
+          variant='contained'
+          color='error'
+          onClick={handleDisable}
+          disabled={loading || !canConfirm}
+          startIcon={loading ? <CircularProgress size={16} /> : <i className='ri-lock-unlock-line' />}
+        >
+          {t('twoFactor.disableButton')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+/* --------------------------------
    Main Page
 -------------------------------- */
 
@@ -668,6 +748,26 @@ return () => setPageInfo('', '', '')
     setSelectedUser(null)
     setUserDialogOpen(true)
   }
+
+  const [disable2FADialogOpen, setDisable2FADialogOpen] = useState(false)
+  const [userToDisable2FA, setUserToDisable2FA] = useState(null)
+
+  const handleDisable2FA = (user) => {
+    setUserToDisable2FA(user)
+    setDisable2FADialogOpen(true)
+  }
+
+  const handle2FADisabled = useCallback((userId) => {
+    // Optimistically flip totp_enabled to false for the row without a full
+    // network round-trip. mutateUsers() will reconcile on next SWR revalidation.
+    mutateUsers(prev => {
+      if (!prev?.data) return prev
+      return {
+        ...prev,
+        data: prev.data.map(u => u.id === userId ? { ...u, totp_enabled: false } : u),
+      }
+    }, false)
+  }, [mutateUsers])
 
   const columns = useMemo(
     () => [
@@ -773,6 +873,36 @@ return () => setPageInfo('', '', '')
         renderCell: params => <AuthProviderChip provider={params.row.auth_provider} t={t} />,
       },
       {
+        field: 'totp_enabled',
+        headerName: t('twoFactor.columnHeader'),
+        width: 70,
+        sortable: true,
+        renderCell: params => params.row.totp_enabled ? (
+          <Tooltip
+            title={t('twoFactor.statusEnabled')}
+            slotProps={{
+              tooltip: {
+                sx: {
+                  bgcolor: 'background.paper',
+                  color: 'text.primary',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  boxShadow: 1,
+                },
+              },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+              <i className='ri-shield-check-line' style={{ fontSize: 18, color: '#22c55e' }} />
+            </Box>
+          </Tooltip>
+        ) : (
+          <Typography variant='body2' sx={{ opacity: 0.35, textAlign: 'center', width: '100%' }}>
+            {'–'}
+          </Typography>
+        ),
+      },
+      {
         field: 'enabled',
         headerName: t('common.status'),
         width: 100,
@@ -808,7 +938,7 @@ return () => setPageInfo('', '', '')
       {
         field: 'actions',
         headerName: t('common.actions'),
-        width: 100,
+        width: 120,
         sortable: false,
         renderCell: params => (
           <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -817,6 +947,18 @@ return () => setPageInfo('', '', '')
                 <i className='ri-edit-line' />
               </IconButton>
             </Tooltip>
+            {/* Disable 2FA: only visible when the row has 2FA enabled and is not the current session user */}
+            {params.row.totp_enabled && params.row.id !== session?.user?.id && (
+              <Tooltip title={t('twoFactor.adminDisableMenu')}>
+                <IconButton
+                  size='small'
+                  color='warning'
+                  onClick={() => handleDisable2FA(params.row)}
+                >
+                  <i className='ri-lock-unlock-line' />
+                </IconButton>
+              </Tooltip>
+            )}
             {/* Hide delete on your own row — self-delete is refused by the backend */}
             {params.row.id !== session?.user?.id && (
               <Tooltip title={t('common.delete')}>
@@ -833,7 +975,7 @@ return () => setPageInfo('', '', '')
         ),
       },
     ],
-    [t, showRbac, showTenants, session?.user?.id]
+    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA]
   )
 
   return (
@@ -921,6 +1063,14 @@ return () => setPageInfo('', '', '')
         user={userToDelete}
         onConfirm={revalidateAll}
         currentUserId={session?.user?.id}
+        t={t}
+      />
+
+      <Disable2FADialog
+        open={disable2FADialogOpen}
+        onClose={() => setDisable2FADialogOpen(false)}
+        user={userToDisable2FA}
+        onSuccess={handle2FADisabled}
         t={t}
       />
     </Box>

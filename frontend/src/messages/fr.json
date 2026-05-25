@@ -6930,6 +6930,7 @@
     "loginBack": "Retour",
     "forcedTitle": "Authentification à deux facteurs requise",
     "forcedBody": "Votre administrateur exige l'authentification à deux facteurs pour les comptes super_admin. Activez-la maintenant pour continuer.",
+    "columnHeader": "2FA",
     "adminDisableMenu": "Désactiver la 2FA",
     "adminDisableConfirmTitle": "Désactiver la 2FA pour {email}",
     "adminDisableConfirmBody": "Tapez l'email de l'utilisateur pour confirmer.",

@@ -6788,6 +6788,7 @@
     "loginBack": "Back",
     "forcedTitle": "Two-factor authentication required",
     "forcedBody": "Your administrator requires two-factor authentication for super_admin accounts. Please enroll now to continue.",
+    "columnHeader": "2FA",
     "adminDisableMenu": "Disable 2FA",
     "adminDisableConfirmTitle": "Disable 2FA for {email}",
     "adminDisableConfirmBody": "Type the user's email to confirm.",

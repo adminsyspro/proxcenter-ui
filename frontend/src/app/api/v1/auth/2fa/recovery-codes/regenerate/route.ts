@@ -29,18 +29,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "2FA is not enabled" }, { status: 400 })
   }
 
-  // Verify each supplied factor independently — see disable/route.ts for
-  // the rationale (CodeQL js/user-controlled-bypass).
-  const passwordValid =
-    typeof password === "string" && password.length > 0 && !!user.password
-      ? await verifyPassword(password, user.password)
-      : false
-  const totpValid =
-    typeof totpCode === "string" && totpCode.length > 0
-      ? await verifyTotp(session.user.id, totpCode)
-      : false
+  // See disable/route.ts for the rationale: run both verifiers
+  // unconditionally so no user-input value gates a security check.
+  const passwordInput = typeof password === "string" ? password : ""
+  const totpInput = typeof totpCode === "string" ? totpCode : ""
+  const passwordOk = user.password
+    ? await verifyPassword(passwordInput, user.password)
+    : false
+  const totpOk = await verifyTotp(session.user.id, totpInput)
 
-  if (!passwordValid && !totpValid) {
+  if (!passwordOk && !totpOk) {
     return NextResponse.json({ error: "Re-authentication failed" }, { status: 401 })
   }
 

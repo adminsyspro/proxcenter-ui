@@ -36,20 +36,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "2FA is not enabled" }, { status: 400 })
   }
 
-  // Verify each supplied factor independently. Both branches are gated
-  // by `user.password` and `totpCode` being non-empty respectively — we
-  // do not let the request payload's shape control which check runs.
-  // A request needs at least one valid factor to be accepted.
-  const passwordValid =
-    typeof password === "string" && password.length > 0 && !!user.password
-      ? await verifyPassword(password, user.password)
-      : false
-  const totpValid =
-    typeof totpCode === "string" && totpCode.length > 0
-      ? await verifyTotp(session.user.id, totpCode)
-      : false
+  // Run both verifiers unconditionally — the inactive factor returns
+  // false (verifyPassword on empty input, verifyTotp via otplib's null
+  // checkDelta). The only condition is on server-loaded user.password
+  // because passing a missing hash to pbkdf2 would throw. No user-input
+  // value gates a security check.
+  const passwordInput = typeof password === "string" ? password : ""
+  const totpInput = typeof totpCode === "string" ? totpCode : ""
+  const passwordOk = user.password
+    ? await verifyPassword(passwordInput, user.password)
+    : false
+  const totpOk = await verifyTotp(session.user.id, totpInput)
 
-  if (!passwordValid && !totpValid) {
+  if (!passwordOk && !totpOk) {
     return NextResponse.json({ error: "Re-authentication failed" }, { status: 401 })
   }
 

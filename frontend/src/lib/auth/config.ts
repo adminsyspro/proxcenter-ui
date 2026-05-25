@@ -631,6 +631,11 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 jours
+    // Refresh the JWT (and re-run the jwt() callback that recomputes
+    // mustEnroll2fa) every 60 s of session activity. Closes the gap where
+    // an admin enables the 2FA-required policy and an already-logged-in
+    // session would otherwise keep its stale token until it expires.
+    updateAge: 60,
   },
   secret: process.env.NEXTAUTH_SECRET || "build-time-placeholder",
 }

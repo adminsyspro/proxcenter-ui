@@ -3,12 +3,19 @@ import { encode } from "next-auth/jwt"
 
 const SUPER_ADMIN_ROLE_ID = "role_super_admin"
 
-export async function needsEnrollment(userId: string): Promise<boolean> {
-  // Fetch the user row and the global policy in parallel to keep this fast.
+/**
+ * Returns true when this user is in the scope of a 2FA requirement
+ * (per-user flag OR global super_admin policy applies to them), regardless
+ * of whether they currently have TOTP enabled. Use this to decide whether
+ * a future disable would leave them out of compliance — e.g. to refuse
+ * self-disable for accounts that the policy would immediately force back
+ * into enrollment.
+ */
+export async function isEnrollmentRequiredFor(userId: string): Promise<boolean> {
   const [user, policy] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      select: { totpEnabled: true, require2faEnrollment: true },
+      select: { require2faEnrollment: true },
     }),
     prisma.securityPolicy.findFirst({
       where: { id: "default" },
@@ -16,14 +23,10 @@ export async function needsEnrollment(userId: string): Promise<boolean> {
     }),
   ])
 
-  // If the user already has TOTP active, no enrollment is needed regardless
-  // of any flag or policy.
-  if (user?.totpEnabled) return false
-
-  // Per-user flag: admin has explicitly required this user to enroll.
+  // Per-user flag set by an admin always wins.
   if (user?.require2faEnrollment) return true
 
-  // Global super_admin policy path (existing behavior).
+  // Global super_admin policy path.
   if (!policy?.require2faForSuperAdmin) return false
 
   const sa = await prisma.rbacUserRole.findFirst({
@@ -35,6 +38,17 @@ export async function needsEnrollment(userId: string): Promise<boolean> {
     select: { id: true },
   })
   return !!sa
+}
+
+export async function needsEnrollment(userId: string): Promise<boolean> {
+  // Already enrolled → no work to do.
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { totpEnabled: true },
+  })
+  if (u?.totpEnabled) return false
+
+  return isEnrollmentRequiredFor(userId)
 }
 
 /**

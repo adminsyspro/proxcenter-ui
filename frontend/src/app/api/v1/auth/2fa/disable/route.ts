@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword } from "@/lib/auth/password"
 import { verifyTotp } from "@/lib/auth/totp"
-import { needsEnrollment } from "@/lib/auth/enforce-2fa"
+import { isEnrollmentRequiredFor } from "@/lib/auth/enforce-2fa"
 import { clearUserTotp } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
 
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (await needsEnrollment(session.user.id)) {
+  if (await isEnrollmentRequiredFor(session.user.id)) {
     return NextResponse.json(
       { error: "Cannot disable 2FA: policy requires it on your account.", code: "POLICY_LOCK" },
       { status: 409 },

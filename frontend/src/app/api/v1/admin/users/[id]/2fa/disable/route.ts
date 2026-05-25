@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { needsEnrollment } from "@/lib/auth/enforce-2fa"
+import { isEnrollmentRequiredFor } from "@/lib/auth/enforce-2fa"
 import { clearUserTotp, requireSuperAdminCaller } from "@/lib/auth/totp-admin"
 
 export const runtime = "nodejs"
@@ -16,7 +16,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const session = await getServerSession(authOptions)
   const { id: targetId } = await ctx.params
 
-  if (targetId === session.user.id && (await needsEnrollment(session.user.id))) {
+  if (targetId === session.user.id && (await isEnrollmentRequiredFor(session.user.id))) {
     return NextResponse.json({ error: "POLICY_LOCK" }, { status: 409 })
   }
 

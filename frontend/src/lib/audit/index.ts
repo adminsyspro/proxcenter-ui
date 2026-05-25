@@ -78,6 +78,16 @@ export type AuditAction =
   // SDN
   | "sdn.apply"
 
+  // 2FA
+  | "2fa_enrolled"
+  | "2fa_disabled"
+  | "2fa_login_failed"
+  | "2fa_recovery_used"
+  | "2fa_recovery_low"
+  | "2fa_recovery_regenerated"
+  | "2fa_required_for_user"
+  | "2fa_requirement_cleared"
+
 export type AuditStatus = "success" | "failure" | "warning"
 
 export interface AuditLogEntry {

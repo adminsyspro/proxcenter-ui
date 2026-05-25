@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from "vitest"
 import { authenticator } from "otplib"
-import { generateTotpSecret, buildOtpauthUrl, verifyTotp } from "./totp"
+import { generateTotpSecret, buildOtpauthUrl, verifyTotp, encryptTotpSecret } from "./totp"
 
 vi.mock("@/lib/db/prisma", () => {
   const usersUpdateMany = vi.fn()
@@ -25,6 +25,10 @@ import { prisma } from "@/lib/db/prisma"
 describe("totp", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("encryptTotpSecret delegates to encryptSecret", () => {
+    expect(encryptTotpSecret("plain")).toBe("enc:plain")
   })
 
   it("generates a base32 secret of at least 32 chars", () => {

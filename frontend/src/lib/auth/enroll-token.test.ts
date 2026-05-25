@@ -22,4 +22,15 @@ describe("enroll-token", () => {
     await new Promise((r) => setTimeout(r, 1100))
     await expect(verifyEnrollToken(tok, SECRET)).rejects.toBeInstanceOf(joseErrors.JWTExpired)
   })
+
+  it("throws TypeError when payload shape is wrong", async () => {
+    const { SignJWT } = await import("jose")
+    const key = new TextEncoder().encode(SECRET)
+    const tok = await new SignJWT({ wrongField: "yes" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("60s")
+      .sign(key)
+    await expect(verifyEnrollToken(tok, SECRET)).rejects.toBeInstanceOf(TypeError)
+  })
 })

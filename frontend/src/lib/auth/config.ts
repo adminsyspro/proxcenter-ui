@@ -39,6 +39,7 @@ declare module "next-auth/jwt" {
     role: UserRole
     authProvider: "credentials" | "ldap" | "oidc"
     tenantId: string
+    mustEnroll2fa?: boolean
   }
 }
 
@@ -83,6 +84,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        totpCode: { label: "TOTP", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -103,6 +105,7 @@ export const authOptions: NextAuthOptions = {
             role: true,
             authProvider: true,
             enabled: true,
+            totpEnabled: true,
           },
         })
 
@@ -141,6 +144,18 @@ export const authOptions: NextAuthOptions = {
         if (!isValid) {
           await logFailure("Incorrect password")
           throw new Error("Identifiants invalides")
+        }
+
+        if (user.totpEnabled) {
+          if (!credentials.totpCode) {
+            throw new Error("TOTP_REQUIRED")
+          }
+          const { verifyTotpOrRecovery } = await import("@/lib/auth/verify-second-factor")
+          const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
+          if (!ok) {
+            await logFailure("Invalid TOTP")
+            throw new Error("Identifiants invalides")
+          }
         }
 
         // Mettre à jour last_login_at
@@ -199,6 +214,7 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
+        totpCode: { label: "TOTP", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
@@ -360,6 +376,21 @@ export const authOptions: NextAuthOptions = {
             })
           }
           // If no group match but existing role: preserve manually-assigned role
+        }
+
+        const localUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { totpEnabled: true },
+        })
+        if (localUser?.totpEnabled) {
+          if (!credentials.totpCode) {
+            throw new Error("TOTP_REQUIRED")
+          }
+          const { verifyTotpOrRecovery } = await import("@/lib/auth/verify-second-factor")
+          const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
+          if (!ok) {
+            throw new Error("Identifiants LDAP invalides")
+          }
         }
 
         return {
@@ -526,6 +557,15 @@ export const authOptions: NextAuthOptions = {
           token.tenantId = await getUserDefaultTenantId(token.id as string)
         } catch {
           token.tenantId = token.tenantId || 'default'
+        }
+      }
+
+      if (token.id) {
+        try {
+          const { needsEnrollment } = await import("@/lib/auth/enforce-2fa")
+          token.mustEnroll2fa = await needsEnrollment(token.id as string)
+        } catch {
+          token.mustEnroll2fa = false
         }
       }
 

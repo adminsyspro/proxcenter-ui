@@ -4,7 +4,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
-import { Box, CircularProgress } from '@mui/material'
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Typography
+} from '@mui/material'
 import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
 
@@ -30,6 +40,10 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [capsLock, setCapsLock] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [totpStep, setTotpStep] = useState(false)
+  const [totpCode, setTotpCode] = useState('')
+  const [totpError, setTotpError] = useState('')
+  const [totpLoading, setTotpLoading] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -66,14 +80,57 @@ export default function LoginPage() {
       const result = authMethod === 'local'
         ? await signIn('credentials', { email, password, redirect: false, callbackUrl })
         : await signIn('ldap', { username, password, redirect: false, callbackUrl })
-      if (result?.error) setError(result.error)
-      else if (result?.ok) { router.push(callbackUrl); router.refresh() }
+      if (result?.error === 'TOTP_REQUIRED') {
+        setTotpStep(true)
+        setTotpError('')
+        setTotpCode('')
+      } else if (result?.error) {
+        setError(result.error)
+      } else if (result?.ok) {
+        router.push(callbackUrl)
+        router.refresh()
+      }
     } catch {
       setError(t('auth.loginError'))
     } finally {
       setLoading(false)
     }
   }, [authMethod, email, password, username, callbackUrl, router, t])
+
+  const handleTotpSubmit = useCallback(async (e) => {
+    e?.preventDefault?.()
+    if (!totpCode.trim()) return
+    setTotpLoading(true)
+    setTotpError('')
+    try {
+      const result = authMethod === 'local'
+        ? await signIn('credentials', {
+            email, password, totpCode: totpCode.trim(),
+            redirect: false, callbackUrl
+          })
+        : await signIn('ldap', {
+            username, password, totpCode: totpCode.trim(),
+            redirect: false, callbackUrl
+          })
+      if (result?.error) {
+        setTotpError(t('twoFactor.loginTotpInvalid'))
+      } else if (result?.ok) {
+        router.push(callbackUrl)
+        router.refresh()
+      }
+    } catch {
+      setTotpError(t('twoFactor.loginTotpInvalid'))
+    } finally {
+      setTotpLoading(false)
+    }
+  }, [authMethod, email, password, username, totpCode, callbackUrl, router, t])
+
+  const handleTotpCancel = useCallback(() => {
+    setTotpStep(false)
+    setTotpCode('')
+    setTotpError('')
+    setPassword('')
+  }, [])
 
   const handleSso = useCallback(() => {
     signIn('oidc', { callbackUrl })
@@ -88,25 +145,57 @@ export default function LoginPage() {
   }
 
   return (
-    <LoginShell
-      branding={branding}
-      brandingLoading={brandingLoading}
-      ldapEnabled={ldapEnabled}
-      oidcEnabled={oidcEnabled}
-      oidcProviderName={oidcProviderName}
-      authMethod={authMethod}
-      setAuthMethod={setAuthMethod}
-      email={email} setEmail={setEmail}
-      username={username} setUsername={setUsername}
-      password={password} setPassword={setPassword}
-      isPasswordShown={isPasswordShown} setIsPasswordShown={setIsPasswordShown}
-      rememberMe={rememberMe} setRememberMe={setRememberMe}
-      capsLock={capsLock} onPasswordKey={handleKeyEvent}
-      loading={loading}
-      error={error}
-      mounted={mounted}
-      onSubmit={handleLogin}
-      onSso={handleSso}
-    />
+    <>
+      <LoginShell
+        branding={branding}
+        brandingLoading={brandingLoading}
+        ldapEnabled={ldapEnabled}
+        oidcEnabled={oidcEnabled}
+        oidcProviderName={oidcProviderName}
+        authMethod={authMethod}
+        setAuthMethod={setAuthMethod}
+        email={email} setEmail={setEmail}
+        username={username} setUsername={setUsername}
+        password={password} setPassword={setPassword}
+        isPasswordShown={isPasswordShown} setIsPasswordShown={setIsPasswordShown}
+        rememberMe={rememberMe} setRememberMe={setRememberMe}
+        capsLock={capsLock} onPasswordKey={handleKeyEvent}
+        loading={loading}
+        error={error}
+        mounted={mounted}
+        onSubmit={handleLogin}
+        onSso={handleSso}
+      />
+      <Dialog open={totpStep} onClose={handleTotpCancel} fullWidth maxWidth='xs'>
+        <DialogTitle>{t('twoFactor.loginTotpTitle')}</DialogTitle>
+        <DialogContent>
+          <Box component='form' onSubmit={handleTotpSubmit} sx={{ pt: 1 }}>
+            <TextField
+              autoFocus
+              fullWidth
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value)}
+              placeholder='123456'
+              inputProps={{ maxLength: 11, autoComplete: 'one-time-code' }}
+              error={!!totpError}
+              helperText={totpError || t('twoFactor.loginRecoveryHint')}
+              disabled={totpLoading}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleTotpCancel} disabled={totpLoading}>
+            {t('twoFactor.loginBack')}
+          </Button>
+          <Button
+            onClick={handleTotpSubmit}
+            variant='contained'
+            disabled={!totpCode.trim() || totpLoading}
+          >
+            {totpLoading ? <CircularProgress size={18} sx={{ color: 'inherit' }} /> : t('twoFactor.wizardVerify')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   )
 }

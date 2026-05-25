@@ -2,9 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
-import { prisma } from "@/lib/db/prisma"
-import { audit } from "@/lib/audit"
-import { requireSuperAdminCaller } from "@/lib/auth/totp-admin"
+import { requireSuperAdminCaller, setUserRequire2faFlag } from "@/lib/auth/totp-admin"
 
 export const runtime = "nodejs"
 
@@ -14,32 +12,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const session = await getServerSession(authOptions)
   const { id: targetId } = await ctx.params
-
-  const target = await prisma.user.findUnique({
-    where: { id: targetId },
-    select: { email: true },
+  return setUserRequire2faFlag(targetId, false, {
+    id: session?.user.id,
+    email: session?.user.email,
   })
-
-  if (!target) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 })
-  }
-
-  await prisma.user.update({
-    where: { id: targetId },
-    data: { require2faEnrollment: false },
-  })
-
-  await audit({
-    action: "2fa_requirement_cleared",
-    category: "auth",
-    userId: session?.user.id,
-    userEmail: session?.user.email ?? undefined,
-    resourceType: "user",
-    resourceId: targetId,
-    resourceName: target.email,
-    status: "success",
-    details: {},
-  })
-
-  return NextResponse.json({ data: { ok: true } })
 }

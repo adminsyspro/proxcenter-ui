@@ -1,3 +1,9 @@
+// Next Imports
+import { redirect } from 'next/navigation'
+
+// NextAuth Imports
+import { getServerSession } from 'next-auth'
+
 // MUI Imports
 import Button from '@mui/material/Button'
 
@@ -20,11 +26,24 @@ import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
 import { RollingUpdateProvider } from '@/contexts/RollingUpdateContext'
 import { TagColorProvider } from '@/contexts/TagColorContext'
 
+// Auth Imports
+import { authOptions } from '@/lib/auth/config'
+import { needsEnrollment } from '@/lib/auth/enforce-2fa'
+
 // Util Imports
 import { getMode, getSystemMode } from '@core/utils/serverHelpers'
 
 const Layout = async props => {
   const { children } = props
+
+  // Authoritative 2FA enrollment gate. The Edge middleware only consults the
+  // JWT hint, so sessions minted before the policy was turned on slip past
+  // it. This DB check catches them on every protected page navigation.
+  const session = await getServerSession(authOptions)
+
+  if (session?.user?.id && (await needsEnrollment(session.user.id))) {
+    redirect('/profile/2fa/enrollment')
+  }
 
   // Type guard to ensure lang is a valid Locale
   // Vars

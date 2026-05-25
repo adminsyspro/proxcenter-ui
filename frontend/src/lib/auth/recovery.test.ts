@@ -3,6 +3,7 @@ import {
   generateRecoveryCodes,
   hashRecoveryCode,
   consumeRecoveryCode,
+  countRemainingRecoveryCodes,
   RECOVERY_CODE_PATTERN,
 } from "./recovery"
 
@@ -81,5 +82,13 @@ describe("recovery codes", () => {
     const ok = await consumeRecoveryCode("u1", code, null)
 
     expect(ok).toBe(false)
+  })
+
+  it("countRemainingRecoveryCodes calls prisma.count with the right filter", async () => {
+    ;(prisma.userTotpRecoveryCode.count as any).mockResolvedValue(7)
+    const n = await countRemainingRecoveryCodes("u1")
+    expect(n).toBe(7)
+    expect((prisma.userTotpRecoveryCode.count as any).mock.calls[0][0])
+      .toEqual({ where: { userId: "u1", consumedAt: null } })
   })
 })

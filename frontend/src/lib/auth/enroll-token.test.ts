@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { errors as joseErrors } from "jose"
 import { signEnrollToken, verifyEnrollToken } from "./enroll-token"
 
 const SECRET = "x".repeat(32)
@@ -19,6 +20,6 @@ describe("enroll-token", () => {
   it("rejects an expired token", async () => {
     const tok = await signEnrollToken({ userId: "u1", secretEnc: "abc" }, SECRET, 1)
     await new Promise((r) => setTimeout(r, 1100))
-    await expect(verifyEnrollToken(tok, SECRET)).rejects.toThrow(/expired/i)
+    await expect(verifyEnrollToken(tok, SECRET)).rejects.toBeInstanceOf(joseErrors.JWTExpired)
   })
 })

@@ -27,14 +27,7 @@ export async function verifyEnrollToken(
   token: string,
   secret: string,
 ): Promise<EnrollPayload> {
-  let payload
-  try {
-    ;({ payload } = await jwtVerify(token, keyFromSecret(secret)))
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('"exp"')) throw new Error("Token expired")
-    throw err
-  }
+  const { payload } = await jwtVerify(token, keyFromSecret(secret))
   if (typeof payload.userId !== "string" || typeof payload.secretEnc !== "string") {
     throw new Error("Invalid enroll token payload")
   }

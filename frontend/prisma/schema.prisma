@@ -300,11 +300,12 @@ model User {
   createdAt    DateTime  @map("created_at")
   updatedAt    DateTime  @map("updated_at")
 
-  totpSecretEnc     String?   @map("totp_secret_enc")
-  totpEnabled       Boolean   @default(false) @map("totp_enabled")
-  totpEnrolledAt    DateTime?                @map("totp_enrolled_at")
-  totpLastUsedStep  BigInt?                  @map("totp_last_used_step")
-  totpRecoveryCodes UserTotpRecoveryCode[]
+  totpSecretEnc        String?   @map("totp_secret_enc")
+  totpEnabled          Boolean   @default(false) @map("totp_enabled")
+  totpEnrolledAt       DateTime?                @map("totp_enrolled_at")
+  totpLastUsedStep     BigInt?                  @map("totp_last_used_step")
+  totpRecoveryCodes    UserTotpRecoveryCode[]
+  require2faEnrollment Boolean   @default(false) @map("require_2fa_enrollment")
 
   sessions            Session[]
   tenants             UserTenant[]

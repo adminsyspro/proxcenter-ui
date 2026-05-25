@@ -4,10 +4,26 @@ import { encode } from "next-auth/jwt"
 const SUPER_ADMIN_ROLE_ID = "role_super_admin"
 
 export async function needsEnrollment(userId: string): Promise<boolean> {
-  const policy = await prisma.securityPolicy.findFirst({
-    where: { id: "default" },
-    select: { require2faForSuperAdmin: true },
-  })
+  // Fetch the user row and the global policy in parallel to keep this fast.
+  const [user, policy] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { totpEnabled: true, require2faEnrollment: true },
+    }),
+    prisma.securityPolicy.findFirst({
+      where: { id: "default" },
+      select: { require2faForSuperAdmin: true },
+    }),
+  ])
+
+  // If the user already has TOTP active, no enrollment is needed regardless
+  // of any flag or policy.
+  if (user?.totpEnabled) return false
+
+  // Per-user flag: admin has explicitly required this user to enroll.
+  if (user?.require2faEnrollment) return true
+
+  // Global super_admin policy path (existing behavior).
   if (!policy?.require2faForSuperAdmin) return false
 
   const sa = await prisma.rbacUserRole.findFirst({
@@ -18,13 +34,7 @@ export async function needsEnrollment(userId: string): Promise<boolean> {
     },
     select: { id: true },
   })
-  if (!sa) return false
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { totpEnabled: true },
-  })
-  return !user?.totpEnabled
+  return !!sa
 }
 
 /**

@@ -112,6 +112,7 @@ export async function GET() {
       auth_provider: m.user.authProvider,
       enabled: m.user.enabled,
       totp_enabled: m.user.totpEnabled,
+      require_2fa_enrollment: m.user.require2faEnrollment,
       last_login_at: m.user.lastLoginAt?.toISOString() ?? null,
       created_at: m.user.createdAt.toISOString(),
       updated_at: m.user.updatedAt.toISOString(),

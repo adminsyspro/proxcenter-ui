@@ -4,8 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { needsEnrollment } from "@/lib/auth/enforce-2fa"
-import { clearUserTotp, requireSuperAdminCaller } from "@/lib/auth/totp-admin"
+import { requireSuperAdminCaller } from "@/lib/auth/totp-admin"
 
 export const runtime = "nodejs"
 
@@ -16,33 +15,30 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const session = await getServerSession(authOptions)
   const { id: targetId } = await ctx.params
 
-  if (targetId === session.user.id && (await needsEnrollment(session.user.id))) {
-    return NextResponse.json({ error: "POLICY_LOCK" }, { status: 409 })
-  }
-
   const target = await prisma.user.findUnique({
     where: { id: targetId },
-    select: { email: true, totpEnabled: true },
+    select: { email: true },
   })
 
-  if (!target?.totpEnabled) {
-    return NextResponse.json({ error: "2FA is not enabled on this user" }, { status: 400 })
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  await prisma.$transaction(async (tx) => {
-    await clearUserTotp(tx, targetId)
+  await prisma.user.update({
+    where: { id: targetId },
+    data: { require2faEnrollment: false },
   })
 
   await audit({
-    action: "2fa_disabled",
+    action: "2fa_requirement_cleared",
     category: "auth",
-    userId: session.user.id,
-    userEmail: session.user.email ?? undefined,
+    userId: session!.user.id,
+    userEmail: session!.user.email ?? undefined,
     resourceType: "user",
     resourceId: targetId,
     resourceName: target.email,
     status: "success",
-    details: { by: "admin" },
+    details: {},
   })
 
   return NextResponse.json({ data: { ok: true } })

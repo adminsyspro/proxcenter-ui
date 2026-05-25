@@ -1,5 +1,4 @@
 import { describe, expect, it, beforeEach, vi } from "vitest"
-import bcrypt from "bcryptjs"
 import {
   generateRecoveryCodes,
   hashRecoveryCode,
@@ -34,11 +33,16 @@ describe("recovery codes", () => {
     }
   })
 
-  it("hashRecoveryCode returns a bcrypt hash that verifies", async () => {
+  it("hashRecoveryCode produces a salt:derived hex string that round-trips", async () => {
     const code = "ABCDE-FGHJK"
     const h = await hashRecoveryCode(code)
-    expect(h.startsWith("$2")).toBe(true)
-    expect(await bcrypt.compare(code, h)).toBe(true)
+    expect(h).toMatch(/^[0-9a-f]{32}:[0-9a-f]{128}$/)
+
+    // Verify via the public consume path on a mocked row
+    ;(prisma.userTotpRecoveryCode.findMany as any).mockResolvedValue([{ id: "r1", codeHash: h }])
+    ;(prisma.userTotpRecoveryCode.updateMany as any).mockResolvedValue({ count: 1 })
+    const ok = await consumeRecoveryCode("u1", code, null)
+    expect(ok).toBe(true)
   })
 
   it("consumeRecoveryCode succeeds and marks the row atomically", async () => {

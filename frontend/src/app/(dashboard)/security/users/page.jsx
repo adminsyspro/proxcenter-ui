@@ -708,9 +708,9 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
         <i className={isRequire ? 'ri-shield-keyhole-line' : 'ri-shield-cross-line'} />
         {t(titleKey, { email: user?.email || '' })}
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ pt: 2 }}>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
-        <Typography>{t(bodyKey)}</Typography>
+        <Typography sx={{ mt: 1 }}>{t(bodyKey)}</Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>{t('common.cancel')}</Button>

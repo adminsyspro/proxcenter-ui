@@ -22,6 +22,7 @@ import {
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useRBAC } from '@/contexts/RBACContext'
+import TwoFactorCard from '@/components/profile/TwoFactorCard'
 
 
 // Fonction pour obtenir les initiales
@@ -33,7 +34,7 @@ const getInitials = (name, email) => {
       return (parts[0][0] + parts[1][0]).toUpperCase()
     }
 
-    
+
 return name.substring(0, 2).toUpperCase()
   }
 
@@ -41,7 +42,7 @@ return name.substring(0, 2).toUpperCase()
     return email.substring(0, 2).toUpperCase()
   }
 
-  
+
 return 'U'
 }
 
@@ -54,7 +55,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setPageInfo(t('profile.title'), t('settings.subtitle'), 'ri-user-line')
-    
+
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
   const user = session?.user
@@ -63,7 +64,7 @@ return () => setPageInfo('', '', '')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
-  
+
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [profileSuccess, setProfileSuccess] = useState('')
@@ -95,7 +96,7 @@ return () => setPageInfo('', '', '')
 
       if (!res.ok) {
         setProfileError(data.error || t('settings.saveError'))
-        
+
 return
       }
 
@@ -137,7 +138,7 @@ return
 
       if (!res.ok) {
         setPasswordError(data.error || t('common.error'))
-        
+
 return
       }
 
@@ -161,10 +162,10 @@ return
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 220 }}>
               <Avatar
                 src={user?.avatar || undefined}
-                sx={{ 
-                  width: 120, 
-                  height: 120, 
-                  fontSize: '2.5rem', 
+                sx={{
+                  width: 120,
+                  height: 120,
+                  fontSize: '2.5rem',
                   fontWeight: 700,
                   bgcolor: 'primary.main',
                   mb: 2,
@@ -190,7 +191,7 @@ return
               <Typography variant='h6' sx={{ fontWeight: 600, mb: 2 }}>
                 {t('profile.personalInfo')}
               </Typography>
-              
+
               <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 1.5, mb: 3 }}>
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>Email</Typography>
                 <Typography variant='body2' sx={{ fontWeight: 500 }}>{user?.email}</Typography>
@@ -204,7 +205,7 @@ return
                 </Typography>
 
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>ID</Typography>
-                <Typography variant='body2' sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                <Typography variant='body2' sx={{ opacity: 0.75, fontSize: 12 }}>
                   {user?.id}
                 </Typography>
               </Box>
@@ -212,6 +213,11 @@ return
           </Box>
         </CardContent>
       </Card>
+
+      {/* Section: Account */}
+      <Typography variant='overline' color='text.secondary' sx={{ mt: 1, display: 'block' }}>
+        {t('profile.sectionAccount')}
+      </Typography>
 
       {/* Formulaires côte à côte */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
@@ -317,6 +323,14 @@ return
           </Card>
         )}
       </Box>
+
+      {/* Section: Security */}
+      <Typography variant='overline' color='text.secondary' sx={{ mt: 1, display: 'block' }}>
+        {t('profile.sectionSecurity')}
+      </Typography>
+
+      {/* Two-factor authentication */}
+      <TwoFactorCard />
     </Box>
   )
 }

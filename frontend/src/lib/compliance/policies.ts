@@ -29,6 +29,7 @@ export interface SecurityPolicies {
   login_lockout_duration_minutes: number
   audit_retention_days: number
   audit_auto_cleanup: boolean
+  require_2fa_for_super_admin: boolean
   updated_at: string
   updated_by: string | null
 }
@@ -49,6 +50,7 @@ function rowToPolicies(row: PrismaRow): SecurityPolicies {
     login_lockout_duration_minutes: row.loginLockoutDurationMinutes,
     audit_retention_days: row.auditRetentionDays,
     audit_auto_cleanup: row.auditAutoCleanup,
+    require_2fa_for_super_admin: row.require2faForSuperAdmin,
     updated_at: row.updatedAt.toISOString(),
     updated_by: row.updatedBy,
   }
@@ -86,6 +88,7 @@ const SNAKE_TO_CAMEL: Record<string, keyof Prisma.SecurityPolicyUpdateInput> = {
   login_lockout_duration_minutes: 'loginLockoutDurationMinutes',
   audit_retention_days: 'auditRetentionDays',
   audit_auto_cleanup: 'auditAutoCleanup',
+  require_2fa_for_super_admin: 'require2faForSuperAdmin',
 }
 
 export async function updateSecurityPolicies(
@@ -93,6 +96,22 @@ export async function updateSecurityPolicies(
   userId: string,
   tenantId: string = 'default',
 ): Promise<SecurityPolicies> {
+  if (partial.require_2fa_for_super_admin === true) {
+    const current = await prisma.securityPolicy.findFirst({
+      where: { id: 'default', tenantId },
+      select: { require2faForSuperAdmin: true },
+    })
+    if (current && !current.require2faForSuperAdmin) {
+      const actor = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { totpEnabled: true },
+      })
+      if (!actor?.totpEnabled) {
+        throw new Error('E_NEED_OWN_2FA')
+      }
+    }
+  }
+
   const data: Prisma.SecurityPolicyUpdateInput = {}
 
   for (const [snake, camel] of Object.entries(SNAKE_TO_CAMEL)) {

@@ -56,6 +56,15 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ data: updated })
   } catch (e: any) {
+    if (e?.message === 'E_NEED_OWN_2FA') {
+      return NextResponse.json(
+        {
+          error: 'Enable 2FA on your own account before enforcing this policy.',
+          code: 'E_NEED_OWN_2FA',
+        },
+        { status: 409 },
+      )
+    }
     console.error('Error updating security policies:', e)
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }

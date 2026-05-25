@@ -29,7 +29,7 @@ export async function verifyEnrollToken(
 ): Promise<EnrollPayload> {
   const { payload } = await jwtVerify(token, keyFromSecret(secret))
   if (typeof payload.userId !== "string" || typeof payload.secretEnc !== "string") {
-    throw new Error("Invalid enroll token payload")
+    throw new TypeError("Invalid enroll token payload")
   }
   return { userId: payload.userId, secretEnc: payload.secretEnc }
 }

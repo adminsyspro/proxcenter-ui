@@ -563,7 +563,7 @@ export const authOptions: NextAuthOptions = {
       if (token.id) {
         try {
           const { needsEnrollment } = await import("@/lib/auth/enforce-2fa")
-          token.mustEnroll2fa = await needsEnrollment(token.id as string)
+          token.mustEnroll2fa = await needsEnrollment(token.id)
         } catch {
           token.mustEnroll2fa = false
         }

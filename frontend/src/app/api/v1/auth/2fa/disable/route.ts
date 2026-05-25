@@ -36,15 +36,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "2FA is not enabled" }, { status: 400 })
   }
 
-  let reauthOk = false
+  // Verify each supplied factor independently. Both branches are gated
+  // by `user.password` and `totpCode` being non-empty respectively — we
+  // do not let the request payload's shape control which check runs.
+  // A request needs at least one valid factor to be accepted.
+  const passwordValid =
+    typeof password === "string" && password.length > 0 && !!user.password
+      ? await verifyPassword(password, user.password)
+      : false
+  const totpValid =
+    typeof totpCode === "string" && totpCode.length > 0
+      ? await verifyTotp(session.user.id, totpCode)
+      : false
 
-  if (password && user.password) {
-    reauthOk = await verifyPassword(password, user.password)
-  } else if (totpCode) {
-    reauthOk = await verifyTotp(session.user.id, totpCode)
-  }
-
-  if (!reauthOk) {
+  if (!passwordValid && !totpValid) {
     return NextResponse.json({ error: "Re-authentication failed" }, { status: 401 })
   }
 

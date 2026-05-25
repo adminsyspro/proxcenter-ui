@@ -91,26 +91,37 @@ const SNAKE_TO_CAMEL: Record<string, keyof Prisma.SecurityPolicyUpdateInput> = {
   require_2fa_for_super_admin: 'require2faForSuperAdmin',
 }
 
+/**
+ * Foot-shoot guard: enabling the global 2FA-for-super_admin policy is
+ * refused when the actor doesn't have 2FA on their own account. Anything
+ * other than a false→true transition on this flag is a no-op.
+ */
+async function assertCanEnable2faPolicy(
+  partial: Partial<Record<string, unknown>>,
+  userId: string,
+  tenantId: string,
+): Promise<void> {
+  if (partial.require_2fa_for_super_admin !== true) return
+  const current = await prisma.securityPolicy.findFirst({
+    where: { id: 'default', tenantId },
+    select: { require2faForSuperAdmin: true },
+  })
+  if (!current || current.require2faForSuperAdmin) return
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { totpEnabled: true },
+  })
+  if (!actor?.totpEnabled) {
+    throw new Error('E_NEED_OWN_2FA')
+  }
+}
+
 export async function updateSecurityPolicies(
   partial: Partial<Record<string, unknown>>,
   userId: string,
   tenantId: string = 'default',
 ): Promise<SecurityPolicies> {
-  if (partial.require_2fa_for_super_admin === true) {
-    const current = await prisma.securityPolicy.findFirst({
-      where: { id: 'default', tenantId },
-      select: { require2faForSuperAdmin: true },
-    })
-    if (current && !current.require2faForSuperAdmin) {
-      const actor = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { totpEnabled: true },
-      })
-      if (!actor?.totpEnabled) {
-        throw new Error('E_NEED_OWN_2FA')
-      }
-    }
-  }
+  await assertCanEnable2faPolicy(partial, userId, tenantId)
 
   const data: Prisma.SecurityPolicyUpdateInput = {}
 

@@ -32,8 +32,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   await audit({
     action: "2fa_requirement_cleared",
     category: "auth",
-    userId: session!.user.id,
-    userEmail: session!.user.email ?? undefined,
+    userId: session?.user.id,
+    userEmail: session?.user.email ?? undefined,
     resourceType: "user",
     resourceId: targetId,
     resourceName: target.email,

@@ -716,7 +716,6 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
         <Button onClick={handleClose}>{t('common.cancel')}</Button>
         <Button
           variant='contained'
-          color={isRequire ? 'info' : 'inherit'}
           onClick={handleConfirm}
           disabled={loading}
           startIcon={loading ? <CircularProgress size={16} /> : null}

@@ -300,6 +300,12 @@ model User {
   createdAt    DateTime  @map("created_at")
   updatedAt    DateTime  @map("updated_at")
 
+  totpSecretEnc     String?   @map("totp_secret_enc")
+  totpEnabled       Boolean   @default(false) @map("totp_enabled")
+  totpEnrolledAt    DateTime?                @map("totp_enrolled_at")
+  totpLastUsedStep  BigInt?                  @map("totp_last_used_step")
+  totpRecoveryCodes UserTotpRecoveryCode[]
+
   sessions            Session[]
   tenants             UserTenant[]
   rolesAssigned       RbacUserRole[]       @relation("RbacUserRoleUser")
@@ -309,6 +315,19 @@ model User {
 
   @@index([tenantId])
   @@map("users")
+}
+
+model UserTotpRecoveryCode {
+  id          String    @id
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash    String    @map("code_hash")
+  consumedAt  DateTime? @map("consumed_at")
+  consumedIp  String?   @map("consumed_ip")
+  createdAt   DateTime  @map("created_at")
+
+  @@index([userId, consumedAt])
+  @@map("user_totp_recovery_codes")
 }
 
 model Session {
@@ -874,6 +893,7 @@ model SecurityPolicy {
   loginLockoutDurationMinutes Int      @default(15) @map("login_lockout_duration_minutes")
   auditRetentionDays          Int      @default(90) @map("audit_retention_days")
   auditAutoCleanup            Boolean  @default(false) @map("audit_auto_cleanup")
+  require2faForSuperAdmin     Boolean  @default(false) @map("require_2fa_for_super_admin")
   updatedAt                   DateTime @map("updated_at")
   updatedBy                   String?  @map("updated_by")
 

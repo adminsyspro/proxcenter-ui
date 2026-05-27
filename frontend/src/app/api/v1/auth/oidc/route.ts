@@ -32,6 +32,8 @@ export async function GET() {
           claim_groups: "groups",
           auto_provision: true,
           default_role: "viewer",
+          show_local_login: true,
+          force_sso_redirect: false,
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           group_role_mapping: "{}",
           hasClientSecret: false,
@@ -61,6 +63,8 @@ export async function GET() {
         claim_groups: config.claimGroups || "groups",
         auto_provision: config.autoProvision,
         default_role: config.defaultRole || "viewer",
+        show_local_login: config.showLocalLogin,
+        force_sso_redirect: config.forceSsoRedirect,
         group_role_mapping: groupRoleMappingStr,
         hasClientSecret: !!config.clientSecretEnc,
       },
@@ -94,6 +98,8 @@ export async function PUT(req: Request) {
       claim_groups,
       auto_provision,
       default_role,
+      show_local_login,
+      force_sso_redirect,
       group_role_mapping,
     } = body
 
@@ -105,6 +111,13 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: "Client ID is required" }, { status: 400 })
       }
     }
+
+    // Anti-lockout: hiding the local form or auto-redirecting to the IdP only
+    // makes sense when SSO works. When OIDC is off, coerce both back to safe
+    // values so the local form can never be hidden without a working SSO (and
+    // so disabling OIDC never gets rejected for carrying stale flags).
+    const persistShowLocalLogin = enabled ? show_local_login !== false : true
+    const persistForceSsoRedirect = enabled ? !!force_sso_redirect : false
 
     const mappingObj = normalizeGroupRoleMapping(group_role_mapping)
 
@@ -123,6 +136,8 @@ export async function PUT(req: Request) {
       claimGroups: claim_groups || "groups",
       autoProvision: !!auto_provision,
       defaultRole: default_role || "viewer",
+      showLocalLogin: persistShowLocalLogin,
+      forceSsoRedirect: persistForceSsoRedirect,
       groupRoleMapping: mappingObj,
       updatedAt: now,
     }

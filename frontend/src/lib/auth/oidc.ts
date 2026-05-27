@@ -22,6 +22,8 @@ export interface OidcConfig {
   autoProvision: boolean
   defaultRole: string
   groupRoleMapping: Record<string, string>
+  showLocalLogin: boolean
+  forceSsoRedirect: boolean
 }
 
 /** Cheap "is OIDC turned on" probe — see isLdapEnabled for the rationale. */
@@ -70,6 +72,8 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
     autoProvision: row.autoProvision,
     defaultRole: row.defaultRole || "viewer",
     groupRoleMapping,
+    showLocalLogin: row.showLocalLogin,
+    forceSsoRedirect: row.forceSsoRedirect,
   }
 }
 

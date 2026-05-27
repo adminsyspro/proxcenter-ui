@@ -419,6 +419,12 @@ model OidcConfig {
   claimGroups      String?  @default("groups") @map("claim_groups")
   autoProvision    Boolean  @default(true) @map("auto_provision")
   defaultRole      String   @default("viewer") @map("default_role")
+  // Login-page behavior when SSO is enabled.
+  // showLocalLogin=false hides the local/LDAP form from /login (only the SSO
+  // button shows). The /access escape-hatch route ignores this flag.
+  // forceSsoRedirect=true sends /login straight to the IdP.
+  showLocalLogin   Boolean  @default(true)  @map("show_local_login")
+  forceSsoRedirect Boolean  @default(false) @map("force_sso_redirect")
   // JSON object mapping IdP group claims to internal role names.
   groupRoleMapping Json     @default("{}") @map("group_role_mapping")
   createdAt        DateTime @map("created_at")

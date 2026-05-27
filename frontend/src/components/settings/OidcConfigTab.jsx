@@ -45,6 +45,8 @@ export default function OidcConfigTab() {
     claim_groups: 'groups',
     auto_provision: true,
     default_role: 'role_viewer',
+    show_local_login: true,
+    force_sso_redirect: false,
     group_role_mapping: '{}',
   })
 
@@ -350,6 +352,62 @@ export default function OidcConfigTab() {
             disabled={!config.enabled}
             helperText={t('oidc.scopesHelper')}
           />
+        </CardContent>
+      </Card>
+
+      {/* Login Page Behavior */}
+      <Card variant='outlined'>
+        <CardContent>
+          <Typography variant='subtitle1' fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className='ri-login-box-line' style={{ color: '#3b82f6' }} />
+            {t('oidc.loginBehaviorSection')}
+          </Typography>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.show_local_login}
+                onChange={e => setConfig({ ...config, show_local_login: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.showLocalLogin')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.showLocalLoginDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 2, alignItems: 'flex-start' }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.force_sso_redirect}
+                onChange={e => setConfig({ ...config, force_sso_redirect: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.forceSsoRedirect')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.forceSsoRedirectDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: 'flex-start' }}
+          />
+
+          <Alert severity='info' sx={{ mt: 2 }} icon={<i className='ri-key-2-line' />}>
+            {t('oidc.escapeHatchInfo')}
+          </Alert>
         </CardContent>
       </Card>
 

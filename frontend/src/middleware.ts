@@ -13,6 +13,7 @@ const defaultLocale = 'en'
 // Routes publiques (pas besoin d'être connecté)
 const publicRoutes = [
   "/login",
+  "/access", // local-login escape hatch (SSO-only mode backdoor)
   "/logout",
   "/setup",
   "/api/auth",

@@ -11,10 +11,17 @@ export async function GET() {
       isLdapEnabled(),
     ])
     let oidcProviderName = 'SSO'
+    // Login-page behavior. Only meaningful when OIDC is on; default to the
+    // safe values (local form visible, no auto-redirect) otherwise so the
+    // local form can never be hidden without a working SSO.
+    let showLocalLogin = true
+    let forceSsoRedirect = false
 
     if (oidcEnabled) {
       const config = await getOidcConfig()
       oidcProviderName = config?.providerName || 'SSO'
+      showLocalLogin = config?.showLocalLogin ?? true
+      forceSsoRedirect = config?.forceSsoRedirect ?? false
     }
 
     return NextResponse.json({
@@ -22,6 +29,8 @@ export async function GET() {
       ldapEnabled,
       oidcEnabled,
       oidcProviderName,
+      showLocalLogin,
+      forceSsoRedirect,
     })
   } catch (error) {
     return NextResponse.json({
@@ -29,6 +38,8 @@ export async function GET() {
       ldapEnabled: false,
       oidcEnabled: false,
       oidcProviderName: 'SSO',
+      showLocalLogin: true,
+      forceSsoRedirect: false,
     })
   }
 }

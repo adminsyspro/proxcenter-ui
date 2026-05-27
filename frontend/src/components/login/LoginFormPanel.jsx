@@ -18,6 +18,7 @@ export default function LoginFormPanel({
   ldapEnabled,
   oidcEnabled,
   oidcProviderName,
+  showLocalForm = true,
   authMethod,
   setAuthMethod,
   email, setEmail,
@@ -97,27 +98,29 @@ export default function LoginFormPanel({
             </Box>
           )}
 
-          {oidcEnabled && (
+          {oidcEnabled && showLocalForm && (
             <Divider sx={{ mb: 3 }}>
               <Typography variant='caption' sx={{ opacity: 0.5 }}>{t('auth.or')}</Typography>
             </Divider>
           )}
 
-          {ldapEnabled && (
+          {ldapEnabled && showLocalForm && (
             <LoginAuthTabs value={authMethod} onChange={setAuthMethod} disabled={loading} />
           )}
 
-          <LoginCredentialsForm
-            authMethod={authMethod}
-            email={email} setEmail={setEmail}
-            username={username} setUsername={setUsername}
-            password={password} setPassword={setPassword}
-            isPasswordShown={isPasswordShown} setIsPasswordShown={setIsPasswordShown}
-            rememberMe={rememberMe} setRememberMe={setRememberMe}
-            capsLock={capsLock} onPasswordKey={onPasswordKey}
-            loading={loading}
-            onSubmit={onSubmit}
-          />
+          {showLocalForm && (
+            <LoginCredentialsForm
+              authMethod={authMethod}
+              email={email} setEmail={setEmail}
+              username={username} setUsername={setUsername}
+              password={password} setPassword={setPassword}
+              isPasswordShown={isPasswordShown} setIsPasswordShown={setIsPasswordShown}
+              rememberMe={rememberMe} setRememberMe={setRememberMe}
+              capsLock={capsLock} onPasswordKey={onPasswordKey}
+              loading={loading}
+              onSubmit={onSubmit}
+            />
+          )}
 
           <Box sx={{ mt: 6 }}>
             <LoginFooter branding={branding} />

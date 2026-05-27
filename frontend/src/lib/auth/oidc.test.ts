@@ -20,6 +20,8 @@ function makeConfig(mapping: Record<string, string>, defaultRole = 'role_default
     autoProvision: true,
     defaultRole,
     groupRoleMapping: mapping,
+    showLocalLogin: true,
+    forceSsoRedirect: false,
   }
 }
 

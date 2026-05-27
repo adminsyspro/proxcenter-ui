@@ -18,7 +18,7 @@ import {
 import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
 
-export default function LoginPage() {
+export default function LoginPage({ forceLocal = false }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
@@ -34,6 +34,13 @@ export default function LoginPage() {
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [oidcEnabled, setOidcEnabled] = useState(false)
   const [oidcProviderName, setOidcProviderName] = useState('SSO')
+  // SSO-only login behavior (from /api/v1/auth/providers).
+  const [showLocalLogin, setShowLocalLogin] = useState(true)
+  const [forceSsoRedirect, setForceSsoRedirect] = useState(false)
+  // Gate the form render until providers are known, so the local form never
+  // flashes before an auto-redirect or a hide decision.
+  const [providersLoaded, setProvidersLoaded] = useState(false)
+  const [redirectingSso, setRedirectingSso] = useState(false)
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -68,10 +75,31 @@ export default function LoginPage() {
         setLdapEnabled(data.ldapEnabled || false)
         setOidcEnabled(data.oidcEnabled || false)
         setOidcProviderName(data.oidcProviderName || 'SSO')
+        setShowLocalLogin(data.showLocalLogin !== false)
+        setForceSsoRedirect(data.forceSsoRedirect || false)
       })
       .catch(() => {})
+      // Always mark providers as resolved (even on failure) so the form falls
+      // back to visible rather than spinning forever — never lock the admin out.
+      .finally(() => setProvidersLoaded(true))
     if (errorParam) setError(decodeURIComponent(errorParam))
   }, [errorParam])
+
+  // Auto-redirect to the IdP when forced. Skipped on the /access escape hatch
+  // and whenever an OIDC error bounced us back (?error=), to avoid a loop.
+  useEffect(() => {
+    if (
+      providersLoaded &&
+      oidcEnabled &&
+      forceSsoRedirect &&
+      !forceLocal &&
+      !errorParam &&
+      !redirectingSso
+    ) {
+      setRedirectingSso(true)
+      signIn('oidc', { callbackUrl })
+    }
+  }, [providersLoaded, oidcEnabled, forceSsoRedirect, forceLocal, errorParam, redirectingSso, callbackUrl])
 
   const handleLogin = useCallback(async () => {
     setLoading(true)
@@ -136,13 +164,19 @@ export default function LoginPage() {
     signIn('oidc', { callbackUrl })
   }, [callbackUrl])
 
-  if (checkingSetup) {
+  // Hold the full-screen spinner until setup + providers are known, and while
+  // an SSO auto-redirect is in flight, so the local form never flashes.
+  if (checkingSetup || !providersLoaded || redirectingSso) {
     return (
       <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <CircularProgress />
       </Box>
     )
   }
+
+  // On /access (forceLocal) the local form is always shown. Otherwise it
+  // follows the showLocalLogin flag.
+  const showLocalForm = forceLocal || showLocalLogin
 
   return (
     <>
@@ -152,6 +186,7 @@ export default function LoginPage() {
         ldapEnabled={ldapEnabled}
         oidcEnabled={oidcEnabled}
         oidcProviderName={oidcProviderName}
+        showLocalForm={showLocalForm}
         authMethod={authMethod}
         setAuthMethod={setAuthMethod}
         email={email} setEmail={setEmail}

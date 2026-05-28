@@ -9,7 +9,8 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { generateFingerprint } from "@/lib/alerts/fingerprint"
-import { isDashboardAlertSilenced, isOrchestratorAlertSilenced, loadActiveSilenceFingerprints } from "@/lib/alerts/silenceFilter"
+import { loadActiveSilenceFingerprints } from "@/lib/alerts/silenceFilter"
+import { mergeAndFilterDashboardAlerts } from "@/lib/alerts/dashboardAlertMerge"
 import { authOptions } from "@/lib/auth/config"
 import { filterVmsByPermission, filterNodesByPermission } from "@/lib/rbac"
 import { alertsApi } from "@/lib/orchestrator/client"
@@ -762,67 +763,27 @@ return null
     const fTopCpu = fRunningVms.map((v: any) => ({ name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: round1(Number(v.cpu || 0) * 100) })).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
     const fTopRam = fRunningVms.map((v: any) => { const used = Number(v.mem || 0), max = Number(v.maxmem || 0); return { name: v.name || `VM ${v.vmid}`, vmid: v.vmid, node: v.node, connId: v.connectionId || v.connId, type: v.type || 'qemu', value: max > 0 ? round1((used / max) * 100) : 0 } }).sort((a: any, b: any) => b.value - a.value).slice(0, 10)
 
-    // Active silences for this tenant — used both to drop muted orchestrator
-    // alerts before merging and to drop muted dashboard-evaluated alerts at
-    // the end. Single query, set lookup is O(1).
-    const silencedFingerprints = await loadActiveSilenceFingerprints(await getSessionPrisma())
-
-    // Merge with orchestrator alerts (snapshots, event rules, etc.)
-    // Only attempt if orchestrator is explicitly configured (Enterprise edition)
+    // Merge orchestrator alerts in (Enterprise only) + drop muted entries.
+    // All logic lives in lib/alerts/dashboardAlertMerge.ts for testability.
+    let orchAlerts: any[] | undefined
     if (process.env.ORCHESTRATOR_URL) {
       try {
         const orchResponse = await alertsApi.getAlerts({ status: 'active', limit: 100 })
         const orchData = orchResponse.data as any
-        const orchAlerts: any[] = orchData?.data || (Array.isArray(orchData) ? orchData : [])
-
-        // Build a set of existing alert signatures to deduplicate
-        const existingKeys = new Set(alerts.map((a: any) => `${a.entityType}:${a.entityId}:${a.metric}:${a.severity}`))
-
-        const connNameMap = new Map(allConnections.map(c => [c.id, c.name]))
-
-        for (const oa of (Array.isArray(orchAlerts) ? orchAlerts : [])) {
-          // Drop muted orchestrator alerts using the SHA-256 fingerprint shared
-          // with /operations/alerts. Computed on the orchestrator-shape fields
-          // before they get transformed into the dashboard shape below.
-          if (isOrchestratorAlertSilenced(oa, silencedFingerprints)) continue
-
-          const key = `${oa.resource_type}:${oa.resource_id || oa.resource}:${oa.type}:${oa.severity}`
-          if (existingKeys.has(key)) continue
-          existingKeys.add(key)
-
-          alerts.push({
-            severity: oa.severity === 'critical' ? 'crit' : oa.severity === 'warning' ? 'warn' : oa.severity,
-            message: oa.message,
-            source: connNameMap.get(oa.connection_id) || oa.resource || 'Orchestrator',
-            sourceType: 'pve',
-            entityType: oa.resource_type,
-            entityId: oa.resource,
-            entityName: oa.resource,
-            connId: oa.connection_id,
-            metric: oa.type,
-            currentValue: oa.current_value,
-            threshold: oa.threshold,
-            time: oa.last_seen_at || oa.created_at,
-          })
-        }
-
-        // Re-sort after merge
-        alerts.sort((a: any, b: any) => (severityOrder[a.severity] || 2) - (severityOrder[b.severity] || 2))
+        orchAlerts = orchData?.data || (Array.isArray(orchData) ? orchData : [])
       } catch {
         // Silently ignore orchestrator errors — not critical for dashboard
       }
     }
-
-    // Filter alerts to only include visible resources
-    const visibleNodeNames = new Set(filteredNodes.map((n: any) => n.name))
-    let filteredAlerts = alerts.filter((a: any) => {
-      if (a.entityType === 'node') return visibleNodeNames.has(a.entityId)
-      return filteredNodes.length > 0
+    const visibleNodeNames = new Set<string>(filteredNodes.map((n: any) => n.name))
+    const filteredAlerts = mergeAndFilterDashboardAlerts({
+      baseAlerts: alerts,
+      orchAlerts,
+      connectionNameById: new Map(allConnections.map(c => [c.id, c.name])),
+      visibleNodeNames,
+      hasVisibleNodes: filteredNodes.length > 0,
+      silencedFingerprints: await loadActiveSilenceFingerprints(await getSessionPrisma()),
     })
-    // Drop dashboard-evaluated alerts whose MD5 fingerprint is silenced.
-    // Orchestrator alerts merged above were already filtered against their own
-    // SHA-256 fingerprint before being pushed.
-    filteredAlerts = filteredAlerts.filter((a: any) => !isDashboardAlertSilenced(a, silencedFingerprints))
 
     return NextResponse.json({
       data: {

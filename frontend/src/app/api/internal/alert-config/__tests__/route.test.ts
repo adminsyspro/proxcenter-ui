@@ -84,6 +84,26 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.snapshot_max_age_days).toBe(7)
   })
 
+  it('truncates fractional snapshot_max_age_days to int for the Go decoder', async () => {
+    // The Go AlertThresholds struct decodes snapshot_max_age_days as int.
+    // A fractional value (which the settings PUT path can persist) would make
+    // the configsync JSON decode fail and silently freeze the worker — exactly
+    // the silent-stale regression #359 is meant to eliminate.
+    getSettingMock.mockResolvedValueOnce({
+      memory_warning: 90,
+      snapshot_max_age_days: 7.9,
+    })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.thresholds.snapshot_max_age_days).toBe(7)
+    expect(Number.isInteger(body.thresholds.snapshot_max_age_days)).toBe(true)
+    // Non-int-typed fields stay as-is.
+    expect(body.thresholds.memory_warning).toBe(90)
+  })
+
   it('honors X-Tenant-ID by scoping the query', async () => {
     getSettingMock.mockResolvedValueOnce({})
     findManyMock.mockResolvedValueOnce([])

@@ -19,13 +19,19 @@ const DEFAULT_THRESHOLDS = {
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
 
+// Fields the Go orchestrator decodes as int (see backend AlertThresholds).
+// A fractional value here makes the configsync JSON decode fail and the worker
+// rejects the entire payload, leaving thresholds and silences silently stale.
+const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set(['snapshot_max_age_days'])
+
 function coerceThresholds(raw: unknown): Thresholds {
   const t = { ...DEFAULT_THRESHOLDS }
   if (!raw || typeof raw !== 'object') return t
   const obj = raw as Record<string, unknown>
   for (const key of Object.keys(DEFAULT_THRESHOLDS) as (keyof Thresholds)[]) {
     const v = obj[key]
-    if (typeof v === 'number' && Number.isFinite(v)) t[key] = v
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue
+    t[key] = INT_THRESHOLD_KEYS.has(key) ? Math.trunc(v) : v
   }
   return t
 }

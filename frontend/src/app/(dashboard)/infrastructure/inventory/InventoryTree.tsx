@@ -3271,13 +3271,7 @@ return (
         {/* ── Proxmox VE Section ── */}
         {filteredClusters.length > 0 && (
           <Box
-            onClick={() => {
-              // Single-click UX: select the root (right panel updates to
-              // the all-VMs view) AND toggle expand. Same rationale as
-              // the NETWORK section above.
-              onSelect({ type: 'root', id: 'root' })
-              toggleSection('pve')
-            }}
+            onClick={() => onSelect({ type: 'root', id: 'root' })}
             sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
               bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
@@ -3285,11 +3279,15 @@ return (
               cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)' },
             }}
           >
-            {/* Visual-only +/- — full-row click target above. */}
-            <i
-              className={collapsedSections.has('pve') ? 'ri-add-line' : 'ri-subtract-line'}
-              style={{ fontSize: 14, opacity: 0.7 }}
-            />
+            <Box
+              onClick={(e) => { e.stopPropagation(); toggleSection('pve') }}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', p: 0.25, mr: -0.25 }}
+            >
+              <i
+                className={collapsedSections.has('pve') ? 'ri-add-line' : 'ri-subtract-line'}
+                style={{ fontSize: 14, opacity: 0.7 }}
+              />
+            </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 14, height: 14 }} />
               <Typography variant="body2" sx={{ fontWeight: 700 }}>{t('inventory.headerProxmoxVe')}</Typography>
@@ -3763,25 +3761,7 @@ return (
       {(viewMode === 'tree' || viewMode === 'vms') && clusters.length > 0 && (
         <>
           <Box
-            onClick={() => {
-              // Single-click UX: clicking anywhere on the header does both
-              // (a) select the network root so the right panel updates, and
-              // (b) toggle the expand state. The previous design split these
-              // (header click = select only, separate +/- icon = toggle) but
-              // the +/- click target was small and inconsistent — users had
-              // to "click elsewhere" to make expansion catch up.
-              if (isProviderTenant) {
-                if (!networkFetchedRef.current) {
-                  networkFetchedRef.current = true
-                  fetchNetworks()
-                }
-              } else if (!tenantVnetsFetchedRef.current) {
-                tenantVnetsFetchedRef.current = true
-                void fetchTenantVnets()
-              }
-              onSelect({ type: 'network-root', id: 'network-root' })
-              toggleNetSection('network')
-            }}
+            onClick={() => onSelect({ type: 'network-root', id: 'network-root' })}
             sx={{
               display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
               bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
@@ -3789,12 +3769,27 @@ return (
               cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)' },
             }}
           >
-            {/* Visual-only +/- indicator — the click target is the entire
-                header (parent Box), no inner click region anymore. */}
-            <i
-              className={expandedNetSections.has('network') ? 'ri-subtract-line' : 'ri-add-line'}
-              style={{ fontSize: 14, opacity: 0.7 }}
-            />
+            <Box
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isProviderTenant) {
+                  if (!networkFetchedRef.current) {
+                    networkFetchedRef.current = true
+                    fetchNetworks()
+                  }
+                } else if (!tenantVnetsFetchedRef.current) {
+                  tenantVnetsFetchedRef.current = true
+                  void fetchTenantVnets()
+                }
+                toggleNetSection('network')
+              }}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', p: 0.25, mr: -0.25 }}
+            >
+              <i
+                className={expandedNetSections.has('network') ? 'ri-subtract-line' : 'ri-add-line'}
+                style={{ fontSize: 14, opacity: 0.7 }}
+              />
+            </Box>
             <i className="ri-router-fill" style={{ fontSize: 14, opacity: 0.7 }} />
             <Typography variant="body2" sx={{ fontWeight: 700 }}>NETWORK</Typography>
             {isProviderTenant && networkData.length > 0 && (

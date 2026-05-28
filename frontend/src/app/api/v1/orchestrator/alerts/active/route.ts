@@ -2,18 +2,21 @@ import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
+import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { getVdcScope } from '@/lib/vdc/scope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/v1/orchestrator/alerts/active
- * Récupère uniquement les alertes actives, filtrées par tenant
+ * Récupère uniquement les alertes actives, filtrées par tenant ET par silences.
+ * Silenced alerts are excluded entirely — the sole consumer is the Infrastructure
+ * Health badge counter, which should reflect "alerts the user has not muted".
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
@@ -46,6 +49,26 @@ export async function GET(req: Request) {
         alerts.map((a: any) => isAlertVisibleToTenant(a, visibilityCtx)),
       )
       filtered = alerts.filter((_: any, i: number) => visible[i])
+    }
+
+    // Drop silenced alerts. The sibling /alerts route annotates with
+    // status='silenced' so the list view can still show them; here we
+    // exclude them so the badge counter respects the mute.
+    if (Array.isArray(filtered) && filtered.length > 0) {
+      try {
+        const prisma = await getSessionPrisma()
+        const now = new Date()
+        const silences = await prisma.alertSilence.findMany({
+          where: { OR: [{ silencedUntil: null }, { silencedUntil: { gt: now } }] },
+          select: { fingerprint: true },
+        })
+        const silencedFingerprints = new Set(silences.map(s => s.fingerprint))
+        if (silencedFingerprints.size > 0) {
+          filtered = filtered.filter((a: any) => !silencedFingerprints.has(buildOrchestratorFingerprint(a)))
+        }
+      } catch {
+        // AlertSilence table may not exist yet — fall through with un-filtered results
+      }
     }
 
     return NextResponse.json(filtered)

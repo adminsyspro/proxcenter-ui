@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
@@ -8,33 +7,10 @@ import { getVdcScope } from '@/lib/vdc/scope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-/**
- * Build a fingerprint from an orchestrator alert to match against silences
- * and to dedupe within the list view.
- *
- * `rule_id` is part of the key: when two rules fire on the same event
- * (e.g. NEW-MSP "test" + CLOUD-MSP "start/stop" both subscribed to
- * vmstart on a shared cluster), the orchestrator stores them as two
- * rows with the same connection/severity/resource. Without rule_id in
- * the fingerprint they'd dedupe into one row and the wrong tenant
- * could end up owning the surviving alert.
- */
-function buildOrchestratorFingerprint(alert: {
-  connection_id?: string
-  type?: string
-  severity?: string
-  resource?: string
-  resource_type?: string
-  rule_id?: string
-}): string {
-  const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
-  const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}|${alert.rule_id || ''}`
-  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
-}
 
 /**
  * GET /api/v1/orchestrator/alerts

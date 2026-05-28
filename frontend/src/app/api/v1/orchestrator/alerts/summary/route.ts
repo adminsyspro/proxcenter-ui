@@ -1,4 +1,3 @@
-import crypto from 'crypto'
 import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
@@ -8,23 +7,10 @@ import { getVdcScope } from '@/lib/vdc/scope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// rule_id MUST be in the fingerprint — see route.ts for the why.
-function buildOrchestratorFingerprint(alert: {
-  connection_id?: string
-  type?: string
-  severity?: string
-  resource?: string
-  resource_type?: string
-  rule_id?: string
-}): string {
-  const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
-  const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}|${alert.rule_id || ''}`
-  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
-}
 
 /**
  * GET /api/v1/orchestrator/alerts/summary

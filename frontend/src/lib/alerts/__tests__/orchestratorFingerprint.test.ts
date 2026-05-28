@@ -1,26 +1,11 @@
-import crypto from 'crypto'
 import { describe, expect, it } from 'vitest'
 
-// This is the canonical contract that backend/internal/alerts/fingerprint.go must
-// also implement. Both implementations are tested against the same 6 vectors; any
-// drift breaks silence matching between the orchestrator and the UI mute flow.
-//
-// DO NOT REFACTOR THIS FUNCTION HERE WITHOUT UPDATING:
-//   - frontend/src/app/api/v1/orchestrator/alerts/route.ts (l.26-37)
-//   - frontend/src/app/api/v1/orchestrator/alerts/summary/route.ts (l.16)
-//   - backend/internal/alerts/fingerprint.go (and its tests)
-function buildOrchestratorFingerprint(alert: {
-  connection_id?: string
-  type?: string
-  severity?: string
-  resource?: string
-  resource_type?: string
-  rule_id?: string
-}): string {
-  const source = alert.connection_id ? `${alert.connection_id}:${alert.type || ''}` : (alert.type || '')
-  const data = `${source}|${alert.severity || ''}|${alert.resource_type || ''}|${alert.resource || ''}|${alert.type || ''}|${alert.rule_id || ''}`
-  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 32)
-}
+import { buildOrchestratorFingerprint } from '../orchestratorFingerprint'
+
+// Canonical contract pinned across both repos. The Go side
+// (backend/internal/alerts/fingerprint.go) MUST produce identical hex outputs
+// for the same inputs — see its own canonical vector tests. Any drift here
+// silently breaks silence matching between the orchestrator and the UI mute flow.
 
 describe('buildOrchestratorFingerprint (canonical contract)', () => {
   const vectors = [

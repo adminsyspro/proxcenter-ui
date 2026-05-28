@@ -29,4 +29,27 @@ describe('buildOrchestratorFingerprint (canonical contract)', () => {
     const b = buildOrchestratorFingerprint({ ...base, rule_id: 'rule-B' })
     expect(a).not.toBe(b)
   })
+
+  it('falls back to type alone when connection_id is absent', () => {
+    // Exercises the ternary's falsy branch: source = type instead of `${cid}:${type}`.
+    const withCid = buildOrchestratorFingerprint({ connection_id: 'c', type: 'cpu', severity: 'warning', resource_type: 'node', resource: 'n' })
+    const withoutCid = buildOrchestratorFingerprint({ type: 'cpu', severity: 'warning', resource_type: 'node', resource: 'n' })
+    expect(withCid).not.toBe(withoutCid)
+    // Both should be 32-char hex.
+    expect(withoutCid).toMatch(/^[0-9a-f]{32}$/)
+  })
+
+  it('coerces undefined fields to empty strings without throwing', () => {
+    // Empty/undefined branch coverage for severity / resource_type / resource / type / rule_id.
+    const fp = buildOrchestratorFingerprint({})
+    expect(fp).toMatch(/^[0-9a-f]{32}$/)
+    // Stable under repeated invocation.
+    expect(buildOrchestratorFingerprint({})).toBe(fp)
+  })
+
+  it('treats explicit empty strings the same as undefined fields', () => {
+    const allEmpty = buildOrchestratorFingerprint({ connection_id: '', type: '', severity: '', resource_type: '', resource: '', rule_id: '' })
+    const allUndefined = buildOrchestratorFingerprint({})
+    expect(allEmpty).toBe(allUndefined)
+  })
 })

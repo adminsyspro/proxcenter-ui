@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
-import { isDashboardAlertSilenced, isOrchestratorAlertSilenced } from '@/lib/alerts/silenceFilter'
+import { isDashboardAlertSilenced, isOrchestratorAlertSilenced, loadActiveSilenceFingerprints } from '@/lib/alerts/silenceFilter'
 
 describe('isOrchestratorAlertSilenced', () => {
   const orchAlert = {
@@ -74,5 +74,39 @@ describe('isDashboardAlertSilenced', () => {
       metric: 'storage',
     })
     expect(isDashboardAlertSilenced(alert, new Set([fp]))).toBe(true)
+  })
+})
+
+describe('loadActiveSilenceFingerprints', () => {
+  it('returns a Set of fingerprints from prisma rows', async () => {
+    const findMany = vi.fn().mockResolvedValue([{ fingerprint: 'fp-a' }, { fingerprint: 'fp-b' }])
+    const prisma = { alertSilence: { findMany } }
+
+    const result = await loadActiveSilenceFingerprints(prisma)
+    expect(result.has('fp-a')).toBe(true)
+    expect(result.has('fp-b')).toBe(true)
+    expect(result.size).toBe(2)
+  })
+
+  it('queries with the non-expired OR clause (silencedUntil null or > now)', async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    await loadActiveSilenceFingerprints({ alertSilence: { findMany } })
+
+    expect(findMany).toHaveBeenCalledTimes(1)
+    const where = findMany.mock.calls[0][0].where as { OR: Array<{ silencedUntil: unknown }> }
+    expect(where.OR.some(c => c.silencedUntil === null)).toBe(true)
+    expect(where.OR.some(c => (c.silencedUntil as { gt?: Date })?.gt instanceof Date)).toBe(true)
+  })
+
+  it('returns an empty Set when the table query throws (table missing on stale schema)', async () => {
+    const findMany = vi.fn().mockRejectedValue(new Error('relation "AlertSilence" does not exist'))
+    const result = await loadActiveSilenceFingerprints({ alertSilence: { findMany } })
+    expect(result.size).toBe(0)
+  })
+
+  it('returns an empty Set when no rows match', async () => {
+    const findMany = vi.fn().mockResolvedValue([])
+    const result = await loadActiveSilenceFingerprints({ alertSilence: { findMany } })
+    expect(result.size).toBe(0)
   })
 })

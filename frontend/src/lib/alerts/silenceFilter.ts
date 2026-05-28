@@ -2,6 +2,39 @@ import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 /**
+ * Minimal interface for the silence query — matches both the tenant-scoped
+ * `getSessionPrisma()` and a bare `prisma` client used by routes that run
+ * outside a user session.
+ */
+interface SilenceQueryClient {
+  alertSilence: {
+    findMany: (args: {
+      where: unknown
+      select: { fingerprint: true }
+    }) => Promise<Array<{ fingerprint: string }>>
+  }
+}
+
+/**
+ * Loads the set of fingerprints currently muted by an active silence
+ * (silencedUntil IS NULL OR silencedUntil > now()). Used by every alerts route
+ * that needs to skip muted entries before returning them. Failures (e.g.
+ * AlertSilence table missing on a stale schema) resolve to an empty set so
+ * the caller silently falls back to un-filtered results.
+ */
+export async function loadActiveSilenceFingerprints(prisma: SilenceQueryClient): Promise<Set<string>> {
+  try {
+    const rows = await prisma.alertSilence.findMany({
+      where: { OR: [{ silencedUntil: null }, { silencedUntil: { gt: new Date() } }] },
+      select: { fingerprint: true },
+    })
+    return new Set(rows.map(r => r.fingerprint))
+  } catch {
+    return new Set()
+  }
+}
+
+/**
  * Returns true if the orchestrator alert (raw shape, before transform into the
  * dashboard shape) is muted via the SHA-256 fingerprint stored by the
  * /operations/alerts mute UI. Single source of truth for the dashboard route's

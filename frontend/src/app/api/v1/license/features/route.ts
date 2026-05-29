@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -34,6 +36,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
 export async function GET() {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/features`, {
+      headers: orchestratorHeaders(),
       cache: "no-store",
     })
 

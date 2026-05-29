@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
 
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     // Fetch rolling updates
     try {
       const rollingRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates`, {
-        headers: { "Content-Type": "application/json" },
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (rollingRes.ok) {
@@ -110,7 +111,7 @@ export async function GET(req: Request) {
     // Fetch DRS migrations
     try {
       const drsRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations?limit=50`, {
-        headers: { "Content-Type": "application/json" },
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (drsRes.ok) {
@@ -157,7 +158,7 @@ export async function GET(req: Request) {
     // Fetch Site Recovery replication jobs
     try {
       const replRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/jobs`, {
-        headers: { "Content-Type": "application/json" },
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (replRes.ok) {
@@ -213,7 +214,7 @@ export async function GET(req: Request) {
     // Fetch Site Recovery plan executions (failover/failback/test)
     try {
       const plansRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans`, {
-        headers: { "Content-Type": "application/json" },
+        headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       })
 
       if (plansRes.ok) {
@@ -225,7 +226,7 @@ export async function GET(req: Request) {
           if (!plan.last_failover && !plan.last_test) continue
           try {
             const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${plan.id}/history`, {
-              headers: { "Content-Type": "application/json" },
+              headers: orchestratorHeaders({ "Content-Type": "application/json" }),
             })
             if (!histRes.ok) continue
             const histData = await histRes.json()

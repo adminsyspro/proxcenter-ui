@@ -69,11 +69,28 @@ if [ -z "$ORCHESTRATOR_API_KEY" ] && [ -f /app/orchestrator_data/.api_key ]; the
   echo "[entrypoint] Loaded ORCHESTRATOR_API_KEY from orchestrator shared volume"
 fi
 
-# Security checks
-if [ -z "$NEXTAUTH_SECRET" ]; then
-  echo "[entrypoint] ⚠ WARNING: NEXTAUTH_SECRET is not set. Sessions will use an insecure default key."
-  echo "[entrypoint]   Generate one with: openssl rand -base64 32"
-fi
+# Security checks: refuse missing or placeholder secrets. Both .env.example
+# files and the build-time fallback in src/lib/auth/config.ts ship known
+# stub values; if any of those reach a container at runtime the operator
+# forgot to provision real secrets and sessions would all share the same
+# key across every install.
+check_secret() {
+  var_name=$1
+  eval value="\$$var_name"
+  case "$value" in
+    "" | \
+    "your-nextauth-secret-here" | "your-nextauth-secret-change-me" | \
+    "your-app-secret-here" | "your-app-secret-change-me" | \
+    "build-time-placeholder")
+      echo "[entrypoint] ERROR: $var_name is empty or set to a placeholder value." >&2
+      echo "[entrypoint]   Replace it in .env with a real secret: openssl rand -base64 32" >&2
+      exit 1
+      ;;
+  esac
+}
+
+check_secret NEXTAUTH_SECRET
+check_secret APP_SECRET
 
 echo "[entrypoint] Starting..."
 exec "$@"

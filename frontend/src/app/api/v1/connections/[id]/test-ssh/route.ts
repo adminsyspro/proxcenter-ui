@@ -7,6 +7,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 import { executeSSHDirect } from "@/lib/ssh/exec"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
 
@@ -204,7 +205,7 @@ export async function POST(
 
       const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/connections/${id}/test-ssh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(sshCredentials),
         signal: controller.signal,
       })

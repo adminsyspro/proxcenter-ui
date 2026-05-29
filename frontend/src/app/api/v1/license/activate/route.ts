@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
 
@@ -20,9 +21,7 @@ export async function POST(req: Request) {
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/activate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ license: body.license }),
     })
 

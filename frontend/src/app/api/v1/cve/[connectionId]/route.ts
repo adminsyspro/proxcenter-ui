@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,7 +28,7 @@ export async function GET(
     }
 
     const response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
     })
 
     const data = await response.json()
@@ -70,7 +71,7 @@ export async function POST(
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
     })
 
     const data = await response.json()

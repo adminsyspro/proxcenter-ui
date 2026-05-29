@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -16,6 +18,7 @@ const DEFAULT_COMMUNITY_STATUS = {
 export async function GET() {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/status`, {
+      headers: orchestratorHeaders(),
       cache: "no-store",
     })
 

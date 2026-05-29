@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
 
@@ -105,9 +106,7 @@ export async function POST(req: Request) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/preflight`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
     })
 

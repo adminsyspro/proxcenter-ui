@@ -5,6 +5,7 @@ import { getNodeIp } from '@/lib/ssh/node-ip'
 import { executeSSHDirect, shellEscape, type SSHResult } from '@/lib/ssh/exec'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { safeLog } from '@/lib/log/sanitize'
+import { orchestratorHeaders } from '@/lib/orchestrator/headers'
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://proxcenter-orchestrator:8080'
 
@@ -87,7 +88,7 @@ async function runSshForWatcher(
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     })

@@ -2,6 +2,7 @@ import { Client } from "ssh2"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { safeLog } from "@/lib/log/sanitize"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -121,7 +122,7 @@ export async function executeSSH(
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ssh/exec`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: orchestratorHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     })

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,7 @@ export async function DELETE() {
 
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/deactivate`, {
       method: "DELETE",
+      headers: orchestratorHeaders(),
     })
 
     const data = await res.json()

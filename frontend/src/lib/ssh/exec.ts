@@ -22,6 +22,15 @@ export interface SSHResult {
 }
 
 /**
+ * SSH budget for node-management actions (update, reboot, maintenance) that may
+ * target hosts reached over a high-latency WAN link (e.g. a remote node added
+ * by public IP). The commands themselves are quick or backgrounded; the slow
+ * part is the SSH connect/handshake, which can exceed the 30s executeSSH
+ * default. Matches the budget the "Test SSH" path already grants. See #370.
+ */
+export const NODE_MGMT_SSH_TIMEOUT_MS = 120_000
+
+/**
  * Execute an SSH command with orchestrator-first, ssh2-fallback strategy.
  *
  * 1. Try the Go orchestrator POST /api/v1/ssh/exec
@@ -229,7 +238,13 @@ export function executeSSHDirect(opts: {
       host: opts.host,
       port: opts.port,
       username: opts.user,
-      readyTimeout: 30_000,
+      // Connect/handshake budget. Honor the caller's timeoutMs (capped at
+      // 120s) instead of a hardcoded 30s, so high-latency WAN links and
+      // long-running ops get enough headroom to complete the SSH handshake.
+      // Plain 30s execs are unchanged (min(30s, 120s) === 30s). See #370:
+      // a node added over a public-IP WAN link timed out the upgrade at 30s
+      // even though "Test SSH" (which allows 120s) connected fine.
+      readyTimeout: Math.min(overallTimeoutMs, 120_000),
       // TOFU host-key verification. Pin on first contact, refuse any
       // later connection whose server key differs. Closes the MITM gap
       // that ssh2's default "trust everything" behaviour leaves open.

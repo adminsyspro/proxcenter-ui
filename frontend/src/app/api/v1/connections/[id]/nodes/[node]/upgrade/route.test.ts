@@ -1,0 +1,101 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { NODE_MGMT_SSH_TIMEOUT_MS } from '@/lib/ssh/exec'
+
+// Declared via vi.hoisted so they exist before the (hoisted) vi.mock factories
+// run — required because the @/lib/ssh/exec factory is async (importActual).
+const { checkPermissionMock, getConnectionByIdMock, getNodeIpMock, executeSSHMock } = vi.hoisted(() => ({
+  checkPermissionMock: vi.fn<(...args: any[]) => Promise<Response | null>>(),
+  getConnectionByIdMock: vi.fn<(id: string) => Promise<any>>(),
+  getNodeIpMock: vi.fn<(...args: any[]) => Promise<string>>(),
+  executeSSHMock: vi.fn<(...args: any[]) => Promise<any>>(),
+}))
+
+vi.mock('@/lib/rbac', () => ({
+  checkPermission: checkPermissionMock,
+  buildNodeResourceId: (connId: string, node: string) => `${connId}:${node}`,
+  PERMISSIONS: { NODE_VIEW: 'node.view', NODE_MANAGE: 'node.manage' },
+}))
+
+vi.mock('@/lib/connections/getConnection', () => ({
+  getConnectionById: getConnectionByIdMock,
+}))
+
+vi.mock('@/lib/ssh/node-ip', () => ({
+  getNodeIp: getNodeIpMock,
+}))
+
+// Mock executeSSH but keep the real NODE_MGMT_SSH_TIMEOUT_MS, so the test
+// guards the actual exported value rather than a hand-copied constant.
+vi.mock('@/lib/ssh/exec', async (importActual) => {
+  const actual = await importActual<typeof import('@/lib/ssh/exec')>()
+  return { ...actual, executeSSH: executeSSHMock }
+})
+
+beforeEach(() => {
+  checkPermissionMock.mockReset().mockResolvedValue(null)
+  getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'c1', baseUrl: 'https://10.0.0.1:8006' })
+  getNodeIpMock.mockReset().mockResolvedValue('203.0.113.9')
+  executeSSHMock.mockReset().mockResolvedValue({ success: true, output: '' })
+})
+
+async function importPOST() {
+  const mod = await import('./route')
+  return mod.POST as Parameters<typeof callRoute>[0]
+}
+
+async function importGET() {
+  const mod = await import('./route')
+  return mod.GET as Parameters<typeof callRoute>[0]
+}
+
+describe('POST /api/v1/connections/[id]/nodes/[node]/upgrade (#370 WAN timeout)', () => {
+  it('drives the upgrade SSH with the WAN node-management budget, not the 30s default', async () => {
+    const POST = await importPOST()
+    const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
+
+    expect(res.status).toBe(200)
+    expect(await readJson<any>(res)).toEqual({ started: true })
+
+    // The reported bug: a remote node over WAN timed out at the 30s default
+    // even though "Test SSH" (120s) connected. The start must use the larger
+    // budget. Asserting the exact arg guards the regression for good.
+    expect(executeSSHMock).toHaveBeenCalledTimes(1)
+    const [connId, nodeIp, , timeoutMs] = executeSSHMock.mock.calls[0]
+    expect(connId).toBe('c1')
+    expect(nodeIp).toBe('203.0.113.9')
+    expect(timeoutMs).toBe(NODE_MGMT_SSH_TIMEOUT_MS)
+    expect(timeoutMs).toBeGreaterThan(30_000)
+  })
+
+  it('returns 500 when the SSH start fails', async () => {
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'SSH connection timeout (120s)' })
+
+    const POST = await importPOST()
+    const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
+
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toContain('timeout')
+  })
+})
+
+describe('GET /api/v1/connections/[id]/nodes/[node]/upgrade (poll)', () => {
+  it('polls status with the same WAN budget', async () => {
+    executeSSHMock.mockResolvedValueOnce({
+      success: true,
+      output: 'RUNNING\n---SEPARATOR---\nupgrading...\n---SEPARATOR---\nNO',
+    })
+
+    const GET = await importGET()
+    const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' } })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.status).toBe('RUNNING')
+    expect(body.reboot_required).toBe(false)
+
+    const [, , , timeoutMs] = executeSSHMock.mock.calls[0]
+    expect(timeoutMs).toBe(NODE_MGMT_SSH_TIMEOUT_MS)
+  })
+})

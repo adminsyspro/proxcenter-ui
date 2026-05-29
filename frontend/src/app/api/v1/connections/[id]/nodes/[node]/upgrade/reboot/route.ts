@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getNodeIp } from "@/lib/ssh/node-ip"
-import { executeSSH } from "@/lib/ssh/exec"
+import { executeSSH, NODE_MGMT_SSH_TIMEOUT_MS } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -29,7 +29,7 @@ export async function POST(_req: Request, ctx: Ctx) {
   const nodeIp = await getNodeIp(conn, node)
 
   // Use nohup so the SSH session returns before the reboot kills it
-  const result = await executeSSH(id, nodeIp, "nohup bash -c 'sleep 1 && reboot' > /dev/null 2>&1 &")
+  const result = await executeSSH(id, nodeIp, "nohup bash -c 'sleep 1 && reboot' > /dev/null 2>&1 &", NODE_MGMT_SSH_TIMEOUT_MS)
 
   if (!result.success) {
     return NextResponse.json(

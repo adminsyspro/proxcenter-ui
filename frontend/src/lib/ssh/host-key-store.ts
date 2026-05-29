@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma"
 import { timingSafeEqual } from "node:crypto"
+import { safeLog } from "@/lib/log/sanitize"
 
 // TOFU host-key store for the frontend ssh2 path. Mirrors the backend
 // orchestrator's /app/data/known_hosts. Keyed by "host:port" so that
@@ -129,5 +130,39 @@ async function touchLastUsed(host: string): Promise<void> {
     })
   } catch {
     // ignore
+  }
+}
+
+type VerifyCallback = (ok: boolean) => void
+
+/**
+ * Builds the ssh2 `hostVerifier` callback. Kept here rather than inline
+ * in executeSSHDirect so the logging branches stay unit-testable. Every
+ * interpolated value passes through safeLog because keyType strings
+ * come from the buffer the remote server hands us, and CodeQL's
+ * js/log-injection rule treats anything reachable from network input
+ * as tainted until a known sanitiser is applied.
+ */
+export function makeHostVerifier(host: string, port: number) {
+  return (key: Buffer, verify: VerifyCallback): void => {
+    const safeHost = safeLog(host)
+    verifyOrPin(host, port, key)
+      .then((result) => {
+        if (result.status === "mismatch") {
+          console.warn(
+            `[ssh] host-key mismatch for ${safeHost}: pinned ${safeLog(result.expectedKeyType)}, presented ${safeLog(result.presentedKeyType)}. Refusing to connect. Remove the row in ssh_host_keys to re-pin.`,
+          )
+          verify(false)
+          return
+        }
+        if (result.status === "pinned-new") {
+          console.log(`[ssh] pinned ${safeLog(result.keyType)} host key for ${safeHost} (first contact)`)
+        }
+        verify(true)
+      })
+      .catch((err) => {
+        console.error(`[ssh] host-key verification failed for ${safeHost}: ${safeLog(err?.message || String(err))}`)
+        verify(false)
+      })
   }
 }

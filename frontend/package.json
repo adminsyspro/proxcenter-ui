@@ -135,6 +135,8 @@
     "defu": ">=6.1.5",
     "fast-uri": ">=3.1.2",
     "postcss": "$postcss",
-    "js-cookie": "^3.0.7"
+    "js-cookie": "^3.0.7",
+    "tmp": "^0.2.6",
+    "uuid": "^11.1.1"
   }
 }

@@ -87,14 +87,20 @@ async function handleWsConnection(clientWs, req) {
       return
     }
 
-    const { host, pvePort, port, ticket, node, user, apiToken } = session
+    const { host, pvePort, port, ticket, node, user, apiToken, insecure } = session
     if (!host || !port || !ticket || !node) {
       console.error('[WS] Invalid shell session data:', session)
       clientWs.close(4002, 'Invalid session data')
       return
     }
 
-    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user})`)
+    // Mirror the connection's insecureTLS flag instead of accepting
+    // every certificate unconditionally. Default missing/undefined to
+    // the legacy permissive behaviour so an in-flight rolling deploy
+    // where an old session predates the field does not lock anyone out.
+    const rejectUnauthorized = insecure === false
+
+    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}, tls_verify: ${rejectUnauthorized})`)
 
     try {
       const basePath = `/api2/json/nodes/${encodeURIComponent(node)}`
@@ -110,7 +116,7 @@ async function handleWsConnection(clientWs, req) {
       }
 
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
-        rejectUnauthorized: false,
+        rejectUnauthorized,
         headers: wsHeaders
       })
 
@@ -213,7 +219,7 @@ async function handleWsConnection(clientWs, req) {
       }
 
       const session = await sessionRes.json()
-      const { baseUrl, port, ticket, node, apiToken } = session
+      const { baseUrl, port, ticket, node, apiToken, insecure } = session
 
       if (!baseUrl || !port || !ticket) {
         console.error('[WS] Invalid session data:', session)
@@ -226,7 +232,13 @@ async function handleWsConnection(clientWs, req) {
       const wsProtocol = pveUrl.protocol === 'https:' ? 'wss:' : 'ws:'
       const pveWsUrl = `${wsProtocol}//${pveUrl.host}/api2/json/nodes/${encodeURIComponent(node)}/${session.type}/${session.vmid}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
-      console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
+      // Mirror the connection's insecureTLS flag rather than blanket-
+      // accepting every cert. False means strict TLS verification.
+      // Default to permissive on missing field to survive rolling
+      // deploys where the consume route predates the change.
+      const rejectUnauthorized = insecure === false
+
+      console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')} (tls_verify: ${rejectUnauthorized})`)
 
       // Headers d'authentification pour Proxmox
       const wsHeaders = {
@@ -240,7 +252,7 @@ async function handleWsConnection(clientWs, req) {
 
       // Se connecter à Proxmox
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
-        rejectUnauthorized: false, // Pour les certificats auto-signés
+        rejectUnauthorized,
         headers: wsHeaders
       })
 

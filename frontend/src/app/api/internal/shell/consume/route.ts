@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     host: s.host,
     pvePort: s.pvePort,
     apiToken: s.apiToken,
+    insecure: s.insecure,
     node: s.node,
     port: s.port,
     ticket: s.ticket,

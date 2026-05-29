@@ -65,12 +65,13 @@ describe('POST /api/internal/shell/consume', () => {
     expect(consumeMock).toHaveBeenCalledWith('abc')
   })
 
-  it('returns the full session payload on a hit', async () => {
+  it('returns the full session payload on a hit, including the per-connection insecure flag', async () => {
     consumeMock.mockReturnValueOnce({
       baseUrl: 'https://pve.example:8006',
       host: 'pve.example',
       pvePort: 8006,
       apiToken: 'pve!tok=secret',
+      insecure: true,
       node: 'pve1',
       port: 5900,
       ticket: 'PVE:ticket',
@@ -89,11 +90,33 @@ describe('POST /api/internal/shell/consume', () => {
       host: 'pve.example',
       pvePort: 8006,
       apiToken: 'pve!tok=secret',
+      insecure: true,
       node: 'pve1',
       port: 5900,
       ticket: 'PVE:ticket',
       user: 'root@pam!root',
       upid: 'UPID:1',
     })
+  })
+
+  it('preserves insecure=false so ws-proxy enables strict TLS', async () => {
+    consumeMock.mockReturnValueOnce({
+      baseUrl: 'https://pve.example:8006',
+      host: 'pve.example',
+      pvePort: 8006,
+      apiToken: 'pve!tok=secret',
+      insecure: false,
+      node: 'pve1',
+      port: 5900,
+      ticket: 'PVE:ticket',
+      user: 'root@pam!root',
+      upid: 'UPID:1',
+      expiresAt: Date.now() + 10_000,
+    })
+    const res = await POST(
+      makeReq({ 'X-Internal-Caller': PROXY_CALLER, 'X-Internal-Secret': 'shell-test-secret' })
+    )
+    const body = await res.json()
+    expect(body.insecure).toBe(false)
   })
 })

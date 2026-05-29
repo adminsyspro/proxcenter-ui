@@ -46,6 +46,7 @@ export async function POST(
   sessions.set(sessionId, {
     baseUrl: conn.baseUrl,
     apiToken: conn.apiToken,
+    insecure: conn.insecureDev,
     node,
     type,
     vmid,

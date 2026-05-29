@@ -19,6 +19,10 @@ type TerminalSession = {
   host: string
   pvePort: number
   apiToken: string
+  // Mirrors the connection's insecureTLS flag so ws-proxy can decide
+  // whether to enable certificate verification on the PVE WebSocket
+  // hop. False means strict TLS (matches H7 backend behaviour).
+  insecure: boolean
   node: string
   port: number
   ticket: string
@@ -93,6 +97,7 @@ export async function POST(
       host,
       pvePort,
       apiToken: conn.apiToken,
+      insecure: conn.insecureDev,
       node,
       port: Number(termproxy.port),
       ticket: termproxy.ticket,

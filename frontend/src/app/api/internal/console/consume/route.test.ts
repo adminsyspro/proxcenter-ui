@@ -65,10 +65,11 @@ describe('POST /api/internal/console/consume', () => {
     expect(consumeMock).toHaveBeenCalledWith('abc')
   })
 
-  it('returns the VM console session payload on a hit', async () => {
+  it('returns the VM console session payload on a hit, including the per-connection insecure flag', async () => {
     consumeMock.mockReturnValueOnce({
       baseUrl: 'https://pve.example:8006',
       apiToken: 'pve!tok=secret',
+      insecure: true,
       node: 'pve1',
       type: 'qemu',
       vmid: '100',
@@ -85,11 +86,31 @@ describe('POST /api/internal/console/consume', () => {
     expect(body).toMatchObject({
       baseUrl: 'https://pve.example:8006',
       apiToken: 'pve!tok=secret',
+      insecure: true,
       node: 'pve1',
       type: 'qemu',
       vmid: '100',
       port: 5901,
       ticket: 'PVE:vncticket',
     })
+  })
+
+  it('preserves insecure=false so ws-proxy enables strict TLS', async () => {
+    consumeMock.mockReturnValueOnce({
+      baseUrl: 'https://pve.example:8006',
+      apiToken: 'pve!tok=secret',
+      insecure: false,
+      node: 'pve1',
+      type: 'qemu',
+      vmid: '100',
+      port: 5901,
+      ticket: 'PVE:vncticket',
+      expiresAt: Date.now() + 10_000,
+    })
+    const res = await POST(
+      makeReq({ 'X-Internal-Caller': PROXY_CALLER, 'X-Internal-Secret': 'console-test-secret' })
+    )
+    const body = await res.json()
+    expect(body.insecure).toBe(false)
   })
 })

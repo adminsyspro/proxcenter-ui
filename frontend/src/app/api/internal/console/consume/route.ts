@@ -24,6 +24,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     baseUrl: s.baseUrl,
     apiToken: s.apiToken,
+    insecure: s.insecure,
     port: s.port,
     ticket: s.ticket,
     node: s.node,

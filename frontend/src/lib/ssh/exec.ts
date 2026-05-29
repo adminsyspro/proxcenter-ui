@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { verifyOrPin } from "@/lib/ssh/host-key-store"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -229,6 +230,30 @@ export function executeSSHDirect(opts: {
       port: opts.port,
       username: opts.user,
       readyTimeout: 30_000,
+      // TOFU host-key verification. Pin on first contact, refuse any
+      // later connection whose server key differs. Closes the MITM gap
+      // that ssh2's default "trust everything" behaviour leaves open
+      // (audit finding NEW-H2).
+      hostVerifier: (key: Buffer, verify: (ok: boolean) => void) => {
+        verifyOrPin(opts.host, opts.port, key)
+          .then((result) => {
+            if (result.status === "mismatch") {
+              console.warn(
+                `[ssh] host-key mismatch for ${safeLog(opts.host)}: pinned ${result.expectedKeyType}, presented ${result.presentedKeyType}. Refusing to connect. Remove the row in ssh_host_keys to re-pin.`,
+              )
+              verify(false)
+              return
+            }
+            if (result.status === "pinned-new") {
+              console.log(`[ssh] pinned ${result.keyType} host key for ${safeLog(opts.host)} (first contact)`)
+            }
+            verify(true)
+          })
+          .catch((err) => {
+            console.error(`[ssh] host-key verification failed for ${safeLog(opts.host)}: ${err?.message || err}`)
+            verify(false)
+          })
+      },
     }
 
     if (opts.key) {

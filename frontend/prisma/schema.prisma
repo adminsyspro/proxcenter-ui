@@ -1004,3 +1004,19 @@ model NodeGreenConfig {
   @@id([connectionId, nodeName])
   @@map("node_green_config")
 }
+
+// TOFU host-key store for the frontend ssh2 path. Mirrors the backend
+// orchestrator's /app/data/known_hosts store. Keyed by host (lowercased,
+// without port — same host is assumed to present the same key on every
+// SSH port we use). The first successful connection pins the key; every
+// subsequent connection verifies it matches.
+model SshHostKey {
+  id          String   @id @default(cuid())
+  host        String   @unique
+  keyType     String   @map("key_type")
+  keyData     Bytes    @map("key_data")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastUsedAt  DateTime @default(now()) @updatedAt @map("last_used_at")
+
+  @@map("ssh_host_keys")
+}

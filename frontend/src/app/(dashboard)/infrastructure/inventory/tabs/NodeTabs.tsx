@@ -1032,14 +1032,8 @@ export default function NodeTabs(props: any) {
                           const XTermShell = require('@/components/xterm/XTermShell').default
                           return (
                             <XTermShell
-                              wsUrl={nodeShellData.wsUrl}
+                              sessionId={nodeShellData.sessionId}
                               host={nodeShellData.host}
-                              port={nodeShellData.port}
-                              ticket={nodeShellData.ticket}
-                              node={nodeShellData.node}
-                              user={nodeShellData.user}
-                              pvePort={nodeShellData.nodePort}
-                              apiToken={nodeShellData.apiToken}
                               onDisconnect={() => {
                                 setNodeShellData(null)
                                 setNodeShellConnected(false)

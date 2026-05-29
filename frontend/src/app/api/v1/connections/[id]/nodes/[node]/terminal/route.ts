@@ -5,13 +5,39 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
+// In-memory short-lived terminal sessions. Same MVP store as the VM
+// console flow (see consoles route): keyed by random UUID, single-use,
+// expires after 30 s to leave headroom for slow ws-proxy hops. The
+// ws-proxy process consumes the session via /api/internal/shell/consume
+// (gated by APP_SECRET) and then opens the WebSocket to PVE on the
+// browser's behalf. The apiToken NEVER leaves the server: previously
+// this route returned conn.apiToken in the JSON payload, allowing any
+// user with node.console permission to scrape the long-lived PVE token
+// from DevTools (audit finding NEW-C).
+type TerminalSession = {
+  baseUrl: string
+  host: string
+  pvePort: number
+  apiToken: string
+  node: string
+  port: number
+  ticket: string
+  user: string
+  upid: string
+  expiresAt: number
+}
+
+const sessions = new Map<string, TerminalSession>()
+
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/terminal
- * 
- * Crée une session terminal (shell) pour un node
+ *
+ * Creates a terminal (shell) session for a PVE node.
  * Proxmox API: POST /nodes/{node}/termproxy
- * 
- * Retourne les informations nécessaires pour établir une connexion WebSocket
+ *
+ * Returns only { sessionId, host, node, expiresAt } so the browser can
+ * open ws://.../api/internal/ws/shell/{sessionId} without ever
+ * receiving the underlying PVE API token.
  */
 export async function POST(
   _req: Request,
@@ -28,19 +54,17 @@ export async function POST(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    // Parser le baseUrl pour extraire host et port
     let host = ''
-    let port = 8006
+    let pvePort = 8006
     try {
       const url = new URL(conn.baseUrl)
       host = url.hostname
-      port = url.port ? Number.parseInt(url.port) : 8006
+      pvePort = url.port ? Number.parseInt(url.port) : 8006
     } catch {
-      // Si le parsing échoue, essayer de parser manuellement
       const match = conn.baseUrl.match(/https?:\/\/([^:/]+)(?::(\d+))?/)
       if (match) {
         host = match[1]
-        port = match[2] ? Number.parseInt(match[2]) : 8006
+        pvePort = match[2] ? Number.parseInt(match[2]) : 8006
       }
     }
 
@@ -48,7 +72,6 @@ export async function POST(
       return NextResponse.json({ error: "Could not determine host from connection" }, { status: 500 })
     }
 
-    // POST /nodes/{node}/termproxy
     const termproxy = await pveFetch<any>(
       conn,
       `/nodes/${encodeURIComponent(node)}/termproxy`,
@@ -62,23 +85,44 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    // Use the connection host — Proxmox API routes vncwebsocket to the correct node internally
-    const wsUrl = `wss://${host}:${port}/api2/json/nodes/${encodeURIComponent(node)}/vncwebsocket?port=${termproxy.port}&vncticket=${encodeURIComponent(termproxy.ticket)}`
+    const sessionId = crypto.randomUUID()
+    const expiresAt = Date.now() + 30_000
+
+    sessions.set(sessionId, {
+      baseUrl: conn.baseUrl,
+      host,
+      pvePort,
+      apiToken: conn.apiToken,
+      node,
+      port: Number(termproxy.port),
+      ticket: termproxy.ticket,
+      user: termproxy.user,
+      upid: termproxy.upid,
+      expiresAt,
+    })
 
     return NextResponse.json({
       data: {
-        ticket: termproxy.ticket,
-        port: termproxy.port,
-        user: termproxy.user,
-        upid: termproxy.upid,
-        wsUrl,
+        sessionId,
         host,
-        nodePort: port,
-        apiToken: conn.apiToken,
+        node,
+        expiresAt,
       }
     })
   } catch (e: any) {
     console.error("[terminal/node] Error:", e?.message)
     return NextResponse.json({ error: e?.message || "Failed to create terminal session" }, { status: 500 })
   }
+}
+
+// Server-only helper consumed by /api/internal/shell/consume. The
+// session is single-use: removed from the map on first read so a leaked
+// sessionId cannot be replayed by a second client. Returns null if the
+// id is unknown or the entry has expired.
+export function consumeTerminalSession(sessionId: string): TerminalSession | null {
+  const s = sessions.get(sessionId)
+  if (!s) return null
+  sessions.delete(sessionId)
+  if (Date.now() > s.expiresAt) return null
+  return s
 }

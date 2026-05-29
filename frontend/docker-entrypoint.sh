@@ -89,8 +89,14 @@ check_secret() {
   esac
 }
 
-check_secret NEXTAUTH_SECRET
-check_secret APP_SECRET
+# The published demo image bakes DEMO_MODE=true and ships without any
+# real .env. demo-api intercepts every API call and never reaches Prisma
+# or auth middleware, so requiring real secrets here would regress demo
+# bootstrap from "warn and run" to "exit and fail" with no benefit.
+if [ "$DEMO_MODE" != "true" ]; then
+  check_secret NEXTAUTH_SECRET
+  check_secret APP_SECRET
+fi
 
 echo "[entrypoint] Starting..."
 exec "$@"

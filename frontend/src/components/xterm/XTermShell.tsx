@@ -4,20 +4,15 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, CircularProgress, Typography, Chip, Button } from '@mui/material'
 
 interface XTermShellProps {
-  wsUrl: string
+  sessionId: string
+  // Display-only label shown in the status bar. The actual host/port
+  // PVE talks to live server-side in the consume route and never leak
+  // to the browser.
   host: string
-  port: number
-  ticket: string
-  node: string
-  user?: string
-  pvePort?: number
-  apiToken?: string
-  vmtype?: string  // 'qemu' | 'lxc' for VM/CT shell
-  vmid?: string    // VM/CT ID
   onDisconnect?: () => void
 }
 
-export default function XTermShell({ wsUrl, host, port, ticket, node, user, pvePort = 8006, apiToken, vmtype, vmid, onDisconnect }: XTermShellProps) {
+export default function XTermShell({ sessionId, host, onDisconnect }: XTermShellProps) {
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<any>(null)
   const fitAddonRef = useRef<any>(null)
@@ -112,24 +107,16 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
         wsRef.current.close()
       }
 
-      // Connexion WebSocket via le proxy
-      // In dev mode, next dev doesn't handle WS upgrades, redirect to standalone ws-proxy on 3001
+      // Connexion WebSocket via le proxy. In dev mode, next dev doesn't
+      // handle WS upgrades so we redirect to the standalone ws-proxy on
+      // 3001. The browser only ever passes a sessionId; host/port/
+      // ticket/apiToken stay server-side (NEW-C / NEW-H1).
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const isDev = window.location.port === '3000' && window.location.hostname === 'localhost'
       const wsHost = isDev ? 'localhost:3001' : window.location.host
-      let proxyWsUrl = `${wsProtocol}//${wsHost}/api/internal/ws/shell?host=${encodeURIComponent(host)}&port=${port}&ticket=${encodeURIComponent(ticket)}&node=${encodeURIComponent(node)}&pvePort=${pvePort}`
+      const proxyWsUrl = `${wsProtocol}//${wsHost}/api/internal/ws/shell/${encodeURIComponent(sessionId)}`
 
-      if (user) {
-        proxyWsUrl += `&user=${encodeURIComponent(user)}`
-      }
-      if (apiToken) {
-        proxyWsUrl += `&apiToken=${encodeURIComponent(apiToken)}`
-      }
-      if (vmtype && vmid) {
-        proxyWsUrl += `&vmtype=${encodeURIComponent(vmtype)}&vmid=${encodeURIComponent(vmid)}`
-      }
-      
-      console.log('[XTerm] Connecting to proxy:', proxyWsUrl.replace(/ticket=[^&]+/, 'ticket=***').replace(/apiToken=[^&]+/, 'apiToken=***'))
+      console.log('[XTerm] Connecting to proxy:', proxyWsUrl)
       
       const ws = new WebSocket(proxyWsUrl, ['binary'])
       wsRef.current = ws
@@ -168,14 +155,22 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
 
       ws.onclose = (event) => {
         console.log('[XTerm] WebSocket closed:', event.code, event.reason)
+        // Ignore stale closes from a previous WS that was superseded
+        // (React StrictMode double-mount in dev, manual Reconnect, etc).
+        // Without this guard a successful reconnect keeps the red error
+        // banner from the obsolete socket forever.
+        if (wsRef.current !== ws) return
         setStatus('disconnected')
-        if (event.code !== 1000) {
+        // 1000 = normal, 1005 = no status (browser close() without args).
+        // Either is a clean shutdown from our side, not an error.
+        if (event.code !== 1000 && event.code !== 1005) {
           setErrorMsg(`Connection closed: ${event.reason || 'Unknown reason'}`)
         }
       }
 
       ws.onerror = (error) => {
         console.error('[XTerm] WebSocket error:', error)
+        if (wsRef.current !== ws) return
         setStatus('error')
         setErrorMsg('WebSocket connection failed.')
       }
@@ -185,7 +180,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
       setStatus('error')
       setErrorMsg(err.message || 'Failed to initialize terminal')
     }
-  }, [host, port, ticket, node, user, pvePort, apiToken, vmtype, vmid])
+  }, [sessionId])
 
   // Connexion initiale
   useEffect(() => {
@@ -245,7 +240,7 @@ export default function XTermShell({ wsUrl, host, port, ticket, node, user, pveP
             }} 
           />
           <Typography sx={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>
-            {host}:{port}
+            {host}
           </Typography>
           <Typography sx={{ color: '#666', fontSize: 12 }}>
             • {status === 'connected' ? 'Connected' : 

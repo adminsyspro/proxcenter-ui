@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server"
 
 import { consumeConsoleSession } from "@/app/api/v1/connections/[id]/guests/[type]/[node]/[vmid]/console/route"
+import { requireInternalCaller } from "@/lib/internal-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
-  // Only allow internal calls (from our own WS proxy)
-  const origin = req.headers.get("x-internal-caller")
-  if (origin !== "proxcenter-ws-proxy") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
+  // Defensive: gate behind APP_SECRET on top of the x-internal-caller
+  // fingerprint. The fingerprint is trivially spoofable since this
+  // route lives under publicApiRoutes; the secret is server-only.
+  const denied = requireInternalCaller(req)
+  if (denied) return denied
 
   const { sessionId } = await req.json().catch(() => ({}))
 

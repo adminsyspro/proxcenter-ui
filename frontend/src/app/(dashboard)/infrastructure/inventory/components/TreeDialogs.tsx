@@ -1263,14 +1263,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 const XTermShell = require('@/components/xterm/XTermShell').default
                 return (
                   <XTermShell
-                    wsUrl={shellDialog.data.wsUrl}
+                    sessionId={shellDialog.data.sessionId}
                     host={shellDialog.data.host}
-                    port={shellDialog.data.port}
-                    ticket={shellDialog.data.ticket}
-                    node={shellDialog.data.node}
-                    user={shellDialog.data.user}
-                    pvePort={shellDialog.data.nodePort}
-                    apiToken={shellDialog.data.apiToken}
                     onDisconnect={() => setShellDialog(prev => ({ ...prev, data: null, error: 'Disconnected' }))}
                   />
                 )

@@ -8,14 +8,38 @@
  *
  * Routes:
  *   /ws/console/{sessionId} - Console VM/CT via session stockée
- *   /ws/shell?host=...&port=...&ticket=... - Shell node direct
+ *   /ws/shell/{sessionId}   - Shell node via session stockée
  */
+
+// Load .env files before reading APP_SECRET / PORT / etc. ws-proxy
+// runs under `node`, which (unlike `next dev`) does not auto-load .env,
+// so process.env.APP_SECRET would be empty in local dev without this.
+// @next/env is bundled with Next and silently no-ops in containers where
+// no .env file is present (the secret is provided via the container env).
+try {
+  const path = require('node:path')
+  require('@next/env').loadEnvConfig(path.join(__dirname))
+} catch {
+  // @next/env unavailable (standalone runtime build) — fall back to
+  // whatever the container injected via env.
+}
 
 const { WebSocket } = require('ws')
 
 // Always use localhost for internal API calls (ws-proxy runs in same container as frontend)
 const APP_PORT = process.env.PORT || 3000
 const INTERNAL_API_URL = `http://localhost:${APP_PORT}`
+
+// Shared secret used to authenticate ws-proxy against the Next.js
+// /api/internal/* routes. process.env.APP_SECRET is set by the same
+// .env that backs the rest of the app; without it the consume routes
+// return 500 and no proxy session can be established.
+const INTERNAL_SECRET = process.env.APP_SECRET || ''
+const INTERNAL_HEADERS = {
+  'Content-Type': 'application/json',
+  'X-Internal-Caller': 'proxcenter-ws-proxy',
+  ...(INTERNAL_SECRET ? { 'X-Internal-Secret': INTERNAL_SECRET } : {}),
+}
 
 /**
  * Handle an incoming WebSocket connection.
@@ -34,43 +58,55 @@ async function handleWsConnection(clientWs, req) {
 
   console.log(`[WS] New connection: ${url.pathname} -> ${pathname}`)
 
-  // Route: /ws/shell?host=...&port=...&ticket=...&node=...&user=...&apiToken=...&vmtype=...&vmid=...
-  if (pathParts[1] === 'ws' && pathParts[2] === 'shell') {
-    const host = url.searchParams.get('host')
-    const port = url.searchParams.get('port')
-    const ticket = url.searchParams.get('ticket')
-    const node = url.searchParams.get('node')
-    const user = url.searchParams.get('user')
-    const pvePort = url.searchParams.get('pvePort') || '8006'
-    const apiToken = url.searchParams.get('apiToken')
-    const vmtype = url.searchParams.get('vmtype')  // 'qemu' or 'lxc' (optional, for VM/CT shell)
-    const vmid = url.searchParams.get('vmid')      // VM/CT ID (optional)
+  // Route: /ws/shell/{sessionId}
+  // The browser only ever sees a sessionId. We trade it for the actual
+  // PVE termproxy parameters (including the apiToken) here, behind the
+  // APP_SECRET-gated /api/internal/shell/consume endpoint.
+  if (pathParts[1] === 'ws' && pathParts[2] === 'shell' && pathParts[3]) {
+    const sessionId = pathParts[3]
 
-    if (!host || !port || !ticket) {
-      console.error('[WS] Missing shell parameters')
-      clientWs.close(4000, 'Missing parameters: host, port, ticket required')
+    console.log(`[WS] Shell session: ${sessionId}`)
+
+    let session
+    try {
+      const sessionRes = await fetch(`${INTERNAL_API_URL}/api/internal/shell/consume`, {
+        method: 'POST',
+        headers: INTERNAL_HEADERS,
+        body: JSON.stringify({ sessionId })
+      })
+      if (!sessionRes.ok) {
+        const err = await sessionRes.text()
+        console.error(`[WS] Shell session not found or expired: ${sessionId}`, err)
+        clientWs.close(4001, 'Session not found or expired')
+        return
+      }
+      session = await sessionRes.json()
+    } catch (err) {
+      console.error('[WS] Shell consume error:', err.message)
+      clientWs.close(4004, 'Internal error')
       return
     }
 
-    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}${vmtype ? `, ${vmtype}/${vmid}` : ''})`)
+    const { host, pvePort, port, ticket, node, user, apiToken } = session
+    if (!host || !port || !ticket || !node) {
+      console.error('[WS] Invalid shell session data:', session)
+      clientWs.close(4002, 'Invalid session data')
+      return
+    }
+
+    console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user})`)
 
     try {
-      // Build path: /nodes/{node}/vncwebsocket (node shell)
-      //          or /nodes/{node}/qemu/{vmid}/vncwebsocket (VM shell)
-      //          or /nodes/{node}/lxc/{vmid}/vncwebsocket (LXC shell)
-      const basePath = `/api2/json/nodes/${encodeURIComponent(node || 'localhost')}`
-      const vmPath = vmtype && vmid ? `/${vmtype}/${encodeURIComponent(vmid)}` : ''
-      const pveWsUrl = `wss://${host}:${pvePort}${basePath}${vmPath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
+      const basePath = `/api2/json/nodes/${encodeURIComponent(node)}`
+      const pveWsUrl = `wss://${host}:${pvePort}${basePath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)
 
       const wsHeaders = {
         'Origin': `https://${host}:${pvePort}`
       }
-
       if (apiToken) {
         wsHeaders['Authorization'] = `PVEAPIToken=${apiToken}`
-        console.log('[WS] Using API token authentication')
       }
 
       const pveWs = new WebSocket(pveWsUrl, ['binary'], {
@@ -165,7 +201,7 @@ async function handleWsConnection(clientWs, req) {
       // Récupérer les infos de session depuis l'API (internal call via localhost)
       const sessionRes = await fetch(`${INTERNAL_API_URL}/api/internal/console/consume`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Caller': 'proxcenter-ws-proxy' },
+        headers: INTERNAL_HEADERS,
         body: JSON.stringify({ sessionId })
       })
 

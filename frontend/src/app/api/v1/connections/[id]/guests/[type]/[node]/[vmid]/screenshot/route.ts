@@ -19,16 +19,20 @@ const CACHE_TTL = 5_000 // 5 seconds
 const hasFramebufferCache = new Map<string, { value: boolean; timestamp: number }>()
 const FRAMEBUFFER_TTL = 60_000 // 60 seconds
 
-// Cleanup old cache entries periodically
-setInterval(() => {
-  const now = Date.now()
+// Drop cache entries older than twice their TTL. Exported so the periodic
+// cleanup below can be exercised deterministically in tests (the 30s interval
+// itself never fires under Vitest). `now` is injectable for the same reason.
+export function pruneScreenshotCaches(now: number = Date.now()): void {
   for (const [key, val] of screenshotCache) {
     if (now - val.timestamp > CACHE_TTL * 2) screenshotCache.delete(key)
   }
   for (const [key, val] of hasFramebufferCache) {
     if (now - val.timestamp > FRAMEBUFFER_TTL * 2) hasFramebufferCache.delete(key)
   }
-}, 30_000)
+}
+
+// Cleanup old cache entries periodically
+setInterval(() => pruneScreenshotCaches(), 30_000)
 
 /**
  * GET /api/v1/connections/[id]/guests/[type]/[node]/[vmid]/screenshot

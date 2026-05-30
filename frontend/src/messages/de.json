@@ -4122,7 +4122,9 @@
     "connected": "Verbunden",
     "errorStatus": "Fehler {status}: {message}",
     "urlNotAvailable": "Console URL nicht verfügbar",
-    "loadingConsole": "laden console..."
+    "loadingConsole": "laden console...",
+    "serialConsole": "Serielle Konsole",
+    "noGraphicalPreview": "Keine grafische Vorschau"
   },
   "errors": {
     "serverError": "Server Fehler",

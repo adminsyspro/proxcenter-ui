@@ -4162,7 +4162,9 @@
     "connected": "Connected",
     "errorStatus": "Error {status}: {message}",
     "urlNotAvailable": "Console URL not available",
-    "loadingConsole": "Loading console..."
+    "loadingConsole": "Loading console...",
+    "serialConsole": "Serial console",
+    "noGraphicalPreview": "No graphical preview"
   },
   "errors": {
     "serverError": "Server error",

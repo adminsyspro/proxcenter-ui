@@ -4124,7 +4124,9 @@
     "connected": "已连接",
     "errorStatus": "错误 {status}：{message}",
     "urlNotAvailable": "控制台 URL 不可用",
-    "loadingConsole": "正在加载控制台..."
+    "loadingConsole": "正在加载控制台...",
+    "serialConsole": "串行控制台",
+    "noGraphicalPreview": "无图形预览"
   },
   "errors": {
     "serverError": "服务器错误",

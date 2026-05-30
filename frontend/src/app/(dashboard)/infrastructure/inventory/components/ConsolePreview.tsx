@@ -112,6 +112,7 @@ function ConsolePreview({
   const isQemu = type === 'qemu'
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
   const [screenshotFailed, setScreenshotFailed] = useState(false)
+  const [noDisplay, setNoDisplay] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // URL de la page console fullscreen (noVNC)
@@ -127,6 +128,18 @@ function ConsolePreview({
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/screenshot`
       )
       const json = await res.json()
+
+      // Serial-only / headless VM: no graphical framebuffer to capture, ever.
+      // Stop polling so we don't hammer a guaranteed-failing screendump every
+      // 10s, and let the render show a "serial console" badge.
+      if (json.reason === 'no_display') {
+        setNoDisplay(true)
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current)
+          intervalRef.current = null
+        }
+        return
+      }
 
       if (json.data) {
         const dataUrl = await decodePpmToDataUrl(json.data)
@@ -183,6 +196,7 @@ function ConsolePreview({
   useEffect(() => {
     setScreenshotUrl(null)
     setScreenshotFailed(false)
+    setNoDisplay(false)
   }, [vmid, connId])
 
   const handleOpenConsole = () => {
@@ -293,9 +307,26 @@ function ConsolePreview({
         >
           {isRunning ? (
             <Box>
-              {/* Click to open console overlay - only visible when no screenshot */}
-              {!screenshotUrl && !screenshotFailed && isQemu && (
-                <CircularProgress size={20} sx={{ color: 'rgba(255,255,255,0.3)' }} />
+              {noDisplay ? (
+                /* Serial-only / headless VM: no graphical screen to preview */
+                <Box>
+                  <Box
+                    component="i"
+                    className="ri-terminal-box-line"
+                    sx={{ fontSize: 40, color: 'rgba(255,255,255,0.3)', mb: 1, display: 'block' }}
+                  />
+                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {t('console.serialConsole')}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {t('console.noGraphicalPreview')}
+                  </Typography>
+                </Box>
+              ) : (
+                /* Loading spinner until the first screenshot lands */
+                !screenshotUrl && !screenshotFailed && isQemu && (
+                  <CircularProgress size={20} sx={{ color: 'rgba(255,255,255,0.3)' }} />
+                )
               )}
             </Box>
           ) : (

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { pveFetch } from "@/lib/proxmox/client"
 import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
@@ -12,11 +13,20 @@ export const runtime = "nodejs"
 const screenshotCache = new Map<string, { data: string; timestamp: number }>()
 const CACHE_TTL = 5_000 // 5 seconds
 
+// Whether a VM has a graphical framebuffer (vga != serial/none), cached so the
+// per-poll path doesn't re-fetch the VM config every 10s. Display config almost
+// never changes at runtime, so a 60s TTL is ample. key = "connId:node:vmid".
+const hasFramebufferCache = new Map<string, { value: boolean; timestamp: number }>()
+const FRAMEBUFFER_TTL = 60_000 // 60 seconds
+
 // Cleanup old cache entries periodically
 setInterval(() => {
   const now = Date.now()
   for (const [key, val] of screenshotCache) {
     if (now - val.timestamp > CACHE_TTL * 2) screenshotCache.delete(key)
+  }
+  for (const [key, val] of hasFramebufferCache) {
+    if (now - val.timestamp > FRAMEBUFFER_TTL * 2) hasFramebufferCache.delete(key)
   }
 }, 30_000)
 
@@ -55,6 +65,34 @@ export async function GET(
 
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  }
+
+  // Serial-only / headless VMs (vga: serial0, none, or GPU passthrough) have
+  // no graphical framebuffer, so `qm monitor ... screendump` always fails with
+  // "There is no console to take a screendump from" — no PPM is written and the
+  // command exits non-zero. Detect that up front and skip the guaranteed-failing
+  // SSH: otherwise the 10s client poll spams the orchestrator ERR log forever
+  // and the UI shows a perpetually-black frame. The client uses reason=no_display
+  // to render a "serial console" badge and stop polling. The VM config lives in
+  // the shared cluster FS, so any reachable node answers regardless of placement.
+  const fbKey = `${id}:${node}:${vmid}`
+  const fbCached = hasFramebufferCache.get(fbKey)
+  if (fbCached && Date.now() - fbCached.timestamp < FRAMEBUFFER_TTL) {
+    if (!fbCached.value) return NextResponse.json({ data: null, reason: "no_display" })
+  } else {
+    try {
+      const cfg = await pveFetch<{ vga?: string }>(
+        conn,
+        `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`
+      )
+      const vga = String(cfg?.vga || "").toLowerCase().trim()
+      const hasFramebuffer = !(vga.startsWith("serial") || vga === "none")
+      hasFramebufferCache.set(fbKey, { value: hasFramebuffer, timestamp: Date.now() })
+      if (!hasFramebuffer) return NextResponse.json({ data: null, reason: "no_display" })
+    } catch {
+      // Config probe failed (node transiently down, etc.) — fall through to the
+      // normal screendump path rather than hiding a VM that may be capturable.
+    }
   }
 
   try {

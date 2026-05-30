@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getNodeIp } from "@/lib/ssh/node-ip"
-import { executeSSH, NODE_MGMT_SSH_TIMEOUT_MS } from "@/lib/ssh/exec"
+import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -52,7 +52,7 @@ if [ $? -eq 0 ]; then echo COMPLETED > /tmp/.proxcenter-upgrade-status; else ech
 ${rebootCmd}
 ' > /dev/null 2>&1 &`
 
-  const result = await executeSSH(id, nodeIp, script, NODE_MGMT_SSH_TIMEOUT_MS)
+  const result = await executeSSH(id, nodeIp, script)
 
   if (!result.success) {
     return NextResponse.json(
@@ -86,7 +86,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const command = `cat /tmp/.proxcenter-upgrade-status 2>/dev/null || echo UNKNOWN; echo '---SEPARATOR---'; cat /tmp/.proxcenter-upgrade.log 2>/dev/null; echo '---SEPARATOR---'; test -f /var/run/reboot-required && echo YES || echo NO`
 
-  const result = await executeSSH(id, nodeIp, command, NODE_MGMT_SSH_TIMEOUT_MS)
+  const result = await executeSSH(id, nodeIp, command)
 
   if (!result.success) {
     return NextResponse.json(

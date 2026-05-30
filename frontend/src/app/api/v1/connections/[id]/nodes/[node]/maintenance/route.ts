@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
-import { executeSSH, NODE_MGMT_SSH_TIMEOUT_MS } from "@/lib/ssh/exec"
+import { executeSSH } from "@/lib/ssh/exec"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
@@ -64,7 +64,7 @@ export async function POST(
     const command = `ha-manager crm-command node-maintenance enable ${node}`
 
     console.log(`[maintenance] POST ${node}: executing via SSH on ${nodeIp}: ${command}`)
-    const result = await executeSSH(id, nodeIp, command, NODE_MGMT_SSH_TIMEOUT_MS)
+    const result = await executeSSH(id, nodeIp, command)
 
     if (result.success) {
       return NextResponse.json({ success: true, method: 'ssh', output: result.output })
@@ -105,7 +105,7 @@ export async function DELETE(
     const command = `ha-manager crm-command node-maintenance disable ${node}`
 
     console.log(`[maintenance] DELETE ${node}: executing via SSH on ${nodeIp}: ${command}`)
-    const result = await executeSSH(id, nodeIp, command, NODE_MGMT_SSH_TIMEOUT_MS)
+    const result = await executeSSH(id, nodeIp, command)
 
     if (result.success) {
       return NextResponse.json({ success: true, method: 'ssh', output: result.output })

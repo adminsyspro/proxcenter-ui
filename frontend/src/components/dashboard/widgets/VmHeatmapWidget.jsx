@@ -71,34 +71,34 @@ function TileTooltip({ vm, mode, isDark }) {
 
   
 return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140, color: c.tooltipText }}>
-      <div style={{ background: headerColor, color: '#fff', padding: '3px 8px', fontWeight: 700, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, textShadow: '0 0 2px rgba(0,0,0,0.4)' }}>
-        <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 11 }} />
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 140, color: c.tooltipText }}>
+      <div style={{ background: headerColor, color: '#fff', padding: '3px 8px', fontWeight: 700, fontSize: '0.7143rem', display: 'flex', alignItems: 'center', gap: 4, textShadow: '0 0 2px rgba(0,0,0,0.4)' }}>
+        <i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: '0.7857rem' }} />
         {vm.name || `VM ${vm.vmid}`}
       </div>
       <div style={{ padding: '5px 8px', display: 'flex', gap: 12 }}>
         <div>
-          <div style={{ color: labelColor, fontSize: 9 }}>Status</div>
+          <div style={{ color: labelColor, fontSize: '0.6429rem' }}>Status</div>
           <div style={{ fontWeight: 600, color: getStatusColor(vm.status), fontFamily: '"JetBrains Mono", monospace' }}>{vm.status}</div>
         </div>
         {vm.status === 'running' && (
           <>
             <div>
-              <div style={{ color: labelColor, fontSize: 9 }}>CPU</div>
+              <div style={{ color: labelColor, fontSize: '0.6429rem' }}>CPU</div>
               <div style={{ fontWeight: mode === 'cpu' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace' }}>{vm.cpuPct}%</div>
             </div>
             <div>
-              <div style={{ color: labelColor, fontSize: 9 }}>RAM</div>
+              <div style={{ color: labelColor, fontSize: '0.6429rem' }}>RAM</div>
               <div style={{ fontWeight: mode === 'ram' ? 700 : 400, fontFamily: '"JetBrains Mono", monospace' }}>{vm.ramPct}%</div>
             </div>
           </>
         )}
         <div>
-          <div style={{ color: labelColor, fontSize: 9 }}>Alloc</div>
+          <div style={{ color: labelColor, fontSize: '0.6429rem' }}>Alloc</div>
           <div style={{ fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(vm.maxmem)}</div>
         </div>
       </div>
-      <div style={{ padding: '0 8px 4px', fontSize: 9, color: footerColor }}>
+      <div style={{ padding: '0 8px 4px', fontSize: '0.6429rem', color: footerColor }}>
         #{vm.vmid} · {vm.type === 'lxc' ? 'LXC' : 'VM'} · {vm.node}
       </div>
     </div>
@@ -121,17 +121,17 @@ function ConnectionFilter({ connections, selected, onChange }) {
   return (
     <>
       <IconButton size='small' onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget) }} sx={{ p: 0.25 }}>
-        <i className='ri-filter-3-line' style={{ fontSize: 14, opacity: allSelected ? 0.5 : 1, color: '#fff' }} />
+        <i className='ri-filter-3-line' style={{ fontSize: '1rem', opacity: allSelected ? 0.5 : 1, color: '#fff' }} />
       </IconButton>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { maxHeight: 300 } } }}>
         <MenuItem dense onClick={() => { onChange([]); setAnchorEl(null) }}>
           <Checkbox size='small' checked={allSelected} sx={{ p: 0, mr: 1 }} />
-          <ListItemText primaryTypographyProps={{ fontSize: 12 }}>All</ListItemText>
+          <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>All</ListItemText>
         </MenuItem>
         {connections.map(c => (
           <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
             <Checkbox size='small' checked={allSelected || selected.includes(c.id)} sx={{ p: 0, mr: 1 }} />
-            <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{c.name}</ListItemText>
+            <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{c.name}</ListItemText>
           </MenuItem>
         ))}
       </Menu>
@@ -245,17 +245,17 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
   const darkCard = {
     bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
     border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    borderRadius: 2.5, p: 1.5,
+    borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
     '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
 
   if (!data || dashboardLoading) {
-    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>Loading...</Typography></Box>
+    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: '0.7857rem' }}>Loading...</Typography></Box>
   }
 
   if (guests.length === 0) {
-    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: 11 }}>{t('common.noData')}</Typography></Box>
+    return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: '0.7857rem' }}>{t('common.noData')}</Typography></Box>
   }
 
   return (
@@ -265,19 +265,19 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           {stats && (
             <>
-              <Typography sx={{ fontSize: 10, opacity: 0.6 }}>{stats.total} guests</Typography>
+              <Typography sx={{ fontSize: '0.7143rem', opacity: 0.6 }}>{stats.total} guests</Typography>
               {mode === 'status' && (
                 <>
-                  <Typography sx={{ fontSize: 10, color: '#4caf50', fontWeight: 600 }}>{stats.running} <span style={{ fontWeight: 400, opacity: 0.7 }}>running</span></Typography>
-                  {stats.stopped > 0 && <Typography sx={{ fontSize: 10, color: '#9e9e9e', fontWeight: 600 }}>{stats.stopped} <span style={{ fontWeight: 400, opacity: 0.7 }}>stopped</span></Typography>}
+                  <Typography sx={{ fontSize: '0.7143rem', color: '#4caf50', fontWeight: 600 }}>{stats.running} <span style={{ fontWeight: 400, opacity: 0.7 }}>running</span></Typography>
+                  {stats.stopped > 0 && <Typography sx={{ fontSize: '0.7143rem', color: '#9e9e9e', fontWeight: 600 }}>{stats.stopped} <span style={{ fontWeight: 400, opacity: 0.7 }}>stopped</span></Typography>}
                 </>
               )}
               {mode !== 'status' && (
                 <>
-                  <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
+                  <Typography sx={{ fontSize: '0.7143rem', opacity: 0.6 }}>
                     Avg <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.avg}%</span>
                   </Typography>
-                  {stats.hot > 0 && <Typography sx={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>{stats.hot} hot</Typography>}
+                  {stats.hot > 0 && <Typography sx={{ fontSize: '0.7143rem', color: '#ef4444', fontWeight: 600 }}>{stats.hot} hot</Typography>}
                 </>
               )}
             </>
@@ -288,7 +288,7 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
           {/* Mode toggle */}
           {MODES.map((v) => (
             <Box key={v} onClick={() => setMode(v)} sx={{
-              px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: 10, fontWeight: mode === v ? 700 : 400,
+              px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: '0.7143rem', fontWeight: mode === v ? 700 : 400,
               color: mode === v ? '#fff' : c.textMuted, bgcolor: mode === v ? c.surfaceActive : 'transparent',
               '&:hover': { bgcolor: c.surfaceSubtle },
             }}>{v === 'status' ? 'Status' : v.toUpperCase()}</Box>
@@ -297,7 +297,7 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
           {/* Threshold (only in cpu/ram mode) */}
           {mode !== 'status' && (
             <Box onClick={cycleThreshold} sx={{
-              px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: 10, fontWeight: 600,
+              px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: '0.7143rem', fontWeight: 600,
               color: minThreshold > 0 ? '#fff' : c.textMuted,
               bgcolor: minThreshold > 0 ? c.surfaceActive : c.borderLight,
               '&:hover': { bgcolor: c.surfaceSubtle },
@@ -317,8 +317,8 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
                 <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} style={{ opacity: 0.6 }} />
                 <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: '#4caf50', border: `1px solid ${isDark ? '#1e1e2d' : '#fff'}` }} />
               </Box>
-              <Typography sx={{ fontWeight: 600, fontSize: 10, opacity: 0.6 }}>{group.node}</Typography>
-              <Typography sx={{ fontSize: 9, opacity: 0.35 }}>({group.vms.length})</Typography>
+              <Typography sx={{ fontWeight: 600, fontSize: '0.7143rem', opacity: 0.6 }}>{group.node}</Typography>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.35 }}>({group.vms.length})</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: `${TILE_GAP}px` }}>
@@ -345,7 +345,7 @@ return (
                     >
                       {mode !== 'status' && (
                         <Typography sx={{
-                          fontSize: 7, fontWeight: 700, lineHeight: 1,
+                          fontSize: '0.5rem', fontWeight: 700, lineHeight: 1,
                           color: (mode === 'cpu' ? vm.cpuPct : vm.ramPct) > 50 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)',
                           textShadow: (mode === 'cpu' ? vm.cpuPct : vm.ramPct) > 50 ? '0 0 1px rgba(0,0,0,0.3)' : 'none',
                         }}>
@@ -353,7 +353,7 @@ return (
                         </Typography>
                       )}
                       {mode === 'status' && !isRunning && (
-                        <i className='ri-stop-fill' style={{ fontSize: 8, color: c.textSecondary }} />
+                        <i className='ri-stop-fill' style={{ fontSize: '0.5714rem', color: c.textSecondary }} />
                       )}
                     </Box>
                   </MuiTooltip>
@@ -370,23 +370,23 @@ return (
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
               <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: '#4caf50' }} />
-              <Typography sx={{ fontSize: 9, opacity: 0.6 }}>Running</Typography>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.6 }}>Running</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
               <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: '#9e9e9e', opacity: 0.5 }} />
-              <Typography sx={{ fontSize: 9, opacity: 0.6 }}>Stopped</Typography>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.6 }}>Stopped</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
               <Box sx={{ width: 8, height: 8, borderRadius: 0.5, bgcolor: '#ff9800' }} />
-              <Typography sx={{ fontSize: 9, opacity: 0.6 }}>Paused</Typography>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.6 }}>Paused</Typography>
             </Box>
           </>
         ) : (
           <>
-            <Typography sx={{ fontSize: 9, opacity: 0.5 }}>0%</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5 }}>0%</Typography>
             <Box sx={{ flex: 1, height: 5, borderRadius: 3, background: `linear-gradient(to right, ${getHeatColor(0)}, ${getHeatColor(30)}, ${getHeatColor(60)}, ${getHeatColor(80)}, ${getHeatColor(100)})` }} />
-            <Typography sx={{ fontSize: 9, opacity: 0.5 }}>100%</Typography>
-            <Typography sx={{ fontSize: 9, opacity: 0.5, ml: 0.5 }}>{mode.toUpperCase()}</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5 }}>100%</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5, ml: 0.5 }}>{mode.toUpperCase()}</Typography>
           </>
         )}
       </Box>

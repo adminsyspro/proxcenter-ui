@@ -45,7 +45,7 @@ function UptimeNodesWidget({ data, loading }) {
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid',
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5,
+          borderRadius: 'var(--proxcenter-card-radius)',
           p: 1.5,
           display: 'flex',
           alignItems: 'center',
@@ -66,7 +66,7 @@ function UptimeNodesWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
@@ -96,16 +96,16 @@ function UptimeNodesWidget({ data, loading }) {
                 width: 8, height: 8, borderRadius: '50%',
                 bgcolor: node.status === 'online' ? '#4caf50' : '#f44336'
               }} />
-              <Typography variant='caption' sx={{ fontWeight: 600, fontSize: 11 }}>
+              <Typography variant='caption' sx={{ fontWeight: 600, fontSize: '0.7857rem' }}>
                 {node.name}
               </Typography>
-              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 10 }}>
+              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.7143rem' }}>
                 {node.connection}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <i className='ri-time-line' style={{ fontSize: 12, color, opacity: 0.8 }} />
-              <Typography variant='caption' sx={{ fontWeight: 700, color, fontSize: 11, fontFamily: '"JetBrains Mono", monospace' }}>
+              <i className='ri-time-line' style={{ fontSize: '0.8571rem', color, opacity: 0.8 }} />
+              <Typography variant='caption' sx={{ fontWeight: 700, color, fontSize: '0.7857rem', fontFamily: '"JetBrains Mono", monospace' }}>
                 {node.status === 'online' ? formatUptime(node.uptime) : t('common.offline')}
               </Typography>
             </Box>

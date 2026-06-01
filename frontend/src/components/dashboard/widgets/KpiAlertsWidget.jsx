@@ -53,10 +53,10 @@ return null
     <Typography
       variant='body2'
       component='span'
-      sx={{ fontSize: 13, color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+      sx={{ fontSize: '0.9286rem', color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
       onClick={() => { router.push(entityLink); onClose() }}
     >
-      {alert.source} <i className='ri-external-link-line' style={{ fontSize: 11 }} />
+      {alert.source} <i className='ri-external-link-line' style={{ fontSize: '0.7857rem' }} />
     </Typography>
   ) : alert.source
 
@@ -76,7 +76,7 @@ return null
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 22, fontSize: 11 }} />
+          <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 22, fontSize: '0.7857rem' }} />
           {t('alerts.detail.title')}
         </Box>
         <IconButton size='small' onClick={onClose}>
@@ -87,10 +87,10 @@ return null
       <DialogContent sx={{ py: 2 }}>
         {details.map((row, idx) => (
           <Box key={idx} sx={{ display: 'flex', py: 0.75, borderBottom: idx < details.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-            <Typography variant='body2' sx={{ fontWeight: 600, width: 140, flexShrink: 0, color: 'text.secondary', fontSize: 13 }}>
+            <Typography variant='body2' sx={{ fontWeight: 600, width: 140, flexShrink: 0, color: 'text.secondary', fontSize: '0.9286rem' }}>
               {row.label}
             </Typography>
-            <Typography variant='body2' sx={{ fontSize: 13 }}>
+            <Typography variant='body2' sx={{ fontSize: '0.9286rem' }}>
               {row.value}
             </Typography>
           </Box>
@@ -153,7 +153,7 @@ return t('time.daysAgo', { count: Math.floor(diff / 86400) })
       <Dialog open={open && !selectedAlert} onClose={onClose} maxWidth='sm' fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <i className='ri-alarm-warning-line' style={{ fontSize: 20 }} />
+            <i className='ri-alarm-warning-line' style={{ fontSize: '1.4286rem' }} />
             {t('alerts.title')} ({alerts.length})
           </Box>
           <IconButton size='small' onClick={onClose}>
@@ -180,8 +180,8 @@ return t('time.daysAgo', { count: Math.floor(diff / 86400) })
                     <ListItemText
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 20, fontSize: 10, minWidth: 44 }} />
-                          <Typography variant='body2' sx={{ fontWeight: 600, fontSize: 13 }}>
+                          <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 20, fontSize: '0.7143rem', minWidth: 44 }} />
+                          <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.9286rem' }}>
                             {translateAlertMessage(alert, t)}
                           </Typography>
                         </Box>
@@ -193,7 +193,7 @@ return t('time.daysAgo', { count: Math.floor(diff / 86400) })
                         </Box>
                       }
                     />
-                    <i className='ri-arrow-right-s-line' style={{ fontSize: 18, opacity: 0.3 }} />
+                    <i className='ri-arrow-right-s-line' style={{ fontSize: '1.2857rem', opacity: 0.3 }} />
                   </ListItemButton>
                 )
               })}
@@ -256,13 +256,13 @@ function KpiAlertsWidget({ data, loading }) {
         onMouseDown={(e) => e.stopPropagation()}
         onClick={() => setDialogOpen(true)}
         component="div"
-        sx={{ height: '100%', width: '100%', display: 'block', borderRadius: 2.5, textAlign: 'left' }}
+        sx={{ height: '100%', width: '100%', display: 'block', borderRadius: 'var(--proxcenter-card-radius)', textAlign: 'left' }}
       >
         <Box
           sx={{
             bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
             border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-            borderRadius: 2.5, p: 1.5, height: '100%',
+            borderRadius: 'var(--proxcenter-card-radius)', p: 1.5, height: '100%',
             display: 'flex', alignItems: 'center', gap: 1.5,
           }}
         >
@@ -274,18 +274,18 @@ function KpiAlertsWidget({ data, loading }) {
             ...(hasCrit && { animation: 'kpiAlertPulse 2s ease-in-out infinite' }),
           }}>
             <i className='ri-alarm-warning-line' style={{
-              fontSize: 24, color,
+              fontSize: '1.7143rem', color,
               ...(hasCrit && { animation: 'kpiIconShake 3s ease-in-out infinite' }),
             }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: 10, opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography sx={{ fontSize: '0.7143rem', opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               {t('dashboard.widgets.alerts')}
             </Typography>
-            <Typography sx={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.2, fontFamily: '"JetBrains Mono", monospace' }}>
+            <Typography sx={{ fontSize: '1.2857rem', fontWeight: 800, color, lineHeight: 1.2, fontFamily: '"JetBrains Mono", monospace' }}>
               {hasCrit ? `${alertsSummary.crit} CRIT` : hasWarn ? `${alertsSummary.warn} WARN` : 'OK'}
             </Typography>
-            <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
+            <Typography sx={{ fontSize: '0.7143rem', opacity: 0.6 }}>
               {hasCrit || hasWarn ? `${alertsSummary.crit || 0} crit \u2022 ${alertsSummary.warn || 0} warn` : t('alerts.noActiveAlerts')}
             </Typography>
           </Box>

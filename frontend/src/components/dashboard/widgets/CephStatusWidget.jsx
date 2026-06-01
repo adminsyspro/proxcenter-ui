@@ -34,16 +34,16 @@ return () => clearTimeout(t) }, [])
             style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
         </svg>
         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>
+          <Typography sx={{ fontSize: '0.7143rem', fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>
             {value}%
           </Typography>
         </Box>
       </Box>
-      <Typography sx={{ fontSize: 8, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <Typography sx={{ fontSize: '0.5714rem', opacity: 0.7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {label}
       </Typography>
       {sublabel && (
-        <Typography sx={{ fontSize: 8, opacity: 0.5, fontFamily: '"JetBrains Mono", monospace', mt: -0.25 }}>
+        <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5, fontFamily: '"JetBrains Mono", monospace', mt: -0.25 }}>
           {sublabel}
         </Typography>
       )}
@@ -60,9 +60,9 @@ function ThroughputTooltip({ active, payload, isDark }) {
 
   
 return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
-      <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-speed-line' style={{ fontSize: 10 }} /> Throughput {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 90, color: c.tooltipText }}>
+      <div style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className='ri-speed-line' style={{ fontSize: '0.7143rem' }} /> Throughput {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.map(e => (
@@ -83,9 +83,9 @@ function IopsTooltip({ active, payload, isDark }) {
 
   
 return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 90, color: c.tooltipText }}>
-      <div style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-flashlight-line' style={{ fontSize: 10 }} /> IOPS {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 90, color: c.tooltipText }}>
+      <div style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className='ri-flashlight-line' style={{ fontSize: '0.7143rem' }} /> IOPS {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
         {payload.map(e => (
@@ -141,7 +141,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
       sx={{
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column',
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5, display: 'flex', flexDirection: 'column',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
@@ -158,13 +158,13 @@ function CephClusterCard({ cluster, isDark, perfData }) {
             bgcolor: healthColor, border: '1.5px solid', borderColor: c.dotBorder,
           }} />
         </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        <Typography sx={{ fontSize: '0.8571rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {cluster.name}
         </Typography>
         <Box sx={{
           px: 0.5, py: 0.15, borderRadius: 0.5,
           bgcolor: `${healthColor}18`, color: healthColor,
-          fontSize: 9, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4,
+          fontSize: '0.6429rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4,
         }}>
           {cluster.health?.replace('HEALTH_', '') || '?'}
         </Box>
@@ -207,7 +207,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
               else { color = '#4caf50'; status = 'Up / In'; opacity = 0.6 }
               return (
                 <span key={i} title={`OSD.${i} - ${status}`}
-                  style={{ fontSize: 12, color, opacity, cursor: 'default', lineHeight: 1 }}>
+                  style={{ fontSize: '0.8571rem', color, opacity, cursor: 'default', lineHeight: 1 }}>
                   <i className="ri-hard-drive-3-fill" />
                 </span>
               )
@@ -223,7 +223,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
 
       {/* Sparklines: Throughput */}
       <Box>
-        <Typography sx={{ fontSize: 8, opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
+        <Typography sx={{ fontSize: '0.5714rem', opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
           Throughput
         </Typography>
         <Box sx={{ height: 36, width: '100%' }}>
@@ -237,7 +237,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
             </ChartContainer>
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}>
-              <Typography sx={{ fontSize: 9 }}>...</Typography>
+              <Typography sx={{ fontSize: '0.6429rem' }}>...</Typography>
             </Box>
           )}
         </Box>
@@ -245,7 +245,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
 
       {/* Sparklines: IOPS */}
       <Box>
-        <Typography sx={{ fontSize: 8, opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
+        <Typography sx={{ fontSize: '0.5714rem', opacity: 0.65, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
           IOPS
         </Typography>
         <Box sx={{ height: 36, width: '100%' }}>
@@ -259,7 +259,7 @@ function CephClusterCard({ cluster, isDark, perfData }) {
             </ChartContainer>
           ) : (
             <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}>
-              <Typography sx={{ fontSize: 9 }}>...</Typography>
+              <Typography sx={{ fontSize: '0.6429rem' }}>...</Typography>
             </Box>
           )}
         </Box>
@@ -267,17 +267,17 @@ function CephClusterCard({ cluster, isDark, perfData }) {
 
       {/* Footer: PGs + current IO */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.65 }}>
-        <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>
+        <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>
           {cluster.pgsTotal || 0} PGs
         </Typography>
         {hasIO && (
           <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>
-              <i className='ri-arrow-down-line' style={{ fontSize: 10, color: '#4caf50' }} />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>
+              <i className='ri-arrow-down-line' style={{ fontSize: '0.7143rem', color: '#4caf50' }} />
               {formatBps(cluster.readBps)}
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>
-              <i className='ri-arrow-up-line' style={{ fontSize: 10, color: '#f97316' }} />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>
+              <i className='ri-arrow-up-line' style={{ fontSize: '0.7143rem', color: '#f97316' }} />
               {formatBps(cluster.writeBps)}
             </span>
           </Box>
@@ -391,11 +391,11 @@ return {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 1.5,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.65,
         }}
       >
-        <i className='ri-database-2-line' style={{ fontSize: 28, marginBottom: 4 }} />
+        <i className='ri-database-2-line' style={{ fontSize: '2rem', marginBottom: 4 }} />
         <Typography variant='caption'>{t('common.notAvailable')}</Typography>
       </Box>
     )

@@ -28,9 +28,9 @@ function ChartTooltip({ active, payload, label, metric, isDark }) {
 
   
 return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 100, color: c.tooltipText }}>
-      <div style={{ background: metric === 'cpu' ? '#f97316' : '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className={metric === 'cpu' ? 'ri-cpu-line' : 'ri-database-2-line'} style={{ fontSize: 10 }} />
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 100, color: c.tooltipText }}>
+      <div style={{ background: metric === 'cpu' ? '#f97316' : '#3b82f6', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className={metric === 'cpu' ? 'ri-cpu-line' : 'ri-database-2-line'} style={{ fontSize: '0.7143rem' }} />
         {metric.toUpperCase()} {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px' }}>
@@ -67,13 +67,13 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
     <>
       <Tooltip title={t('common.filter')}>
         <IconButton size='small' onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget) }} sx={{ p: 0.25 }}>
-          <i className='ri-filter-3-line' style={{ fontSize: 14, opacity: allSelected ? 0.65 : 1 }} />
+          <i className='ri-filter-3-line' style={{ fontSize: '1rem', opacity: allSelected ? 0.65 : 1 }} />
         </IconButton>
       </Tooltip>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { maxHeight: 300 } } }}>
         <MenuItem dense onClick={() => { onChange([]); setAnchorEl(null) }}>
           <Checkbox size='small' checked={allSelected} sx={{ p: 0, mr: 1 }} />
-          <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{t('common.all')}</ListItemText>
+          <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{t('common.all')}</ListItemText>
         </MenuItem>
         {connections.map(c => {
           const checked = allSelected || selected.includes(c.id)
@@ -82,7 +82,7 @@ function ConnectionFilter({ connections, selected, onChange, t }) {
 return (
             <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
-              <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{c.name}</ListItemText>
+              <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{c.name}</ListItemText>
             </MenuItem>
           )
         })}
@@ -259,7 +259,7 @@ return json.data || {}
       sx={{
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75,
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75,
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
         '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
         height: '100%',
@@ -272,7 +272,7 @@ return json.data || {}
             key={v}
             onClick={() => setMetric(v)}
             sx={{
-              px: 1, py: 0.25, fontSize: 10, fontWeight: metric === v ? 700 : 400, cursor: 'pointer',
+              px: 1, py: 0.25, fontSize: '0.7143rem', fontWeight: metric === v ? 700 : 400, cursor: 'pointer',
               borderRadius: 1, color: metric === v ? '#fff' : c.textMuted,
               bgcolor: metric === v ? c.surfaceActive : 'transparent',
               '&:hover': { bgcolor: c.surfaceSubtle },
@@ -304,8 +304,8 @@ return (
               })}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={c.borderLight} />
-            <XAxis dataKey="t" tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 9, fill: c.textMuted }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
+            <XAxis dataKey="t" tick={{ fontSize: '0.6429rem', fill: c.textMuted }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+            <YAxis domain={[0, 100]} tick={{ fontSize: '0.6429rem', fill: c.textMuted }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} />
             <RTooltip content={<ChartTooltip metric={metric} isDark={isDark} />} wrapperStyle={{ backgroundColor: 'transparent', zIndex: 10 }} />
             {nodeNames.map((name, i) => {
               const color = NODE_COLORS[i % NODE_COLORS.length]

@@ -62,7 +62,7 @@ function QuickStatsWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: c.borderLight,
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         display: 'flex',
         alignItems: 'center',
@@ -79,12 +79,12 @@ function QuickStatsWidget({ data, loading }) {
       {stats.map((stat, idx) => (
         <Box key={idx} sx={{ textAlign: 'center', minWidth: 60 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-            <i className={stat.icon} style={{ fontSize: 14, color: stat.color }} />
+            <i className={stat.icon} style={{ fontSize: '1rem', color: stat.color }} />
             <Typography variant='body1' sx={{ fontWeight: 800, color: stat.color, fontFamily: '"JetBrains Mono", monospace' }}>
               {stat.value}
             </Typography>
           </Box>
-          <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 9 }}>
+          <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.6429rem' }}>
             {stat.label}
           </Typography>
         </Box>

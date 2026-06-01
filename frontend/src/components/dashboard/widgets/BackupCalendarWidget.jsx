@@ -39,8 +39,8 @@ function DayTooltip({ day, isDark }) {
   const separatorColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
   return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 140, color: c.tooltipText }}>
-      <div style={{ background: day.total > 0 ? '#3b82f6' : '#616161', color: '#fff', padding: '4px 10px', fontWeight: 700, fontSize: 11 }}>
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 140, color: c.tooltipText }}>
+      <div style={{ background: day.total > 0 ? '#3b82f6' : '#616161', color: '#fff', padding: '4px 10px', fontWeight: 700, fontSize: '0.7857rem' }}>
         {formatted}
       </div>
       <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -187,7 +187,7 @@ return json?.data?.daily || []
   const darkCard = {
     bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
     border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    borderRadius: 2.5, p: 1.5,
+    borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
     '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
@@ -197,8 +197,8 @@ return json?.data?.daily || []
       <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {pbsServers.length === 0 ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.65 }}>
-            <i className='ri-calendar-check-line' style={{ fontSize: 24 }} />
-            <Typography sx={{ fontSize: 11 }}>{t('common.noData')}</Typography>
+            <i className='ri-calendar-check-line' style={{ fontSize: '1.7143rem' }} />
+            <Typography sx={{ fontSize: '0.7857rem' }}>{t('common.noData')}</Typography>
           </Box>
         ) : <CircularProgress size={24} />}
       </Box>
@@ -212,18 +212,18 @@ return json?.data?.daily || []
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           {stats && (
             <>
-              <Typography sx={{ fontSize: 10, opacity: 0.6 }}>{mapTimeRange(timeRange).days}d</Typography>
-              <Typography sx={{ fontSize: 10, opacity: 0.6 }}>
+              <Typography sx={{ fontSize: '0.7143rem', opacity: 0.6 }}>{mapTimeRange(timeRange).days}d</Typography>
+              <Typography sx={{ fontSize: '0.7143rem', opacity: 0.6 }}>
                 <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.total}</span> backups
               </Typography>
-              <Typography sx={{ fontSize: 10, color: '#4caf50' }}>
+              <Typography sx={{ fontSize: '0.7143rem', color: '#4caf50' }}>
                 <span style={{ fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>{stats.verified}</span> verified
               </Typography>
               {stats.zeroDays > 0 && (
-                <Typography sx={{ fontSize: 10, color: '#ff9800' }}>{stats.zeroDays}d empty</Typography>
+                <Typography sx={{ fontSize: '0.7143rem', color: '#ff9800' }}>{stats.zeroDays}d empty</Typography>
               )}
               {stats.totalSize > 0 && (
-                <Typography sx={{ fontSize: 10, opacity: 0.5 }}>{formatSize(stats.totalSize)}</Typography>
+                <Typography sx={{ fontSize: '0.7143rem', opacity: 0.5 }}>{formatSize(stats.totalSize)}</Typography>
               )}
             </>
           )}
@@ -236,7 +236,7 @@ return json?.data?.daily || []
         <Box sx={{ display: 'flex', gap: '4px', pl: '32px' }}>
           {DAY_NAMES.map(d => (
             <Box key={d} sx={{ flex: 1, textAlign: 'center' }}>
-              <Typography sx={{ fontSize: 9, opacity: 0.4, fontWeight: 600 }}>{d}</Typography>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.4, fontWeight: 600 }}>{d}</Typography>
             </Box>
           ))}
         </Box>
@@ -247,7 +247,7 @@ return json?.data?.daily || []
             {/* Week label */}
             <Box sx={{ width: 28, flexShrink: 0, textAlign: 'right', pr: 0.5 }}>
               {week.find(d => d && (d.dayNum <= 7 || wIdx === 0)) && (
-                <Typography sx={{ fontSize: 8, opacity: 0.4 }}>
+                <Typography sx={{ fontSize: '0.5714rem', opacity: 0.4 }}>
                   {week.find(d => d)?.month}
                 </Typography>
               )}
@@ -273,9 +273,9 @@ return json?.data?.daily || []
                     minHeight: 18, maxHeight: 36,
                     '&:hover': { transform: 'scale(1.1)', zIndex: 10, outline: '1px solid rgba(255,255,255,0.4)' },
                   }}>
-                    <Typography sx={{ fontSize: 8, opacity: 0.5, lineHeight: 1 }}>{day.dayNum}</Typography>
+                    <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5, lineHeight: 1 }}>{day.dayNum}</Typography>
                     {day.total > 0 && (
-                      <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.9)', fontFamily: '"JetBrains Mono", monospace', lineHeight: 1 }}>
+                      <Typography sx={{ fontSize: '0.7143rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', fontFamily: '"JetBrains Mono", monospace', lineHeight: 1 }}>
                         {day.total}
                       </Typography>
                     )}
@@ -291,23 +291,23 @@ return json?.data?.daily || []
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
           <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }} />
-          <Typography sx={{ fontSize: 8, opacity: 0.5 }}>0</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5 }}>0</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
           <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: '#4caf5080' }} />
-          <Typography sx={{ fontSize: 8, opacity: 0.5 }}>1-5</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5 }}>1-5</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
           <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: '#4caf50c0' }} />
-          <Typography sx={{ fontSize: 8, opacity: 0.5 }}>6-10</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5 }}>6-10</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
           <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: '#4caf50' }} />
-          <Typography sx={{ fontSize: 8, opacity: 0.5 }}>10+</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5 }}>10+</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
           <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: '#ff980090' }} />
-          <Typography sx={{ fontSize: 8, opacity: 0.5 }}>Unverified</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5 }}>Unverified</Typography>
         </Box>
       </Box>
     </Box>

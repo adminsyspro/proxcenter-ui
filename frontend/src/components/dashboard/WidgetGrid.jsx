@@ -43,7 +43,7 @@ function NoContainerWrapper({ config, data, loading, editMode, onRemove, onUpdat
       ...(editMode && {
         border: '2px dashed',
         borderColor: 'primary.main',
-        borderRadius: 3,
+        borderRadius: 'var(--proxcenter-card-radius)',
         opacity: 0.9,
       }),
     }}>
@@ -143,7 +143,7 @@ function WidgetContainer({
         background: 'transparent',
         border: '1px solid',
         borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-        borderRadius: 3,
+        borderRadius: 'var(--proxcenter-card-radius)',
         '&:hover': editMode ? { boxShadow: 4 } : {},
       }}
     >

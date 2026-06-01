@@ -25,9 +25,9 @@ function CpuRamTooltip({ active, payload, isDark }) {
 
   
 return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
-      <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 80, color: c.tooltipText }}>
+      <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className='ri-cpu-line' style={{ fontSize: '0.7143rem' }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {cpu != null && <div><span style={{ color: '#f97316', fontWeight: 700 }}>CPU</span> {cpu}%</div>}
@@ -61,7 +61,7 @@ return () => clearTimeout(t) }, [])
           style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
       </svg>
       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color, lineHeight: 1 }}>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color, lineHeight: 1 }}>
           {score}
         </Typography>
       </Box>
@@ -94,7 +94,7 @@ return () => clearTimeout(t) }, [])
           style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
       </svg>
       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography sx={{ fontSize: 9, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color }}>{value}%</Typography>
+        <Typography sx={{ fontSize: '0.6429rem', fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', color }}>{value}%</Typography>
       </Box>
     </Box>
   )
@@ -152,20 +152,20 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
       sx={{
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75,
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75,
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
         '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
     >
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <i className='ri-swap-line' style={{ fontSize: 14, opacity: 0.7 }} />
-        <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        <i className='ri-swap-line' style={{ fontSize: '1rem', opacity: 0.7 }} />
+        <Typography sx={{ fontSize: '0.8571rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {clusterName}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: enabled ? (mode === 'automatic' ? '#4caf50' : '#ff9800') : '#9e9e9e' }} />
-          <Typography sx={{ fontSize: 9, opacity: 0.7, fontFamily: '"JetBrains Mono", monospace' }}>
+          <Typography sx={{ fontSize: '0.6429rem', opacity: 0.7, fontFamily: '"JetBrains Mono", monospace' }}>
             {enabled ? mode : 'off'}
           </Typography>
         </Box>
@@ -173,16 +173,16 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
 
       {/* DRS label + Score + Imbalance gauges */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, mt: 0.5 }}>
-        <Typography sx={{ fontSize: 20, fontWeight: 900, opacity: 0.15, letterSpacing: 2, textTransform: 'uppercase', flexShrink: 0 }}>
+        <Typography sx={{ fontSize: '1.4286rem', fontWeight: 900, opacity: 0.15, letterSpacing: 2, textTransform: 'uppercase', flexShrink: 0 }}>
           DRS
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
           <ScoreRing score={score} isDark={isDark} />
-          <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Health</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Health</Typography>
         </Box>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
           <ImbalanceGauge value={imbalance} isDark={isDark} />
-          <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Imbalance</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Imbalance</Typography>
         </Box>
       </Box>
 
@@ -195,7 +195,7 @@ function DrsClusterCard({ clusterId, clusterMetrics, clusterInfo, drsStatus, the
           
 return (
             <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace', width: 55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
+              <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace', width: 55, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>
                 {node.name || `n-${idx}`}
               </Typography>
               <Box sx={{ flex: 1, display: 'flex', gap: 0.5 }}>
@@ -206,7 +206,7 @@ return (
                   <Box sx={{ width: `${nodeRam}%`, height: '100%', borderRadius: 3, bgcolor: getGaugeColor(nodeRam), transition: 'width 0.6s ease' }} />
                 </Box>
               </Box>
-              <Typography sx={{ fontSize: 8, fontFamily: '"JetBrains Mono", monospace', opacity: 0.65, width: 48, textAlign: 'right' }}>
+              <Typography sx={{ fontSize: '0.5714rem', fontFamily: '"JetBrains Mono", monospace', opacity: 0.65, width: 48, textAlign: 'right' }}>
                 {nodeCpu}% {nodeRam}%
               </Typography>
             </Box>
@@ -217,18 +217,18 @@ return (
       {/* Recommendations */}
       {clusterRecs.length > 0 && (
         <Box sx={{ borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', pt: 0.5 }}>
-          <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
-            <i className='ri-lightbulb-line' style={{ fontSize: 9, marginRight: 3 }} />
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
+            <i className='ri-lightbulb-line' style={{ fontSize: '0.6429rem', marginRight: 3 }} />
             Recommendations ({clusterRecs.length})
           </Typography>
           {clusterRecs.slice(0, 3).map((rec, idx) => (
             <Box key={idx} title={`${rec.vm_name || rec.vmid} -> ${rec.target_node}: ${rec.reason || ''}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
-              <i className='ri-arrow-right-line' style={{ fontSize: 9, color: '#ff9800', flexShrink: 0 }} />
-              <Typography sx={{ fontSize: 9, fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
+              <i className='ri-arrow-right-line' style={{ fontSize: '0.6429rem', color: '#ff9800', flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.6429rem', fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
                 {rec.vm_name || `VM ${rec.vmid}`}
               </Typography>
-              <i className='ri-arrow-right-s-line' style={{ fontSize: 10, opacity: 0.4, flexShrink: 0 }} />
-              <Typography sx={{ fontSize: 9, opacity: 0.7, fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+              <i className='ri-arrow-right-s-line' style={{ fontSize: '0.7143rem', opacity: 0.4, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.7, fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
                 {rec.target_node}
               </Typography>
             </Box>
@@ -239,8 +239,8 @@ return (
       {/* Recent migrations */}
       {clusterMigrations.length > 0 && (
         <Box sx={{ borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', pt: 0.5 }}>
-          <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
-            <i className='ri-history-line' style={{ fontSize: 9, marginRight: 3 }} />{' '}
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>
+            <i className='ri-history-line' style={{ fontSize: '0.6429rem', marginRight: 3 }} />{' '}
             Migrations
           </Typography>
           {clusterMigrations.map((mig, idx) => {
@@ -250,14 +250,14 @@ return (
 return (
               <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.25 }}>
                 <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: statusColor, flexShrink: 0 }} />
-                <Typography sx={{ fontSize: 9, fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
+                <Typography sx={{ fontSize: '0.6429rem', fontWeight: 600, flexShrink: 0, maxWidth: 80 }} noWrap>
                   {mig.vm_name || `VM ${mig.vmid}`}
                 </Typography>
-                <i className='ri-arrow-right-s-line' style={{ fontSize: 10, opacity: 0.4, flexShrink: 0 }} />
-                <Typography sx={{ fontSize: 9, opacity: 0.7, fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+                <i className='ri-arrow-right-s-line' style={{ fontSize: '0.7143rem', opacity: 0.4, flexShrink: 0 }} />
+                <Typography sx={{ fontSize: '0.6429rem', opacity: 0.7, fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
                   {mig.target_node}
                 </Typography>
-                <Typography sx={{ fontSize: 8, opacity: 0.5, fontFamily: '"JetBrains Mono", monospace', ml: 'auto', flexShrink: 0 }}>
+                <Typography sx={{ fontSize: '0.5714rem', opacity: 0.5, fontFamily: '"JetBrains Mono", monospace', ml: 'auto', flexShrink: 0 }}>
                   {timeAgo(mig.created_at || mig.started_at)}
                 </Typography>
               </Box>
@@ -269,7 +269,7 @@ return (
       {/* Sparkline CPU/RAM */}
       {trends && trends.length > 2 && (
         <Box>
-          <Typography sx={{ fontSize: 8, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
+          <Typography sx={{ fontSize: '0.5714rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
           <Box sx={{ height: 36, width: '100%' }}>
             <ChartContainer>
               <AreaChart data={trends} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
@@ -284,14 +284,14 @@ return (
 
       {/* Footer */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.65, mt: 'auto' }}>
-        <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>
+        <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>
           {onlineNodes.length} node{onlineNodes.length !== 1 ? 's' : ''}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           <Box sx={{ width: 5, height: 5, borderRadius: 0.5, bgcolor: '#f97316' }} />
-          <Typography sx={{ fontSize: 8 }}>CPU</Typography>
+          <Typography sx={{ fontSize: '0.5714rem' }}>CPU</Typography>
           <Box sx={{ width: 5, height: 5, borderRadius: 0.5, bgcolor: '#3b82f6' }} />
-          <Typography sx={{ fontSize: 8 }}>RAM</Typography>
+          <Typography sx={{ fontSize: '0.5714rem' }}>RAM</Typography>
         </Box>
       </Box>
     </Box>
@@ -388,7 +388,7 @@ return { connId, series }
   if (!isEnterprise) {
     return (
       <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center' }}>
-        <i className='ri-vip-crown-fill' style={{ fontSize: 32, color: 'var(--mui-palette-warning-main)', marginBottom: 8 }} />
+        <i className='ri-vip-crown-fill' style={{ fontSize: '2.2857rem', color: 'var(--mui-palette-warning-main)', marginBottom: 8 }} />
         <Typography variant='caption' sx={{ opacity: 0.75 }}>Enterprise</Typography>
       </Box>
     )
@@ -414,7 +414,7 @@ return !info || info.isCluster || info.nodes > 1
   if (clusterIds.length === 0) {
     return (
       <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.65 }}>
-        <i className='ri-swap-line' style={{ fontSize: 28, marginBottom: 4 }} />
+        <i className='ri-swap-line' style={{ fontSize: '2rem', marginBottom: 4 }} />
         <Typography variant='caption'>{t('common.noData')}</Typography>
       </Box>
     )

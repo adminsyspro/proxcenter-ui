@@ -30,7 +30,7 @@ function ScoreRing({ score, size = 56 }) {
         />
       </svg>
       <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant='body2' sx={{ fontWeight: 800, fontSize: 13, color }}>
+        <Typography variant='body2' sx={{ fontWeight: 800, fontSize: '0.9286rem', color }}>
           {score}
         </Typography>
       </Box>
@@ -74,7 +74,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         height: '100%',
         display: 'flex',
@@ -90,7 +90,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
   if (!isEnterprise) {
     return darkShell(
       <>
-        <i className='ri-vip-crown-fill' style={{ fontSize: 32, color: '#f59e0b', marginBottom: 8 }} />
+        <i className='ri-vip-crown-fill' style={{ fontSize: '2.2857rem', color: '#f59e0b', marginBottom: 8 }} />
         <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)' }}>Enterprise</Typography>
       </>
     )
@@ -125,7 +125,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid',
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5,
+          borderRadius: 'var(--proxcenter-card-radius)',
           p: 1.5,
           height: '100%',
           display: 'flex',
@@ -137,11 +137,11 @@ function SiteRecoveryWidget({ data, loading, config }) {
           },
         }}
       >
-        <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5, fontSize: 10 }}>
+        <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, mb: 1.5, fontSize: '0.7143rem' }}>
           Site Recovery
         </Typography>
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <i className='ri-shield-star-line' style={{ fontSize: 28, color: c.textFaint, marginBottom: 4 }} />
+          <i className='ri-shield-star-line' style={{ fontSize: '2rem', color: c.textFaint, marginBottom: 4 }} />
           <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)' }}>{t('dashboard.widgetSr.noJobs')}</Typography>
         </Box>
       </Box>
@@ -154,7 +154,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         height: '100%',
         display: 'flex',
@@ -169,14 +169,14 @@ function SiteRecoveryWidget({ data, loading, config }) {
     >
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-        <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 10 }}>
+        <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: '0.7143rem' }}>
           Site Recovery
         </Typography>
         <Chip
           size='small'
           label={t(`dashboard.widgetSr.${connectivity}`)}
           color={connColor}
-          sx={{ height: 20, fontSize: 10, fontWeight: 700 }}
+          sx={{ height: 20, fontSize: '0.7143rem', fontWeight: 700 }}
         />
       </Box>
 
@@ -191,7 +191,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
           }}>
             <ScoreRing score={srScore} size={44} />
             <Box>
-              <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 9, display: 'block' }}>
+              <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.6429rem', display: 'block' }}>
                 {t('dashboard.widgetSr.protectionScore')}
               </Typography>
               <Typography variant='body2' sx={{ fontWeight: 700, lineHeight: 1.2, color: '#fff' }}>
@@ -212,7 +212,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
               color: statColor(coveragePct, 80, 50),
               fontFamily: '"JetBrains Mono", monospace',
             }}>{coveragePct}%</Typography>
-            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 8 }}>{t('dashboard.widgetSr.coverage')}</Typography>
+            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.5714rem' }}>{t('dashboard.widgetSr.coverage')}</Typography>
           </Box>
           <Box sx={{
             flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
@@ -223,7 +223,7 @@ function SiteRecoveryWidget({ data, loading, config }) {
               color: statColor(rpoCompliance, 90, 60),
               fontFamily: '"JetBrains Mono", monospace',
             }}>{rpoCompliance}%</Typography>
-            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 8 }}>RPO</Typography>
+            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.5714rem' }}>RPO</Typography>
           </Box>
         </Stack>
 
@@ -234,21 +234,21 @@ function SiteRecoveryWidget({ data, loading, config }) {
             bgcolor: 'rgba(59,130,246,0.1)',
           }}>
             <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: '#3b82f6', fontFamily: '"JetBrains Mono", monospace' }}>{totalJobs}</Typography>
-            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 8 }}>{t('dashboard.widgetSr.jobs')}</Typography>
+            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.5714rem' }}>{t('dashboard.widgetSr.jobs')}</Typography>
           </Box>
           <Box sx={{
             flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
             bgcolor: syncing > 0 ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.06)',
           }}>
             <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: '#6366f1', fontFamily: '"JetBrains Mono", monospace' }}>{syncing}</Typography>
-            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 8 }}>{t('dashboard.widgetSr.syncing')}</Typography>
+            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.5714rem' }}>{t('dashboard.widgetSr.syncing')}</Typography>
           </Box>
           <Box sx={{
             flex: 1, p: 0.75, borderRadius: 1, textAlign: 'center',
             bgcolor: errors > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.06)',
           }}>
             <Typography variant='h6' sx={{ fontWeight: 900, lineHeight: 1, color: errors > 0 ? '#ef4444' : c.textFaint, fontFamily: '"JetBrains Mono", monospace' }}>{errors}</Typography>
-            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: 8 }}>{t('dashboard.widgetSr.errors')}</Typography>
+            <Typography variant='caption' sx={{ color: c.textMuted, fontSize: '0.5714rem' }}>{t('dashboard.widgetSr.errors')}</Typography>
           </Box>
         </Stack>
       </Stack>

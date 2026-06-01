@@ -35,7 +35,7 @@ function EntityIcon({ isGuest, type, status, taskStatus, isDark }) {
 
   return (
     <Box sx={{ position: 'relative', width: 20, height: 20, flexShrink: 0, mr: 0.25 }}>
-      <i className={icon} style={{ fontSize: 18, opacity: 0.8 }} />
+      <i className={icon} style={{ fontSize: '1.2857rem', opacity: 0.8 }} />
       <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 9, height: 9, borderRadius: '50%', bgcolor: dotColor, border: '2px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
     </Box>
   )
@@ -81,7 +81,7 @@ function TaskDetailDialog({ event, open, onClose, t, nodeStatusMap, isDark }) {
     <Dialog open={open} onClose={onClose} maxWidth='xs' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip size='small' label={event.status === 'running' ? t('jobs.running') : event.status} color={statusColor} sx={{ height: 22, fontSize: 11 }} />
+          <Chip size='small' label={event.status === 'running' ? t('jobs.running') : event.status} color={statusColor} sx={{ height: 22, fontSize: '0.7857rem' }} />
           {event.typeLabel || event.type}
         </Box>
         <IconButton size='small' onClick={onClose}>
@@ -92,10 +92,10 @@ function TaskDetailDialog({ event, open, onClose, t, nodeStatusMap, isDark }) {
       <DialogContent sx={{ py: 2 }}>
         {rows.map((row, idx) => (
           <Box key={idx} sx={{ display: 'flex', py: 0.75, borderBottom: idx < rows.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-            <Typography variant='body2' sx={{ fontWeight: 600, width: 110, flexShrink: 0, color: 'text.secondary', fontSize: 13 }}>
+            <Typography variant='body2' sx={{ fontWeight: 600, width: 110, flexShrink: 0, color: 'text.secondary', fontSize: '0.9286rem' }}>
               {row.label}
             </Typography>
-            <Typography variant='body2' sx={{ fontSize: 13 }}>
+            <Typography variant='body2' sx={{ fontSize: '0.9286rem' }}>
               {row.value}
             </Typography>
           </Box>
@@ -176,7 +176,7 @@ return '#4caf50'
   const darkCard = {
     bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
     border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    borderRadius: 2.5, p: 1.5,
+    borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
     '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
@@ -227,15 +227,15 @@ return '#4caf50'
               <EntityIcon isGuest={isGuest} type={guestType} status={guestStatus} taskStatus={event.status} isDark={isDark} />
 
               {/* Task label + guest name */}
-              <Typography sx={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+              <Typography sx={{ fontSize: '0.7857rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                 {TASK_LABELS[event.type] || event.type}
                 {displayName && (
-                  <Typography component='span' sx={{ fontSize: 11, fontWeight: 400, opacity: 0.7, ml: 0.5 }}>
+                  <Typography component='span' sx={{ fontSize: '0.7857rem', fontWeight: 400, opacity: 0.7, ml: 0.5 }}>
                     {displayName}
                   </Typography>
                 )}
                 {!displayName && isGuest && (
-                  <Typography component='span' sx={{ fontSize: 10, fontWeight: 400, opacity: 0.5, ml: 0.5, fontFamily: '"JetBrains Mono", monospace' }}>
+                  <Typography component='span' sx={{ fontSize: '0.7143rem', fontWeight: 400, opacity: 0.5, ml: 0.5, fontFamily: '"JetBrains Mono", monospace' }}>
                     #{event.entity}
                   </Typography>
                 )}
@@ -244,13 +244,13 @@ return '#4caf50'
               {/* Node */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4, flexShrink: 0 }}>
                 <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={10} height={10} style={{ opacity: 0.5 }} />
-                <Typography sx={{ fontSize: 9, opacity: 0.5, fontFamily: '"JetBrains Mono", monospace' }}>
+                <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5, fontFamily: '"JetBrains Mono", monospace' }}>
                   {event.node}
                 </Typography>
               </Box>
 
               {/* Time ago */}
-              <Typography sx={{ fontSize: 9, opacity: 0.5, flexShrink: 0 }}>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5, flexShrink: 0 }}>
                 {timeAgo(starttime)}
               </Typography>
             </Box>

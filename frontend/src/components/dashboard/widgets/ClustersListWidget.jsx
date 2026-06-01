@@ -25,7 +25,7 @@ function ClustersListWidget({ data, loading }) {
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid',
           borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5,
+          borderRadius: 'var(--proxcenter-card-radius)',
           p: 1.5,
           display: 'flex',
           alignItems: 'center',
@@ -44,7 +44,7 @@ function ClustersListWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         display: 'flex',
         flexDirection: 'column',
@@ -69,12 +69,12 @@ function ClustersListWidget({ data, loading }) {
           }}
         >
           <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0 }}>
-            <i className='ri-server-fill' style={{ fontSize: 18, opacity: 0.8 }} />
+            <i className='ri-server-fill' style={{ fontSize: '1.2857rem', opacity: 0.8 }} />
             <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: cluster.onlineNodes > 0 ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? 'rgba(255,255,255,0.03)' : '#fff' }} />
           </Box>
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant='body2' sx={{ fontWeight: 700, fontSize: 13 }}>{cluster.name}</Typography>
-            <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 10 }}>
+            <Typography variant='body2' sx={{ fontWeight: 700, fontSize: '0.9286rem' }}>{cluster.name}</Typography>
+            <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.7143rem' }}>
               {cluster.nodes} {t('inventory.nodes').toLowerCase()} &bull; {cluster.onlineNodes} {t('common.online').toLowerCase()}
             </Typography>
           </Box>
@@ -84,7 +84,7 @@ function ClustersListWidget({ data, loading }) {
                 size='small'
                 label='Quorum'
                 color={cluster.quorum.quorate ? 'success' : 'error'}
-                sx={{ fontSize: 9, height: 18 }}
+                sx={{ fontSize: '0.6429rem', height: 18 }}
               />
             )}
             {cluster.cephHealth && (
@@ -92,7 +92,7 @@ function ClustersListWidget({ data, loading }) {
                 size='small'
                 label={cluster.cephHealth.replaceAll('HEALTH_', '')}
                 color={cluster.cephHealth === 'HEALTH_OK' ? 'success' : cluster.cephHealth === 'HEALTH_WARN' ? 'warning' : 'error'}
-                sx={{ fontSize: 9, height: 18 }}
+                sx={{ fontSize: '0.6429rem', height: 18 }}
               />
             )}
           </Box>

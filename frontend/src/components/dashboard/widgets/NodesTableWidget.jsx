@@ -28,7 +28,7 @@ function NodesTableWidget({ data, loading }) {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 2,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -47,7 +47,7 @@ function NodesTableWidget({ data, loading }) {
         height: '100%',
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         overflow: 'hidden',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -57,11 +57,11 @@ function NodesTableWidget({ data, loading }) {
         <Table size='small' stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: 12, py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('dashboard.widgets.nodes')}</TableCell>
-              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: 12, py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('inventory.clusters')}</TableCell>
-              <TableCell align='center' sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: 12, py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('common.status')}</TableCell>
-              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, minWidth: 100, fontSize: 12, py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('monitoring.cpu')}</TableCell>
-              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, minWidth: 100, fontSize: 12, py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('monitoring.memory')}</TableCell>
+              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: '0.8571rem', py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('dashboard.widgets.nodes')}</TableCell>
+              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: '0.8571rem', py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('inventory.clusters')}</TableCell>
+              <TableCell align='center' sx={{ fontWeight: 800, bgcolor: headerBg, fontSize: '0.8571rem', py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('common.status')}</TableCell>
+              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, minWidth: 100, fontSize: '0.8571rem', py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('monitoring.cpu')}</TableCell>
+              <TableCell sx={{ fontWeight: 800, bgcolor: headerBg, minWidth: 100, fontSize: '0.8571rem', py: 1, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>{t('monitoring.memory')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -81,11 +81,11 @@ function NodesTableWidget({ data, loading }) {
                       <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" style={{ width: 18, height: 18, opacity: node.status === 'online' ? 0.8 : 0.4 }} />
                       <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 8, height: 8, borderRadius: '50%', bgcolor: node.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? 'rgba(255,255,255,0.03)' : '#fff' }} />
                     </Box>
-                    <Typography variant='body2' sx={{ fontWeight: 700, fontSize: 12 }}>{node.name}</Typography>
+                    <Typography variant='body2' sx={{ fontWeight: 700, fontSize: '0.8571rem' }}>{node.name}</Typography>
                   </Box>
                 </TableCell>
                 <TableCell sx={{ py: 0.75, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>
-                  <Typography variant='body2' sx={{ opacity: 0.7, fontSize: 11 }}>{node.connection}</Typography>
+                  <Typography variant='body2' sx={{ opacity: 0.7, fontSize: '0.7857rem' }}>{node.connection}</Typography>
                 </TableCell>
                 <TableCell align='center' sx={{ py: 0.75, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>
                   <Chip
@@ -93,7 +93,7 @@ function NodesTableWidget({ data, loading }) {
                     label={node.status === 'online' ? t('common.online') : t('common.offline')}
                     color={node.status === 'online' ? 'success' : 'error'}
                     variant='outlined'
-                    sx={{ fontSize: 10, height: 20, fontWeight: 600 }}
+                    sx={{ fontSize: '0.7143rem', height: 20, fontWeight: 600 }}
                   />
                 </TableCell>
                 <TableCell sx={{ py: 0.75, borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}>

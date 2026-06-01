@@ -40,7 +40,7 @@ return () => clearTimeout(t) }, [])
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Typography sx={{ fontSize: 24, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color }}>
+        <Typography sx={{ fontSize: '1.7143rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', color }}>
           {score}
         </Typography>
       </Box>
@@ -51,10 +51,10 @@ return () => clearTimeout(t) }, [])
 function StatBox({ label, value, unit }) {
   return (
     <Box sx={{ textAlign: 'center' }}>
-      <Typography sx={{ fontSize: 16, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.2 }}>
-        {value}{unit && <Typography component='span' sx={{ fontSize: 10, opacity: 0.65 }}>{unit}</Typography>}
+      <Typography sx={{ fontSize: '1.1429rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.2 }}>
+        {value}{unit && <Typography component='span' sx={{ fontSize: '0.7143rem', opacity: 0.65 }}>{unit}</Typography>}
       </Typography>
-      <Typography variant='caption' sx={{ fontSize: 9, opacity: 0.65, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <Typography variant='caption' sx={{ fontSize: '0.6429rem', opacity: 0.65, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
         {label}
       </Typography>
     </Box>
@@ -115,7 +115,7 @@ function ClusterHealthWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: c.borderLight,
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         display: 'flex',
         flexDirection: 'column',

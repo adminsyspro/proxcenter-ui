@@ -48,7 +48,7 @@ function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
       {/* Collapse icon */}
       <i
         className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'}
-        style={{ fontSize: 16, opacity: 0.5, flexShrink: 0 }}
+        style={{ fontSize: '1.1429rem', opacity: 0.5, flexShrink: 0 }}
       />
 
       {/* Title */}
@@ -61,7 +61,7 @@ function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
           onKeyDown={handleKeyDown}
           onClick={(e) => e.stopPropagation()}
           sx={{
-            fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
+            fontSize: '0.7857rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
             '& input': { p: 0 },
           }}
         />
@@ -69,7 +69,7 @@ function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
         <Typography
           onDoubleClick={handleStartEdit}
           sx={{
-            fontSize: 11, fontWeight: 700, opacity: 0.6,
+            fontSize: '0.7857rem', fontWeight: 700, opacity: 0.6,
             textTransform: 'uppercase', letterSpacing: 0.5,
             flexShrink: 0,
           }}
@@ -87,7 +87,7 @@ function SectionHeaderWidget({ config, data, loading, onUpdateSettings }) {
         onClick={(e) => { e.stopPropagation(); handleStartEdit(e) }}
         sx={{ p: 0.25, opacity: 0.3, '&:hover': { opacity: 0.8 } }}
       >
-        <i className='ri-pencil-line' style={{ fontSize: 12 }} />
+        <i className='ri-pencil-line' style={{ fontSize: '0.8571rem' }} />
       </IconButton>
     </Box>
   )

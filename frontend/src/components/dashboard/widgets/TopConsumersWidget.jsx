@@ -51,7 +51,7 @@ function TopConsumersWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: c.borderLight,
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         height: '100%',
         display: 'flex',
@@ -74,7 +74,7 @@ function TopConsumersWidget({ data, loading }) {
               py: 0.5,
               borderRadius: 1,
               cursor: 'pointer',
-              fontSize: 11,
+              fontSize: '0.7857rem',
               fontWeight: 600,
               letterSpacing: 0.5,
               textTransform: 'uppercase',
@@ -121,7 +121,7 @@ function TopConsumersWidget({ data, loading }) {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                 <Typography
                   sx={{
-                    fontSize: 11,
+                    fontSize: '0.7857rem',
                     fontWeight: 600,
                     color: c.textPrimary,
                     overflow: 'hidden',
@@ -134,7 +134,7 @@ function TopConsumersWidget({ data, loading }) {
                 </Typography>
                 <Typography
                   sx={{
-                    fontSize: 11,
+                    fontSize: '0.7857rem',
                     fontWeight: 600,
                     fontFamily: '"JetBrains Mono", monospace',
                     color

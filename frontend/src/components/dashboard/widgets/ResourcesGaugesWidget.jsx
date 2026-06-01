@@ -1,78 +1,12 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, Typography, useTheme } from '@mui/material'
 
 import { widgetColors } from './themeColors'
-
-function CircularGauge({ value, color, trackColor, textColor, size = 72, strokeWidth = 6 }) {
-  const [animatedValue, setAnimatedValue] = useState(0)
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const center = size / 2
-
-  useEffect(() => {
-    // Small delay so the animation is visible on mount
-    const timer = setTimeout(() => {
-      setAnimatedValue(Math.min(value || 0, 100))
-    }, 50)
-
-    
-return () => clearTimeout(timer)
-  }, [value])
-
-  const strokeDashoffset = circumference - (animatedValue / 100) * circumference
-
-  return (
-    <Box sx={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        {/* Track */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          stroke={trackColor}
-          strokeWidth={strokeWidth}
-        />
-        {/* Value arc */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          style={{
-            transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.3s ease',
-          }}
-        />
-      </svg>
-      <Box sx={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        textAlign: 'center',
-      }}>
-        <Typography sx={{
-          fontFamily: '"JetBrains Mono", monospace',
-          fontWeight: 700,
-          fontSize: '0.85rem',
-          lineHeight: 1,
-          color: textColor,
-        }}>
-          {Math.round(animatedValue)}%
-        </Typography>
-      </Box>
-    </Box>
-  )
-}
+import CircularGauge from './CircularGauge'
 
 function getGaugeColor(pct) {
   const v = pct || 0
@@ -128,7 +62,7 @@ function ResourcesGaugesWidget({ data, loading }) {
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid',
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5,
+        borderRadius: 'var(--proxcenter-card-radius)',
         p: 1.5,
         height: '100%',
         display: 'flex',
@@ -150,10 +84,12 @@ function ResourcesGaugesWidget({ data, loading }) {
               value={g.pct}
               color={getGaugeColor(g.pct)}
               trackColor={trackColor}
-              textColor={c.textPrimary}
-              size={72}
-              strokeWidth={6}
-            />
+              size='5.1em'
+            >
+              <Box component='span' sx={{ fontWeight: 700, fontSize: '0.9em', color: c.textPrimary }}>
+                {Math.round(g.pct)}%
+              </Box>
+            </CircularGauge>
             <Typography sx={{
               color: c.textPrimary,
               fontWeight: 600,

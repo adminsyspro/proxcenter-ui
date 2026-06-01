@@ -26,7 +26,7 @@ function EntityIcon({ entityType, severity, isDark }) {
     <Box sx={{ position: 'relative', width: 16, height: 16, flexShrink: 0 }}>
       {isNode
         ? <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
-        : <i className={icon} style={{ fontSize: 14, opacity: 0.7 }} />
+        : <i className={icon} style={{ fontSize: '1rem', opacity: 0.7 }} />
       }
       <Box sx={{
         position: 'absolute', bottom: -1, right: -1, width: 6, height: 6, borderRadius: '50%',
@@ -77,10 +77,10 @@ return null
       </Box>
       <Typography
         variant='body2' component='span'
-        sx={{ fontSize: 13, color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+        sx={{ fontSize: '0.9286rem', color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
         onClick={() => { router.push(entityLink); onClose() }}
       >
-        {alert.source} <i className='ri-external-link-line' style={{ fontSize: 11 }} />
+        {alert.source} <i className='ri-external-link-line' style={{ fontSize: '0.7857rem' }} />
       </Typography>
     </Box>
   ) : <NodeLabel name={alert.source} online={nodeStatusMap?.[alert.source]} isDark={isDark} />
@@ -88,7 +88,7 @@ return null
   const nodeOnline = nodeStatusMap?.[alert.entityName] ?? nodeStatusMap?.[alert.source]
 
   const rows = [
-    { label: t('alerts.detail.severity'), value: <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 22, fontSize: 11 }} /> },
+    { label: t('alerts.detail.severity'), value: <Chip size='small' label={cfg.label} color={cfg.color} sx={{ height: 22, fontSize: '0.7857rem' }} /> },
     { label: t('alerts.detail.message'), value: alert.message },
     { label: t('alerts.detail.source'), value: sourceValue },
     { label: t('alerts.detail.sourceType'), value: (alert.sourceType || 'pve').toUpperCase() },
@@ -106,7 +106,7 @@ return null
     <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className='ri-alarm-warning-line' style={{ fontSize: 20 }} />
+          <i className='ri-alarm-warning-line' style={{ fontSize: '1.4286rem' }} />
           {t('alerts.detail.title')}
         </Box>
         <IconButton size='small' onClick={onClose}><i className='ri-close-line' /></IconButton>
@@ -117,8 +117,8 @@ return null
           <TableBody>
             {rows.map((row, idx) => (
               <TableRow key={idx}>
-                <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: 13, border: 'none', py: 1.25, pl: 3 }}>{row.label}</TableCell>
-                <TableCell sx={{ fontSize: 13, border: 'none', py: 1.25 }}>{row.value}</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: 140, color: 'text.secondary', fontSize: '0.9286rem', border: 'none', py: 1.25, pl: 3 }}>{row.label}</TableCell>
+                <TableCell sx={{ fontSize: '0.9286rem', border: 'none', py: 1.25 }}>{row.value}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -184,7 +184,7 @@ return '#3b82f6'
   const darkCard = {
     bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
     border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    borderRadius: 2.5, p: 1.5,
+    borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
     transition: 'border-color 0.2s, box-shadow 0.2s',
     '&:hover': { borderColor: c.surfaceActive, boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
   }
@@ -193,8 +193,8 @@ return '#3b82f6'
     return (
       <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.65 }}>
-          <i className='ri-checkbox-circle-line' style={{ fontSize: 18, color: '#4caf50' }} />
-          <Typography sx={{ fontSize: 12 }}>{t('alerts.noActiveAlerts')}</Typography>
+          <i className='ri-checkbox-circle-line' style={{ fontSize: '1.2857rem', color: '#4caf50' }} />
+          <Typography sx={{ fontSize: '0.8571rem' }}>{t('alerts.noActiveAlerts')}</Typography>
         </Box>
       </Box>
     )
@@ -224,13 +224,13 @@ return '#3b82f6'
               <Box sx={{
                 px: 0.5, py: 0.1, borderRadius: 0.5, flexShrink: 0,
                 bgcolor: `${sevColor}18`, color: sevColor,
-                fontSize: 8, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4,
+                fontSize: '0.5714rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4,
               }}>
                 {sevLabel}
               </Box>
 
               {/* Message */}
-              <Typography sx={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+              <Typography sx={{ fontSize: '0.7857rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
                 {alert.message}
               </Typography>
 
@@ -240,13 +240,13 @@ return '#3b82f6'
                   <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} style={{ opacity: 0.7 }} />
                   <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 5, height: 5, borderRadius: '50%', bgcolor: nodeStatusMap[alert.source] === false ? '#f44336' : '#4caf50', border: '1px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
                 </Box>
-                <Typography sx={{ fontSize: 9, opacity: 0.65, fontFamily: '"JetBrains Mono", monospace', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Typography sx={{ fontSize: '0.6429rem', opacity: 0.65, fontFamily: '"JetBrains Mono", monospace', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {alert.source}
                 </Typography>
               </Box>
 
               {/* Time ago */}
-              <Typography sx={{ fontSize: 9, opacity: 0.5, flexShrink: 0 }}>
+              <Typography sx={{ fontSize: '0.6429rem', opacity: 0.5, flexShrink: 0 }}>
                 {timeAgo(alert.time)}
               </Typography>
             </Box>

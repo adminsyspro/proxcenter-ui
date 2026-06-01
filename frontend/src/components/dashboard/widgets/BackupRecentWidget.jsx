@@ -52,7 +52,7 @@ function BackupRecentWidget({ data, loading }) {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 2,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 2,
           display: 'flex', flexDirection: 'column', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -93,7 +93,7 @@ function BackupRecentWidget({ data, loading }) {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 2,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -110,7 +110,7 @@ function BackupRecentWidget({ data, loading }) {
         height: '100%',
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5,
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -130,14 +130,14 @@ function BackupRecentWidget({ data, loading }) {
               size='small'
               label={item.type === 'error' ? t('jobs.failed') : 'OK'}
               color={item.type === 'error' ? 'error' : 'success'}
-              sx={{ height: 18, fontSize: 9 }}
+              sx={{ height: 18, fontSize: '0.6429rem' }}
             />
-            <Typography variant='caption' sx={{ fontWeight: 600, fontSize: 11 }}>
+            <Typography variant='caption' sx={{ fontWeight: 600, fontSize: '0.7857rem' }}>
               {item.name}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 9 }}>
+            <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.6429rem' }}>
               {item.taskType} {'\u2022'} {item.server} {'\u2022'} {timeAgo(item.time)}
             </Typography>
           </Box>

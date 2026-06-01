@@ -77,7 +77,7 @@ function StoragePoolsWidget({ data, loading, config }) {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 1.5,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
@@ -93,7 +93,7 @@ function StoragePoolsWidget({ data, loading, config }) {
           height: '100%',
           bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
           border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-          borderRadius: 2.5, p: 2,
+          borderRadius: 'var(--proxcenter-card-radius)', p: 2,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'border-color 0.2s, box-shadow 0.2s',
           '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -110,7 +110,7 @@ function StoragePoolsWidget({ data, loading, config }) {
         height: '100%',
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5,
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5,
         overflow: 'auto',
         transition: 'border-color 0.2s, box-shadow 0.2s',
         '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
@@ -131,14 +131,14 @@ function StoragePoolsWidget({ data, loading, config }) {
           >
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                <i className='ri-hard-drive-2-line' style={{ fontSize: 14, opacity: 0.65 }} />
-                <Typography variant='caption' sx={{ fontWeight: 700, fontSize: 11 }}>
+                <i className='ri-hard-drive-2-line' style={{ fontSize: '1rem', opacity: 0.65 }} />
+                <Typography variant='caption' sx={{ fontWeight: 700, fontSize: '0.7857rem' }}>
                   {storage.storage}
                 </Typography>
                 <Chip
                   size='small'
                   label={storage.type || 'dir'}
-                  sx={{ height: 16, fontSize: 9, opacity: 0.7 }}
+                  sx={{ height: 16, fontSize: '0.6429rem', opacity: 0.7 }}
                 />
               </Box>
             </Box>
@@ -154,10 +154,10 @@ function StoragePoolsWidget({ data, loading, config }) {
               <Typography variant='caption' sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>{usagePct}%</Typography>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.25 }}>
-              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 9 }}>
+              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.6429rem' }}>
                 {storage.connectionName}
               </Typography>
-              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: 9 }}>
+              <Typography variant='caption' sx={{ opacity: 0.65, fontSize: '0.6429rem' }}>
                 {formatBytes(storage.used)} / {formatBytes(storage.total)}
               </Typography>
             </Box>

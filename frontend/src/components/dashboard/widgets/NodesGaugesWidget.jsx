@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 import { Box, Checkbox, Chip, IconButton, ListItemText, Menu, MenuItem, Tooltip, Typography, useTheme } from '@mui/material'
@@ -9,40 +9,23 @@ import ChartContainer from '@/components/ChartContainer'
 
 import { widgetColors } from './themeColors'
 import { mapTimeRange, sliceToRange, formatTime } from './timeRangeUtils'
+import CircularGauge from './CircularGauge'
 
-// ─── Circular Gauge (animated on mount) ──────────────────────────────────────
-function CircularGauge({ value, label, size = 64, strokeWidth = 5, color, theme }) {
-  const radius = (size - strokeWidth) / 2
-  const circumference = 2 * Math.PI * radius
-  const [mounted, setMounted] = useState(false)
-  const offset = mounted ? circumference - (value / 100) * circumference : circumference
-  const isDark = theme?.palette?.mode === 'dark'
+// ─── Labeled Gauge ────────────────────────────────────────────────────────────
+function LabeledGauge({ value, label, color, isDark }) {
   const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
 
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 50);
-
- 
-
-return () => clearTimeout(t) }, [])
-
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
-      <Box sx={{ position: 'relative', width: size, height: size }}>
-        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={trackColor} strokeWidth={strokeWidth} />
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
-            strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
-        </svg>
-        <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace' }}>
-            {value}%
-          </Typography>
-        </Box>
-      </Box>
-      <Typography sx={{ fontSize: 9, opacity: 0.7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25, flex: 1, minWidth: 0 }}>
+      <CircularGauge value={value} color={color} trackColor={trackColor} size='4.6em'>
+        <Box component='span' sx={{ fontWeight: 700, fontSize: '0.85em' }}>{value}%</Box>
+      </CircularGauge>
+      <Box
+        component='span'
+        sx={{ fontSize: '0.6429rem', opacity: 0.7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}
+      >
         {label}
-      </Typography>
+      </Box>
     </Box>
   )
 }
@@ -142,9 +125,9 @@ function CpuRamTooltip({ active, payload, isDark }) {
   const c = widgetColors(isDark)
 
   return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
-      <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-cpu-line' style={{ fontSize: 10 }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 80, color: c.tooltipText }}>
+      <div style={{ background: '#f97316', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className='ri-cpu-line' style={{ fontSize: '0.7143rem' }} /> CPU / RAM {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {cpu != null && <div><span style={{ color: '#f97316', fontWeight: 700 }}>CPU</span> {cpu}%</div>}
@@ -163,9 +146,9 @@ function IoNetTooltip({ active, payload, isDark }) {
   const c = widgetColors(isDark)
 
   return (
-    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: 10, minWidth: 80, color: c.tooltipText }}>
-      <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <i className='ri-exchange-line' style={{ fontSize: 10 }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
+    <div style={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 6, overflow: 'hidden', fontSize: '0.7143rem', minWidth: 80, color: c.tooltipText }}>
+      <div style={{ background: '#ab47bc', color: '#fff', padding: '2px 8px', fontWeight: 700, fontSize: '0.6429rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <i className='ri-exchange-line' style={{ fontSize: '0.7143rem' }} /> IO / NET {time && <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 'auto' }}>{time}</span>}
       </div>
       <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {netin != null && <div><span style={{ color: '#4caf50', fontWeight: 700 }}>Net In</span> {formatRate(netin)}</div>}
@@ -192,7 +175,7 @@ function NodeCard({ node, theme, trends }) {
       sx={{
         bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
         border: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-        borderRadius: 2.5, p: 1.5, display: 'flex', flexDirection: 'column', gap: 1,
+        borderRadius: 'var(--proxcenter-card-radius)', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1,
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
         '&:hover': { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.08)' },
       }}
@@ -202,13 +185,13 @@ function NodeCard({ node, theme, trends }) {
           <img src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={18} height={18} style={{ opacity: 0.8 }} />
           <Box sx={{ position: 'absolute', bottom: -1, right: -1, width: 7, height: 7, borderRadius: '50%', bgcolor: isOnline ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: isDark ? '#1e1e2d' : '#fff' }} />
         </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        <Typography sx={{ fontSize: '0.8571rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {node.name}
         </Typography>
         {isOnline && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <Typography sx={{ fontSize: 9, opacity: 0.65, fontFamily: '"JetBrains Mono", monospace' }}>{formatUptime(node.uptime)}</Typography>
-            <Box sx={{ px: 0.5, py: 0.15, borderRadius: 0.5, bgcolor: `${scoreColor}18`, color: scoreColor, fontSize: 9, fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4 }}>{score}</Box>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.65, fontFamily: '"JetBrains Mono", monospace' }}>{formatUptime(node.uptime)}</Typography>
+            <Box sx={{ px: 0.5, py: 0.15, borderRadius: 0.5, bgcolor: `${scoreColor}18`, color: scoreColor, fontSize: '0.6429rem', fontWeight: 800, fontFamily: '"JetBrains Mono", monospace', lineHeight: 1.4 }}>{score}</Box>
           </Box>
         )}
       </Box>
@@ -216,13 +199,13 @@ function NodeCard({ node, theme, trends }) {
       {isOnline ? (
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
-            <CircularGauge value={cpuPct} label="CPU" color={getGaugeColor(cpuPct)} theme={theme} />
-            <CircularGauge value={memPct} label="RAM" color={getGaugeColor(memPct)} theme={theme} />
-            <CircularGauge value={storagePct} label="DISK" color={getGaugeColor(storagePct)} theme={theme} />
+            <LabeledGauge value={cpuPct} label="CPU" color={getGaugeColor(cpuPct)} isDark={isDark} />
+            <LabeledGauge value={memPct} label="RAM" color={getGaugeColor(memPct)} isDark={isDark} />
+            <LabeledGauge value={storagePct} label="DISK" color={getGaugeColor(storagePct)} isDark={isDark} />
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 9, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>CPU / RAM</Typography>
             <Box sx={{ height: 40, width: '100%' }}>
               {hasTrends ? (
                 <ChartContainer>
@@ -232,12 +215,12 @@ function NodeCard({ node, theme, trends }) {
                     <Area type="monotone" dataKey="ram" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ChartContainer>
-              ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
+              ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: '0.6429rem' }}>...</Typography></Box>}
             </Box>
           </Box>
 
           <Box>
-            <Typography sx={{ fontSize: 9, opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>IO / NET</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase', mb: 0.25 }}>IO / NET</Typography>
             <Box sx={{ height: 40, width: '100%' }}>
               {hasTrends ? (
                 <ChartContainer>
@@ -247,19 +230,19 @@ function NodeCard({ node, theme, trends }) {
                     <Area type="monotone" dataKey="netout" name="Net Out" stroke="#f97316" fill="#f97316" fillOpacity={0.6} strokeWidth={1.2} dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ChartContainer>
-              ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: 9 }}>...</Typography></Box>}
+              ) : <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.15 }}><Typography sx={{ fontSize: '0.6429rem' }}>...</Typography></Box>}
             </Box>
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', opacity: 0.65 }}>
-            <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>{node._cpuCores || '-'}c</Typography>
-            <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(node._memMax)}</Typography>
-            <Typography sx={{ fontSize: 9, fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(node._storageMax)}</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>{node._cpuCores || '-'}c</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(node._memMax)}</Typography>
+            <Typography sx={{ fontSize: '0.6429rem', fontFamily: '"JetBrains Mono", monospace' }}>{formatBytes(node._storageMax)}</Typography>
           </Box>
         </>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 3 }}>
-          <Typography variant='caption' sx={{ color: 'error.main', fontWeight: 700, fontSize: 11 }}>OFFLINE</Typography>
+          <Typography variant='caption' sx={{ color: 'error.main', fontWeight: 700, fontSize: '0.7857rem' }}>OFFLINE</Typography>
         </Box>
       )}
     </Box>
@@ -289,16 +272,16 @@ function NodeFilter({ nodes, selected, onChange }) {
     <>
       <Tooltip title={t('common.filter')}>
         <IconButton size='small' onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget) }} sx={{ p: 0.25 }}>
-          <i className='ri-filter-3-line' style={{ fontSize: 14, opacity: allSelected ? 0.4 : 1 }} />
+          <i className='ri-filter-3-line' style={{ fontSize: '1rem', opacity: allSelected ? 0.4 : 1 }} />
         </IconButton>
       </Tooltip>
       {allSelected ? null : (
-        <Chip label={selected.length} size='small' sx={{ height: 16, fontSize: 9, ml: -0.25 }} />
+        <Chip label={selected.length} size='small' sx={{ height: 16, fontSize: '0.6429rem', ml: -0.25 }} />
       )}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { maxHeight: 300 } } }}>
         <MenuItem dense onClick={() => { onChange([]); setAnchorEl(null) }}>
           <Checkbox size='small' checked={allSelected} sx={{ p: 0, mr: 1 }} />
-          <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{t('common.all')}</ListItemText>
+          <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{t('common.all')}</ListItemText>
         </MenuItem>
         {nodes.map(n => {
           const key = `${n.connId}:${n.node || n.name}`
@@ -309,8 +292,8 @@ return (
             <MenuItem key={key} dense onClick={() => handleToggle(key)}>
               <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: n.status === 'online' ? '#4caf50' : '#f44336', mr: 0.75 }} />
-              <ListItemText primaryTypographyProps={{ fontSize: 12 }}>{n.name}</ListItemText>
-              <Typography sx={{ fontSize: 10, opacity: 0.65, ml: 1 }}>{n.connection}</Typography>
+              <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{n.name}</ListItemText>
+              <Typography sx={{ fontSize: '0.7143rem', opacity: 0.65, ml: 1 }}>{n.connection}</Typography>
             </MenuItem>
           )
         })}

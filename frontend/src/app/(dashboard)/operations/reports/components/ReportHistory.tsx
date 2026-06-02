@@ -13,6 +13,7 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { formatBytes } from '@/utils/format'
+import { getReportTypeLabel } from '@/lib/reports/reportTypeLabel'
 
 interface Report {
   id: string
@@ -32,8 +33,14 @@ interface Report {
   completed_at?: string
 }
 
+interface ReportType {
+  type: string
+  name: string
+}
+
 interface ReportHistoryProps {
   reports: Report[]
+  reportTypes: ReportType[]
   onDelete: (id: string) => Promise<void>
   onRefresh: () => void
   loading: boolean
@@ -43,7 +50,7 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString()
 }
 
-export default function ReportHistory({ reports, onDelete, onRefresh, loading }: ReportHistoryProps) {
+export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading }: ReportHistoryProps) {
   const t = useTranslations()
 
   const handleDownload = (reportId: string) => {
@@ -63,17 +70,7 @@ export default function ReportHistory({ reports, onDelete, onRefresh, loading }:
     return <Chip size="small" color={cfg.color} label={cfg.label} />
   }
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      infrastructure: t('reports.types.infrastructure'),
-      alerts: t('reports.types.alerts'),
-      utilization: t('reports.types.utilization'),
-      inventory: t('reports.types.inventory'),
-      capacity: t('reports.types.capacity'),
-    }
-
-    return labels[type] || type
-  }
+  const getTypeLabel = (type: string) => getReportTypeLabel(type, reportTypes, t)
 
   const columns: GridColDef[] = [
     {

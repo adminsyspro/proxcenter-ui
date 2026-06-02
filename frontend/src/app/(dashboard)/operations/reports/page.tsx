@@ -258,6 +258,7 @@ export default function ReportsPage() {
         {tab === 1 && (
           <ReportHistory
             reports={reports}
+            reportTypes={reportTypes}
             onDelete={handleDeleteReport}
             onRefresh={() => mutateReports()}
             loading={loading}
@@ -268,6 +269,7 @@ export default function ReportsPage() {
           <ScheduleManager
             schedules={schedules}
             reportTypes={reportTypes}
+            languages={languages}
             onCreate={handleCreateSchedule}
             onUpdate={handleUpdateSchedule}
             onDelete={handleDeleteSchedule}

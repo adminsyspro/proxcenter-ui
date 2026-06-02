@@ -40,6 +40,11 @@ interface ReportType {
   }>
 }
 
+interface Language {
+  code: string
+  name: string
+}
+
 interface Schedule {
   id: string
   name: string
@@ -52,6 +57,7 @@ interface Schedule {
   connection_ids?: string[]
   sections?: string[]
   recipients: string[]
+  language?: string
   last_run_at?: string
   next_run_at?: string
   created_at: string
@@ -63,6 +69,7 @@ interface ScheduleDialogProps {
   onSave: (data: any) => Promise<void>
   schedule: Schedule | null
   reportTypes: ReportType[]
+  languages: Language[]
 }
 
 export default function ScheduleDialog({
@@ -71,6 +78,7 @@ export default function ScheduleDialog({
   onSave,
   schedule,
   reportTypes,
+  languages,
 }: ScheduleDialogProps) {
   const t = useTranslations()
   const { isProvider } = useTenant()
@@ -85,6 +93,7 @@ export default function ScheduleDialog({
   const [dayOfMonth, setDayOfMonth] = useState(1)
   const [timeOfDay, setTimeOfDay] = useState('08:00')
   const [recipients, setRecipients] = useState('')
+  const [language, setLanguage] = useState('en')
   const [selectedSections, setSelectedSections] = useState<string[]>([])
   const [allSections, setAllSections] = useState(true)
   const [connectionIds, setConnectionIds] = useState<string[]>([])
@@ -100,6 +109,7 @@ export default function ScheduleDialog({
         setDayOfMonth(schedule.day_of_month || 1)
         setTimeOfDay(schedule.time_of_day || '08:00')
         setRecipients(schedule.recipients.join(', '))
+        setLanguage(schedule.language || 'en')
 
         // Legacy schedules were created under the old force-all-connections
         // behavior, so connection_ids holds every connection. Show that as
@@ -125,6 +135,7 @@ export default function ScheduleDialog({
         setDayOfMonth(1)
         setTimeOfDay('08:00')
         setRecipients('')
+        setLanguage('en')
         setSelectedSections([])
         setAllSections(true)
         setConnectionIds([])
@@ -147,6 +158,7 @@ export default function ScheduleDialog({
         day_of_week: frequency === 'weekly' ? dayOfWeek : undefined,
         day_of_month: frequency === 'monthly' ? dayOfMonth : undefined,
         time_of_day: timeOfDay,
+        language,
         recipients: recipients.split(',').map(r => r.trim()).filter(r => r),
         sections: allSections ? [] : selectedSections,
         ...(isProvider && type !== 'vdc' ? { connection_ids: connectionIds } : {}),
@@ -206,6 +218,22 @@ export default function ScheduleDialog({
               {reportTypes.map((rt) => (
                 <MenuItem key={rt.type} value={rt.type}>
                   {rt.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* Report Language */}
+          <FormControl fullWidth>
+            <InputLabel>{t('reports.language')}</InputLabel>
+            <Select
+              value={language}
+              label={t('reports.language')}
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              {languages.map((lang) => (
+                <MenuItem key={lang.code} value={lang.code}>
+                  {lang.name}
                 </MenuItem>
               ))}
             </Select>

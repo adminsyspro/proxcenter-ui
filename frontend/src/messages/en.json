@@ -5954,7 +5954,8 @@
       "inventory": "Inventory",
       "capacity": "Capacity",
       "security": "Security",
-      "site_recovery": "Site Recovery"
+      "site_recovery": "Site Recovery",
+      "backup": "Backup"
     },
     "typeDescriptions": {
       "infrastructure": "Overview of clusters, nodes, VMs, and storage",

@@ -5955,7 +5955,8 @@
       "inventory": "Inventaire",
       "capacity": "Capacité",
       "security": "Sécurité",
-      "site_recovery": "Reprise d'activité"
+      "site_recovery": "Reprise d'activité",
+      "backup": "Sauvegarde"
     },
     "typeDescriptions": {
       "infrastructure": "Vue d'ensemble des clusters, nœuds, VMs et stockage",

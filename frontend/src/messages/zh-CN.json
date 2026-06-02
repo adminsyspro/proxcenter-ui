@@ -5885,7 +5885,8 @@
       "inventory": "资产清单",
       "capacity": "容量",
       "security": "安全",
-      "site_recovery": "站点恢复"
+      "site_recovery": "站点恢复",
+      "backup": "备份"
     },
     "typeDescriptions": {
       "infrastructure": "集群、节点、虚拟机和存储概览",

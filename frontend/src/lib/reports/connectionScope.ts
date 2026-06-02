@@ -14,7 +14,7 @@
 import { NextResponse } from 'next/server'
 
 import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
-import { isVdcTenant, buildScopePayloadForCurrentTenant } from '@/lib/reports/tenantScope'
+import { isVdcTenant, buildScopePayloadForCurrentTenant, assertReportTypeAllowed } from '@/lib/reports/tenantScope'
 import { getVdcScope } from '@/lib/vdc/scope'
 
 /** PVE connection ids reachable by the current tenant (PVE only, no PBS). */
@@ -80,4 +80,17 @@ export async function resolveReportConnectionScope(body: any): Promise<NextRespo
   }
   body.connection_ids = sanitized
   return null
+}
+
+/**
+ * Shared guard for the report generate + schedule (create/update) routes:
+ * enforce the per-tenant report-type allow-list, then resolve the connection
+ * scope. Returns a NextResponse to short-circuit the route on rejection, or
+ * null to proceed. Centralised so the three routes stay in sync (and so the
+ * scope logic is exercised by one set of tests rather than duplicated inline).
+ */
+export async function applyReportRequestScope(body: any): Promise<NextResponse | null> {
+  const typeDenied = await assertReportTypeAllowed(body?.type)
+  if (typeDenied) return typeDenied
+  return resolveReportConnectionScope(body)
 }

@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { assertReportTypeAllowed } from '@/lib/reports/tenantScope'
-import { resolveReportConnectionScope } from '@/lib/reports/connectionScope'
+import { applyReportRequestScope } from '@/lib/reports/connectionScope'
 
 export const runtime = 'nodejs'
 
@@ -48,12 +47,9 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    const typeDenied = await assertReportTypeAllowed(body?.type)
-    if (typeDenied) return typeDenied
-
-    // Resolve the connection scope: vDC forced to its slice (never empty),
-    // provider narrow-only (empty = all), 'vdc' type cleared. Authoritative.
-    const scopeDenied = await resolveReportConnectionScope(body)
+    // Enforce the report-type allow-list + resolve the connection scope (vDC
+    // forced to its slice, provider narrow-only, 'vdc' type cleared). Authoritative.
+    const scopeDenied = await applyReportRequestScope(body)
     if (scopeDenied) return scopeDenied
 
     const data = await orchestratorFetch(`/reports/schedules/${id}`, {

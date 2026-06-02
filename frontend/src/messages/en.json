@@ -5905,6 +5905,8 @@
     "history": "History",
     "schedules": "Schedules",
     "reportType": "Report type",
+    "connections": "Connections",
+    "allConnections": "All connections",
     "dateRange": "Date range",
     "dateFrom": "From",
     "dateTo": "To",

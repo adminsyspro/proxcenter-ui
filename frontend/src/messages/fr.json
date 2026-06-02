@@ -5906,6 +5906,8 @@
     "history": "Historique",
     "schedules": "Planifications",
     "reportType": "Type de rapport",
+    "connections": "Connexions",
+    "allConnections": "Toutes les connexions",
     "dateRange": "Période",
     "dateFrom": "Du",
     "dateTo": "Au",

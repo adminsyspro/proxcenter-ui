@@ -5833,6 +5833,8 @@
     "history": "Verlauf",
     "schedules": "Zeitplans",
     "reportType": "Berichtstyp",
+    "connections": "Verbindungen",
+    "allConnections": "Alle Verbindungen",
     "dateRange": "Zeitraum",
     "dateFrom": "Von",
     "dateTo": "Bis",

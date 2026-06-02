@@ -21,6 +21,10 @@ import {
   Typography,
 } from '@mui/material'
 
+import { useTenant } from '@/contexts/TenantContext'
+
+import ReportConnectionSelect from './ReportConnectionSelect'
+
 interface ReportType {
   type: string
   name: string
@@ -46,6 +50,7 @@ interface ReportGeneratorProps {
 
 export default function ReportGenerator({ reportTypes, languages, onGenerate, loading }: ReportGeneratorProps) {
   const t = useTranslations()
+  const { isProvider } = useTenant()
   const [generating, setGenerating] = useState(false)
 
   // Form state
@@ -64,6 +69,7 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
   const [selectedSections, setSelectedSections] = useState<string[]>([])
   const [allSections, setAllSections] = useState(true)
+  const [connectionIds, setConnectionIds] = useState<string[]>([])
 
   const selectedReportType = reportTypes.find(rt => rt.type === selectedType)
 
@@ -71,6 +77,7 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
     setSelectedType(type)
     setSelectedSections([])
     setAllSections(true)
+    if (type === 'vdc') setConnectionIds([])
   }
 
   const handleSectionToggle = (sectionId: string) => {
@@ -104,10 +111,12 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
         date_to: dateTo,
         sections: allSections ? [] : selectedSections,
         language: language,
+        ...(isProvider && selectedType !== 'vdc' ? { connection_ids: connectionIds } : {}),
       })
 
       // Reset form after successful generation
       setName('')
+      setConnectionIds([])
     } finally {
       setGenerating(false)
     }
@@ -185,6 +194,11 @@ export default function ReportGenerator({ reportTypes, languages, onGenerate, lo
             ))}
           </Select>
         </FormControl>
+
+        {/* Connection scope (provider-only; hidden for the vdc report type) */}
+        {isProvider && selectedType !== 'vdc' && (
+          <ReportConnectionSelect value={connectionIds} onChange={setConnectionIds} />
+        )}
 
         {/* Sections Selection */}
         {selectedReportType && (

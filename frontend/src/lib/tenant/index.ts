@@ -12,7 +12,8 @@ import type { Prisma } from "@prisma/client"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 
-export const DEFAULT_TENANT_ID = "default"
+import { DEFAULT_TENANT_ID } from "./constants"
+export { DEFAULT_TENANT_ID }
 
 export interface Tenant {
   id: string

@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
+
 interface TenantInfo {
   id: string
   slug: string
@@ -16,6 +18,7 @@ interface TenantContextType {
   switchTenant: (tenantId: string) => Promise<void>
   loading: boolean
   isMultiTenant: boolean
+  isProvider: boolean
 }
 
 const TenantContext = createContext<TenantContextType>({
@@ -24,6 +27,7 @@ const TenantContext = createContext<TenantContextType>({
   switchTenant: async () => {},
   loading: true,
   isMultiTenant: false,
+  isProvider: true,
 })
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
@@ -84,6 +88,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       switchTenant,
       loading,
       isMultiTenant: availableTenants.length > 1,
+      isProvider: (currentTenant?.id ?? DEFAULT_TENANT_ID) === DEFAULT_TENANT_ID,
     }}>
       {children}
     </TenantContext.Provider>

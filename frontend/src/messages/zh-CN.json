@@ -5838,6 +5838,8 @@
     "history": "历史",
     "schedules": "计划",
     "reportType": "报告类型",
+    "connections": "连接",
+    "allConnections": "所有连接",
     "dateRange": "日期范围",
     "dateFrom": "起始日期",
     "dateTo": "截止日期",
@@ -5885,7 +5887,8 @@
       "inventory": "资产清单",
       "capacity": "容量",
       "security": "安全",
-      "site_recovery": "站点恢复"
+      "site_recovery": "站点恢复",
+      "backup": "备份"
     },
     "typeDescriptions": {
       "infrastructure": "集群、节点、虚拟机和存储概览",

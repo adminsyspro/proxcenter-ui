@@ -5835,6 +5835,8 @@
     "history": "Verlauf",
     "schedules": "Zeitplans",
     "reportType": "Berichtstyp",
+    "connections": "Verbindungen",
+    "allConnections": "Alle Verbindungen",
     "dateRange": "Zeitraum",
     "dateFrom": "Von",
     "dateTo": "Bis",
@@ -5882,7 +5884,8 @@
       "inventory": "Inventar",
       "capacity": "Kapazität",
       "security": "Sicherheit",
-      "site_recovery": "Site Recovery"
+      "site_recovery": "Site Recovery",
+      "backup": "Backup"
     },
     "typeDescriptions": {
       "infrastructure": "Übersicht über Cluster, Nodes, VMs und Storage",

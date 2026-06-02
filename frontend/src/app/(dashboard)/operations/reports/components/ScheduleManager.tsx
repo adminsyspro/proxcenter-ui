@@ -15,6 +15,8 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
+import { getReportTypeLabel } from '@/lib/reports/reportTypeLabel'
+
 import ScheduleDialog from './ScheduleDialog'
 
 interface ReportType {
@@ -26,6 +28,11 @@ interface ReportType {
     name: string
     description: string
   }>
+}
+
+interface Language {
+  code: string
+  name: string
 }
 
 interface Schedule {
@@ -40,6 +47,7 @@ interface Schedule {
   connection_ids?: string[]
   sections?: string[]
   recipients: string[]
+  language?: string
   last_run_at?: string
   next_run_at?: string
   created_at: string
@@ -48,6 +56,7 @@ interface Schedule {
 interface ScheduleManagerProps {
   schedules: Schedule[]
   reportTypes: ReportType[]
+  languages: Language[]
   onCreate: (request: any) => Promise<void>
   onUpdate: (id: string, request: any) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -58,6 +67,7 @@ interface ScheduleManagerProps {
 export default function ScheduleManager({
   schedules,
   reportTypes,
+  languages,
   onCreate,
   onUpdate,
   onDelete,
@@ -97,17 +107,7 @@ export default function ScheduleManager({
     await onUpdate(schedule.id, { enabled: !schedule.enabled })
   }
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      infrastructure: t('reports.types.infrastructure'),
-      alerts: t('reports.types.alerts'),
-      utilization: t('reports.types.utilization'),
-      inventory: t('reports.types.inventory'),
-      capacity: t('reports.types.capacity'),
-    }
-
-    return labels[type] || type
-  }
+  const getTypeLabel = (type: string) => getReportTypeLabel(type, reportTypes, t)
 
   const getFrequencyLabel = (frequency: string) => {
     const labels: Record<string, string> = {
@@ -304,6 +304,7 @@ export default function ScheduleManager({
         onSave={handleDialogSave}
         schedule={editingSchedule}
         reportTypes={reportTypes}
+        languages={languages}
       />
     </Box>
   )

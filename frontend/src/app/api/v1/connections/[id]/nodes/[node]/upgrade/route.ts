@@ -3,6 +3,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
+import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
 
 export const runtime = "nodejs"
 
@@ -37,6 +38,11 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const nodeIp = await getNodeIp(conn, node)
 
+  const check = await verifyNodeTarget(id, conn, node, nodeIp)
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: check.status })
+  }
+
   // Build the upgrade script
   // Status file: /tmp/.proxcenter-upgrade-status
   // Log file:    /tmp/.proxcenter-upgrade.log
@@ -56,7 +62,7 @@ ${rebootCmd}
 
   if (!result.success) {
     return NextResponse.json(
-      { error: result.error || "Failed to start upgrade" },
+      { error: sshTargetError(node, nodeIp, result.error || "Failed to start upgrade") },
       { status: 500 }
     )
   }
@@ -90,7 +96,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   if (!result.success) {
     return NextResponse.json(
-      { error: result.error || "Failed to poll upgrade status" },
+      { error: sshTargetError(node, nodeIp, result.error || "Failed to poll upgrade status") },
       { status: 500 }
     )
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const findUniqueMock = vi.fn<(args: any) => Promise<any>>()
+const countMock = vi.fn<(args: any) => Promise<number>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolve4Mock = vi.fn<(name: string) => Promise<string[]>>()
 
@@ -8,6 +9,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     managedHost: {
       findUnique: findUniqueMock,
+      count: countMock,
     },
   },
 }))
@@ -24,6 +26,7 @@ vi.mock('dns', () => ({
 
 beforeEach(() => {
   findUniqueMock.mockReset()
+  countMock.mockReset()
   pveFetchMock.mockReset()
   resolve4Mock.mockReset()
 })
@@ -196,5 +199,137 @@ describe('getNodeIp - resilience', () => {
 
     expect(ip).toBe('10.0.0.5')
     expect(findUniqueMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('getNodeIp - standalone WAN substitution', () => {
+  it('replaces a private mgmt IP with the public connection host for a standalone node', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    countMock.mockResolvedValueOnce(1)
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '10.0.0.5', gateway: '10.0.0.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('203.0.113.10')
+  })
+
+  it('keeps a PUBLIC mgmt IP even on a standalone public connection (no substitution)', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    countMock.mockResolvedValueOnce(1)
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '198.51.100.7', gateway: '198.51.100.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('198.51.100.7')
+  })
+
+  it('replaces a stored private ManagedHost.ip with the public connection host (standalone)', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: '10.0.0.5' })
+    countMock.mockResolvedValueOnce(1)
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('203.0.113.10')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does NOT substitute for a multi-node cluster (count > 1)', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    countMock.mockResolvedValueOnce(3)
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '10.0.0.5', gateway: '10.0.0.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve2',
+    )
+    expect(ip).toBe('10.0.0.5')
+  })
+
+  it('fails closed when no ManagedHost row exists for the requested node', async () => {
+    findUniqueMock.mockResolvedValueOnce(null)
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '10.0.0.5', gateway: '10.0.0.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('10.0.0.5')
+    expect(countMock).not.toHaveBeenCalled()
+  })
+
+  it('does NOT substitute when behindProxy even with a public baseUrl', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '10.0.0.5', gateway: '10.0.0.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: true },
+      'pve1',
+    )
+    expect(ip).toBe('10.0.0.5')
+    expect(countMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the sshAddress override before any standalone/connHost logic', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: '198.51.100.9', ip: '10.0.0.5' })
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('198.51.100.9')
+    expect(countMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('replaces a private DNS-resolved IP with the connection host (standalone)', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    countMock.mockResolvedValueOnce(1)
+    pveFetchMock.mockResolvedValueOnce([])
+    resolve4Mock.mockResolvedValueOnce(['10.0.0.42'])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('203.0.113.10')
+  })
+
+  it('fails closed (no substitution) when the standalone count query throws', async () => {
+    findUniqueMock.mockResolvedValueOnce({ sshAddress: null, ip: null })
+    countMock.mockRejectedValueOnce(new Error('DB down'))
+    pveFetchMock.mockResolvedValueOnce([
+      { iface: 'vmbr0', address: '10.0.0.5', gateway: '10.0.0.1' },
+    ])
+
+    const { getNodeIp } = await import('./node-ip')
+    const ip = await getNodeIp(
+      { id: 'c1', baseUrl: 'https://203.0.113.10:8006', behindProxy: false },
+      'pve1',
+    )
+    expect(ip).toBe('10.0.0.5')
   })
 })

@@ -17,6 +17,8 @@
     "status": "Status",
     "name": "Name",
     "size": "Größe",
+    "notes": "Notizen",
+    "format": "Format",
     "total": "Gesamt",
     "used": "Verwendet",
     "free": "Frei",

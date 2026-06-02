@@ -2956,7 +2956,7 @@ return (
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                           <i className="ri-time-line" style={{ fontSize: 13, opacity: 0.5 }} />
                                           <Typography variant="body2" sx={{ fontSize: 12 }}>
-                                            {backup.backupTimeFormatted}
+                                            {backup.backupTime ? formatDateTime(backup.backupTime * 1000, locale) : '-'}
                                           </Typography>
                                         </Box>
                                         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.7 }}>
@@ -3012,7 +3012,7 @@ return (
                         </IconButton>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            {selectedBackup.backupTimeFormatted}
+                            {selectedBackup.backupTime ? formatDateTime(selectedBackup.backupTime * 1000, locale) : '-'}
                           </Typography>
                           <Typography variant="caption" sx={{ opacity: 0.6 }}>
                             {selectedBackup.pbsName} • {selectedBackup.datastore}

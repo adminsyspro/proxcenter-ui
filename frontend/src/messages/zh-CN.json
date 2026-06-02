@@ -40,6 +40,8 @@
     "type": "类型",
     "date": "日期",
     "size": "大小",
+    "notes": "备注",
+    "format": "格式",
     "enabled": "已启用",
     "disabled": "已禁用",
     "active": "活跃",

@@ -40,6 +40,8 @@
     "type": "Type",
     "date": "Date",
     "size": "Taille",
+    "notes": "Notes",
+    "format": "Format",
     "enabled": "Activé",
     "disabled": "Désactivé",
     "active": "Actif",

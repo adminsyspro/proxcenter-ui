@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
+import { buildPbsSnapshotName, pbsFormatLabel } from '@/lib/backups/snapshotDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 
@@ -953,24 +954,37 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                               {/* Column headers */}
                               <Box sx={{
                                 display: 'grid',
-                                gridTemplateColumns: '1fr 80px 30px 80px 30px',
-                                gap: 0.25, px: 1.5, pl: 5, py: 0.3,
+                                gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1fr) 160px 70px 80px 28px 70px 28px',
+                                gap: 0.5, px: 1.5, pl: 5, py: 0.3,
                                 borderBottom: '1px solid', borderColor: 'divider',
                                 bgcolor: 'background.paper'
                               }}>
+                                <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10 }}>{t('common.name')}</Typography>
+                                <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10 }}>{t('common.notes')}</Typography>
                                 <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10 }}>{t('inventory.pbsDateTime')}</Typography>
+                                <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10 }}>{t('common.format')}</Typography>
                                 <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10 }}>{t('inventory.pbsSize')}</Typography>
                                 <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10, textAlign: 'center' }}><i className="ri-lock-line" style={{ fontSize: 10 }} /></Typography>
                                 <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10, textAlign: 'center' }}>{t('common.actions')}</Typography>
                                 <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10, textAlign: 'center' }}><i className="ri-checkbox-circle-line" style={{ fontSize: 10 }} /></Typography>
                               </Box>
-                              {groupBackups.map((backup: any, idx: number) => (
+                              {groupBackups.map((backup: any, idx: number) => {
+                                const snapName = buildPbsSnapshotName(backup.backupType, backup.backupId, backup.backupTime)
+                                // Format client-side from the raw epoch so the time shows in the
+                                // viewer's timezone (real local time), like native PVE — not the
+                                // server container's UTC clock. See discussion #379.
+                                const localDate = backup.backupTime
+                                  ? new Date(backup.backupTime * 1000).toLocaleString(dateLocale)
+                                  : '-'
+                                const notes = backup.comment || backup.vmName || ''
+
+                                return (
                                 <Box
                                   key={backup.id || idx}
                                   sx={{
                                     display: 'grid',
-                                    gridTemplateColumns: '1fr 80px 30px 80px 30px',
-                                    gap: 0.25, px: 1.5, pl: 5, py: 0.15,
+                                    gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1fr) 160px 70px 80px 28px 70px 28px',
+                                    gap: 0.5, px: 1.5, pl: 5, py: 0.15,
                                     borderBottom: idx < groupBackups.length - 1 ? '1px solid' : 'none',
                                     borderColor: 'divider',
                                     alignItems: 'center',
@@ -978,13 +992,27 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                     minHeight: 24,
                                   }}
                                 >
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <i className="ri-time-line" style={{ fontSize: 12, opacity: 0.5 }} />
-                                    <Typography variant="body2" noWrap sx={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
-                                      {backup.backupTimeFormatted}
+                                  {/* Name — PBS snapshot id (UTC stamp), as native PVE shows it */}
+                                  <Typography variant="body2" noWrap title={snapName} sx={{ fontSize: 11, opacity: 0.85 }}>
+                                    {snapName}
+                                  </Typography>
+                                  {/* Notes — PBS snapshot comment */}
+                                  <Typography variant="body2" noWrap title={notes} sx={{ fontSize: 11, opacity: 0.7 }}>
+                                    {notes || '—'}
+                                  </Typography>
+                                  {/* Date — real local time (browser timezone) */}
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                                    <i className="ri-time-line" style={{ fontSize: 12, opacity: 0.5, flexShrink: 0 }} />
+                                    <Typography variant="body2" noWrap sx={{ fontSize: 11 }}>
+                                      {localDate}
                                     </Typography>
                                   </Box>
-                                  <Typography variant="body2" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, opacity: 0.7 }}>
+                                  {/* Format */}
+                                  <Typography variant="body2" noWrap sx={{ fontSize: 11, opacity: 0.7 }}>
+                                    {pbsFormatLabel(backup.backupType)}
+                                  </Typography>
+                                  {/* Size */}
+                                  <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.7 }}>
                                     {backup.sizeFormatted}
                                   </Typography>
                                   <Box sx={{ textAlign: 'center' }}>
@@ -1065,7 +1093,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
                                     )}
                                   </Box>
                                 </Box>
-                              ))}
+                              )})}
                             </Box>
                           )}
                         </Box>

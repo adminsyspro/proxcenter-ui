@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Alert,
@@ -41,6 +41,7 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { formatBytes } from '@/utils/format'
+import { formatDateTime } from '@/lib/i18n/date'
 import BackupJobsTabs from './BackupJobsTabs'
 import BackupTrendsChart from './BackupTrendsChart'
 import EmptyState from '@/components/EmptyState'
@@ -93,10 +94,15 @@ return <Chip size='small' color='default' label={t('backups.notVerified')} varia
 // rather than re-deriving from row.verification.state — the cache layer
 // can lose nested fields if PBS's payload shape evolves, but the boolean
 // is precomputed and matches the verifiedCount stat shown in the KPIs.
-const VerifyStateIcon = ({ row, t }) => {
+const VerifyStateIcon = ({ row, t, locale }) => {
+  // Format the verification time client-side (browser timezone) from the raw
+  // `last-run` epoch — the same UTC->local fix as the backup date. Fall back to
+  // the server-formatted string if the cache dropped the nested field.
+  const lastRun = row.verification?.['last-run']
+  const verifiedAtLocal = lastRun ? formatDateTime(lastRun * 1000, locale) : row.verifiedAt
   if (row.verified) {
-    const tooltip = row.verifiedAt
-      ? t('backups.verifiedOn', { date: row.verifiedAt })
+    const tooltip = verifiedAtLocal
+      ? t('backups.verifiedOn', { date: verifiedAtLocal })
       : t('backups.verified')
     return (
       <Tooltip title={tooltip} arrow>
@@ -108,8 +114,8 @@ const VerifyStateIcon = ({ row, t }) => {
   // legitimately be 'failed', 'none', or other PBS-internal markers.
   const failState = row.verification?.state
   if (failState && failState !== 'ok') {
-    const tooltip = row.verifiedAt
-      ? t('backups.verifyFailedOn', { date: row.verifiedAt })
+    const tooltip = verifiedAtLocal
+      ? t('backups.verifyFailedOn', { date: verifiedAtLocal })
       : t('backups.verifyFailed')
     return (
       <Tooltip title={tooltip} arrow>
@@ -163,6 +169,7 @@ const FileIcon = ({ type, name }) => {
 
 export default function BackupsPage() {
   const t = useTranslations()
+  const locale = useLocale()
   const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const timeAgo = useTimeAgo(t)
@@ -708,14 +715,19 @@ return () => clearTimeout(timer)
       )
     },
     {
-      field: 'backupTimeFormatted',
+      field: 'backupTime',
       headerName: t('common.date'),
       flex: 1,
       minWidth: 150,
+      // Render in the viewer's timezone from the raw epoch (real local time),
+      // like native PVE — not the server container's UTC clock (discussion #379).
+      // The tooltip keeps the UTC snapshot id as a reference.
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           <Tooltip title={params.row.backupTimeIso}>
-            <Typography variant='body2'>{params.value}</Typography>
+            <Typography variant='body2'>
+              {params.row.backupTime ? formatDateTime(params.row.backupTime * 1000, locale) : '-'}
+            </Typography>
           </Tooltip>
         </Box>
       )
@@ -738,7 +750,7 @@ return () => clearTimeout(timer)
       headerAlign: 'center',
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <VerifyStateIcon row={params.row} t={t} />
+          <VerifyStateIcon row={params.row} t={t} locale={locale} />
         </Box>
       )
     },
@@ -1122,7 +1134,7 @@ return () => clearTimeout(timer)
                       {selectedBackup.vmName || selectedBackup.backupId}
                     </Typography>
                     <Typography variant='body2' sx={{ opacity: 0.7 }}>
-                      {selectedBackup.datastore}{selectedBackup.namespace ? ` / ${selectedBackup.namespace}` : ''} • {selectedBackup.backupTimeFormatted}
+                      {selectedBackup.datastore}{selectedBackup.namespace ? ` / ${selectedBackup.namespace}` : ''} • {selectedBackup.backupTime ? formatDateTime(selectedBackup.backupTime * 1000, locale) : selectedBackup.backupTimeFormatted}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -1181,9 +1193,11 @@ return () => clearTimeout(timer)
                       <Typography variant='overline' sx={{ opacity: 0.7 }}>{t('backups.verified')}</Typography>
                       <Box sx={{ mt: 1 }}>
                         <VerifyChip verified={selectedBackup.verified} t={t} />
-                        {selectedBackup.verifiedAt && (
+                        {(selectedBackup.verification?.['last-run'] || selectedBackup.verifiedAt) && (
                           <Typography variant='caption' sx={{ ml: 1, opacity: 0.7 }}>
-                            {selectedBackup.verifiedAt}
+                            {selectedBackup.verification?.['last-run']
+                              ? formatDateTime(selectedBackup.verification['last-run'] * 1000, locale)
+                              : selectedBackup.verifiedAt}
                           </Typography>
                         )}
                       </Box>
@@ -1249,7 +1263,7 @@ return () => clearTimeout(timer)
                           {t('backups.deleteConfirm', {
                             name: selectedBackup.vmName || selectedBackup.backupId,
                             id: selectedBackup.backupId,
-                            date: selectedBackup.backupTimeFormatted,
+                            date: selectedBackup.backupTime ? formatDateTime(selectedBackup.backupTime * 1000, locale) : selectedBackup.backupTimeFormatted,
                           })}
                         </Alert>
                       )}
@@ -1445,6 +1459,7 @@ return () => clearTimeout(timer)
               datastore: selectedBackup.datastore,
               namespace: selectedBackup.namespace || '',
               backupPath,
+              backupTime: selectedBackup.backupTime,
               backupTimeFormatted: selectedBackup.backupTimeFormatted,
               vmName: selectedBackup.vmName,
             }}

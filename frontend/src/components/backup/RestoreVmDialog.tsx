@@ -11,7 +11,7 @@
 // and returns the UPID for the caller to track.
 
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   Alert,
   Box,
@@ -29,6 +29,7 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useTenant } from '@/contexts/TenantContext'
+import { formatDateTime } from '@/lib/i18n/date'
 
 interface BackupRef {
   /** Full PVE volid, e.g. `pbs:backup/vm/100/2025-04-01T10:00:00Z`.
@@ -45,6 +46,10 @@ interface BackupRef {
   vmid?: number
   format?: string
   size?: number | string
+  /** Raw backup epoch (seconds). Preferred over backupTimeFormatted so the
+   *  time renders in the viewer's timezone (real local time), not the server
+   *  container's UTC clock. See discussion #379. */
+  backupTime?: number
   backupTimeFormatted?: string
   /** Friendly VM name from the snapshot's `comment` field (PBS) — used
    *  to label the dialog header instead of leaking the raw backupPath. */
@@ -76,6 +81,7 @@ export default function RestoreVmDialog({
   open, onClose, connectionId: connectionIdProp, node: nodeProp, type, backup, sourceVmid, onStarted,
 }: Props) {
   const t = useTranslations()
+  const locale = useLocale()
   // Tenant mode (vDC) hides every infra picker — VMID, target cluster, node,
   // storage, MAC/start/live/bandwidth flags. The vDC abstraction owns those
   // decisions; a tenant just renames the restored VM. Provider / 'default'
@@ -385,8 +391,11 @@ export default function RestoreVmDialog({
               const head = backup.vmName
                 ? `${label} ${backup.vmName} (${sourceVmid})`
                 : `${label} ${sourceVmid}`
-              return backup.backupTimeFormatted
-                ? `${head} · ${backup.backupTimeFormatted}`
+              const when = backup.backupTime
+                ? formatDateTime(backup.backupTime * 1000, locale)
+                : backup.backupTimeFormatted
+              return when
+                ? `${head} · ${when}`
                 : head
             })()}
           </Alert>

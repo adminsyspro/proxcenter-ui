@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
-import dynamic from 'next/dynamic'
 
 import {
   Alert,
@@ -22,18 +21,10 @@ import {
   MenuItem,
   Select,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material'
-
-// Import dynamique de l'éditeur de templates
-const EmailTemplateEditor = dynamic(() => import('./EmailTemplateEditor'), {
-  ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>
-})
 
 async function fetchJson(url, init) {
   const r = await fetch(url, init)
@@ -53,6 +44,7 @@ export default function NotificationsTab() {
   const t = useTranslations()
   const locale = useLocale()
   const [settings, setSettings] = useState(null)
+  const [categoryMinSeverity, setCategoryMinSeverity] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -60,7 +52,6 @@ export default function NotificationsTab() {
   const [message, setMessage] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
   const [testEmail, setTestEmail] = useState('')
-  const [activeTab, setActiveTab] = useState(0) // 0 = Config, 1 = Templates
 
   const loadSettings = async () => {
     setLoading(true)
@@ -69,6 +60,11 @@ export default function NotificationsTab() {
       const data = await fetchJson('/api/v1/orchestrator/notifications/settings')
 
       setSettings(data)
+      setCategoryMinSeverity(
+        data?.category_min_severity && typeof data.category_min_severity === 'object'
+          ? { ...data.category_min_severity }
+          : {}
+      )
       setMessage(null)
     } catch (err) {
       setMessage({ type: 'error', text: t('notifications.loadingError') + ' ' + err.message })
@@ -84,7 +80,7 @@ export default function NotificationsTab() {
       await fetchJson('/api/v1/orchestrator/notifications/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
+        body: JSON.stringify({ ...settings, category_min_severity: categoryMinSeverity })
       })
       setMessage({ type: 'success', text: t('notifications.savedSuccess') })
     } catch (err) {
@@ -159,30 +155,81 @@ return
     )
   }
 
+  const INHERIT = '__inherit__'
+
+  // Per-category severity override. `typeKey` is the singular NotificationType
+  // string the backend expects (alert/migration/backup/replication/maintenance).
+  // Absent key = inherit the global min_severity.
+  const setCategorySeverity = (typeKey, value) => {
+    setCategoryMinSeverity(prev => {
+      const next = { ...prev }
+
+      if (value === INHERIT) {
+        delete next[typeKey]
+      } else {
+        next[typeKey] = value
+      }
+
+      return next
+    })
+  }
+
+  const renderCategorySeverity = typeKey => (
+    <FormControl size='small' sx={{ minWidth: 200 }}>
+      <InputLabel>{t('notifications.categorySeverity')}</InputLabel>
+      <Select
+        value={categoryMinSeverity[typeKey] ?? INHERIT}
+        label={t('notifications.categorySeverity')}
+        onChange={e => setCategorySeverity(typeKey, e.target.value)}
+      >
+        <MenuItem value={INHERIT}>{t('notifications.inheritDefault')}</MenuItem>
+        <MenuItem value='info'>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip size='small' label='Info' sx={{ bgcolor: '#eff6ff', color: '#3b82f6' }} />
+            {t('notifications.allNotifications')}
+          </Box>
+        </MenuItem>
+        <MenuItem value='success'>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip size='small' label='Success' sx={{ bgcolor: '#ecfdf5', color: '#10b981' }} />
+            {t('notifications.successAndMore')}
+          </Box>
+        </MenuItem>
+        <MenuItem value='warning'>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip size='small' label='Warning' sx={{ bgcolor: '#fffbeb', color: '#f59e0b' }} />
+            {t('notifications.warningsAndCritical')}
+          </Box>
+        </MenuItem>
+        <MenuItem value='critical'>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Chip size='small' label='Critical' sx={{ bgcolor: '#fef2f2', color: '#ef4444' }} />
+            {t('notifications.criticalOnly')}
+          </Box>
+        </MenuItem>
+      </Select>
+    </FormControl>
+  )
+
+  const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <FormControlLabel
+        sx={{ minWidth: 240, mr: 0 }}
+        control={<Switch checked={enabled} onChange={onToggle} />}
+        label={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className={icon} style={{ color: iconColor }} />
+            {label}
+          </Box>
+        }
+      />
+      {enabled && renderCategorySeverity(typeKey)}
+    </Box>
+  )
+
   return (
     <Box>
-      {/* Onglets principaux */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
-          <Tab 
-            icon={<i className="ri-settings-3-line" />} 
-            iconPosition="start" 
-            label={t('notifications.configuration')} 
-          />
-          <Tab 
-            icon={<i className="ri-palette-line" />} 
-            iconPosition="start" 
-            label={t('notifications.emailTemplates')} 
-          />
-        </Tabs>
-      </Box>
-
-      {activeTab === 1 ? (
-        /* Onglet Templates */
-        <EmailTemplateEditor />
-      ) : (
-        /* Onglet Configuration */
-        <Box>
+      <Box>
       <Typography variant='body2' sx={{ opacity: 0.7, mb: 3 }}>
         {t('notifications.description')}
       </Typography>
@@ -457,63 +504,51 @@ return
             {t('notifications.title')}
           </Typography>
 
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' }, gap: 1 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.enable_alerts ?? true}
-                  onChange={e => setSettings(s => ({ ...s, enable_alerts: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-alarm-warning-line' style={{ color: '#ef4444' }} />
-                  {t('notifications.alerts')}
-                </Box>
-              }
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.enable_migrations ?? true}
-                  onChange={e => setSettings(s => ({ ...s, enable_migrations: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-swap-line' style={{ color: '#3b82f6' }} />
-                  {t('notifications.migrations')}
-                </Box>
-              }
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.enable_backups ?? true}
-                  onChange={e => setSettings(s => ({ ...s, enable_backups: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-hard-drive-2-line' style={{ color: '#10b981' }} />
-                  {t('notifications.backups')}
-                </Box>
-              }
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.enable_maintenance ?? true}
-                  onChange={e => setSettings(s => ({ ...s, enable_maintenance: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-tools-line' style={{ color: '#8b5cf6' }} />
-                  {t('notifications.maintenance')}
-                </Box>
-              }
-            />
+          <Typography variant='body2' sx={{ opacity: 0.7, mb: 2 }}>
+            {t('notifications.categorySeverityHelper')}
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            {renderCategoryRow({
+              typeKey: 'alert',
+              enabled: settings.enable_alerts ?? true,
+              onToggle: e => setSettings(s => ({ ...s, enable_alerts: e.target.checked })),
+              icon: 'ri-alarm-warning-line',
+              iconColor: '#ef4444',
+              label: t('notifications.alerts')
+            })}
+            {renderCategoryRow({
+              typeKey: 'migration',
+              enabled: settings.enable_migrations ?? true,
+              onToggle: e => setSettings(s => ({ ...s, enable_migrations: e.target.checked })),
+              icon: 'ri-swap-line',
+              iconColor: '#3b82f6',
+              label: t('notifications.migrations')
+            })}
+            {renderCategoryRow({
+              typeKey: 'backup',
+              enabled: settings.enable_backups ?? true,
+              onToggle: e => setSettings(s => ({ ...s, enable_backups: e.target.checked })),
+              icon: 'ri-hard-drive-2-line',
+              iconColor: '#10b981',
+              label: t('notifications.backups')
+            })}
+            {renderCategoryRow({
+              typeKey: 'replication',
+              enabled: settings.enable_replication ?? true,
+              onToggle: e => setSettings(s => ({ ...s, enable_replication: e.target.checked })),
+              icon: 'ri-refresh-line',
+              iconColor: '#F29221',
+              label: t('notifications.replication')
+            })}
+            {renderCategoryRow({
+              typeKey: 'maintenance',
+              enabled: settings.enable_maintenance ?? true,
+              onToggle: e => setSettings(s => ({ ...s, enable_maintenance: e.target.checked })),
+              icon: 'ri-tools-line',
+              iconColor: '#8b5cf6',
+              label: t('notifications.maintenance')
+            })}
             <FormControlLabel
               control={
                 <Switch
@@ -525,20 +560,6 @@ return
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <i className='ri-file-chart-line' style={{ color: '#06b6d4' }} />
                   {t('notifications.reports')}
-                </Box>
-              }
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.enable_replication ?? true}
-                  onChange={e => setSettings(s => ({ ...s, enable_replication: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-refresh-line' style={{ color: '#F29221' }} />
-                  {t('notifications.replication')}
                 </Box>
               }
             />
@@ -629,7 +650,6 @@ return
         </CardContent>
       </Card>
         </Box>
-      )}
     </Box>
   )
 }

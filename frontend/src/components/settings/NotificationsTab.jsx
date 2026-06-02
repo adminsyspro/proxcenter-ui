@@ -222,8 +222,9 @@ return
   )
 
   const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label }) => (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
       <FormControlLabel
+        sx={{ minWidth: 240, mr: 0 }}
         control={<Switch checked={enabled} onChange={onToggle} />}
         label={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -538,7 +539,7 @@ return
             {t('notifications.categorySeverityHelper')}
           </Typography>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             {renderCategoryRow({
               typeKey: 'alert',
               enabled: settings.enable_alerts ?? true,

@@ -471,7 +471,7 @@ const EXTRA_MOCKS: MockDataMap = {
     data: { enabled: false },
   },
 
-  // --- Notification settings & templates ---
+  // --- Notification settings ---
   'GET:/api/v1/orchestrator/notifications/settings': {
     data: {
       enabled: false,
@@ -479,10 +479,6 @@ const EXTRA_MOCKS: MockDataMap = {
       slack: { webhookUrl: '' },
       discord: { webhookUrl: '' },
     },
-  },
-
-  'GET:/api/v1/orchestrator/notifications/templates': {
-    data: [],
   },
 
   // --- Auth providers (LDAP / OIDC) ---

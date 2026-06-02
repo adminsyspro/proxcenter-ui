@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations, useLocale } from 'next-intl'
-import dynamic from 'next/dynamic'
 
 import {
   Alert,
@@ -22,18 +21,10 @@ import {
   MenuItem,
   Select,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material'
-
-// Import dynamique de l'éditeur de templates
-const EmailTemplateEditor = dynamic(() => import('./EmailTemplateEditor'), {
-  ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><CircularProgress /></Box>
-})
 
 async function fetchJson(url, init) {
   const r = await fetch(url, init)
@@ -61,7 +52,6 @@ export default function NotificationsTab() {
   const [message, setMessage] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
   const [testEmail, setTestEmail] = useState('')
-  const [activeTab, setActiveTab] = useState(0) // 0 = Config, 1 = Templates
 
   const loadSettings = async () => {
     setLoading(true)
@@ -239,28 +229,7 @@ return
 
   return (
     <Box>
-      {/* Onglets principaux */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
-          <Tab 
-            icon={<i className="ri-settings-3-line" />} 
-            iconPosition="start" 
-            label={t('notifications.configuration')} 
-          />
-          <Tab 
-            icon={<i className="ri-palette-line" />} 
-            iconPosition="start" 
-            label={t('notifications.emailTemplates')} 
-          />
-        </Tabs>
-      </Box>
-
-      {activeTab === 1 ? (
-        /* Onglet Templates */
-        <EmailTemplateEditor />
-      ) : (
-        /* Onglet Configuration */
-        <Box>
+      <Box>
       <Typography variant='body2' sx={{ opacity: 0.7, mb: 3 }}>
         {t('notifications.description')}
       </Typography>
@@ -681,7 +650,6 @@ return
         </CardContent>
       </Card>
         </Box>
-      )}
     </Box>
   )
 }

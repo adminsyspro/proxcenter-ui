@@ -8,7 +8,7 @@ import { filterReportTypesForTenant } from '@/lib/reports/tenantScope'
 export const runtime = 'nodejs'
 
 // GET /api/v1/orchestrator/reports/types - Get available report types
-// vDC tenants only receive the curated subset (Alerts, Utilization, Inventory).
+// vDC tenants only receive the curated subset (Alerts, Inventory).
 export async function GET() {
   try {
     const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)

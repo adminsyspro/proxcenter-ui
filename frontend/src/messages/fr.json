@@ -2868,6 +2868,9 @@
     "successAndMore": "Succès et plus",
     "warningsAndCritical": "Avertissements et critiques",
     "criticalOnly": "Critiques uniquement",
+    "categorySeverity": "Sévérité minimale",
+    "inheritDefault": "Hériter (défaut)",
+    "categorySeverityHelper": "Définissez une sévérité minimale par catégorie, ou héritez de la valeur globale.",
     "rateLimit": "Limite par heure",
     "rateLimitHelper": "Protection contre le spam (0 = illimité)"
   },

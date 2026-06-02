@@ -2836,6 +2836,9 @@
     "successAndMore": "Erfolg and above",
     "warningsAndCritical": "Warnungs and critical",
     "criticalOnly": "Nur kritische",
+    "categorySeverity": "Minimale Schwere",
+    "inheritDefault": "Standard übernehmen",
+    "categorySeverityHelper": "Legen Sie eine minimale Schwere pro Kategorie fest oder übernehmen Sie den globalen Standard.",
     "rateLimit": "Limit pro Stunde",
     "rateLimitHelper": "Spam-Schutz (0 = unbegrenzt)"
   },

@@ -2868,6 +2868,9 @@
     "successAndMore": "Success and above",
     "warningsAndCritical": "Warnings and critical",
     "criticalOnly": "Critical only",
+    "categorySeverity": "Minimum severity",
+    "inheritDefault": "Inherit (default)",
+    "categorySeverityHelper": "Set a minimum severity per category, or inherit the global default.",
     "rateLimit": "Rate limit per hour",
     "rateLimitHelper": "Spam protection (0 = unlimited)"
   },

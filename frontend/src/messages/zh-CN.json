@@ -2838,6 +2838,9 @@
     "successAndMore": "成功及以上",
     "warningsAndCritical": "警告和严重",
     "criticalOnly": "仅严重",
+    "categorySeverity": "最低严重级别",
+    "inheritDefault": "继承（默认）",
+    "categorySeverityHelper": "按类别设置最低严重级别，或继承全局默认值。",
     "rateLimit": "每小时速率限制",
     "rateLimitHelper": "防垃圾邮件保护（0 = 无限制）"
   },

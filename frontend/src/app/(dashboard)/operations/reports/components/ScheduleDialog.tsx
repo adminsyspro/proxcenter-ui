@@ -24,6 +24,11 @@ import {
   Typography,
 } from '@mui/material'
 
+import { useTenant } from '@/contexts/TenantContext'
+import { usePVEConnections } from '@/hooks/useConnections'
+
+import ReportConnectionSelect from './ReportConnectionSelect'
+
 interface ReportType {
   type: string
   name: string
@@ -68,6 +73,8 @@ export default function ScheduleDialog({
   reportTypes,
 }: ScheduleDialogProps) {
   const t = useTranslations()
+  const { isProvider } = useTenant()
+  const { data: pveData } = usePVEConnections()
   const [saving, setSaving] = useState(false)
 
   // Form state
@@ -80,6 +87,7 @@ export default function ScheduleDialog({
   const [recipients, setRecipients] = useState('')
   const [selectedSections, setSelectedSections] = useState<string[]>([])
   const [allSections, setAllSections] = useState(true)
+  const [connectionIds, setConnectionIds] = useState<string[]>([])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -92,6 +100,15 @@ export default function ScheduleDialog({
         setDayOfMonth(schedule.day_of_month || 1)
         setTimeOfDay(schedule.time_of_day || '08:00')
         setRecipients(schedule.recipients.join(', '))
+
+        // Legacy schedules were created under the old force-all-connections
+        // behavior, so connection_ids holds every connection. Show that as
+        // empty (= all, dynamic) instead of a frozen list that would exclude
+        // future connections.
+        const allPveIds: string[] = (pveData?.data ?? []).map((c: any) => c.id)
+        const sched = schedule.connection_ids ?? []
+        const coversAll = allPveIds.length > 0 && allPveIds.every((id) => sched.includes(id))
+        setConnectionIds(coversAll ? [] : sched)
 
         if (schedule.sections && schedule.sections.length > 0) {
           setSelectedSections(schedule.sections)
@@ -110,9 +127,10 @@ export default function ScheduleDialog({
         setRecipients('')
         setSelectedSections([])
         setAllSections(true)
+        setConnectionIds([])
       }
     }
-  }, [open, schedule, reportTypes])
+  }, [open, schedule, reportTypes, pveData])
 
   const selectedReportType = reportTypes.find(rt => rt.type === type)
 
@@ -131,6 +149,7 @@ export default function ScheduleDialog({
         time_of_day: timeOfDay,
         recipients: recipients.split(',').map(r => r.trim()).filter(r => r),
         sections: allSections ? [] : selectedSections,
+        ...(isProvider && type !== 'vdc' ? { connection_ids: connectionIds } : {}),
       })
     } finally {
       setSaving(false)
@@ -181,6 +200,7 @@ export default function ScheduleDialog({
                 setType(e.target.value)
                 setSelectedSections([])
                 setAllSections(true)
+                if (e.target.value === 'vdc') setConnectionIds([])
               }}
             >
               {reportTypes.map((rt) => (
@@ -190,6 +210,11 @@ export default function ScheduleDialog({
               ))}
             </Select>
           </FormControl>
+
+          {/* Connection scope (provider-only; hidden for the vdc report type) */}
+          {isProvider && type !== 'vdc' && (
+            <ReportConnectionSelect value={connectionIds} onChange={setConnectionIds} />
+          )}
 
           {/* Frequency */}
           <FormControl fullWidth>

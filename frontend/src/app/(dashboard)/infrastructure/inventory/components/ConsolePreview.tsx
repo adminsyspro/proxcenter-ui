@@ -96,7 +96,8 @@ function ConsolePreview({
   vmid,
   vmStatus,
   osInfo,
-  osLoading
+  osLoading,
+  spiceCapable,
 }: {
   height?: number | string
   connId?: string
@@ -106,6 +107,7 @@ function ConsolePreview({
   vmStatus?: string
   osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null
   osLoading?: boolean
+  spiceCapable?: boolean
 }) {
   const t = useTranslations()
   const isRunning = vmStatus?.toLowerCase() === 'running'
@@ -115,10 +117,20 @@ function ConsolePreview({
   const [noDisplay, setNoDisplay] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // URL de la page console fullscreen (noVNC)
-  const consoleUrl = connId && node && type && vmid
-    ? `/novnc/console.html?connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
+  const isLxc = type === 'lxc'
+  const base = connId && node && type && vmid
+    ? `connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
     : null
+
+  const openConsole = (page: 'novnc' | 'xterm' | 'spice') => {
+    if (!base) return
+    window.open(
+      `/${page}/console.html?${base}`,
+      `console-${page}-${vmid}`,
+      'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
+    )
+  }
+  const handleOpenConsole = () => openConsole('novnc')
 
   const fetchScreenshot = useCallback(async () => {
     if (!connId || !node || !type || !vmid || !isRunning || !isQemu) return
@@ -199,16 +211,6 @@ function ConsolePreview({
     setNoDisplay(false)
   }, [vmid, connId])
 
-  const handleOpenConsole = () => {
-    if (consoleUrl) {
-      window.open(
-        consoleUrl,
-        `console-${vmid}`,
-        'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no'
-      )
-    }
-  }
-
   // Determine OS icon
   const getOsIconData = () => {
     if (!osInfo?.name && !osInfo?.type) return null
@@ -228,6 +230,14 @@ function ConsolePreview({
 
   const osIconData = getOsIconData()
 
+  const consoleBtnSx = {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5,
+    px: 1.5, py: 1, minWidth: 64, color: 'white', cursor: 'pointer',
+    border: '1px solid rgba(255,255,255,0.3)', borderRadius: 'var(--proxcenter-card-radius, 8px)',
+    background: 'rgba(255,255,255,0.08)', font: 'inherit', fontSize: '0.75rem',
+    '&:hover': { background: 'rgba(255,255,255,0.18)', borderColor: 'primary.main' },
+  } as const
+
   return (
     <Box sx={{ width: '100%', height: '100%' }}>
       <Box
@@ -241,9 +251,9 @@ function ConsolePreview({
           overflow: 'hidden',
           bgcolor: '#0b1220',
           position: 'relative',
-          cursor: isRunning && consoleUrl ? 'pointer' : 'default',
+          cursor: isRunning && base ? 'pointer' : 'default',
           transition: 'all 0.2s ease',
-          '&:hover': isRunning && consoleUrl ? {
+          '&:hover': isRunning && base ? {
             borderColor: 'primary.main',
             boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.3)',
           } : {},
@@ -346,28 +356,37 @@ function ConsolePreview({
           )}
         </Box>
 
-        {/* "Click to open" overlay on hover when screenshot is shown */}
-        {screenshotUrl && isRunning && (
+        {/* Console-type picker overlay (on hover, running guests) */}
+        {isRunning && base && (
           <Box
             sx={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: 0,
-              transition: 'opacity 0.2s ease',
-              bgcolor: 'rgba(0,0,0,0.5)',
+              position: 'absolute', inset: 0, zIndex: 4,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
+              opacity: 0, transition: 'opacity 0.2s ease', bgcolor: 'rgba(0,0,0,0.55)',
               '&:hover': { opacity: 1 },
             }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Box sx={{ textAlign: 'center', color: 'white' }}>
-              <i className="ri-fullscreen-line" style={{ fontSize: 28 }} />
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                Console
-              </Typography>
-            </Box>
+            <MuiTooltip title="noVNC">
+              <Box component="button" onClick={() => openConsole('novnc')} sx={consoleBtnSx}>
+                <i className="ri-computer-line" style={{ fontSize: 18 }} />
+                <span>noVNC</span>
+              </Box>
+            </MuiTooltip>
+            <MuiTooltip title={t('console.serialConsole')}>
+              <Box component="button" onClick={() => openConsole('xterm')} sx={consoleBtnSx}>
+                <i className="ri-terminal-box-line" style={{ fontSize: 18 }} />
+                <span>Xterm</span>
+              </Box>
+            </MuiTooltip>
+            {isQemu && spiceCapable !== false && (
+              <MuiTooltip title="SPICE">
+                <Box component="button" onClick={() => openConsole('spice')} sx={consoleBtnSx}>
+                  <i className="ri-remote-control-line" style={{ fontSize: 18 }} />
+                  <span>SPICE</span>
+                </Box>
+              </MuiTooltip>
+            )}
           </Box>
         )}
 

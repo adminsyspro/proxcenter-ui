@@ -3,11 +3,9 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { putSingleUse, takeSingleUse } from "@/lib/console/session"
 
 export const runtime = "nodejs"
-
-// ⚠️ MVP: store mémoire. Plus tard: Redis.
-const sessions = new Map<string, any>()
 
 export async function POST(
   _req: Request,
@@ -18,17 +16,14 @@ export async function POST(
   // RBAC: Check vm.console permission
   const resourceId = buildVmResourceId(id, node, type, vmid)
   const denied = await checkPermission(PERMISSIONS.VM_CONSOLE, "vm", resourceId)
-
   if (denied) return denied
 
   const conn = await getConnectionById(id)
-
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
   // Proxmox: POST .../vncproxy (option websocket=1)
-  // Le body doit être une string URL-encoded
   const data = await pveFetch<any>(
     conn,
     `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/vncproxy`,
@@ -39,11 +34,8 @@ export async function POST(
     }
   )
 
-  // data: { port, ticket, ... }
-  const sessionId = crypto.randomUUID()
-  const expiresAt = Date.now() + 30_000 // 30s to allow for network latency / reverse proxy
-
-  sessions.set(sessionId, {
+  const expiresAt = Date.now() + 30_000
+  const sessionId = putSingleUse({
     baseUrl: conn.baseUrl,
     apiToken: conn.apiToken,
     insecure: conn.insecureDev,
@@ -55,7 +47,6 @@ export async function POST(
     expiresAt,
   })
 
-  // Construire l'URL noVNC native de Proxmox
   const baseUrl = new URL(conn.baseUrl)
   const novncUrl = `${baseUrl.origin}/?console=${type}&novnc=1&vmid=${vmid}&vmname=VM${vmid}&node=${node}&resize=off&cmd=`
 
@@ -72,13 +63,8 @@ export async function POST(
   })
 }
 
-// export pour le service WS
+// export pour le service WS — thin wrapper over the shared store so the
+// /api/internal/console/consume route and its tests are unchanged.
 export function consumeConsoleSession(sessionId: string) {
-  const s = sessions.get(sessionId)
-
-  if (!s) return null
-  sessions.delete(sessionId)
-  if (Date.now() > s.expiresAt) return null
-  
-return s
+  return takeSingleUse(sessionId)
 }

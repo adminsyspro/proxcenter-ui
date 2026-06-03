@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { putSingleUse, takeSingleUse } from "@/lib/console/session"
 
 export const runtime = "nodejs"
 
@@ -28,10 +29,12 @@ type TerminalSession = {
   ticket: string
   user: string
   upid: string
+  // Optional guest-scoped upstream WS base path. Node shells leave this
+  // undefined and the relay uses /api2/json/nodes/{node}. Guest serial
+  // consoles (Task 8) set it to /api2/json/nodes/{node}/{type}/{vmid}.
+  upstreamBasePath?: string
   expiresAt: number
 }
-
-const sessions = new Map<string, TerminalSession>()
 
 /**
  * POST /api/v1/connections/[id]/nodes/[node]/terminal
@@ -89,10 +92,8 @@ export async function POST(
       return NextResponse.json({ error: "Failed to create terminal session" }, { status: 500 })
     }
 
-    const sessionId = crypto.randomUUID()
     const expiresAt = Date.now() + 30_000
-
-    sessions.set(sessionId, {
+    const sessionId = putSingleUse({
       baseUrl: conn.baseUrl,
       host,
       pvePort,
@@ -104,7 +105,7 @@ export async function POST(
       user: termproxy.user,
       upid: termproxy.upid,
       expiresAt,
-    })
+    } as TerminalSession)
 
     return NextResponse.json({
       data: {
@@ -125,9 +126,5 @@ export async function POST(
 // sessionId cannot be replayed by a second client. Returns null if the
 // id is unknown or the entry has expired.
 export function consumeTerminalSession(sessionId: string): TerminalSession | null {
-  const s = sessions.get(sessionId)
-  if (!s) return null
-  sessions.delete(sessionId)
-  if (Date.now() > s.expiresAt) return null
-  return s
+  return takeSingleUse(sessionId) as TerminalSession | null
 }

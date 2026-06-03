@@ -1,0 +1,64 @@
+THIRD-PARTY OPEN SOURCE NOTICES
+================================
+ProxCenter bundles or serves the following open source libraries.
+Full license texts are referenced below or vendored in the repository.
+
+
+------------------------------------------------------------------------
+spice-html5
+------------------------------------------------------------------------
+License:    GNU Lesser General Public License, version 3 (LGPL-3.0)
+Upstream:   https://gitlab.freedesktop.org/spice/spice-html5
+Revision:   fea5c028b0e9ec2d2845fb766e8f91e40df94a47
+
+Source availability:
+  The complete corresponding source for spice-html5 is vendored
+  unmodified in this repository at frontend/vendor/spice-html5/.
+  The served bundle public/spice/spice.bundle.js is non-minified
+  and may be independently replaced with a compatible build of
+  spice-html5.
+
+Full license text:
+  See frontend/vendor/spice-html5/COPYING (shipped with this product)
+  or https://www.gnu.org/licenses/lgpl-3.0.txt
+
+
+------------------------------------------------------------------------
+noVNC (@novnc/novnc)
+------------------------------------------------------------------------
+License:    Mozilla Public License 2.0 (MPL-2.0)
+Upstream:   https://github.com/novnc/noVNC
+
+Full license text:
+  https://www.mozilla.org/en-US/MPL/2.0/
+
+
+------------------------------------------------------------------------
+xterm.js (xterm)
+------------------------------------------------------------------------
+License:    MIT License
+Upstream:   https://github.com/xtermjs/xterm.js
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+------------------------------------------------------------------------
+End of third-party notices
+------------------------------------------------------------------------

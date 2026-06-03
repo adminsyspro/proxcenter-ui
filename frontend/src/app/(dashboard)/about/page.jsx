@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 
 import { useTranslations } from 'next-intl'
 
-import { Box, Card, CardContent, Typography, Chip, Divider } from '@mui/material'
+import { Box, Card, CardContent, Typography, Chip, Divider, Link } from '@mui/material'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { GIT_SHA, GITHUB_URL } from '@/config/version'
@@ -45,6 +45,11 @@ return () => setPageInfo('', '', '')
           <Divider sx={{ my: 2 }} />
           <Typography variant='body2' sx={{ opacity: 0.6 }}>
             {t('aboutPage.copyright')}
+          </Typography>
+          <Typography variant='body2' sx={{ mt: 1, opacity: 0.6 }}>
+            <Link href='/THIRD_PARTY_LICENSES.txt' target='_blank' rel='noopener noreferrer'>
+              Third-party open source notices
+            </Link>
           </Typography>
         </CardContent>
       </Card>

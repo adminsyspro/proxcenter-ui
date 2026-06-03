@@ -3065,7 +3065,8 @@
       "vmct": "VM/CT",
       "clusterConnection": "Cluster / Connection",
       "tag": "Tag",
-      "pool": "Pool"
+      "pool": "Pool",
+      "inherit": "Inherited from role"
     },
     "cannotModifySystem": "Cannot modify a system role",
     "cannotDeleteSystem": "Cannot delete a system role",
@@ -4874,6 +4875,11 @@
       "title": "Widget visibility",
       "desc": "Tick widgets to hide from the dashboard for users with this role. Stacks on top of the automatic scope-based filter.",
       "hiddenCount": "{count} hidden"
+    },
+    "defaultScope": {
+      "title": "Default scope",
+      "desc": "Assignments that inherit from this role only see resources matching this scope. Leave empty for global access. Custom roles only.",
+      "none": "No default scope (global access)."
     },
     "globalScope": "Global",
     "tagScope": "Tag",

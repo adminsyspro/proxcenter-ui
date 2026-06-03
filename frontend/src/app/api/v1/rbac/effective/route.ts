@@ -6,7 +6,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
-import { hasPermission, isUserSuperAdmin } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, resolveEffectiveScopes } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
             name: true,
             color: true,
             widgetOverrides: true,
+            defaultScopes: true,
             permissions: {
               select: { permission: { select: { id: true, name: true, category: true } } },
             },
@@ -128,24 +129,45 @@ export async function GET(req: NextRequest) {
     // Calculer les permissions effectives
     const effectivePermissions = new Set<string>()
     const permissionDetails: any[] = []
+    // Aggregate scope types across roles AND direct grants. Populated from
+    // resolved scopes so "inherit" never leaks here (issue #383).
+    const scopeTypes = new Set<string>()
+    // Dedup permission_details by (permission, resolved scope) so a role that
+    // inherits several default scopes surfaces each one instead of collapsing
+    // to a single row.
+    const detailSeen = new Set<string>()
 
-    // Ajouter les permissions via les rôles
+    // Ajouter les permissions via les rôles. "inherit" assignments expand into
+    // the role's default scopes before matching, so a resource-filtered call no
+    // longer drops the permission on the sentinel (was checkScopeMatch default).
     for (const ur of userRoles) {
-      const matches = checkScopeMatch(ur.scopeType, ur.scopeTarget, resourceType, resourceId)
-      if (!matches) continue
+      const effectiveScopes = resolveEffectiveScopes(
+        ur.scopeType,
+        ur.scopeTarget,
+        ur.role.defaultScopes as { scopeType: string; scopeTarget: string | null }[] | null,
+      )
 
-      for (const rp of ur.role.permissions) {
-        const perm = rp.permission
-        if (!effectivePermissions.has(perm.name)) {
+      for (const sc of effectiveScopes) {
+        if (sc.scopeType) scopeTypes.add(sc.scopeType)
+      }
+
+      for (const sc of effectiveScopes) {
+        if (!checkScopeMatch(sc.scopeType, sc.scopeTarget, resourceType, resourceId)) continue
+
+        for (const rp of ur.role.permissions) {
+          const perm = rp.permission
           effectivePermissions.add(perm.name)
+          const key = `${perm.name}|${sc.scopeType}|${sc.scopeTarget ?? ""}`
+          if (detailSeen.has(key)) continue
+          detailSeen.add(key)
           permissionDetails.push({
             id: perm.id,
             name: perm.name,
             category: perm.category,
             source: "role",
             source_name: ur.role.name,
-            scope_type: ur.scopeType,
-            scope_target: ur.scopeTarget,
+            scope_type: sc.scopeType,
+            scope_target: sc.scopeTarget,
           })
         }
       }
@@ -183,16 +205,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Aggregate scope types across roles AND direct user permissions, so
-    // downstream consumers (e.g. dashboard widget visibility) don't have to
-    // re-derive it and don't miss users whose access comes from a direct
-    // permission grant rather than a role.
-    const scopeTypes = new Set<string>()
-
-    for (const ur of userRoles) {
-      if (ur.scopeType) scopeTypes.add(ur.scopeType)
-    }
-
+    // Role-derived scope types were aggregated (resolved) in the role loop
+    // above; fold in direct user-permission scopes here too, so downstream
+    // consumers don't miss users whose access comes from a direct grant.
     for (const dp of directPermissions) {
       if (dp.scopeType) scopeTypes.add(dp.scopeType)
     }
@@ -207,6 +222,13 @@ export async function GET(req: NextRequest) {
           color: ur.role.color,
           scope_type: ur.scopeType,
           scope_target: ur.scopeTarget,
+          // Resolved scopes for an "inherit" assignment, so the UI can render
+          // the role's default scope instead of the raw sentinel (issue #383).
+          resolved_scopes: resolveEffectiveScopes(
+            ur.scopeType,
+            ur.scopeTarget,
+            ur.role.defaultScopes as { scopeType: string; scopeTarget: string | null }[] | null,
+          ),
         })),
         permissions: Array.from(effectivePermissions),
         permission_details: permissionDetails,

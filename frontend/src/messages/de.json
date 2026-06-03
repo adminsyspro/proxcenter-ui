@@ -3025,7 +3025,8 @@
       "vmct": "VM/CT",
       "clusterConnection": "Cluster / Verbindung",
       "tag": "Tag",
-      "pool": "Pool"
+      "pool": "Pool",
+      "inherit": "Von Rolle geerbt"
     },
     "cannotModifySystem": "Systemrolle kann nicht geändert werden",
     "cannotDeleteSystem": "Cannot löschen a system role",
@@ -4828,6 +4829,11 @@
       "title": "Widget-Sichtbarkeit",
       "desc": "Widgets ankreuzen, die für Benutzer mit dieser Rolle ausgeblendet werden sollen. Zusätzlich zum automatischen Scope-Filter.",
       "hiddenCount": "{count} ausgeblendet"
+    },
+    "defaultScope": {
+      "title": "Standard-Geltungsbereich",
+      "desc": "Zuweisungen, die von dieser Rolle erben, sehen nur Ressourcen, die diesem Bereich entsprechen. Leer lassen für globalen Zugriff. Nur benutzerdefinierte Rollen.",
+      "none": "Kein Standard-Geltungsbereich (globaler Zugriff)."
     },
     "globalScope": "Global",
     "tagScope": "Tag",

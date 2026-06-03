@@ -10,6 +10,7 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -295,16 +296,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const validScopes = ["global", "connection", "node", "vm", "tag", "pool"]
-    const scopeType = scope_type || "global"
-
-    if (!validScopes.includes(scopeType)) {
-      return NextResponse.json({ error: "scope_type invalide" }, { status: 400 })
+    // Default to "inherit" so a manual assignment follows the role's default
+    // scope, just like SSO does (issue #383). Explicit scopes still override.
+    const scopeCheck = validateAssignmentScope(scope_type || "inherit", scope_target)
+    if (!scopeCheck.ok) {
+      return NextResponse.json({ error: scopeCheck.error }, { status: 400 })
     }
-
-    if (scopeType !== "global" && !scope_target) {
-      return NextResponse.json({ error: "scope_target requis pour ce type de scope" }, { status: 400 })
-    }
+    const scopeType = scopeCheck.scopeType
+    const scopeTarget = scopeCheck.scopeTarget
 
     // Vérifier que l'utilisateur existe
     const user = await prisma.user.findUnique({
@@ -366,7 +365,7 @@ export async function POST(req: NextRequest) {
         userId: user_id,
         roleId: role_id,
         scopeType,
-        scopeTarget: scope_target ?? null,
+        scopeTarget,
         tenantId: targetTenantId,
       },
       select: { id: true },
@@ -386,7 +385,7 @@ export async function POST(req: NextRequest) {
         userId: user_id,
         roleId: role_id,
         scopeType,
-        scopeTarget: scope_target ?? null,
+        scopeTarget,
         tenantId: targetTenantId,
         grantedById: session.user.id,
         grantedAt: now,
@@ -407,7 +406,7 @@ export async function POST(req: NextRequest) {
         role_name: role.name,
         role_id,
         scope_type: scopeType,
-        scope_target,
+        scope_target: scopeTarget,
         tenant_id: targetTenantId,
       },
       status: "success"
@@ -420,7 +419,7 @@ export async function POST(req: NextRequest) {
         role_id,
         tenant_id: targetTenantId,
         scope_type: scopeType,
-        scope_target,
+        scope_target: scopeTarget,
         granted_at: now.toISOString(),
         expires_at: expiresAt?.toISOString() ?? null,
       }

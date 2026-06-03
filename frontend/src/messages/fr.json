@@ -3065,7 +3065,8 @@
       "vmct": "VM/CT",
       "clusterConnection": "Cluster / Connexion",
       "tag": "Tag",
-      "pool": "Pool"
+      "pool": "Pool",
+      "inherit": "Hérité du rôle"
     },
     "cannotModifySystem": "Impossible de modifier un rôle système",
     "cannotDeleteSystem": "Impossible de supprimer un rôle système",
@@ -4874,6 +4875,11 @@
       "title": "Visibilité des widgets",
       "desc": "Cochez les widgets à masquer sur le tableau de bord pour les utilisateurs portant ce rôle. S'ajoute au filtre automatique par scope.",
       "hiddenCount": "{count} masqué(s)"
+    },
+    "defaultScope": {
+      "title": "Périmètre par défaut",
+      "desc": "Les assignations qui héritent de ce rôle ne voient que les ressources correspondant à ce périmètre. Laissez vide pour un accès global. Rôles personnalisés uniquement.",
+      "none": "Aucun périmètre par défaut (accès global)."
     },
     "globalScope": "Global",
     "tagScope": "Tag",

@@ -492,6 +492,12 @@ model RbacRole {
   // Shape: { hidden: string[] }. Composed across roles as a union (any role
   // denying a widget hides it for the user).
   widgetOverrides Json?    @map("widget_overrides")
+  // Default resource scope inherited by every assignment of this role whose
+  // scopeType is "inherit". Shape: [{ scopeType, scopeTarget }] reusing the
+  // assignment scope vocabulary (connection|node|vm|tag|pool). Null/empty =
+  // global. Allowed on custom roles only — never on system roles, whose
+  // super-admin/protected shortcuts bypass scope resolution entirely.
+  defaultScopes   Json?    @map("default_scopes")
   // Tenant scoping. Null = global (system roles, visible to every tenant).
   // Non-null = custom role only visible to that tenant's admins.
   tenantId        String?  @map("tenant_id")

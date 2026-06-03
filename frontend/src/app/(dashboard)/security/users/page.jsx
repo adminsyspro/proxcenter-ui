@@ -318,7 +318,8 @@ return
             body: JSON.stringify({
               user_id: userId,
               role_id: selectedRole.id,
-              scope_type: 'global',
+              // inherit so the role's default scope applies automatically (issue #383)
+              scope_type: 'inherit',
               scope_target: null
             })
           })

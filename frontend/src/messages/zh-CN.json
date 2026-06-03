@@ -3027,7 +3027,8 @@
       "vmct": "VM/CT",
       "clusterConnection": "集群 / 连接",
       "tag": "标签",
-      "pool": "资源池"
+      "pool": "资源池",
+      "inherit": "继承自角色"
     },
     "cannotModifySystem": "无法修改系统角色",
     "cannotDeleteSystem": "无法删除系统角色",
@@ -4833,6 +4834,11 @@
       "title": "小组件可见性",
       "desc": "勾选要为此角色用户隐藏的小组件。叠加于按 Scope 自动过滤之上。",
       "hiddenCount": "已隐藏 {count} 个"
+    },
+    "defaultScope": {
+      "title": "默认范围",
+      "desc": "继承此角色的分配仅可见与此范围匹配的资源。留空表示全局访问。仅自定义角色。",
+      "none": "无默认范围（全局访问）。"
     },
     "globalScope": "全局",
     "tagScope": "标签",

@@ -57,7 +57,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         id: roleAssignId,
         userId: body.userId,
         roleId,
-        scopeType: 'global',
+        // inherit so the assignment follows the role's default scope (issue #383)
+        scopeType: 'inherit',
         tenantId: id,
         grantedById: session?.user?.id || null,
         grantedAt: new Date(),

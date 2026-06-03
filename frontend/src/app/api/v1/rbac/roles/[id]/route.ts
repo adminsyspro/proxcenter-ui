@@ -10,6 +10,7 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         is_system: role.isSystem,
         color: role.color,
         widget_overrides: role.widgetOverrides ?? null,
+        default_scopes: role.defaultScopes ?? null,
         tenant_id: role.tenantId,
         created_at: role.createdAt.toISOString(),
         updated_at: role.updatedAt.toISOString(),
@@ -166,22 +168,40 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     const body = await req.json()
-    const { name, description, color, permissions, widget_overrides } = body
+    const { name, description, color, permissions, widget_overrides, default_scopes } = body
     const now = new Date()
     const normalizedOverrides = normalizeWidgetOverrides(widget_overrides)
 
     // System roles are immutable except for widget overrides — those purely
     // hide UI elements and grant no privileges, so admins can tailor the
-    // dashboard for system roles without forking them.
+    // dashboard for system roles without forking them. default_scopes is NOT
+    // allowed on system roles: their super-admin/protected shortcuts bypass
+    // scope resolution, so a scope there would be silently ignored (issue #383).
     if (role.isSystem) {
       const touchedSystemImmutable =
         name !== undefined ||
         description !== undefined ||
         color !== undefined ||
+        default_scopes !== undefined ||
         Array.isArray(permissions)
 
       if (touchedSystemImmutable) {
         return NextResponse.json({ error: "Impossible de modifier un rôle système" }, { status: 400 })
+      }
+    }
+
+    // Validate the role's default scope when provided (custom roles only —
+    // system roles are rejected above). An empty list clears it.
+    let defaultScopesUpdate: { scopeType: string; scopeTarget: string }[] | null | undefined
+    if (default_scopes !== undefined) {
+      if (default_scopes === null) {
+        defaultScopesUpdate = null
+      } else {
+        const check = validateRoleDefaultScopes(default_scopes)
+        if (!check.ok) {
+          return NextResponse.json({ error: check.error }, { status: 400 })
+        }
+        defaultScopesUpdate = check.scopes.length ? check.scopes : null
       }
     }
 
@@ -203,6 +223,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       description?: string | null
       color?: string
       widgetOverrides?: any
+      defaultScopes?: any
       updatedAt: Date
     } = {
       updatedAt: now,
@@ -215,6 +236,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     // TypeScript or fail at runtime depending on the client version.
     if (normalizedOverrides !== undefined) {
       updateData.widgetOverrides = normalizedOverrides === null ? Prisma.DbNull : normalizedOverrides
+    }
+    if (defaultScopesUpdate !== undefined) {
+      updateData.defaultScopes = defaultScopesUpdate === null ? Prisma.DbNull : defaultScopesUpdate
     }
 
     const replacePermissions = Array.isArray(permissions)
@@ -266,6 +290,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         is_system: updated.isSystem,
         color: updated.color,
         widget_overrides: updated.widgetOverrides ?? null,
+        default_scopes: updated.defaultScopes ?? null,
         tenant_id: updated.tenantId,
         created_at: updated.createdAt.toISOString(),
         updated_at: updated.updatedAt.toISOString(),

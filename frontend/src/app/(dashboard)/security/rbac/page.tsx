@@ -21,16 +21,18 @@ import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widgetRegistry'
+import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
+import { formatScopeTarget } from './scope-options'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
 interface PermissionCategory { id: string; label: string; permissions: Permission[] }
-interface Role { id: string; name: string; description: string | null; is_system: boolean; color: string; permissions: Permission[]; user_count: number }
+interface Role { id: string; name: string; description: string | null; is_system: boolean; color: string; permissions: Permission[]; user_count: number; default_scopes?: { scopeType: string; scopeTarget: string }[] | null }
 interface User { id: string; email: string; name: string | null }
 interface Assignment { id: string; user: User; role: { id: string; name: string; color: string }; scope_type: string; scope_target: string | null; granted_at: string; granted_by_email: string | null }
 
 // Constants
-const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line', tag: 'ri-price-tag-3-line', pool: 'ri-folder-shared-line' }
+const scopeIcons = { global: 'ri-global-line', connection: 'ri-server-line', node: 'ri-computer-line', vm: 'ri-instance-line', tag: 'ri-price-tag-3-line', pool: 'ri-folder-shared-line', inherit: 'ri-links-line' }
 const catIcons = { vm: 'ri-instance-line', storage: 'ri-hard-drive-3-line', node: 'ri-computer-line', connection: 'ri-server-line', backup: 'ri-archive-line', admin: 'ri-shield-user-line' }
 
 // Roles that must NEVER be assigned in a non-default tenant. Two reasons
@@ -64,7 +66,8 @@ const getScopeLabels = (t: any) => ({
   node: t('rbac.scopes.node'),
   vm: t('rbac.scopes.vmct'),
   tag: t('rbac.scopes.tag'),
-  pool: t('rbac.scopes.pool')
+  pool: t('rbac.scopes.pool'),
+  inherit: t('rbac.scopes.inherit')
 })
 
 const timeAgo = (d, t?: any, locale?: string) => {
@@ -85,6 +88,7 @@ function RoleDialog({ open, onClose, role, categories, onSave, t }) {
   const [color, setColor] = useState('#6366f1')
   const [selectedPerms, setSelectedPerms] = useState(new Set())
   const [hiddenWidgets, setHiddenWidgets] = useState(new Set())
+  const [defaultScopes, setDefaultScopes] = useState<{ scopeType: string; scopeTarget: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(new Set())
@@ -98,8 +102,9 @@ function RoleDialog({ open, onClose, role, categories, onSave, t }) {
       setColor(role.color || '#6366f1')
       setSelectedPerms(new Set(role.permissions.map(p => p.id)))
       setHiddenWidgets(new Set(role.widget_overrides?.hidden || []))
+      setDefaultScopes(Array.isArray(role.default_scopes) ? role.default_scopes : [])
     } else {
-      setName(''); setDescription(''); setColor('#6366f1'); setSelectedPerms(new Set()); setHiddenWidgets(new Set())
+      setName(''); setDescription(''); setColor('#6366f1'); setSelectedPerms(new Set()); setHiddenWidgets(new Set()); setDefaultScopes([])
     }
 
     setExpanded(new Set(categories.map(c => c.id)))
@@ -159,7 +164,7 @@ return }
     const widgetOverrides = hiddenWidgets.size > 0 ? { hidden: Array.from(hiddenWidgets) } : null
     const payload = role?.is_system
       ? { widget_overrides: widgetOverrides }
-      : { name: name.trim(), description: description.trim() || null, color, permissions: Array.from(selectedPerms), widget_overrides: widgetOverrides }
+      : { name: name.trim(), description: description.trim() || null, color, permissions: Array.from(selectedPerms), widget_overrides: widgetOverrides, default_scopes: defaultScopes }
 
     try {
       const res = await fetch(isEdit ? `/api/v1/rbac/roles/${role.id}` : '/api/v1/rbac/roles', {
@@ -225,6 +230,21 @@ return n })}>
             )
           })}
         </Paper>
+
+        {/* Role default scope (issue #383). Custom roles only — system roles
+            bypass scope resolution via their super-admin/protected shortcuts. */}
+        {!role?.is_system && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant='subtitle2' sx={{ mb: 0.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className='ri-links-line' style={{ fontSize: '1.1rem' }} />
+              {t('rbacPage.defaultScope.title')}
+              {defaultScopes.length > 0 && (
+                <Chip size='small' label={defaultScopes.length} color='primary' variant='outlined' />
+              )}
+            </Typography>
+            <RoleDefaultScopeEditor value={defaultScopes} onChange={setDefaultScopes} t={t} />
+          </Box>
+        )}
 
         {/* Widget visibility (denylist) — admins tick widgets to hide for users
             carrying this role. Always editable, including on system roles. */}
@@ -300,7 +320,9 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
   // operator can pick any enabled tenant — the POST body's tenant_id field is
   // honored only when the session is in the provider tenant (server check).
   const [tenantId, setTenantId] = useState<string>(currentTenantId)
-  const [scopeType, setScopeType] = useState('global')
+  // Default to "inherit" so a new assignment follows the role's default scope
+  // (issue #383). The admin can still pick an explicit override.
+  const [scopeType, setScopeType] = useState('inherit')
   const [selectedTargets, setSelectedTargets] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -329,7 +351,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
       setUser(null)
       setRoleId('')
       setTenantId(currentTenantId)
-      setScopeType('global')
+      setScopeType('inherit')
       setSelectedTargets([])
       setSearchFilter('')
       setError('')
@@ -527,9 +549,12 @@ return scopeOptions.filter((o: any) =>
 return
     }
 
-    if (scopeType !== 'global' && selectedTargets.length === 0) {
+    // global and inherit carry no target — a single assignment is created.
+    const scopeHasNoTarget = scopeType === 'global' || scopeType === 'inherit'
+
+    if (!scopeHasNoTarget && selectedTargets.length === 0) {
       setError(t('common.error'))
-      
+
 return
     }
 
@@ -537,7 +562,7 @@ return
     setError('')
 
     try {
-      const targets = scopeType === 'global' ? [null] : selectedTargets
+      const targets = scopeHasNoTarget ? [null] : selectedTargets
       let successCount = 0
       let errors: string[] = []
 
@@ -665,6 +690,15 @@ return
             label={t('rbacPage.scope')}
             onChange={e => { setScopeType(e.target.value); setSelectedTargets([]) }}
           >
+            <MenuItem value='inherit'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-links-line' style={{ color: '#10b981' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbac.scopes.inherit')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.defaultScope.desc')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
             <MenuItem value='global'>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
@@ -742,7 +776,7 @@ return
         )}
 
         {/* Sélection des ressources */}
-        {scopeType !== 'global' && (
+        {scopeType !== 'global' && scopeType !== 'inherit' && (
           <Box sx={{ mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant='subtitle2'>
@@ -835,6 +869,12 @@ return
           </Box>
         )}
 
+        {scopeType === 'inherit' && (
+          <Alert severity='info' sx={{ mt: 2 }} icon={<i className='ri-links-line' />}>
+            {t('rbacPage.defaultScope.desc')}
+          </Alert>
+        )}
+
         {scopeType === 'global' && (
           <Alert severity='info' sx={{ mt: 2 }}>
             {/* Translation contains <strong>…</strong> as inline rich text.
@@ -860,7 +900,7 @@ return
             !roleId ||
             !!conflict.existingDifferentRole ||
             (scopeType === 'global' && conflict.globalAlreadyExists) ||
-            (scopeType !== 'global' && selectedTargets.length === 0)
+            (scopeType !== 'global' && scopeType !== 'inherit' && selectedTargets.length === 0)
           }
         >
           {saving ? t('common.saving') : selectedTargets.length > 1 ? `${t('common.save')} (${selectedTargets.length})` : t('common.save')}
@@ -896,6 +936,47 @@ function RolesTab({ roles, categories, onRefresh, t }) {
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+  const [connNames, setConnNames] = useState({})
+
+  // Connection id -> name so the default-scope chips show the connection name
+  // instead of its opaque id (issue #383). Lighter than the full inventory the
+  // dialogs load: the card only needs to resolve connection scopes.
+  useEffect(() => {
+    let active = true
+    fetch('/api/v1/connections?type=pve')
+      .then(r => r.json())
+      .then(d => {
+        if (!active) return
+        const map = {}
+        for (const c of d?.data ?? []) if (c?.id) map[c.id] = c.name || c.id
+        setConnNames(map)
+      })
+      .catch(() => {})
+
+    return () => { active = false }
+  }, [])
+
+  // Map permission id -> its category, so a role's permissions can be
+  // summarised by area (e.g. "VM 13") instead of listing individual names.
+  const permCat = useMemo(() => {
+    const m = {}
+    for (const cat of categories || []) for (const p of cat.permissions || []) m[p.id] = cat
+
+    return m
+  }, [categories])
+
+  const catCounts = useCallback(role => {
+    const counts = new Map()
+    for (const p of role.permissions) {
+      const cat = permCat[p.id]
+      const id = cat?.id ?? p.name.split('.')[0]
+      const entry = counts.get(id) || { id, label: cat ? t(`rbac.categories.${cat.id}`, { defaultValue: cat.label }) : id, count: 0 }
+      entry.count++
+      counts.set(id, entry)
+    }
+
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count)
+  }, [permCat, t])
 
   const handleDelete = async () => {
     if (!toDelete) return
@@ -924,14 +1005,23 @@ return }
       </Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 2 }}>
         {roles.map(role => (
-          <Paper key={role.id} variant='outlined' sx={{ p: 2, borderLeft: 4, borderLeftColor: role.color, '&:hover': { bgcolor: 'action.hover' } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant='subtitle1' sx={{ fontWeight: 600 }}>{role.is_system ? t(`rbac.roles.${role.id}`, { defaultValue: role.name }) : role.name}</Typography>
-                  {role.is_system && <Chip label={t('rbacPage.systemRole')} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />}
+          <Paper key={role.id} variant='outlined' sx={{ p: 2, overflow: 'hidden', borderLeft: 4, borderLeftColor: role.color, '&:hover': { bgcolor: 'action.hover' } }}>
+            {/* Tinted header band carries the role colour from the left accent
+                across the whole header (issue #383 polish). */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, mt: -2, mx: -2, mb: 0, px: 2, py: 1.5, bgcolor: alpha(role.color, 0.08), borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  <Typography variant='subtitle1' noWrap sx={{ fontWeight: 600 }}>{role.is_system ? t(`rbac.roles.${role.id}`, { defaultValue: role.name }) : role.name}</Typography>
+                  {role.is_system && <Chip label={t('rbacPage.systemRole')} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }} />}
                 </Box>
-                {role.description && <Typography variant='body2' sx={{ opacity: 0.6 }}>{role.is_system ? t(`rbac.roleDesc.${role.id}`, { defaultValue: role.description }) : role.description}</Typography>}
+                {/* Always reserve a 2-line (clamped) description block so every
+                    card header has the same height, with or without a description. */}
+                <Typography
+                  variant='body2'
+                  sx={{ opacity: 0.6, mt: 0.25, minHeight: 40, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                >
+                  {role.is_system ? t(`rbac.roleDesc.${role.id}`, { defaultValue: role.description || '' }) : (role.description || '')}
+                </Typography>
               </Box>
               {isSuperAdmin && (
                 <Box>
@@ -940,15 +1030,57 @@ return }
                 </Box>
               )}
             </Box>
-            <Divider sx={{ my: 1 }} />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Typography variant='body2'><i className='ri-key-line' style={{ opacity: 0.5, marginRight: 4 }} />{role.permissions.length} {t('rbacPage.permissions')}</Typography>
-              <Typography variant='body2'><i className='ri-user-line' style={{ opacity: 0.5, marginRight: 4 }} />{t('rbacPage.userCount', { count: role.user_count })}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-              {role.permissions.slice(0, 4).map(p => <Chip key={p.id} label={p.name.split('.')[1]} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem' }} />)}
-              {role.permissions.length > 4 && <Chip label={`+${role.permissions.length - 4}`} size='small' sx={{ height: 20, fontSize: '0.7rem' }} />}
-            </Box>
+            {/* Meta line: counts only, no individual permission names. */}
+            <Typography variant='caption' sx={{ display: 'block', opacity: 0.6, mt: 1.5 }}>
+              {role.permissions.length} {t('rbacPage.permissions')} &nbsp;·&nbsp; {t('rbacPage.userCount', { count: role.user_count })}
+            </Typography>
+
+            {/* Permissions summarised by area (issue #383): "VM 13", "Connection 1". */}
+            {role.permissions.length > 0 && (
+              <Box sx={{ mt: 1.5 }}>
+                <Typography variant='overline' sx={{ display: 'block', opacity: 0.5, fontSize: '0.65rem', letterSpacing: '0.08em', lineHeight: 1.6 }}>
+                  {t('rbacPage.permissions')}
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                  {catCounts(role).map(c => (
+                    <Chip
+                      key={c.id}
+                      size='small'
+                      variant='outlined'
+                      icon={<i className={catIcons[c.id] || 'ri-folder-line'} style={{ fontSize: 14 }} />}
+                      label={<span>{c.label}&nbsp;<Box component='span' sx={{ fontWeight: 700 }}>{c.count}</Box></span>}
+                      sx={{ height: 22, fontSize: '0.72rem' }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {/* Default scope summary (issue #383): inheriting assignments follow this. */}
+            {Array.isArray(role.default_scopes) && role.default_scopes.length > 0 && (
+              <Box sx={{ mt: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <i className='ri-links-line' style={{ fontSize: 14, color: '#10b981' }} />
+                  <Typography variant='overline' sx={{ opacity: 0.5, fontSize: '0.65rem', letterSpacing: '0.08em', lineHeight: 1.6 }}>
+                    {t('rbacPage.defaultScope.title')}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.25 }}>
+                  {role.default_scopes.slice(0, 4).map(s => (
+                    <Chip
+                      key={`${s.scopeType}:${s.scopeTarget}`}
+                      size='small'
+                      color='primary'
+                      variant='outlined'
+                      icon={<i className={scopeIcons[s.scopeType] || 'ri-price-tag-3-line'} style={{ fontSize: 14 }} />}
+                      label={formatScopeTarget(connNames, s.scopeType, s.scopeTarget)}
+                      sx={{ height: 22, fontSize: '0.72rem' }}
+                    />
+                  ))}
+                  {role.default_scopes.length > 4 && <Chip label={`+${role.default_scopes.length - 4}`} size='small' sx={{ height: 22, fontSize: '0.72rem' }} />}
+                </Box>
+              </Box>
+            )}
           </Paper>
         ))}
       </Box>
@@ -1429,7 +1561,12 @@ return scopeOptions.filter((o: any) =>
 return
     }
 
-    if (scopeType !== 'global' && selectedTargets.length === 0) {
+    // global and inherit carry no target (issue #383); only truly scoped types
+    // require a selection.
+    const noTarget = scopeType === 'global' || scopeType === 'inherit'
+    const wasNoTarget = assignmentGroup.scope_type === 'global' || assignmentGroup.scope_type === 'inherit'
+
+    if (!noTarget && selectedTargets.length === 0) {
       setError(t('common.error'))
 
 return
@@ -1440,7 +1577,7 @@ return
 
     try {
       const originalTargets = new Set<string>(assignmentGroup.scope_targets || [])
-      const newTargets = scopeType === 'global' ? new Set<string>() : new Set(selectedTargets)
+      const newTargets = noTarget ? new Set<string>() : new Set(selectedTargets)
       
       // Calculer les différences
       const toAdd = [...newTargets].filter(t => !originalTargets.has(t))
@@ -1464,8 +1601,9 @@ return
 
       // Mettre à jour le rôle des assignations conservées si changé
       if (roleId !== assignmentGroup.role.id) {
-        // Global scope: update the single assignment directly (no targets to iterate)
-        if (scopeType === 'global' && assignmentGroup.scope_type === 'global') {
+        // No-target scope (global/inherit), unchanged type: update the single
+        // assignment directly (no targets to iterate).
+        if (noTarget && assignmentGroup.scope_type === scopeType) {
           for (const assignment of assignmentGroup.assignments) {
             const res = await fetch(`/api/v1/rbac/assignments/${assignment.id}`, {
               method: 'PATCH',
@@ -1526,9 +1664,9 @@ return
         }
       }
 
-      // Cas spécial: passage à global
-      if (scopeType === 'global' && assignmentGroup.scope_type !== 'global') {
-        // Supprimer toutes les anciennes assignations et créer une globale
+      // Cas spécial: passage vers un scope sans cible (global ou inherit) depuis
+      // un scope différent. Supprime tout et crée une seule assignation.
+      if (noTarget && assignmentGroup.scope_type !== scopeType) {
         for (const assignment of assignmentGroup.assignments) {
           await fetch(`/api/v1/rbac/assignments/${assignment.id}`, { method: 'DELETE' })
         }
@@ -1539,7 +1677,7 @@ return
           body: JSON.stringify({
             user_id: assignmentGroup.user.id,
             role_id: roleId,
-            scope_type: 'global',
+            scope_type: scopeType,
             scope_target: null,
             ...tenantPayload,
           })
@@ -1552,9 +1690,9 @@ return
         }
       }
 
-      // Cas spécial: passage de global à spécifique
-      if (scopeType !== 'global' && assignmentGroup.scope_type === 'global') {
-        // Supprimer l'assignation globale
+      // Cas spécial: passage d'un scope sans cible vers un scope spécifique
+      if (!noTarget && wasNoTarget) {
+        // Supprimer l'assignation sans cible
         for (const assignment of assignmentGroup.assignments) {
           await fetch(`/api/v1/rbac/assignments/${assignment.id}`, { method: 'DELETE' })
         }
@@ -1630,6 +1768,15 @@ return
               setSelectedTargets([])
             }}
           >
+            <MenuItem value='inherit'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-links-line' style={{ color: '#10b981' }} />
+                <Box>
+                  <Typography variant='body2'>{t('rbac.scopes.inherit')}</Typography>
+                  <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.defaultScope.desc')}</Typography>
+                </Box>
+              </Box>
+            </MenuItem>
             <MenuItem value='global'>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className='ri-global-line' style={{ color: '#6366f1' }} />
@@ -1688,7 +1835,7 @@ return
         </FormControl>
 
         {/* Sélection des ressources (multi-sélection) */}
-        {scopeType !== 'global' && (
+        {scopeType !== 'global' && scopeType !== 'inherit' && (
           <Box sx={{ mt: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography variant='subtitle2'>
@@ -1785,7 +1932,7 @@ return
         <Button
           variant='contained'
           onClick={handleSave}
-          disabled={saving || !roleId || (scopeType !== 'global' && selectedTargets.length === 0)}
+          disabled={saving || !roleId || (scopeType !== 'global' && scopeType !== 'inherit' && selectedTargets.length === 0)}
         >
           {saving ? (t('common.saving')) : (t('common.save'))}
         </Button>

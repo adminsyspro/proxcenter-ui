@@ -193,3 +193,86 @@ export function resolveLdapRole(groups: string[], config: LdapConfig): string | 
 
   return null
 }
+
+// Minimal Prisma surface the LDAP sync needs — injected so the logic is unit
+// testable without a real client.
+type LdapSyncDb = {
+  rbacRole: { findUnique: (args: any) => Promise<{ id: string } | null> }
+  rbacUserRole: {
+    findFirst: (args: any) => Promise<{ id: string } | null>
+    deleteMany: (args: any) => Promise<unknown>
+    create: (args: any) => Promise<unknown>
+  }
+  $transaction: (ops: unknown[]) => Promise<unknown>
+}
+
+/**
+ * Sync a user's LDAP-derived RBAC assignment on login (issue #383).
+ *
+ * The assignment is created with scopeType "inherit" so it follows the role's
+ * default scope automatically. The LDAP-managed row is identified by its
+ * `ldap_` id prefix, so the delete/replace never touches a manually-created
+ * assignment (which would otherwise be clobbered when keyed on scope type).
+ *
+ *  - group matches a role  -> replace the ldap_ row with the resolved role
+ *    (falling back to role_viewer if the resolved role no longer exists)
+ *  - no match, no role yet -> assign the default role (first login)
+ *  - no match, role exists -> preserve whatever the user already has
+ */
+export async function syncLdapRoleAssignment(
+  db: LdapSyncDb,
+  params: {
+    userId: string
+    resolvedRoleId: string | null
+    defaultRoleId: string
+    now: Date
+    newId: () => string
+  },
+): Promise<void> {
+  const { userId, resolvedRoleId, defaultRoleId, now, newId } = params
+  const tenantId = "default"
+  const ldapOwned = { userId, tenantId, id: { startsWith: "ldap_" } }
+
+  if (resolvedRoleId) {
+    const roleExists = await db.rbacRole.findUnique({
+      where: { id: resolvedRoleId },
+      select: { id: true },
+    })
+    const finalRoleId = roleExists ? resolvedRoleId : "role_viewer"
+    await db.$transaction([
+      db.rbacUserRole.deleteMany({ where: ldapOwned }),
+      db.rbacUserRole.create({
+        data: {
+          id: newId(),
+          userId,
+          roleId: finalRoleId,
+          scopeType: "inherit",
+          tenantId,
+          grantedById: null,
+          grantedAt: now,
+        },
+      }),
+    ])
+    return
+  }
+
+  // No group matched — only seed the default role if the user has none yet,
+  // so a manually-assigned role is never duplicated or overridden on login.
+  const hasAnyRole = await db.rbacUserRole.findFirst({
+    where: { userId, tenantId },
+    select: { id: true },
+  })
+  if (!hasAnyRole) {
+    await db.rbacUserRole.create({
+      data: {
+        id: newId(),
+        userId,
+        roleId: defaultRoleId,
+        scopeType: "inherit",
+        tenantId,
+        grantedById: null,
+        grantedAt: now,
+      },
+    })
+  }
+}

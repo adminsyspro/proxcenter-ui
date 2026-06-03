@@ -12,6 +12,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
 import { getCurrentTenantId } from "@/lib/tenant"
 
 /**
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest) {
         isSystem: true,
         color: true,
         widgetOverrides: true,
+        defaultScopes: true,
         tenantId: true,
         createdAt: true,
         updatedAt: true,
@@ -102,6 +104,7 @@ export async function GET(req: NextRequest) {
       is_system: role.isSystem,
       color: role.color,
       widget_overrides: role.widgetOverrides ?? null,
+      default_scopes: role.defaultScopes ?? null,
       tenant_id: role.tenantId,
       created_at: role.createdAt.toISOString(),
       updated_at: role.updatedAt.toISOString(),
@@ -151,10 +154,21 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, description, color, permissions, widget_overrides } = body
+    const { name, description, color, permissions, widget_overrides, default_scopes } = body
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json({ error: "Nom du rôle requis" }, { status: 400 })
+    }
+
+    // Role-level default scope (issue #383). New roles are always custom, so
+    // it's always allowed here; the validator rejects global/inherit entries.
+    let defaultScopes: { scopeType: string; scopeTarget: string }[] | undefined
+    if (default_scopes !== undefined && default_scopes !== null) {
+      const check = validateRoleDefaultScopes(default_scopes)
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 })
+      }
+      defaultScopes = check.scopes.length ? check.scopes : undefined
     }
 
     const trimmedName = name.trim()
@@ -192,6 +206,7 @@ export async function POST(req: NextRequest) {
             normalizedOverrides === undefined ? undefined :
             normalizedOverrides === null ? Prisma.DbNull :
             normalizedOverrides,
+          defaultScopes: defaultScopes ?? undefined,
           tenantId: ownerTenantId,
           createdAt: now,
           updatedAt: now,
@@ -240,6 +255,7 @@ export async function POST(req: NextRequest) {
         is_system: newRole.isSystem,
         color: newRole.color,
         widget_overrides: newRole.widgetOverrides ?? null,
+        default_scopes: newRole.defaultScopes ?? null,
         tenant_id: newRole.tenantId,
         created_at: newRole.createdAt.toISOString(),
         updated_at: newRole.updatedAt.toISOString(),

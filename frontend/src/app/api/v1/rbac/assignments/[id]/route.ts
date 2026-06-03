@@ -8,6 +8,7 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -278,16 +279,16 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     if (scope_type !== undefined) {
-      const validScopes = ["global", "connection", "node", "vm", "tag", "pool"]
-
-      if (!validScopes.includes(scope_type)) {
-        return NextResponse.json({ error: "scope_type invalide" }, { status: 400 })
+      // Validate against the effective target (incoming, else the existing one)
+      // so the shared rule applies; "inherit"/"global" normalize to no target.
+      const targetForCheck = scope_target !== undefined ? scope_target : assignment.scopeTarget
+      const check = validateAssignmentScope(scope_type, targetForCheck)
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 })
       }
-
-      data.scopeType = scope_type
-    }
-
-    if (scope_target !== undefined) {
+      data.scopeType = check.scopeType
+      data.scopeTarget = check.scopeTarget
+    } else if (scope_target !== undefined) {
       data.scopeTarget = scope_target || null
     }
 

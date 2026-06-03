@@ -8,7 +8,7 @@ import { nanoid } from "nanoid"
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
 import { extractGroupsFromClaim, isLdapGroupAllowed } from "./groupMapping"
-import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole } from "./ldap"
+import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, resolveOidcRole } from "./oidc"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
@@ -324,58 +324,20 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Sync RBAC role from LDAP groups (Postgres / Prisma).
+        // Sync RBAC role from LDAP groups (Postgres / Prisma). The assignment
+        // is created with scopeType "inherit" so it follows the role's default
+        // scope automatically (issue #383); the helper keys its delete/replace
+        // on the ldap_ id prefix so manual assignments are never clobbered.
         const ldapConfig = await getLdapConfig()
         if (ldapConfig) {
           const resolvedRoleId = resolveLdapRole(ldapUser.groups, ldapConfig)
-
-          // Check if user already has a global RBAC role on the default tenant
-          const existingRole = await prisma.rbacUserRole.findFirst({
-            where: { userId: user.id, scopeType: "global", tenantId: "default" },
-            select: { id: true },
+          await syncLdapRoleAssignment(prisma, {
+            userId: user.id,
+            resolvedRoleId,
+            defaultRoleId: ldapConfig.defaultRole || "role_viewer",
+            now,
+            newId: () => `ldap_${nanoid(12)}`,
           })
-
-          if (resolvedRoleId) {
-            // LDAP group matched — sync the resolved role.
-            // Fall back to role_viewer if the resolved role doesn't exist.
-            const roleExists = await prisma.rbacRole.findUnique({
-              where: { id: resolvedRoleId },
-              select: { id: true },
-            })
-            const finalRoleId = roleExists ? resolvedRoleId : "role_viewer"
-
-            await prisma.$transaction([
-              prisma.rbacUserRole.deleteMany({
-                where: { userId: user.id, scopeType: "global", tenantId: "default" },
-              }),
-              prisma.rbacUserRole.create({
-                data: {
-                  id: `ldap_${nanoid(12)}`,
-                  userId: user.id,
-                  roleId: finalRoleId,
-                  scopeType: "global",
-                  tenantId: "default",
-                  grantedById: null,
-                  grantedAt: now,
-                },
-              }),
-            ])
-          } else if (!existingRole) {
-            // No group match AND no existing role (first login) — assign default role
-            const defaultRoleId = ldapConfig.defaultRole || "role_viewer"
-            await prisma.rbacUserRole.create({
-              data: {
-                id: `ldap_${nanoid(12)}`,
-                userId: user.id,
-                roleId: defaultRoleId,
-                scopeType: "global",
-                tenantId: "default",
-                grantedById: null,
-                grantedAt: now,
-              },
-            })
-          }
-          // If no group match but existing role: preserve manually-assigned role
         }
 
         const localUser = await prisma.user.findUnique({
@@ -512,6 +474,9 @@ export const authOptions: NextAuthOptions = {
           })
 
           // Create RBAC role assignment from OIDC groups (Postgres / Prisma).
+          // scopeType "inherit" so the assignment follows the role's default
+          // scope automatically (issue #383). Resolves to global when the role
+          // has no default scope, matching the previous behaviour.
           const oidcRoleExists = await prisma.rbacRole.findUnique({
             where: { id: oidcRoleId },
             select: { id: true },
@@ -523,7 +488,7 @@ export const authOptions: NextAuthOptions = {
               id: `oidc_${nanoid(12)}`,
               userId: id,
               roleId: finalOidcRoleId,
-              scopeType: "global",
+              scopeType: "inherit",
               tenantId: "default",
               grantedAt: now,
             },

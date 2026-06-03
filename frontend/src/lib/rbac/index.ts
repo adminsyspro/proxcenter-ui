@@ -55,6 +55,39 @@ type LoadedGrants = {
   }>
 }
 
+/**
+ * Sentinel `scopeType` on an assignment meaning "follow the role's default
+ * scope". It is never stored on a role's `defaultScopes` and is expanded away
+ * before any `scopeMatches` call, so the matcher only ever sees real scopes.
+ */
+export const INHERIT_SCOPE = "inherit"
+
+type ScopeEntry = { scopeType: string; scopeTarget: string | null }
+
+/**
+ * Resolve an assignment's effective scopes (issue #383). An assignment whose
+ * scopeType is "inherit" follows the role's `defaultScopes`, or `global` when
+ * the role has none. Any explicit scope overrides the role default for that
+ * single assignment. Pure, no DB. Malformed default entries (missing or blank
+ * scopeType) are dropped so a bad role row can never silently widen access.
+ */
+export function resolveEffectiveScopes(
+  scopeType: string,
+  scopeTarget: string | null,
+  roleDefaultScopes: ScopeEntry[] | null | undefined,
+): ScopeEntry[] {
+  if (scopeType !== INHERIT_SCOPE) {
+    return [{ scopeType, scopeTarget: scopeTarget ?? null }]
+  }
+  const defaults = (Array.isArray(roleDefaultScopes) ? roleDefaultScopes : [])
+    .filter(
+      (s): s is ScopeEntry =>
+        !!s && typeof s.scopeType === "string" && s.scopeType.length > 0,
+    )
+    .map(s => ({ scopeType: s.scopeType, scopeTarget: s.scopeTarget ?? null }))
+  return defaults.length ? defaults : [{ scopeType: "global", scopeTarget: null }]
+}
+
 async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedGrants> {
   // Super admins short-circuit: the role grants global, cross-tenant access
   // and we never need to enumerate scopes for them.
@@ -72,6 +105,7 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
         scopeTarget: true,
         role: {
           select: {
+            defaultScopes: true,
             permissions: { select: { permission: { select: { name: true } } } },
           },
         },
@@ -103,9 +137,19 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
   }
 
   for (const r of roleGrants) {
-    const entry = upsert(r.scopeType, r.scopeTarget)
-    for (const rp of r.role.permissions) {
-      entry.permissions.add(rp.permission.name)
+    // "inherit" assignments expand into the role's default scopes (issue #383);
+    // every other scope passes through unchanged. The role's permissions are
+    // attached to each resolved scope entry.
+    const effective = resolveEffectiveScopes(
+      r.scopeType,
+      r.scopeTarget,
+      r.role.defaultScopes as ScopeEntry[] | null,
+    )
+    for (const s of effective) {
+      const entry = upsert(s.scopeType, s.scopeTarget)
+      for (const rp of r.role.permissions) {
+        entry.permissions.add(rp.permission.name)
+      }
     }
   }
   for (const d of directGrants) {

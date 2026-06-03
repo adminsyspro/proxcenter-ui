@@ -301,7 +301,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 id: `tenant_role_${m.tenantId}_${id}_${nanoid(6)}`,
                 userId: id,
                 roleId,
-                scopeType: "global",
+                // inherit so the assignment follows the role's default scope (issue #383)
+                scopeType: "inherit",
                 tenantId: m.tenantId,
                 grantedById,
                 grantedAt: now,

@@ -82,7 +82,7 @@ describe('POST .../spice', () => {
     const stored = consumeSpiceSession(body.data.sessionId)
     expect(stored).toMatchObject({
       proxyticket: 'proxyticket-abc',
-      proxyHost: '10.0.0.5',
+      proxyHost: 'pve1', // connection host (https://pve1:8006), not the proxy node name
       proxyPort: 3128,
       tlsPort: 61000,
       hostSubject: 'CN=pve1',

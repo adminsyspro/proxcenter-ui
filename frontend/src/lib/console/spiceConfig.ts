@@ -17,24 +17,27 @@ export type ParsedSpiceConfig = {
 }
 
 function deriveProxy(proxy: string | undefined, connBaseUrl: string): { host: string; port: number } {
-  if (proxy) {
-    // proxy looks like "http://10.0.0.5:3128"
-    try {
-      const u = new URL(proxy)
-      return { host: u.hostname, port: u.port ? Number.parseInt(u.port) : 3128 }
-    } catch {
-      const m = proxy.match(/^(?:https?:\/\/)?([^:/]+)(?::(\d+))?/)
-      if (m) return { host: m[1], port: m[2] ? Number.parseInt(m[2]) : 3128 }
-    }
-  }
-  // Fallback: the connection host on the default spiceproxy port.
+  // Port: Proxmox's spiceproxy listens on 3128 by default; honour a custom
+  // port if the `proxy` field carries one (e.g. "http://node:3129").
+  let port = 3128
+  const portMatch = proxy?.match(/:(\d+)\s*$/)
+  if (portMatch) port = Number.parseInt(portMatch[1])
+
+  // Host: ALWAYS the connection host, i.e. the address ProxCenter already
+  // uses to reach Proxmox (where pveFetch works). Proxmox sets the `proxy`
+  // field to the TARGET NODE's own hostname (e.g. "pve-3az-5-c"), which is
+  // typically NOT resolvable from ProxCenter. The signed proxyticket lets
+  // any cluster node's spiceproxy route the CONNECT to the right VM, so
+  // connecting to the connection host is correct, mirroring how the VNC
+  // relay uses baseUrl.host rather than the node name.
+  let host = ''
   try {
-    const u = new URL(connBaseUrl)
-    return { host: u.hostname, port: 3128 }
+    host = new URL(connBaseUrl).hostname
   } catch {
     const m = connBaseUrl.match(/^(?:https?:\/\/)?([^:/]+)/)
-    return { host: m ? m[1] : '', port: 3128 }
+    host = m ? m[1] : ''
   }
+  return { host, port }
 }
 
 export function parseSpiceConfig(cfg: Record<string, any>, connBaseUrl: string): ParsedSpiceConfig {

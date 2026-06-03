@@ -399,9 +399,13 @@ return () => setPageInfo('', '', '')
     setTreeOptimisticVmStatus(() => fn)
   }, [])
 
-  // Derive loading/error from SWR states
+  // issue #378: the connections-list SWR only warms the shared cache for
+  // dialogs — its result isn't rendered here, and the tree streams its own
+  // data via SSE (and shows its own errors). A 403/500 on this fetch must NOT
+  // blank the whole inventory, which is exactly what happened to low-privilege
+  // roles. Log for diagnostics instead of gating the tree on it.
   useEffect(() => {
-    if (connectionsError) setErr(connectionsError.message)
+    if (connectionsError) console.warn('[inventory] connections list fetch failed:', connectionsError.message)
   }, [connectionsError])
 
   // Quand on passe en mode tree, sélectionner automatiquement 'root' pour afficher la vue arborescente

@@ -89,7 +89,7 @@ async function handleWsConnection(clientWs, req) {
       return
     }
 
-    const { host, pvePort, port, ticket, node, user, apiToken, insecure } = session
+    const { host, pvePort, port, ticket, node, user, apiToken, insecure, upstreamBasePath } = session
     if (!host || !port || !ticket || !node) {
       console.error('[WS] Invalid shell session data:', session)
       clientWs.close(4002, 'Invalid session data')
@@ -105,7 +105,7 @@ async function handleWsConnection(clientWs, req) {
     console.log(`[WS] Shell connection to ${host}:${pvePort} (VNC port: ${port}, user: ${user}, tls_verify: ${rejectUnauthorized})`)
 
     try {
-      const basePath = `/api2/json/nodes/${encodeURIComponent(node)}`
+      const basePath = upstreamBasePath || `/api2/json/nodes/${encodeURIComponent(node)}`
       const pveWsUrl = `wss://${host}:${pvePort}${basePath}/vncwebsocket?port=${port}&vncticket=${encodeURIComponent(ticket)}`
 
       console.log(`[WS] Connecting to Proxmox: ${pveWsUrl.replace(/vncticket=[^&]+/, 'vncticket=***')}`)

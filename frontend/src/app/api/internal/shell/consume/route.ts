@@ -32,5 +32,6 @@ export async function POST(req: Request) {
     ticket: s.ticket,
     user: s.user,
     upid: s.upid,
+    upstreamBasePath: s.upstreamBasePath,
   })
 }

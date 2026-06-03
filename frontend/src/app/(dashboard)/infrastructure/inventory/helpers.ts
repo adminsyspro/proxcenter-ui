@@ -566,6 +566,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
       maxdisk: Number(g.maxdisk ?? 0),
       uptime: Number(g.uptime ?? 0),
       tags: parseTags(g.tags),
+      isCluster: nodes.length > 1,
       lock: g.lock,
     }))
 

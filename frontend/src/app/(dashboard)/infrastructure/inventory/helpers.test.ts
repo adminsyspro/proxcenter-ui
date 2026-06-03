@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   TAG_PALETTE,
   hashStringToInt,
@@ -16,6 +16,7 @@ import {
   getMetricIcon,
   pickNumber,
   buildSeriesFromRrd,
+  fetchDetails,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -529,5 +530,54 @@ describe('buildSeriesFromRrd', () => {
   it('extracts loadavg', () => {
     const result = buildSeriesFromRrd([{ time: 1, loadavg: 2.5 }])
     expect(result[0].loadAvg).toBe(2.5)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails — cluster pivot tags allVms with isCluster (issue #381) */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails — cluster allVms isCluster', () => {
+  const connId = 'conn1'
+
+  const jsonRes = (body: any, ok = true) => ({ ok, json: async () => body }) as Response
+
+  // Route the 5 parallel cluster-pivot fetches by URL. Only the node list
+  // varies between tests; the single guest lives on a multi-node cluster.
+  function stubFetch(nodes: any[]) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+      if (url.includes('/nodes')) return Promise.resolve(jsonRes({ data: nodes }))
+      if (url.includes('/resources')) return Promise.resolve(jsonRes({ data: [
+        { node: 'pve-2-2', vmid: 20004, type: 'qemu', name: 'RDSLic02-W2022', status: 'running' },
+      ] }))
+      if (url.includes('/ceph/status')) return Promise.resolve(jsonRes({ data: { health: 'HEALTH_OK' } }))
+      if (url.includes('/storage')) return Promise.resolve(jsonRes({ data: [] }))
+      return Promise.resolve(jsonRes({ data: { name: 'PVE-2' } })) // bare /connections/:id
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('flags allVms entries as isCluster on a multi-node cluster', async () => {
+    stubFetch([
+      { node: 'pve-2-1', status: 'online' },
+      { node: 'pve-2-2', status: 'online' },
+    ])
+
+    const payload = await fetchDetails({ type: 'cluster', id: connId } as any)
+
+    expect(payload?.allVms).toHaveLength(1)
+    expect(payload?.allVms?.[0].isCluster).toBe(true)
+  })
+
+  it('leaves isCluster false for a single-node (standalone) connection', async () => {
+    stubFetch([{ node: 'pve-2-1', status: 'online' }])
+
+    const payload = await fetchDetails({ type: 'cluster', id: connId } as any)
+
+    expect(payload?.allVms?.[0].isCluster).toBe(false)
   })
 })

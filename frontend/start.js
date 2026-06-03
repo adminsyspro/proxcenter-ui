@@ -166,6 +166,7 @@ ${c.orange}${c.bold} ██████╗ ██╗  ██╗ █████�
  ${c.dim}WebSocket routes${c.reset}
  ${c.dim}├─${c.reset} /api/internal/ws/shell           ${c.dim}Node/VM/CT shell${c.reset}
  ${c.dim}├─${c.reset} /api/internal/ws/console/{id}    ${c.dim}VM/CT console${c.reset}
+ ${c.dim}├─${c.reset} /api/internal/ws/spice/{id}      ${c.dim}VM SPICE console${c.reset}
  ${c.dim}├─${c.reset} /ws/shell                        ${c.dim}(alias)${c.reset}
  ${c.dim}└─${c.reset} /ws/console/{id}                 ${c.dim}(alias)${c.reset}
 `)

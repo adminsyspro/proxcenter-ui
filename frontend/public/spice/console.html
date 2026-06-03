@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <title>SPICE Console</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0c0c0c; color: #ccc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+      background: #111; border-bottom: 1px solid #333; }
+    #dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+    #dot.connected { background: #22c55e; } #dot.connecting { background: #f59e0b; } #dot.error { background: #ef4444; }
+    #title { font-weight: 600; color: #fff; } #status { color: #888; font-size: 12px; }
+    #spice-area { position: absolute; top: 41px; bottom: 0; left: 0; right: 0; background: #000; overflow: auto; }
+    #message { position: absolute; inset: 0; top: 41px; display: none; place-items: center; text-align: center; padding: 24px; }
+    #message.visible { display: grid; }
+    #message .big { font-size: 15px; color: #fecaca; } #message .small { font-size: 13px; color: #9ca3af; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <span id="dot"></span><span id="title">SPICE</span><span id="status">• Initializing...</span>
+  </div>
+  <div id="spice-area"></div>
+  <div id="message"><div><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+
+  <script src="/spice/spice.bundle.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const connId = params.get('connId');
+    const type = params.get('type');
+    const node = params.get('node');
+    const vmid = params.get('vmid');
+    const dot = document.getElementById('dot');
+    const status = document.getElementById('status');
+    const title = document.getElementById('title');
+    const area = document.getElementById('spice-area');
+    const messageBox = document.getElementById('message');
+    let sc = null;
+
+    title.textContent = `SPICE • ${type?.toUpperCase()} ${vmid} • ${node}`;
+    document.title = `SPICE - ${vmid} - ${node}`;
+
+    function setStatus(s, text) { dot.className = s; status.textContent = '• ' + text; }
+    function fail(big, small) {
+      setStatus('error', 'Error');
+      document.getElementById('msg-big').textContent = big;
+      document.getElementById('msg-small').textContent = small || '';
+      messageBox.classList.add('visible');
+    }
+
+    async function connect() {
+      if (!connId || !type || !node || !vmid) return fail('Missing parameters');
+      setStatus('connecting', 'Creating session...');
+      let json;
+      try {
+        const res = await fetch(
+          `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/spice`,
+          { method: 'POST' }
+        );
+        json = await res.json();
+        if (!res.ok) {
+          return fail(json?.error || `HTTP ${res.status}`,
+            res.status === 400 ? 'This guest does not support SPICE. Use the noVNC console.' : '');
+        }
+      } catch (e) { return fail('Could not reach ProxCenter', e.message); }
+
+      const { wsUrl, password } = json?.data || {};
+      if (!wsUrl) return fail('Invalid session');
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const isDev = location.port === '3000' && location.hostname === 'localhost';
+      const wsHost = isDev ? 'localhost:3001' : location.host;
+      const uri = `${wsProtocol}//${wsHost}/api/internal${wsUrl}`;
+
+      try {
+        setStatus('connecting', 'Connecting to SPICE...');
+        sc = new SpiceMainConn({
+          uri,
+          screen_id: 'spice-area',
+          password,
+          onerror: (e) => fail('SPICE connection failed',
+            'Check that ProxCenter can reach the node on TCP 3128, or use the noVNC console.'),
+          onsuccess: () => setStatus('connected', 'Connected'),
+        });
+      } catch (e) { fail('SPICE init failed', e.message); }
+    }
+    connect();
+  </script>
+</body>
+</html>

@@ -25,6 +25,8 @@ try {
 }
 
 const { WebSocket } = require('ws')
+const net = require('node:net')
+const tls = require('node:tls')
 
 // Always use localhost for internal API calls (ws-proxy runs in same container as frontend)
 const APP_PORT = process.env.PORT || 3000
@@ -193,6 +195,128 @@ async function handleWsConnection(clientWs, req) {
       console.error('[WS] Shell error:', err)
       clientWs.close(4004, 'Internal error')
     }
+
+    return
+  }
+
+  // Route: /ws/spice/{sessionId} - QEMU SPICE console (spice-html5).
+  // spice-html5 opens one WS per channel; each WS maps to its own upstream:
+  // TCP -> node:3128 -> HTTP CONNECT {proxyticket}:{tlsPort} -> TLS -> relay.
+  if (pathParts[1] === 'ws' && pathParts[2] === 'spice' && pathParts[3]) {
+    const sessionId = pathParts[3]
+    console.log(`[WS] SPICE session: ${sessionId}`)
+
+    let session
+    try {
+      const r = await fetch(`${INTERNAL_API_URL}/api/internal/spice/consume`, {
+        method: 'POST',
+        headers: INTERNAL_HEADERS,
+        body: JSON.stringify({ sessionId }),
+      })
+      if (!r.ok) {
+        const err = await r.text()
+        console.error(`[WS] SPICE session not found/expired: ${sessionId}`, err)
+        clientWs.close(4001, 'Session not found or expired')
+        return
+      }
+      session = await r.json()
+    } catch (err) {
+      console.error('[WS] SPICE consume error:', err.message)
+      clientWs.close(4004, 'Internal error')
+      return
+    }
+
+    const { proxyticket, proxyHost, proxyPort, tlsPort, ca, hostSubject, insecure } = session
+    if (!proxyticket || !proxyHost || !tlsPort) {
+      console.error('[WS] Invalid SPICE session data:', session)
+      clientWs.close(4002, 'Invalid session data')
+      return
+    }
+
+    // 1) Plain TCP to the spiceproxy daemon, then HTTP CONNECT.
+    const tcp = net.connect({ host: proxyHost, port: proxyPort })
+    let upstream = null
+    let connectAcked = false
+    let connectBuf = ''
+
+    const closeAll = (code, reason) => {
+      try { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(code || 1000, reason || '') } catch {}
+      try { upstream && upstream.destroy() } catch {}
+      try { tcp.destroy() } catch {}
+    }
+
+    tcp.on('connect', () => {
+      // proxyticket is the CONNECT host token; spiceproxy routes it.
+      tcp.write(`CONNECT ${proxyticket}:${tlsPort} HTTP/1.1\r\nHost: ${proxyHost}:${proxyPort}\r\n\r\n`)
+    })
+
+    tcp.on('data', (chunk) => {
+      if (connectAcked) return // shouldn't happen; tls owns the socket after upgrade
+      connectBuf += chunk.toString('binary')
+      const headerEnd = connectBuf.indexOf('\r\n\r\n')
+      if (headerEnd === -1) return
+      const statusLine = connectBuf.split('\r\n')[0]
+      if (!/^HTTP\/1\.[01] 200/.test(statusLine)) {
+        console.error('[WS] SPICE CONNECT rejected:', statusLine)
+        closeAll(4003, 'CONNECT rejected')
+        return
+      }
+      connectAcked = true
+      // Any bytes after the header belong to TLS; net rarely delivers them
+      // here for a fresh CONNECT, but guard anyway.
+      const leftover = Buffer.from(connectBuf.slice(headerEnd + 4), 'binary')
+
+      // 2) TLS over the established tunnel. Validate against host-subject;
+      // never silently disable verification in production.
+      const tlsOpts = { socket: tcp, servername: undefined }
+      if (insecure === true) {
+        tlsOpts.rejectUnauthorized = false
+      } else {
+        if (!ca || !hostSubject) {
+          console.error('[WS] SPICE TLS params missing; refusing to connect')
+          closeAll(4003, 'TLS params missing')
+          return
+        }
+        tlsOpts.ca = ca
+        tlsOpts.rejectUnauthorized = true
+        tlsOpts.checkServerIdentity = (_host, cert) => {
+          // Proxmox host-subject is the expected certificate subject DN.
+          const subj = cert && cert.subject
+            ? Object.entries(cert.subject).map(([k, v]) => `${k}=${v}`).join(',')
+            : ''
+          // Compare on the CN at minimum; accept if host-subject CN matches.
+          const wantCn = (hostSubject.match(/CN=([^,]+)/) || [])[1]
+          const gotCn = cert && cert.subject ? cert.subject.CN : undefined
+          if (wantCn && gotCn && wantCn === gotCn) return undefined
+          return new Error(`SPICE host-subject mismatch (want ${hostSubject}, got ${subj})`)
+        }
+      }
+
+      upstream = tls.connect(tlsOpts, () => {
+        console.log(`[WS] SPICE upstream TLS established for ${sessionId}`)
+      })
+      if (leftover.length) upstream.write(leftover)
+
+      upstream.on('data', (d) => {
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(d, { binary: true })
+      })
+      upstream.on('close', () => closeAll(1000, ''))
+      upstream.on('error', (e) => {
+        console.error('[WS] SPICE upstream error:', e.message)
+        closeAll(4003, 'Upstream error')
+      })
+    })
+
+    tcp.on('error', (e) => {
+      console.error('[WS] SPICE 3128 error:', e.message)
+      closeAll(4003, '3128 unreachable')
+    })
+
+    clientWs.on('message', (data) => {
+      if (upstream && upstream.writable) upstream.write(data)
+    })
+    clientWs.on('close', () => closeAll(1000, ''))
+    clientWs.on('error', () => closeAll(1011, 'client error'))
 
     return
   }

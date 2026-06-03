@@ -206,6 +206,32 @@ async function handleWsConnection(clientWs, req) {
     const sessionId = pathParts[3]
     console.log(`[WS] SPICE session: ${sessionId}`)
 
+    // SPICE differs from VNC: the client (spice-html5) speaks FIRST, sending
+    // its SpiceLinkMess the instant the WebSocket opens. Resolving the session
+    // (the consume fetch below) is async, so if the 'message' listener were
+    // attached only afterwards, that first frame would arrive during the await
+    // with no listener and be dropped by ws — leaving the SPICE link half-open
+    // and the console hanging forever. So wire up the client listeners and the
+    // pre-upstream buffer BEFORE any await. Frames that arrive before the
+    // upstream TLS tunnel is ready are queued and flushed once it connects.
+    let upstream = null
+    let upstreamReady = false
+    let tcp = null
+    const clientBuf = []
+
+    const closeAll = (code, reason) => {
+      try { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(code || 1000, reason || '') } catch {}
+      try { upstream && upstream.destroy() } catch {}
+      try { tcp && tcp.destroy() } catch {}
+    }
+
+    clientWs.on('message', (data) => {
+      if (upstreamReady && upstream && upstream.writable) upstream.write(data)
+      else clientBuf.push(data)
+    })
+    clientWs.on('close', () => closeAll(1000, ''))
+    clientWs.on('error', () => closeAll(1011, 'client error'))
+
     let session
     try {
       const r = await fetch(`${INTERNAL_API_URL}/api/internal/spice/consume`, {
@@ -234,20 +260,18 @@ async function handleWsConnection(clientWs, req) {
     }
 
     // 1) Plain TCP to the spiceproxy daemon, then HTTP CONNECT.
-    const tcp = net.connect({ host: proxyHost, port: proxyPort })
-    let upstream = null
+    tcp = net.connect({ host: proxyHost, port: proxyPort })
     let connectAcked = false
     let connectBuf = ''
 
-    const closeAll = (code, reason) => {
-      try { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(code || 1000, reason || '') } catch {}
-      try { upstream && upstream.destroy() } catch {}
-      try { tcp.destroy() } catch {}
-    }
-
     tcp.on('connect', () => {
-      // proxyticket is the CONNECT host token; spiceproxy routes it.
-      tcp.write(`CONNECT ${proxyticket}:${tlsPort} HTTP/1.1\r\nHost: ${proxyHost}:${proxyPort}\r\n\r\n`)
+      // Proxmox's spiceproxy reads the connect string from the HOST HEADER
+      // (verify_spice_connect_url($request->header('Host'))), NOT the CONNECT
+      // request line. So the Host header MUST carry the proxyticket:tlsPort,
+      // not the proxy host:3128 — otherwise it 401s "invalid ticket". A valid
+      // ticket on any cluster node re-proxies to the VM's owning node.
+      const target = `${proxyticket}:${tlsPort}`
+      tcp.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`)
     })
 
     tcp.on('data', (chunk) => {
@@ -293,7 +317,13 @@ async function handleWsConnection(clientWs, req) {
       }
 
       upstream = tls.connect(tlsOpts, () => {
-        console.log(`[WS] SPICE upstream TLS established for ${sessionId}`)
+        upstreamReady = true
+        // Flush browser SPICE-link bytes buffered during the CONNECT + TLS
+        // handshake; spice-html5 sends its link message the instant the WS
+        // opens, so dropping these would stall the link and fail the console.
+        console.log(`[WS] SPICE upstream TLS established for ${sessionId}, flushing ${clientBuf.length} queued frame(s)`)
+        for (const m of clientBuf) { try { upstream.write(m) } catch {} }
+        clientBuf.length = 0
       })
       if (leftover.length) upstream.write(leftover)
 
@@ -311,12 +341,6 @@ async function handleWsConnection(clientWs, req) {
       console.error('[WS] SPICE 3128 error:', e.message)
       closeAll(4003, '3128 unreachable')
     })
-
-    clientWs.on('message', (data) => {
-      if (upstream && upstream.writable) upstream.write(data)
-    })
-    clientWs.on('close', () => closeAll(1000, ''))
-    clientWs.on('error', () => closeAll(1011, 'client error'))
 
     return
   }

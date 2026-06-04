@@ -26,6 +26,7 @@ import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
 import { pveSetVmConfig } from "./pve-vm-config"
+import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -98,49 +99,6 @@ function isCancelled(jobId: string): boolean {
   return cancelledJobs.has(jobId)
 }
 
-/** Wait for a PVE task to complete */
-async function waitForPveTask(
-  conn: { baseUrl: string; apiToken: string; insecureDev: boolean; id: string },
-  node: string,
-  upid: string,
-  timeoutMs = 300000
-): Promise<void> {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const status = await pveFetch<any>(
-      conn,
-      `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`
-    )
-    if (status?.status === "stopped") {
-      if (status.exitstatus === "OK") return
-      throw new Error(`PVE task failed: ${status.exitstatus || "unknown error"}`)
-    }
-    await new Promise(r => setTimeout(r, 3000))
-  }
-  throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
-}
-
-/**
- * Find the IP address of a Proxmox node for SSH access.
- * Tries managed hosts first, then extracts from baseUrl.
- */
-async function getNodeIpForMigration(db: any, connectionId: string, nodeName: string, baseUrl: string): Promise<string> {
-  // Check managed hosts
-  const host = await db.managedHost.findFirst({
-    where: { connectionId, node: nodeName, enabled: true },
-    select: { ip: true, sshAddress: true },
-  })
-  if (host?.sshAddress) return host.sshAddress
-  if (host?.ip) return host.ip
-
-  // Fallback: extract from baseUrl
-  try {
-    const url = new URL(baseUrl)
-    return url.hostname
-  } catch {
-    throw new Error(`Cannot determine IP for node ${nodeName}`)
-  }
-}
 
 /** Power off VM with fallback to manual power off for free ESXi license */
 async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: string): Promise<void> {

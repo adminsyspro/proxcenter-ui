@@ -594,6 +594,21 @@ export interface EsxiDiskInfo {
   datastoreName: string
   relativePath: string
   controllerType?: string // "scsi" | "sata" | "ide" — derived from controllerKey
+  // CBT-relevant fields (warm migration), populated by parseVmConfig via parseDiskCbtFields.
+  deviceKey?: number
+  diskMode?: string
+  sharing?: string
+  changeId?: string
+}
+
+/** Extract CBT-relevant fields from one <VirtualDisk> block of config.hardware.device. */
+export function parseDiskCbtFields(d: string): { deviceKey: number; diskMode: string; sharing: string; changeId: string } {
+  return {
+    deviceKey: Number.parseInt(d.match(/<key>(\d+)<\/key>/)?.[1] || "0", 10),
+    diskMode: d.match(/<diskMode>([^<]*)<\/diskMode>/)?.[1] || "",
+    sharing: d.match(/<sharing>([^<]*)<\/sharing>/)?.[1] || "",
+    changeId: d.match(/<changeId>([^<]*)<\/changeId>/)?.[1] || "",
+  }
 }
 
 export interface EsxiNicInfo {
@@ -698,7 +713,7 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
     const controllerKey = Number.parseInt(d.match(/<controllerKey>(\d+)<\/controllerKey>/)?.[1] || "0", 10)
     const controllerType = controllerKeyMap.get(controllerKey) || (controllerKey >= 1000 && controllerKey < 2000 ? "scsi" : controllerKey >= 15000 ? "sata" : controllerKey >= 200 && controllerKey < 300 ? "ide" : undefined)
 
-    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath, controllerType })
+    disks.push({ label, fileName, capacityBytes, thinProvisioned, datastoreName, relativePath, controllerType, ...parseDiskCbtFields(d) })
   }
 
   // NICs

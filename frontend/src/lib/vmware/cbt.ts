@@ -1,0 +1,92 @@
+import type { SoapSession } from "./soap"
+import { soapRequest } from "./soap"
+
+const ENV = (inner: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`
+
+export interface ChangedArea { offset: number; length: number }
+
+// ---- pure parsers / checks (unit-tested) ----
+
+/** Parse a QueryChangedDiskAreas response into the disk length + changed extents. */
+export function parseChangedDiskAreas(xml: string): { diskLength: number; extents: ChangedArea[] } {
+  const diskLength = Number.parseInt(xml.match(/<length>(\d+)<\/length>/)?.[1] || "0", 10)
+  const extents: ChangedArea[] = []
+  const re = /<changedArea>\s*<start>(\d+)<\/start>\s*<length>(\d+)<\/length>\s*<\/changedArea>/g
+  let m
+  while ((m = re.exec(xml)) !== null) extents.push({ offset: Number(m[1]), length: Number(m[2]) })
+  return { diskLength, extents }
+}
+
+export interface CbtEligibilityInput { hwVersion: string; disks: { diskMode?: string; sharing?: string }[] }
+
+/** Pure eligibility check: CBT needs hw version >= 7 and no independent / multi-writer disks. */
+export function cbtEligibility(vm: CbtEligibilityInput): { eligible: boolean; reason?: string } {
+  const ver = Number.parseInt(vm.hwVersion.replace("vmx-", ""), 10) || 0
+  if (ver < 7) return { eligible: false, reason: `hardware version ${vm.hwVersion} is below vmx-07` }
+  for (const d of vm.disks) {
+    if ((d.diskMode || "").includes("independent")) return { eligible: false, reason: "independent disk present" }
+    if (d.sharing === "sharingMultiWriter") return { eligible: false, reason: "multi-writer disk present" }
+  }
+  return { eligible: true }
+}
+
+// ---- SOAP callers (network; exercised by the Plan 2 integration path, not unit tests) ----
+
+function faultOf(xml: string): string | null {
+  return xml.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] ?? null
+}
+
+/** Poll a result-less *_Task to success or error. */
+async function waitVoidTask(session: SoapSession, taskMor: string, timeoutMs = 120000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 2000))
+    const body = ENV(`<urn:RetrievePropertiesEx><urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>` +
+      `<urn:specSet><urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet><urn:pathSet>info.error</urn:pathSet></urn:propSet>` +
+      `<urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet></urn:specSet><urn:options/></urn:RetrievePropertiesEx>`)
+    const res = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+    if (/<val[^>]*>success<\/val>/.test(res.text)) return
+    if (/<val[^>]*>error<\/val>/.test(res.text)) {
+      throw new Error(res.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Task failed")
+    }
+  }
+  throw new Error("Task timed out")
+}
+
+async function reconfigCbt(session: SoapSession, vmid: string, enabled: boolean): Promise<void> {
+  const res = await soapRequest(session.baseUrl, ENV(
+    `<urn:ReconfigVM_Task><urn:_this type="VirtualMachine">${vmid}</urn:_this>` +
+    `<urn:spec><urn:changeTrackingEnabled>${enabled}</urn:changeTrackingEnabled></urn:spec></urn:ReconfigVM_Task>`,
+  ), session.cookie, session.insecureTLS)
+  const fault = faultOf(res.text)
+  if (fault) throw new Error(`ReconfigVM (CBT) failed: ${fault}`)
+  const taskMor = res.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
+  if (!taskMor) throw new Error("ReconfigVM_Task returned no task")
+  await waitVoidTask(session, taskMor)
+}
+
+export const soapEnableCbt = (s: SoapSession, vmid: string) => reconfigCbt(s, vmid, true)
+export const soapDisableCbt = (s: SoapSession, vmid: string) => reconfigCbt(s, vmid, false)
+
+export async function soapQueryChangedDiskAreas(
+  session: SoapSession, vmid: string, snapshotMor: string, deviceKey: number, startOffset: number, changeId: string,
+): Promise<{ diskLength: number; extents: ChangedArea[] }> {
+  const res = await soapRequest(session.baseUrl, ENV(
+    `<urn:QueryChangedDiskAreas><urn:_this type="VirtualMachine">${vmid}</urn:_this>` +
+    `<urn:snapshot type="VirtualMachineSnapshot">${snapshotMor}</urn:snapshot>` +
+    `<urn:deviceKey>${deviceKey}</urn:deviceKey><urn:startOffset>${startOffset}</urn:startOffset>` +
+    `<urn:changeId>${changeId}</urn:changeId></urn:QueryChangedDiskAreas>`,
+  ), session.cookie, session.insecureTLS)
+  const fault = faultOf(res.text)
+  if (fault) throw new Error(`QueryChangedDiskAreas failed: ${fault}`)
+  return parseChangedDiskAreas(res.text)
+}
+
+export async function soapGuestShutdown(session: SoapSession, vmid: string): Promise<void> {
+  const res = await soapRequest(session.baseUrl, ENV(
+    `<urn:ShutdownGuest><urn:_this type="VirtualMachine">${vmid}</urn:_this></urn:ShutdownGuest>`,
+  ), session.cookie, session.insecureTLS)
+  const fault = faultOf(res.text)
+  if (fault) throw new Error(`ShutdownGuest failed: ${fault}`)
+}

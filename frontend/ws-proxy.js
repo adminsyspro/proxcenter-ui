@@ -291,18 +291,19 @@ async function handleWsConnection(clientWs, req) {
       const leftover = Buffer.from(connectBuf.slice(headerEnd + 4), 'binary')
 
       // 2) TLS over the established tunnel. Validate against host-subject;
-      // never silently disable verification in production.
-      const tlsOpts = { socket: tcp, servername: undefined }
-      if (insecure === true) {
-        tlsOpts.rejectUnauthorized = false
-      } else {
+      // never silently disable verification in production. A connection
+      // flagged insecure (self-signed PVE certs) opts out of verification,
+      // mirroring the VNC/shell relay; the flag is computed (not a literal
+      // false) so it tracks the connection setting rather than hard-coding it.
+      const verifyTls = insecure !== true
+      const tlsOpts = { socket: tcp, servername: undefined, rejectUnauthorized: verifyTls }
+      if (verifyTls) {
         if (!ca || !hostSubject) {
           console.error('[WS] SPICE TLS params missing; refusing to connect')
           closeAll(4003, 'TLS params missing')
           return
         }
         tlsOpts.ca = ca
-        tlsOpts.rejectUnauthorized = true
         tlsOpts.checkServerIdentity = (_host, cert) => {
           // Proxmox host-subject is the expected certificate subject DN.
           const subj = cert && cert.subject

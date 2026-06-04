@@ -205,16 +205,15 @@
       
       try {
         // Appeler l'API avec ?console=xterm
-        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/termproxy`;
+        const apiUrl = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/console?console=xterm`;
         console.log('API call:', apiUrl);
         
         const res = await fetch(apiUrl, { method: 'POST' });
         console.log('API status:', res.status);
         
         if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          const msg = errJson?.error || `HTTP ${res.status}`;
-          throw new Error(msg);
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
         }
         
         const json = await res.json();

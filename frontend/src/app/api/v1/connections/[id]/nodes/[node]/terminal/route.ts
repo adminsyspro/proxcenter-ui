@@ -29,10 +29,6 @@ type TerminalSession = {
   ticket: string
   user: string
   upid: string
-  // Optional guest-scoped upstream WS base path. Node shells leave this
-  // undefined and the relay uses /api2/json/nodes/{node}. Guest serial
-  // consoles (Task 8) set it to /api2/json/nodes/{node}/{type}/{vmid}.
-  upstreamBasePath?: string
   expiresAt: number
 }
 

@@ -122,7 +122,7 @@ function ConsolePreview({
     ? `connId=${encodeURIComponent(connId)}&type=${encodeURIComponent(type)}&node=${encodeURIComponent(node)}&vmid=${encodeURIComponent(vmid)}`
     : null
 
-  const openConsole = (page: 'novnc' | 'xterm' | 'spice') => {
+  const openConsole = (page: 'novnc' | 'spice') => {
     if (!base) return
     window.open(
       `/${page}/console.html?${base}`,
@@ -371,12 +371,6 @@ function ConsolePreview({
               <Box component="button" onClick={() => openConsole('novnc')} sx={consoleBtnSx}>
                 <i className="ri-computer-line" style={{ fontSize: 18 }} />
                 <span>noVNC</span>
-              </Box>
-            </MuiTooltip>
-            <MuiTooltip title={t('console.serialConsole')}>
-              <Box component="button" onClick={() => openConsole('xterm')} sx={consoleBtnSx}>
-                <i className="ri-terminal-box-line" style={{ fontSize: 18 }} />
-                <span>Xterm</span>
               </Box>
             </MuiTooltip>
             {isQemu && spiceCapable !== false && (

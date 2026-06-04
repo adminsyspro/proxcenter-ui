@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { foldEffectiveVlanTags } from '@/lib/proxmox/hostVlanMap'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
@@ -2379,7 +2380,9 @@ return favorites.has(vmKey)
           const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
           if (!res.ok) return []
           const json = await res.json()
-          return (json.data || []).map((vm: any) => ({ ...vm, connId }))
+          // Fold each guest's server-computed host VLAN into `tag` so the VLAN tree resolves
+          // traditional bondX.N-bridge layouts instead of bucketing them Untagged (see helper).
+          return (json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) }))
         } catch { return [] }
       })
     ).then((results) => {

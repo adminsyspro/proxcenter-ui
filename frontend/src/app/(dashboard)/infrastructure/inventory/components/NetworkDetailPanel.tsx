@@ -22,6 +22,7 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import type { InventorySelection } from '../types'
+import { foldEffectiveVlanTags } from '@/lib/proxmox/hostVlanMap'
 
 type NetIface = { id: string; model: string; bridge: string; macaddr?: string; tag?: number; firewall?: boolean; rate?: number }
 type VmNet = { vmid: string; name: string; node: string; type: string; status: string; connId?: string; nets: NetIface[] }
@@ -46,7 +47,9 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
     setLoading(true)
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
       .then(r => r.json())
-      .then(json => setNetData((json.data || []).map((vm: any) => ({ ...vm, connId }))))
+      // Fold each guest's server-computed host VLAN into `tag` so guests on a
+      // bondX.N bridge with no per-NIC tag group under their real VLAN (see helper).
+      .then(json => setNetData((json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) }))))
       .catch(() => setNetData([]))
       .finally(() => setLoading(false))
   }, [connId])

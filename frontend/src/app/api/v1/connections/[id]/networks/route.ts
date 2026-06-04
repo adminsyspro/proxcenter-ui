@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getVdcScope } from "@/lib/vdc/scope"
+import { buildBridgeVlanMap, resolveEffectiveTag } from "@/lib/proxmox/hostVlanMap"
 
 export const runtime = "nodejs"
 
@@ -18,6 +19,12 @@ type NetIface = {
   bridge: string
   macaddr?: string
   tag?: number
+  /**
+   * VLAN the guest actually rides: the per-NIC `tag` when present, otherwise the
+   * VLAN derived from the host bridge it attaches to (traditional `bondX.N`
+   * sub-interface layouts). Undefined when the guest is genuinely untagged.
+   */
+  effectiveTag?: number
   firewall?: boolean
   rate?: number
 }
@@ -35,7 +42,7 @@ type VmNet = {
  * Parse a Proxmox net string like:
  *   "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,tag=100,firewall=1,rate=10"
  */
-function parseNetString(id: string, raw: string): NetIface {
+export function parseNetString(id: string, raw: string): NetIface {
   const parts = raw.split(",")
   const iface: NetIface = { id, model: "unknown", bridge: "unknown" }
 
@@ -106,6 +113,26 @@ export async function GET(_req: Request, ctx: RouteContext) {
         : []
     }
 
+    // Build a per-node `bridge -> VLAN` map from each node's host networking.
+    // This lets us resolve the effective VLAN of guests on the traditional
+    // layout (a `bondX.N` sub-interface feeding a dedicated bridge), which carry
+    // no per-NIC tag and would otherwise all show up as Untagged (discussion #389).
+    const nodeNames = [...new Set(
+      resources.map((vm: any) => vm?.node).filter((n: any): n is string => typeof n === "string" && n.length > 0)
+    )]
+    const bridgeVlanByNode = new Map<string, Map<string, number>>()
+    await Promise.all(
+      nodeNames.map(async (node) => {
+        try {
+          const ifaces = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/network`)
+          bridgeVlanByNode.set(node, buildBridgeVlanMap(Array.isArray(ifaces) ? ifaces : []))
+        } catch {
+          // Host network unavailable for this node — guests fall back to NIC tags only.
+          bridgeVlanByNode.set(node, new Map())
+        }
+      })
+    )
+
     // Batch fetch configs with concurrency limit
     const CONCURRENCY = 15
     const results: VmNet[] = []
@@ -124,11 +151,14 @@ export async function GET(_req: Request, ctx: RouteContext) {
               `/nodes/${encodeURIComponent(node)}/${vmType}/${encodeURIComponent(vmid)}/config`
             )
 
+            const bridgeVlanMap = bridgeVlanByNode.get(node) ?? new Map<string, number>()
             const nets: NetIface[] = []
             if (config) {
               for (const [key, val] of Object.entries(config)) {
                 if (/^net\d+$/.test(key) && typeof val === "string") {
-                  nets.push(parseNetString(key, val))
+                  const iface = parseNetString(key, val)
+                  iface.effectiveTag = resolveEffectiveTag(iface.tag, iface.bridge, bridgeVlanMap)
+                  nets.push(iface)
                 }
               }
             }

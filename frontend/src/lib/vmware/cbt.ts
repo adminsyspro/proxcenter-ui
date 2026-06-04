@@ -1,5 +1,5 @@
 import type { SoapSession } from "./soap"
-import { soapRequest } from "./soap"
+import { soapRequest, soapGetVmConfig, extractProp } from "./soap"
 
 const ENV = (inner: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`
@@ -8,14 +8,20 @@ export interface ChangedArea { offset: number; length: number }
 
 // ---- pure parsers / checks (unit-tested) ----
 
-/** Parse a QueryChangedDiskAreas response into the disk length + changed extents. */
-export function parseChangedDiskAreas(xml: string): { diskLength: number; extents: ChangedArea[] } {
-  const diskLength = Number.parseInt(xml.match(/<length>(\d+)<\/length>/)?.[1] || "0", 10)
+/**
+ * Parse one QueryChangedDiskAreas response. NOTE: the top-level `length` is the
+ * length of the area (starting at `startOffset`) that this single call covered,
+ * NOT the disk size. Large disks require multiple calls (see queryAllChangedAreas).
+ */
+export function parseChangedDiskAreas(xml: string): { startOffset: number; length: number; extents: ChangedArea[] } {
+  const head = xml.match(/<startOffset>(\d+)<\/startOffset>\s*<length>(\d+)<\/length>/)
+  const startOffset = head ? Number(head[1]) : 0
+  const length = head ? Number(head[2]) : 0
   const extents: ChangedArea[] = []
   const re = /<changedArea>\s*<start>(\d+)<\/start>\s*<length>(\d+)<\/length>\s*<\/changedArea>/g
   let m
   while ((m = re.exec(xml)) !== null) extents.push({ offset: Number(m[1]), length: Number(m[2]) })
-  return { diskLength, extents }
+  return { startOffset, length, extents }
 }
 
 export interface CbtEligibilityInput { hwVersion: string; disks: { diskMode?: string; sharing?: string }[] }
@@ -31,17 +37,16 @@ export function cbtEligibility(vm: CbtEligibilityInput): { eligible: boolean; re
   return { eligible: true }
 }
 
-// ---- SOAP callers (network; exercised by the Plan 2 integration path, not unit tests) ----
+// ---- SOAP callers ----
 
 function faultOf(xml: string): string | null {
   return xml.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] ?? null
 }
 
-/** Poll a result-less *_Task to success or error. */
+/** Poll a result-less *_Task to success or error (polls first, then sleeps). */
 async function waitVoidTask(session: SoapSession, taskMor: string, timeoutMs = 120000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 2000))
     const body = ENV(`<urn:RetrievePropertiesEx><urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>` +
       `<urn:specSet><urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet><urn:pathSet>info.error</urn:pathSet></urn:propSet>` +
       `<urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet></urn:specSet><urn:options/></urn:RetrievePropertiesEx>`)
@@ -50,6 +55,7 @@ async function waitVoidTask(session: SoapSession, taskMor: string, timeoutMs = 1
     if (/<val[^>]*>error<\/val>/.test(res.text)) {
       throw new Error(res.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Task failed")
     }
+    await new Promise(r => setTimeout(r, 2000))
   }
   throw new Error("Task timed out")
 }
@@ -69,9 +75,10 @@ async function reconfigCbt(session: SoapSession, vmid: string, enabled: boolean)
 export const soapEnableCbt = (s: SoapSession, vmid: string) => reconfigCbt(s, vmid, true)
 export const soapDisableCbt = (s: SoapSession, vmid: string) => reconfigCbt(s, vmid, false)
 
+/** One QueryChangedDiskAreas call: returns the covered window + its changed extents. */
 export async function soapQueryChangedDiskAreas(
   session: SoapSession, vmid: string, snapshotMor: string, deviceKey: number, startOffset: number, changeId: string,
-): Promise<{ diskLength: number; extents: ChangedArea[] }> {
+): Promise<{ startOffset: number; length: number; extents: ChangedArea[] }> {
   const res = await soapRequest(session.baseUrl, ENV(
     `<urn:QueryChangedDiskAreas><urn:_this type="VirtualMachine">${vmid}</urn:_this>` +
     `<urn:snapshot type="VirtualMachineSnapshot">${snapshotMor}</urn:snapshot>` +
@@ -83,10 +90,41 @@ export async function soapQueryChangedDiskAreas(
   return parseChangedDiskAreas(res.text)
 }
 
+/**
+ * Page through QueryChangedDiskAreas until the whole disk capacity is covered,
+ * accumulating all changed extents. vCenter caps the area covered per call on
+ * large disks, so a single call is not enough for multi-GB/TB disks.
+ */
+export async function queryAllChangedAreas(
+  session: SoapSession, vmid: string, snapshotMor: string, deviceKey: number, changeId: string, diskCapacityBytes: number,
+): Promise<ChangedArea[]> {
+  const all: ChangedArea[] = []
+  let offset = 0
+  for (let guard = 0; offset < diskCapacityBytes && guard < 100000; guard++) {
+    const { startOffset, length, extents } = await soapQueryChangedDiskAreas(session, vmid, snapshotMor, deviceKey, offset, changeId)
+    all.push(...extents)
+    if (length <= 0) break // no progress reported; stop rather than loop forever
+    offset = startOffset + length
+  }
+  return all
+}
+
+/** Initiate a clean guest shutdown via VMware Tools. Returns immediately; the guest powers off asynchronously, so poll with soapWaitPoweredOff before relying on it. */
 export async function soapGuestShutdown(session: SoapSession, vmid: string): Promise<void> {
   const res = await soapRequest(session.baseUrl, ENV(
     `<urn:ShutdownGuest><urn:_this type="VirtualMachine">${vmid}</urn:_this></urn:ShutdownGuest>`,
   ), session.cookie, session.insecureTLS)
   const fault = faultOf(res.text)
   if (fault) throw new Error(`ShutdownGuest failed: ${fault}`)
+}
+
+/** Poll runtime.powerState until poweredOff or timeout. Returns true if it reached poweredOff. */
+export async function soapWaitPoweredOff(session: SoapSession, vmid: string, timeoutMs = 300000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const xml = await soapGetVmConfig(session, vmid)
+    if (extractProp(xml, "runtime.powerState") === "poweredOff") return true
+    await new Promise(r => setTimeout(r, 3000))
+  }
+  return false
 }

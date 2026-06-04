@@ -14,4 +14,9 @@ describe("normalizeExtents", () => {
     expect(normalizeExtents([{ offset: 0, length: 10 }, { offset: 100, length: 10 }]))
       .toEqual([{ offset: 0, length: 10 }, { offset: 100, length: 10 }])
   })
+  it("clamps an aligned tail to the disk length (no over-read past EOF)", () => {
+    // disk is 100 bytes; an extent at 90..100 aligned to 16 would round end to 112 -> clamp to 100
+    expect(normalizeExtents([{ offset: 90, length: 10 }], 16, 100))
+      .toEqual([{ offset: 80, length: 20 }])
+  })
 })

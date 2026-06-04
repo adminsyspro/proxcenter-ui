@@ -1,18 +1,23 @@
 export interface Extent { offset: number; length: number }
 
 /**
- * Sort, optionally align to a block boundary, then merge overlapping and
- * adjacent extents into a minimal disjoint set. Alignment rounds each extent's
- * start down and end up to the given block size (so direct-I/O writes land on
- * aligned boundaries); alignment <= 0 disables it.
+ * Sort, optionally align to a block boundary, optionally clamp to a disk length,
+ * then merge overlapping and adjacent extents into a minimal disjoint set.
+ * Alignment rounds each extent's start down and end up to the block size (so
+ * direct-I/O writes land on aligned boundaries); alignment <= 0 disables it.
+ * diskLength > 0 clamps every extent's end so an aligned tail cannot run past EOF.
  */
-export function normalizeExtents(extents: Extent[], alignment = 0): Extent[] {
+export function normalizeExtents(extents: Extent[], alignment = 0, diskLength = 0): Extent[] {
   const aligned = extents
     .map(e => {
-      if (alignment <= 0) return { offset: e.offset, length: e.length }
-      const start = Math.floor(e.offset / alignment) * alignment
-      const end = Math.ceil((e.offset + e.length) / alignment) * alignment
-      return { offset: start, length: end - start }
+      let start = e.offset
+      let end = e.offset + e.length
+      if (alignment > 0) {
+        start = Math.floor(e.offset / alignment) * alignment
+        end = Math.ceil((e.offset + e.length) / alignment) * alignment
+      }
+      if (diskLength > 0 && end > diskLength) end = diskLength
+      return { offset: start, length: Math.max(0, end - start) }
     })
     .filter(e => e.length > 0)
     .sort((a, b) => a.offset - b.offset)

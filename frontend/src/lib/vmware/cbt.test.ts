@@ -2,16 +2,17 @@ import { describe, it, expect } from "vitest"
 import { parseChangedDiskAreas, cbtEligibility } from "./cbt"
 
 describe("parseChangedDiskAreas", () => {
-  it("parses changed areas into extents and the disk length", () => {
+  it("parses the covered window + changed extents (length is covered length, not disk size)", () => {
     const xml = `<returnval><startOffset>0</startOffset><length>16106127360</length>` +
       `<changedArea><start>0</start><length>65536</length></changedArea>` +
       `<changedArea><start>1048576</start><length>131072</length></changedArea></returnval>`
     expect(parseChangedDiskAreas(xml)).toEqual({
-      diskLength: 16106127360,
+      startOffset: 0,
+      length: 16106127360,
       extents: [{ offset: 0, length: 65536 }, { offset: 1048576, length: 131072 }],
     })
   })
-  it("returns no extents for an unchanged disk", () => {
+  it("returns no extents for an unchanged window", () => {
     const xml = `<returnval><startOffset>0</startOffset><length>1024</length></returnval>`
     expect(parseChangedDiskAreas(xml).extents).toEqual([])
   })

@@ -24,6 +24,10 @@ describe("pure builders", () => {
     expect(c).toContain("nbd-client -d /dev/nbd3")
     expect(c).toContain("/tmp/v.sock")
     expect(c).toContain("/tmp/pw")
+    // Guard against the pkill self-match: the pattern must be "[n]bdkit", not
+    // "nbdkit", otherwise pkill -f matches this teardown command's own shell
+    // (its argv carries the pattern) and SIGTERMs it (exit 143, rm cleanup unrun).
+    expect(c).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
   })
   it("also removes the log file when present in the handle", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.log" })

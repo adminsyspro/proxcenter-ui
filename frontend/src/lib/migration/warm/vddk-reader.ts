@@ -29,7 +29,14 @@ export function buildNbdConnectCmd(sock: string, nbdDev: string): string {
  */
 export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
   const files = [h.sock, h.pwFile, h.logFile].filter(Boolean).join(" ")
-  return `nbd-client -d ${h.nbdDev} 2>/dev/null; pkill -f "nbdkit.*${h.sock}" 2>/dev/null; rm -f ${files}`
+  // The pkill pattern is "[n]bdkit" (a one-character class), not "nbdkit":
+  // pkill -f matches against each process's FULL command line, and this teardown
+  // command's own shell carries the pattern string in its argv (and the sock path
+  // again in the rm), so a literal "nbdkit.*<sock>" would also match — and SIGTERM —
+  // the teardown shell itself (exit 143, and the rm cleanup never runs, leaking the
+  // temp files). "[n]bdkit" still matches the real `nbdkit …` process but no longer
+  // matches this shell's own "[n]bdkit" literal.
+  return `nbd-client -d ${h.nbdDev} 2>/dev/null; pkill -f "[n]bdkit.*${h.sock}" 2>/dev/null; rm -f ${files}`
 }
 
 export interface PollOpts { intervalMs?: number; maxAttempts?: number }

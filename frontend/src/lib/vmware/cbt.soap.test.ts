@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-vi.mock("./soap", () => ({
-  soapRequest: vi.fn(),
-  soapGetVmConfig: vi.fn(),
-  extractProp: vi.fn(),
-}))
+// Mock only the network/IO surface; keep real pure helpers (parseDiskCbtFields)
+// that the cbt callers compose with.
+vi.mock("./soap", async (importActual) => {
+  const actual = await importActual<typeof import("./soap")>()
+  return { ...actual, soapRequest: vi.fn(), soapGetVmConfig: vi.fn(), extractProp: vi.fn() }
+})
 
 import { soapRequest, soapGetVmConfig, extractProp } from "./soap"
-import { soapEnableCbt, soapQueryChangedDiskAreas, queryAllChangedAreas, soapGuestShutdown, soapWaitPoweredOff } from "./cbt"
+import { soapEnableCbt, soapQueryChangedDiskAreas, queryAllChangedAreas, soapGuestShutdown, soapWaitPoweredOff, soapGetSnapshotChangeIds } from "./cbt"
 
 const sr = vi.mocked(soapRequest)
 const gvc = vi.mocked(soapGetVmConfig)
@@ -68,5 +69,18 @@ describe("soapWaitPoweredOff", () => {
     gvc.mockResolvedValue("<xml/>")
     ep.mockReturnValue("poweredOff")
     await expect(soapWaitPoweredOff(session, "vm-1", 10000)).resolves.toBe(true)
+  })
+})
+
+describe("soapGetSnapshotChangeIds", () => {
+  it("retrieves the snapshot device list and maps deviceKey -> changeId", async () => {
+    sr.mockResolvedValue({ text: "<irrelevant/>" } as any)
+    ep.mockReturnValue(
+      `<VirtualDevice xsi:type="VirtualDisk"><key>2000</key><backing><changeId>52 cc/9</changeId></backing></VirtualDevice>`,
+    )
+    const m = await soapGetSnapshotChangeIds(session, "snapshot-7")
+    expect(m.get(2000)).toBe("52 cc/9")
+    // queried the snapshot object for its disk backings
+    expect(sr.mock.calls[0][1]).toContain("snapshot-7")
   })
 })

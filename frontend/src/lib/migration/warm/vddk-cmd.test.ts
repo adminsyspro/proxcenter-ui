@@ -29,6 +29,25 @@ describe("buildNbdkitVddkCmd", () => {
     expect(cmd).toContain("file='[ds] vm/vm.vmdk'")
   })
 
+  it("appends the snapshot moref when reading a snapshot's logical view (CBT delta read)", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk",
+      snapshot: "snapshot-42",
+    })
+    expect(cmd).toContain("snapshot='snapshot-42'")
+    // snapshot= comes before file= (VDDK needs it to resolve the chain)
+    expect(cmd.indexOf("snapshot=")).toBeLessThan(cmd.indexOf("file="))
+  })
+
+  it("omits the snapshot parameter for a static current-disk read", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk",
+    })
+    expect(cmd).not.toContain("snapshot=")
+  })
+
   it("quotes a disk path containing single quotes safely", () => {
     const cmd = buildNbdkitVddkCmd({
       sock: "/tmp/v.sock",

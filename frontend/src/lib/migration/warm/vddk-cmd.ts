@@ -17,6 +17,12 @@ export interface VddkOpts {
   moref: string
   /** Datastore-relative disk path, e.g. "[datastore] vm/vm.vmdk" (file=). */
   diskPath: string
+  /**
+   * Optional snapshot moref (snapshot=). REQUIRED to read a snapshot's logical
+   * view (base + delta at snapshot time), which is what every CBT delta read
+   * needs. Omit only for a static read of the VM's current disk.
+   */
+  snapshot?: string
 }
 
 /**
@@ -28,7 +34,7 @@ export interface VddkOpts {
  * in the process argument list.
  */
 export function buildNbdkitVddkCmd(o: VddkOpts): string {
-  return [
+  const parts = [
     "nbdkit", "-U", shellEscape(o.sock), "vddk",
     `libdir=${shellEscape(o.libdir)}`,
     `server=${shellEscape(o.server)}`,
@@ -36,6 +42,8 @@ export function buildNbdkitVddkCmd(o: VddkOpts): string {
     `password=+${shellEscape(o.passwordFile)}`,
     `thumbprint=${shellEscape(o.thumbprint)}`,
     `vm=moref=${shellEscape(o.moref)}`,
-    `file=${shellEscape(o.diskPath)}`,
-  ].join(" ")
+  ]
+  if (o.snapshot) parts.push(`snapshot=${shellEscape(o.snapshot)}`)
+  parts.push(`file=${shellEscape(o.diskPath)}`)
+  return parts.join(" ")
 }

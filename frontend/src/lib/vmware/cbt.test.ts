@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseChangedDiskAreas, cbtEligibility } from "./cbt"
+import { parseChangedDiskAreas, cbtEligibility, parseSnapshotChangeIds } from "./cbt"
 
 describe("parseChangedDiskAreas", () => {
   it("parses the covered window + changed extents (length is covered length, not disk size)", () => {
@@ -30,5 +30,19 @@ describe("cbtEligibility", () => {
   })
   it("rejects old hardware versions", () => {
     expect(cbtEligibility({ hwVersion: "vmx-04", disks: [{ diskMode: "persistent", sharing: "sharingNone" }] }).eligible).toBe(false)
+  })
+})
+
+describe("parseSnapshotChangeIds", () => {
+  it("maps each disk's deviceKey to its backing changeId", () => {
+    const deviceXml =
+      `<VirtualDevice xsi:type="VirtualDisk"><key>2000</key><backing><changeId>52 a1/0</changeId></backing></VirtualDevice>` +
+      `<VirtualDevice xsi:type="VirtualDisk"><key>2001</key><backing><changeId>52 b2/3</changeId></backing></VirtualDevice>`
+    const m = parseSnapshotChangeIds(deviceXml)
+    expect(m.get(2000)).toBe("52 a1/0")
+    expect(m.get(2001)).toBe("52 b2/3")
+  })
+  it("returns an empty map when there are no disks", () => {
+    expect(parseSnapshotChangeIds("<no/>").size).toBe(0)
   })
 })

@@ -1,5 +1,5 @@
 import type { SoapSession } from "./soap"
-import { soapRequest, soapGetVmConfig, extractProp } from "./soap"
+import { soapRequest, soapGetVmConfig, extractProp, parseDiskCbtFields } from "./soap"
 
 const ENV = (inner: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`
@@ -22,6 +22,24 @@ export function parseChangedDiskAreas(xml: string): { startOffset: number; lengt
   let m
   while ((m = re.exec(xml)) !== null) extents.push({ offset: Number(m[1]), length: Number(m[2]) })
   return { startOffset, length, extents }
+}
+
+/**
+ * Map each VirtualDisk's deviceKey to its backing changeId from a snapshot's
+ * `config.hardware.device` XML. This is the per-disk baseline (cid_k) recorded
+ * after each pass's snapshot, used as the `changeId` argument to the NEXT
+ * QueryChangedDiskAreas. Reuses parseDiskCbtFields and the same VirtualDisk
+ * delimiter parseVmConfig uses. Pure.
+ */
+export function parseSnapshotChangeIds(deviceXml: string): Map<number, string> {
+  const map = new Map<number, string>()
+  const diskRegex = /xsi:type="VirtualDisk">([\s\S]*?)(?=<VirtualDevice|$)/g
+  let m: RegExpExecArray | null
+  while ((m = diskRegex.exec(deviceXml)) !== null) {
+    const { deviceKey, changeId } = parseDiskCbtFields(m[1])
+    if (deviceKey) map.set(deviceKey, changeId)
+  }
+  return map
 }
 
 export interface CbtEligibilityInput { hwVersion: string; disks: { diskMode?: string; sharing?: string }[] }
@@ -107,6 +125,22 @@ export async function queryAllChangedAreas(
     offset = startOffset + length
   }
   return all
+}
+
+/**
+ * Retrieve a snapshot's per-disk changeId map (deviceKey -> changeId) by reading
+ * the snapshot object's `config.hardware.device`. Record this after creating
+ * each pass's snapshot; it is the baseline for the next QueryChangedDiskAreas.
+ */
+export async function soapGetSnapshotChangeIds(session: SoapSession, snapshotMor: string): Promise<Map<number, string>> {
+  const res = await soapRequest(session.baseUrl, ENV(
+    `<urn:RetrievePropertiesEx><urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>` +
+    `<urn:specSet><urn:propSet><urn:type>VirtualMachineSnapshot</urn:type><urn:pathSet>config.hardware.device</urn:pathSet></urn:propSet>` +
+    `<urn:objectSet><urn:obj type="VirtualMachineSnapshot">${snapshotMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet></urn:specSet><urn:options/></urn:RetrievePropertiesEx>`,
+  ), session.cookie, session.insecureTLS)
+  const fault = faultOf(res.text)
+  if (fault) throw new Error(`QuerySnapshotChangeIds failed: ${fault}`)
+  return parseSnapshotChangeIds(extractProp(res.text, "config.hardware.device"))
 }
 
 /** Initiate a clean guest shutdown via VMware Tools. Returns immediately; the guest powers off asynchronously, so poll with soapWaitPoweredOff before relying on it. */

@@ -3327,8 +3327,9 @@ return
                   <Stack direction="row" spacing={1}>
                     {([
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                      // Warm is ESXi-direct only (hostType 'vmware'); vCenter and XCP-ng keep Live.
-                      bulkMigHostInfo?.hostType === 'vmware'
+                      // Warm (CBT, no in-transit loss) for direct ESXi AND vCenter (the engine
+                      // talks to the source endpoint generically); XCP-ng keeps Live.
+                      (bulkMigHostInfo?.hostType === 'vmware' || bulkMigHostInfo?.hostType === 'vcenter')
                         ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
                         : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                     ]).map(opt => (
@@ -3369,7 +3370,9 @@ return
                 {/* vCenter/Hyper-V info banner for bulk */}
                 {bulkMigHostInfo?.hostType === 'vcenter' && (
                   <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
-                    {migType === 'live'
+                    {migType === 'warm'
+                      ? 'Warm migration: each source stays online while changed blocks are copied (CBT) over vCenter, then a short per-VM cutover does a clean guest shutdown before the final sync. No in-transit data loss; vSAN supported. Needs a block-storage target and the VDDK runtime on the Proxmox node(s).'
+                      : migType === 'live'
                       ? 'Live migration: each VM is snapshotted, its disks are NFC-exported while it stays running, then the source is powered off + snapshot removed just before virt-v2v. Per-VM downtime = convert + import + boot.'
                       : 'Cold migration: each source VM must be powered off first. virt-v2v handles disk conversion and virtio driver injection automatically.'}
                   </Alert>
@@ -3390,7 +3393,7 @@ return
                     covers apt-installable deps (virt-v2v / nbdkit / libnbd-bin),
                     virtio-win is a separate manual step surfaced via instructions
                     below and does NOT block the Start Migration button. */}
-                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && vcenterPreflight?.checked && (() => {
+                {(bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix') && migType !== 'warm' && vcenterPreflight?.checked && (() => {
                   const isAutoBulk = migTargetNode === '__auto__'
                   const checkedNodesBulk = isAutoBulk
                     ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').length
@@ -3871,7 +3874,7 @@ return
                 variant="outlined"
                 disabled={(() => {
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting) return true
-                  const isV2vSource = bulkMigHostInfo?.hostType === 'vcenter' || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix'
+                  const isV2vSource = (bulkMigHostInfo?.hostType === 'vcenter' && migType !== 'warm') || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix'
                   if (isV2vSource) {
                     if (vcenterPreflight?.checked) {
                       if (!vcenterPreflight.virtV2vInstalled) return true

@@ -246,8 +246,8 @@ export interface InventoryDialogsProps {
   setMigDiskPaths: (v: string) => void
   migTempStorage: string
   setMigTempStorage: (v: string) => void
-  migType: 'cold' | 'live' | 'sshfs_boot'
-  setMigType: (v: 'cold' | 'live' | 'sshfs_boot') => void
+  migType: 'cold' | 'live' | 'sshfs_boot' | 'warm'
+  setMigType: (v: 'cold' | 'live' | 'sshfs_boot' | 'warm') => void
   migTransferMode: 'https' | 'sshfs' | 'auto'
   setMigTransferMode: (v: 'https' | 'sshfs' | 'auto') => void
   migPveConnections: any[]
@@ -2177,7 +2177,13 @@ return
                     <Stack direction="row" spacing={1}>
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                        { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
+                        // Warm (CBT, no in-transit data loss) is ESXi-direct only (hostType
+                        // 'vmware'). vCenter keeps its existing Live, and any other source that
+                        // reaches this selector (e.g. XCP-ng) keeps Live too — the backend rejects
+                        // warm for non-VMware sources.
+                        esxiMigrateVm?.hostType === 'vmware'
+                          ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
+                          : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                       ]).map(opt => (
                         <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                           <Box
@@ -2217,9 +2223,17 @@ return
                       which injects the VirtIO drivers + guest tools during conversion,
                       so no manual install is needed on that path. Live stays on the
                       in-house fast path without injection, hence the reminder. */}
-                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && migType === 'live' && (
+                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (migType === 'live' || migType === 'warm') && (
                     <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                       {t('inventoryPage.esxiMigration.windowsVirtioNote')}
+                    </Alert>
+                  )}
+
+                  {/* Warm migration note: source stays online; CBT enabled on it; cutover does a
+                      clean guest shutdown; needs a block-storage target + nbdkit-vddk on the node. */}
+                  {migType === 'warm' && (
+                    <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-flashlight-line" style={{ fontSize: 18 }} />}>
+                      {t('inventoryPage.esxiMigration.migrationTypeWarmNote')}
                     </Alert>
                   )}
 
@@ -3240,7 +3254,10 @@ return
                   <Stack direction="row" spacing={1}>
                     {([
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                      { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
+                      // Warm is ESXi-direct only (hostType 'vmware'); vCenter and XCP-ng keep Live.
+                      bulkMigHostInfo?.hostType === 'vmware'
+                        ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
+                        : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                     ]).map(opt => (
                       <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
                         <Box

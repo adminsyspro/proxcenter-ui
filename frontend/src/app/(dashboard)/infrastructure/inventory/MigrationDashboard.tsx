@@ -451,6 +451,8 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
                 : job.status === 'cancelled' ? 'ri-forbid-line'
                 : 'ri-loader-4-line'
               const isActive = job.status === 'transferring' || job.status === 'preflight' || job.status === 'creating_vm' || job.status === 'configuring' || job.status === 'pending'
+                // Warm migration (CBT) phases
+                || job.status === 'planning' || job.status === 'enabling_cbt' || job.status === 'full_copy' || job.status === 'delta_sync' || job.status === 'cutover' || job.status === 'verify'
               const duration = job.startedAt && job.completedAt
                 ? Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 1000)
                 : null

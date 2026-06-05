@@ -1,4 +1,10 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { getConnectionById } from "@/lib/connections/getConnection"
+import { getNodeIpForMigration } from "../pve-tasks"
+import { prisma } from "@/lib/db/prisma"
+
+/** Default VDDK libdir. Must match the warm engine default (warm-pipeline.ts). */
+export const DEFAULT_VDDK_LIBDIR = "/usr/lib/vmware-vix-disklib"
 
 export interface VddkPreflightResult {
   ok: boolean
@@ -70,4 +76,23 @@ export async function checkVddkPreflight(connectionId: string, nodeIp: string, l
     return { ok: false, missing: [], error: `VDDK preflight probe could not run on ${nodeIp}: ${res.error || res.output}` }
   }
   return parsePreflightOutput(res.output || "", libdir)
+}
+
+/**
+ * Pre-migration go/no-go for the warm path, surfaced in the migrate dialog.
+ *
+ * Resolves the target node IP exactly as runWarmMigration does
+ * (getNodeIpForMigration + the same `vddkLibdir || default`) and runs
+ * checkVddkPreflight, so the dialog's verdict matches the backstop the engine
+ * performs at planning time. Node preparation itself is the operator's
+ * responsibility (documented separately); this only reports readiness.
+ */
+export async function runWarmNodePreflight(
+  connectionId: string,
+  node: string,
+  vddkLibdir?: string,
+): Promise<VddkPreflightResult> {
+  const conn = await getConnectionById(connectionId)
+  const nodeIp = await getNodeIpForMigration(prisma, connectionId, node, conn.baseUrl)
+  return checkVddkPreflight(connectionId, nodeIp, vddkLibdir || DEFAULT_VDDK_LIBDIR)
 }

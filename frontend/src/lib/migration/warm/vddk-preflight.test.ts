@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildPreflightCmd, parsePreflightOutput, checkVddkPreflight } from "./vddk-preflight"
+import { buildPreflightCmd, parsePreflightOutput, checkVddkPreflight, runWarmNodePreflight } from "./vddk-preflight"
 
 vi.mock("@/lib/ssh/exec", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/ssh/exec")>()
@@ -7,6 +7,18 @@ vi.mock("@/lib/ssh/exec", async (importActual) => {
 })
 import { executeSSH } from "@/lib/ssh/exec"
 const mockSSH = executeSSH as unknown as ReturnType<typeof vi.fn>
+
+// runWarmNodePreflight resolves the node IP exactly like the warm engine does,
+// so the dialog verdict matches what runWarmMigration checks at planning time.
+vi.mock("@/lib/connections/getConnection", () => ({
+  getConnectionById: vi.fn(async () => ({ baseUrl: "https://pve.local:8006" })),
+}))
+vi.mock("../pve-tasks", () => ({
+  getNodeIpForMigration: vi.fn(async () => "10.0.0.7"),
+}))
+vi.mock("@/lib/db/prisma", () => ({ prisma: {} }))
+import { getNodeIpForMigration } from "../pve-tasks"
+const mockNodeIp = getNodeIpForMigration as unknown as ReturnType<typeof vi.fn>
 
 const ALL_PRESENT = [
   "nbdkit=/usr/sbin/nbdkit",
@@ -59,5 +71,37 @@ describe("checkVddkPreflight", () => {
     const r = await checkVddkPreflight("conn", "10.99.99.201", "/opt/vddk")
     expect(r.ok).toBe(false)
     expect(r.error).toMatch(/connection refused|preflight/i)
+  })
+})
+
+describe("runWarmNodePreflight", () => {
+  beforeEach(() => {
+    mockSSH.mockReset()
+    mockNodeIp.mockClear()
+    mockNodeIp.mockResolvedValue("10.0.0.7")
+  })
+
+  it("resolves the node IP the way the engine does, then probes that node (default libdir)", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
+    const r = await runWarmNodePreflight("conn", "pve1")
+    expect(r.ok).toBe(true)
+    // Engine parity: getNodeIpForMigration(prisma, connId, node, baseUrl)
+    expect(mockNodeIp).toHaveBeenCalledWith(expect.anything(), "conn", "pve1", "https://pve.local:8006")
+    // Probe ran against the resolved IP, with the engine's default libdir.
+    expect(mockSSH).toHaveBeenCalledWith("conn", "10.0.0.7", expect.stringContaining("vmware-vix-disklib"))
+  })
+
+  it("honours a custom vddkLibdir so the verdict matches the migration's libdir", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
+    await runWarmNodePreflight("conn", "pve1", "/opt/vddk")
+    expect(mockSSH).toHaveBeenCalledWith("conn", "10.0.0.7", expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"))
+  })
+
+  it("returns no-go with the missing deps when the node is not prepared", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: "nbdkit=MISSING\nnbd-client=MISSING\nvddk-plugin=\nvddk-lib=" })
+    const r = await runWarmNodePreflight("conn", "pve1")
+    expect(r.ok).toBe(false)
+    expect(r.missing).toContain("vddk-plugin")
+    expect(r.missing).toContain("vddk-lib")
   })
 })

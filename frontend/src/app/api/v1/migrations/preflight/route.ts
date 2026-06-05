@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { runV2vPreflight, installV2vPackages, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
+import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
     action?: string
     vmName?: string
     sourceType?: string
+    vddkLibdir?: string
   }
 
   try {
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { targetConnectionId, targetNode, requiredDiskBytes, action, vmName, sourceType } = body
+  const { targetConnectionId, targetNode, requiredDiskBytes, action, vmName, sourceType, vddkLibdir } = body
 
   if (!targetConnectionId || !targetNode) {
     return NextResponse.json(
@@ -48,6 +50,13 @@ export async function POST(req: Request) {
     if (action === "check-virtio-win") {
       const result = await checkVirtioWinProgress(targetConnectionId, targetNode)
       return NextResponse.json(result)
+    }
+
+    // Warm migration go/no-go: report whether the target node has the VDDK
+    // runtime the engine needs. Node prep is the operator's job (documented);
+    // this only reports readiness so the dialog can block a doomed launch.
+    if (action === "warm-check") {
+      return NextResponse.json(await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir))
     }
 
     const result = await runV2vPreflight(

@@ -214,11 +214,24 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
+    // The VM shell may already own a disk: an OVMF/UEFI guest gets an efidisk0
+    // (vm-<vmid>-disk-0) created with `qm create`. Data disks must therefore
+    // start after the highest existing disk number, or `pvesm alloc` collides on
+    // the name (mirrors the cold pipeline's allocateBlockVolume).
+    const shellConf = await pveFetch<Record<string, any>>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
+    let nextDiskNum = 0
+    for (const v of Object.values(shellConf || {})) {
+      if (typeof v === "string") {
+        const m = v.match(/vm-\d+-disk-(\d+)/)
+        if (m) nextDiskNum = Math.max(nextDiskNum, Number(m[1]) + 1)
+      }
+    }
+
     // Allocate a raw block volume per disk and resolve (+ map) its device path.
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const sizeKB = Math.ceil(disk.capacityBytes / 1024)
-      const volName = `vm-${targetVmid}-disk-${i}`
+      const volName = `vm-${targetVmid}-disk-${nextDiskNum + i}`
       const alloc = await allocateBlockVolumeAndResolvePath(config.targetConnectionId, nodeIp, config.targetStorage, targetVmid, volName, sizeKB)
       const dev = await mapRbdIfNeeded(config.targetConnectionId, nodeIp, alloc.devicePath, allocatedVolumes, alloc.volumeId)
       targetDev.set(disk.deviceKey, dev)

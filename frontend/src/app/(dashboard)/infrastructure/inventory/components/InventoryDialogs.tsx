@@ -618,7 +618,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // previously selected node is never mistaken for the current selection.
   const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string } | null>(null)
   React.useEffect(() => {
-    if (esxiMigrateVm?.hostType !== 'vmware' || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
+    if ((esxiMigrateVm?.hostType !== 'vmware' && esxiMigrateVm?.hostType !== 'vcenter') || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
       setWarmPreflight(null)
       return
     }
@@ -2217,7 +2217,7 @@ return
                         // 'vmware'). vCenter keeps its existing Live, and any other source that
                         // reaches this selector (e.g. XCP-ng) keeps Live too — the backend rejects
                         // warm for non-VMware sources.
-                        esxiMigrateVm?.hostType === 'vmware'
+                        (esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter')
                           ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
                           : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },
                       ]).map(opt => (
@@ -2324,7 +2324,7 @@ return
                     below — deps missing -> button disabled.
                   */}
                   {(() => {
-                    const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                    const isV2vVcenter = (esxiMigrateVm?.hostType === 'vcenter' && migType !== 'warm') || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                     const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                     const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
                     return (isV2vVcenter || isDirectEsxiWinCold) && vcenterPreflight?.checked
@@ -2480,7 +2480,7 @@ return
                       /tmp as a fallback when it lives on /, so reaching this branch
                       means the target node genuinely has no qualifying mount. */}
                   {(() => {
-                    const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                    const isV2vVcenter = (esxiMigrateVm?.hostType === 'vcenter' && migType !== 'warm') || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                     const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                     const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
                     const needsV2vDeps = isV2vVcenter || isDirectEsxiWinCold
@@ -2664,7 +2664,9 @@ return
                     : esxiMigrateVm?.hostType === 'hyperv'
                     ? 'Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.'
                     : esxiMigrateVm?.hostType === 'vcenter'
-                    ? (migType === 'live'
+                    ? (migType === 'warm'
+                        ? 'Warm migration: the source stays online while changed blocks are copied (CBT) over vCenter, then a short cutover does a clean guest shutdown before the final sync. No in-transit data loss. vSAN-backed disks are supported. Needs a block-storage target and the VDDK runtime on the Proxmox node.'
+                        : migType === 'live'
                         ? 'Live migration: vCenter snapshot is created on the running VM, disks are exported via NFC while the VM stays up, then the source is powered off and the snapshot removed just before virt-v2v runs. Downtime = convert + import + boot (minutes).'
                         : 'Cold migration: the source VM must be powered off. virt-v2v handles disk conversion and virtio driver injection automatically.')
                     : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
@@ -2834,7 +2836,7 @@ return
                   // that the user clicking Migrate then will simply pre-empt
                   // the check, and the backend re-validates the range anyway.
                   if (migTargetVmid && (migTargetVmidStatus === 'taken' || migTargetVmidStatus === 'invalid')) return true
-                  const isV2vVcenter = esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
+                  const isV2vVcenter = (esxiMigrateVm?.hostType === 'vcenter' && migType !== 'warm') || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix'
                   const isWindowsGuest = !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win')
                   // Direct-ESXi Windows Cold is auto-routed through virt-v2v by the API
                   // for automatic driver injection, so we gate on the same deps as vCenter.

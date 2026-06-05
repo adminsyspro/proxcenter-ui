@@ -614,14 +614,17 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // engine's planning-time backstop. Node prep is the operator's job (documented);
   // this only fast-fails a doomed launch. Cluster-auto ('__auto__') can't be probed
   // before the node is resolved, so it's skipped (the engine backstop still covers it).
-  const [warmPreflight, setWarmPreflight] = useState<{ loading: boolean; ok: boolean; missing: string[]; error?: string } | null>(null)
+  // The verdict carries the target it was taken for (`key`), so a stale result from a
+  // previously selected node is never mistaken for the current selection.
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string } | null>(null)
   React.useEffect(() => {
     if (esxiMigrateVm?.hostType !== 'vmware' || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
       setWarmPreflight(null)
       return
     }
+    const key = `${migTargetConn}::${migTargetNode}`
     let cancelled = false
-    setWarmPreflight({ loading: true, ok: false, missing: [] })
+    setWarmPreflight({ key, loading: true, ok: false, missing: [] })
     fetch('/api/v1/migrations/preflight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -629,11 +632,17 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     })
       .then(r => r.json())
       .then((d: { ok?: boolean; missing?: string[]; error?: string }) => {
-        if (!cancelled) setWarmPreflight({ loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error })
       })
-      .catch(() => { if (!cancelled) setWarmPreflight({ loading: false, ok: false, missing: [] }) })
+      .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [] }) })
     return () => { cancelled = true }
   }, [esxiMigrateVm?.hostType, migType, migTargetConn, migTargetNode])
+  // Only trust the verdict when it belongs to the currently selected target. On a
+  // node/connection switch the state briefly still holds the prior target's result
+  // (the effect re-runs after render); ignoring a mismatched key stops a stale "ready"
+  // from re-enabling the launch against a node that has not passed the current check.
+  const warmPreflightCurrent =
+    warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}` ? warmPreflight : null
 
   const startVirtioWinDownload = async () => {
     const installNodes = migTargetNode === '__auto__'
@@ -2267,12 +2276,12 @@ return
                   {/* Warm go/no-go: is the chosen target node provisioned with the VDDK
                       runtime? Mirrors the engine's planning-time preflight so a launch that
                       would fail is blocked here, with the missing pieces named. */}
-                  {migType === 'warm' && warmPreflight && (
-                    warmPreflight.loading ? (
+                  {migType === 'warm' && warmPreflightCurrent && (
+                    warmPreflightCurrent.loading ? (
                       <Alert severity="info" sx={{ fontSize: 12 }} icon={<CircularProgress size={16} />}>
                         {t('inventoryPage.esxiMigration.warmPreflightChecking')}
                       </Alert>
-                    ) : warmPreflight.ok ? (
+                    ) : warmPreflightCurrent.ok ? (
                       <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
                         {t('inventoryPage.esxiMigration.warmPreflightReady')}
                       </Alert>
@@ -2281,9 +2290,9 @@ return
                         <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                           {t('inventoryPage.esxiMigration.warmPreflightFailedTitle')}
                         </Typography>
-                        {warmPreflight.missing.length > 0 && (
+                        {warmPreflightCurrent.missing.length > 0 && (
                           <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflight.missing.join(', ') })}
+                            {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflightCurrent.missing.join(', ') })}
                           </Typography>
                         )}
                         <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
@@ -2870,12 +2879,12 @@ return
                   if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
                   // vSAN source on direct-ESXi: blocked because vSAN objects need NFC via vCenter.
                   if (vsanBlocksMigration) return true
-                  // Warm: block the launch unless the chosen target node passed the VDDK
-                  // preflight. `ok` is false while the check is in flight too, so this also
-                  // blocks during the check and a click can't beat the verdict to fire a
-                  // doomed migration. Cluster-auto leaves warmPreflight null (skipped here;
-                  // the engine's planning backstop still covers it), so it isn't gated.
-                  if (migType === 'warm' && warmPreflight && !warmPreflight.ok) return true
+                  // Warm: require a CURRENT successful readiness check for the selected
+                  // node. warmPreflightCurrent is null unless the verdict matches the chosen
+                  // target, so this blocks a missing, stale (prior-node), in-flight, or
+                  // failed check, and a click can't beat the verdict to fire a doomed
+                  // migration. Cluster-auto is not gated (the engine backstop covers it).
+                  if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}

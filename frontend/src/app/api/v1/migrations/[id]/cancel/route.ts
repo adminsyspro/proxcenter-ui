@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { cancelMigrationJob } from "@/lib/migration/pipeline"
+import { cancelWarmMigrationJob } from "@/lib/migration/warm/warm-pipeline"
 
 export const runtime = "nodejs"
 
@@ -30,7 +31,11 @@ export async function POST(
       return NextResponse.json({ error: `Cannot cancel a ${job.status} job` }, { status: 400 })
     }
 
+    // Signal both job registries: the job may be running on either the
+    // cold/live pipeline or the warm orchestrator, and each keeps its own
+    // cooperative cancel set. Signalling both is harmless for the other.
     cancelMigrationJob(id)
+    cancelWarmMigrationJob(id)
     await prisma.migrationJob.update({
       where: { id },
       data: { status: "cancelled", currentStep: "cancelled", completedAt: new Date() },

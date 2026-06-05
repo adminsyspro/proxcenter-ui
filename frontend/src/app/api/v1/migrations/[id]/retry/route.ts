@@ -5,6 +5,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
+import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 
 export const runtime = "nodejs"
 
@@ -61,8 +62,15 @@ export async function POST(
     })
 
     const tenantId = await getCurrentTenantId()
+    // Dispatch the retry to the same engine the original used. Warm jobs must
+    // not fall back to the cold pipeline (it powers off the running source).
+    const isWarm = (job.config as any)?.migrationType === "warm"
     after(async () => {
-      await runMigrationPipeline(newJob.id, config, tenantId)
+      if (isWarm) {
+        await runWarmMigration(newJob.id, config as unknown as Parameters<typeof runWarmMigration>[1], tenantId)
+      } else {
+        await runMigrationPipeline(newJob.id, config, tenantId)
+      }
     })
 
     return NextResponse.json({ data: { jobId: newJob.id, status: "pending" } })

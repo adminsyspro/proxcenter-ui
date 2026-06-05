@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
 import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
+import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
 
@@ -70,6 +71,19 @@ export async function POST(req: Request) {
       vlanTag = n
     }
 
+    // Optional warm-migration cutover downtime budget (seconds). Validate up
+    // front: a malformed value would coerce to NaN and make the convergence
+    // loop never auto-cut-over (it would run every pass then stall at the
+    // operator gate). undefined means "use the pipeline default".
+    let downtimeBudgetSec: number | undefined
+    if (body.downtimeBudgetSec !== undefined && body.downtimeBudgetSec !== null && body.downtimeBudgetSec !== "") {
+      const n = Number(body.downtimeBudgetSec)
+      if (!Number.isFinite(n) || n < 30 || n > 86400) {
+        return NextResponse.json({ error: "downtimeBudgetSec must be a number between 30 and 86400 seconds" }, { status: 400 })
+      }
+      downtimeBudgetSec = n
+    }
+
     // Verify connections exist
     const [sourceConn, pveConn] = await Promise.all([
       prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, subType: true, name: true, baseUrl: true } }),
@@ -90,6 +104,13 @@ export async function POST(req: Request) {
       effectiveSourceType = "vcenter"
     }
 
+    // Warm migration (CBT) is phase-1 scoped to ESXi-direct sources. vCenter and
+    // other hypervisors keep their existing paths until later phases; reject early
+    // with a clear message rather than silently falling through to a cold/lossy path.
+    if (migrationType === "warm" && effectiveSourceType !== "vmware") {
+      return NextResponse.json({ error: "Warm migration is only available for ESXi-direct (non-vCenter) sources in this release." }, { status: 400 })
+    }
+
     // Create job record
     const job = await prisma.migrationJob.create({
       data: {
@@ -103,7 +124,10 @@ export async function POST(req: Request) {
         // targetVmid stored in config so the pipeline can read it back; the
         // top-level `targetVmid` Prisma column gets set by the pipeline once
         // the actual VM is created (next-free fallback path).
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }) },
+        // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
+        // retry — which rebuilds the config from job.config — keeps them instead of
+        // silently reverting to the defaults.
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }) },
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -132,6 +156,19 @@ export async function POST(req: Request) {
     // Run appropriate pipeline in background after response (pass tenantId for scoped DB access)
     const tenantId = await getCurrentTenantId()
     after(async () => {
+      // Warm (CBT) is routed explicitly BEFORE any fall-through: a "warm" value
+      // must never reach the cold/live branch below, which powers off the
+      // running source. ESXi-direct only (gated synchronously above).
+      if (effectiveSourceType === "vmware" && migrationType === "warm") {
+        await runWarmMigration(job.id, {
+          sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
+          networkBridge, vlanTag, startAfterMigration,
+          ...(targetVmid !== undefined && { targetVmid }),
+          ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
+          ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
+        }, tenantId)
+        return
+      }
       if (effectiveSourceType === "vcenter" || effectiveSourceType === "hyperv" || effectiveSourceType === "nutanix") {
         const { sourceVmName = "", vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage } = body
         // Live migration via NFC-on-snapshot is only plumbed for vcenter today.

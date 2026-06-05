@@ -84,8 +84,12 @@ export async function startVddkReader(
   // Attach the socket to the kernel device.
   const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(opts.sock, nbdDev))
   if (!connect.success) {
+    // The VDDK failure detail lands in the nbdkit log (and the nbd-client output
+    // via 2>&1), not in the orchestrator's generic exit message — read both
+    // before teardown removes the log.
+    const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopVddkReader(connectionId, nodeIp, { nbdDev, sock: opts.sock, pwFile: opts.passwordFile, logFile }).catch(() => {})
-    throw new Error(`nbd-client failed to attach ${nbdDev}: ${connect.error || connect.output}`)
+    throw new Error(`nbd-client failed to attach ${nbdDev}: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${log.output?.trim() || "(empty)"}`)
   }
 
   return { nbdDev, sock: opts.sock, pwFile: opts.passwordFile, logFile }

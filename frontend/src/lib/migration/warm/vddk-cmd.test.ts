@@ -16,7 +16,7 @@ describe("buildNbdkitVddkCmd", () => {
       moref: "vm-9",
       diskPath: "[ds] vm/vm.vmdk",
     })
-    expect(cmd).toContain("nbdkit -U '/tmp/v.sock' vddk")
+    expect(cmd).toContain("nbdkit -r -U '/tmp/v.sock' vddk") // -r: read-only (source disk)
     expect(cmd).toContain("libdir='/opt/vddk'")
     expect(cmd).toContain("server='10.0.0.9'")
     expect(cmd).toContain("user='root'")

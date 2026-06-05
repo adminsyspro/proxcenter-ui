@@ -35,7 +35,10 @@ export interface VddkOpts {
  */
 export function buildNbdkitVddkCmd(o: VddkOpts): string {
   const parts = [
-    "nbdkit", "-U", shellEscape(o.sock), "vddk",
+    // -r (read-only): warm only ever reads the source. Without it nbdkit serves
+    // a read-write export, so VDDK opens the disk read-write, which a running VM
+    // rejects over NFC (NBD_ERR_GENERIC). Read-only opens the frozen snapshot.
+    "nbdkit", "-r", "-U", shellEscape(o.sock), "vddk",
     `libdir=${shellEscape(o.libdir)}`,
     `server=${shellEscape(o.server)}`,
     `user=${shellEscape(o.user)}`,

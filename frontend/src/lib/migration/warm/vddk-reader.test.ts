@@ -50,7 +50,7 @@ describe("startVddkReader", () => {
     // The launch call writes the password (no trailing newline) and backgrounds nbdkit to a log file.
     const launchCmd = mockSSH.mock.calls[0][2] as string
     expect(launchCmd).toContain("printf '%s'")
-    expect(launchCmd).toContain("nohup nbdkit -U '/tmp/v.sock' vddk")
+    expect(launchCmd).toContain("nohup nbdkit -r -U '/tmp/v.sock' vddk")
     expect(launchCmd).not.toContain("\ns3cr3t\n") // password not heredoc'd raw
     // The device-attach call uses the connect builder.
     const connectCmd = mockSSH.mock.calls[3][2] as string

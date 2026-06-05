@@ -12,7 +12,10 @@ export interface VddkPreflightResult {
 const HINTS: Record<string, string> = {
   "nbdkit": "apt install nbdkit",
   "nbd-client": "apt install nbd-client",
-  "vddk-plugin": "apt install nbdkit-plugin-vddk",
+  // nbdkit-plugin-vddk lives in Debian non-free, which a stock PVE node doesn't
+  // enable — so it's an admin prerequisite, not something "Prepare node(s)"
+  // installs. Enable contrib/non-free in the node's apt sources, then install.
+  "vddk-plugin": "nbdkit-plugin-vddk is in Debian non-free; enable contrib/non-free in the node's apt sources, then: apt install nbdkit-plugin-vddk",
   "vddk-lib":
     "install the Broadcom VDDK under <libdir>/lib64 (libvixDiskLib.so*); for VDDK 9.x, symlink libvixDiskLib.so.8 -> the installed .so.9 (nbdkit 1.42 dlopens the so.8 SONAME), or ship VDDK 8.0.x",
 }

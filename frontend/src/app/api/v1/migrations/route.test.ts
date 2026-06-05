@@ -78,16 +78,19 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(warm).not.toHaveBeenCalled()
   })
 
-  it("rejects warm for a vCenter source before creating a job", async () => {
+  it("dispatches a vCenter warm request to runWarmMigration, never the cold pipeline", async () => {
     h.prisma.connection.findUnique
       .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })
       .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
 
     const res = await callRoute(POST, { body })
-    expect(res.status).toBe(400)
-    expect((await readJson<any>(res))?.error).toMatch(/ESXi-direct/i)
-    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    expect((await readJson<any>(res))?.data?.jobId).toBe("job-1")
+
     await runAfters()
-    expect(warm).not.toHaveBeenCalled()
+    expect(warm).toHaveBeenCalledTimes(1)
+    expect(warm.mock.calls[0][0]).toBe("job-1")
+    expect(warm.mock.calls[0][1]).toMatchObject({ sourceConnectionId: "src", targetStorage: "local-lvm" })
+    expect(cold).not.toHaveBeenCalled()
   })
 })

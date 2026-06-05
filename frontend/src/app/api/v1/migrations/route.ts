@@ -104,11 +104,11 @@ export async function POST(req: Request) {
       effectiveSourceType = "vcenter"
     }
 
-    // Warm migration (CBT) is phase-1 scoped to ESXi-direct sources. vCenter and
-    // other hypervisors keep their existing paths until later phases; reject early
-    // with a clear message rather than silently falling through to a cold/lossy path.
-    if (migrationType === "warm" && effectiveSourceType !== "vmware") {
-      return NextResponse.json({ error: "Warm migration is only available for ESXi-direct (non-vCenter) sources in this release." }, { status: 400 })
+    // Warm migration (CBT) is available for VMware sources (ESXi-direct and
+    // vCenter). Other hypervisors keep their existing paths; reject early with a
+    // clear message rather than silently falling through to a cold/lossy path.
+    if (migrationType === "warm" && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
+      return NextResponse.json({ error: "Warm migration is only available for VMware sources (ESXi or vCenter)." }, { status: 400 })
     }
 
     // Create job record
@@ -157,9 +157,10 @@ export async function POST(req: Request) {
     const tenantId = await getCurrentTenantId()
     after(async () => {
       // Warm (CBT) is routed explicitly BEFORE any fall-through: a "warm" value
-      // must never reach the cold/live branch below, which powers off the
-      // running source. ESXi-direct only (gated synchronously above).
-      if (effectiveSourceType === "vmware" && migrationType === "warm") {
+      // must never reach the cold/live/v2v branches below, which power off the
+      // running source. VMware sources only — ESXi-direct AND vCenter (the engine
+      // talks to the source endpoint generically); gated synchronously above.
+      if ((effectiveSourceType === "vmware" || effectiveSourceType === "vcenter") && migrationType === "warm") {
         await runWarmMigration(job.id, {
           sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
           networkBridge, vlanTag, startAfterMigration,

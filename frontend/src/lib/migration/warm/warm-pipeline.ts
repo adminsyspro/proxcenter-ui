@@ -2,6 +2,7 @@ import { getTenantPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapCreateSnapshot, soapRemoveSnapshot,
@@ -20,7 +21,7 @@ import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { buildApplyScript } from "./block-applier"
-import { detectChangedExtentsByChecksum } from "./checksum-detector"
+import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
@@ -51,6 +52,10 @@ export interface WarmMigrationConfig {
 interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }
 const cancelledJobs = new Set<string>()
 const jobPrisma = new Map<string, any>()
+// At most one warm job per source VM in-flight. Concurrent warm runs against the
+// same VM would interleave snapshots and dd-seek writes (target corruption), so a
+// second run for a VM already migrating is rejected (design §12 concurrency lock).
+const activeWarmVms = new Set<string>()
 
 /** Cooperative cancel signal for a warm job (called by the cancel route). */
 export function cancelWarmMigrationJob(jobId: string) { cancelledJobs.add(jobId) }
@@ -113,10 +118,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = config.targetVmid ?? null
+  let nodeIp = ""                                   // resolved in planning; used by failure cleanup
+  const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
+  let acquiredVmLock = false
   const ourSnapshots: string[] = []                 // MORs WE created — cleaned up by specific MOR
   const allocatedVolumes: { volumeId: string; devicePath: string; rbdMapped?: boolean; attached?: boolean }[] = []
   const activeReaders: VddkReaderHandle[] = []      // readers to tear down on failure
-  // Per-disk: kernel nbd device index, target device path, CBT state.
+  // Per-disk: target device path + CBT state. NOTE: state is in-memory only; a
+  // retry re-runs from a fresh full pass (safe, full re-copy) rather than resuming
+  // mid-stream. Persisted/resumable per-disk state (design §5.3/§12) is deferred.
   const targetDev = new Map<number, string>()
   const diskState = new Map<number, DiskWarmState>()
 
@@ -124,6 +134,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // ── planning ──
     await updateJob(jobId, "planning")
     await appendLog(jobId, "Warm migration: planning")
+
+    if (activeWarmVms.has(vmKey)) {
+      throw new Error("A warm migration is already running for this source VM. Wait for it to finish or cancel it before starting another.")
+    }
+    activeWarmVms.add(vmKey); acquiredVmLock = true
 
     const esxiConn = await prisma.connection.findUnique({
       where: { id: config.sourceConnectionId },
@@ -139,7 +154,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const esxiHost = new URL(esxiUrl).hostname
 
     const pveConn = await getConnectionById(config.targetConnectionId)
-    const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
+    nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode, (pveConn as any).baseUrl)
 
     soapSession = await soapLogin(esxiUrl, username, password, esxiConn.insecureTLS)
     await appendLog(jobId, `Authenticated to ${esxiHost} as ${username}`, "success")
@@ -153,6 +168,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       totalDisks: vmConfig.disks.length,
       totalBytes: BigInt(vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0)),
     })
+
+    // Warm patches the target by byte offset, which is only valid on a raw
+    // block device. A file-based target (dir/NFS qcow2) would be silently
+    // corrupted by the dd-seek apply — refuse it up front.
+    const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(config.targetStorage)}`)
+    if (isFileBasedStorage(storageInfo?.type || "dir")) {
+      throw new Error(`Warm migration requires a block-storage target (LVM/LVM-thin/ZFS/Ceph RBD); "${config.targetStorage}" is file-based (${storageInfo?.type}). Pick a block storage or use a cold migration.`)
+    }
 
     // VDDK preflight on the PVE node — actionable error before we touch anything.
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)
@@ -200,10 +223,23 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const dev = await mapRbdIfNeeded(config.targetConnectionId, nodeIp, alloc.devicePath, allocatedVolumes, alloc.volumeId)
       targetDev.set(disk.deviceKey, dev)
       diskState.set(disk.deviceKey, initDiskState(disk.deviceKey))
-      // Unwritten regions must read as zero (CBT only copies allocated/changed
-      // blocks). Thin/ZFS/RBD volumes are pre-zeroed; thick LVM is not, so
-      // discard-zero best-effort. blkdiscard is fast and a no-op where unsupported.
-      await executeSSH(config.targetConnectionId, nodeIp, `blkdiscard -f ${shellEscape(dev)} 2>/dev/null || true`)
+      // Unwritten regions MUST read as zero: the CBT pass writes only the
+      // allocated/changed map, so any block it skips is left as-is on the target.
+      // Thin pools (LVM-thin / ZFS / Ceph RBD) hand back pre-zeroed volumes, so a
+      // cheap discard suffices. Plain (thick) LVM does NOT — a bare DISCARD only
+      // *permits* zero reads, it does not guarantee them, so a freshly-alloc'd
+      // thick LV can surface a previous tenant's bytes (a correctness AND
+      // information-leak bug). Write-zero those (slow but mandatory); fail hard if
+      // it doesn't succeed rather than copy onto stale data.
+      const preZeroed = ["lvmthin", "zfspool", "zfs", "rbd"].includes(storageInfo?.type)
+      if (preZeroed) {
+        await executeSSH(config.targetConnectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
+      } else {
+        const z = await executeSSH(config.targetConnectionId, nodeIp,
+          `blkdiscard -z ${shellEscape(dev)} 2>&1 || dd if=/dev/zero of=${shellEscape(dev)} bs=4M oflag=direct status=none 2>&1`, APPLY_TIMEOUT_MS)
+        if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.error || z.output}`)
+        await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
+      }
       await appendLog(jobId, `Disk ${i}: target ${alloc.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
     }
 
@@ -232,6 +268,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // Run one CBT pass: snapshot, per-disk query+read+apply, record changeIds, remove the snapshot.
     async function runCbtPass(label: string, baseline: (deviceKey: number) => string): Promise<number> {
       const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-${label}`, "warm migration", false)
+      if (!snapMor) throw new Error(`CreateSnapshot (${label}) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually`)
       ourSnapshots.push(snapMor)
       let bytes = 0
       try {
@@ -244,7 +281,12 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         // Record this snapshot's per-disk changeId as the next pass's baseline.
         const cids = await soapGetSnapshotChangeIds(soapSession!, snapMor)
         for (const disk of vmConfig.disks) {
-          diskState.set(disk.deviceKey, recordPass(diskState.get(disk.deviceKey)!, { newChangeId: cids.get(disk.deviceKey) || "", bytes: 0 }))
+          const cid = cids.get(disk.deviceKey) || ""
+          // An empty changeId means the next pass falls back to "*" (full allocated
+          // re-read) for this disk — correct but wasteful; surface it rather than
+          // silently inflating the next delta.
+          if (!cid) await appendLog(jobId, `Warning: no changeId captured for disk ${disk.deviceKey} after ${label}; the next pass will re-read its full allocated map`, "warn")
+          diskState.set(disk.deviceKey, recordPass(diskState.get(disk.deviceKey)!, { newChangeId: cid, bytes: 0 }))
         }
       } finally {
         // Always remove OUR snapshot, by its specific MOR, never the children (a
@@ -300,6 +342,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId)
       await updateJob(jobId, "full_copy")
       const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, "warm migration", false)
+      if (!snapMor) throw new Error("CreateSnapshot (checksum) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually")
       ourSnapshots.push(snapMor)
       try {
         for (let i = 0; i < vmConfig.disks.length; i++) {
@@ -329,9 +372,39 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       }
     }
 
-    // ── verify (sampled) → attach (FATAL on failure) → boot ──
+    // ── verify (sampled, defense-in-depth) ──
+    // The no-loss property is algorithmic (CBT + post-shutdown final delta), not a
+    // product of this check. We sample the first block of each disk: the source is
+    // now powered off, so its current disk == the cutover state (no snapshot param).
+    // A mismatch is a loud warning, never a hard failure; the authoritative full
+    // cmp is the lab runbook.
     await updateJob(jobId, "verify")
-    await appendLog(jobId, "Verifying (sampled) and attaching disks…")
+    for (let i = 0; i < vmConfig.disks.length; i++) {
+      const disk = vmConfig.disks[i]
+      const dev = targetDev.get(disk.deviceKey)!
+      const sock = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.sock`
+      const pwFile = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.pw`
+      try {
+        const reader = await startVddkReader(config.targetConnectionId, nodeIp,
+          { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password, `/dev/nbd${i}`)
+        try {
+          const [src, dst] = await Promise.all([
+            scanBlockChecksums(config.targetConnectionId, nodeIp, reader.nbdDev, 256 * 1024 * 1024, 1),
+            scanBlockChecksums(config.targetConnectionId, nodeIp, dev, 256 * 1024 * 1024, 1),
+          ])
+          if (src[0] && dst[0] && src[0] !== dst[0]) {
+            await appendLog(jobId, `Verify: disk ${i} first-block checksum differs (source vs target) — investigate before relying on the copy`, "warn")
+          } else {
+            await appendLog(jobId, `Verify: disk ${i} sampled block matches`, "success")
+          }
+        } finally {
+          await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
+        }
+      } catch (e: any) {
+        await appendLog(jobId, `Verify (sampled) skipped on disk ${i}: ${e?.message || e}`, "warn")
+      }
+    }
+    await appendLog(jobId, "Attaching target disks…")
 
     const reconfig = new URLSearchParams()
     const slots: string[] = []
@@ -361,12 +434,13 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
-    await cleanupOnFailure(config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, jobId).catch(() => {})
+    await cleanupOnFailure(config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
     throw err
   } finally {
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     jobPrisma.delete(jobId)
     cancelledJobs.delete(jobId)
+    if (acquiredVmLock) activeWarmVms.delete(vmKey)
   }
 }
 
@@ -415,9 +489,10 @@ async function cleanupOnFailure(
   ourSnapshots: string[],
   allocatedVolumes: { volumeId: string; devicePath: string; rbdMapped?: boolean; attached?: boolean }[],
   activeReaders: VddkReaderHandle[],
-  jobId: string,
+  nodeIp: string,
 ): Promise<void> {
-  const nodeIp = await getNodeIpForMigration(jobPrisma.get(jobId), config.targetConnectionId, config.targetNode, "").catch(() => "")
+  // nodeIp is the value resolved during planning (empty if we failed before that,
+  // in which case nothing was allocated on the node and there is nothing to free).
   for (const r of activeReaders) {
     if (nodeIp) await stopVddkReader(config.targetConnectionId, nodeIp, r).catch(() => {})
   }

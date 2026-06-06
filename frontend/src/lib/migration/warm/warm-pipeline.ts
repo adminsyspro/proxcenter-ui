@@ -10,7 +10,7 @@ import {
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import {
   cbtEligibility, soapEnableCbt, queryAllChangedAreas, soapGetSnapshotChangeIds,
-  soapGuestShutdown, soapWaitPoweredOff,
+  soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
 import { allocateBlockVolumeAndResolvePath } from "../pvesm-alloc"
@@ -25,6 +25,7 @@ import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-d
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
+import { startSoapKeepAlive } from "./session-keepalive"
 
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "full_copy" | "delta_sync"
@@ -99,6 +100,8 @@ export function planPasses(stats: PassStat[], cfg: ConvergenceConfig): Convergen
 // Long-running SSH operations (block apply, checksum scan) need a generous timeout.
 const APPLY_TIMEOUT_MS = 12 * 60 * 60 * 1000
 const SNAPSHOT_PREFIX = "proxcenter-warm"
+// Ping the SOAP session every 60 s to prevent idle-expiry during long dd copies (issue #394).
+const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
 
 /**
  * Warm migration orchestrator (ESXi-direct source, Proxmox block target).
@@ -117,6 +120,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   const maxPasses = config.maxPasses ?? 5
 
   let soapSession: SoapSession | null = null
+  let stopKeepAlive: (() => void) | null = null
   let targetVmid: number | null = config.targetVmid ?? null
   let nodeIp = ""                                   // resolved in planning; used by failure cleanup
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
@@ -158,6 +162,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     soapSession = await soapLogin(esxiUrl, username, password, esxiConn.insecureTLS)
     await appendLog(jobId, `Authenticated to ${esxiHost} as ${username}`, "success")
+    stopKeepAlive = startSoapKeepAlive(() => soapKeepAlive(soapSession!), SOAP_KEEPALIVE_INTERVAL_MS)
 
     const vmConfig: EsxiVmConfig = parseVmConfig(await soapGetVmConfig(soapSession, config.sourceVmId))
     for (const d of vmConfig.disks) {
@@ -450,6 +455,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await cleanupOnFailure(config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
     throw err
   } finally {
+    stopKeepAlive?.()
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     jobPrisma.delete(jobId)
     cancelledJobs.delete(jobId)

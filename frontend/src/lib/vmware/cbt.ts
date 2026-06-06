@@ -143,6 +143,20 @@ export async function soapGetSnapshotChangeIds(session: SoapSession, snapshotMor
   return parseSnapshotChangeIds(extractProp(res.text, "config.hardware.device"))
 }
 
+/**
+ * Send a no-op CurrentTime request to the ServiceInstance to reset the server's
+ * SOAP-session idle timer. Issue #394: the warm pipeline holds the SOAP session
+ * for the full duration of a long dd copy (potentially >30 min) with no SOAP
+ * traffic, so vCenter/ESXi can reap the idle session. startSoapKeepAlive in
+ * session-keepalive.ts calls this every 60 s. All errors are swallowed: a
+ * transient keepalive failure must never abort a migration.
+ */
+export async function soapKeepAlive(session: SoapSession): Promise<void> {
+  await soapRequest(session.baseUrl, ENV(
+    `<urn:CurrentTime><urn:_this type="ServiceInstance">ServiceInstance</urn:_this></urn:CurrentTime>`,
+  ), session.cookie, session.insecureTLS).catch(() => {})
+}
+
 /** Initiate a clean guest shutdown via VMware Tools. Returns immediately; the guest powers off asynchronously, so poll with soapWaitPoweredOff before relying on it. */
 export async function soapGuestShutdown(session: SoapSession, vmid: string): Promise<void> {
   const res = await soapRequest(session.baseUrl, ENV(

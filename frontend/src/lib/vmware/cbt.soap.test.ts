@@ -8,7 +8,7 @@ vi.mock("./soap", async (importActual) => {
 })
 
 import { soapRequest, soapGetVmConfig, extractProp } from "./soap"
-import { soapEnableCbt, soapQueryChangedDiskAreas, queryAllChangedAreas, soapGuestShutdown, soapWaitPoweredOff, soapGetSnapshotChangeIds } from "./cbt"
+import { soapEnableCbt, soapQueryChangedDiskAreas, queryAllChangedAreas, soapGuestShutdown, soapWaitPoweredOff, soapGetSnapshotChangeIds, soapKeepAlive } from "./cbt"
 
 const sr = vi.mocked(soapRequest)
 const gvc = vi.mocked(soapGetVmConfig)
@@ -82,5 +82,19 @@ describe("soapGetSnapshotChangeIds", () => {
     expect(m.get(2000)).toBe("52 cc/9")
     // queried the snapshot object for its disk backings
     expect(sr.mock.calls[0][1]).toContain("snapshot-7")
+  })
+})
+
+describe("soapKeepAlive", () => {
+  it("sends a CurrentTime ping on the ServiceInstance and passes the session cookie", async () => {
+    sr.mockResolvedValue({ text: "<returnval>2026-01-01T00:00:00Z</returnval>" } as any)
+    await expect(soapKeepAlive(session)).resolves.toBeUndefined()
+    expect(sr.mock.calls[0][1]).toContain("<urn:CurrentTime>")
+    expect(sr.mock.calls[0][2]).toBe(session.cookie)
+  })
+
+  it("swallows errors so a transient failure never aborts the migration", async () => {
+    sr.mockRejectedValue(new Error("boom"))
+    await expect(soapKeepAlive(session)).resolves.toBeUndefined()
   })
 })

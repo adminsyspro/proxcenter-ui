@@ -209,9 +209,9 @@ export default function InventoryDetails({
   // provider keeps the LXC option for lightweight workloads on dedicated
   // setups. Same gate is used to funnel tenants through the template
   // catalogue instead of the bare-metal Create VM dialog.
-  const { currentTenant, loading: tenantLoading } = useTenant()
+  const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
-  const allowLxc = !tenantLoading && (currentTenant === null || isProviderTenant)
+  const allowLxc = !tenantLoading && (currentTenant === null || isFullClusterView)
   const allowBlankVm = allowLxc
   const router = useRouter()
   const { trackTask } = useTaskTracker()
@@ -2861,12 +2861,13 @@ return vm?.isCluster ?? false
                       />
                     </MuiTooltip>
                   )}
-                  {/* Node chip — provider only. Tenants see a vDC abstraction
-                      where the underlying PVE node is an implementation detail
-                      they don't manage; exposing it would also make the host
-                      view clickable from a tenant admin (we hide /hosts for
-                      them). The cluster icon link goes away with it. */}
-                  {isProviderTenant && (
+                  {/* Node chip — provider/MSP only. vDC tenants see a vDC
+                      abstraction where the underlying PVE node is an
+                      implementation detail they don't manage; exposing it
+                      would also make the host view clickable from a tenant
+                      admin (we hide /hosts for them). The cluster icon link
+                      goes away with it. */}
+                  {isFullClusterView && (
                     <Typography variant="body2" noWrap sx={{ color: 'text.secondary', flexShrink: 0 }}>
                       {'- '}
                       <span style={{ position: 'relative', display: 'inline-block', verticalAlign: 'text-bottom', marginRight: 4, width: 14, height: 14 }}>

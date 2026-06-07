@@ -525,6 +525,8 @@ function VmsTable({
   // so every callsite (InventoryDetails right panel, NodeTabs, ClusterTabs)
   // gets the same gating without touching each one.
   const { currentTenant, loading: tenantLoading } = useTenant()
+  // Migration endpoints are provider-only (requireProviderTenant). MSP migrate
+  // would need server-side changes, so keep this gate provider-only for now.
   const canMigrate = !tenantLoading && currentTenant?.id === 'default'
   const effectiveOnMigrate = canMigrate ? onMigrate : undefined
   

@@ -58,9 +58,9 @@ function CreateLxcDialog({
   const { isAdmin } = useRBAC()
   // Tenants other than the provider get the cloud abstraction: no node
   // picker, smart auto-placement on the least-loaded node.
-  const { currentTenant, loading: tenantLoading } = useTenant()
+  const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
-  const hideNodePicker = !tenantLoading && !!currentTenant && !isProviderTenant
+  const hideNodePicker = !tenantLoading && !!currentTenant && !isFullClusterView
 
   const [activeTab, setActiveTab] = useState(0)
   const [creating, setCreating] = useState(false)

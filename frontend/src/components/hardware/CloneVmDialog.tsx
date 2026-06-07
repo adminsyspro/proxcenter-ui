@@ -54,8 +54,8 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   // storage, VMID and pool are auto-resolved server-side (clone route
   // already calls resolveVdcForTenant + forces pool to vDC pool), so
   // we just hide the controls and ship sensible defaults.
-  const { currentTenant, loading: tenantLoading } = useTenant()
-  const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
+  const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  const isProviderTenant = !tenantLoading && isFullClusterView
   const [cloning, setCloning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nodes, setNodes] = useState<NodeInfo[]>([])

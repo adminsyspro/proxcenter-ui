@@ -87,7 +87,7 @@ export default function RestoreVmDialog({
   // decisions; a tenant just renames the restored VM. Provider / 'default'
   // tenant keeps the full surface so the operator can pick the target.
   const { currentTenant, loading: tenantLoading } = useTenant()
-  const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
+  const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default' && currentTenant.operatingModel !== 'msp'
 
   // When the caller provides connectionId/node, lock them; otherwise we
   // render pickers and the user picks. Internal state holds the effective

@@ -9,7 +9,8 @@ import { waitForTask } from "@/lib/proxmox/tasks"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { resolveVdcForTenant } from "@/lib/vdc/quota"
-import { assertVdcPbsAccess, getVdcScope } from "@/lib/vdc/scope"
+import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
@@ -54,9 +55,14 @@ export async function POST(
     // allow-list. RBAC was already checked above (BACKUP at node-resource
     // granularity); this layer adds the vDC contract.
     const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    // Non-default tenants still go through the PBS-access + pool-placement
+    // blocks below (assertVdcPbsAccess and the vDC pool lookup both handle MSP
+    // correctly: MSP gets admin PBS access on owned connections and has no vDC
+    // pool). Only the vDC STORAGE-allowlist scoping is iaas-only.
     const isTenant = tenantId !== DEFAULT_TENANT_ID
     let allowedStorages: Set<string> | null = null
-    if (isTenant) {
+    if (infra.kind === 'iaas') {
       // Verify the target node is in the tenant's vDC. resolveVdcForTenant
       // throws NODE_NOT_AUTHORIZED when the node is outside the allow list;
       // returning null means the tenant has no vDC on this connection at all,
@@ -73,7 +79,7 @@ export async function POST(
       if (!vdcInfo) {
         return NextResponse.json({ error: 'No vDC on this connection — restore not allowed' }, { status: 403 })
       }
-      const scope = await getVdcScope(tenantId)
+      const scope = infra.vdcScope
       if (!scope) {
         // Cannot happen for a non-default tenant after the v1.4.0 scope
         // contract fix (scope is always a VdcScope, possibly empty), but

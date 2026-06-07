@@ -20,6 +20,8 @@ interface TenantContextType {
   loading: boolean
   isMultiTenant: boolean
   isProvider: boolean
+  isMsp: boolean
+  isFullClusterView: boolean
 }
 
 const TenantContext = createContext<TenantContextType>({
@@ -29,6 +31,8 @@ const TenantContext = createContext<TenantContextType>({
   loading: true,
   isMultiTenant: false,
   isProvider: true,
+  isMsp: false,
+  isFullClusterView: true,
 })
 
 export function TenantProvider({ children }: { children: React.ReactNode }) {
@@ -82,6 +86,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const isProvider = (currentTenant?.id ?? DEFAULT_TENANT_ID) === DEFAULT_TENANT_ID
+  const isMsp = currentTenant?.operatingModel === 'msp'
+
   return (
     <TenantContext.Provider value={{
       currentTenant,
@@ -89,7 +96,9 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       switchTenant,
       loading,
       isMultiTenant: availableTenants.length > 1,
-      isProvider: (currentTenant?.id ?? DEFAULT_TENANT_ID) === DEFAULT_TENANT_ID,
+      isProvider,
+      isMsp,
+      isFullClusterView: isProvider || isMsp,
     }}>
       {children}
     </TenantContext.Provider>

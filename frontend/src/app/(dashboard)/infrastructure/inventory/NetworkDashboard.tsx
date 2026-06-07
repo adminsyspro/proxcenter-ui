@@ -269,10 +269,10 @@ type VnetSummary = {
 export default function NetworkDashboard({ connectionIds, connectionNames }: Props) {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const { currentTenant } = useTenant()
-  // Provider tenant keeps the legacy bridge-centric dashboard; non-provider
-  // (tenant admin) gets the VNet/IPAM-focused KPIs and skips the bridges
-  // table entirely. Detection key matches useRBACScopeProfile.
+  const { currentTenant, isFullClusterView } = useTenant()
+  // Provider tenant (and MSP) keeps the legacy bridge-centric dashboard;
+  // non-provider vDC tenants get the VNet/IPAM-focused KPIs and skip the
+  // bridges table entirely. Detection key matches useRBACScopeProfile.
   const isProviderTenant = currentTenant?.id === 'default' || !currentTenant
   const [loading, setLoading] = useState(false)
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
@@ -314,7 +314,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   // in VnetsSection — kept lightweight (only the fields we need for KPIs).
   // Provider view doesn't render the donut row, so we skip the round-trip.
   useEffect(() => {
-    if (!connIdsKey || isProviderTenant) return
+    if (!connIdsKey || isFullClusterView) return
     const accept = new Set(connIdsKey.split(','))
     let alive = true
     ;(async () => {
@@ -350,7 +350,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       } catch { /* keep KPIs at 0 */ }
     })()
     return () => { alive = false }
-  }, [connIdsKey, isProviderTenant])
+  }, [connIdsKey, isFullClusterView])
 
   // The summary is always built — even when networkData is empty — so the
   // tenant view can keep rendering the donut KPIs (zeroed) and the VNets
@@ -439,10 +439,10 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
         </Box>
       </Stack>
 
-      {/* KPI Row. Provider view keeps the legacy bridge/VLAN counters, tenant
-          view gets the donut-based VNet/IPAM/firewall metrics that are more
-          actionable for them. */}
-      {isProviderTenant ? (
+      {/* KPI Row. Provider/MSP view keeps the legacy bridge/VLAN counters,
+          vDC tenant view gets the donut-based VNet/IPAM/firewall metrics
+          that are more actionable for them. */}
+      {isFullClusterView ? (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 3 }}>
           <KpiCard label="Total Bridges" value={summary.totalBridges} icon="ri-share-line" />
           <KpiCard label="VLANs" value={summary.totalVlans} icon="ri-git-branch-line" />
@@ -525,10 +525,10 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
         <VlanVmsList vlans={summary.vlanBreakdown} />
       )}
 
-      {/* Bridge Table — provider only. Tenants don't see / can't act on
-          physical bridges; for them the VNets list below is the equivalent
+      {/* Bridge Table — provider/MSP only. vDC tenants don't see / can't act
+          on physical bridges; for them the VNets list below is the equivalent
           actionable view. */}
-      {isProviderTenant && (
+      {isFullClusterView && (
         <Card variant="outlined" sx={{ borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 0.8)}` }}>
           <CardContent sx={{ pb: '16px !important' }}>
             <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>

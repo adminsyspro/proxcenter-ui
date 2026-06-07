@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
@@ -31,7 +31,17 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    // MSP tenants own whole clusters and may only query connections they own.
+    // The shared getConnectionById below authorizes via the connection's OWN
+    // tenantId, so without this gate an MSP user could pass a non-owned connId
+    // and leak that cluster's bridge/VNet choices.
+    if (infra.kind === 'msp' && !infra.connectionIds.has(connId)) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
+    // provider + msp (maskingScope null) take the full-cluster branch below
+    // (all physical bridges + all SDN VNets); iaas tenants get their vDC slice.
+    const scope = maskingScope(infra)
 
     const connMeta = await prisma.connection.findUnique({ where: { id: connId }, select: { tenantId: true } })
     if (!connMeta) return NextResponse.json({ error: "Connection not found" }, { status: 404 })

@@ -7,7 +7,7 @@ import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
 import { setNodeIps } from "@/lib/cache/nodeIpCache"
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -194,15 +194,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     hostId: sshOverrides[n.node || n.name]?.hostId || null,
   }))
 
-  // vDC filtering: restrict to nodes assigned to the tenant's vDC
-  const vdcScope = await getVdcScope(tenantId)
-  if (vdcScope) {
-    const allowedNodes = vdcScope.nodesByConnection.get(id)
-    if (allowedNodes) {
-      nodesWithSsh = nodesWithSsh.filter((n: any) => allowedNodes.has(n.node || n.name))
-    } else {
-      nodesWithSsh = []
-    }
+  // Node filtering: iaas (vDC) tenants see only their vDC's nodes; provider and
+  // msp tenants see the full node list (msp owns the whole cluster). maskingScope
+  // is null for provider + msp, so they skip filtering entirely.
+  const mask = maskingScope(await getTenantInfrastructureScope(tenantId))
+  if (mask) {
+    const allowedNodes = mask.nodesByConnection.get(id)
+    nodesWithSsh = allowedNodes
+      ? nodesWithSsh.filter((n: any) => allowedNodes.has(n.node || n.name))
+      : []
   }
 
   // Cache the response for 30s (keyed by tenant)

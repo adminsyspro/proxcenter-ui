@@ -5,7 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -165,7 +165,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // backup tab — `loadPveStorages` couldn't find any PVE-PBS bridge to
     // run the file-restore against.
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    // iaas (vDC) tenants are masked to their slice; provider + msp see the full
+    // cluster (maskingScope is null for both → no filtering below).
+    const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (vdcScope) {
       const allowedStorages = vdcScope.storagesByConnection.get(id)
       const allowedNodes = vdcScope.nodesByConnection.get(id)

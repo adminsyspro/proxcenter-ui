@@ -269,10 +269,22 @@ export async function guardTenantStorageWrite(
   const { NextResponse } = await import('next/server')
   const { getConnectionById } = await import('@/lib/connections/getConnection')
   const { pveFetch } = await import('@/lib/proxmox/client')
+  const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
 
-  const scope = await getVdcScope(await getCurrentTenantId())
-  if (!scope) return null
+  const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+  // Provider: no restriction.
+  if (infra.kind === 'provider') return null
+  // MSP: the tenant owns the whole (dedicated) cluster — any storage on an
+  // owned connection is writable, including shared backends (no cross-tenant
+  // leak on a dedicated cluster).
+  if (infra.kind === 'msp') {
+    return infra.connectionIds.has(connId)
+      ? null
+      : NextResponse.json({ error: 'Storage not accessible' }, { status: 403 })
+  }
 
+  // iaas: existing vDC logic (must target a storage in the vDC and a non-shared backend).
+  const scope = infra.vdcScope
   const allowed = scope.storagesByConnection.get(connId)
   if (!allowed || !allowed.has(storage)) {
     return NextResponse.json({ error: 'Storage not accessible' }, { status: 403 })
@@ -317,10 +329,20 @@ export type VdcPbsAccess =
 export async function assertVdcPbsAccess(connId: string): Promise<VdcPbsAccess | Response> {
   const { getCurrentTenantId } = await import('@/lib/tenant')
   const { NextResponse } = await import('next/server')
+  const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
 
-  const scope = await getVdcScope(await getCurrentTenantId())
-  if (!scope) return { kind: 'admin' }
+  const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+  if (infra.kind === 'provider') return { kind: 'admin' }
+  // MSP: owns the PBS connection directly → full (admin-like) access, no
+  // namespace filtering (dedicated cluster).
+  if (infra.kind === 'msp') {
+    return infra.connectionIds.has(connId)
+      ? { kind: 'admin' }
+      : NextResponse.json({ error: 'PBS not accessible for this tenant' }, { status: 403 })
+  }
 
+  // iaas: existing namespace logic.
+  const scope = infra.vdcScope
   const allowed = scope.pbsNamespacesByConnection.get(connId)
   if (!allowed || allowed.length === 0) {
     return NextResponse.json({ error: 'PBS not accessible for this tenant' }, { status: 403 })

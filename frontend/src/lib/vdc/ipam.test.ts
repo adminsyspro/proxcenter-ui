@@ -24,6 +24,7 @@ const VDC_TABLES = [
   'vdc_subnets',
   'vdc_vnets',
   'vdcs',
+  'provider_connections',
   'Connection',
   'tenants',
 ]
@@ -44,18 +45,24 @@ async function seed(args: { cidr: string; gateway: string }): Promise<SeedIds> {
       id: 'tenant-1',
       slug: 'tenant-1',
       name: 'Test Tenant',
+      operatingModel: 'iaas',
       createdAt: now,
       updatedAt: now,
     },
   })
-  await prismaTest.connection.create({
-    data: {
-      id: 'conn-1',
-      tenantId: 'tenant-1',
-      name: 'pve-test',
-      baseUrl: 'https://pve.test',
-      apiTokenEnc: 'encrypted-fake',
-    },
+  // PVE connections used as vdc.connectionId must be provider-owned and pooled.
+  // The deferred pool-sync trigger requires both rows in one transaction.
+  await prismaTest.$transaction(async (tx) => {
+    await tx.connection.create({
+      data: {
+        id: 'conn-1',
+        tenantId: 'default',
+        name: 'pve-test',
+        baseUrl: 'https://pve.test',
+        apiTokenEnc: 'encrypted-fake',
+      },
+    })
+    await tx.providerConnection.create({ data: { connectionId: 'conn-1' } })
   })
   await prismaTest.vdc.create({
     data: {

@@ -19,11 +19,16 @@ vi.mock('@/lib/tenant', () => ({
     connection: { create: connectionCreateMock },
   }),
   getCurrentTenantId: async () => 'default',
+  DEFAULT_TENANT_ID: 'default',
 }))
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     connection: { findMany: vi.fn().mockResolvedValue([]) },
+    $transaction: async (cb: any) => cb({
+      connection: { create: connectionCreateMock },
+      providerConnection: { create: vi.fn().mockResolvedValue({}) },
+    }),
   },
 }))
 

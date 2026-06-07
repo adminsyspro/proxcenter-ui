@@ -5,22 +5,34 @@ import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
 
 import { allocateVni, generatePveVnetId, generateZoneName } from './sdn'
 
-const TABLES = ['vdc_vnets', 'vdcs', 'Connection', 'tenants']
+const TABLES = ['vdc_vnets', 'vdcs', 'provider_connections', 'Connection', 'tenants']
 
 beforeEach(async () => {
   await truncate(TABLES)
 
   const now = new Date()
   await prismaTest.tenant.create({
-    data: { id: 'tenant-1', slug: 'tenant-1', name: 'Test', createdAt: now, updatedAt: now },
+    data: { id: 'tenant-1', slug: 'tenant-1', name: 'Test', operatingModel: 'iaas', createdAt: now, updatedAt: now },
   })
-  await prismaTest.connection.createMany({
-    data: [
-      { id: 'conn1', tenantId: 'tenant-1', name: 'pve-1', baseUrl: 'https://pve1', apiTokenEnc: 'enc' },
-      { id: 'conn-A', tenantId: 'tenant-1', name: 'pve-A', baseUrl: 'https://pveA', apiTokenEnc: 'enc' },
-      { id: 'conn-B', tenantId: 'tenant-1', name: 'pve-B', baseUrl: 'https://pveB', apiTokenEnc: 'enc' },
-      { id: 'conn-shared', tenantId: 'tenant-1', name: 'pve-shared', baseUrl: 'https://pves', apiTokenEnc: 'enc' },
-    ],
+  // PVE connections used as vdc.connectionId must be provider-owned and pooled.
+  // The deferred pool-sync trigger requires connection + pool row in one transaction.
+  await prismaTest.$transaction(async (tx) => {
+    await tx.connection.createMany({
+      data: [
+        { id: 'conn1', tenantId: 'default', name: 'pve-1', baseUrl: 'https://pve1', apiTokenEnc: 'enc' },
+        { id: 'conn-A', tenantId: 'default', name: 'pve-A', baseUrl: 'https://pveA', apiTokenEnc: 'enc' },
+        { id: 'conn-B', tenantId: 'default', name: 'pve-B', baseUrl: 'https://pveB', apiTokenEnc: 'enc' },
+        { id: 'conn-shared', tenantId: 'default', name: 'pve-shared', baseUrl: 'https://pves', apiTokenEnc: 'enc' },
+      ],
+    })
+    await tx.providerConnection.createMany({
+      data: [
+        { connectionId: 'conn1' },
+        { connectionId: 'conn-A' },
+        { connectionId: 'conn-B' },
+        { connectionId: 'conn-shared' },
+      ],
+    })
   })
 })
 

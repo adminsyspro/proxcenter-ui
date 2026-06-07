@@ -36,12 +36,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "slug must contain only lowercase letters, numbers, and hyphens" }, { status: 400 })
   }
 
+  // v1.5: optional operating model. Accept only the two valid values; the
+  // default ('iaas') is applied in createTenant. The selector UI ships later.
+  if (body.operatingModel !== undefined && !['iaas', 'msp'].includes(body.operatingModel)) {
+    return NextResponse.json({ error: "operatingModel must be 'iaas' or 'msp'" }, { status: 400 })
+  }
+
   try {
     const tenant = await createTenant({
       slug: body.slug,
       name: body.name,
       description: body.description,
       createdBy: session?.user?.id,
+      operatingModel: body.operatingModel,
     })
 
     await audit({

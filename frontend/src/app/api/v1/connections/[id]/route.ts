@@ -94,9 +94,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const body = parseResult.data
     const data: any = {}
 
+    // v1.5: Connection.type is immutable post-create (changing pve<->pbs would
+    // invalidate the provider-pool invariant). The DB trigger is the backstop;
+    // return a clean 400 here.
+    if (body.type !== undefined) {
+      const existingType = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
+      if (existingType && existingType.type !== body.type) {
+        return NextResponse.json(
+          { error: 'Connection type is immutable; create a new connection instead' },
+          { status: 400 },
+        )
+      }
+      // type unchanged → no-op, leave data.type unset
+    }
+
     // Champs de base
     if (body.name !== undefined) data.name = body.name
-    if (body.type !== undefined) data.type = body.type
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl
     if (body.behindProxy !== undefined) data.behindProxy = !!body.behindProxy
     if (body.insecureTLS !== undefined) data.insecureTLS = body.insecureTLS

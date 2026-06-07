@@ -373,6 +373,7 @@ export async function createTenant(data: {
   name: string
   description?: string
   createdBy?: string
+  operatingModel?: 'iaas' | 'msp'
 }): Promise<Tenant> {
   const id = crypto.randomUUID()
   const now = new Date()
@@ -383,6 +384,8 @@ export async function createTenant(data: {
       name: data.name,
       description: data.description || null,
       enabled: true,
+      // v1.5: non-default tenants need operating_model (DB CHECK); default to iaas.
+      operatingModel: data.operatingModel ?? 'iaas',
       createdBy: data.createdBy || null,
       createdAt: now,
       updatedAt: now,

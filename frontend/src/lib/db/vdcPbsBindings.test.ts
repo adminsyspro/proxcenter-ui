@@ -15,6 +15,7 @@ const TABLES = [
   'vdc_pbs_pve_storages',
   'vdc_pbs_namespaces',
   'vdcs',
+  'provider_connections',
   'Connection',
   'tenants',
 ]
@@ -28,23 +29,30 @@ beforeEach(async () => {
       id: 'tenant-1',
       slug: 'tenant-1',
       name: 'Test Tenant',
+      operatingModel: 'iaas',
       createdAt: now,
       updatedAt: now,
     },
   })
-  await prismaTest.connection.create({
-    data: {
-      id: 'pve-conn',
-      tenantId: 'tenant-1',
-      name: 'pve-test',
-      baseUrl: 'https://pve.test',
-      apiTokenEnc: 'enc',
-    },
+  // PVE connection used as vdc.connectionId must be provider-owned and pooled.
+  // The deferred pool-sync trigger requires both rows in one transaction.
+  await prismaTest.$transaction(async (tx) => {
+    await tx.connection.create({
+      data: {
+        id: 'pve-conn',
+        tenantId: 'default',
+        name: 'pve-test',
+        baseUrl: 'https://pve.test',
+        apiTokenEnc: 'enc',
+      },
+    })
+    await tx.providerConnection.create({ data: { connectionId: 'pve-conn' } })
   })
+  // PBS connections are not pooled (trigger skips non-PVE types).
   await prismaTest.connection.create({
     data: {
       id: 'pbs-conn',
-      tenantId: 'tenant-1',
+      tenantId: 'default',
       type: 'pbs',
       name: 'pbs-test',
       baseUrl: 'https://pbs.test',

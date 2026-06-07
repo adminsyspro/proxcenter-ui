@@ -30,8 +30,21 @@ if (!databaseUrl) {
   process.exit(1)
 }
 
+// PrismaPg ignores the libpq-style `?schema=` query parameter; pass the
+// schema explicitly so the seed works in non-public schemas (e.g. smoke tests).
+function extractSchema(url: string): string | undefined {
+  try {
+    const parsed = new URL(url)
+    const s = parsed.searchParams.get('schema')
+    return s && s.length > 0 ? s : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const _schema = extractSchema(databaseUrl)
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: databaseUrl }),
+  adapter: new PrismaPg({ connectionString: databaseUrl }, _schema ? { schema: _schema } : {}),
 })
 
 async function seedTenant() {

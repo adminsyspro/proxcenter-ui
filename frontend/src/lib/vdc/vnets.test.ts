@@ -8,6 +8,7 @@ const TABLES = [
   'vdc_vnets',
   'vdc_quotas',
   'vdcs',
+  'provider_connections',
   'Connection',
   'tenants',
 ]
@@ -18,18 +19,23 @@ beforeEach(async () => {
   const now = new Date()
   await prismaTest.tenant.createMany({
     data: [
-      { id: 'tenant-a', slug: 'tenant-a', name: 'Tenant A', createdAt: now, updatedAt: now },
-      { id: 'tenant-b', slug: 'tenant-b', name: 'Tenant B', createdAt: now, updatedAt: now },
+      { id: 'tenant-a', slug: 'tenant-a', name: 'Tenant A', operatingModel: 'iaas', createdAt: now, updatedAt: now },
+      { id: 'tenant-b', slug: 'tenant-b', name: 'Tenant B', operatingModel: 'iaas', createdAt: now, updatedAt: now },
     ],
   })
-  await prismaTest.connection.create({
-    data: {
-      id: 'conn-1',
-      tenantId: 'tenant-a',
-      name: 'pve-test',
-      baseUrl: 'https://pve.test',
-      apiTokenEnc: 'enc',
-    },
+  // PVE connections used as vdc.connectionId must be provider-owned and pooled.
+  // The deferred pool-sync trigger requires both rows in one transaction.
+  await prismaTest.$transaction(async (tx) => {
+    await tx.connection.create({
+      data: {
+        id: 'conn-1',
+        tenantId: 'default',
+        name: 'pve-test',
+        baseUrl: 'https://pve.test',
+        apiTokenEnc: 'enc',
+      },
+    })
+    await tx.providerConnection.create({ data: { connectionId: 'conn-1' } })
   })
 })
 

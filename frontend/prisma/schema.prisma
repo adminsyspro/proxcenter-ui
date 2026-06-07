@@ -30,6 +30,10 @@ model Connection {
   country          String? // ISO-3166-1 alpha-2 (e.g. "FR", "DE"). Optional, set in /settings?tab=connections.
   apiTokenEnc      String
   fingerprint      String? // SHA256 cert fingerprint; populated for PBS connections
+  // v1.5: connection access profile, enforced at the HTTP-client boundary in
+  // a later step. Defaults to today's behavior (full_admin) so existing
+  // connections are unchanged.
+  accessProfile String @default("full_admin") @map("access_profile")
 
   // Custom ProxCenter tags (semicolon-separated)
   tags String?
@@ -53,6 +57,9 @@ model Connection {
   // — they let the FKs exist without needing to be queried from this side.
   greenConfig     ConnectionGreenConfig?
   nodeGreenConfig NodeGreenConfig[]
+
+  providerConnection ProviderConnection?
+  licenseMapping     LicenseMapping?
 }
 
 model ManagedHost {
@@ -444,6 +451,10 @@ model Tenant {
   enabled     Boolean  @default(true)
   // Free-form per-tenant settings (theme, feature flags, ...). JSONB.
   settings    Json?
+  // v1.5 MSP: "iaas" | "msp" for non-default tenants; NULL only for the
+  // 'default' (provider) tenant. Enforced by CHECK constraints in the
+  // msp_alpha1_schema migration.
+  operatingModel String? @map("operating_model")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")
@@ -587,6 +598,9 @@ model Vdc {
   tenantId       String   @map("tenant_id")
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
   connectionId   String   @map("connection_id")
+  // v1.5: a vDC may only reference a connection that is in the provider pool.
+  // FK is to provider_connections (not directly to Connection); see migration.
+  providerConnection ProviderConnection @relation(fields: [connectionId], references: [connectionId], onDelete: Restrict)
   name           String
   slug           String
   description    String?
@@ -1025,4 +1039,61 @@ model SshHostKey {
   lastUsedAt  DateTime @default(now()) @updatedAt @map("last_used_at")
 
   @@map("ssh_host_keys")
+}
+
+// ============================================
+// v1.5 MSP mode + multi-license (msp_alpha1_schema migration)
+// ============================================
+
+model ProviderConnection {
+  // A connection is in the provider pool (vDC-sliceable) iff a row exists here.
+  // App code keeps this in sync for PVE + tenant_id='default' connections only.
+  connectionId String     @id @map("connection_id")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  vdcs         Vdc[]
+
+  @@map("provider_connections")
+}
+
+model InstallIdentity {
+  id          String    @id // install_uuid (UUIDv4)
+  publicKey   String    @map("public_key")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  lastResetAt DateTime? @map("last_reset_at")
+
+  @@map("install_identities")
+}
+
+model License {
+  id                 String   @id @default(cuid())
+  licenseId          String   @unique @map("license_id")
+  blob               String
+  edition            String
+  maxNodes           Int      @map("max_nodes")
+  installableCount   Int?     @map("installable_count") // NULL = legacy unlimited
+  clusterUuid        String?  @map("cluster_uuid")
+  activatedAt        DateTime @default(now()) @map("activated_at")
+  expiresAt          DateTime @map("expires_at")
+  isPrimary          Boolean  @default(false) @map("is_primary")
+  installFingerprint String   @map("install_fingerprint")
+  features           Json?
+  state              String   @default("active") // 'pending' | 'active' | 'expired'
+
+  mappings LicenseMapping[]
+
+  @@index([isPrimary])
+  @@index([state])
+  @@map("licenses")
+  // Partial unique index "license_one_primary" added via raw SQL in the migration.
+}
+
+model LicenseMapping {
+  licenseId    String @map("license_id")
+  connectionId String @unique @map("connection_id")
+
+  license    License    @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@id([licenseId, connectionId])
+  @@map("license_mappings")
 }

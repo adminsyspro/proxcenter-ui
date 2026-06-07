@@ -1,7 +1,7 @@
 // src/app/api/v1/connections/route.ts
 import { NextResponse } from "next/server"
 
-import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getVdcScope } from "@/lib/vdc/scope"
 import { encryptSecret } from "@/lib/crypto/secret"
@@ -309,29 +309,28 @@ export async function POST(req: Request) {
       }
     }
 
-    const prisma = await getSessionPrisma()
-    const created = await prisma.connection.create({
-      data,
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        baseUrl: true,
-        behindProxy: true,
-        insecureTLS: true,
-        hasCeph: true,
-        latitude: true,
-        longitude: true,
-        locationLabel: true,
-        country: true,
-        sshEnabled: true,
-        sshPort: true,
-        sshUser: true,
-        sshAuthMethod: true,
-        sshUseSudo: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // v1.5: create the connection and (for provider-owned PVE) its
+    // provider_connections row atomically. The pool-sync trigger is DEFERRABLE
+    // INITIALLY DEFERRED and validates at COMMIT, so both rows must land in one
+    // transaction. Use the GLOBAL client (provider_connections has no tenant_id
+    // column) and set tenant_id explicitly instead of relying on the
+    // tenant-scoped client's injection.
+    const tenantId = await getCurrentTenantId()
+    const created = await globalPrisma.$transaction(async (tx) => {
+      const conn = await tx.connection.create({
+        data: { ...data, tenantId },
+        select: {
+          id: true, name: true, type: true, baseUrl: true, behindProxy: true,
+          insecureTLS: true, hasCeph: true, latitude: true, longitude: true,
+          locationLabel: true, country: true, sshEnabled: true, sshPort: true,
+          sshUser: true, sshAuthMethod: true, sshUseSudo: true, createdAt: true,
+          updatedAt: true,
+        },
+      })
+      if (conn.type === 'pve' && tenantId === DEFAULT_TENANT_ID) {
+        await tx.providerConnection.create({ data: { connectionId: conn.id } })
+      }
+      return conn
     })
 
     // Audit

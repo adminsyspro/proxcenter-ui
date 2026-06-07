@@ -12,9 +12,21 @@
  * The helper is pure (no DB), so we exercise its branches directly.
  */
 
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from './backupJobs'
+// getAllowedJobPools resolves the caller's infrastructure scope, which hits
+// prisma for non-default tenants. Stub only that resolver; keep maskingScope
+// (and the rest of the module) real so the provider/msp -> null mapping is
+// exercised end to end.
+const { getTenantInfrastructureScopeMock } = vi.hoisted(() => ({
+  getTenantInfrastructureScopeMock: vi.fn(),
+}))
+vi.mock('@/lib/tenant/infraScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tenant/infraScope')>()),
+  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
+}))
+
+import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from './backupJobs'
 import type { VdcScope } from './scope'
 
 const CONN = 'conn-pve-1'
@@ -138,6 +150,36 @@ describe('validateTenantJobInfra (storage / node / fleecing / namespace)', () =>
   it('treats an empty body as a no-op (PUT with unrelated fields)', () => {
     const scope = makeScope()
     expect(validateTenantJobInfra({}, scope, CONN)).toBeNull()
+  })
+})
+
+describe('getAllowedJobPools (provider + MSP see the whole cluster, iaas is pool-scoped)', () => {
+  beforeEach(() => {
+    getTenantInfrastructureScopeMock.mockReset()
+  })
+
+  it('returns null for the provider — no pool filter, full cluster view', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    expect(await getAllowedJobPools('default', CONN)).toBeNull()
+  })
+
+  it('returns null for an MSP tenant — it owns the whole cluster, so backup jobs are unfiltered', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set([CONN]) })
+    expect(await getAllowedJobPools('tenant-msp', CONN)).toBeNull()
+  })
+
+  it('returns the vDC pool set for an iaas tenant on a connection it slices', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: makeScope({ pools: ['pool-acme'] }) })
+    const pools = await getAllowedJobPools('tenant-iaas', CONN)
+    expect(pools).not.toBeNull()
+    expect([...pools!]).toEqual(['pool-acme'])
+  })
+
+  it('returns an empty (deny-all) set for an iaas tenant with no vDC on the target connection', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: makeScope({ pools: ['pool-acme'] }) })
+    const pools = await getAllowedJobPools('tenant-iaas', 'conn-without-vdc')
+    expect(pools).not.toBeNull()
+    expect(pools!.size).toBe(0)
   })
 })
 

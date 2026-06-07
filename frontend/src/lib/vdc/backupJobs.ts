@@ -14,8 +14,11 @@
 //     (validateTenantJobInfra)
 //
 // Provider (default tenant) gets the unfiltered cluster-wide view, same
-// as before. The function returns `null` to signal "no filter applies"
-// so callers can short-circuit cleanly.
+// as before. An MSP tenant directly owns the connection's whole cluster,
+// so it is treated exactly like the provider here: full job view, any
+// selection mode, no pool/storage/node masking. Only iaas (vDC) tenants
+// are pool-scoped. The function returns `null` to signal "no filter
+// applies" so callers can short-circuit cleanly.
 //
 // The strict pool-only contract for tenant-side mutations is intentional:
 // `selectionMode='include'` (vmid list) and `selectionMode='all'` would
@@ -24,18 +27,23 @@
 // silently keep backing up a foreign VM. The pool-based contract makes
 // drift impossible.
 
-import { getVdcScope, type VdcScope } from './scope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
+
+import { type VdcScope } from './scope'
 
 /**
  * Returns the set of PVE pool names a tenant is allowed to target via
- * backup jobs on the given connection. `null` means the caller is the
- * provider (default tenant) — no filter, full cluster view.
+ * backup jobs on the given connection. `null` means the caller sees the
+ * whole cluster with no pool filter — either the provider (default tenant)
+ * or an MSP tenant, which directly owns the connection's cluster.
  *
- * An empty Set means the tenant has no vDC on this connection: every
- * job is forbidden, every list is empty.
+ * An empty Set means an iaas (vDC) tenant has no vDC on this connection:
+ * every job is forbidden, every list is empty.
  */
 export async function getAllowedJobPools(tenantId: string, connectionId: string): Promise<Set<string> | null> {
-  const scope = await getVdcScope(tenantId)
+  // maskingScope is null for the provider AND for MSP tenants (both own the
+  // full cluster, no pool filter) and the vDC scope for an iaas tenant.
+  const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
   if (!scope) return null
   return scope.poolsByConnection.get(connectionId) ?? new Set<string>()
 }

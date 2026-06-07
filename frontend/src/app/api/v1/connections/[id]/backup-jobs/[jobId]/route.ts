@@ -5,8 +5,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
-import { getVdcScope } from "@/lib/vdc/scope"
 
 /**
  * Tenant ownership check used by every per-job endpoint. Loads the job
@@ -17,7 +17,7 @@ import { getVdcScope } from "@/lib/vdc/scope"
  */
 async function loadJobForTenant(conn: any, connectionId: string, jobId: string) {
   const tenantId = await getCurrentTenantId()
-  const scope = await getVdcScope(tenantId)
+  const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
   const allowedPools = await getAllowedJobPools(tenantId, connectionId)
   let job: any
   try {

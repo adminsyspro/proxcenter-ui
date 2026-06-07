@@ -5,8 +5,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, validateTenantJobInfra } from "@/lib/vdc/backupJobs"
-import { getVdcScope } from "@/lib/vdc/scope"
 
 export const runtime = "nodejs"
 
@@ -41,7 +41,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // connection means tenant with no vDC on this connection (nothing
     // visible).
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     const allowedPools = await getAllowedJobPools(tenantId, id)
 
     // Récupérer les backup jobs
@@ -277,7 +277,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     // same vDC. Provider can use any selectionMode the original payload
     // offers.
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     const allowedPools = await getAllowedJobPools(tenantId, id)
     if (allowedPools !== null && scope !== null) {
       const poolError = validateTenantJobBody(body, allowedPools)

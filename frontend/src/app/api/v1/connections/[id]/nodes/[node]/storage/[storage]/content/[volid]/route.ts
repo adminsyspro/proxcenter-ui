@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getVdcScope, guardTenantStorageWrite } from "@/lib/vdc/scope"
+import { guardTenantStorageWrite } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 
@@ -39,7 +40,9 @@ export async function DELETE(
     // filename, refuse delete on iso/import volumes whose filename doesn't
     // match `custom-<tenantSlug>-*`. Super admins (scope===null) skip this.
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    // provider + msp own the full cluster (maskingScope null → no prefix guard);
+    // iaas tenants keep the per-tenant filename-ownership check below.
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope) {
       const m = decodedVolid.match(/^[^:]+:([^/]+)\/(.+)$/)
       const itemContent = m?.[1] || ''

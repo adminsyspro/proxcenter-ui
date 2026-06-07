@@ -4,7 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma } from "@/lib/db/prisma"
 
 export const runtime = "nodejs"
@@ -34,7 +34,9 @@ export async function GET(
     // (getVdcScope returns null for them). Stops cross-tenant enumeration on
     // shared storages the tenant never attached.
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    // provider + msp see the full cluster (maskingScope null → no filtering);
+    // iaas tenants are restricted to their vDC storages.
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope) {
       const allowed = scope.storagesByConnection.get(id)
       if (!allowed || !allowed.has(storage)) {

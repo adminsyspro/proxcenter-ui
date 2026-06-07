@@ -4,7 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { buildBridgeVlanMap, resolveEffectiveTag } from "@/lib/proxmox/hostVlanMap"
 
 export const runtime = "nodejs"
@@ -104,7 +104,9 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // a shared PVE cluster (cross-vDC leak). super-admin / provider tenant
     // returns null scope -> no filtering applied.
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    // provider + msp see the full cluster (maskingScope null → no pool filter);
+    // iaas tenants are restricted to their vDC pools.
+    const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
     let resources = allResources
     if (vdcScope) {
       const allowedPools = vdcScope.poolsByConnection.get(id)

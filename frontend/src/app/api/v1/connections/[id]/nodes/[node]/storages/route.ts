@@ -4,7 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -65,7 +65,8 @@ return contents.includes(contentFilter)
     // tenant can't dump a backup onto a non-isolated provider storage —
     // PBS namespace isolation is the only supported tenant backup path.
     const tenantId = await getCurrentTenantId()
-    const scope = await getVdcScope(tenantId)
+    // provider + msp see the full cluster (maskingScope null); iaas = vDC slice.
+    const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
     if (scope && storages) {
       const allowed = scope.storagesByConnection.get(id)
       storages = allowed

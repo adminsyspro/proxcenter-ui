@@ -43,7 +43,11 @@ export function useRBACScopeProfile(): ScopeProfile {
   // nodes / hosts / clusters are an implementation detail and never appear
   // in their UI, regardless of RBAC scope.
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
-  const hideInfra = !tenantLoading && !!currentTenant && !isProviderTenant
+  // MSP-mode tenants own whole clusters, so they keep the infra views
+  // (tree / hosts) like the provider. Only vDC / IaaS tenants get the
+  // cloud-style abstraction that hides node/cluster topology.
+  const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
+  const hideInfra = !tenantLoading && !!currentTenant && !isProviderTenant && !isMspTenant
 
   return useMemo(() => {
     const restrict = (profile: ScopeProfile): ScopeProfile => {

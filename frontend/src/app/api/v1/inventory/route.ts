@@ -14,7 +14,8 @@ import {
   getInflightFetch,
   setInflightFetch,
 } from "@/lib/cache/inventoryCache"
-import { getVdcScope, applyVdcFilter } from "@/lib/vdc/scope"
+import { applyVdcFilter } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope, type InfraScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -123,32 +124,33 @@ type ExternalHypervisor = {
   type: string
 }
 
-async function fetchRawInventory(vdcScope?: import('@/lib/vdc/scope').VdcScope | null): Promise<{
+async function fetchRawInventory(infra: InfraScope): Promise<{
   clusters: ClusterData[]
   pbsServers: PbsServerData[]
   externalHypervisors: ExternalHypervisor[]
   storages: any[]
   stats: { totalClusters: number; totalNodes: number; totalGuests: number; onlineNodes: number; runningGuests: number; totalPbsServers: number; totalDatastores: number; totalBackups: number }
 }> {
-  const prisma = await getSessionPrisma()
-  // For tenants with vDCs: load connections referenced by vDCs (they belong to the provider tenant)
-  const connPrisma = vdcScope ? globalPrisma : prisma
-  const pveWhere = vdcScope
-    ? { type: 'pve' as const, id: { in: [...vdcScope.connectionIds] } }
+  const sessionPrisma = await getSessionPrisma()
+  const plan = inventoryConnectionPlan(infra)
+  const pveClient = plan.pveClient === 'global' ? globalPrisma : sessionPrisma
+  const pbsExtClient = plan.pbsExtClient === 'global' ? globalPrisma : sessionPrisma
+  const pveWhere = plan.pveConnectionIds
+    ? { type: 'pve' as const, id: { in: plan.pveConnectionIds } }
     : { type: 'pve' as const }
 
   const [pveConnections, pbsConnections, externalConnections] = await Promise.all([
-    connPrisma.connection.findMany({
+    pveClient.connection.findMany({
       where: pveWhere,
       orderBy: { createdAt: 'desc' },
       select: { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true, sshEnabled: true, tenantId: true },
     }),
-    prisma.connection.findMany({
+    pbsExtClient.connection.findMany({
       where: { type: 'pbs' },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, tenantId: true },
     }),
-    prisma.connection.findMany({
+    pbsExtClient.connection.findMany({
       where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } },
       orderBy: { createdAt: 'desc' },
       select: { id: true, name: true, type: true },
@@ -363,7 +365,9 @@ return aId - bId
   // 3) Pour chaque connexion PBS, charger status et datastores EN PARALLÈLE
   const pbsPromises = pbsConnections.map(async (conn): Promise<PbsServerData | null> => {
     try {
-      const connConfig = await getPbsConnectionById(conn.id)
+      // Pass the connection's own tenantId so the provider (global query) can
+      // open PBS servers owned by MSP tenants, not just default-owned ones.
+      const connConfig = await getPbsConnectionById(conn.id, (conn as any).tenantId)
 
       const [statusResult, datastoresResult] = await Promise.allSettled([
         pbsFetch<any>(connConfig, '/status'),
@@ -518,12 +522,12 @@ return aId - bId
  * Blocking fetch with thundering-herd protection.
  * Used on cache miss or force refresh — the caller awaits the result.
  */
-async function blockingFetch(tenantId: string, vdcScope?: import('@/lib/vdc/scope').VdcScope | null) {
+async function blockingFetch(tenantId: string, infra: InfraScope) {
   let inflight = getInflightFetch(tenantId)
 
   if (inflight === null) {
     const startTime = Date.now()
-    inflight = fetchRawInventory(vdcScope)
+    inflight = fetchRawInventory(infra)
       .then(result => {
         console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
         setCachedInventory(result, tenantId)
@@ -544,11 +548,11 @@ async function blockingFetch(tenantId: string, vdcScope?: import('@/lib/vdc/scop
  * Trigger a background revalidation if one isn't already in progress.
  * Fire-and-forget — errors are logged but don't affect the current request.
  */
-function triggerBackgroundRevalidation(tenantId: string, vdcScope?: import('@/lib/vdc/scope').VdcScope | null) {
+function triggerBackgroundRevalidation(tenantId: string, infra: InfraScope) {
   if (getInflightFetch(tenantId) !== null) return
 
   const startTime = Date.now()
-  const revalidation = fetchRawInventory(vdcScope)
+  const revalidation = fetchRawInventory(infra)
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
       setCachedInventory(result, tenantId)
@@ -575,7 +579,8 @@ export async function GET(request: NextRequest) {
 
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const mask = maskingScope(infra)
 
     // 1) Tenter le cache (sauf si refresh forcé)
     const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId)
@@ -589,18 +594,16 @@ export async function GET(request: NextRequest) {
       // Cache is stale — serve immediately, trigger background revalidation
       console.log('[inventory] Serving stale data, revalidating in background')
       raw = cacheResult.data
-      triggerBackgroundRevalidation(tenantId, vdcScope)
+      triggerBackgroundRevalidation(tenantId, infra)
     } else {
       // Cache miss or force refresh — blocking fetch required
-      raw = await blockingFetch(tenantId, vdcScope)
+      raw = await blockingFetch(tenantId, infra)
     }
 
     // 2) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache)
     //    Also filter by vDC connection scope — only include clusters whose
     //    connection is part of the tenant's vDC assignments.
-    const visibleRawClusters = vdcScope
-      ? raw.clusters.filter(c => vdcScope.connectionIds.has(c.id))
-      : raw.clusters
+    const visibleRawClusters = mask ? raw.clusters.filter(c => mask.connectionIds.has(c.id)) : raw.clusters
 
     let clusters: ClusterData[] = visibleRawClusters.map(c => ({
       ...c,
@@ -639,7 +642,7 @@ export async function GET(request: NextRequest) {
         }
       }
       // Then apply vDC filter (nodes + pool membership)
-      return applyVdcFilter(filtered, vdcScope)
+      return applyVdcFilter(filtered, mask)
     }))
 
     // 4) Recalculer les stats après filtrage RBAC

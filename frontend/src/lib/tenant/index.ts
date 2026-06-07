@@ -21,6 +21,7 @@ export interface Tenant {
   name: string
   description: string | null
   enabled: boolean
+  operatingModel: string | null
   settings: Record<string, any> | null
   createdBy: string | null
   createdAt: string
@@ -33,6 +34,7 @@ function rowToTenant(row: {
   name: string
   description: string | null
   enabled: boolean
+  operatingModel: string | null
   settings: Prisma.JsonValue | null
   createdBy: string | null
   createdAt: Date
@@ -44,6 +46,7 @@ function rowToTenant(row: {
     name: row.name,
     description: row.description,
     enabled: row.enabled,
+    operatingModel: row.operatingModel,
     settings:
       row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
         ? (row.settings as Record<string, any>)

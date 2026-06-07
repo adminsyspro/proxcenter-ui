@@ -10,6 +10,7 @@ interface TenantInfo {
   slug: string
   name: string
   description?: string | null
+  operatingModel?: string | null
 }
 
 interface TenantContextType {

@@ -442,6 +442,10 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // (see also vDC strategy: dedicated storage per tenant for full isolation).
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
+  // MSP-mode tenants own whole clusters (no vDC slice), so they get the full
+  // cluster view like the provider, not the vDC abstraction.
+  const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
+  const isFullClusterView = isProviderTenant || isMspTenant
   const { trackTask } = useTaskTracker()
   const { getColor: getTagColor, loadConnection } = useTagColors()
   const [loading, setLoading] = useState(true)
@@ -2414,7 +2418,7 @@ return favorites.has(vmKey)
     if (!isHydrated) return
     if (!expandedNetSections.has('network')) return
     if (clusters.length === 0) return
-    if (isProviderTenant) {
+    if (isFullClusterView) {
       if (!networkFetchedRef.current) {
         networkFetchedRef.current = true
         fetchNetworksRef.current?.()
@@ -2425,7 +2429,7 @@ return favorites.has(vmKey)
         void fetchTenantVnets()
       }
     }
-  }, [isHydrated, expandedNetSections, clusters.length, isProviderTenant, fetchTenantVnets])
+  }, [isHydrated, expandedNetSections, clusters.length, isFullClusterView, fetchTenantVnets])
 
   // Build network tree: Connection → Node → VLAN → VMs
   const networkTree = useMemo(() => {
@@ -3445,8 +3449,9 @@ return (
           }
 
           // Pour un tenant vDC (non-admin), on n'affiche pas le noeud cluster,
-          // on rend les nodes directement au premier niveau
-          if (!isAdmin) {
+          // on rend les nodes directement au premier niveau. Les tenants MSP
+          // possèdent le cluster entier → vue complète (comme le provider).
+          if (!isAdmin && !isMspTenant) {
             return clu.nodes.map(n => (
               <TreeItem
                 key={`${clu.connId}:${n.node}`}
@@ -3775,7 +3780,7 @@ return (
             <Box
               onClick={(e) => {
                 e.stopPropagation()
-                if (isProviderTenant) {
+                if (isFullClusterView) {
                   if (!networkFetchedRef.current) {
                     networkFetchedRef.current = true
                     fetchNetworks()
@@ -3795,12 +3800,12 @@ return (
             </Box>
             <i className="ri-router-fill" style={{ fontSize: 14, opacity: 0.7 }} />
             <Typography variant="body2" sx={{ fontWeight: 700 }}>NETWORK</Typography>
-            {isProviderTenant && networkData.length > 0 && (
+            {isFullClusterView && networkData.length > 0 && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
                 ({new Set(networkData.flatMap(v => v.nets.filter(n => n.tag != null).map(n => n.tag))).size} VLANs)
               </Typography>
             )}
-            {!isProviderTenant && tenantVnets.length > 0 && (
+            {!isFullClusterView && tenantVnets.length > 0 && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
                 ({tenantVnets.length} VNet{tenantVnets.length > 1 ? 's' : ''})
               </Typography>
@@ -3810,7 +3815,7 @@ return (
             {/* Tenant view: skip the bridge / VLAN walk and show VNets only.
                 Each VNet is a direct leaf under the Network section, optionally
                 grouped by vDC name when there are multiple vDCs. */}
-            {!isProviderTenant ? (
+            {!isFullClusterView ? (
               tenantVnetsLoading ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 2 }}>
                   <CircularProgress size={16} />

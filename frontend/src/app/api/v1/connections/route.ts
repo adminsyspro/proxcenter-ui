@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { encryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
@@ -34,24 +34,23 @@ export async function GET(req: Request) {
     if (typeFilter) where.type = typeFilter
     if (hasCephFilter === 'true') where.hasCeph = true
 
-    // vDC-aware: tenant's connections belong to the provider, use vDC scope to filter
+    // Tenant scope: provider sees all; iaas sees its vDC-referenced connections;
+    // msp sees the connections it directly owns (Connection.tenant_id).
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
-    const prisma = vdcScope ? globalPrisma : await getSessionPrisma()
+    const infra = await getTenantInfrastructureScope(tenantId)
 
-    // For vDC tenants, restrict to connections referenced by their vDCs.
-    // PVE connections come from vdcs.connection_id (→ scope.connectionIds);
-    // PBS connections come from vdc_pbs_namespaces (→ scope.pbsConnectionIds).
-    // When the caller asks for both (no type filter), allow either set.
-    if (vdcScope) {
-      const pveIds = [...vdcScope.connectionIds]
-      const pbsIds = [...vdcScope.pbsConnectionIds]
-      const allowedIds = typeFilter === 'pbs'
-        ? pbsIds
-        : typeFilter === 'pve'
-          ? pveIds
-          : [...pveIds, ...pbsIds]
-      where.id = { in: allowedIds }
+    let prisma: typeof globalPrisma | Awaited<ReturnType<typeof getSessionPrisma>>
+    if (infra.kind === "provider") {
+      prisma = globalPrisma
+    } else if (infra.kind === "msp") {
+      prisma = await getSessionPrisma()
+    } else {
+      prisma = globalPrisma
+      const pveIds = [...infra.vdcScope.connectionIds]
+      const pbsIds = [...infra.vdcScope.pbsConnectionIds]
+      where.id = {
+        in: typeFilter === "pbs" ? pbsIds : typeFilter === "pve" ? pveIds : [...pveIds, ...pbsIds],
+      }
     }
 
     const connections = await prisma.connection.findMany({

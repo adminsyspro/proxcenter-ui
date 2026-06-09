@@ -2204,7 +2204,7 @@ return
                     }}
                   />
                   {/* Migration type selector — hidden for Hyper-V / Nutanix (cold only).
-                      vCenter and direct ESXi both support cold + live. */}
+                      vCenter and direct ESXi both support cold + warm. */}
                   {esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -2213,10 +2213,10 @@ return
                     <Stack direction="row" spacing={1}>
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                        // Warm (CBT, no in-transit data loss) is ESXi-direct only (hostType
-                        // 'vmware'). vCenter keeps its existing Live, and any other source that
-                        // reaches this selector (e.g. XCP-ng) keeps Live too — the backend rejects
-                        // warm for non-VMware sources.
+                        // Warm (CBT, no in-transit data loss) covers both direct ESXi (hostType
+                        // 'vmware') and vCenter. Any other source that reaches this selector
+                        // (e.g. XCP-ng) keeps Live, since the backend rejects warm for
+                        // non-VMware sources.
                         (esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter')
                           ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
                           : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },

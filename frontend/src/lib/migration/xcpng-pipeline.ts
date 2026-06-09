@@ -33,7 +33,7 @@ import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
-import { pveSetVmConfig } from "./pve-vm-config"
+import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -893,11 +893,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}`,
-          { method: "DELETE", body: new URLSearchParams({ purge: "1", "destroy-unreferenced-disks": "1" }) }
-        )
+        await destroyPveVm(pveConn, config.targetNode, targetVmid)
         await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
       } catch {
         // Cleanup failed — leave for manual intervention

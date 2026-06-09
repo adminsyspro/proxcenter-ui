@@ -26,3 +26,26 @@ export async function pveSetVmConfig(
     { timeoutMs: PVE_CONFIG_PUT_TIMEOUT_MS },
   )
 }
+
+/**
+ * Destroy a VM (`DELETE /nodes/{node}/qemu/{vmid}`), purging it from the cluster
+ * config and reclaiming any disks no longer referenced.
+ *
+ * The `purge` and `destroy-unreferenced-disks` flags MUST travel in the query
+ * string. PVE's DELETE handler rejects a request body outright with
+ * `501 Unexpected content for method 'DELETE'`, which silently aborts the
+ * cleanup and leaks the VMID plus its disk on a failed migration (issue #400).
+ * Centralised here so every failed-migration cleanup path uses the query-string
+ * form and the body footgun can't be reintroduced on a new call site.
+ */
+export async function destroyPveVm(
+  pveConn: ProxmoxClientOptions,
+  node: string,
+  vmid: number | string,
+): Promise<void> {
+  await pveFetch<unknown>(
+    pveConn,
+    `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}?purge=1&destroy-unreferenced-disks=1`,
+    { method: "DELETE" },
+  )
+}

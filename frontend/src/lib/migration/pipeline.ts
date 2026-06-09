@@ -25,7 +25,7 @@ import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloa
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
-import { pveSetVmConfig } from "./pve-vm-config"
+import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
@@ -2908,11 +2908,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}`,
-          { method: "DELETE", body: new URLSearchParams({ purge: "1", "destroy-unreferenced-disks": "1" }) }
-        )
+        await destroyPveVm(pveConn, config.targetNode, targetVmid)
         await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
       } catch {
         // Cleanup failed — leave for manual intervention

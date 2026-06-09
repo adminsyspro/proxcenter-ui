@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -48,11 +48,13 @@ export async function GET(
     // by their vDC bindings (vdc_pbs_namespaces) using the global client +
     // an id whitelist, mirroring `/api/v1/connections?type=pbs`.
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
     const sessionPrisma = await getSessionPrisma()
-    const connPrisma = vdcScope ? globalPrisma : sessionPrisma
+    // iaas uses GLOBAL + vDC id filter (provider-owned PBS, tenant can't see them via session);
+    // provider uses GLOBAL with no filter (all PBS); msp uses SESSION (its own owned PBS).
+    const connPrisma = infra.kind === 'msp' ? sessionPrisma : globalPrisma
     const pbsWhere: any = { type: 'pbs' }
-    if (vdcScope) pbsWhere.id = { in: [...vdcScope.pbsConnectionIds] }
+    if (infra.kind === 'iaas') pbsWhere.id = { in: [...infra.vdcScope.pbsConnectionIds] }
     const pbsConnections = await connPrisma.connection.findMany({
       where: pbsWhere,
       select: {

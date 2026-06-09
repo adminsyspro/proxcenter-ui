@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
@@ -32,7 +32,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // vdcs.connection_id, PBS via vdc_pbs_namespaces). Mutations stay
     // tenant-scoped via getSessionPrisma() in PATCH/DELETE below.
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const vdcScope = maskingScope(infra)
 
     const connection = await globalPrisma.connection.findUnique({
       where: { id },
@@ -43,10 +44,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const ownsConnection = (connection as any).tenantId === tenantId
-    const allowedByVdc = !!vdcScope && (
-      vdcScope.connectionIds.has(id) || vdcScope.pbsConnectionIds.has(id)
-    )
-    if (!ownsConnection && !allowedByVdc) {
+    const allowedByVdc = !!vdcScope && (vdcScope.connectionIds.has(id) || vdcScope.pbsConnectionIds.has(id))
+    const allowedByProvider = infra.kind === 'provider'
+    if (!ownsConnection && !allowedByVdc && !allowedByProvider) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 

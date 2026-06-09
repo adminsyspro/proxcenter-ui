@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
-import { getVdcScope } from '@/lib/vdc/scope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 
 export const runtime = 'nodejs'
 
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
     // vDC tenant on a cluster shared with the provider (or another tenant)
     // would otherwise see every change on that cluster regardless of node
     // or pool. Pull the vDC scope and tighten on (node, pool) when present.
-    const vdcScope = await getVdcScope(await getCurrentTenantId())
+    const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+    const vdcScope = maskingScope(infra)
 
     const query = params.toString()
     const data = await orchestratorFetch<any>(`/changes${query ? `?${query}` : ''}`)
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
       data.data = data.data.filter((c: any) => {
         // Strict: drop records without a connection. App-wide events are
         // cluster-less and can leak provider-internal state to tenants.
-        if (!c.connectionId) return vdcScope === null
+        if (!c.connectionId) return infra.kind === 'provider'
         if (!tenantConnectionIds.has(c.connectionId)) return false
         // Provider tenants (no scope) keep the connection-level filter only.
         if (!vdcScope) return true

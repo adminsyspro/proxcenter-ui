@@ -5,7 +5,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
 import { formatBytes, formatUptime } from "@/utils/format"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
+import { prisma as globalPrisma } from "@/lib/db/prisma"
 
 export const runtime = "nodejs"
 
@@ -30,12 +31,25 @@ export async function GET(req: Request) {
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
 
+    // Resolve infrastructure scope once; used for both connection enumeration
+    // and vDC masking later. Provider and MSP avoid calling getVdcScope.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const plan = inventoryConnectionPlan(infra)
+    const connPrisma = plan.pveClient === 'global' ? globalPrisma : prisma
+
     // Récupérer les connexions PVE
-    const connections = await prisma.connection.findMany({
+    let connections = await connPrisma.connection.findMany({
       where: { type: 'pve' },
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, tenantId: true },
     })
+
+    // For iaas, restrict to the vDC-referenced connection ids
+    if (plan.pveConnectionIds) {
+      const allowed = new Set(plan.pveConnectionIds)
+      connections = connections.filter(c => allowed.has(c.id))
+    }
 
     if (!connections.length) {
       return NextResponse.json({
@@ -54,7 +68,7 @@ export async function GET(req: Request) {
     // Charger toutes les connexions EN PARALLÈLE
     const connectionPromises = targetConnections.map(async (conn) => {
       try {
-        const connData = await getConnectionById(conn.id)
+        const connData = await getConnectionById(conn.id, (conn as any).tenantId)
 
         if (!connData.baseUrl || !connData.apiToken) return []
 
@@ -122,8 +136,8 @@ return []
     }
 
     // vDC filtering: restrict VMs to those in the tenant's vDC pools
-    const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    // (infra and tenantId already resolved above)
+    const vdcScope = maskingScope(infra)
 
     if (vdcScope) {
       allVms = allVms.filter(vm => {

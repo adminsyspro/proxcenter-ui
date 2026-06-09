@@ -5,6 +5,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { getSessionPrisma } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
 import { extractTaskVmid } from "@/lib/tasks/scope"
 
@@ -67,9 +68,14 @@ export async function GET(req: Request) {
     if (permError) return permError
 
     const { getCurrentTenantId } = await import('@/lib/tenant')
-    const { getVdcScope } = await import('@/lib/vdc/scope')
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+
+    // Resolve infrastructure scope: provider sees all connections, msp sees
+    // tenant-owned, iaas is restricted to vDC-referenced connection ids.
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const plan = inventoryConnectionPlan(infra)
+    const vdcScope = maskingScope(infra)
+
     // Pool-level scope (shared-node MSP clusters need this on top of the
     // node filter, which collapses to a no-op when every vDC owns every
     // node).
@@ -79,14 +85,12 @@ export async function GET(req: Request) {
     const limit = Math.min(Number.parseInt(searchParams.get('limit') || '100'), 500)
     const source = searchParams.get('source') || 'all' // 'tasks', 'logs', 'all'
 
-    // For vDC tenants, the PVE connections their vDC consumes are owned by a
-    // different tenant (the provider) so the session-scoped client can't see
-    // them. Use the global client + an explicit id whitelist from the scope,
-    // mirroring /api/v1/guests/{vmid}/backups. Without this fix the tenant
-    // gets an empty connections list and zero tasks in the taskbar.
-    const connPrisma = vdcScope ? globalPrisma : sessionPrisma
+    // Choose the connection client based on tenant kind: provider + iaas use
+    // global (see all / filtered-by-id); msp uses the session client
+    // (tenant-owned connections only).
+    const connPrisma = plan.pveClient === 'global' ? globalPrisma : sessionPrisma
     const connWhere: any = { type: 'pve' }
-    if (vdcScope) connWhere.id = { in: [...vdcScope.connectionIds] }
+    if (plan.pveConnectionIds) connWhere.id = { in: plan.pveConnectionIds }
     const connections = await connPrisma.connection.findMany({ where: connWhere })
     
     if (connections.length === 0) {
@@ -99,7 +103,7 @@ export async function GET(req: Request) {
     await Promise.all(
       connections.map(async (conn) => {
         try {
-          const connection = await getConnectionById(conn.id)
+          const connection = await getConnectionById(conn.id, (conn as any).tenantId)
 
           // Récupérer les tâches
           if (source === 'all' || source === 'tasks') {

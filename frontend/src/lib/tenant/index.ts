@@ -304,16 +304,28 @@ export async function getSessionPrisma() {
  * getVdcScope returns null for them so no extra union happens.
  */
 export async function getTenantConnectionIds(): Promise<Set<string>> {
+  const tenantId = await getCurrentTenantId()
+
+  // Provider / NOC sees the whole fleet, including MSP-tenant-owned
+  // connections. The session client scopes to tenant_id='default' (pool
+  // only), so enumerate every connection with the global client instead.
+  if (tenantId === DEFAULT_TENANT_ID) {
+    const all = await prisma.connection.findMany({ select: { id: true } })
+    return new Set(all.map((c: any) => c.id))
+  }
+
+  // MSP tenants own their connections directly (the session client returns
+  // them). IaaS tenants own none directly but reach provider-pool PVE/PBS
+  // connections via their vDC bindings, so union those in.
   const tenantPrisma = await getSessionPrisma()
   const connections = await tenantPrisma.connection.findMany({ select: { id: true } })
   const ids = new Set(connections.map((c: any) => c.id))
 
-  // Union with vDC bindings — PVE under .connectionIds, PBS under
+  // Union with vDC bindings: PVE under .connectionIds, PBS under
   // .pbsConnectionIds. Imported lazily to keep the dependency direction
-  // tenant → vdc only at call time (vdc/scope.ts depends on this module
+  // tenant -> vdc only at call time (vdc/scope.ts depends on this module
   // for DEFAULT_TENANT_ID, so a top-level import would cycle).
   const { getVdcScope } = await import('@/lib/vdc/scope')
-  const tenantId = await getCurrentTenantId()
   const scope = await getVdcScope(tenantId)
   if (scope) {
     for (const cid of scope.connectionIds) ids.add(cid)

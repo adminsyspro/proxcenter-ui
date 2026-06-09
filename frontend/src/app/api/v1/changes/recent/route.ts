@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
-import { getVdcScope } from '@/lib/vdc/scope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 
 export const runtime = 'nodejs'
 
@@ -24,14 +24,15 @@ export async function GET(req: Request) {
     const tenantConnectionIds = await getTenantConnectionIds()
     // Same multi-tenant tightening as /api/v1/changes — connection-level
     // filter alone leaks neighbour activity on shared clusters.
-    const vdcScope = await getVdcScope(await getCurrentTenantId())
+    const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+    const vdcScope = maskingScope(infra)
 
     const data = await orchestratorFetch<any>(`/changes/recent?limit=100`)
 
     if (data?.data && Array.isArray(data.data)) {
       data.data = data.data
         .filter((c: any) => {
-          if (!c.connectionId) return vdcScope === null
+          if (!c.connectionId) return infra.kind === 'provider'
           if (!tenantConnectionIds.has(c.connectionId)) return false
           if (!vdcScope) return true
           const allowedNodes = vdcScope.nodesByConnection.get(c.connectionId)

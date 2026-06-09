@@ -97,9 +97,9 @@ export async function GET() {
     if (denied) return denied
 
     const { getCurrentTenantId } = await import('@/lib/tenant')
-    const { getVdcScope } = await import('@/lib/vdc/scope')
+    const { getTenantInfrastructureScope, maskingScope } = await import('@/lib/tenant/infraScope')
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
     // For vDC tenants on shared-node clusters the node filter is a no-op
     // (every vDC has every node in scope). Pool-membership is the real
     // boundary — pull the live vmid set per connection.
@@ -132,7 +132,7 @@ export async function GET() {
     await Promise.all(
       connections.map(async (conn) => {
         try {
-          const connection = await getConnectionById(conn.id)
+          const connection = await getConnectionById(conn.id, (conn as any).tenantId)
           let tasks: ProxmoxTask[] = []
           
           // Essayer d'abord /cluster/tasks (pour les clusters)

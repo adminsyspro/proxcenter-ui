@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 
 import { subscribe, type InventoryEvent } from "@/lib/cache/inventoryPoller"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
-import { getVdcScope } from "@/lib/vdc/scope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   // otherwise vmid=X from vDC A leaks to vDC B because they share a PVE
   // cluster (same connId). node:* events stay connection-scoped only.
   const tenantId = await getCurrentTenantId()
-  const vdcScope = await getVdcScope(tenantId)
+  const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
 
   const encoder = new TextEncoder()
 

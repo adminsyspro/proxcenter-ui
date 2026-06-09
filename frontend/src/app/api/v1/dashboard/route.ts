@@ -3,9 +3,11 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
-import { getVdcScope } from '@/lib/vdc/scope'
+import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
+import { prisma as globalPrisma } from '@/lib/db/prisma'
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
+import { listSnapshotsInNamespace } from "@/lib/proxmox/pbsNamespace"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { generateFingerprint } from "@/lib/alerts/fingerprint"
@@ -128,8 +130,10 @@ export async function GET(req: Request) {
     const userId = session.user.id
     const tenantId = (session as any).user?.tenantId || 'default'
 
-    // vDC scope: restrict dashboard to tenant's vDC resources
-    const vdcScope = await getVdcScope(tenantId)
+    // Infrastructure scope: provider sees all connections; msp sees owned; iaas is vDC-scoped
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const plan = inventoryConnectionPlan(infra)
+    const vdcScope = maskingScope(infra)
 
     // Thresholds configurés par l'utilisateur (via Settings > Alert thresholds)
     // Stockés localement en SQLite, fonctionne sans orchestrator (Community + Enterprise).
@@ -152,18 +156,28 @@ export async function GET(req: Request) {
       // Pas de config stockée, on garde les défauts
     }
 
-    // Récupérer toutes les connexions (PVE et PBS) en une seule requête
-    const allConnections = await prisma.connection.findMany({
+    // Choose the connection client based on tenant kind:
+    // provider + iaas use the global client (see all connections); msp uses the session (tenant-owned only)
+    const connPrisma = plan.pveClient === 'global' ? globalPrisma : prisma
+    const allConnections = await connPrisma.connection.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, type: true, hasCeph: true },
+      select: { id: true, name: true, type: true, hasCeph: true, tenantId: true },
     })
 
     let pveConnections = allConnections.filter(c => c.type === 'pve')
-    const pbsConnections = allConnections.filter(c => c.type === 'pbs')
+    let pbsConnections = allConnections.filter(c => c.type === 'pbs')
 
-    // If vDC scope is active, only fetch PVE connections that have vDCs for this tenant
-    if (vdcScope) {
-      pveConnections = pveConnections.filter(c => vdcScope.connectionIds.has(c.id))
+    // For iaas, further restrict PVE connections to those referenced by vDC config
+    if (plan.pveConnectionIds) {
+      const allowed = new Set(plan.pveConnectionIds)
+      pveConnections = pveConnections.filter(c => allowed.has(c.id))
+    }
+
+    // For iaas, restrict PBS connections to those assigned to the tenant's vDC
+    // (provider sees all PBS; msp only owns its connections via session client already)
+    if (infra.kind === 'iaas') {
+      const allowedPbs = infra.vdcScope.pbsConnectionIds
+      pbsConnections = pbsConnections.filter(c => allowedPbs.has(c.id))
     }
 
     // ============================================
@@ -173,7 +187,7 @@ export async function GET(req: Request) {
       // PVE
       Promise.all(pveConnections.map(async (conn) => {
         try {
-          const connData = await getConnectionById(conn.id)
+          const connData = await getConnectionById(conn.id, (conn as any).tenantId)
 
           if (!connData.baseUrl || !connData.apiToken) return null
 
@@ -257,17 +271,36 @@ return null
       // PBS
       Promise.all(pbsConnections.map(async (conn) => {
         try {
-          const connData = await getPbsConnectionById(conn.id)
-          
+          const connData = await getPbsConnectionById(conn.id, (conn as any).tenantId)
+
+          // IaaS tenants share a PBS by namespace: only expose their assigned namespaces.
+          // Provider (NOC sees all) and MSP (owns the whole connection) keep the full aggregation.
+          const isIaas = infra.kind === 'iaas'
+          const nsAllowed = isIaas ? infra.vdcScope.pbsNamespacesByConnection.get(conn.id) : null
+          if (isIaas && (!nsAllowed || nsAllowed.length === 0)) return null
+
+          // Build a per-datastore namespace map for IaaS (unused for provider/MSP).
+          const nsByStore = new Map<string, string[]>()
+          if (nsAllowed) {
+            for (const { datastore, namespace } of nsAllowed) {
+              const list = nsByStore.get(datastore) ?? []
+              list.push(namespace)
+              nsByStore.set(datastore, list)
+            }
+          }
+
           const pbsTimeout = { signal: AbortSignal.timeout(15000) }
 
-          const [datastores, tasks] = await Promise.allSettled([
+          // Provider/MSP: fetch tasks server-wide. IaaS: skip (tasks cannot be scoped to a namespace).
+          const [datastores, tasksResult] = await Promise.allSettled([
             pbsFetch<any[]>(connData, "/admin/datastore", pbsTimeout),
-            pbsFetch<any[]>(connData, "/nodes/localhost/tasks?limit=200&typefilter=backup,verify,garbage_collection", pbsTimeout),
+            isIaas
+              ? Promise.resolve([] as any[])
+              : pbsFetch<any[]>(connData, "/nodes/localhost/tasks?limit=200&typefilter=backup,verify,garbage_collection", pbsTimeout),
           ])
 
           const datastoreList = datastores.status === 'fulfilled' ? datastores.value || [] : []
-          const taskList = tasks.status === 'fulfilled' ? tasks.value || [] : []
+          const taskList = tasksResult.status === 'fulfilled' ? tasksResult.value || [] : []
 
           // Stats des datastores + count snapshots last 24h in parallel
           const now = Date.now() / 1000
@@ -281,20 +314,43 @@ return null
 
             if (!storeName) return null
 
+            // IaaS: skip datastores not assigned to this tenant's namespaces.
+            if (isIaas && !nsByStore.has(storeName)) return null
+
             try {
-              const [dsStatus, snapshots] = await Promise.allSettled([
-                pbsFetch<any>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/status`, { signal: AbortSignal.timeout(10000) }),
-                pbsFetch<any[]>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/snapshots`, { signal: AbortSignal.timeout(10000) }),
-              ])
+              // IaaS tenants share a PBS by namespace — datastore capacity is server-wide and
+              // cannot be attributed to a single namespace. Fetching /status would expose the
+              // total/used of the whole datastore (including other tenants' data), so we skip
+              // it entirely and return zeroed capacity for the IaaS branch.
+              // Provider and MSP always fetch /status and report real numbers.
+              const dsStatus = isIaas
+                ? null
+                : await pbsFetch<any>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/status`, { signal: AbortSignal.timeout(10000) }).catch(() => null)
+              const status = dsStatus
 
-              const status = dsStatus.status === 'fulfilled' ? dsStatus.value : null
-              const snaps = snapshots.status === 'fulfilled' ? (snapshots.value || []) : []
-
-              // Count snapshots created in the last 24h
-              const recent = snaps.filter((s: any) => {
-                const btime = s['backup-time'] || s.backup_time || s.ctime || 0
-                return btime > cutoff24h
-              })
+              let recent: any[]
+              if (isIaas) {
+                // IaaS: count snapshots only from the tenant's assigned namespaces.
+                const allowedNamespaces = nsByStore.get(storeName) ?? []
+                const nsSnapshots = await Promise.all(
+                  allowedNamespaces.map(ns =>
+                    listSnapshotsInNamespace(connData, storeName, ns).catch(() => [] as any[])
+                  )
+                )
+                const allNsSnaps = nsSnapshots.flat()
+                recent = allNsSnaps.filter((s: any) => {
+                  const btime = s['backup-time'] || s.backup_time || s.ctime || 0
+                  return btime > cutoff24h
+                })
+              } else {
+                // Provider/MSP: use the bulk datastore-wide snapshots endpoint.
+                const snapshotsResult = await pbsFetch<any[]>(connData, `/admin/datastore/${encodeURIComponent(storeName)}/snapshots`, { signal: AbortSignal.timeout(10000) }).catch(() => [] as any[])
+                const snaps = snapshotsResult || []
+                recent = snaps.filter((s: any) => {
+                  const btime = s['backup-time'] || s.backup_time || s.ctime || 0
+                  return btime > cutoff24h
+                })
+              }
 
               backupsTotal24h += recent.length
               // PBS snapshots that exist are successful (failed backups don't create snapshots)
@@ -302,9 +358,11 @@ return null
 
               return {
                 name: storeName,
-                total: Number(status?.total || 0),
-                used: Number(status?.used || 0),
-                avail: Number(status?.avail || 0),
+                // IaaS: capacity intentionally not exposed (namespace-scoped tenants must not
+                // see datastore-wide total/used which spans all tenants sharing the PBS).
+                total: isIaas ? 0 : Number(status?.total || 0),
+                used: isIaas ? 0 : Number(status?.used || 0),
+                avail: isIaas ? 0 : Number(status?.avail || 0),
               }
             } catch { return null }
           }))
@@ -316,19 +374,35 @@ return null
             if (ds) { totalSize += ds.total; totalUsed += ds.used }
           }
 
-          // Count failed backup tasks from task log (tasks with status !== OK)
-          const last24h = taskList.filter((t: any) => t.starttime && t.starttime > cutoff24h)
-          const failedBackupTasks = last24h.filter((t: any) =>
-            (t.worker_type === 'backup') && t.status && t.status !== 'OK'
-          )
-          const verifyTasks = last24h.filter((t: any) => t.worker_type === 'verify')
+          // Provider/MSP: aggregate failed backup tasks from the server-wide task log.
+          // IaaS: tasks are server-wide and cannot be attributed to a namespace; suppress entirely.
+          let failedBackupTasks: any[]
+          let verifyTasks: any[]
+          let recentErrors: any[]
 
-          // Add failed tasks to total (they don't create snapshots)
-          backupsTotal24h += failedBackupTasks.length
+          if (isIaas) {
+            failedBackupTasks = []
+            verifyTasks = []
+            recentErrors = []
+          } else {
+            const last24h = taskList.filter((t: any) => t.starttime && t.starttime > cutoff24h)
+            failedBackupTasks = last24h.filter((t: any) =>
+              (t.worker_type === 'backup') && t.status && t.status !== 'OK'
+            )
+            verifyTasks = last24h.filter((t: any) => t.worker_type === 'verify')
+            recentErrors = last24h.filter((t: any) => t.status && t.status !== 'OK').slice(0, 5).map((t: any) => ({
+              type: t.worker_type,
+              id: t.worker_id,
+              status: t.status,
+              time: t.starttime,
+            }))
+            // Add failed tasks to total (they don't create snapshots)
+            backupsTotal24h += failedBackupTasks.length
+          }
 
           return {
             conn,
-            datastoreCount: datastoreList.length,
+            datastoreCount: validDsStats.length,
             totalSize,
             totalUsed,
             usagePct: totalSize > 0 ? round1((totalUsed / totalSize) * 100) : 0,
@@ -337,16 +411,11 @@ return null
               backup: { total: backupsTotal24h, ok: backupsOk24h, error: failedBackupTasks.length },
               verify: { total: verifyTasks.length, ok: verifyTasks.filter((t: any) => t.status === 'OK').length, error: verifyTasks.filter((t: any) => t.status && t.status !== 'OK').length },
             },
-            recentErrors: last24h.filter((t: any) => t.status && t.status !== 'OK').slice(0, 5).map((t: any) => ({
-              type: t.worker_type,
-              id: t.worker_id,
-              status: t.status,
-              time: t.starttime,
-            })),
+            recentErrors,
           }
         } catch (e) {
           console.error(`[dashboard] PBS error ${conn.id}:`, e)
-          
+
 return null
         }
       })),

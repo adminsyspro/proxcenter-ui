@@ -79,6 +79,24 @@ function parsePruneBackups(raw: string | null | undefined) {
   return result
 }
 
+// Renders a VM/CT option row in the backup-job include/exclude pickers.
+// Shared so the two Autocompletes do not duplicate the markup.
+function renderVmJobOption(props: any, option: any) {
+  const { key, ...optionProps } = props
+
+  return (
+    <li key={key} {...optionProps}>
+      <Chip
+        size="small"
+        label={option.type === 'qemu' ? 'VM' : 'CT'}
+        sx={{ mr: 1, fontSize: 10 }}
+        color={option.type === 'qemu' ? 'primary' : 'secondary'}
+      />
+      {option.vmid} - {option.name}
+    </li>
+  )
+}
+
 export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPanelProps) {
   const t = useTranslations()
   const dateLocale = getDateLocale(useLocale())
@@ -757,21 +775,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   value={vms.filter(vm => formData.vmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, vmids: newValue.map(v => v.vmid) }))}
                   renderInput={(params) => <TextField {...params} label={t('inventory.selectVms')} />}
-                  renderOption={(props, option) => {
-                    const { key, ...optionProps } = props
-
-                    return (
-                      <li key={key} {...optionProps}>
-                        <Chip
-                          size="small"
-                          label={option.type === 'qemu' ? 'VM' : 'CT'}
-                          sx={{ mr: 1, fontSize: 10 }}
-                          color={option.type === 'qemu' ? 'primary' : 'secondary'}
-                        />
-                        {option.vmid} - {option.name}
-                      </li>
-                    )
-                  }}
+                  renderOption={renderVmJobOption}
                 />
               )}
 
@@ -784,21 +788,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   value={vms.filter(vm => formData.excludedVmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, excludedVmids: newValue.map(v => v.vmid) }))}
                   renderInput={(params) => <TextField {...params} label={t('inventory.excludeVms')} />}
-                  renderOption={(props, option) => {
-                    const { key, ...optionProps } = props
-
-                    return (
-                      <li key={key} {...optionProps}>
-                        <Chip
-                          size="small"
-                          label={option.type === 'qemu' ? 'VM' : 'CT'}
-                          sx={{ mr: 1, fontSize: 10 }}
-                          color={option.type === 'qemu' ? 'primary' : 'secondary'}
-                        />
-                        {option.vmid} - {option.name}
-                      </li>
-                    )
-                  }}
+                  renderOption={renderVmJobOption}
                 />
               )}
 

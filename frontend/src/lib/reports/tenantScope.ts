@@ -17,7 +17,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
 import { isUserSuperAdmin } from '@/lib/rbac'
-import { getVdcScope, type VdcScope } from '@/lib/vdc/scope'
+import { type VdcScope } from '@/lib/vdc/scope'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 
@@ -36,10 +36,17 @@ export const SUPER_ADMIN_ONLY_REPORT_TYPES: ReadonlySet<string> = new Set([
   'vdc',
 ])
 
-/** True when the current session belongs to a non-provider (vDC) tenant. */
+/**
+ * True when the current session belongs to an iaas (vDC) tenant.
+ * Returns false for provider and msp tenants: msp tenants get the full
+ * report-type set (like provider) and no intra-cluster masking.
+ */
 export async function isVdcTenant(): Promise<boolean> {
   const tenantId = await getCurrentTenantId()
-  return tenantId !== DEFAULT_TENANT_ID
+  if (tenantId === DEFAULT_TENANT_ID) return false
+  const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
+  const infra = await getTenantInfrastructureScope(tenantId)
+  return infra.kind === 'iaas'
 }
 
 /** True when the current session belongs to a user holding role_super_admin. */
@@ -112,7 +119,8 @@ export interface ScopePayload {
  */
 export async function buildScopePayloadForCurrentTenant(): Promise<ScopePayload | null> {
   const tenantId = await getCurrentTenantId()
-  const scope = await getVdcScope(tenantId)
+  const { getTenantInfrastructureScope, maskingScope } = await import('@/lib/tenant/infraScope')
+  const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
   if (!scope) return null
   return buildScopePayloadFromVdc(scope, tenantId)
 }

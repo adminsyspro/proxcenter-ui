@@ -45,6 +45,7 @@ vi.mock('@/lib/db/prisma', () => ({
     connection: {
       findUnique: vi.fn(async () => ({
         id: 'pbs1',
+        tenantId: 'default',
         type: 'pbs',
         baseUrl: 'https://pbs.example:8007',
         fingerprint: 'AA:BB:CC',
@@ -120,6 +121,11 @@ describe('bindPbsToVdc', () => {
   })
 
   it('rejects when fingerprint is missing on the PBS connection', async () => {
+    // First call: ownership check (needs tenantId = 'default' to pass)
+    ;(prismaMod.prisma.connection.findUnique as any).mockResolvedValueOnce({
+      id: 'pbs1', tenantId: 'default',
+    })
+    // Second call: resolvePbsMeta reads the full row (fingerprint missing triggers the error)
     ;(prismaMod.prisma.connection.findUnique as any).mockResolvedValueOnce({
       id: 'pbs1', type: 'pbs', baseUrl: 'https://pbs',
       fingerprint: null, apiTokenEnc: 'e', insecureTLS: true,

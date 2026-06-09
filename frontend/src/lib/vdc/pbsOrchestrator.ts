@@ -114,6 +114,19 @@ async function removeVdcStorage(vdcId: string, storageId: string): Promise<void>
 export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBindingRow; steps: StepStatus }> {
   const lockKey = `${args.vdcId}|${args.pbsConnectionId}|${args.datastore}|${args.namespace ?? ''}`
   return withLock(lockKey, async () => {
+    // Ownership check BEFORE any PBS side effects (ensureNamespace/token/ACL).
+    // insertBinding also checks, but by then we may have already provisioned on
+    // the PBS. Checking here keeps the function idempotent on failure and closes
+    // the P1 ordering issue flagged by Codex.
+    const ownerRow = await prisma.connection.findUnique({
+      where: { id: args.pbsConnectionId },
+      select: { tenantId: true },
+    })
+    if (!ownerRow) throw new Error(`PBS connection ${args.pbsConnectionId} not found`)
+    if (ownerRow.tenantId !== 'default') {
+      throw new Error(`PBS connection ${args.pbsConnectionId} is owned by tenant ${ownerRow.tenantId}; vDC bindings can only target provider-pool PBS`)
+    }
+
     const { vdc, tenant } = await readVdcAndTenant(args.vdcId)
     const namespace = args.namespace ?? `tenant-${tenant.slug}/vdc-${vdc.slug}`
     const pbs = await resolvePbsMeta(args.pbsConnectionId)

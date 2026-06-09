@@ -55,6 +55,18 @@ export async function insertBinding(args: {
   mode: PbsBindingMode;
   pbsTokenId?: string | null; pbsTokenSecret?: string | null;
 }): Promise<PbsBindingRow> {
+  // A vDC PBS binding may only target a provider-pool PBS. An MSP tenant owns
+  // its PBS connections wholly; letting a vDC bind to an MSP-owned PBS would
+  // grant IaaS tenants namespace access to another tenant's dedicated server.
+  const owner = await prisma.connection.findUnique({
+    where: { id: args.pbsConnectionId },
+    select: { tenantId: true, type: true },
+  })
+  if (!owner) throw new Error(`PBS connection ${args.pbsConnectionId} not found`)
+  if (owner.tenantId !== 'default') {
+    throw new Error(`PBS connection ${args.pbsConnectionId} is owned by tenant ${owner.tenantId}; vDC bindings can only target provider-pool PBS`)
+  }
+
   const row = await prisma.vdcPbsNamespace.create({
     data: {
       id: randomUUID(),

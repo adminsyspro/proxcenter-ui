@@ -11,7 +11,7 @@ vi.mock("@/lib/db/prisma", () => ({
 }))
 vi.mock("@/lib/vdc/scope", () => ({ getVdcScope: getVdcScopeMock }))
 
-import { getTenantInfrastructureScope, pveConnectionFilter, maskingScope, inventoryConnectionPlan } from "./infraScope"
+import { getTenantInfrastructureScope, pveConnectionFilter, maskingScope, inventoryConnectionPlan, canMigrateConnections } from "./infraScope"
 
 beforeEach(() => {
   tenantFindUniqueMock.mockReset()
@@ -47,6 +47,32 @@ describe("getTenantInfrastructureScope", () => {
     expect(pveConnectionFilter(infra)).toEqual(new Set(["p1"]))
     expect(maskingScope(infra)).toBe(vdcScope)
     expect(getVdcScopeMock).toHaveBeenCalledWith("t-iaas")
+  })
+})
+
+describe("canMigrateConnections", () => {
+  it("provider always returns true regardless of connection ids", () => {
+    expect(canMigrateConnections({ kind: "provider" }, "any-id", "other-id")).toBe(true)
+    expect(canMigrateConnections({ kind: "provider" })).toBe(true)
+  })
+
+  it("msp returns true when it owns ALL given connection ids", () => {
+    const infra = { kind: "msp" as const, connectionIds: new Set(["c1", "c2"]) }
+    expect(canMigrateConnections(infra, "c1")).toBe(true)
+    expect(canMigrateConnections(infra, "c1", "c2")).toBe(true)
+  })
+
+  it("msp returns false when at least one connection id is not owned", () => {
+    const infra = { kind: "msp" as const, connectionIds: new Set(["c1"]) }
+    expect(canMigrateConnections(infra, "c1", "c2")).toBe(false)
+    expect(canMigrateConnections(infra, "c3")).toBe(false)
+  })
+
+  it("iaas always returns false regardless of connection ids", () => {
+    const vdcScope: any = { connectionIds: new Set(["c1"]), pbsConnectionIds: new Set() }
+    const infra = { kind: "iaas" as const, vdcScope }
+    expect(canMigrateConnections(infra, "c1")).toBe(false)
+    expect(canMigrateConnections(infra)).toBe(false)
   })
 })
 

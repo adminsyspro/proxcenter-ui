@@ -5,7 +5,8 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
-import { requireProviderTenant } from "@/lib/tenant"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -24,12 +25,17 @@ export async function POST(
 
     if (denied) return denied
 
-    // VM placement is the provider's responsibility in MSP/vDC mode —
-    // tenants don't choose nodes (they get an abstracted vDC). Block at
-    // the API layer too so the read-only UI can't be bypassed by a
-    // crafted POST or by a tenant admin that happens to have VM_MIGRATE.
-    const providerOnly = await requireProviderTenant()
-    if (providerOnly) return providerOnly
+    // VM placement is a whole-cluster operation: the provider may migrate any
+    // cluster it manages; an MSP tenant may migrate within a cluster it OWNS;
+    // vDC/iaas tenants get an abstracted slice and cannot migrate.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    if (!canMigrateConnections(infra, id)) {
+      return NextResponse.json(
+        { error: 'Migration is restricted to the provider or the MSP tenant that owns this connection' },
+        { status: 403 },
+      )
+    }
 
     const rawBody = await req.json()
     const parseResult = migrateVmSchema.safeParse(rawBody)

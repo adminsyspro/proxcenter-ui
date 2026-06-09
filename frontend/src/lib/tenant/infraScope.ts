@@ -61,6 +61,17 @@ export function maskingScope(infra: InfraScope): VdcScope | null {
   return infra.kind === "iaas" ? infra.vdcScope : null
 }
 
+/**
+ * Whether a tenant may run a migration touching the given connection ids.
+ * Provider: always. MSP: only if it owns EVERY involved connection. iaas: never
+ * (migration is a whole-cluster operation, not vDC-scoped).
+ */
+export function canMigrateConnections(infra: InfraScope, ...connectionIds: string[]): boolean {
+  if (infra.kind === "provider") return true
+  if (infra.kind === "msp") return connectionIds.every((id) => infra.connectionIds.has(id))
+  return false
+}
+
 export type InventoryConnClient = "global" | "session"
 
 export interface InventoryConnectionPlan {

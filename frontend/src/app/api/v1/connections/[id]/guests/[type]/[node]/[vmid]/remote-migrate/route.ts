@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
-import { getCurrentTenantId, requireProviderTenant } from "@/lib/tenant"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
 import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
@@ -45,11 +46,17 @@ export async function POST(
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
-    // Cross-cluster migration is even more provider-only than same-cluster:
-    // it crosses connection boundaries and the tenant has no notion of the
-    // remote cluster. Mirror the gate from the local /migrate route.
-    const providerOnly = await requireProviderTenant()
-    if (providerOnly) return providerOnly
+    // VM placement is a whole-cluster operation: the provider may migrate any
+    // cluster it manages; an MSP tenant may migrate within clusters it OWNS;
+    // vDC/iaas tenants get an abstracted slice and cannot migrate.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    if (!canMigrateConnections(infra, id)) {
+      return NextResponse.json(
+        { error: 'Migration is restricted to the provider or the MSP tenant that owns this connection' },
+        { status: 403 },
+      )
+    }
 
     const body = await req.json()
     const {
@@ -66,6 +73,14 @@ export async function POST(
     // Validation des paramètres requis
     if (!targetConnectionId) {
       return NextResponse.json({ error: "targetConnectionId is required" }, { status: 400 })
+    }
+
+    // MSP tenants must also own the target connection
+    if (infra.kind === 'msp' && !infra.connectionIds.has(targetConnectionId)) {
+      return NextResponse.json(
+        { error: 'Cross-cluster migration target must be a connection owned by your tenant' },
+        { status: 403 },
+      )
     }
     if (!targetNode) {
       return NextResponse.json({ error: "targetNode is required" }, { status: 400 })
@@ -237,7 +252,6 @@ export async function POST(
     // browser tab, navigates away, or the tab is throttled in the background.
     // tenantId must be captured here while the request session is alive.
     if (typeof result === 'string' && result.startsWith('UPID:')) {
-      const tenantId = await getCurrentTenantId()
       void watchMigrationAndCleanup({
         connectionId: id,
         tenantId,

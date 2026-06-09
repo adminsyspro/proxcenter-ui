@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
-import { getVdcScope } from '@/lib/vdc/scope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
@@ -35,9 +35,10 @@ export async function GET(
     // isolation on shared clusters.
     const tenantId = await getCurrentTenantId()
     const tenantConnectionIds = await getTenantConnectionIds()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const vdcScope = maskingScope(infra)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
-    if (!(await isAlertVisibleToTenant(alert as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids }))) {
+    if (!(await isAlertVisibleToTenant(alert as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 
@@ -75,9 +76,10 @@ export async function DELETE(
     const alertRes = await alertsApi.getAlert(id)
     const tenantId = await getCurrentTenantId()
     const tenantConnectionIds = await getTenantConnectionIds()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const vdcScope = maskingScope(infra)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
-    if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids }))) {
+    if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
 

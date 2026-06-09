@@ -22,8 +22,9 @@ vi.mock('@/lib/tenant', () => ({
   }),
 }))
 
-vi.mock('@/lib/vdc/scope', () => ({
-  getVdcScope: vi.fn().mockResolvedValue(null),
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: vi.fn().mockResolvedValue({ kind: 'provider' }),
+  maskingScope: () => null,
 }))
 
 vi.mock('@/lib/rbac', () => ({

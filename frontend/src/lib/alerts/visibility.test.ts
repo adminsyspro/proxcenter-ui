@@ -46,6 +46,7 @@ function ctx(tenantId: string, opts: Partial<AlertVisibilityCtx> = {}): AlertVis
   return {
     tenantId,
     tenantConnectionIds: new Set([CONN_SHARED]),
+    infraKind: 'iaas' as const,
     vdcScope: {
       connectionIds: new Set([CONN_SHARED]),
       pbsConnectionIds: new Set(),
@@ -76,7 +77,7 @@ describe('isAlertVisibleToTenant — tenant isolation contract', () => {
 
     // Provider sees built-in alerts. The provider has no vdcScope.
     expect(
-      await isAlertVisibleToTenant(alert, ctx(PROVIDER, { vdcScope: null })),
+      await isAlertVisibleToTenant(alert, ctx(PROVIDER, { vdcScope: null, infraKind: 'provider' as const })),
     ).toBe(true)
   })
 
@@ -164,8 +165,88 @@ describe('isAlertVisibleToTenant — tenant isolation contract', () => {
     // type-narrowing assertion below catches it.
     const result = await isAlertVisibleToTenant(
       { connection_id: CONN_SHARED, resource_type: 'qemu', resource_id: 100, node: 'pve1' },
-      ctx(PROVIDER, { vdcScope: null }),
+      ctx(PROVIDER, { vdcScope: null, infraKind: 'provider' as const }),
     )
     expect(typeof result).toBe('boolean')
+  })
+
+  describe('MSP tenant visibility', () => {
+    const MSP_TENANT = 'tenant-msp'
+    const CONN_MSP = 'conn-msp'
+
+    function mspCtx(opts: Partial<AlertVisibilityCtx> = {}): AlertVisibilityCtx {
+      return {
+        tenantId: MSP_TENANT,
+        tenantConnectionIds: new Set([CONN_MSP]),
+        infraKind: 'msp' as const,
+        vdcScope: null,
+        vdcVmids: new Map([[CONN_MSP, new Set(['200'])]]),
+        ...opts,
+      }
+    }
+
+    it('msp + built-in alert (no rule_id) on an owned connection is visible', async () => {
+      const alert = {
+        connection_id: CONN_MSP,
+        resource_type: 'node',
+        resource_id: 'pve1',
+        node: 'pve1',
+      }
+      expect(await isAlertVisibleToTenant(alert, mspCtx())).toBe(true)
+    })
+
+    it('msp + built-in alert with no connection_id is NOT visible', async () => {
+      const alert = {
+        resource_type: 'cluster',
+        resource_id: 'cluster',
+      }
+      expect(await isAlertVisibleToTenant(alert, mspCtx())).toBe(false)
+    })
+
+    it('msp + alert on a connection NOT in tenantConnectionIds is NOT visible', async () => {
+      const alert = {
+        rule_id: 'rule-a',
+        connection_id: 'conn-other',
+        resource_type: 'qemu',
+        resource_id: 200,
+        node: 'pve1',
+      }
+      expect(await isAlertVisibleToTenant(alert, mspCtx())).toBe(false)
+    })
+
+    it('msp + alert on an owned connection with a rule the tenant owns is visible', async () => {
+      // Seed rule ownership for the MSP tenant in beforeEach is for TENANT_A/B.
+      // We seed an msp-specific rule here via the prismaTest directly.
+      await prismaTest.alertRuleOwner.create({ data: { ruleId: 'rule-msp', tenantId: MSP_TENANT } })
+
+      const alert = {
+        rule_id: 'rule-msp',
+        connection_id: CONN_MSP,
+        resource_type: 'qemu',
+        resource_id: 200,
+        node: 'pve1',
+      }
+      expect(await isAlertVisibleToTenant(alert, mspCtx())).toBe(true)
+    })
+
+    it('provider + connection-less alert is visible', async () => {
+      const alert = {
+        resource_type: 'cluster',
+        resource_id: 'cluster',
+      }
+      expect(
+        await isAlertVisibleToTenant(alert, ctx(PROVIDER, { vdcScope: null, infraKind: 'provider' as const })),
+      ).toBe(true)
+    })
+
+    it('iaas + built-in alert (no rule_id) is NOT visible (regression guard)', async () => {
+      const alert = {
+        connection_id: CONN_SHARED,
+        resource_type: 'node',
+        resource_id: 'pve1',
+        node: 'pve1',
+      }
+      expect(await isAlertVisibleToTenant(alert, ctx(TENANT_A))).toBe(false)
+    })
   })
 })

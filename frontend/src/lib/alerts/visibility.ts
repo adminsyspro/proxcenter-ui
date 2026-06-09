@@ -30,6 +30,10 @@ export interface AlertVisibilityCtx {
   tenantId: string
   tenantConnectionIds: Set<string>
   vdcScope: VdcScope | null
+  /** Tenant infrastructure kind. Drives built-in + connection-less gates
+   *  (vdcScope===null is no longer a valid "is provider" proxy: maskingScope
+   *  returns null for BOTH provider and msp). */
+  infraKind: 'provider' | 'iaas' | 'msp'
   /**
    * connectionId → Set<vmid>: the tenant's vDC pool members, fetched
    * directly from PVE (see `getVdcVmidsByConnection`). When provided,
@@ -78,21 +82,30 @@ export async function isAlertVisibleToTenant(
   alert: OrchestratorAlertLike,
   ctx: AlertVisibilityCtx,
 ): Promise<boolean> {
-  const { tenantId, tenantConnectionIds, vdcScope } = ctx
+  const { tenantId, tenantConnectionIds, vdcScope, infraKind } = ctx
 
   // Gate 1: rule visibility.
   if (alert.rule_id) {
     if (!(await ruleVisibleToTenant(alert.rule_id, tenantId))) return debugDeny(alert, 'rule_not_owned')
-  } else if (tenantId !== DEFAULT_TENANT_ID) {
-    // Built-in orchestrator alerts (storage / node / license / cluster /
-    // system thresholds): provider only.
-    return debugDeny(alert, 'builtin_alert_provider_only')
+  } else {
+    // Built-in (no-rule) orchestrator alert (storage / node / license /
+    // cluster / system thresholds). Provider sees all. An MSP tenant sees
+    // built-in alerts on its OWNED connections (gate 2 enforces ownership);
+    // a built-in alert with no connection_id is cluster-wide and provider-only.
+    // IaaS tenants never see built-in alerts.
+    if (infraKind === 'provider') {
+      // allowed
+    } else if (infraKind === 'msp' && alert.connection_id) {
+      // allowed; gate 2 below scopes to owned connections
+    } else {
+      return debugDeny(alert, 'builtin_alert_not_visible')
+    }
   }
 
   // Gate 2: connection + node scope.
   if (!alert.connection_id) {
     // Cluster-wide alert with no connection. Provider only.
-    return vdcScope === null ? true : debugDeny(alert, 'no_connection_id_vdc_tenant')
+    return infraKind === 'provider' ? true : debugDeny(alert, 'no_connection_id_non_provider')
   }
   if (!tenantConnectionIds.has(alert.connection_id)) return debugDeny(alert, 'connection_not_reachable', { connection_id: alert.connection_id })
   if (!vdcScope) return true

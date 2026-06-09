@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
-import { getVdcScope } from '@/lib/vdc/scope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
@@ -31,13 +31,14 @@ export async function GET(req: Request) {
 
     const tenantConnectionIds = await getTenantConnectionIds()
     const tenantId = await getCurrentTenantId()
-    const vdcScope = await getVdcScope(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const vdcScope = maskingScope(infra)
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
     const response = await alertsApi.getActiveAlerts(connectionId)
 
     const resData = response.data as any
     const alerts = Array.isArray(resData) ? resData : (resData?.data || [])
-    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids }
+    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }
     // isAlertVisibleToTenant is async (Postgres cutover made the rule
     // ownership lookup a Prisma query). Array.filter doesn't await its
     // predicate — it'd see a Promise, which is truthy, and let every

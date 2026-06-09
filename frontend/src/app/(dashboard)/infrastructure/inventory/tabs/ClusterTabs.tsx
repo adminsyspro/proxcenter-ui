@@ -3265,6 +3265,27 @@ export default function ClusterTabs(props: any) {
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
                               {agg.nodes.join(', ')}
                             </Typography>
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.75 }}>
+                              {t('updates.permissionErrorFixHint')}
+                            </Typography>
+                            <Box
+                              component="pre"
+                              sx={{
+                                mt: 0.5,
+                                mb: 0,
+                                p: 1,
+                                borderRadius: 1,
+                                bgcolor: 'grey.900',
+                                color: 'grey.100',
+                                fontFamily: '"JetBrains Mono", monospace',
+                                fontSize: '0.7rem',
+                                overflow: 'auto',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {`pveum role add ProxCenter -privs "${agg.permission}"\npveum aclmod / -user proxcenter@pve -role ProxCenter`}
+                            </Box>
                           </Alert>
                         )
                       })()}

@@ -2191,7 +2191,10 @@
     "trendsCount": "数量",
     "trendsSize": "大小",
     "trendsVerification": "验证",
-    "trendsDistribution": "类型分布"
+    "trendsDistribution": "类型分布",
+    "noPbsConfiguredTitle": "未配置 Proxmox Backup Server",
+    "noPbsConfiguredHint": "没有已连接的 Proxmox Backup Server 备份此机器的集群。请将该集群的 PBS 添加为连接以在此处查看备份。",
+    "noGuestBackups": "未找到此机器的备份。"
   },
   "backup": {
     "notifAuto": "自动",

@@ -195,7 +195,7 @@ export interface InventoryDialogsProps {
   creatingBackup: boolean
   setCreatingBackup: (v: boolean) => void
   backupStorages: any[]
-  loadBackups: (vmid: string, vmType: string) => void
+  loadBackups: (vmid: string, vmType: string, connId?: string) => void
 
   // Delete VM dialog
   deleteVmDialogOpen: boolean
@@ -1704,9 +1704,9 @@ return
                 // Recharger les backups après un délai
                 setTimeout(() => {
                   if (selection?.type === 'vm') {
-                    const { type: vmType, vmid } = parseVmId(selection.id)
+                    const { connId, type: vmType, vmid } = parseVmId(selection.id)
 
-                    loadBackups(vmid, vmType)
+                    loadBackups(vmid, vmType, connId)
                   }
                 }, 5000)
               } catch (e: any) {

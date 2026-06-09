@@ -2189,7 +2189,10 @@
     "trendsCount": "Anzahl",
     "trendsSize": "Größe",
     "trendsVerification": "Verifizierung",
-    "trendsDistribution": "Typverteilung"
+    "trendsDistribution": "Typverteilung",
+    "noPbsConfiguredTitle": "Kein Proxmox Backup Server konfiguriert",
+    "noPbsConfiguredHint": "Kein verbundener Proxmox Backup Server sichert den Cluster dieses Gasts. Fügen Sie den PBS des Clusters als Verbindung hinzu, um seine Sicherungen hier zu sehen.",
+    "noGuestBackups": "Keine Sicherungen für diese Maschine gefunden."
   },
   "backup": {
     "notifAuto": "Auto",

@@ -1050,6 +1050,7 @@ export default function InventoryDetails({
     backupsError, setBackupsError,
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
+    backupsPbsConfigured, setBackupsPbsConfigured,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
     selectedBackup, setSelectedBackup,
@@ -1532,8 +1533,8 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     if (backupsLoadedForIdRef.current === currentSelectionId) return
     backupsLoadedForIdRef.current = currentSelectionId
 
-    const { type, vmid } = parseVmId(selection.id)
-    loadBackups(vmid, type)
+    const { connId, type, vmid } = parseVmId(selection.id)
+    loadBackups(vmid, type, connId)
     setBackupsPreloaded(true)
   }, [selection?.type, selection?.id, loadBackups])
 
@@ -3287,7 +3288,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'vm' && (
             <VmDetailTabs
               {...{addCephReplicationDialogOpen, addReplicationDialogOpen, availableTargetNodes, backToArchives, backToBackupsList,
-                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, balloon,
+                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, backupsPbsConfigured, balloon,
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuFlags, cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,

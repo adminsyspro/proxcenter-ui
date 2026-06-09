@@ -2221,7 +2221,10 @@
     "trendsCount": "Count",
     "trendsSize": "Size",
     "trendsVerification": "Verification",
-    "trendsDistribution": "Type distribution"
+    "trendsDistribution": "Type distribution",
+    "noPbsConfiguredTitle": "No Proxmox Backup Server configured",
+    "noPbsConfiguredHint": "No connected Proxmox Backup Server backs up this guest's cluster. Add the cluster's PBS as a connection to see its backups here.",
+    "noGuestBackups": "No backups found for this guest."
   },
   "backup": {
     "notifAuto": "Auto",

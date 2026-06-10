@@ -341,6 +341,39 @@ function ConnectionsTab() {
     loadHypervConnections,
   } = useConnectionsManagement()
 
+  // Tenant name map for ownership badges: id -> name
+  const [tenantNameMap, setTenantNameMap] = useState({})
+  useEffect(() => {
+    fetch('/api/v1/tenants')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (!Array.isArray(json?.data)) return
+        const map = {}
+        for (const tenant of json.data) map[tenant.id] = tenant.name
+        setTenantNameMap(map)
+      })
+      .catch(() => {})
+  }, [])
+
+  // vDC map: connectionId -> Array<{ vdcName, tenantId }> (provider-only; silently ignore non-OK)
+  const [vdcsByConnection, setVdcsByConnection] = useState({})
+  useEffect(() => {
+    fetch('/api/v1/admin/vdcs')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        const rows = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : null)
+        if (!rows) return
+        const map = {}
+        for (const vdc of rows) {
+          if (!vdc.connectionId) continue
+          if (!map[vdc.connectionId]) map[vdc.connectionId] = []
+          map[vdc.connectionId].push({ vdcName: vdc.name, tenantId: vdc.tenantId })
+        }
+        setVdcsByConnection(map)
+      })
+      .catch(() => {})
+  }, [])
+
   // Dialog
   const [addConnOpen, setAddConnOpen] = useState(false)
   const [addConnType, setAddConnType] = useState('pve')
@@ -510,6 +543,55 @@ function ConnectionsTab() {
     }
   }
 
+  // Shared "Tenant / vDC" column definition factory
+  const makeTenantVdcColumn = (tenantMap, vdcMap) => ({
+    field: 'tenantVdc',
+    headerName: t('settings.connTenantVdcHeader'),
+    width: 200,
+    sortable: false,
+    renderCell: params => {
+      const row = params.row
+      const tid = row.tenantId
+      const isMspOwned = tid && tid !== 'default'
+
+      if (isMspOwned) {
+        const name = tenantMap[tid] || tid
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%', flexWrap: 'wrap' }}>
+            <Chip size='small' label={t('settings.connectionOwnedBy', { name })} color='secondary' variant='outlined' sx={{ fontSize: '0.7rem', height: 20 }} />
+          </Box>
+        )
+      }
+
+      const vdcs = vdcMap[row.id]
+      if (vdcs && vdcs.length > 0) {
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%', flexWrap: 'wrap' }}>
+            {vdcs.map((v, i) => {
+              const tName = tenantMap[v.tenantId] || v.tenantId
+              return (
+                <Chip
+                  key={i}
+                  size='small'
+                  label={`${tName} / ${v.vdcName}`}
+                  color='info'
+                  variant='outlined'
+                  sx={{ fontSize: '0.7rem', height: 20 }}
+                />
+              )
+            })}
+          </Box>
+        )
+      }
+
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <Typography variant='caption' sx={{ opacity: 0.4 }}>{t('settings.connPoolLabel')}</Typography>
+        </Box>
+      )
+    }
+  })
+
   // PVE Columns
   const pveColumns = useMemo(
     () => [
@@ -525,6 +607,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: t('settings.urlApi'),
@@ -712,7 +795,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t, loadPveConnections, theme]
+    [t, loadPveConnections, theme, tenantNameMap, vdcsByConnection]
   )
 
   // PBS Columns
@@ -730,6 +813,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: t('settings.urlApi'),
@@ -812,7 +896,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t, theme]
+    [t, theme, tenantNameMap, vdcsByConnection]
   )
 
   // VMware columns
@@ -830,6 +914,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: t('settings.esxiHost'),
@@ -886,7 +971,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t]
+    [t, tenantNameMap, vdcsByConnection]
   )
 
   // XCP-ng columns
@@ -904,6 +989,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: t('settings.xcpngHost'),
@@ -975,7 +1061,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t]
+    [t, tenantNameMap, vdcsByConnection]
   )
 
   // Nutanix columns
@@ -993,6 +1079,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: 'Prism Central',
@@ -1035,7 +1122,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t]
+    [t, tenantNameMap, vdcsByConnection]
   )
 
   // Hyper-V columns
@@ -1053,6 +1140,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeTenantVdcColumn(tenantNameMap, vdcsByConnection),
       {
         field: 'baseUrl',
         headerName: 'Hyper-V Host',
@@ -1095,7 +1183,7 @@ function ConnectionsTab() {
         )
       }
     ],
-    [t]
+    [t, tenantNameMap, vdcsByConnection]
   )
 
   return (

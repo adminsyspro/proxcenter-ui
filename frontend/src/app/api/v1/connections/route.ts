@@ -1,5 +1,6 @@
 // src/app/api/v1/connections/route.ts
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
@@ -53,13 +54,50 @@ export async function GET(req: Request) {
       }
     }
 
-    const connections = await prisma.connection.findMany({
+    // `prisma` is a union type (global | session); passing it directly to the
+    // deeply-overloaded findMany generic trips TS2589. The concrete row type
+    // is declared here so downstream mapping is fully typed without relying on
+    // Prisma's generic inference across the union.
+    interface ConnectionRow {
+      id: string
+      name: string
+      type: string
+      tenantId: string | null
+      baseUrl: string
+      behindProxy: boolean
+      insecureTLS: boolean
+      hasCeph: boolean
+      latitude: number | null
+      longitude: number | null
+      locationLabel: string | null
+      country: string | null
+      fingerprint: string | null
+      sshEnabled: boolean
+      sshPort: number
+      sshUser: string
+      sshAuthMethod: string | null
+      sshUseSudo: boolean
+      sshKeyEnc: string | null
+      sshPassEnc: string | null
+      createdAt: Date
+      updatedAt: Date
+      hosts: { id: string; node: string; ip: string | null; enabled: boolean }[]
+    }
+
+    // Delegate to globalPrisma for the type signature (both clients share the
+    // same schema); the union assignability check itself hits TS2589, so we
+    // suppress it here. The cast is safe: both union members are PrismaClient
+    // instances with identical connection model signatures.
+    // @ts-expect-error TS2589: union assignability exceeds TS instantiation depth
+    const typedPrisma: typeof globalPrisma = prisma
+    const connections: ConnectionRow[] = await typedPrisma.connection.findMany({
       where: Object.keys(where).length > 0 ? where : undefined,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         name: true,
         type: true,
+        tenantId: true,
         baseUrl: true,
         behindProxy: true,
         insecureTLS: true,
@@ -69,13 +107,11 @@ export async function GET(req: Request) {
         locationLabel: true,
         country: true,
         fingerprint: true,
-        // SSH fields (sans les secrets)
         sshEnabled: true,
         sshPort: true,
         sshUser: true,
         sshAuthMethod: true,
         sshUseSudo: true,
-        // Inclure les champs chiffrés pour vérifier si configuré (ne pas renvoyer au client)
         sshKeyEnc: true,
         sshPassEnc: true,
         createdAt: true,

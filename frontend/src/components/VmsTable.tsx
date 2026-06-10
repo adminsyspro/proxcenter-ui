@@ -520,14 +520,12 @@ function VmsTable({
   const t = useTranslations()
   const { getColor, getShape, loadConnection } = useTagColors()
   const primaryColor = theme.palette.primary.main
-  // VM placement is provider-only in MSP/vDC mode. Hide migrate icons
-  // (per-row + context menu) for tenant admins. Done at the table level
-  // so every callsite (InventoryDetails right panel, NodeTabs, ClusterTabs)
-  // gets the same gating without touching each one.
-  const { currentTenant, loading: tenantLoading } = useTenant()
-  // Migration endpoints are provider-only (requireProviderTenant). MSP migrate
-  // would need server-side changes, so keep this gate provider-only for now.
-  const canMigrate = !tenantLoading && currentTenant?.id === 'default'
+  // Migration is allowed for provider AND MSP tenants (full-cluster view).
+  // MSP users only see connections they own; the backend enforces ownership,
+  // so enabling the button here cannot migrate another tenant's VM.
+  // vDC / iaas tenants still cannot migrate (placement is the provider's job).
+  const { loading: tenantLoading, isFullClusterView } = useTenant()
+  const canMigrate = !tenantLoading && isFullClusterView
   const effectiveOnMigrate = canMigrate ? onMigrate : undefined
   
   // Load tag color overrides for all connections in the table

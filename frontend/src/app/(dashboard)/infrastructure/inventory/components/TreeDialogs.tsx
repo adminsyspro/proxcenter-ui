@@ -232,11 +232,10 @@ export interface TreeDialogsProps {
 
 export default function TreeDialogs(props: TreeDialogsProps) {
   const t = useTranslations()
-  // Migration is a provider-only operation in MSP/vDC mode (placement is
-  // the provider's job — tenants don't choose nodes). Hides the per-VM
-  // Migrate menu entry and the node-level "Migrate all VMs" bulk action.
-  const { currentTenant, loading: tenantLoading } = useTenant()
-  const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
+  // Migration is allowed for provider AND MSP tenants (full-cluster view).
+  // vDC / iaas tenants cannot migrate (placement is the provider's job).
+  // MSP users only see connections they own; the backend enforces ownership.
+  const { loading: tenantLoading, isFullClusterView } = useTenant()
 
   const {
     contextMenu, handleCloseContextMenu, actionBusy, handleVmAction, unlocking,
@@ -441,7 +440,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           <Divider key="divider3" />,
 
           /* --- Console / Migrate / Unlock --- */
-          contextMenu?.isCluster && isProviderTenant ? (
+          contextMenu?.isCluster && !tenantLoading && isFullClusterView ? (
             <MenuItem
               key="migrate"
               onClick={() => {
@@ -577,7 +576,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             </ListItemIcon>
             <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
           </MenuItem>,
-          isProviderTenant ? (
+          !tenantLoading && isFullClusterView ? (
             <MenuItem key="bulk-migrate" onClick={() => handleBulkActionClick('migrate-all')}>
               <ListItemIcon sx={{ minWidth: 36 }}>
                 <MoveUpIcon fontSize="small" />

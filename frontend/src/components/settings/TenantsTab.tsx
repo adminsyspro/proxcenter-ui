@@ -16,17 +16,21 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControl,
+  FormControlLabel,
   IconButton,
+  InputLabel,
   LinearProgress,
   List,
   ListItem,
   ListItemAvatar,
   ListItemText,
+  MenuItem,
+  Select,
   Switch,
   TextField,
   Tooltip,
   Typography,
-  FormControlLabel,
 } from '@mui/material'
 
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
@@ -41,6 +45,7 @@ interface Tenant {
   enabled: number
   createdAt: string
   updatedAt: string
+  operatingModel?: string | null
 }
 
 interface TenantUser {
@@ -60,6 +65,13 @@ interface AllUser {
   name: string
 }
 
+interface Connection {
+  id: string
+  name: string
+  type: string
+  tenantId?: string | null
+}
+
 export default function TenantsTab() {
   const t = useTranslations()
   const [tenants, setTenants] = useState<Tenant[]>([])
@@ -70,7 +82,7 @@ export default function TenantsTab() {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
-  const [form, setForm] = useState({ name: '', slug: '', description: '', enabled: true })
+  const [form, setForm] = useState({ name: '', slug: '', description: '', enabled: true, operatingModel: 'iaas' })
   const [saving, setSaving] = useState(false)
 
   // Users state (inside edit dialog)
@@ -78,6 +90,11 @@ export default function TenantsTab() {
   const [allUsers, setAllUsers] = useState<AllUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [selectedUser, setSelectedUser] = useState<AllUser | null>(null)
+
+  // Connections state (inside edit dialog, MSP tenants only)
+  const [allConnections, setAllConnections] = useState<Connection[]>([])
+  const [connectionsLoading, setConnectionsLoading] = useState(false)
+  const [selectedConnection, setSelectedConnection] = useState<string>('')
 
   // Delete confirmation
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -128,12 +145,34 @@ export default function TenantsTab() {
     }
   }, [t])
 
+  const fetchConnections = useCallback(async () => {
+    setConnectionsLoading(true)
+
+    try {
+      const res = await fetch('/api/v1/connections')
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+
+      const data = await res.json()
+
+      setAllConnections(data.data || [])
+    } catch {
+      setError(t('tenants.failedLoadConnections'))
+    } finally {
+      setConnectionsLoading(false)
+    }
+  }, [t])
+
   const handleCreate = () => {
     setEditingTenant(null)
-    setForm({ name: '', slug: '', description: '', enabled: true })
+    setForm({ name: '', slug: '', description: '', enabled: true, operatingModel: 'iaas' })
     setTenantUsers([])
     setAllUsers([])
     setSelectedUser(null)
+    setAllConnections([])
+    setSelectedConnection('')
     setDialogOpen(true)
   }
 
@@ -144,10 +183,16 @@ export default function TenantsTab() {
       slug: tenant.slug,
       description: tenant.description || '',
       enabled: !!tenant.enabled,
+      operatingModel: tenant.operatingModel || 'iaas',
     })
     setSelectedUser(null)
+    setSelectedConnection('')
     setDialogOpen(true)
     fetchTenantUsers(tenant.id)
+
+    if (tenant.operatingModel === 'msp') {
+      fetchConnections()
+    }
   }
 
   const handleSave = async () => {
@@ -158,10 +203,22 @@ export default function TenantsTab() {
       const url = editingTenant ? `/api/v1/tenants/${editingTenant.id}` : '/api/v1/tenants'
       const method = editingTenant ? 'PUT' : 'POST'
 
+      const body: Record<string, unknown> = {
+        name: form.name,
+        slug: form.slug,
+        description: form.description,
+        enabled: form.enabled,
+      }
+
+      // operatingModel only sent on create (immutable after creation)
+      if (!editingTenant) {
+        body.operatingModel = form.operatingModel
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       })
 
       if (!res.ok) {
@@ -251,8 +308,65 @@ export default function TenantsTab() {
     }
   }
 
+  const handleAssignConnection = async () => {
+    if (!selectedConnection || !editingTenant) return
+
+    try {
+      const res = await fetch(`/api/v1/connections/${selectedConnection}/owner`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: editingTenant.id }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+
+        throw new Error(err.error || t('tenants.failedAssignConnection'))
+      }
+
+      setSelectedConnection('')
+      setSuccess(t('tenants.connectionAssigned'))
+      fetchConnections()
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const handleReleaseConnection = async (connectionId: string) => {
+    if (!editingTenant) return
+
+    try {
+      const res = await fetch(`/api/v1/connections/${connectionId}/owner`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: 'default' }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+
+        throw new Error(err.error || t('tenants.failedReleaseConnection'))
+      }
+
+      setSuccess(t('tenants.connectionReleased'))
+      fetchConnections()
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
   const availableUsers = allUsers.filter(
     (u) => !tenantUsers.some((tu) => tu.id === u.id)
+  )
+
+  // Connections owned by this MSP tenant
+  const ownedConnections = allConnections.filter(
+    (c) => editingTenant && c.tenantId === editingTenant.id
+  )
+
+  // Pool PVE connections available to assign (not already owned by anyone)
+  const assignableConnections = allConnections.filter(
+    (c) => c.tenantId === 'default' && c.type === 'pve'
   )
 
   const getInitials = (name: string, email: string) => {
@@ -263,6 +377,20 @@ export default function TenantsTab() {
     }
 
     return email?.[0]?.toUpperCase() || '?'
+  }
+
+  const getOperatingModelLabel = (model: string | null | undefined) => {
+    if (!model) return t('tenants.modelProvider')
+    if (model === 'msp') return t('tenants.modelMsp')
+
+    return t('tenants.modelIaas')
+  }
+
+  const getOperatingModelColor = (model: string | null | undefined): 'default' | 'primary' | 'secondary' => {
+    if (!model) return 'default'
+    if (model === 'msp') return 'secondary'
+
+    return 'primary'
   }
 
   const columns: GridColDef[] = [
@@ -279,6 +407,20 @@ export default function TenantsTab() {
       minWidth: 120,
       renderCell: (params) => (
         <Chip label={params.value} size="small" sx={{ fontSize: '0.75rem' }} />
+      ),
+    },
+    {
+      field: 'operatingModel',
+      headerName: t('tenants.operatingModel'),
+      width: 160,
+      renderCell: (params) => (
+        <Chip
+          label={getOperatingModelLabel(params.value)}
+          size="small"
+          color={getOperatingModelColor(params.value)}
+          variant="outlined"
+          sx={{ fontSize: '0.72rem' }}
+        />
       ),
     },
     {
@@ -416,6 +558,32 @@ export default function TenantsTab() {
             multiline
             rows={2}
           />
+
+          {/* Operating model selector — create only, immutable after creation */}
+          {!editingTenant && (
+            <FormControl fullWidth>
+              <InputLabel>{t('tenants.operatingModel')}</InputLabel>
+              <Select
+                value={form.operatingModel}
+                label={t('tenants.operatingModel')}
+                onChange={(e) => setForm((f) => ({ ...f, operatingModel: e.target.value }))}
+              >
+                <MenuItem value="iaas">
+                  <Box>
+                    <Typography variant="body2">{t('tenants.modelIaas')}</Typography>
+                    <Typography variant="caption" color="text.secondary">{t('tenants.modelIaasDesc')}</Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="msp">
+                  <Box>
+                    <Typography variant="body2">{t('tenants.modelMsp')}</Typography>
+                    <Typography variant="caption" color="text.secondary">{t('tenants.modelMspDesc')}</Typography>
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
+          )}
+
           <FormControlLabel
             control={
               <Switch
@@ -533,6 +701,99 @@ export default function TenantsTab() {
                               </Box>
                             }
                             secondary={user.email}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* Connections section — MSP tenants only, edit mode */}
+          {editingTenant && editingTenant.operatingModel === 'msp' && (
+            <>
+              <Divider sx={{ mt: 1 }} />
+              <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className="ri-server-line" />
+                {t('tenants.connections')}
+              </Typography>
+
+              {connectionsLoading ? (
+                <LinearProgress />
+              ) : (
+                <>
+                  {/* Assign connection control */}
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <FormControl size="small" fullWidth>
+                      <InputLabel>{t('tenants.assignConnection')}</InputLabel>
+                      <Select
+                        value={selectedConnection}
+                        label={t('tenants.assignConnection')}
+                        onChange={(e) => setSelectedConnection(e.target.value)}
+                      >
+                        {assignableConnections.length === 0 ? (
+                          <MenuItem value="" disabled>
+                            {t('tenants.noAssignableConnections')}
+                          </MenuItem>
+                        ) : (
+                          assignableConnections.map((c) => (
+                            <MenuItem key={c.id} value={c.id}>
+                              {c.name}
+                            </MenuItem>
+                          ))
+                        )}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={!selectedConnection}
+                      onClick={handleAssignConnection}
+                      sx={{ minWidth: 80 }}
+                    >
+                      {t('common.add')}
+                    </Button>
+                  </Box>
+
+                  {/* Owned connections list */}
+                  {ownedConnections.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
+                      {t('tenants.noConnections')}
+                    </Typography>
+                  ) : (
+                    <List dense disablePadding sx={{ maxHeight: 250, overflow: 'auto' }}>
+                      {ownedConnections.map((conn) => (
+                        <ListItem
+                          key={conn.id}
+                          secondaryAction={
+                            <Tooltip title={t('tenants.releaseConnection')}>
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                color="error"
+                                onClick={() => handleReleaseConnection(conn.id)}
+                              >
+                                <i className="ri-close-line" />
+                              </IconButton>
+                            </Tooltip>
+                          }
+                        >
+                          <ListItemAvatar>
+                            <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', bgcolor: 'secondary.main' }}>
+                              <i className="ri-server-line" style={{ fontSize: '0.9rem' }} />
+                            </Avatar>
+                          </ListItemAvatar>
+                          <ListItemText
+                            primary={conn.name}
+                            secondary={
+                              <Chip
+                                label={conn.type.toUpperCase()}
+                                size="small"
+                                sx={{ height: 16, fontSize: '0.6rem' }}
+                              />
+                            }
                           />
                         </ListItem>
                       ))}

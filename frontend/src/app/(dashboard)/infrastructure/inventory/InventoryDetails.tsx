@@ -210,7 +210,6 @@ export default function InventoryDetails({
   // setups. Same gate is used to funnel tenants through the template
   // catalogue instead of the bare-metal Create VM dialog.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
-  const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
   const allowLxc = !tenantLoading && (currentTenant === null || isFullClusterView)
   const allowBlankVm = allowLxc
   const router = useRouter()
@@ -2946,7 +2945,7 @@ return vm?.isCluster ?? false
                         isCluster={data.isCluster}
                         isLocked={vmLock.locked}
                         lockType={vmLock.lockType}
-                        canMigrate={isProviderTenant}
+                        canMigrate={!tenantLoading && isFullClusterView}
                         onStart={onStart}
                         onShutdown={onShutdown}
                         onStop={onStop}

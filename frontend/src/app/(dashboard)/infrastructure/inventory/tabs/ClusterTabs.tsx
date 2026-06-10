@@ -70,6 +70,7 @@ import InventorySummary from '../components/InventorySummary'
 import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import EntityTagManager from '../components/EntityTagManager'
+import CephTopology from '../components/CephTopology'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -3059,6 +3060,14 @@ export default function ClusterTabs(props: any) {
                                 </ChartContainer>
                               </ExpandableChart>
                             </Box>
+                          </CardContent>
+                        </Card>
+
+                        {/* CRUSH Topology */}
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>CRUSH Topology</Typography>
+                            <CephTopology connId={connId} />
                           </CardContent>
                         </Card>
                       </Stack>

@@ -91,7 +91,7 @@ function CephConfLines({ text, lang }: Readonly<{ text: string; lang: 'ini' | 'c
         if (trimmed.length === 0) return <Box key={k}>{' '}</Box>
         if (trimmed.startsWith('#') || trimmed.startsWith(';')) return <Box key={k} sx={{ color: '#9e9e9e' }}>{line}</Box>
         if (lang === 'ini') {
-          if (/^\[.*\]$/.test(trimmed)) return <Box key={k} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) return <Box key={k} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
           const eq = line.indexOf('=')
           if (eq > -1) return <Box key={k}><span style={{ color: '#81c784' }}>{line.slice(0, eq)}</span>{line.slice(eq)}</Box>
           return <Box key={k}>{line}</Box>
@@ -99,10 +99,13 @@ function CephConfLines({ text, lang }: Readonly<{ text: string; lang: 'ini' | 'c
         // crush: "host pve1 {" / "rule replicated_rule {" act like section headers
         if (trimmed.endsWith('{')) return <Box key={k} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
         if (trimmed === '}') return <Box key={k}>{line}</Box>
-        // color the leading keyword (id/item/weight/device/type/tunable…) green, keep indentation
-        const m = /^(\s*)(\S+)(.*)$/.exec(line)
-        if (m) return <Box key={k}>{m[1]}<span style={{ color: '#81c784' }}>{m[2]}</span>{m[3]}</Box>
-        return <Box key={k}>{line}</Box>
+        // color the leading keyword (id/item/weight/device/type/tunable…) green, keep
+        // indentation. Plain string ops (no regex) to avoid any backtracking concern.
+        const lead = line.length - line.trimStart().length
+        const body = line.slice(lead)
+        const breaks = [body.indexOf(' '), body.indexOf('\t')].filter((n) => n >= 0)
+        const cut = breaks.length > 0 ? Math.min(...breaks) : body.length
+        return <Box key={k}>{line.slice(0, lead)}<span style={{ color: '#81c784' }}>{body.slice(0, cut)}</span>{body.slice(cut)}</Box>
       })}
     </>
   )

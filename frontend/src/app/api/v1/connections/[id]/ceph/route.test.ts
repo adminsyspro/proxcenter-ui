@@ -27,7 +27,14 @@ function mockCluster() {
         pgmap: {}, osdmap: {}, monmap: {},
       }
     }
-    return [] // osd, mon, pool, mds, rules, fs
+    if (path.endsWith("/ceph/pool")) {
+      return [{
+        pool: "1", pool_name: "rbd", size: 3, min_size: 2,
+        crush_rule: "0", crush_rule_name: "replicated_rule",
+        autoscale_status: { crush_root_id: -1 }, percent_used: 0.07,
+      }]
+    }
+    return [] // osd, mon, mds, rules, fs
   })
 }
 
@@ -39,5 +46,14 @@ describe("GET /api/v1/connections/[id]/ceph — managers", () => {
     const json = await readJson<{ data: { managers: { active: { name: string; host: string }; standbys: { name: string; host: string }[] } } }>(res)
     expect(json?.data.managers.active).toEqual({ name: "pve1", host: "pve1" })
     expect(json?.data.managers.standbys).toEqual([{ name: "pve2", host: "pve2" }])
+  })
+
+  it("exposes crushRuleName and crushRootId on pools (for the topology rule/target)", async () => {
+    mockCluster()
+    const res = await callRoute(GET, { params: { id: "c1" } })
+    const json = await readJson<{ data: { pools: { list: Array<{ name: string; crushRuleName: string; crushRootId: number }> } } }>(res)
+    const rbd = json?.data.pools.list.find((p) => p.name === "rbd")
+    expect(rbd?.crushRuleName).toBe("replicated_rule")
+    expect(rbd?.crushRootId).toBe(-1)
   })
 })

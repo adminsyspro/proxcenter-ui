@@ -309,8 +309,11 @@ return {
         // Application (rbd vs cephfs)
         application: cephFSPoolNames.has(poolName) ? 'cephfs' : 'rbd',
 
-        // Crush rule
+        // Crush rule (name comes straight from the pool; the /ceph/rules
+        // endpoint is often bare). crushRootId resolves to a target bucket.
         crushRule: pool.crush_rule || 0,
+        crushRuleName: pool.crush_rule_name || null,
+        crushRootId: pool.autoscale_status?.crush_root_id ?? null,
 
         // Autoscale
         pgAutoscaleMode: pool.pg_autoscale_mode || 'unknown',

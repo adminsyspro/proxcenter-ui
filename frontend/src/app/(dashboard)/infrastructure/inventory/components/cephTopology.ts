@@ -2,7 +2,7 @@
 // kept separate so it is unit-tested and measured by SonarCloud.
 
 export type CrushNode = {
-  id: number
+  id: string | number
   name: string
   type: string
   status?: string
@@ -26,9 +26,23 @@ export type CephTopology = { tree: CrushNode[]; poolRules: PoolRuleRow[] }
 
 type AnyRec = Record<string, any>
 
-function osdIndex(list: AnyRec[]): Map<number, AnyRec> {
-  const m = new Map<number, AnyRec>()
-  for (const o of list) if (typeof o?.id === "number") m.set(o.id, o)
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+// PVE returns ids as strings ("2") for OSDs and crush rules but numbers for
+// buckets (-1). Always key/look up by String() so the merges actually match.
+function osdIndex(list: AnyRec[]): Map<string, AnyRec> {
+  const m = new Map<string, AnyRec>()
+  for (const o of list) if (o?.id !== undefined && o?.id !== null) m.set(String(o.id), o)
+  return m
+}
+
+// id -> bucket/osd name, over the whole crush tree (used to resolve a pool's
+// crush root id to a readable target name).
+function bucketNameIndex(nodes: AnyRec[], m: Map<string, string> = new Map()): Map<string, string> {
+  for (const n of nodes ?? []) {
+    if (n?.id !== undefined && n?.id !== null) m.set(String(n.id), n.name)
+    if (Array.isArray(n?.children)) bucketNameIndex(n.children, m)
+  }
   return m
 }
 
@@ -51,17 +65,20 @@ function hostDaemonIndex(data: AnyRec): Map<string, { mon: boolean; monLeader: b
   return m
 }
 
-function enrich(node: AnyRec, osds: Map<number, AnyRec>, hosts: Map<string, any>): CrushNode {
+function enrich(node: AnyRec, osds: Map<string, AnyRec>, hosts: Map<string, any>): CrushNode {
   const base: CrushNode = {
     id: node.id, name: node.name, type: node.type, status: node.status,
     usedBytes: 0, totalBytes: 0, usedPct: 0,
   }
-  if (node.type === "osd" || (!node.children && typeof node.id === "number" && node.id >= 0)) {
-    const o = osds.get(node.id)
+  if (node.type === "osd" || (!node.children && Number(node.id) >= 0)) {
+    const o = osds.get(String(node.id))
     if (o) {
-      base.usedBytes = o.usedBytes || 0
       base.totalBytes = o.totalBytes || 0
-      base.usedPct = typeof o.usedPct === "number" ? o.usedPct : 0
+      base.usedPct = round1(typeof o.usedPct === "number" ? o.usedPct : 0)
+      // The route's osds.list usedBytes is unreliable (derived from a kb_used
+      // field PVE doesn't return); derive it from the trustworthy percent_used
+      // so bucket roll-ups are correct.
+      base.usedBytes = Math.round((base.totalBytes * base.usedPct) / 100)
       base.osd = { up: !!o.up, in: !!o.in, deviceClass: o.deviceClass || "unknown" }
       base.status = base.status || (o.up ? "up" : "down")
     }
@@ -71,7 +88,7 @@ function enrich(node: AnyRec, osds: Map<number, AnyRec>, hosts: Map<string, any>
   base.children = children
   base.usedBytes = children.reduce((s, c) => s + c.usedBytes, 0)
   base.totalBytes = children.reduce((s, c) => s + c.totalBytes, 0)
-  base.usedPct = base.totalBytes > 0 ? Math.round((base.usedBytes / base.totalBytes) * 1000) / 10 : 0
+  base.usedPct = base.totalBytes > 0 ? round1((base.usedBytes / base.totalBytes) * 100) : 0
   if (node.type === "host") base.daemons = hosts.get(node.name) ?? { mon: false, monLeader: false, mgr: false, mds: false }
   return base
 }
@@ -82,18 +99,25 @@ export function buildCrushTopology(data: AnyRec): CephTopology {
   const hosts = hostDaemonIndex(data ?? {})
   const tree = crushTree.map((n) => enrich(n, osds, hosts))
 
+  const bucketNames = bucketNameIndex(crushTree)
   const rules: AnyRec[] = Array.isArray(data?.crushRules) ? data.crushRules : []
-  const ruleById = new Map<number, AnyRec>()
-  for (const r of rules) if (typeof r?.id === "number") ruleById.set(r.id, r)
+  const ruleById = new Map<string, AnyRec>()
+  for (const r of rules) if (r?.id !== undefined && r?.id !== null) ruleById.set(String(r.id), r)
+
   const poolRules: PoolRuleRow[] = (data?.pools?.list ?? []).map((p: AnyRec) => {
-    const rule = ruleById.get(p.crushRule)
+    const rule = ruleById.get(String(p.crushRule))
     const take = rule?.steps?.find((s: AnyRec) => s?.op === "take")
+    // Prefer the pool's own crush_rule_name; the rules endpoint is often bare.
+    const ruleName = p.crushRuleName || rule?.name || String(p.crushRule ?? "")
+    // Target = the rule's take-step bucket/class when available, else the pool's
+    // crush root id resolved to a bucket name (e.g. "default").
+    const rootName = (p.crushRootId !== undefined && p.crushRootId !== null) ? bucketNames.get(String(p.crushRootId)) : undefined
     return {
       pool: p.name,
-      ruleName: rule?.name ?? String(p.crushRule ?? ""),
-      target: take?.item_name ?? "",
+      ruleName,
+      target: take?.item_name ?? rootName ?? "",
       size: `${p.size ?? "?"}/${p.minSize ?? "?"}`,
-      usedPct: typeof p.percentUsed === "number" ? p.percentUsed : 0,
+      usedPct: round1(typeof p.percentUsed === "number" ? p.percentUsed : 0),
     }
   })
 

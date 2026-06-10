@@ -34,9 +34,35 @@ function DaemonChips({ d }: Readonly<{ d: NonNullable<CrushNode['daemons']> }>) 
   return <>{chip(d.monLeader ? 'mon ★' : 'mon', d.mon, 'success')}{chip('mgr', d.mgr, 'info')}{chip('mds', d.mds, 'secondary')}</>
 }
 
-function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId }: Readonly<{
+// RemixIcon glyph per CRUSH bucket type (osd / chassis / rack / datacenter / …).
+function crushTypeIcon(type: string): string {
+  switch (type) {
+    case 'osd': return 'ri-hard-drive-2-line'
+    case 'chassis': return 'ri-server-line'
+    case 'rack': return 'ri-archive-2-line'
+    case 'row': return 'ri-layout-row-line'
+    case 'pdu': return 'ri-plug-line'
+    case 'pod': return 'ri-archive-stack-line'
+    case 'room': return 'ri-home-4-line'
+    case 'datacenter': return 'ri-building-2-line'
+    case 'zone': return 'ri-global-line'
+    case 'region': return 'ri-earth-line'
+    case 'root': return 'ri-stack-line'
+    default: return 'ri-checkbox-blank-circle-line'
+  }
+}
+
+// Host buckets are PVE nodes → show the Proxmox logo; other bucket types use a glyph.
+function TypeIcon({ type, logoSrc }: Readonly<{ type: string; logoSrc: string }>) {
+  if (type === 'host') {
+    return <Box component="img" src={logoSrc} alt="" sx={{ width: 15, height: 15, flexShrink: 0, mr: 0.75 }} />
+  }
+  return <Box component="i" className={crushTypeIcon(type)} sx={{ fontSize: 15, width: 16, textAlign: 'center', opacity: 0.7, flexShrink: 0, mr: 0.75, color: 'text.secondary' }} />
+}
+
+function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc }: Readonly<{
   node: CrushNode; depth: number; expanded: Set<string>; toggle: (k: string) => void
-  onSelect: (n: CrushNode) => void; selectedId: string
+  onSelect: (n: CrushNode) => void; selectedId: string; logoSrc: string
 }>) {
   const key = `${node.type}:${node.id}:${node.name}`
   const hasChildren = !!node.children && node.children.length > 0
@@ -57,8 +83,9 @@ function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId }: Readon
         >
           <i className={isOpen ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
         </Box>
+        <TypeIcon type={node.type} logoSrc={logoSrc} />
         <Typography variant="body2" component="span" sx={{ color: node.type === 'osd' ? 'text.primary' : 'text.secondary' }}>
-          {node.type !== 'osd' && node.type !== 'root' ? `${node.type} ` : ''}<b>{node.name}</b>
+          {node.type !== 'osd' && node.type !== 'root' && node.type !== 'host' ? `${node.type} ` : ''}<b>{node.name}</b>
         </Typography>
         {node.osd && (
           <>
@@ -72,7 +99,7 @@ function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId }: Readon
         {node.totalBytes > 0 && <CapacityBar pct={node.usedPct} />}
       </Box>
       {hasChildren && isOpen && node.children!.map((c) => (
-        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} />
+        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} logoSrc={logoSrc} />
       ))}
     </Box>
   )
@@ -103,6 +130,8 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<CrushNode | null>(null)
   const tooltipSlotProps = useTooltipSlotProps()
+  const theme = useTheme()
+  const logoSrc = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
 
   useEffect(() => {
     if (!connId) return
@@ -147,7 +176,7 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>CRUSH tree</Typography>
           {tree.map((n) => (
-            <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} />
+            <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} logoSrc={logoSrc} />
           ))}
         </CardContent></Card>
         <Card variant="outlined"><CardContent>

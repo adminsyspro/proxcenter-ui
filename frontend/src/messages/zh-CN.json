@@ -2740,6 +2740,20 @@
         "clipboardFailed": "复制到剪贴板失败。",
         "retry": "重试"
       }
+    },
+    "diagnostics": {
+      "title": "连接诊断",
+      "runDiagnostics": "运行诊断",
+      "running": "正在运行诊断...",
+      "rerun": "重新运行",
+      "close": "关闭",
+      "summaryOk": "{count} 项通过",
+      "summaryWarn": "{count} 项警告",
+      "summaryError": "{count} 项错误",
+      "summarySkip": "{count} 项跳过",
+      "durationLabel": "总计 {ms} ms",
+      "unavailable": "诊断不可用",
+      "allOk": "所有检查均通过。"
     }
   },
   "green": {

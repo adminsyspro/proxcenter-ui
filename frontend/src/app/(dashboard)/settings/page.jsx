@@ -77,6 +77,10 @@ const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionD
   ssr: false
 })
 
+const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
+  ssr: false
+})
+
 const WhiteLabelTab = dynamic(() => import('@/components/settings/WhiteLabelTab'), {
   ssr: false,
   loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
@@ -380,6 +384,17 @@ function ConnectionsTab() {
   const [editingConn, setEditingConn] = useState(null)
   const [detectingCephId, setDetectingCephId] = useState(null)
 
+  // Diagnostic modal state
+  const [diagOpen, setDiagOpen] = useState(false)
+  const [diagConnectionId, setDiagConnectionId] = useState(null)
+  const [diagConnectionName, setDiagConnectionName] = useState('')
+
+  const openDiagnostic = (id, name) => {
+    setDiagConnectionId(id)
+    setDiagConnectionName(name)
+    setDiagOpen(true)
+  }
+
   const handleDetectCeph = async (connId) => {
     setDetectingCephId(connId)
     try {
@@ -592,6 +607,41 @@ function ConnectionsTab() {
     }
   })
 
+  // Diagnostic column (shared across all 6 grids)
+  const makeDiagnosticColumn = () => ({
+    field: 'diagnostic',
+    headerName: '',
+    width: 46,
+    sortable: false,
+    renderCell: params => (
+      <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <Tooltip
+          title={t('settings.diagnostics.runDiagnostics')}
+          slotProps={{
+            tooltip: {
+              sx: {
+                bgcolor: 'background.paper',
+                color: 'text.primary',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                boxShadow: 3,
+              }
+            }
+          }}
+        >
+          <IconButton
+            size='small'
+            onClick={(e) => { e.stopPropagation(); openDiagnostic(params.row.id, params.row.name) }}
+            sx={{ width: 28, height: 28 }}
+          >
+            <i className='ri-heart-pulse-line' style={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    )
+  })
+
   // PVE Columns
   const pveColumns = useMemo(
     () => [
@@ -774,6 +824,7 @@ function ConnectionsTab() {
           )
         },
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -875,6 +926,7 @@ function ConnectionsTab() {
           )
         },
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -950,6 +1002,7 @@ function ConnectionsTab() {
           </Box>
         )
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -1040,6 +1093,7 @@ function ConnectionsTab() {
           )
         },
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -1101,6 +1155,7 @@ function ConnectionsTab() {
           <ConnectionStatus connection={params.row} autoTest={true} />
         )
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -1162,6 +1217,7 @@ function ConnectionsTab() {
           <ConnectionStatus connection={params.row} autoTest={true} />
         )
       },
+      makeDiagnosticColumn(),
       {
         field: 'actions',
         headerName: '',
@@ -1550,6 +1606,14 @@ function ConnectionsTab() {
         type={addConnType}
         initialData={editingConn}
         mode={editingConn ? 'edit' : 'create'}
+      />
+
+      {/* Diagnostic modal */}
+      <DiagnosticModal
+        open={diagOpen}
+        connectionId={diagConnectionId}
+        connectionName={diagConnectionName}
+        onClose={() => setDiagOpen(false)}
       />
 
       {/* Dialog confirmation suppression connexion — remplace l'ancien

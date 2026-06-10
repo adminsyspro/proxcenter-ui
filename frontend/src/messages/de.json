@@ -2738,6 +2738,20 @@
         "clipboardFailed": "Kopieren in die Zwischenablage fehlgeschlagen.",
         "retry": "Erneut versuchen"
       }
+    },
+    "diagnostics": {
+      "title": "Verbindungsdiagnose",
+      "runDiagnostics": "Diagnose starten",
+      "running": "Diagnose wird durchgefuhrt...",
+      "rerun": "Erneut ausführen",
+      "close": "Schließen",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count} Warnung",
+      "summaryError": "{count} Fehler",
+      "summarySkip": "{count} übersprungen",
+      "durationLabel": "{ms} ms gesamt",
+      "unavailable": "Diagnose nicht verfügbar",
+      "allOk": "Alle Prüfungen bestanden."
     }
   },
   "green": {

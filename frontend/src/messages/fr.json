@@ -2770,6 +2770,20 @@
         "clipboardFailed": "Impossible de copier dans le presse-papiers.",
         "retry": "Réessayer"
       }
+    },
+    "diagnostics": {
+      "title": "Diagnostics de connexion",
+      "runDiagnostics": "Lancer les diagnostics",
+      "running": "Diagnostics en cours...",
+      "rerun": "Relancer",
+      "close": "Fermer",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count} avertissement",
+      "summaryError": "{count} erreur",
+      "summarySkip": "{count} ignoré",
+      "durationLabel": "{ms} ms au total",
+      "unavailable": "Diagnostics indisponibles",
+      "allOk": "Tous les controles sont passés."
     }
   },
   "green": {

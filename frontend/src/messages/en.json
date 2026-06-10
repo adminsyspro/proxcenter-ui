@@ -2770,6 +2770,20 @@
         "clipboardFailed": "Could not copy to clipboard.",
         "retry": "Retry"
       }
+    },
+    "diagnostics": {
+      "title": "Connection diagnostics",
+      "runDiagnostics": "Run diagnostics",
+      "running": "Running diagnostics...",
+      "rerun": "Re-run",
+      "close": "Close",
+      "summaryOk": "{count} OK",
+      "summaryWarn": "{count} warning",
+      "summaryError": "{count} error",
+      "summarySkip": "{count} skipped",
+      "durationLabel": "{ms} ms total",
+      "unavailable": "Diagnostics unavailable",
+      "allOk": "All checks passed."
     }
   },
   "green": {

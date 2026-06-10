@@ -94,31 +94,39 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nod
       result.version = initialStatus.versions?.overall?.version || initialStatus.version
     }
 
-    // Configuration - extraite du status car /ceph/config n'existe pas au niveau node
+    // Configuration - Proxmox expose le fichier ceph.conf complet ET la
+    // config database au niveau node, sous /ceph/cfg/ (PVE::API2::Ceph::Cfg) :
+    //   - /ceph/cfg/raw -> /etc/pve/ceph.conf brut (texte) : toutes les
+    //     sections [global]/[client]/[client.crash]/[mon.X] et toutes les clés.
+    //   - /ceph/cfg/db  -> base de configuration (ceph config dump).
+    // (Les chemins /ceph/config et /ceph/configdb n'existent pas : 501.)
     if (section === 'all' || section === 'config') {
-      // La configuration est dans le status - on extrait les informations disponibles
+      const [rawConfig, configDb, crush] = await Promise.all([
+        fetchSafe<string>(`/nodes/${encodeURIComponent(node)}/ceph/cfg/raw`),
+        fetchSafe<any[]>(`/nodes/${encodeURIComponent(node)}/ceph/cfg/db`),
+        fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/ceph/crush`),
+      ])
+
+      // Fallback structuré reconstruit depuis le status, utilisé uniquement si
+      // le fichier brut est indisponible (PVE ancien / token restreint).
+      // Clés de section SANS crochets : le rendu ajoute lui-même les [ ].
       const monmap = initialStatus.monmap || {}
-      const fsid = monmap.fsid || initialStatus.fsid
-      
-      // Construire une représentation de la config à partir des données disponibles
-      const configData: any = {
-        '[global]': {
-          fsid: fsid,
+      const fallbackGlobal: any = {
+        global: {
+          fsid: monmap.fsid || initialStatus.fsid,
           mon_host: (monmap.mons || []).map((m: any) => m.addr?.split('/')[0] || m.public_addr?.split('/')[0]).filter(Boolean).join(' '),
           cluster_network: initialStatus.cluster_network,
           public_network: initialStatus.public_network,
         },
-        '[client]': {
+        client: {
           keyring: '/etc/pve/priv/$cluster.$name.keyring'
         }
       }
-      
-      // Récupérer le crush map si disponible
-      const crush = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/ceph/crush`)
-      
+
       result.config = {
-        global: configData,
-        database: [], // Non disponible via l'API node
+        raw: typeof rawConfig === 'string' && rawConfig.trim().length > 0 ? rawConfig : null,
+        global: fallbackGlobal,
+        database: Array.isArray(configDb) ? configDb : [],
         crushMap: crush
       }
     }

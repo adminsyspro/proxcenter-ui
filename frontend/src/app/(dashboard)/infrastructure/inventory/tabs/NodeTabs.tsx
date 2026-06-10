@@ -74,6 +74,37 @@ import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import EntityTagManager from '../components/EntityTagManager'
 
+/**
+ * Renders a Ceph config-style text verbatim (indentation preserved) with light
+ * per-line syntax coloring. Returns just the colored lines; the caller wraps
+ * them in the dark code box. Shared by the Ceph "Configuration" (ceph.conf,
+ * lang="ini") and "Crush Map" (lang="crush") panels so both render the same way.
+ */
+function CephConfLines({ text, lang }: { text: string; lang: 'ini' | 'crush' }) {
+  return (
+    <>
+      {String(text).split('\n').map((line: string, i: number) => {
+        const trimmed = line.trim()
+        if (trimmed.length === 0) return <Box key={i}>{' '}</Box>
+        if (trimmed.startsWith('#') || trimmed.startsWith(';')) return <Box key={i} sx={{ color: '#9e9e9e' }}>{line}</Box>
+        if (lang === 'ini') {
+          if (/^\[.*\]$/.test(trimmed)) return <Box key={i} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
+          const eq = line.indexOf('=')
+          if (eq > -1) return <Box key={i}><span style={{ color: '#81c784' }}>{line.slice(0, eq)}</span>{line.slice(eq)}</Box>
+          return <Box key={i}>{line}</Box>
+        }
+        // crush: "host pve1 {" / "rule replicated_rule {" act like section headers
+        if (trimmed.endsWith('{')) return <Box key={i} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
+        if (trimmed === '}') return <Box key={i}>{line}</Box>
+        // color the leading keyword (id/item/weight/device/type/tunable…) green, keep indentation
+        const m = /^(\s*)(\S+)(.*)$/.exec(line)
+        if (m) return <Box key={i}>{m[1]}<span style={{ color: '#81c784' }}>{m[2]}</span>{m[3]}</Box>
+        return <Box key={i}>{line}</Box>
+      })}
+    </>
+  )
+}
+
 export default function NodeTabs(props: any) {
   const t = useTranslations()
   const theme = useTheme()
@@ -2244,7 +2275,7 @@ export default function NodeTabs(props: any) {
                         <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
                           {/* Configuration */}
                           {nodeCephSubTab === 0 && (
-                            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 300px' }, gap: 2 }}>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr', gap: 2 }}>
                               <Stack spacing={2}>
                                 {/* Configuration globale */}
                                 <Card variant="outlined">
@@ -2261,7 +2292,10 @@ export default function NodeTabs(props: any) {
                                       whiteSpace: 'pre-wrap',
                                       color: '#e0e0e0'
                                     }}>
-                                      {nodeCephData.config?.global ? (
+                                      {nodeCephData.config?.raw ? (
+                                        /* Fichier ceph.conf brut, rendu verbatim (indentation préservée) avec coloration par ligne */
+                                        <CephConfLines text={nodeCephData.config.raw} lang="ini" />
+                                      ) : nodeCephData.config?.global ? (
                                         Object.entries(nodeCephData.config.global).map(([section, values]: [string, any]) => (
                                           <Box key={section}>
                                             <Box sx={{ color: '#4fc3f7', fontWeight: 700 }}>[{section}]</Box>
@@ -2324,13 +2358,17 @@ export default function NodeTabs(props: any) {
                                     borderRadius: 1, 
                                     p: 2, 
                                     fontFamily: 'monospace', 
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     maxHeight: 500,
                                     overflow: 'auto',
                                     whiteSpace: 'pre-wrap',
                                     color: '#e0e0e0'
                                   }}>
-                                    {nodeCephData.config?.crushMap || 'Crush map not available'}
+                                    {nodeCephData.config?.crushMap ? (
+                                      <CephConfLines text={nodeCephData.config.crushMap} lang="crush" />
+                                    ) : (
+                                      <Typography variant="caption" sx={{ opacity: 0.5 }}>Crush map not available</Typography>
+                                    )}
                                   </Box>
                                 </CardContent>
                               </Card>

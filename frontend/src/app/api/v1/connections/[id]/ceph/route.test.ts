@@ -34,7 +34,14 @@ function mockCluster() {
         autoscale_status: { crush_root_id: -1 }, percent_used: 0.07,
       }]
     }
-    return [] // osd, mon, mds, rules, fs
+    if (path.endsWith("/ceph/osd")) {
+      return { root: { children: [
+        { id: "0", name: "osd.0", type: "osd", status: "up", up: 1, in: 1, device_class: "hdd",
+          crush_weight: 0.05, percent_used: 80, reweight: 1, pgs: 33, ceph_version_short: "19.2.3",
+          apply_latency_ms: 1, commit_latency_ms: 2 },
+      ] } }
+    }
+    return [] // mon, mds, rules, fs
   })
 }
 
@@ -55,5 +62,27 @@ describe("GET /api/v1/connections/[id]/ceph — managers", () => {
     const rbd = json?.data.pools.list.find((p) => p.name === "rbd")
     expect(rbd?.crushRuleName).toBe("replicated_rule")
     expect(rbd?.crushRootId).toBe(-1)
+  })
+
+  it("exposes reweight/pgs/version on osds (for the topology details panel)", async () => {
+    mockCluster()
+    const res = await callRoute(GET, { params: { id: "c1" } })
+    const json = await readJson<{ data: { osds: { list: Array<{ name: string; reweight: number; pgs: number; version: string }> } } }>(res)
+    const osd0 = json?.data.osds.list.find((o) => o.name === "osd.0")
+    expect(osd0?.reweight).toBe(1)
+    expect(osd0?.pgs).toBe(33)
+    expect(osd0?.version).toBe("19.2.3")
+  })
+
+  it("handles a cluster with no active mgr (managers.active null, standbys [])", async () => {
+    pveFetch.mockImplementation(async (_c: unknown, path: string) => {
+      if (path === "/nodes") return [{ node: "pve1", status: "online" }]
+      if (path.endsWith("/ceph/status")) return { health: { status: "HEALTH_OK", checks: {} }, mgrmap: {}, pgmap: {}, osdmap: {}, monmap: {} }
+      return []
+    })
+    const res = await callRoute(GET, { params: { id: "c1" } })
+    const json = await readJson<{ data: { managers: { active: unknown; standbys: unknown[] } } }>(res)
+    expect(json?.data.managers.active).toBeNull()
+    expect(json?.data.managers.standbys).toEqual([])
   })
 })

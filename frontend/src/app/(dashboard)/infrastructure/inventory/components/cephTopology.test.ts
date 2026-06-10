@@ -89,6 +89,45 @@ describe("buildCrushTopology", () => {
   })
 })
 
+describe("buildCrushTopology — edge cases", () => {
+  it("uses the route usedBytes when present and skips osds missing from the list", () => {
+    const { tree } = buildCrushTopology({
+      crushTree: [{ id: -1, name: "default", type: "root", children: [
+        { id: -2, name: "pve1", type: "host", children: [
+          { id: "0", name: "osd.0", type: "osd" },
+          { id: "9", name: "osd.9", type: "osd" }, // not present in osds.list
+        ]},
+      ]}],
+      osds: { list: [{ id: "0", name: "osd.0", host: "pve1", up: true, in: true, deviceClass: "ssd", totalBytes: 200, usedBytes: 50, usedPct: 25 }] },
+    } as any)
+    const host = tree[0].children![0]
+    const [osd0, osd9] = host.children!
+    expect(osd0.usedBytes).toBe(50) // route value used directly, not derived
+    expect(osd0.osd?.deviceClass).toBe("ssd")
+    expect(osd9.osd).toBeUndefined() // missing from list → no merge, no crash
+    expect(host.osdCount).toBe(1)
+  })
+
+  it("falls back to String(crushRule) and an empty target when nothing resolves", () => {
+    const { poolRules } = buildCrushTopology({
+      pools: { list: [{ name: "orphan", size: 2, minSize: 1, crushRule: "9", percentUsed: 0 }] },
+      crushRules: [],
+    } as any)
+    expect(poolRules[0]).toEqual({ pool: "orphan", ruleName: "9", target: "", size: "2/1", usedPct: 0 })
+  })
+
+  it("indexes host daemons defensively (host-less mon/mds ignored, standby mgr counted)", () => {
+    const { tree } = buildCrushTopology({
+      crushTree: [{ id: -2, name: "pve2", type: "host", children: [{ id: "1", name: "osd.1", type: "osd" }] }],
+      osds: { list: [{ id: "1", host: "pve2", up: true, in: true, deviceClass: "hdd", totalBytes: 100, usedBytes: 0, usedPct: 0 }] },
+      monitors: { list: [{ name: "x", leader: true }, { name: "pve2", host: "pve2" }] }, // first has no host → ignored
+      mds: { list: [{ name: "y" }] }, // no host → ignored
+      managers: { active: { name: "z" }, standbys: [{ name: "pve2", host: "pve2" }] }, // active host-less, standby on pve2
+    } as any)
+    expect(tree[0].daemons).toEqual({ mon: true, monLeader: false, mgr: true, mds: false })
+  })
+})
+
 describe("capacityColor", () => {
   it("maps utilization to theme palette keys", () => {
     expect(capacityColor(10)).toBe("success")

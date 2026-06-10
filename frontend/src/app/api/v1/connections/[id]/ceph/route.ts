@@ -267,6 +267,9 @@ return result
           // Stats
           commitLatencyMs: osd.commit_latency_ms || 0,
           applyLatencyMs: osd.apply_latency_ms || 0,
+          reweight: osd.reweight,
+          pgs: osd.pgs ?? osd.num_pgs,
+          version: osd.ceph_version_short || osd.version || null,
         }
       })
       .sort((a: any, b: any) => a.id - b.id)

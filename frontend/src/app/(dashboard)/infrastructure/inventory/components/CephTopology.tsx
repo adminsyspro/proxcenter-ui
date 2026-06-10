@@ -6,6 +6,7 @@ import {
   TableContainer, TableHead, TableRow, Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
 import { buildCrushTopology, capacityColor, type CrushNode } from './cephTopology'
+import { formatBytes } from '@/utils/format'
 
 // Theme-aware tooltip styling, mirroring InventoryTree's tooltipSlotProps.
 const useTooltipSlotProps = () => {
@@ -105,18 +106,37 @@ function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc 
   )
 }
 
+function daemonSummary(d: NonNullable<CrushNode['daemons']>): string {
+  return [d.monLeader ? 'mon (leader)' : d.mon ? 'mon' : '', d.mgr ? 'mgr' : '', d.mds ? 'mds' : ''].filter(Boolean).join(', ') || 'none'
+}
+
 function DetailsPanel({ node }: Readonly<{ node: CrushNode | null }>) {
   if (!node) return <Typography variant="caption" sx={{ opacity: 0.6 }}>Select a node to see details.</Typography>
-  const rows: [string, string][] = [['Type', node.type], ['Capacity', node.totalBytes > 0 ? `${node.usedPct}%` : 'n/a']]
-  if (node.osd) rows.push(['Status', `${node.osd.up ? 'up' : 'down'} / ${node.osd.in ? 'in' : 'out'}`], ['Class', node.osd.deviceClass])
-  if (node.daemons) rows.push(['Daemons', [node.daemons.monLeader ? 'mon (leader)' : node.daemons.mon ? 'mon' : '', node.daemons.mgr ? 'mgr' : '', node.daemons.mds ? 'mds' : ''].filter(Boolean).join(', ') || 'none'])
+  const cap = node.totalBytes > 0 ? `${formatBytes(node.usedBytes)} / ${formatBytes(node.totalBytes)} (${node.usedPct}%)` : 'n/a'
+  const rows: [string, string][] = [['Type', node.type], ['Capacity', cap]]
+  if (node.osd) {
+    rows.push(['Status', `${node.osd.up ? 'up' : 'down'} / ${node.osd.in ? 'in' : 'out'}`])
+    rows.push(['Device class', node.osd.deviceClass])
+    if (node.osd.reweight !== undefined) rows.push(['Reweight', String(node.osd.reweight)])
+    if (node.osd.pgs !== undefined) rows.push(['PGs', String(node.osd.pgs)])
+    if (node.osd.applyLatencyMs !== undefined || node.osd.commitLatencyMs !== undefined) {
+      rows.push(['Latency apply/commit', `${node.osd.applyLatencyMs ?? 0} / ${node.osd.commitLatencyMs ?? 0} ms`])
+    }
+    if (node.osd.host) rows.push(['Host', node.osd.host])
+    if (node.osd.version) rows.push(['Version', node.osd.version])
+  } else {
+    rows.push(['OSDs', `${node.osdUp} / ${node.osdCount} up`])
+    if (node.type !== 'host' && node.hostCount > 0) rows.push(['Hosts', String(node.hostCount)])
+    if (node.classes.length > 0) rows.push(['Device classes', node.classes.join(', ')])
+    if (node.daemons) rows.push(['Daemons', daemonSummary(node.daemons)])
+  }
   return (
     <Box>
       <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{node.name}</Typography>
       {rows.map(([k, v]) => (
-        <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25, borderBottom: '1px dashed', borderColor: 'divider' }}>
-          <Typography variant="caption" color="text.secondary">{k}</Typography>
-          <Typography variant="caption" fontWeight={600}>{v}</Typography>
+        <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, py: 0.25, borderBottom: '1px dashed', borderColor: 'divider' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>{k}</Typography>
+          <Typography variant="caption" fontWeight={600} sx={{ textAlign: 'right' }}>{v}</Typography>
         </Box>
       ))}
     </Box>
@@ -185,7 +205,7 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
         </CardContent></Card>
       </Box>
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Pools → CRUSH rules</Typography>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>POOLS</Typography>
         {poolRules.length > 0 ? (
           <TableContainer><Table size="small">
             <TableHead><TableRow>

@@ -1,6 +1,18 @@
 // Pure composition logic for the Ceph CRUSH topology view. No JSX, no React —
 // kept separate so it is unit-tested and measured by SonarCloud.
 
+export type OsdDetail = {
+  up: boolean
+  in: boolean
+  deviceClass: string
+  reweight?: number
+  pgs?: number
+  version?: string | null
+  applyLatencyMs?: number
+  commitLatencyMs?: number
+  host?: string
+}
+
 export type CrushNode = {
   id: string | number
   name: string
@@ -9,7 +21,12 @@ export type CrushNode = {
   usedBytes: number
   totalBytes: number
   usedPct: number
-  osd?: { up: boolean; in: boolean; deviceClass: string }
+  // descendant aggregates (osd leaves count themselves)
+  osdCount: number
+  osdUp: number
+  hostCount: number
+  classes: string[]
+  osd?: OsdDetail
   daemons?: { mon: boolean; monLeader: boolean; mgr: boolean; mds: boolean }
   children?: CrushNode[]
 }
@@ -68,7 +85,7 @@ function hostDaemonIndex(data: AnyRec): Map<string, { mon: boolean; monLeader: b
 function enrich(node: AnyRec, osds: Map<string, AnyRec>, hosts: Map<string, any>): CrushNode {
   const base: CrushNode = {
     id: node.id, name: node.name, type: node.type, status: node.status,
-    usedBytes: 0, totalBytes: 0, usedPct: 0,
+    usedBytes: 0, totalBytes: 0, usedPct: 0, osdCount: 0, osdUp: 0, hostCount: 0, classes: [],
   }
   if (node.type === "osd" || (!node.children && Number(node.id) >= 0)) {
     const o = osds.get(String(node.id))
@@ -76,19 +93,30 @@ function enrich(node: AnyRec, osds: Map<string, AnyRec>, hosts: Map<string, any>
       base.totalBytes = o.totalBytes || 0
       base.usedPct = round1(typeof o.usedPct === "number" ? o.usedPct : 0)
       // The route's osds.list usedBytes is unreliable (derived from a kb_used
-      // field PVE doesn't return); derive it from the trustworthy percent_used
-      // so bucket roll-ups are correct.
-      base.usedBytes = Math.round((base.totalBytes * base.usedPct) / 100)
-      base.osd = { up: !!o.up, in: !!o.in, deviceClass: o.deviceClass || "unknown" }
+      // field PVE doesn't return, so 0); fall back to deriving it from the
+      // trustworthy percent_used so bucket roll-ups are correct.
+      base.usedBytes = o.usedBytes || Math.round((base.totalBytes * base.usedPct) / 100)
+      base.osd = {
+        up: !!o.up, in: !!o.in, deviceClass: o.deviceClass || "unknown",
+        reweight: o.reweight, pgs: o.pgs, version: o.version ?? null,
+        applyLatencyMs: o.applyLatencyMs, commitLatencyMs: o.commitLatencyMs, host: o.host,
+      }
       base.status = base.status || (o.up ? "up" : "down")
+      base.osdCount = 1
+      base.osdUp = o.up ? 1 : 0
+      base.classes = base.osd.deviceClass ? [base.osd.deviceClass] : []
     }
     return base
   }
-  const children = (node.children ?? []).map((c: AnyRec) => enrich(c, osds, hosts))
+  const children: CrushNode[] = (node.children ?? []).map((c: AnyRec) => enrich(c, osds, hosts))
   base.children = children
   base.usedBytes = children.reduce((s, c) => s + c.usedBytes, 0)
   base.totalBytes = children.reduce((s, c) => s + c.totalBytes, 0)
   base.usedPct = base.totalBytes > 0 ? round1((base.usedBytes / base.totalBytes) * 100) : 0
+  base.osdCount = children.reduce((s, c) => s + c.osdCount, 0)
+  base.osdUp = children.reduce((s, c) => s + c.osdUp, 0)
+  base.hostCount = node.type === "host" ? 1 : children.reduce((s, c) => s + c.hostCount, 0)
+  base.classes = [...new Set(children.flatMap((c) => c.classes))].sort((a, b) => a.localeCompare(b))
   if (node.type === "host") base.daemons = hosts.get(node.name) ?? { mon: false, monLeader: false, mgr: false, mds: false }
   return base
 }

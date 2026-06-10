@@ -17,7 +17,7 @@ const cephData = {
     ]},
   ],
   osds: { list: [
-    { id: "0", name: "osd.0", host: "pve1", up: true, in: true, deviceClass: "hdd", totalBytes: 100, usedBytes: 0, usedPct: 80 },
+    { id: "0", name: "osd.0", host: "pve1", up: true, in: true, deviceClass: "hdd", totalBytes: 100, usedBytes: 0, usedPct: 80, reweight: 1, pgs: 33, version: "19.2.3", applyLatencyMs: 2, commitLatencyMs: 3 },
     { id: "1", name: "osd.1", host: "pve1", up: true, in: true, deviceClass: "hdd", totalBytes: 100, usedBytes: 0, usedPct: 40 },
   ]},
   monitors: { list: [{ name: "pve1", host: "pve1", inQuorum: true, leader: true }] },
@@ -30,11 +30,26 @@ const cephData = {
 }
 
 describe("buildCrushTopology", () => {
-  it("merges osd status/class into the leaf nodes despite STRING ids", () => {
+  it("merges osd status/class/details into the leaf nodes despite STRING ids", () => {
     const { tree } = buildCrushTopology(cephData as any)
     const osd0 = tree[0].children![0].children![0].children![0]
     expect(osd0.usedPct).toBe(80)
-    expect(osd0.osd).toEqual({ up: true, in: true, deviceClass: "hdd" })
+    expect(osd0.osd).toEqual({
+      up: true, in: true, deviceClass: "hdd",
+      reweight: 1, pgs: 33, version: "19.2.3", applyLatencyMs: 2, commitLatencyMs: 3, host: "pve1",
+    })
+  })
+
+  it("computes descendant aggregates (osd counts, classes, host count)", () => {
+    const { tree } = buildCrushTopology(cephData as any)
+    const root = tree[0]
+    expect(root.osdCount).toBe(2)
+    expect(root.osdUp).toBe(2)
+    expect(root.hostCount).toBe(1)
+    expect(root.classes).toEqual(["hdd"])
+    const host = root.children![0].children![0]
+    expect(host.osdCount).toBe(2)
+    expect(host.hostCount).toBe(1)
   })
 
   it("derives usedBytes from usedPct (route usedBytes is unreliable) and rolls capacity up", () => {

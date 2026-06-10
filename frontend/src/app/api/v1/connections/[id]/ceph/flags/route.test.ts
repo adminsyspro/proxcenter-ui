@@ -7,7 +7,7 @@ vi.mock("@/lib/rbac", () => ({
 vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: vi.fn(async () => ({ id: "c1", baseUrl: "https://h", apiToken: "t" })),
 }))
-const pveFetch = vi.fn(async () => null)
+const pveFetch = vi.fn()
 vi.mock("@/lib/proxmox/client", () => ({
   pveFetch: (...args: unknown[]) => pveFetch(...args),
 }))

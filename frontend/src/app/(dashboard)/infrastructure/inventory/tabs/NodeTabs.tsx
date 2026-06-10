@@ -80,28 +80,65 @@ import EntityTagManager from '../components/EntityTagManager'
  * them in the dark code box. Shared by the Ceph "Configuration" (ceph.conf,
  * lang="ini") and "Crush Map" (lang="crush") panels so both render the same way.
  */
-function CephConfLines({ text, lang }: { text: string; lang: 'ini' | 'crush' }) {
+function CephConfLines({ text, lang }: Readonly<{ text: string; lang: 'ini' | 'crush' }>) {
+  // Precompute a stable per-line key (the list is static and never reordered),
+  // so the JSX `key` is not the map index.
+  const rows = String(text).split('\n').map((line, idx) => ({ line, k: `${idx}|${line}` }))
   return (
     <>
-      {String(text).split('\n').map((line: string, i: number) => {
+      {rows.map(({ line, k }) => {
         const trimmed = line.trim()
-        if (trimmed.length === 0) return <Box key={i}>{' '}</Box>
-        if (trimmed.startsWith('#') || trimmed.startsWith(';')) return <Box key={i} sx={{ color: '#9e9e9e' }}>{line}</Box>
+        if (trimmed.length === 0) return <Box key={k}>{' '}</Box>
+        if (trimmed.startsWith('#') || trimmed.startsWith(';')) return <Box key={k} sx={{ color: '#9e9e9e' }}>{line}</Box>
         if (lang === 'ini') {
-          if (/^\[.*\]$/.test(trimmed)) return <Box key={i} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
+          if (/^\[.*\]$/.test(trimmed)) return <Box key={k} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
           const eq = line.indexOf('=')
-          if (eq > -1) return <Box key={i}><span style={{ color: '#81c784' }}>{line.slice(0, eq)}</span>{line.slice(eq)}</Box>
-          return <Box key={i}>{line}</Box>
+          if (eq > -1) return <Box key={k}><span style={{ color: '#81c784' }}>{line.slice(0, eq)}</span>{line.slice(eq)}</Box>
+          return <Box key={k}>{line}</Box>
         }
         // crush: "host pve1 {" / "rule replicated_rule {" act like section headers
-        if (trimmed.endsWith('{')) return <Box key={i} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
-        if (trimmed === '}') return <Box key={i}>{line}</Box>
+        if (trimmed.endsWith('{')) return <Box key={k} sx={{ color: '#4fc3f7', fontWeight: 700 }}>{line}</Box>
+        if (trimmed === '}') return <Box key={k}>{line}</Box>
         // color the leading keyword (id/item/weight/device/type/tunable…) green, keep indentation
         const m = /^(\s*)(\S+)(.*)$/.exec(line)
-        if (m) return <Box key={i}>{m[1]}<span style={{ color: '#81c784' }}>{m[2]}</span>{m[3]}</Box>
-        return <Box key={i}>{line}</Box>
+        if (m) return <Box key={k}>{m[1]}<span style={{ color: '#81c784' }}>{m[2]}</span>{m[3]}</Box>
+        return <Box key={k}>{line}</Box>
       })}
     </>
+  )
+}
+
+/**
+ * The Ceph "Configuration" panel body: the raw ceph.conf when available, the
+ * status-derived structured view as a fallback, otherwise an empty-state note.
+ * Kept as a component (rather than a nested ternary in the render) for clarity.
+ */
+function CephConfigurationBlock({ config }: Readonly<{ config: any }>) {
+  if (!config?.raw && !config?.global) {
+    return <Typography variant="caption" sx={{ opacity: 0.5 }}>No configuration available</Typography>
+  }
+  return (
+    <Box sx={{ bgcolor: 'grey.900', borderRadius: 1, p: 2, fontFamily: 'monospace', fontSize: 12, maxHeight: 300, overflow: 'auto', whiteSpace: 'pre-wrap', color: '#e0e0e0' }}>
+      {config.raw ? (
+        /* Fichier ceph.conf brut, rendu verbatim (indentation préservée) avec coloration par ligne */
+        <CephConfLines text={config.raw} lang="ini" />
+      ) : (
+        Object.entries(config.global).map(([section, values]: [string, any]) => (
+          <Box key={section}>
+            <Box sx={{ color: '#4fc3f7', fontWeight: 700 }}>[{section}]</Box>
+            {typeof values === 'object' && values !== null ? (
+              Object.entries(values).map(([k, v]) => (
+                <Box key={k} sx={{ pl: 2 }}>
+                  <span style={{ color: '#81c784' }}>{k}</span> = {String(v)}
+                </Box>
+              ))
+            ) : (
+              <Box sx={{ pl: 2 }}>{String(values)}</Box>
+            )}
+          </Box>
+        ))
+      )}
+    </Box>
   )
 }
 
@@ -2281,39 +2318,7 @@ export default function NodeTabs(props: any) {
                                 <Card variant="outlined">
                                   <CardContent>
                                     <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>Configuration</Typography>
-                                    <Box sx={{ 
-                                      bgcolor: 'grey.900', 
-                                      borderRadius: 1, 
-                                      p: 2, 
-                                      fontFamily: 'monospace', 
-                                      fontSize: 12,
-                                      maxHeight: 300,
-                                      overflow: 'auto',
-                                      whiteSpace: 'pre-wrap',
-                                      color: '#e0e0e0'
-                                    }}>
-                                      {nodeCephData.config?.raw ? (
-                                        /* Fichier ceph.conf brut, rendu verbatim (indentation préservée) avec coloration par ligne */
-                                        <CephConfLines text={nodeCephData.config.raw} lang="ini" />
-                                      ) : nodeCephData.config?.global ? (
-                                        Object.entries(nodeCephData.config.global).map(([section, values]: [string, any]) => (
-                                          <Box key={section}>
-                                            <Box sx={{ color: '#4fc3f7', fontWeight: 700 }}>[{section}]</Box>
-                                            {typeof values === 'object' && values !== null ? (
-                                              Object.entries(values).map(([k, v]) => (
-                                                <Box key={k} sx={{ pl: 2 }}>
-                                                  <span style={{ color: '#81c784' }}>{k}</span> = {String(v)}
-                                                </Box>
-                                              ))
-                                            ) : (
-                                              <Box sx={{ pl: 2 }}>{String(values)}</Box>
-                                            )}
-                                          </Box>
-                                        ))
-                                      ) : (
-                                        <Typography variant="caption" sx={{ opacity: 0.5 }}>No configuration available</Typography>
-                                      )}
-                                    </Box>
+                                    <CephConfigurationBlock config={nodeCephData.config} />
                                   </CardContent>
                                 </Card>
 

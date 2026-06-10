@@ -723,21 +723,36 @@ function ConnectionsTab() {
               </Box>
             )
           }
+          const firstHost = hosts[0]
+          const extraCount = hosts.length - 1
+          // Full node list shown on hover so the row stays a single line even
+          // for large clusters. One node per line: name, IP, and disabled flag.
+          const nodeList = hosts
+            .map(h => `${h.node}${h.ip ? ` - ${h.ip}` : ''}${h.enabled ? '' : ` (${t('common.disabled')})`}`)
+            .join('\n')
           return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%', flexWrap: 'wrap' }}>
-              {hosts.map(host => (
-                <Tooltip key={host.id} title={host.ip || t('settings.noIp')} arrow>
-                  <Chip
-                    size='small'
-                    label={host.node}
-                    icon={<i className='ri-server-line' style={{ fontSize: 14 }} />}
-                    variant='outlined'
-                    color={host.enabled ? 'default' : 'warning'}
-                    sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.75rem' }}
-                  />
-                </Tooltip>
-              ))}
-            </Box>
+            <Tooltip
+              title={<span style={{ whiteSpace: 'pre-line' }}>{nodeList}</span>}
+              arrow
+              slotProps={{
+                tooltip: { sx: { bgcolor: 'background.paper', color: 'text.primary', border: '1px solid', borderColor: 'divider', boxShadow: 3, maxWidth: 360 } },
+                arrow: { sx: { color: 'background.paper', '&::before': { border: '1px solid', borderColor: 'divider' } } },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%', minWidth: 0 }}>
+                <Chip
+                  size='small'
+                  label={firstHost.node}
+                  icon={<i className='ri-server-line' style={{ fontSize: 14 }} />}
+                  variant='outlined'
+                  color={firstHost.enabled ? 'default' : 'warning'}
+                  sx={{ fontSize: '0.75rem', maxWidth: 130, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }}
+                />
+                {extraCount > 0 && (
+                  <Chip size='small' label={`+${extraCount}`} variant='outlined' sx={{ fontSize: '0.75rem' }} />
+                )}
+              </Box>
+            </Tooltip>
           )
         }
       },

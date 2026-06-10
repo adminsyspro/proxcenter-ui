@@ -138,6 +138,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const numMons = monmap.num_mons || (monList?.length || 0)
     const quorum = status.quorum_names || []
 
+    // Managers (mgr) placement, derived from the mgrmap. mgr daemon names are
+    // the hostname (possibly FQDN), so host = name before the first dot.
+    const mgrmap = status.mgrmap || {}
+    const mgrHost = (n: any) => String(n || "").split(".")[0]
+    const managers = {
+      active: mgrmap.active_name ? { name: mgrmap.active_name, host: mgrHost(mgrmap.active_name) } : null,
+      standbys: (Array.isArray(mgrmap.standbys) ? mgrmap.standbys : []).map((s: any) => {
+        const name = s?.name ?? String(s)
+        return { name, host: mgrHost(name) }
+      }),
+    }
+
     // Mapper les OSDs avec plus de détails
     // Les OSDs peuvent être dans un format arborescent dans Proxmox
     const extractOsdsFromTree = (items: any[]): any[] => {
@@ -404,6 +416,7 @@ return {
       // CRUSH topology
       crushTree,
       crushRules,
+      managers,
     }
 
     return NextResponse.json({ data: cephData })

@@ -63,7 +63,7 @@ vi.mock("@/lib/connections/getConnection", () => ({
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: checkPermissionMock,
-  PERMISSIONS: { NODE_VIEW: "node.view" },
+  PERMISSIONS: { NODE_VIEW: "node.view", CONNECTION_VIEW: "connection.view" },
 }))
 
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
@@ -168,5 +168,25 @@ describe("GET /api/v1/connections/[id]/nodes (cross-tenant ManagedHost handling)
     expect(res.status).toBe(200)
     expect(sessionUpsertMock).toHaveBeenCalled()
     expect(globalUpsertMock).not.toHaveBeenCalled()
+  })
+
+  it("a fleet-view cache entry is not served to a scoped default-tenant caller", async () => {
+    // Authorized NOC caller fills the 30s response cache for the MSP connection
+    mockPveNodes()
+    const first = await callRoute(GET, { params: { id: "c-msp" } })
+    expect(first.status).toBe(200)
+
+    // A scoped default-tenant caller (connection.view denied) must miss that
+    // cache entry; the data layer then rejects the cross-tenant load.
+    checkPermissionMock.mockImplementation(async (_perm: string, type?: string) =>
+      type === "connection"
+        ? new Response(JSON.stringify({ error: "forbidden" }), { status: 403 })
+        : null
+    )
+    getConnectionByIdMock.mockRejectedValue(new Error("Connection not found: c-msp"))
+
+    await expect(callRoute(GET, { params: { id: "c-msp" } })).rejects.toThrow(
+      /Connection not found/
+    )
   })
 })

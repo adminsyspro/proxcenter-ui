@@ -40,9 +40,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   // Resolve tenant for vDC-aware caching and filtering
   const tenantId = await getCurrentTenantId()
-  const cacheKey = `${tenantId}:${id}`
 
-  // Check response cache (keyed by tenant to avoid cross-tenant leaks)
+  // The 30s response cache must not serve an MSP-owned cluster's node list,
+  // fetched by an authorized NOC user, to a narrowly scoped default-tenant
+  // user. The caller's connection-scoped view grant is part of the key;
+  // getConnectionById enforces the actual access.
+  const fleetView =
+    tenantId === DEFAULT_TENANT_ID &&
+    (await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)) === null
+  const cacheKey = `${tenantId}:${fleetView ? "fleet" : "scoped"}:${id}`
+
+  // Check response cache (keyed by tenant + access scope to avoid leaks)
   const cache = getNodesCache()
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < NODES_CACHE_TTL) {

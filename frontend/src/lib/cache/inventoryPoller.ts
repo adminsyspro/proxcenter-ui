@@ -259,9 +259,11 @@ async function pollAll() {
   if (subscribers.size === 0) return
 
   try {
+    // Select tenantId so connection loads pass the row's owner tenant: this
+    // poller runs without a session and must reach MSP-owned connections too.
     const connections = await prisma.connection.findMany({
       where: { type: 'pve' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, tenantId: true },
     })
 
     const allEvents: InventoryEvent[] = []
@@ -269,7 +271,7 @@ async function pollAll() {
     // Poll all connections in parallel
     const results = await Promise.allSettled(
       connections.map(async (conn) => {
-        const connConfig = await getConnectionById(conn.id)
+        const connConfig = await getConnectionById(conn.id, conn.tenantId)
         return pollConnection(conn.id, connConfig)
       })
     )
@@ -306,7 +308,7 @@ async function pollAll() {
       if (connectionsNeedingDiscovery.length > 0) {
         Promise.allSettled(
           connectionsNeedingDiscovery.map(async (conn) => {
-            const connConfig = await getConnectionById(conn.id)
+            const connConfig = await getConnectionById(conn.id, conn.tenantId)
             if (connConfig.baseUrl && connConfig.apiToken) {
               await discoverNodeIps(connConfig, conn.id)
             }
@@ -355,7 +357,13 @@ async function handleAutoHaEvents(events: InventoryEvent[]) {
       const settings = await getSetting<any>(`auto_ha:${connId}`)
       if (!settings?.enabled) continue
 
-      const conn = await getConnectionById(connId)
+      // Background context: resolve with the row's owner tenant (MSP-owned
+      // connections included).
+      const row = await prisma.connection.findUnique({
+        where: { id: connId },
+        select: { tenantId: true },
+      })
+      const conn = await getConnectionById(connId, row?.tenantId)
 
       for (const vm of vms) {
         const sid = `${vm.type === 'lxc' ? 'ct' : 'vm'}:${vm.vmid}`

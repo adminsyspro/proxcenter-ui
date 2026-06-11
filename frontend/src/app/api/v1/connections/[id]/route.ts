@@ -312,6 +312,29 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       select: { name: true, type: true, baseUrl: true },
     })
 
+    // Route PBS deletions through unbindFromVdc first: the DB delete-trigger
+    // cascades the binding rows (vdc_pbs_namespaces + vdc_pbs_pve_storages),
+    // but only the app-level unbind also removes the denormalized vdc_storages
+    // rows, the pbs-type storage definitions left on the PVE clusters and the
+    // PBS sub-token. Best-effort per binding: a failed unbind must not block
+    // the deletion (the trigger keeps the DB consistent either way).
+    if (connection?.type === "pbs") {
+      const bindings = await globalPrisma.vdcPbsNamespace.findMany({
+        where: { pbsConnectionId: id },
+        select: { id: true },
+      })
+      if (bindings.length > 0) {
+        const { unbindFromVdc } = await import("@/lib/vdc/pbsOrchestrator")
+        for (const b of bindings) {
+          try {
+            await unbindFromVdc(b.id)
+          } catch (e: any) {
+            console.error(`[connections] unbind ${b.id} before PBS delete failed:`, e?.message || e)
+          }
+        }
+      }
+    }
+
     // Option: supprime aussi les hosts gérés liés
     await prisma.managedHost.deleteMany({ where: { connectionId: id } }).catch(() => {})
 

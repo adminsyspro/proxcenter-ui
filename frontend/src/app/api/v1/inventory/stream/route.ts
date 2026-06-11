@@ -4,6 +4,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connections/getConnection"
+import { scopePbsDataForTenant, type PbsServerData, type PbsDatastoreData } from "@/lib/inventory/scopePbs"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { isSharedStorage } from "@/lib/proxmox/storage"
@@ -143,96 +144,9 @@ function scopeStorageDataForTenant(
   return { ...data, nodes, sharedStorages: [] }
 }
 
-/**
- * Restrict a PbsServerData payload to the namespaces the tenant's vDC allows.
- * Counts are recomputed from only the permitted namespaces.
- * Returns null if no datastores remain after filtering (caller should skip the send).
- */
-async function scopePbsDataForTenant(
-  data: PbsServerData,
-  scope: VdcScope | null,
-): Promise<PbsServerData | null> {
-  if (!scope) return data
-  const allowed = scope.pbsNamespacesByConnection.get(data.id)
-  if (!allowed || allowed.length === 0) return null
-
-  const { listSnapshotsInNamespace } = await import('@/lib/proxmox/pbsNamespace')
-  const conn = await getPbsConnectionByIdUnscoped(data.id).catch(() => null)
-  if (!conn) return null
-
-  const byStore = new Map<string, string[]>()
-  for (const { datastore, namespace } of allowed) {
-    const list = byStore.get(datastore) ?? []
-    list.push(namespace)
-    byStore.set(datastore, list)
-  }
-
-  let vmCount = 0, ctCount = 0, hostCount = 0, backupCount = 0
-  const datastores: PbsDatastoreData[] = []
-
-  for (const ds of data.datastores) {
-    const namespaces = byStore.get(ds.name)
-    if (!namespaces) continue
-    let dsVm = 0, dsCt = 0, dsHost = 0, dsBackup = 0
-    for (const ns of namespaces) {
-      try {
-        const snapshots = await listSnapshotsInNamespace(conn, ds.name, ns)
-        for (const s of snapshots) {
-          dsBackup++
-          const t = s['backup-type']
-          if (t === 'vm') dsVm++
-          else if (t === 'ct') dsCt++
-          else if (t === 'host') dsHost++
-        }
-      } catch { /* ignore per-namespace failure */ }
-    }
-    datastores.push({ ...ds, backupCount: dsBackup, vmCount: dsVm, ctCount: dsCt, hostCount: dsHost })
-    vmCount += dsVm; ctCount += dsCt; hostCount += dsHost; backupCount += dsBackup
-  }
-
-  if (datastores.length === 0) return null
-
-  return {
-    ...data,
-    datastores,
-    stats: {
-      datastoreCount: datastores.length,
-      backupCount,
-      totalSize: datastores.reduce((s, d) => s + d.total, 0),
-      totalUsed: datastores.reduce((s, d) => s + d.used, 0),
-    },
-  }
-}
-
-type PbsDatastoreData = {
-  name: string
-  path?: string
-  comment?: string
-  total: number
-  used: number
-  available: number
-  usagePercent: number
-  backupCount: number
-  vmCount: number
-  ctCount: number
-  hostCount: number
-}
-
-type PbsServerData = {
-  id: string
-  name: string
-  type: 'pbs'
-  status: 'online' | 'offline'
-  version?: string
-  uptime?: number
-  datastores: PbsDatastoreData[]
-  stats: {
-    totalSize: number
-    totalUsed: number
-    datastoreCount: number
-    backupCount: number
-  }
-}
+// scopePbsDataForTenant + the PBS payload types are extracted to
+// @/lib/inventory/scopePbs (testable module; route files cannot export
+// non-handler symbols).
 
 /* ------------------------------------------------------------------ */
 /* Per-connection fetch functions (reused from inventory route)         */

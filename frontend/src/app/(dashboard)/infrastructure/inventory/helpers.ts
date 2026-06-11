@@ -51,7 +51,10 @@ export function sanitizeTag(raw: string): string {
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9_+.-]/g, '')
     .replace(/-{2,}/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
+    // Two anchored single-class trims rather than one alternation: keeps the
+    // regex linear (no backtracking, avoids the ReDoS hotspot Sonar flags).
+    .replace(/^[-.]+/, '')
+    .replace(/[-.]+$/, '')
 }
 
 /**

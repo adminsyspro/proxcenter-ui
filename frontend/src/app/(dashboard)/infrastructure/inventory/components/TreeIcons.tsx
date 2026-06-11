@@ -4,6 +4,8 @@ import React from 'react'
 
 import { Box, CircularProgress, useTheme } from '@mui/material'
 
+import { vmIconOpacity } from '../helpers'
+
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -70,12 +72,13 @@ export function StatusIcon({ status, type, isMigrating, isPendingAction, mainten
     )
   }
 
-  // Normal VM: icon + colored status dot
+  // Normal VM: icon + colored status dot. The glyph is dimmed when the guest
+  // is off so on/off reads from brightness, not just the dot colour.
   const dotColor = status === 'running' ? '#4caf50' : status === 'paused' ? '#ed6c02' : '#f44336'
 
   return (
     <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: size, height: size, flexShrink: 0 }}>
-      <i className={iconClass} style={{ fontSize: size, opacity: 0.7 }} />
+      <i className={iconClass} style={{ fontSize: size, opacity: vmIconOpacity(status, template) }} />
       <Box sx={{
         position: 'absolute', bottom: -2, right: -3,
         width: dotSize, height: dotSize, borderRadius: '50%',

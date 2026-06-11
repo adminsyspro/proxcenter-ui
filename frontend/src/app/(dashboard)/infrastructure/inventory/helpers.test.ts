@@ -6,6 +6,7 @@ import {
   sanitizeTag,
   filterTagInput,
   resolveVmPowerAction,
+  vmIconOpacity,
   safeJson,
   asArray,
   parseTags,
@@ -145,6 +146,35 @@ describe('resolveVmPowerAction', () => {
     expect(resolveVmPowerAction('stop', 'running')).toBe('stop')
     expect(resolveVmPowerAction('reboot', 'running')).toBe('reboot')
     expect(resolveVmPowerAction('hibernate', 'running')).toBe('hibernate')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* vmIconOpacity                                                       */
+/* ------------------------------------------------------------------ */
+
+describe('vmIconOpacity', () => {
+  it('keeps running guests bright', () => {
+    expect(vmIconOpacity('running')).toBe(0.9)
+  })
+
+  it('fades stopped guests the most', () => {
+    expect(vmIconOpacity('stopped')).toBe(0.3)
+  })
+
+  it('puts paused guests in between', () => {
+    const paused = vmIconOpacity('paused')
+    expect(paused).toBeLessThan(vmIconOpacity('running'))
+    expect(paused).toBeGreaterThan(vmIconOpacity('stopped'))
+  })
+
+  it('treats unknown status as off', () => {
+    expect(vmIconOpacity(undefined)).toBe(0.3)
+  })
+
+  it('uses the template opacity regardless of status', () => {
+    expect(vmIconOpacity('running', true)).toBe(0.5)
+    expect(vmIconOpacity('stopped', true)).toBe(0.5)
   })
 })
 

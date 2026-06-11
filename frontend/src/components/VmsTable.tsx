@@ -4,6 +4,7 @@ import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallba
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { useTagColors } from '@/contexts/TagColorContext'
+import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
 import { useTenant } from '@/contexts/TenantContext'
 
 import { createPortal } from 'react-dom'
@@ -910,7 +911,7 @@ return (
                     </Box>
                   ) : (
                     <>
-                      <i className={iconClass} style={{ fontSize: 18, opacity: 0.7 }} />
+                      <i className={iconClass} style={{ fontSize: 18, opacity: vmIconOpacity(vm.status, vm.template) }} />
                       {!vm.template && (
                         <Box sx={{
                           position: 'absolute', bottom: -1, right: -2,

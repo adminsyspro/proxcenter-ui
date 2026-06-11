@@ -94,6 +94,19 @@ export function resolveVmPowerAction(uiAction: string, status?: string): string 
   return uiAction
 }
 
+/**
+ * Opacity for a guest's tree icon, dimmed by power state. Running guests stay
+ * bright and stopped ones fade out, so on/off is legible from brightness alone
+ * and does not depend on the red/green status dot (accessibility, PDM-style).
+ */
+export function vmIconOpacity(status?: string, template?: boolean): number {
+  if (template) return 0.5
+  if (status === 'running') return 0.9
+  if (status === 'paused') return 0.55
+
+  return 0.3 // stopped / unknown
+}
+
 /* ------------------------------------------------------------------ */
 /* Helpers JSON / Array                                               */
 /* ------------------------------------------------------------------ */

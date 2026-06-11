@@ -12,7 +12,8 @@ import {
 import { getConnectionById } from '@/lib/connections/getConnection'
 import {
   insertBinding, insertPveStorage, deleteBinding, deletePveStorage,
-  listPveStoragesForBinding, findBindingByTuple, type PbsBindingRow,
+  listPveStoragesForBinding, findBindingByTuple, updateBindingToken,
+  deleteBindingIfExists, type PbsBindingRow,
 } from '@/lib/db/vdcPbsBindings'
 import { clearVdcScopeCache } from './scope'
 
@@ -114,19 +115,6 @@ async function removeVdcStorage(vdcId: string, storageId: string): Promise<void>
 export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBindingRow; steps: StepStatus }> {
   const lockKey = `${args.vdcId}|${args.pbsConnectionId}|${args.datastore}|${args.namespace ?? ''}`
   return withLock(lockKey, async () => {
-    // Ownership check BEFORE any PBS side effects (ensureNamespace/token/ACL).
-    // insertBinding also checks, but by then we may have already provisioned on
-    // the PBS. Checking here keeps the function idempotent on failure and closes
-    // the P1 ordering issue flagged by Codex.
-    const ownerRow = await prisma.connection.findUnique({
-      where: { id: args.pbsConnectionId },
-      select: { tenantId: true },
-    })
-    if (!ownerRow) throw new Error(`PBS connection ${args.pbsConnectionId} not found`)
-    if (ownerRow.tenantId !== 'default') {
-      throw new Error(`PBS connection ${args.pbsConnectionId} is owned by tenant ${ownerRow.tenantId}; vDC bindings can only target provider-pool PBS`)
-    }
-
     const { vdc, tenant } = await readVdcAndTenant(args.vdcId)
     const namespace = args.namespace ?? `tenant-${tenant.slug}/vdc-${vdc.slug}`
     const pbs = await resolvePbsMeta(args.pbsConnectionId)
@@ -141,39 +129,94 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
       throw new Error(`Binding already exists (${existing.datastore}/${existing.namespace}). Delete it first if you want to recreate.`)
     }
 
-    await ensureNamespacePath(pbs.conn, args.datastore, namespace)
-    steps.namespace = 'ok'
-
-    const tokenShortId = `vdc-${args.vdcId.slice(0, 8)}`
-    let tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
-    if (!tokenResult.secret) {
-      await deleteSubToken(pbs.conn, pbs.rootUser, tokenShortId)
-      tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
-      if (!tokenResult.secret) throw new Error('Failed to mint sub-token (no secret)')
-    }
-    steps.token = 'ok'
-    const effectiveTokenId = tokenResult.tokenId
-    const effectiveSecret = tokenResult.secret
-
-    await setNamespaceAcl(pbs.conn, args.datastore, namespace, effectiveTokenId)
-    await setDatastoreAuditAcl(pbs.conn, args.datastore, effectiveTokenId)
-    steps.acl = 'ok'
-
-    // Wait for PBS to propagate the just-set ACLs to the point where the
-    // sub-token's own /admin/datastore/{store}/status returns 200. That's the
-    // same call PVE's pbs: storage probe ends up making, so once it's green
-    // here the POST /storage probe will be too. Empirically takes 3-5s.
-    await waitForPbsTokenReady(pbs.conn, args.datastore, effectiveTokenId, effectiveSecret)
-
+    // Record the binding BEFORE provisioning anything on the PBS. insertBinding
+    // validates pool ownership and the DB insert-trigger re-checks it under the
+    // per-connection advisory lock, so from this point a concurrent
+    // owner-reassign is rejected and a concurrent connection-delete sees the
+    // row and routes it through unbindFromVdc: no orphan PBS artifacts either
+    // way. Token fields start null (like a manual binding, which every consumer
+    // already tolerates) and are completed after provisioning; any failure
+    // rolls back the placeholder row and the PBS artifacts below.
     const binding = await insertBinding({
       vdcId: args.vdcId,
       pbsConnectionId: args.pbsConnectionId,
       datastore: args.datastore,
       namespace,
       mode: 'auto',
-      pbsTokenId: effectiveTokenId,
-      pbsTokenSecret: effectiveSecret,
+      pbsTokenId: null,
+      pbsTokenSecret: null,
     })
+
+    const tokenShortId = `vdc-${args.vdcId.slice(0, 8)}`
+    // Only roll the sub-token back when WE obtained a fresh secret: the token
+    // id is per-vDC and may pre-exist for a sibling binding of the same vDC.
+    let freshSecretMinted = false
+    let effectiveTokenId: string
+    let effectiveSecret: string
+
+    try {
+      await ensureNamespacePath(pbs.conn, args.datastore, namespace)
+      steps.namespace = 'ok'
+
+      let tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
+      if (!tokenResult.secret) {
+        await deleteSubToken(pbs.conn, pbs.rootUser, tokenShortId)
+        tokenResult = await ensureSubToken(pbs.conn, pbs.rootUser, tokenShortId)
+        if (!tokenResult.secret) throw new Error('Failed to mint sub-token (no secret)')
+      }
+      freshSecretMinted = true
+      steps.token = 'ok'
+      effectiveTokenId = tokenResult.tokenId
+      effectiveSecret = tokenResult.secret
+
+      await setNamespaceAcl(pbs.conn, args.datastore, namespace, effectiveTokenId)
+      await setDatastoreAuditAcl(pbs.conn, args.datastore, effectiveTokenId)
+      steps.acl = 'ok'
+
+      // Wait for PBS to propagate the just-set ACLs to the point where the
+      // sub-token's own /admin/datastore/{store}/status returns 200. That's the
+      // same call PVE's pbs: storage probe ends up making, so once it's green
+      // here the POST /storage probe will be too. Empirically takes 3-5s.
+      await waitForPbsTokenReady(pbs.conn, args.datastore, effectiveTokenId, effectiveSecret)
+
+      // Complete the placeholder row. Throws (P2025) when the row vanished,
+      // i.e. the PBS connection was deleted while we were provisioning: the
+      // rollback below then removes the freshly minted PBS artifacts.
+      await updateBindingToken(binding.id, effectiveTokenId, effectiveSecret)
+    } catch (e) {
+      try { await deleteBindingIfExists(binding.id) } catch { /* best-effort */ }
+      if (freshSecretMinted) {
+        try {
+          // The token id is per-vDC: when a SIBLING binding of the same vDC
+          // still references it, leave the token alone. (Its secret was
+          // already rotated by ensureSubToken, a pre-existing quirk of the
+          // shared-token design, but revoking it entirely would be worse.)
+          const sibling = await prisma.vdcPbsNamespace.findFirst({
+            // Same token on the SAME PBS server only: the same vDC bound to
+            // another PBS yields the same token id string there, which must
+            // not suppress cleanup on the server that just failed. A
+            // concurrent auto bind of the same vDC still provisioning counts
+            // too: its placeholder row has null token fields but shares the
+            // per-vDC token (our own placeholder is already deleted above).
+            // Accepted residual: if that concurrent bind ALSO fails before
+            // minting, the token stays unreferenced on the PBS until the next
+            // bind of this vDC reclaims the same tokenShortId.
+            where: {
+              pbsConnectionId: args.pbsConnectionId,
+              OR: [
+                { pbsTokenId: effectiveTokenId },
+                { vdcId: args.vdcId, pbsTokenId: null, mode: 'auto' },
+              ],
+            },
+            select: { id: true },
+          })
+          if (!sibling) await deleteSubToken(pbs.conn, pbs.rootUser, tokenShortId)
+        } catch { /* best-effort */ }
+      }
+      // The namespace is intentionally left in place: it may have pre-existed
+      // with data, and unbindFromVdc keeps namespaces too.
+      throw e
+    }
 
     const pveConnId = vdc.connectionId
     const pveConn = await getConnectionById(pveConnId, tenant.id)
@@ -198,7 +241,12 @@ export async function bindPbsToVdc(args: BindAutoArgs): Promise<{ binding: PbsBi
     }
 
     clearVdcScopeCache(tenant.id)
-    return { binding, steps }
+    // Reflect the completed token in the returned row (the placeholder was
+    // inserted with null token fields).
+    return {
+      binding: { ...binding, pbsTokenId: effectiveTokenId, pbsTokenSecret: effectiveSecret },
+      steps,
+    }
   })
 }
 

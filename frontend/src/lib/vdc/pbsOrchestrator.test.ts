@@ -10,8 +10,10 @@ vi.mock('@/lib/db/vdcPbsBindings', () => ({
   insertPveStorage: vi.fn(),
   listPveStoragesForBinding: vi.fn(async () => []),
   deleteBinding: vi.fn(),
+  deleteBindingIfExists: vi.fn(),
   deletePveStorage: vi.fn(),
   findBindingByTuple: vi.fn(async () => null),
+  updateBindingToken: vi.fn(),
 }))
 vi.mock('@/lib/proxmox/pbsNamespace', () => ({
   ensureNamespacePath: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock('@/lib/db/prisma', () => ({
     },
     vdcPbsNamespace: {
       findUnique: vi.fn(async () => null),
+      findFirst: vi.fn(async () => null),
     },
   },
 }))
@@ -121,17 +124,104 @@ describe('bindPbsToVdc', () => {
   })
 
   it('rejects when fingerprint is missing on the PBS connection', async () => {
-    // First call: ownership check (needs tenantId = 'default' to pass)
-    ;(prismaMod.prisma.connection.findUnique as any).mockResolvedValueOnce({
-      id: 'pbs1', tenantId: 'default',
-    })
-    // Second call: resolvePbsMeta reads the full row (fingerprint missing triggers the error)
+    // resolvePbsMeta reads the full row (fingerprint missing triggers the error)
     ;(prismaMod.prisma.connection.findUnique as any).mockResolvedValueOnce({
       id: 'pbs1', type: 'pbs', baseUrl: 'https://pbs',
       fingerprint: null, apiTokenEnc: 'e', insecureTLS: true,
     })
     await expect(bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store1' }))
       .rejects.toThrow(/fingerprint/i)
+    // Failed before the placeholder insert: nothing to roll back
+    expect(bindings.insertBinding).not.toHaveBeenCalled()
+  })
+
+  it('records the placeholder binding BEFORE provisioning, then completes the token', async () => {
+    ;(bindings.insertBinding as any).mockResolvedValue({
+      id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1',
+      datastore: 'store1', namespace: 'tenant-acme/vdc-prod',
+      mode: 'auto', pbsTokenId: null, pbsTokenSecret: null, createdAt: 't',
+    })
+
+    const result = await bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store1' })
+
+    // Placeholder row first (null token), all PBS side effects after it
+    expect(bindings.insertBinding).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'auto', pbsTokenId: null, pbsTokenSecret: null }),
+    )
+    const insertOrder = (bindings.insertBinding as any).mock.invocationCallOrder[0]
+    const nsOrder = (pbsNs.ensureNamespacePath as any).mock.invocationCallOrder[0]
+    expect(insertOrder).toBeLessThan(nsOrder)
+    // Token completed on the row + reflected in the returned binding
+    expect(bindings.updateBindingToken).toHaveBeenCalledWith('b1', 'root@pam!vdc-abc', 'S3CR3T')
+    expect(result.binding.pbsTokenId).toBe('root@pam!vdc-abc')
+  })
+
+  it('rolls back the placeholder row and the fresh token when provisioning fails', async () => {
+    ;(bindings.insertBinding as any).mockResolvedValue({
+      id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1',
+      datastore: 'store1', namespace: 'n', mode: 'auto',
+      pbsTokenId: null, pbsTokenSecret: null, createdAt: 't',
+    })
+    ;(pbsNs.setNamespaceAcl as any).mockRejectedValueOnce(new Error('ACL boom'))
+
+    await expect(bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store1' }))
+      .rejects.toThrow(/ACL boom/)
+
+    expect(bindings.deleteBindingIfExists).toHaveBeenCalledWith('b1')
+    // A fresh secret was minted before the failure: token rolled back
+    expect(pbsNs.deleteSubToken).toHaveBeenCalled()
+    expect(pveStorage.createPbsStorage).not.toHaveBeenCalled()
+  })
+
+  it('does not revoke the per-vDC token when a sibling binding still references it', async () => {
+    ;(bindings.insertBinding as any).mockResolvedValue({
+      id: 'b2', vdcId: 'v1', pbsConnectionId: 'pbs1',
+      datastore: 'store2', namespace: 'n2', mode: 'auto',
+      pbsTokenId: null, pbsTokenSecret: null, createdAt: 't',
+    })
+    // A sibling binding of the same vDC shares the per-vDC token id
+    ;(prismaMod.prisma.vdcPbsNamespace.findFirst as any).mockResolvedValueOnce({ id: 'b1' })
+    ;(pbsNs.setNamespaceAcl as any).mockRejectedValueOnce(new Error('ACL boom'))
+
+    await expect(bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store2' }))
+      .rejects.toThrow(/ACL boom/)
+
+    expect(bindings.deleteBindingIfExists).toHaveBeenCalledWith('b2')
+    expect(pbsNs.deleteSubToken).not.toHaveBeenCalled()
+  })
+
+  it('does not revoke the per-vDC token when no fresh secret was minted', async () => {
+    ;(bindings.insertBinding as any).mockResolvedValue({
+      id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1',
+      datastore: 'store1', namespace: 'n', mode: 'auto',
+      pbsTokenId: null, pbsTokenSecret: null, createdAt: 't',
+    })
+    ;(pbsNs.ensureNamespacePath as any).mockRejectedValueOnce(new Error('ns boom'))
+
+    await expect(bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store1' }))
+      .rejects.toThrow(/ns boom/)
+
+    expect(bindings.deleteBindingIfExists).toHaveBeenCalledWith('b1')
+    expect(pbsNs.deleteSubToken).not.toHaveBeenCalled()
+  })
+
+  it('rolls back the PBS artifacts when the row vanished mid-provisioning (concurrent delete)', async () => {
+    ;(bindings.insertBinding as any).mockResolvedValue({
+      id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1',
+      datastore: 'store1', namespace: 'n', mode: 'auto',
+      pbsTokenId: null, pbsTokenSecret: null, createdAt: 't',
+    })
+    // Simulate the connection-delete cascade removing the row while we provision
+    ;(bindings.updateBindingToken as any).mockRejectedValueOnce(
+      Object.assign(new Error('Record not found'), { code: 'P2025' }),
+    )
+
+    await expect(bindPbsToVdc({ vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'store1' }))
+      .rejects.toThrow(/Record not found/)
+
+    expect(bindings.deleteBindingIfExists).toHaveBeenCalledWith('b1')
+    expect(pbsNs.deleteSubToken).toHaveBeenCalled()
+    expect(pveStorage.createPbsStorage).not.toHaveBeenCalled()
   })
 })
 

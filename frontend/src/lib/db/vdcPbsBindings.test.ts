@@ -6,11 +6,13 @@ import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
 
 import {
   deleteBinding,
+  deleteBindingIfExists,
   findBindingByTuple,
   insertBinding,
   insertPveStorage,
   listBindingsForVdc,
   listPveStoragesForBinding,
+  updateBindingToken,
 } from './vdcPbsBindings'
 
 const TABLES = [
@@ -110,6 +112,24 @@ describe('vdcPbsBindings', () => {
     expect(row.id).toMatch(/^[a-f0-9-]{36}$/)
     const found = await findBindingByTuple('pbs-conn', 'store1', 'tenant-x/vdc-y')
     expect(found?.id).toBe(row.id)
+  })
+
+  it('updateBindingToken completes a placeholder and throws once the row is gone', async () => {
+    const row = await insertBinding({
+      vdcId: 'v1', pbsConnectionId: 'pbs-conn', datastore: 'd2', namespace: 'n2',
+      mode: 'auto', pbsTokenId: null, pbsTokenSecret: null,
+    })
+
+    await updateBindingToken(row.id, 'root@pam!vdc-abc', 'sek')
+    const found = await findBindingByTuple('pbs-conn', 'd2', 'n2')
+    expect(found?.pbsTokenId).toBe('root@pam!vdc-abc')
+
+    await deleteBinding(row.id)
+    await expect(updateBindingToken(row.id, 'x', 'y')).rejects.toThrow()
+  })
+
+  it('deleteBindingIfExists is a no-op on a missing row', async () => {
+    await expect(deleteBindingIfExists(randomUUID())).resolves.toBeUndefined()
   })
 
   it('enforces uniqueness on (pbs, ds, ns)', async () => {

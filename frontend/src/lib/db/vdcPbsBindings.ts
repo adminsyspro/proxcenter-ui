@@ -109,6 +109,24 @@ export async function deleteBinding(id: string): Promise<void> {
   await prisma.vdcPbsNamespace.delete({ where: { id } })
 }
 
+/**
+ * Complete a placeholder binding with the freshly minted PBS sub-token.
+ * Throws (P2025) when the row no longer exists, e.g. the PBS connection was
+ * deleted while provisioning: callers use that signal to roll back the
+ * PBS-side artifacts they just created.
+ */
+export async function updateBindingToken(id: string, pbsTokenId: string, pbsTokenSecret: string): Promise<void> {
+  await prisma.vdcPbsNamespace.update({
+    where: { id },
+    data: { pbsTokenId, pbsTokenSecret },
+  })
+}
+
+/** Rollback-safe delete: no error when the row is already gone. */
+export async function deleteBindingIfExists(id: string): Promise<void> {
+  await prisma.vdcPbsNamespace.deleteMany({ where: { id } })
+}
+
 export async function insertPveStorage(args: {
   bindingId: string; pveConnectionId: string; pveStorageName: string;
   managed?: boolean;

@@ -4294,7 +4294,9 @@
     "forceStop": "Erzwingen Stopp",
     "pause": "Pausieren",
     "resume": "Fortsetzen",
+    "suspend": "Anhalten",
     "restart": "Neustart",
+    "reboot": "Neu starten",
     "console": "Konsole",
     "migrate": "Migrieren",
     "clone": "Klonen",
@@ -4305,6 +4307,7 @@
     "shutdownSuccess": "Wird heruntergefahren (ACPI)",
     "stopSuccess": "VM wird erzwungen gestoppt",
     "suspendSuccess": "VM wird pausiert",
+    "resumeSuccess": "VM wird fortgesetzt",
     "rebootSuccess": "VM wird neugestartet",
     "migrateSuccess": "Migration gestartet",
     "cloneSuccess": "Klonen gestartet"

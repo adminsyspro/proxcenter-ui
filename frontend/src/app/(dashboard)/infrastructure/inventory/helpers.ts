@@ -33,6 +33,56 @@ return TAG_PALETTE[idx]
 }
 
 /* ------------------------------------------------------------------ */
+/* Tag sanitization (Proxmox pve-tag format)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Normalize a user-typed tag to Proxmox's `pve-tag` format.
+ *
+ * Proxmox accepts tags matching `[A-Za-z0-9_][A-Za-z0-9_+.-]*`, so we keep
+ * '.' and '+' (alongside '-' and '_'). That lets users store values such as
+ * IP addresses (e.g. "192.168.1.50") as tags, matching what PDM allows.
+ * We lowercase because PVE's default tag-style is case-insensitive.
+ */
+export function sanitizeTag(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_+.-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+}
+
+/**
+ * Filter applied to each keystroke in a tag input. Looser than sanitizeTag:
+ * it keeps whitespace (hyphenated only on save) but rejects characters that
+ * are not valid in a Proxmox tag.
+ */
+export function filterTagInput(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9_+.\s-]/g, '')
+}
+
+/* ------------------------------------------------------------------ */
+/* VM power actions                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Resolve the PVE `status/<action>` verb for a UI power action, given the
+ * guest's current status.
+ *
+ * A *paused* guest (suspend-to-RAM, `qm suspend`) must be **resumed**, not
+ * started: `status/start` on a paused VM is rejected by Proxmox with
+ * "VM is already running". The UI "pause" verb also maps to PVE `suspend`.
+ */
+export function resolveVmPowerAction(uiAction: string, status?: string): string {
+  if (uiAction === 'start' && status === 'paused') return 'resume'
+  if (uiAction === 'pause') return 'suspend'
+
+  return uiAction
+}
+
+/* ------------------------------------------------------------------ */
 /* Helpers JSON / Array                                               */
 /* ------------------------------------------------------------------ */
 

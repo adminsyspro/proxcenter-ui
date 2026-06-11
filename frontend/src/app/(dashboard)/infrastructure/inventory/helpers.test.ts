@@ -3,6 +3,9 @@ import {
   TAG_PALETTE,
   hashStringToInt,
   tagColor,
+  sanitizeTag,
+  filterTagInput,
+  resolveVmPowerAction,
   safeJson,
   asArray,
   parseTags,
@@ -58,6 +61,90 @@ describe('tagColor', () => {
 
   it('returns a valid hex color', () => {
     expect(tagColor('test')).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Tag sanitization (Proxmox pve-tag format)                           */
+/* ------------------------------------------------------------------ */
+
+describe('sanitizeTag', () => {
+  it('keeps dots so IP addresses are valid tags (discussion #408)', () => {
+    expect(sanitizeTag('192.168.1.50')).toBe('192.168.1.50')
+  })
+
+  it('keeps plus and underscore (pve-tag format)', () => {
+    expect(sanitizeTag('build_v2+rc1')).toBe('build_v2+rc1')
+  })
+
+  it('lowercases and hyphenates whitespace', () => {
+    expect(sanitizeTag('  Prod Web  ')).toBe('prod-web')
+  })
+
+  it('strips characters outside the pve-tag set', () => {
+    expect(sanitizeTag('héllo/wörld!')).toBe('hllowrld')
+  })
+
+  it('collapses repeated hyphens', () => {
+    expect(sanitizeTag('a---b')).toBe('a-b')
+  })
+
+  it('trims leading/trailing dots and hyphens', () => {
+    expect(sanitizeTag('.foo.')).toBe('foo')
+    expect(sanitizeTag('-bar-')).toBe('bar')
+  })
+
+  it('returns empty string for input with no valid characters', () => {
+    expect(sanitizeTag('   ')).toBe('')
+    expect(sanitizeTag('@@@')).toBe('')
+  })
+})
+
+describe('filterTagInput', () => {
+  it('keeps dots while typing', () => {
+    expect(filterTagInput('10.0.0.1')).toBe('10.0.0.1')
+  })
+
+  it('preserves whitespace (hyphenated only on save)', () => {
+    expect(filterTagInput('prod web')).toBe('prod web')
+  })
+
+  it('lowercases and drops invalid characters', () => {
+    expect(filterTagInput('Web/Tier#1')).toBe('webtier1')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* resolveVmPowerAction                                                */
+/* ------------------------------------------------------------------ */
+
+describe('resolveVmPowerAction', () => {
+  it('maps start -> resume for a paused VM (discussion #408)', () => {
+    expect(resolveVmPowerAction('start', 'paused')).toBe('resume')
+  })
+
+  it('leaves start unchanged for a stopped VM', () => {
+    expect(resolveVmPowerAction('start', 'stopped')).toBe('start')
+  })
+
+  it('leaves start unchanged when status is unknown', () => {
+    expect(resolveVmPowerAction('start')).toBe('start')
+  })
+
+  it('maps pause -> suspend regardless of status', () => {
+    expect(resolveVmPowerAction('pause', 'running')).toBe('suspend')
+    expect(resolveVmPowerAction('pause', 'paused')).toBe('suspend')
+  })
+
+  it('passes resume through unchanged', () => {
+    expect(resolveVmPowerAction('resume', 'paused')).toBe('resume')
+  })
+
+  it('passes other actions through unchanged', () => {
+    expect(resolveVmPowerAction('shutdown', 'running')).toBe('shutdown')
+    expect(resolveVmPowerAction('stop', 'running')).toBe('stop')
+    expect(resolveVmPowerAction('reboot', 'running')).toBe('reboot')
+    expect(resolveVmPowerAction('hibernate', 'running')).toBe('hibernate')
   })
 })
 

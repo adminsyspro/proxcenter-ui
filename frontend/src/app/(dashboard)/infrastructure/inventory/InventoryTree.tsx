@@ -51,6 +51,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 /* PauseIcon, TerminalIcon, MoveUpIcon, ContentCopyIcon, DescriptionIcon → ./components/TreeDialogs */
 
 import EntityTagManager from './components/EntityTagManager'
+import { resolveVmPowerAction } from './helpers'
 import { useRBAC } from '@/contexts/RBACContext'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
@@ -1235,8 +1236,10 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     setVmActionConfirm(null)
 
     try {
+      // A paused VM must be resumed, not started; 'pause' maps to PVE suspend.
+      const effectiveAction = resolveVmPowerAction(action, contextMenu.status)
       // hibernate = suspend to disk via PVE
-      const pveAction = action === 'hibernate' ? 'suspend' : action
+      const pveAction = effectiveAction === 'hibernate' ? 'suspend' : effectiveAction
       const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/${pveAction}`
       const res = await fetch(url, { method: 'POST' })
 
@@ -1257,7 +1260,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         hibernate: 'stopped',
         resume: 'running',
       }
-      const newStatus = optimisticStatus[action]
+      const newStatus = optimisticStatus[effectiveAction]
       if (newStatus) {
         setClusters(prev => prev.map(clu => {
           if (clu.connId !== connId) return clu
@@ -1276,7 +1279,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       // Also trigger SSE poll for full data sync
       fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
-      setSnackbar({ open: true, message: `${action.charAt(0).toUpperCase() + action.slice(1)} — ${contextMenu.name}`, severity: 'success' })
+      setSnackbar({ open: true, message: `${effectiveAction.charAt(0).toUpperCase() + effectiveAction.slice(1)} — ${contextMenu.name}`, severity: 'success' })
     } catch (e: any) {
       setVmActionError(`${t('common.error')} (${action}): ${e?.message || e}`)
     } finally {

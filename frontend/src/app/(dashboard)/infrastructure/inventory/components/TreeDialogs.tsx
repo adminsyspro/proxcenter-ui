@@ -323,7 +323,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             <ListItemIcon>
               <i className="ri-play-fill" style={{ fontSize: 18, color: '#4caf50' }} />
             </ListItemIcon>
-            <ListItemText>{t('audit.actions.start')}</ListItemText>
+            <ListItemText>{contextMenu?.status === 'paused' ? t('vmActions.resume') : t('audit.actions.start')}</ListItemText>
           </MenuItem>,
 
           <MenuItem

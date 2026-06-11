@@ -4334,7 +4334,9 @@
     "forceStop": "Force stop",
     "pause": "Pause",
     "resume": "Resume",
+    "suspend": "Suspend",
     "restart": "Restart",
+    "reboot": "Reboot",
     "console": "Console",
     "migrate": "Migrate",
     "clone": "Clone",
@@ -4345,6 +4347,7 @@
     "shutdownSuccess": "Shutting down (ACPI)",
     "stopSuccess": "Force stopping VM",
     "suspendSuccess": "Suspending VM",
+    "resumeSuccess": "Resuming VM",
     "rebootSuccess": "Rebooting VM",
     "migrateSuccess": "Migration started",
     "cloneSuccess": "Cloning started"

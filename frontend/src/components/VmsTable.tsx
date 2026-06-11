@@ -458,7 +458,7 @@ type VmsTableProps = {
   vms: VmRow[]
   loading?: boolean
   onVmClick?: (vm: VmRow) => void
-  onVmAction?: (vm: VmRow, action: 'start' | 'shutdown' | 'stop' | 'pause' | 'suspend' | 'reboot' | 'console' | 'details' | 'clone') => void
+  onVmAction?: (vm: VmRow, action: 'start' | 'resume' | 'shutdown' | 'stop' | 'pause' | 'suspend' | 'reboot' | 'console' | 'details' | 'clone') => void
   onMigrate?: (vm: VmRow) => void  // Callback pour ouvrir le dialog de migration
   onContextMenu?: (event: React.MouseEvent, vm: VmRow) => void  // Menu contextuel
   onNodeClick?: (connId: string, node: string) => void  // Callback pour clic sur le node
@@ -637,7 +637,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     setContextMenu(null)
   }, [])
   
-  const handleContextAction = useCallback((action: 'start' | 'shutdown' | 'stop' | 'pause' | 'suspend' | 'reboot' | 'console' | 'details' | 'clone') => {
+  const handleContextAction = useCallback((action: 'start' | 'resume' | 'shutdown' | 'stop' | 'pause' | 'suspend' | 'reboot' | 'console' | 'details' | 'clone') => {
     if (!contextMenu || !onVmAction) return
     onVmAction(contextMenu.vm, action)
     handleCloseContextMenu()
@@ -1483,13 +1483,13 @@ return (
           if (isMobile) {
             return (
               <Stack direction='row' spacing={0.25} sx={{ alignItems: 'center' }}>
-                <Tooltip title={isRunning ? t('vmActions.stop') : t('vmActions.start')}>
+                <Tooltip title={isRunning ? t('vmActions.stop') : isPaused ? t('vmActions.resume') : t('vmActions.start')}>
                   <span>
-                    <IconButton 
-                      size='small' 
-                      onClick={(e) => { 
+                    <IconButton
+                      size='small'
+                      onClick={(e) => {
                         e.stopPropagation()
-                        onVmAction(vm, isRunning ? 'shutdown' : 'start') 
+                        onVmAction(vm, isRunning ? 'shutdown' : isPaused ? 'resume' : 'start')
                       }}
                       sx={{ 
                         color: isRunning ? 'warning.main' : 'success.main',
@@ -1521,13 +1521,13 @@ return (
           
           return (
             <Stack direction='row' spacing={0.25} sx={{ alignItems: 'center' }}>
-              {/* Start - visible si stopped ou paused */}
-              <Tooltip title={t('vmActions.start')}>
+              {/* Start - visible si stopped ou paused (resume si paused) */}
+              <Tooltip title={isPaused ? t('vmActions.resume') : t('vmActions.start')}>
                 <span>
-                  <IconButton 
-                    size='small' 
+                  <IconButton
+                    size='small'
                     disabled={isRunning}
-                    onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'start') }}
+                    onClick={(e) => { e.stopPropagation(); onVmAction(vm, isPaused ? 'resume' : 'start') }}
                     sx={{ 
                       color: (isStopped || isPaused) ? 'success.main' : 'action.disabled',
                       p: 0.5,
@@ -1581,10 +1581,10 @@ return (
               {!isTablet && (
                 <Tooltip title={isPaused ? t('vmActions.resume') : t('vmActions.pause')}>
                   <span>
-                    <IconButton 
+                    <IconButton
                       size='small'
                       disabled={isStopped}
-                      onClick={(e) => { e.stopPropagation(); onVmAction(vm, 'pause') }}
+                      onClick={(e) => { e.stopPropagation(); onVmAction(vm, isPaused ? 'resume' : 'pause') }}
                       sx={{ 
                         color: (isRunning || isPaused) ? 'info.main' : 'action.disabled',
                         p: 0.5,
@@ -2032,15 +2032,15 @@ return [
 
         {/* Actions pour VM normale */}
         {!contextMenu?.vm.template && [
-          <MenuItem 
+          <MenuItem
             key="start"
-            onClick={() => handleContextAction('start')} 
+            onClick={() => handleContextAction(contextMenu?.vm.status === 'paused' ? 'resume' : 'start')}
             disabled={contextMenu?.vm.status === 'running'}
           >
             <ListItemIcon>
               <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
             </ListItemIcon>
-            <ListItemText>{t('audit.actions.start')}</ListItemText>
+            <ListItemText>{contextMenu?.vm.status === 'paused' ? t('vmActions.resume') : t('audit.actions.start')}</ListItemText>
           </MenuItem>,
 
           <MenuItem

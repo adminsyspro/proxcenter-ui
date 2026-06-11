@@ -18,6 +18,8 @@ import {
 
 import { tagColorFallback } from '@/contexts/TagColorContext'
 
+import { sanitizeTag, filterTagInput } from '../helpers'
+
 /**
  * Tag manager for ProxCenter entities (clusters / nodes).
  * Unlike TagManager.tsx (Proxmox VM tags via PVE API), this writes tags
@@ -61,9 +63,6 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
   }
 
   const handleClose = () => { setAnchorEl(null); setNewTagInput('') }
-
-  const sanitizeTag = (raw: string): string =>
-    raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').replace(/-{2,}/g, '-').replace(/^-|-$/g, '')
 
   const saveTagsToApi = async (newTags: string[]) => {
     const tagsString = newTags.length > 0 ? newTags.join(';') : null
@@ -188,7 +187,7 @@ function EntityTagManager({ tags, entityType, entityId, connectionId, nodeName, 
               size="small"
               placeholder={t('inventoryPage.newTag')}
               value={newTagInput}
-              onChange={e => setNewTagInput(e.target.value.toLowerCase().replace(/[^a-z0-9_\s-]/g, ''))}
+              onChange={e => setNewTagInput(filterTagInput(e.target.value))}
               onKeyDown={e => {
                 if (e.key === 'Enter' && newTagInput.trim()) {
                   handleAddTag(newTagInput)

@@ -4334,7 +4334,9 @@
     "forceStop": "Forcer l'arrêt",
     "pause": "Pause",
     "resume": "Reprendre",
+    "suspend": "Suspendre",
     "restart": "Redémarrer",
+    "reboot": "Redémarrer",
     "console": "Console",
     "migrate": "Migrer",
     "clone": "Cloner",
@@ -4345,6 +4347,7 @@
     "shutdownSuccess": "Arrêt en cours (ACPI)",
     "stopSuccess": "Arrêt forcé en cours",
     "suspendSuccess": "Mise en pause en cours",
+    "resumeSuccess": "Reprise en cours",
     "rebootSuccess": "Redémarrage en cours",
     "migrateSuccess": "Migration en cours",
     "cloneSuccess": "Clonage en cours"

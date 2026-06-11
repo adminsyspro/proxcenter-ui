@@ -4296,7 +4296,9 @@
     "forceStop": "强制停止",
     "pause": "暂停",
     "resume": "恢复",
+    "suspend": "挂起",
     "restart": "重启",
+    "reboot": "重新启动",
     "console": "控制台",
     "migrate": "迁移",
     "clone": "克隆",
@@ -4307,6 +4309,7 @@
     "shutdownSuccess": "正在关机（ACPI）",
     "stopSuccess": "正在强制停止 VM",
     "suspendSuccess": "正在挂起 VM",
+    "resumeSuccess": "正在恢复 VM",
     "rebootSuccess": "正在重启 VM",
     "migrateSuccess": "迁移已开始",
     "cloneSuccess": "克隆已开始"

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
 export type PveConn = {
   id: string
@@ -9,6 +10,8 @@ export type PveConn = {
   apiToken: string
   insecureDev: boolean
   behindProxy: boolean
+  /** Owning tenant of the connection row (set by getConnectionById). */
+  tenantId?: string
 }
 
 export type PbsConn = {
@@ -69,9 +72,12 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
 
   if (!c) throw new Error(`Connection not found: ${id}`)
 
-  // Tenant isolation: verify the connection belongs to the requesting tenant
-  // OR the tenant has a vDC assignment on this connection
-  if (c.tenantId !== resolvedTenantId) {
+  // Tenant isolation: the provider (NOC, = the default tenant) supervises the
+  // whole fleet including MSP-owned connections (A1 fleet-scope decision), so
+  // it may load any row. Any OTHER tenant must own the connection OR hold a
+  // vDC assignment on it. Intra-tenant access control remains the per-route
+  // RBAC checks, exactly as for pool connections.
+  if (c.tenantId !== resolvedTenantId && resolvedTenantId !== DEFAULT_TENANT_ID) {
     const vdcAccess = await prisma.vdc.findFirst({
       where: { tenantId: resolvedTenantId, connectionId: id, enabled: true },
       select: { id: true },
@@ -91,12 +97,14 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
     apiToken: decryptSecret(c.apiTokenEnc),
     insecureDev: !!c.insecureTLS,
     behindProxy: !!c.behindProxy,
+    tenantId: c.tenantId,
   }
 
   connectionCache.set(cacheKey, { data: result, expiry: Date.now() + CACHE_TTL })
 
   return result
 }
+
 
 /**
  * Loads a PBS connection by id WITHOUT tenant ownership check.
@@ -172,11 +180,13 @@ export async function getPbsConnectionById(id: string, tenantId?: string): Promi
 
   if (!c) throw new Error(`PBS Connection not found: ${id}`)
 
-  // Tenant isolation: the connection must either belong to the requesting
-  // tenant OR be referenced by one of its vDC PBS bindings. The latter lets
-  // tenants reach provider-owned PBS connections through their vDC scope
-  // (mirrors the assertVdcPbsAccess pattern used in the backups route).
-  if (c.tenantId !== resolvedTenantId) {
+  // Tenant isolation: the provider (NOC, = the default tenant) supervises the
+  // whole fleet including MSP-owned PBS connections (A1 fleet-scope decision).
+  // Any OTHER tenant must own the connection OR have it referenced by one of
+  // its vDC PBS bindings. The latter lets tenants reach provider-owned PBS
+  // connections through their vDC scope (mirrors the assertVdcPbsAccess
+  // pattern used in the backups route).
+  if (c.tenantId !== resolvedTenantId && resolvedTenantId !== DEFAULT_TENANT_ID) {
     const { getVdcScope } = await import('@/lib/vdc/scope')
     const scope = await getVdcScope(resolvedTenantId)
     if (!scope || !scope.pbsConnectionIds.has(id)) {

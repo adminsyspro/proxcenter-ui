@@ -2,11 +2,13 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
 import { setNodeIps } from "@/lib/cache/nodeIpCache"
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
@@ -48,6 +50,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const conn = await getConnectionById(id)
+
+  // ManagedHost rows follow the connection owner's tenant (see lib/connections/
+  // assignment.ts). When the provider visits an MSP-owned connection, write
+  // through the global client with the owner's tenantId so the visit never
+  // creates default-owned rows that would collide with the MSP tenant's own
+  // upserts on the [connectionId, node] unique key.
+  const crossTenantView =
+    tenantId === DEFAULT_TENANT_ID &&
+    (conn.tenantId ?? DEFAULT_TENANT_ID) !== DEFAULT_TENANT_ID
+  const hostDb = crossTenantView ? globalPrisma : prisma
+  const hostTenant: { tenantId?: string } = crossTenantView
+    ? { tenantId: conn.tenantId }
+    : {}
 
   // Fetch nodes and cluster resources in parallel (for maintenance hastate)
   const [nodes, clusterResources] = await Promise.all([
@@ -158,17 +173,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         const nodeName = n.node || n.name
         if (!nodeName) return Promise.resolve()
         liveNodeNames.push(nodeName)
-        return prisma.managedHost.upsert({
+        return hostDb.managedHost.upsert({
           where: { connectionId_node: { connectionId: id, node: nodeName } },
           update: { ip: n.ip || null },
-          create: { connectionId: id, node: nodeName, ip: n.ip || null },
+          create: { connectionId: id, node: nodeName, ip: n.ip || null, ...hostTenant },
         })
       })
     )
 
     // Cleanup stale ManagedHost entries for nodes removed from the cluster
     if (liveNodeNames.length > 0) {
-      await prisma.managedHost.deleteMany({
+      await hostDb.managedHost.deleteMany({
         where: { connectionId: id, node: { notIn: liveNodeNames } },
       })
     }
@@ -179,7 +194,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // Fetch SSH address overrides from ManagedHost
   let sshOverrides: Record<string, { sshAddress: string | null; hostId: string }> = {}
   try {
-    const hosts = await prisma.managedHost.findMany({
+    const hosts = await hostDb.managedHost.findMany({
       where: { connectionId: id },
       select: { id: true, node: true, sshAddress: true },
     })

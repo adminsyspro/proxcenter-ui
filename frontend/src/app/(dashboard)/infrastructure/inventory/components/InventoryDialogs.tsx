@@ -1183,6 +1183,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               currentNode={node}
               vmName={data?.name || `VM ${vmid}`}
               vmid={vmid}
+              vmType={type}
               nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
               existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
               pools={[]}
@@ -1218,6 +1219,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           currentNode={tableCloneVm.node}
           vmName={tableCloneVm.name}
           vmid={tableCloneVm.vmid}
+          vmType={tableCloneVm.type}
           nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
           existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
           pools={[]}

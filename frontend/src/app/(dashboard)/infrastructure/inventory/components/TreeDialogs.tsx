@@ -902,6 +902,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           currentNode={cloneTarget.node}
           vmName={cloneTarget.name || `VM ${cloneTarget.vmid}`}
           vmid={cloneTarget.vmid}
+          vmType={cloneTarget.type}
           nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
           existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
           pools={[]}

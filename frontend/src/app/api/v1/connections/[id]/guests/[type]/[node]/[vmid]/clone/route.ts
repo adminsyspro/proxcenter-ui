@@ -9,6 +9,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { getAllowedBridgesForTenant, parseBridgeFromNet, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
+import { stripMacFromNet } from "@/lib/vdc/ipamScan"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
 
@@ -108,12 +109,11 @@ export async function POST(
     }
 
     // ── IPAM-managed clone hardening (qemu only) ──
-    // PVE's clone keeps the source MACs by default, which would create
-    // both a network-level MAC collision AND an IPAM (subnet, mac) UNIQUE
-    // collision when allocating for the new vmid. If the source has any
-    // NIC on an IPAM-managed VNet, force `unique=1` so PVE regenerates
-    // every MAC. The post-clone sync below then allocates fresh IPs for
-    // those new MACs.
+    // PVE's clone keeps the source MACs by default, which would create both a
+    // network-level MAC collision AND an IPAM (subnet, mac) UNIQUE collision
+    // when allocating for the new vmid. If the source has any NIC on an
+    // IPAM-managed VNet, the after() block below regenerates those MACs once
+    // the clone task finishes, then allocates fresh IPs for the new MACs.
     let cloneTouchesIpam = false
     if (type === 'qemu') {
       try {
@@ -139,9 +139,19 @@ export async function POST(
     const formData = new URLSearchParams()
 
     for (const [key, value] of Object.entries(body)) {
+      if (key === 'full') continue // normalized below to a canonical 1/0
       if (value !== undefined && value !== null && value !== '') {
         formData.append(key, String(value))
       }
+    }
+
+    // PVE's clone API branches its parameter schema on `full`: a full clone
+    // accepts storage/format, a linked clone rejects them. Send a canonical
+    // 1/0 so a JS boolean (which stringifies to "true"/"false") can't land in
+    // the linked-clone branch and trip "property is not defined in schema".
+    const isFullClone = body.full === true || body.full === 1
+    if (body.full !== undefined) {
+      formData.set('full', isFullClone ? '1' : '0')
     }
 
     // Force pool assignment if tenant has a vDC
@@ -149,12 +159,10 @@ export async function POST(
       formData.set('pool', vdcPoolName)
     }
 
-    if (cloneTouchesIpam) {
-      // unique=1 tells PVE to regenerate every MAC on the clone's NICs.
-      // Without it, two VMs would share MACs which collides at L2 and
-      // breaks the IPAM (subnet, mac) UNIQUE constraint.
-      formData.set('unique', '1')
-    }
+    // NB: PVE clones keep the source MACs. We do NOT use the clone API's
+    // `unique` flag to regenerate them — it isn't portable (older PVE builds
+    // reject it as an unknown property). For IPAM-managed NICs the MACs are
+    // instead regenerated post-clone in the after() block below.
 
     // Appeler l'API Proxmox pour cloner la VM
     const result = await pveFetch<any>(conn, endpoint, {
@@ -179,13 +187,35 @@ export async function POST(
       const cloneNode = String(body.target || node)
       const cloneName = body.name ? String(body.name) : null
 
+      const cloneConfigPath = `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(newVmid))}/config`
+
       after(async () => {
         try {
           if (upid) await waitForTask(conn, cloneNode, upid)
-          const cloneConfig = await pveFetch<any>(
-            conn,
-            `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(newVmid))}/config`
-          )
+          let cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
+
+          // ── Regenerate MACs on IPAM-managed NICs ──
+          // The clone inherited the source MACs. For NICs on an IPAM-managed
+          // VNet that collides at L2 and on the (subnet, mac) UNIQUE constraint
+          // the sync below would hit, so strip the pinned MAC and let PVE
+          // assign a fresh one, then re-read the config before allocating.
+          const macPatch = new URLSearchParams()
+          for (const k of Object.keys(cloneConfig || {})) {
+            if (!/^net\d+$/.test(k)) continue
+            const val = String(cloneConfig[k] || '')
+            const bridge = parseBridgeFromNet(val)
+            if (bridge && await resolveSubnetForBridge(id, bridge)) {
+              macPatch.set(k, stripMacFromNet(val))
+            }
+          }
+          if (Array.from(macPatch.keys()).length > 0) {
+            await pveFetch<any>(conn, cloneConfigPath, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: macPatch.toString(),
+            })
+            cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
+          }
 
           const sync = await syncIpamForVmConfig({
             before: null,
@@ -203,15 +233,11 @@ export async function POST(
             const patch = new URLSearchParams()
             for (const [k, v] of Object.entries(sync.bodyOverrides)) patch.set(k, v)
             try {
-              await pveFetch<any>(
-                conn,
-                `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(newVmid))}/config`,
-                {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: patch.toString(),
-                }
-              )
+              await pveFetch<any>(conn, cloneConfigPath, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: patch.toString(),
+              })
             } catch (err: any) {
               console.error(`[clone-ipam-sync] PVE PUT config failed for vmid=${newVmid}: ${err?.message ?? err}`)
               try { await sync.rollback() } catch { /* tolerate */ }

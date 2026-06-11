@@ -710,7 +710,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false)
   const [cloneTarget, setCloneTarget] = useState<VmContextMenu>(null)
 
-  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
+  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => {
     if (!cloneTarget) throw new Error('No VM selected for cloning')
 
     const payload: Record<string, any> = {
@@ -721,6 +721,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       format: params.format || undefined,
       pool: params.pool || undefined,
       full: params.full ? 1 : 0,
+      snapname: params.snapname || undefined,
     }
 
     const res = await fetch(

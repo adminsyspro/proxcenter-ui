@@ -45,16 +45,25 @@ return TAG_PALETTE[idx]
  * We lowercase because PVE's default tag-style is case-insensitive.
  */
 export function sanitizeTag(raw: string): string {
-  return raw
+  const cleaned = raw
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9_+.-]/g, '')
     .replace(/-{2,}/g, '-')
-    // Two anchored single-class trims rather than one alternation: keeps the
-    // regex linear (no backtracking, avoids the ReDoS hotspot Sonar flags).
-    .replace(/^[-.]+/, '')
-    .replace(/[-.]+$/, '')
+
+  // Trim leading/trailing '.' and '-' so the tag starts/ends on an
+  // alphanumeric/'_' character (Proxmox requires the first char to be one).
+  // Done without a regex: an anchored quantified class like /[-.]+$/ trips
+  // Sonar's ReDoS hotspot (S5852), and this is simpler anyway.
+  const isEdge = (c: string) => c === '-' || c === '.'
+  let start = 0
+  let end = cleaned.length
+
+  while (start < end && isEdge(cleaned[start])) start++
+  while (end > start && isEdge(cleaned[end - 1])) end--
+
+  return cleaned.slice(start, end)
 }
 
 /**

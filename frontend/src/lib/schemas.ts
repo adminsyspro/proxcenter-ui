@@ -9,6 +9,9 @@ import { z } from 'zod'
 export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
   type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv', 'nutanix']).default('pve'),
+  // Provider-only: create the connection directly owned by an MSP tenant
+  // (omit, or 'default', for the provider pool). Validated in the route.
+  ownerTenantId: z.string().optional(),
   baseUrl: z.string().min(1, 'baseUrl is required').transform(s => s.trim().replace(/\/+$/, '')),
   behindProxy: z.boolean().default(false),
   insecureTLS: z.boolean().default(false),

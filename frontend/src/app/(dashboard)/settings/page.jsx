@@ -454,6 +454,8 @@ function ConnectionsTab() {
         ...(formData.sshPassphrase.trim() && { sshPassphrase: formData.sshPassphrase.trim() }),
         ...(formData.sshPassword.trim() && { sshPassword: formData.sshPassword.trim() }),
       }),
+      // Provider-only create-with-owner: own the connection by an MSP tenant
+      ...(!editingConn?.id && formData.ownerTenantId && { ownerTenantId: formData.ownerTenantId }),
     }
 
     if (editingConn?.id) {

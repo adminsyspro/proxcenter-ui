@@ -168,7 +168,53 @@ export async function POST(req: Request) {
       latitude, longitude, locationLabel, country,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
       sshKey, sshPassphrase, sshPassword, sshUseSudo,
+      ownerTenantId,
     } = parseResult.data
+
+    // Create-with-owner (provider-only): the NOC can create a connection
+    // directly owned by an MSP client tenant instead of creating it in the
+    // pool and reassigning afterwards. Anyone else may only create for
+    // themselves (the session tenant).
+    const sessionTenantId = await getCurrentTenantId()
+    let ownerTenant = sessionTenantId
+
+    if (ownerTenantId && ownerTenantId !== sessionTenantId) {
+      const infra = await getTenantInfrastructureScope(sessionTenantId)
+      if (infra.kind !== 'provider') {
+        return NextResponse.json(
+          { error: "Only the provider can create a connection for another tenant" },
+          { status: 403 }
+        )
+      }
+      if (type !== 'pve' && type !== 'pbs') {
+        return NextResponse.json(
+          { error: "Only PVE and PBS connections can be owned by an MSP tenant" },
+          { status: 400 }
+        )
+      }
+      const target = await globalPrisma.tenant.findUnique({
+        where: { id: ownerTenantId },
+        select: { operatingModel: true, enabled: true },
+      })
+      if (!target) {
+        return NextResponse.json({ error: `Unknown tenant: ${ownerTenantId}` }, { status: 400 })
+      }
+      if (target.operatingModel !== 'msp') {
+        return NextResponse.json(
+          { error: "The owner tenant must be an MSP tenant (or omit ownerTenantId for the provider pool)" },
+          { status: 400 }
+        )
+      }
+      // Mirrors the owner-reassign endpoint: no new connections for a tenant
+      // that cannot log in or operate.
+      if (!target.enabled) {
+        return NextResponse.json(
+          { error: `Tenant ${ownerTenantId} is disabled` },
+          { status: 400 }
+        )
+      }
+      ownerTenant = ownerTenantId
+    }
 
     // Préparer les données
     const data: any = {
@@ -349,8 +395,9 @@ export async function POST(req: Request) {
     // INITIALLY DEFERRED and validates at COMMIT, so both rows must land in one
     // transaction. Use the GLOBAL client (provider_connections has no tenant_id
     // column) and set tenant_id explicitly instead of relying on the
-    // tenant-scoped client's injection.
-    const tenantId = await getCurrentTenantId()
+    // tenant-scoped client's injection. An MSP-owned connection gets NO pool
+    // row (the connection_tenant_model_check trigger validates the owner).
+    const tenantId = ownerTenant
     const created = await globalPrisma.$transaction(async (tx) => {
       const conn = await tx.connection.create({
         data: { ...data, tenantId },

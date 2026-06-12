@@ -23,6 +23,7 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  FormHelperText,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -38,6 +39,7 @@ import {
 
 import { COUNTRIES, findCountry } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import { useTenant } from '@/contexts/TenantContext'
 
 export type ConnectionFormData = {
   name: string
@@ -66,6 +68,8 @@ export type ConnectionFormData = {
   sshPassphrase: string
   sshPassword: string
   sshUseSudo: boolean
+  // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
+  ownerTenantId: string
 }
 
 type ConnectionDialogProps = {
@@ -105,6 +109,7 @@ const defaultFormData: ConnectionFormData = {
   sshPassphrase: '',
   sshPassword: '',
   sshUseSudo: false,
+  ownerTenantId: '',
 }
 
 export default function ConnectionDialog({
@@ -116,7 +121,9 @@ export default function ConnectionDialog({
   mode = 'create'
 }: ConnectionDialogProps) {
   const t = useTranslations()
+  const { isProvider } = useTenant()
   const [form, setForm] = useState<ConnectionFormData>(defaultFormData)
+  const [mspTenants, setMspTenants] = useState<{ id: string; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showSshKey, setShowSshKey] = useState(false)
@@ -180,6 +187,24 @@ export default function ConnectionDialog({
     setForm(prev => ({ ...prev, [field]: value }))
     setError(null)
   }
+
+  // Provider-only owner selector (create mode, PVE/PBS): load the MSP tenants
+  // the connection can be created for. Anyone else never sees the selector.
+  // A provider user lacking admin.tenants gets a 403 here -> empty list ->
+  // selector hidden (graceful: they keep the create-then-assign flow via a
+  // tenants admin); picking an owner intentionally requires tenant visibility.
+  useEffect(() => {
+    if (!open || mode !== 'create' || !isProvider || (type !== 'pve' && type !== 'pbs')) return
+    fetch('/api/v1/tenants')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const list = (data?.data || []).filter(
+          (tn: any) => tn.operatingModel === 'msp' && tn.enabled !== false
+        )
+        setMspTenants(list.map((tn: any) => ({ id: tn.id, name: tn.name })))
+      })
+      .catch(() => setMspTenants([]))
+  }, [open, mode, isProvider, type])
 
   // Reverse-geocode lat/lng → country (ISO-2) when user fills the GPS fields
   // and the country field is still empty. Debounced 800 ms so we don't hammer
@@ -542,6 +567,24 @@ export default function ConnectionDialog({
           sx={{ mt: 1 }}
           required
         />
+
+        {mode === 'create' && isProvider && (type === 'pve' || type === 'pbs') && mspTenants.length > 0 && (
+          <FormControl fullWidth>
+            <InputLabel id='conn-owner-tenant-label'>{t('settings.connOwnerTenantLabel')}</InputLabel>
+            <Select
+              labelId='conn-owner-tenant-label'
+              label={t('settings.connOwnerTenantLabel')}
+              value={form.ownerTenantId || 'default'}
+              onChange={e => handleChange('ownerTenantId', e.target.value === 'default' ? '' : e.target.value)}
+            >
+              <MenuItem value='default'>{t('settings.connOwnerPool')}</MenuItem>
+              {mspTenants.map(tn => (
+                <MenuItem key={tn.id} value={tn.id}>{tn.name}</MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>{t('settings.connOwnerHelper')}</FormHelperText>
+          </FormControl>
+        )}
 
         <TextField
           fullWidth

@@ -53,6 +53,16 @@ export async function discoverNodeIps(
     // Persist to DB
     try {
       const { prisma } = await import("../db/prisma")
+
+      // ManagedHost rows follow the connection owner's tenant (see
+      // lib/connections/assignment.ts): resolve it so an MSP-owned connection
+      // never gets default-owned rows colliding with the owner's own upserts.
+      const owner = await prisma.connection.findUnique({
+        where: { id: connectionId },
+        select: { tenantId: true },
+      })
+      const ownerTenantId = owner?.tenantId ?? "default"
+
       const liveNodeNames: string[] = []
       await Promise.all(
         entries.filter(e => e !== null).map((e) => {
@@ -60,7 +70,7 @@ export async function discoverNodeIps(
           return prisma.managedHost.upsert({
             where: { connectionId_node: { connectionId, node: e!.node } },
             update: { ip: e!.ip || null },
-            create: { connectionId, node: e!.node, ip: e!.ip || null },
+            create: { connectionId, node: e!.node, ip: e!.ip || null, tenantId: ownerTenantId },
           })
         })
       )

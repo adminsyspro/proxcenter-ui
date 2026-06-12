@@ -16,8 +16,8 @@ const status = {
   },
 }
 const imports = [
-  { ID: 'imp-a', LicenseID: 'LIC-A', Edition: 'enterprise', MaxNodes: 8, ClusterUUID: 'cluster-a', ExpiresAt: '2027-03-23T00:00:00Z', State: 'active', ConnectionIDs: ['c-a'], Customer: 'Client A' },
-  { ID: 'imp-b', LicenseID: 'LIC-B', Edition: 'enterprise', MaxNodes: 12, ClusterUUID: null, ExpiresAt: '2027-06-30T00:00:00Z', State: 'active', ConnectionIDs: ['c-b'], Customer: 'Client B' },
+  { id: 'imp-a', license_id: 'LIC-A', edition: 'enterprise', max_nodes: 8, cluster_uuid: 'cluster-a', expires_at: '2027-03-23T00:00:00Z', state: 'active', connection_ids: ['c-a'], customer: 'Client A' },
+  { id: 'imp-b', license_id: 'LIC-B', edition: 'enterprise', max_nodes: 12, cluster_uuid: null, expires_at: '2027-06-30T00:00:00Z', state: 'active', connection_ids: ['c-b'], customer: 'Client B' },
 ]
 
 describe('buildLicenseTableRows', () => {
@@ -60,7 +60,7 @@ describe('buildLicenseTableRows', () => {
   it('lists an import that has no per_license entry (e.g. inert/expired) with 0 used', () => {
     const rows = buildLicenseTableRows(
       { node_status: { per_license: [{ license_id: 'PRIMARY-1', max_nodes: 10, used_nodes: 0, is_primary: true }] }, license_id: 'PRIMARY-1' } as any,
-      [{ ID: 'imp-x', LicenseID: 'LIC-X', Edition: 'enterprise', MaxNodes: 5, ClusterUUID: null, ExpiresAt: '2020-01-01T00:00:00Z', State: 'active', ConnectionIDs: [] }] as any,
+      [{ id: 'imp-x', license_id: 'LIC-X', edition: 'enterprise', max_nodes: 5, cluster_uuid: null, expires_at: '2020-01-01T00:00:00Z', state: 'active', connection_ids: [] }] as any,
     )
     const x = rows.find(r => r.licenseId === 'LIC-X')!
     expect(x.usedNodes).toBe(0)

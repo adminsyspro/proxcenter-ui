@@ -8,15 +8,15 @@ export interface PerLicenseUsage {
   is_primary?: boolean
 }
 export interface ImportedLicenseDTO {
-  ID: string
-  LicenseID: string
-  Edition: string
-  MaxNodes: number
-  ClusterUUID: string | null
-  ExpiresAt: string
-  State: string
-  ConnectionIDs: string[]
-  Customer?: string
+  id: string
+  license_id: string
+  edition: string
+  max_nodes: number
+  cluster_uuid: string | null
+  expires_at: string
+  state: string
+  connection_ids: string[]
+  customer?: string
 }
 export interface LicenseTableRow {
   rowId: string
@@ -52,7 +52,7 @@ interface LicenseStatusLike {
  * one row per imported license, joining per-license usage (used/max, from
  * node_status.per_license) with import metadata (expiry, cluster, connections,
  * from GET /license/imports). An import with no per_license entry (inert/expired)
- * shows used=0, max from its own MaxNodes.
+ * shows used=0, max from its own max_nodes.
  */
 export function buildLicenseTableRows(
   status: LicenseStatusLike,
@@ -84,19 +84,19 @@ export function buildLicenseTableRows(
   }
 
   for (const imp of imports || []) {
-    const usage = usageByLicenseId.get(imp.LicenseID)
+    const usage = usageByLicenseId.get(imp.license_id)
     rows.push({
-      rowId: imp.ID,
-      licenseId: imp.LicenseID,
+      rowId: imp.id,
+      licenseId: imp.license_id,
       role: 'import',
-      licensedTo: imp.Customer || '',
+      licensedTo: imp.customer || '',
       usedNodes: usage ? usage.used_nodes : 0,
-      maxNodes: imp.MaxNodes,
-      unlimited: imp.MaxNodes <= 0,
-      expiresAt: imp.ExpiresAt || null,
-      clusterUuid: imp.ClusterUUID || null,
-      connectionIds: imp.ConnectionIDs || [],
-      state: imp.State,
+      maxNodes: imp.max_nodes,
+      unlimited: imp.max_nodes <= 0,
+      expiresAt: imp.expires_at || null,
+      clusterUuid: imp.cluster_uuid || null,
+      connectionIds: imp.connection_ids || [],
+      state: imp.state,
     })
   }
 

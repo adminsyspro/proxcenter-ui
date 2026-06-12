@@ -27,7 +27,7 @@ describe('GET /api/v1/license/imports', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
   it('forwards the orchestrator imports list', async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ imports: [{ ID: 'i1' }] }) })
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ imports: [{ id: 'i1' }] }) })
     const res = await callRoute(await importGET(), {})
     expect(res.status).toBe(200)
     expect((await readJson(res)).imports).toHaveLength(1)

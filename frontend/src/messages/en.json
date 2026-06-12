@@ -4136,6 +4136,7 @@
         "bridgeGroupShared": "Shared bridges",
         "bridgeGroupBridges": "Cluster bridges",
         "bridgeNoVnet": "No VNet available — create one in Inventory › Network",
+        "bridgeNoneAvailable": "No bridge available on the selected node",
         "vlan": "VLAN Tag",
         "vlanPlaceholder": "None",
         "vlanDisabledOnVnet": "— SDN VNet, tag ignored",

@@ -4098,6 +4098,7 @@
         "bridgeGroupShared": "共享桥接",
         "bridgeGroupBridges": "集群桥接",
         "bridgeNoVnet": "暂无可用的 VNet — 请在 清单 › 网络 中创建",
+        "bridgeNoneAvailable": "所选节点上没有可用的桥接",
         "vlan": "VLAN 标签",
         "vlanPlaceholder": "无",
         "vlanDisabledOnVnet": "— SDN VNet，忽略标签",

@@ -4136,6 +4136,7 @@
         "bridgeGroupShared": "Bridges partagés",
         "bridgeGroupBridges": "Bridges cluster",
         "bridgeNoVnet": "Aucun VNet disponible — créez-en un dans Inventaire › Réseau",
+        "bridgeNoneAvailable": "Aucun bridge disponible sur le nœud sélectionné",
         "vlan": "Tag VLAN",
         "vlanPlaceholder": "Aucun",
         "vlanDisabledOnVnet": "— VNet SDN, tag ignoré",

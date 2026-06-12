@@ -91,8 +91,16 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // node / storage / VMID picker. They only enter a name. Selections are
   // resolved in the background (first allowed connection, least-loaded
   // node, first shared storage, /cluster/nextid).
-  const { currentTenant, loading: tenantLoading } = useTenant()
+  const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const hideInfra = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
+  // Full cluster view = provider OR MSP tenant (mirrors CreateVmDialog). In
+  // that mode the bridge picker exposes the whole PVE bridge list and the
+  // VLAN Tag field is live; the SDN-VNet-only lock below is for vDC tenants.
+  // `hideInfra` (vDC tenant) and `isFullClusterView` are NOT mutually
+  // exclusive opposites in general (an MSP user is full-cluster but could
+  // still scope to a vDC connection), so we branch on the dedicated flag
+  // rather than `!hideInfra`.
+  const fullClusterNet = !tenantLoading && isFullClusterView
   const [activeStep, setActiveStep] = useState(0)
   const [deploying, setDeploying] = useState(false)
   const [deploymentId, setDeploymentId] = useState<string | null>(null)
@@ -120,10 +128,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [scsihw, setScsihw] = useState('virtio-scsi-single')
   const [networkModel, setNetworkModel] = useState('virtio')
   const [networkBridge, setNetworkBridge] = useState('vmbr0')
-  // VLAN tag is gone from the wizard: deployments here always land on a
-  // SDN VNet (see the bridge picker below) which carries its own VNI, so
-  // PVE rejects per-NIC tags. The blueprint loader and deploy payload
-  // both ignore vlanTag for this reason.
+  // VLAN tag. For vDC tenants the wizard restricts the bridge picker to SDN
+  // VNets, which carry their own VNI and reject per-NIC tags — so the field
+  // stays locked and the payload nulls it (legacy behaviour). In full
+  // cluster view (provider / MSP) the picker exposes raw PVE bridges, where
+  // an 802.1Q tag is valid; the field becomes editable and we send the tag.
+  // '' = no tag. Stored as a string so the controlled <TextField> stays
+  // un-glitchy; coerced to number | null at submit.
+  const [vlanTag, setVlanTag] = useState<string>('')
   const [cpu, setCpu] = useState('host')
   // ISO-mode only: BIOS firmware + OS type override. Cloud-images keep
   // ostype from the catalog and seabios silently; ISO installs need an
@@ -296,6 +308,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     setDeploying(false)
     setDeploymentId(null)
     setDeployError(null)
+    // Fresh open starts with no VLAN tag; the blueprint prefill below
+    // overrides this when a stored tag round-trips.
+    setVlanTag('')
 
     if (image) {
       setCores(image.recommendedCores)
@@ -332,6 +347,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         setScsihw(hw.scsihw || 'virtio-scsi-single')
         setNetworkModel(hw.networkModel || 'virtio')
         setNetworkBridge(hw.networkBridge || 'vmbr0')
+        // Round-trip a stored VLAN tag from the blueprint (only meaningful
+        // for raw bridges in full cluster view; on a VNet the picker effect
+        // re-locks it). null / undefined / 0 → no tag.
+        setVlanTag(hw.vlanTag != null && hw.vlanTag !== 0 ? String(hw.vlanTag) : '')
         setCpu(hw.cpu || 'host')
         setAgent(hw.agent !== false)
       } catch { /* ignore */ }
@@ -486,19 +505,27 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           subnet: c.subnet ?? null,
         }))
         setBridges(list)
-        // Auto-pick the first VNet so the displayed picker value and
-        // the deploy payload stay in sync — the wizard now restricts
-        // the bridge to SDN VNets only, so non-VNet pre-fills (e.g.
-        // 'vmbr0' from initial state, or a stale blueprint value)
-        // would otherwise leave networkBridge pointing at something the
-        // dropdown no longer surfaces.
-        const vnets = list.filter((b: { type: string }) => b.type === 'vnet')
-        if (vnets.length > 0 && !vnets.some((b: { iface: string }) => b.iface === networkBridge)) {
-          setNetworkBridge(vnets[0].iface)
+        // Auto-pick the first VNet so the displayed picker value and the
+        // deploy payload stay in sync — for vDC tenants the wizard restricts
+        // the bridge to SDN VNets only, so non-VNet pre-fills (e.g. 'vmbr0'
+        // from initial state, or a stale blueprint value) would otherwise
+        // leave networkBridge pointing at something the dropdown no longer
+        // surfaces. In full cluster view (provider / MSP) we expose the whole
+        // bridge list and must NOT force-switch — keep the user's / blueprint
+        // value if it exists, else fall back to 'vmbr0'.
+        if (fullClusterNet) {
+          if (!list.some((b: { iface: string }) => b.iface === networkBridge)) {
+            setNetworkBridge(list.some((b: { iface: string }) => b.iface === 'vmbr0') ? 'vmbr0' : (networkBridge || 'vmbr0'))
+          }
+        } else {
+          const vnets = list.filter((b: { type: string }) => b.type === 'vnet')
+          if (vnets.length > 0 && !vnets.some((b: { iface: string }) => b.iface === networkBridge)) {
+            setNetworkBridge(vnets[0].iface)
+          }
         }
       })
       .catch(() => setBridges([]))
-  }, [connectionId, node, hideInfra])
+  }, [connectionId, node, hideInfra, fullClusterNet])
 
   // Fetch the tenant's vDC quota+usage for the live quota banner on the
   // Hardware step. The /api/v1/vdcs route already returns null for the
@@ -581,11 +608,22 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           scsihw,
           networkModel,
           networkBridge,
-          // Hard-null: the bridge picker only exposes SDN VNets which
-          // already segment traffic via their own VNI. PVE rejects per-NIC
-          // VLAN tags on VXLAN VNets, and the form's VLAN field is locked
-          // to match — so we drop any stale value loaded from a blueprint.
-          vlanTag: null,
+          // VLAN tag:
+          //  - vDC tenant: the picker only exposes SDN VNets (own VNI), PVE
+          //    rejects per-NIC tags on VXLAN VNets and the field is locked →
+          //    hard-null, dropping any stale blueprint value.
+          //  - full cluster view (provider / MSP): a raw bridge can carry an
+          //    802.1Q tag. Send the number when one was entered AND the
+          //    selected choice isn't a VNet; null otherwise (VNet selected,
+          //    or field left empty). The deploy route applies `,tag=` only
+          //    when this is truthy.
+          vlanTag: (() => {
+            if (!fullClusterNet) return null
+            const sel = bridges.find(b => b.iface === networkBridge)
+            if (sel?.type === 'vnet') return null
+            const n = Number.parseInt(vlanTag, 10)
+            return Number.isFinite(n) && n >= 1 && n <= 4094 ? n : null
+          })(),
           // ISO mode lets the user override ostype (Windows install media
           // pre-selects win11) — fall back to the catalog ostype otherwise.
           ostype: isIsoMode ? (ostypeOverride || image.ostype) : image.ostype,
@@ -659,7 +697,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     }
   }, [
     image, connectionId, node, storage, isoStorage, vmid, vmName, cores, sockets, memory,
-    diskSize, scsihw, networkModel, networkBridge, cpu, agent,
+    diskSize, scsihw, networkModel, networkBridge, vlanTag, fullClusterNet, cpu, agent,
     bios, ostypeOverride, isIsoMode, isoNeedsReservation, staticIp, staticMac,
     ciuser, cipassword, sshKeys, ipOverride, nameserver, searchdomain,
     bridges,
@@ -1100,77 +1138,122 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           </Box>
         )
       })()}
-      {/* Bridge picker: restricted to SDN VNets. Shared bridges and raw
-          PVE bridges are intentionally hidden — deployments here always
-          land on a tenant VNet so traffic stays inside the vDC's L2
-          domain (VXLAN VNI).
-          Each option also surfaces the VNet's subnet (CIDR + gateway)
-          when one is configured, so the user knows up-front which
-          subnet the VM will land on without having to navigate away.
-          For tenant admins we span the picker full-width and drop the
-          VLAN Tag field (always disabled in this wizard); super-admins
-          keep the disabled VLAN field for parity with the
-          CreateVmDialog they may also use. */}
-      <FormControl size="small" sx={hideInfra ? { gridColumn: '1 / -1' } : undefined}>
-        <InputLabel>{t('templates.deploy.hardware.bridge')}</InputLabel>
-        <Select
-          value={bridges.some(b => b.iface === networkBridge && b.type === 'vnet') ? networkBridge : (bridges.find(b => b.type === 'vnet')?.iface || '')}
-          onChange={e => setNetworkBridge(String(e.target.value))}
-          label={t('templates.deploy.hardware.bridge')}
-        >
-          {bridges.filter(b => b.type === 'vnet').length === 0 && (
-            <MenuItem value="" disabled>
-              <Typography variant="body2" sx={{ fontStyle: 'italic', opacity: 0.6 }}>
-                {t('templates.deploy.hardware.bridgeNoVnet')}
-              </Typography>
-            </MenuItem>
-          )}
-          {bridges.filter(b => b.type === 'vnet').map(b => (
-            <MenuItem key={b.iface} value={b.iface}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                <Box component="i" className="ri-shield-keyhole-line" sx={{ fontSize: 14, color: 'primary.main' }} />
-                <Typography variant="body2">{b.displayName || b.iface}</Typography>
-                {b.subnet && (
-                  <Stack direction="row" spacing={0.5} alignItems="center" sx={{ ml: 'auto', opacity: 0.7 }}>
-                    <Chip
-                      size="small"
-                      label={b.subnet.cidr}
-                      sx={{ height: 18, fontSize: 10 }}
-                    />
-                    <Typography variant="caption" sx={{ fontSize: 10 }}>
-                      gw {b.subnet.gateway}
-                    </Typography>
-                  </Stack>
-                )}
-              </Box>
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-      {/* Super-admin keeps the (disabled) VLAN Tag field for visual parity
-          with the bare-metal CreateVmDialog. Tenant admins don't see it —
-          the picker spans full-width above and the cell stays uncluttered. */}
-      {!hideInfra && (
-        <Tooltip
-          arrow
-          placement="top"
-          title={t('templates.deploy.hardware.vlanDisabledOnVnetTooltip')}
-        >
-          <span>
-            <TextField
-              size="small"
-              label={t('templates.deploy.hardware.vlan')}
-              type="number"
-              value=""
-              placeholder={t('templates.deploy.hardware.vlanDisabledOnVnet')}
-              slotProps={{ htmlInput: { min: 1, max: 4094 } }}
-              disabled
-              helperText={t('templates.deploy.hardware.vlanDisabledOnVnetHelp')}
-              fullWidth
-            />
-          </span>
-        </Tooltip>
-      )}
+      {/* Bridge picker.
+          - vDC tenant: restricted to SDN VNets. Shared bridges and raw PVE
+            bridges are hidden — deployments land on a tenant VNet so traffic
+            stays inside the vDC's L2 domain (VXLAN VNI). Each option surfaces
+            the VNet's subnet (CIDR + gateway) when configured. The picker
+            spans full-width and the VLAN Tag field is dropped (tenant) or
+            shown disabled (super-admin parity case below).
+          - full cluster view (provider / MSP): lists the whole `bridges`
+            list — VNets first (keeping their shield icon + subnet chips),
+            then raw bridges / shared uplinks rendered the CreateVmDialog way
+            (iface name + a type tag). On a raw bridge the VLAN field is
+            editable; on a VNet it stays disabled like before. */}
+      {(() => {
+        // VNets float to the top so the friendly tenant-scoped entries stay
+        // discoverable; raw bridges follow. Stable within each group.
+        const vnetChoices = bridges.filter(b => b.type === 'vnet')
+        const rawChoices = bridges.filter(b => b.type !== 'vnet')
+        const ordered = fullClusterNet ? [...vnetChoices, ...rawChoices] : vnetChoices
+        // Selection value:
+        //  - full cluster: keep the user's choice if it's still in the list,
+        //    else fall back to vmbr0 / first entry (never coerce to a VNet).
+        //  - vDC tenant: legacy coercion to a VNet so the displayed value
+        //    always matches a surfaced option.
+        const selectValue = fullClusterNet
+          ? (bridges.some(b => b.iface === networkBridge) ? networkBridge : '')
+          : (bridges.some(b => b.iface === networkBridge && b.type === 'vnet') ? networkBridge : (vnetChoices[0]?.iface || ''))
+        return (
+          <FormControl size="small" sx={hideInfra ? { gridColumn: '1 / -1' } : undefined}>
+            <InputLabel>{t('templates.deploy.hardware.bridge')}</InputLabel>
+            <Select
+              value={selectValue}
+              onChange={e => setNetworkBridge(String(e.target.value))}
+              label={t('templates.deploy.hardware.bridge')}
+            >
+              {ordered.length === 0 && (
+                <MenuItem value="" disabled>
+                  <Typography variant="body2" sx={{ fontStyle: 'italic', opacity: 0.6 }}>
+                    {t(fullClusterNet ? 'templates.deploy.hardware.bridgeNoneAvailable' : 'templates.deploy.hardware.bridgeNoVnet')}
+                  </Typography>
+                </MenuItem>
+              )}
+              {ordered.map(b => {
+                if (b.type === 'vnet') {
+                  return (
+                    <MenuItem key={b.iface} value={b.iface}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                        <Box component="i" className="ri-shield-keyhole-line" sx={{ fontSize: 14, color: 'primary.main' }} />
+                        <Typography variant="body2">{b.displayName || b.iface}</Typography>
+                        {b.subnet && (
+                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ ml: 'auto', opacity: 0.7 }}>
+                            <Chip
+                              size="small"
+                              label={b.subnet.cidr}
+                              sx={{ height: 18, fontSize: 10 }}
+                            />
+                            <Typography variant="caption" sx={{ fontSize: 10 }}>
+                              gw {b.subnet.gateway}
+                            </Typography>
+                          </Stack>
+                        )}
+                      </Box>
+                    </MenuItem>
+                  )
+                }
+                // Raw bridge / shared uplink. Mirror CreateVmDialog's label
+                // convention: iface name + a short type tag.
+                const tag = b.type === 'shared' ? 'Shared' : b.type === 'OVSBridge' ? 'OVS' : 'Bridge'
+                return (
+                  <MenuItem key={b.iface} value={b.iface}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                      <Box component="i" className="ri-git-branch-line" sx={{ fontSize: 14, opacity: 0.6 }} />
+                      <Typography variant="body2">{b.iface}</Typography>
+                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.5 }}>{tag}</Typography>
+                    </Box>
+                  </MenuItem>
+                )
+              })}
+            </Select>
+          </FormControl>
+        )
+      })()}
+      {/* VLAN Tag field.
+          - vDC tenant (hideInfra): hidden — the picker spans full-width.
+          - super-admin on a vDC connection (!hideInfra, !fullClusterNet):
+            disabled field for parity with CreateVmDialog (VNet-only here).
+          - full cluster view: editable when a raw bridge is selected,
+            disabled (with the same VNet tooltip) when a VNet is selected. */}
+      {!hideInfra && (() => {
+        const sel = bridges.find(b => b.iface === networkBridge)
+        // Disabled either because we're not in full cluster view (legacy
+        // VNet-only lock) or because the selected choice is a VNet (VXLAN
+        // VNI can't carry an 802.1Q tag).
+        const vlanDisabled = !fullClusterNet || sel?.type === 'vnet'
+        return (
+          <Tooltip
+            arrow
+            placement="top"
+            title={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetTooltip') : ''}
+          >
+            <span>
+              <TextField
+                size="small"
+                label={t('templates.deploy.hardware.vlan')}
+                type="number"
+                value={vlanDisabled ? '' : vlanTag}
+                onChange={e => setVlanTag(e.target.value)}
+                placeholder={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnet') : t('templates.deploy.hardware.vlanPlaceholder')}
+                slotProps={{ htmlInput: { min: 1, max: 4094 } }}
+                disabled={vlanDisabled}
+                helperText={vlanDisabled ? t('templates.deploy.hardware.vlanDisabledOnVnetHelp') : undefined}
+                fullWidth
+              />
+            </span>
+          </Tooltip>
+        )
+      })()}
       <FormControlLabel
         control={<Switch checked={agent} onChange={(_, v) => setAgent(v)} size="small" />}
         label={t('templates.deploy.hardware.qemuAgent')}

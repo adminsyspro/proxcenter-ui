@@ -1286,7 +1286,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
               sx={{ mt: 0.5, height: 32, fontSize: '0.8rem' }}
               renderValue={(val) => (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className='ri-building-line' style={{ fontSize: 14, opacity: 0.7 }} />
+                  <i className={val === 'default' ? 'ri-stack-line' : 'ri-building-line'} style={{ fontSize: 14, opacity: 0.7 }} />
                   {availableTenants.find(tn => tn.id === val)?.name || val}
                 </Box>
               )}
@@ -1294,7 +1294,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
               {availableTenants.map((tenant) => (
                 <MenuItem key={tenant.id} value={tenant.id}>
                   <ListItemIcon sx={{ minWidth: 28 }}>
-                    <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : 'ri-building-line'} style={{ fontSize: 16 }} />
+                    <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : (tenant.id === 'default' ? 'ri-stack-line' : 'ri-building-line')} style={{ fontSize: 16 }} />
                   </ListItemIcon>
                   {tenant.name}
                 </MenuItem>

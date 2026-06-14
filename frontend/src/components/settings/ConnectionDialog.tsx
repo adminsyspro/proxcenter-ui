@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useTheme } from '@mui/material/styles'
 
 import {
   Accordion,
@@ -23,7 +24,6 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
-  FormHelperText,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -121,6 +121,11 @@ export default function ConnectionDialog({
   mode = 'create'
 }: ConnectionDialogProps) {
   const t = useTranslations()
+  const theme = useTheme()
+  const tooltipSlotProps = {
+    tooltip: { sx: { bgcolor: 'background.paper', color: 'text.primary', border: `1px solid ${theme.palette.divider}`, boxShadow: 3, fontSize: '0.75rem' } },
+    arrow: { sx: { color: 'background.paper' } },
+  }
   const { isProvider } = useTenant()
   const [form, setForm] = useState<ConnectionFormData>(defaultFormData)
   const [mspTenants, setMspTenants] = useState<{ id: string; name: string }[]>([])
@@ -459,12 +464,6 @@ export default function ConnectionDialog({
           </Alert>
         )}
 
-        {/* Section: Informations générales */}
-        <Typography variant="subtitle2" sx={{ mt: 1, mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-information-line" />
-          {t('settings.generalInfo')}
-        </Typography>
-
         {(isXcpng || isVmware) && (
           <Alert severity="info" sx={{ mb: 2 }}>
             {isXcpng
@@ -569,20 +568,65 @@ export default function ConnectionDialog({
         />
 
         {mode === 'create' && isProvider && (type === 'pve' || type === 'pbs') && mspTenants.length > 0 && (
-          <FormControl fullWidth>
-            <InputLabel id='conn-owner-tenant-label'>{t('settings.connOwnerTenantLabel')}</InputLabel>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel id='conn-owner-tenant-label'>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                {t('settings.connOwnerTenantLabel')}
+                <Tooltip
+                  arrow
+                  slotProps={tooltipSlotProps}
+                  title={
+                    <Box sx={{ p: 1 }}>
+                      <Typography variant='caption' sx={{ display: 'block' }}>
+                        {t('settings.connOwnerHelper')}
+                      </Typography>
+                    </Box>
+                  }
+                >
+                  <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                    <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                  </Box>
+                </Tooltip>
+              </Box>
+            </InputLabel>
             <Select
               labelId='conn-owner-tenant-label'
-              label={t('settings.connOwnerTenantLabel')}
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {t('settings.connOwnerTenantLabel')}
+                  <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                </Box>
+              }
               value={form.ownerTenantId || 'default'}
               onChange={e => handleChange('ownerTenantId', e.target.value === 'default' ? '' : e.target.value)}
+              renderValue={value => {
+                const isPool = !value || value === 'default'
+                const label = isPool
+                  ? t('settings.connOwnerPool')
+                  : (mspTenants.find(tn => tn.id === value)?.name ?? value)
+                return (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className={isPool ? 'ri-stack-line' : 'ri-building-line'} style={{ fontSize: 16, opacity: 0.7 }} />
+                    {label}
+                  </Box>
+                )
+              }}
             >
-              <MenuItem value='default'>{t('settings.connOwnerPool')}</MenuItem>
+              <MenuItem value='default'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-stack-line' style={{ fontSize: 16, opacity: 0.7 }} />
+                  {t('settings.connOwnerPool')}
+                </Box>
+              </MenuItem>
               {mspTenants.map(tn => (
-                <MenuItem key={tn.id} value={tn.id}>{tn.name}</MenuItem>
+                <MenuItem key={tn.id} value={tn.id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className='ri-building-line' style={{ fontSize: 16, opacity: 0.7 }} />
+                    {tn.name}
+                  </Box>
+                </MenuItem>
               ))}
             </Select>
-            <FormHelperText>{t('settings.connOwnerHelper')}</FormHelperText>
           </FormControl>
         )}
 
@@ -639,9 +683,23 @@ export default function ConnectionDialog({
               />
             }
             label={
-              <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <Typography variant="body2">{t('settings.behindProxy')}</Typography>
-                <Typography variant="caption" color="text.secondary">{t('settings.behindProxyHelper')}</Typography>
+                <Tooltip
+                  arrow
+                  slotProps={tooltipSlotProps}
+                  title={
+                    <Box sx={{ p: 1 }}>
+                      <Typography variant='caption' sx={{ display: 'block' }}>
+                        {t('settings.behindProxyHelper')}
+                      </Typography>
+                    </Box>
+                  }
+                >
+                  <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                    <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                  </Box>
+                </Tooltip>
               </Box>
             }
           />
@@ -707,8 +765,8 @@ export default function ConnectionDialog({
               label={t('settings.apiTokenId')}
               value={tokenId}
               onChange={e => setTokenId(e.target.value)}
-              placeholder="user@realm!tokenid"
-              helperText={isEdit ? t('settings.apiTokenHelperEdit') : t('settings.apiTokenIdHelper')}
+              placeholder={t('settings.apiTokenIdHelper')}
+              helperText={isEdit ? t('settings.apiTokenHelperEdit') : undefined}
               sx={{ mt: 1 }}
               required={!isEdit}
             />
@@ -718,8 +776,8 @@ export default function ConnectionDialog({
               value={tokenSecret}
               onChange={e => setTokenSecret(e.target.value)}
               type={showTokenSecret ? 'text' : 'password'}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              helperText={isEdit ? t('settings.apiTokenHelperEdit') : t('settings.apiTokenSecretHelper')}
+              placeholder={t('settings.apiTokenSecretHelper')}
+              helperText={isEdit ? t('settings.apiTokenHelperEdit') : undefined}
               sx={{ mt: 1.5 }}
               required={!isEdit}
               slotProps={{
@@ -740,10 +798,22 @@ export default function ConnectionDialog({
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <i className="ri-fingerprint-line" style={{ fontSize: 16, opacity: 0.7 }} />
                   <Typography variant="body2" fontWeight={600}>TLS fingerprint (SHA256)</Typography>
+                  <Tooltip
+                    arrow
+                    slotProps={tooltipSlotProps}
+                    title={
+                      <Box sx={{ p: 1 }}>
+                        <Typography variant='caption' sx={{ display: 'block' }}>
+                          Required for PVE to trust this PBS when ProxCenter injects a pbs: storage. Click Capture to fetch from the server&apos;s TLS handshake.
+                        </Typography>
+                      </Box>
+                    }
+                  >
+                    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                      <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                    </Box>
+                  </Tooltip>
                 </Box>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                  Required for PVE to trust this PBS when ProxCenter injects a `pbs:` storage. Click Capture to fetch from the server's TLS handshake.
-                </Typography>
                 {pbsFingerprint ? (
                   <Typography
                     variant="body2"
@@ -875,13 +945,22 @@ export default function ConnectionDialog({
           <i className="ri-terminal-line" />
           {t('settings.sshAccess')}
           <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
+          <Tooltip
+            arrow
+            slotProps={tooltipSlotProps}
+            title={
+              <Box sx={{ p: 1 }}>
+                <Typography variant='caption' sx={{ display: 'block' }}>
+                  {t('settings.sshInfo')}
+                </Typography>
+              </Box>
+            }
+          >
+            <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+              <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+            </Box>
+          </Tooltip>
         </Typography>
-
-        <Alert severity="info" sx={{ mb: 2 }}>
-          <Typography variant="body2">
-            {t('settings.sshInfo')}
-          </Typography>
-        </Alert>
 
         <FormControlLabel
           control={
@@ -1021,9 +1100,23 @@ export default function ConnectionDialog({
                 />
               }
               label={
-                <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <Typography variant="body2">{t('settings.sshUseSudo')}</Typography>
-                  <Typography variant="caption" color="text.secondary">{t('settings.sshUseSudoHelper')}</Typography>
+                  <Tooltip
+                    arrow
+                    slotProps={tooltipSlotProps}
+                    title={
+                      <Box sx={{ p: 1 }}>
+                        <Typography variant='caption' sx={{ display: 'block' }}>
+                          {t('settings.sshUseSudoHelper')}
+                        </Typography>
+                      </Box>
+                    }
+                  >
+                    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                      <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                    </Box>
+                  </Tooltip>
                 </Box>
               }
               sx={{ mt: 1, ml: 0 }}
@@ -1086,24 +1179,31 @@ export default function ConnectionDialog({
               <i className="ri-map-pin-line" />
               {t('settings.location')}
               <Chip label={t('common.optional')} size="small" variant="outlined" sx={{ ml: 1 }} />
+              <Tooltip
+                arrow
+                slotProps={tooltipSlotProps}
+                title={
+                  <Box sx={{ p: 1 }}>
+                    <Typography variant='caption' sx={{ display: 'block' }}>
+                      {t('settings.locationInfo')}
+                    </Typography>
+                  </Box>
+                }
+              >
+                <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'default' }}>
+                  <i className='ri-information-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                </Box>
+              </Tooltip>
             </Typography>
 
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <Typography variant="body2">
-                {t('settings.locationInfo')}
-              </Typography>
-            </Alert>
-
-            <TextField
-              fullWidth
-              label={t('settings.locationLabel')}
-              value={form.locationLabel}
-              onChange={e => handleChange('locationLabel', e.target.value)}
-              placeholder="Paris DC1, Frankfurt, ..."
-              sx={{ mt: 1 }}
-            />
-
-            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+              <TextField
+                label={t('settings.locationLabel')}
+                value={form.locationLabel}
+                onChange={e => handleChange('locationLabel', e.target.value)}
+                placeholder="Paris DC1, Frankfurt, ..."
+                sx={{ flex: 2 }}
+              />
               <TextField
                 label={t('settings.latitude')}
                 value={form.latitude}

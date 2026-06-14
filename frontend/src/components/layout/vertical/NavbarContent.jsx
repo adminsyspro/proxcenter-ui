@@ -240,7 +240,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
       id: a.id,
       message: a.message,
       severity: a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info',
-      source: a.resource || a.connection_id,
+      source: a.resource_name ? `${a.resource_name} (${a.resource})` : (a.resource || a.connection_id),
       lastSeenAt: a.last_seen_at,
       firstSeenAt: a.first_seen_at,
       occurrences: a.occurrences || 1

@@ -45,6 +45,7 @@ import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useOrchestratorAlerts, useAlertsSummary, useAlertRules } from '@/hooks/useAlerts'
+import { useConnections } from '@/hooks/useConnections'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
@@ -60,6 +61,7 @@ interface AlertData {
   status: 'active' | 'acknowledged' | 'resolved' | 'silenced'
   resource: string
   resource_type: string
+  resource_name?: string
   message: string
   current_value: number
   threshold: number
@@ -347,6 +349,18 @@ return () => setPageInfo('', '', '')
     mutate: mutateRules
   } = useAlertRules(isEnterprise)
 
+  // Resolve connection names for the alert "resource" column. The VM/guest name
+  // now comes from the alert itself (resource_name, stamped by the orchestrator);
+  // we only join the connection (cluster/host) name from the SWR-cached
+  // connections list shared with other pages.
+  const { data: connectionsResp } = useConnections()
+
+  const connNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of (connectionsResp?.data || [])) m.set(c.id, c.name)
+    return m
+  }, [connectionsResp])
+
   // Derive state from SWR data
   const alerts: AlertData[] = alertsData?.data || []
   const orchestratorAvailable = !alertsError
@@ -591,7 +605,27 @@ return true
         </Box>
       )
     },
-    { field: 'resource', headerName: t('alerts.resource'), width: 150 },
+    {
+      field: 'resource',
+      headerName: t('alerts.resource'),
+      width: 220,
+      renderCell: (p) => {
+        const vmName = p.row.resource_name
+        const connName = connNameById.get(p.row.connection_id)
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 0.5, minWidth: 0 }}>
+            <Typography variant="body2" noWrap sx={{ lineHeight: 1.4 }}>
+              {vmName ? `${vmName} (${p.value})` : p.value}
+            </Typography>
+            {connName && (
+              <Typography variant="caption" noWrap sx={{ opacity: 0.6, lineHeight: 1.2 }}>
+                {connName}
+              </Typography>
+            )}
+          </Box>
+        )
+      }
+    },
     { field: 'current_value', headerName: t('alerts.value'), width: 80, renderCell: (p) => p.value ? `${p.value.toFixed(1)}${p.row.unit || ''}` : '—' },
     { field: 'last_seen_at', headerName: t('alerts.lastSeen'), width: 120, renderCell: (p) => <Tooltip title={new Date(p.value).toLocaleString()}><span>{timeAgo(p.value)}</span></Tooltip> },
     {

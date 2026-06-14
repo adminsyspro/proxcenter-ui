@@ -39,34 +39,50 @@ export async function GET(
 }
 
 /**
- * PUT /api/v1/connections/[id]/ceph/flags
+ * Set (value=true) or unset (value=false) a single Ceph OSD flag.
  *
- * Set a Ceph OSD flag. Body: { flag: "noout" }
+ * PVE exposes `PUT /cluster/ceph/flags/{flag}` with a REQUIRED boolean `value`
+ * parameter; there is no DELETE on the single-flag endpoint, so unsetting is
+ * also a PUT with value=false. Params are form-encoded, per the PVE convention
+ * used elsewhere in this codebase.
+ *
+ * Body (both PUT and DELETE): { flag: "noout" }
  */
-export async function PUT(
+async function setCephFlag(
   req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> },
+  value: boolean
 ) {
+  const { id } = await ctx.params
+  const body = await req.json().catch(() => ({}))
+  const flag = body?.flag
+
+  if (!flag || typeof flag !== 'string') {
+    return NextResponse.json({ error: "Missing or invalid 'flag' parameter" }, { status: 400 })
+  }
+
+  const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
+  if (denied) return denied
+
+  const conn = await getConnectionById(id)
+  if (!conn) {
+    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  }
+
+  await pveFetch(conn, `/cluster/ceph/flags/${encodeURIComponent(flag)}`, {
+    method: 'PUT',
+    body: new URLSearchParams({ value: value ? '1' : '0' }),
+  })
+
+  return NextResponse.json({ success: true, flag, value })
+}
+
+/**
+ * PUT /api/v1/connections/[id]/ceph/flags — set a Ceph OSD flag. Body: { flag }
+ */
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await ctx.params
-    const body = await req.json()
-    const flag = body?.flag
-
-    if (!flag || typeof flag !== 'string') {
-      return NextResponse.json({ error: "Missing or invalid 'flag' parameter" }, { status: 400 })
-    }
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
-    if (denied) return denied
-
-    const conn = await getConnectionById(id)
-    if (!conn) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
-
-    await pveFetch(conn, `/cluster/ceph/flags/${encodeURIComponent(flag)}`, { method: 'PUT' })
-
-    return NextResponse.json({ success: true, flag })
+    return await setCephFlag(req, ctx, true)
   } catch (e: any) {
     console.error("[ceph/flags] PUT Error:", String(e?.message).replace(/[\r\n]/g, ''))
     return NextResponse.json({ error: e?.message || "Failed to set Ceph flag" }, { status: 500 })
@@ -74,34 +90,11 @@ export async function PUT(
 }
 
 /**
- * DELETE /api/v1/connections/[id]/ceph/flags
- *
- * Unset a Ceph OSD flag. Body: { flag: "noout" }
+ * DELETE /api/v1/connections/[id]/ceph/flags — unset a Ceph OSD flag. Body: { flag }
  */
-export async function DELETE(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await ctx.params
-    const body = await req.json()
-    const flag = body?.flag
-
-    if (!flag || typeof flag !== 'string') {
-      return NextResponse.json({ error: "Missing or invalid 'flag' parameter" }, { status: 400 })
-    }
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
-    if (denied) return denied
-
-    const conn = await getConnectionById(id)
-    if (!conn) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
-
-    await pveFetch(conn, `/cluster/ceph/flags/${encodeURIComponent(flag)}`, { method: 'DELETE' })
-
-    return NextResponse.json({ success: true, flag })
+    return await setCephFlag(req, ctx, false)
   } catch (e: any) {
     console.error("[ceph/flags] DELETE Error:", String(e?.message).replace(/[\r\n]/g, ''))
     return NextResponse.json({ error: e?.message || "Failed to unset Ceph flag" }, { status: 500 })

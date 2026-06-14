@@ -61,8 +61,8 @@ function VmActions({
 
   return (
     <Stack direction="row" spacing={0.25} alignItems="center" sx={{ ml: 'auto' }}>
-      {/* Start */}
-      <MuiTooltip title={t('audit.actions.start')}>
+      {/* Start (resume when the guest is paused) */}
+      <MuiTooltip title={vmStatus === 'paused' ? t('vmActions.resume') : t('audit.actions.start')}>
         <span>
           <IconButton
             size="small"

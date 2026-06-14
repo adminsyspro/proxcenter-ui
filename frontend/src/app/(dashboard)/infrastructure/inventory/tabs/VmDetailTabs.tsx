@@ -227,6 +227,7 @@ export default function VmDetailTabs(props: any) {
     backupsPreloaded,
     backupsStats,
     backupsWarnings,
+    backupsPbsConfigured,
     balloon,
     balloonEnabled,
     browseArchive,
@@ -2820,9 +2821,22 @@ return (
                   {/* Liste des backups groupés par PBS/datastore */}
                   {!backupsLoading && !selectedBackup && (() => {
                     if (backups.length === 0) {
+                      if (backupsPbsConfigured === false) {
+                        return (
+                          <Alert severity="info" sx={{ mt: 2 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {t('backups.noPbsConfiguredTitle')}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {t('backups.noPbsConfiguredHint')}
+                            </Typography>
+                          </Alert>
+                        )
+                      }
+
                       return (
                         <Alert severity="info" sx={{ mt: 2 }}>
-                          {t('common.noData')}
+                          {t('backups.noGuestBackups')}
                         </Alert>
                       )
                     }
@@ -2836,7 +2850,7 @@ return (
                     if (visibleBackups.length === 0) {
                       return (
                         <Alert severity="info" sx={{ mt: 2 }}>
-                          {t('common.noData')}
+                          {t('backups.noGuestBackups')}
                         </Alert>
                       )
                     }

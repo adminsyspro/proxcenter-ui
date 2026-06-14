@@ -3,6 +3,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import {
   parseNetLine,
   parseIpconfigLine,
+  stripMacFromNet,
   scanUsedIpsForSubnet,
   scannedToIntSet,
   invalidateScanCache,
@@ -245,5 +246,36 @@ describe('scanUsedIpsForSubnet', () => {
       connectionId: 'conn-1',
     })
     expect(out).toEqual([{ vmid: 101, mac: 'AA:00:00:00:00:02', ip: '10.42.0.6' }])
+  })
+})
+
+describe('stripMacFromNet', () => {
+  it('drops the MAC from the canonical model=MAC form so PVE regenerates it', () => {
+    expect(stripMacFromNet('virtio=BC:24:11:AA:BB:CC,bridge=tenantA,tag=10'))
+      .toBe('virtio,bridge=tenantA,tag=10')
+  })
+
+  it('drops the macaddr= token from the alt form', () => {
+    expect(stripMacFromNet('virtio,bridge=tenantA,macaddr=BC:24:11:AA:BB:CC,firewall=1'))
+      .toBe('virtio,bridge=tenantA,firewall=1')
+  })
+
+  it('handles every supported model token', () => {
+    expect(stripMacFromNet('e1000=AA:BB:CC:DD:EE:FF,bridge=b')).toBe('e1000,bridge=b')
+    expect(stripMacFromNet('rtl8139=AA:BB:CC:DD:EE:FF,bridge=b')).toBe('rtl8139,bridge=b')
+    expect(stripMacFromNet('vmxnet3=AA:BB:CC:DD:EE:FF,bridge=b')).toBe('vmxnet3,bridge=b')
+  })
+
+  it('leaves a line with no pinned MAC unchanged', () => {
+    expect(stripMacFromNet('virtio,bridge=vmbr0')).toBe('virtio,bridge=vmbr0')
+  })
+
+  it('preserves the other NIC options and their order', () => {
+    expect(stripMacFromNet('virtio=BC:24:11:00:00:01,bridge=tenantA,tag=20,firewall=1,mtu=1400'))
+      .toBe('virtio,bridge=tenantA,tag=20,firewall=1,mtu=1400')
+  })
+
+  it('returns an empty string for empty input', () => {
+    expect(stripMacFromNet('')).toBe('')
   })
 })

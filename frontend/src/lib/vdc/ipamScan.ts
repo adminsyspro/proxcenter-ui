@@ -141,6 +141,42 @@ export function parseNetLine(value: string): { bridge: string | null; mac: strin
 }
 
 /**
+ * Rewrite a `netN` line so PVE assigns a fresh MAC on the next config write.
+ *
+ * PVE's clone keeps the source MACs and the clone API's `unique` flag is not
+ * portable across PVE versions (older builds reject it as an unknown
+ * property). For NICs on an IPAM-managed VNet the duplicated MAC collides both
+ * on the wire and on the (subnet, mac) UNIQUE constraint, so we strip the
+ * pinned MAC — both the canonical `model=MAC` form and the `macaddr=` form —
+ * and let PVE auto-generate one. A line with no pinned MAC is returned as-is.
+ */
+export function stripMacFromNet(value: string): string {
+  const parts = String(value || '').split(',')
+  const out: string[] = []
+
+  for (const part of parts) {
+    const eq = part.indexOf('=')
+
+    if (eq >= 0) {
+      const k = part.slice(0, eq).trim()
+
+      // Canonical `model=MAC` → keep just the bare model token (drop the MAC).
+      if (NET_MODEL_TOKENS.has(k)) {
+        out.push(k)
+        continue
+      }
+
+      // Alt `macaddr=MAC` → drop the token entirely.
+      if (k === 'macaddr') continue
+    }
+
+    out.push(part)
+  }
+
+  return out.join(',')
+}
+
+/**
  * Parse an `ipconfigN` line. Returns the static IP if the line is in
  * `ip=A.B.C.D[/prefix],...` form. `ip=dhcp`, missing `ip=`, and SLAAC
  * (`ip6=...`) all yield null — we only track static v4 in the IPAM.

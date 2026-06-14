@@ -18,6 +18,8 @@ import {
 
 import { useTagColors } from '@/contexts/TagColorContext'
 
+import { sanitizeTag, filterTagInput } from '../helpers'
+
 const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CloseIcon = ({ fontSize, sx, style, className, ...rest }: any) => <i className={`ri-close-line${className ? ` ${className}` : ''}`} style={{ fontSize: fontSize === 'small' ? 18 : 20, color: sx?.color, ...style }} {...rest} />
 
@@ -77,10 +79,6 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
     setAnchorEl(null)
     setNewTagInput('')
   }
-
-  // Sanitize tag for Proxmox: lowercase, alphanumeric + hyphen + underscore only
-  const sanitizeTag = (raw: string): string =>
-    raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').replace(/-{2,}/g, '-').replace(/^-|-$/g, '')
 
   // Ajouter un tag
   const handleAddTag = async (tagToAdd: string) => {
@@ -232,7 +230,7 @@ return (
               size="small"
               placeholder={t('inventoryPage.newTag')}
               value={newTagInput}
-              onChange={e => setNewTagInput(e.target.value.toLowerCase().replace(/[^a-z0-9_\s-]/g, ''))}
+              onChange={e => setNewTagInput(filterTagInput(e.target.value))}
               onKeyDown={e => {
                 if (e.key === 'Enter' && newTagInput.trim()) {
                   handleAddTag(newTagInput)

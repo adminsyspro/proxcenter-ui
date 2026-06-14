@@ -5,7 +5,7 @@ import type { VmRow } from '@/components/VmsTable'
 import type { CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import type { InventorySelection, DetailsPayload } from '../types'
 import type { AllVmItem, HostItem } from '../InventoryTree'
-import { parseVmId, fetchDetails } from '../helpers'
+import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 
 /* ------------------------------------------------------------------ */
@@ -263,7 +263,7 @@ export function useVmActions({
 
   // ── Clone (selected VM panel) ───────────────────────────────────────
 
-  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
+  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => {
     if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
@@ -280,7 +280,8 @@ export function useVmActions({
           storage: params.targetStorage || undefined,
           format: params.format || undefined,
           pool: params.pool || undefined,
-          full: params.full
+          full: params.full,
+          snapname: params.snapname || undefined
         })
       }
     )
@@ -391,7 +392,7 @@ export function useVmActions({
 
   // ── Table clone ─────────────────────────────────────────────────────
 
-  const handleTableCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => {
+  const handleTableCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => {
     if (!tableCloneVm) throw new Error('No VM selected for cloning')
 
     const { connId, node, type, vmid } = tableCloneVm
@@ -413,6 +414,10 @@ export function useVmActions({
 
     if (params.pool) {
       body.pool = params.pool
+    }
+
+    if (params.snapname) {
+      body.snapname = params.snapname
     }
 
     const res = await fetch(
@@ -578,6 +583,10 @@ export function useVmActions({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
+    // A paused VM must be resumed, not started (PVE rejects status/start on
+    // a suspended guest with "VM already running").
+    action = resolveVmPowerAction(action, dataRef.current?.vmRealStatus)
+
     // Actions nécessitant confirmation via dialog MUI
     if (['shutdown', 'stop', 'suspend', 'reboot'].includes(action)) {
       const actionLabels: Record<string, { title: string; message: string; icon: string }> = {
@@ -735,7 +744,7 @@ export function useVmActions({
 
   // ── Table VM action ─────────────────────────────────────────────────
 
-  const handleTableVmAction = useCallback(async (vm: VmRow, action: 'start' | 'shutdown' | 'stop' | 'pause' | 'console' | 'details' | 'clone' | 'reboot' | 'suspend') => {
+  const handleTableVmAction = useCallback(async (vm: VmRow, action: 'start' | 'resume' | 'shutdown' | 'stop' | 'pause' | 'console' | 'details' | 'clone' | 'reboot' | 'suspend') => {
     if (action === 'details') {
       onSelect?.({ type: 'vm', id: vm.id })
 
@@ -762,7 +771,8 @@ export function useVmActions({
       return
     }
 
-    const apiAction = action === 'pause' ? 'suspend' : action
+    // 'pause' -> PVE 'suspend'; 'start' on a paused VM -> 'resume'.
+    const apiAction = resolveVmPowerAction(action, vm.status)
 
     // Actions nécessitant confirmation
     if (['shutdown', 'stop', 'suspend', 'reboot'].includes(apiAction)) {

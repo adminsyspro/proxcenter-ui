@@ -138,6 +138,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const numMons = monmap.num_mons || (monList?.length || 0)
     const quorum = status.quorum_names || []
 
+    // Managers (mgr) placement, derived from the mgrmap. mgr daemon names are
+    // the hostname (possibly FQDN), so host = name before the first dot.
+    const mgrmap = status.mgrmap || {}
+    const mgrHost = (n: any) => String(n || "").split(".")[0]
+    const managers = {
+      active: mgrmap.active_name ? { name: mgrmap.active_name, host: mgrHost(mgrmap.active_name) } : null,
+      standbys: (Array.isArray(mgrmap.standbys) ? mgrmap.standbys : []).map((s: any) => {
+        const name = s?.name ?? String(s)
+        return { name, host: mgrHost(name) }
+      }),
+    }
+
     // Mapper les OSDs avec plus de détails
     // Les OSDs peuvent être dans un format arborescent dans Proxmox
     const extractOsdsFromTree = (items: any[]): any[] => {
@@ -255,6 +267,9 @@ return result
           // Stats
           commitLatencyMs: osd.commit_latency_ms || 0,
           applyLatencyMs: osd.apply_latency_ms || 0,
+          reweight: osd.reweight,
+          pgs: osd.pgs ?? osd.num_pgs,
+          version: osd.ceph_version_short || osd.version || null,
         }
       })
       .sort((a: any, b: any) => a.id - b.id)
@@ -297,8 +312,11 @@ return {
         // Application (rbd vs cephfs)
         application: cephFSPoolNames.has(poolName) ? 'cephfs' : 'rbd',
 
-        // Crush rule
+        // Crush rule (name comes straight from the pool; the /ceph/rules
+        // endpoint is often bare). crushRootId resolves to a target bucket.
         crushRule: pool.crush_rule || 0,
+        crushRuleName: pool.crush_rule_name || null,
+        crushRootId: pool.autoscale_status?.crush_root_id ?? null,
 
         // Autoscale
         pgAutoscaleMode: pool.pg_autoscale_mode || 'unknown',
@@ -404,6 +422,7 @@ return {
       // CRUSH topology
       crushTree,
       crushRules,
+      managers,
     }
 
     return NextResponse.json({ data: cephData })

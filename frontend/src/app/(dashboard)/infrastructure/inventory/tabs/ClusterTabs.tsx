@@ -70,6 +70,7 @@ import InventorySummary from '../components/InventorySummary'
 import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 import EntityTagManager from '../components/EntityTagManager'
+import CephTopology from '../components/CephTopology'
 import { AddIcon } from '../components/IconWrappers'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -3061,6 +3062,14 @@ export default function ClusterTabs(props: any) {
                             </Box>
                           </CardContent>
                         </Card>
+
+                        {/* CRUSH Topology */}
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>CRUSH Topology</Typography>
+                            <CephTopology connId={connId} />
+                          </CardContent>
+                        </Card>
                       </Stack>
                     ) : (
                       <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -3265,6 +3274,27 @@ export default function ClusterTabs(props: any) {
                             <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
                               {agg.nodes.join(', ')}
                             </Typography>
+                            <Typography variant="caption" sx={{ display: 'block', mt: 0.75 }}>
+                              {t('updates.permissionErrorFixHint')}
+                            </Typography>
+                            <Box
+                              component="pre"
+                              sx={{
+                                mt: 0.5,
+                                mb: 0,
+                                p: 1,
+                                borderRadius: 1,
+                                bgcolor: 'grey.900',
+                                color: 'grey.100',
+                                fontFamily: '"JetBrains Mono", monospace',
+                                fontSize: '0.7rem',
+                                overflow: 'auto',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {`pveum role add ProxCenter -privs "${agg.permission}"\npveum aclmod / -user proxcenter@pve -role ProxCenter`}
+                            </Box>
                           </Alert>
                         )
                       })()}

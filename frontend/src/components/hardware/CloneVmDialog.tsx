@@ -36,17 +36,18 @@ import { useTenant } from '@/contexts/TenantContext'
 type CloneVmDialogProps = {
   open: boolean
   onClose: () => void
-  onClone: (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean }) => Promise<void>
+  onClone: (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => Promise<void>
   connId: string
   currentNode: string
   vmName: string
   vmid: string
+  vmType?: string  // 'qemu' | 'lxc' — needed to read the source snapshots
   nextVmid: number
   pools?: string[]
   existingVmids?: number[]  // Liste des VMIDs déjà utilisés
 }
 
-export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmName, vmid, nextVmid, pools = [], existingVmids = [] }: CloneVmDialogProps) {
+export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmName, vmid, vmType, nextVmid, pools = [], existingVmids = [] }: CloneVmDialogProps) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -73,6 +74,12 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   const [format, setFormat] = useState('qcow2')
   const [pool, setPool] = useState('')
   const [fullClone, setFullClone] = useState(true)
+
+  // Snapshot source — clone from a snapshot restore point (PDM parity).
+  // PVE's clone API accepts an optional `snapname`; empty = current state.
+  const [snapshots, setSnapshots] = useState<{ name: string; snaptimeFormatted: string; vmstate?: boolean }[]>([])
+  const [snapname, setSnapname] = useState('')
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false)
 
   // Generate a random available VMID
   const generateRandomVmid = () => {
@@ -203,6 +210,40 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
     setTargetStorage('')
   }, [open, connId, targetNode])
 
+  // Charger les snapshots de la VM source (pour cloner depuis un point de
+  // restauration). Lus depuis le node source (currentNode), pas le node cible.
+  useEffect(() => {
+    if (!open || !connId || !vmType || !vmid || !currentNode) return
+    let cancelled = false
+
+    const loadSnapshots = async () => {
+      setSnapshotsLoading(true)
+
+      try {
+        const vmKey = `${connId}:${vmType}:${currentNode}:${vmid}`
+        const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmKey)}/snapshots`, { cache: 'no-store' })
+        const json = await res.json()
+        const list = json?.data?.snapshots
+
+        if (!cancelled && Array.isArray(list)) {
+          setSnapshots(list.map((s: any) => ({
+            name: s.name,
+            snaptimeFormatted: s.snaptimeFormatted || '',
+            vmstate: s.vmstate,
+          })))
+        }
+      } catch {
+        // Tolerate — without a snapshot list we simply hide the picker.
+      } finally {
+        if (!cancelled) setSnapshotsLoading(false)
+      }
+    }
+
+    loadSnapshots()
+
+    return () => { cancelled = true }
+  }, [open, connId, vmType, vmid, currentNode])
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
@@ -218,6 +259,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       setFormat('qcow2')
       setPool('')
       setFullClone(true)
+      setSnapname('')
       setError(null)
     }
   }, [open, currentNode, nextVmid, isProviderTenant])
@@ -273,7 +315,8 @@ return currentScore > bestScore ? current : best
         targetStorage: targetStorage || undefined,
         format: targetStorage ? format : undefined,
         pool: pool || undefined,
-        full: fullClone
+        full: fullClone,
+        snapname: snapname || undefined
       })
       onClose()
     } catch (e: any) {
@@ -293,6 +336,49 @@ return currentScore > bestScore ? current : best
 
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {/* Clone-from-snapshot selector — only shown when the source VM has
+            snapshots. Empty value clones the current (live) state, otherwise
+            the clone is taken from the chosen snapshot's restore point. */}
+        {snapshots.length > 0 && (
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Clone from</InputLabel>
+              <Select
+                value={snapname}
+                onChange={(e) => setSnapname(e.target.value)}
+                label="Clone from"
+                disabled={snapshotsLoading}
+                MenuProps={{ PaperProps: { sx: { maxHeight: 320 } } }}
+              >
+                <MenuItem value="">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <i className="ri-focus-3-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                    <Typography variant="body2">Current state</Typography>
+                  </Box>
+                </MenuItem>
+
+                <Divider sx={{ my: 0.5 }} />
+
+                {snapshots.map((s) => (
+                  <MenuItem key={s.name} value={s.name} sx={{ py: 0.75 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-camera-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                      <Box>
+                        <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
+                        {s.snaptimeFormatted && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
+                            {s.snaptimeFormatted}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        )}
 
         {/* Tenant view — single name field. Target node stays the source
             node, target storage falls back to "same as source", VMID is

@@ -1,5 +1,32 @@
 [
   {
+    "version": "1.4.2",
+    "title": "Warm migration, SPICE consoles, Ceph topology & security",
+    "items": [
+      { "type": "new", "text": "Warm migration for VMware with changed-block tracking and a final delta sync: no data loss on large or busy disks, for ESXi-direct and vCenter (including vSAN), single and bulk, with a go/no-go preflight" },
+      { "type": "new", "text": "In-browser SPICE console for QEMU VMs, alongside noVNC" },
+      { "type": "new", "text": "Ceph CRUSH topology view in the cluster Ceph tab: read-only CRUSH tree with details and pools" },
+      { "type": "new", "text": "Clone a VM from a snapshot restore point, choosing a snapshot as the clone source" },
+      { "type": "new", "text": "Role-level default RBAC scope, inherited by every assignment of that role" },
+      { "type": "new", "text": "SSO-only login policy for OIDC (hide the local form, force the SSO redirect)" },
+      { "type": "new", "text": "Local TOTP two-factor authentication with an admin enforcement policy" },
+      { "type": "new", "text": "Local migration from the cluster Guests tab (node-to-node), not just cross-cluster" },
+      { "type": "improved", "text": "Reports and notifications: connection scoping, backup report polish, per-category severity, and an event-email rework (English copy, task-log details, one mail per event)" },
+      { "type": "improved", "text": "Ceph tab shows the full cluster config with working OSD flag toggles" },
+      { "type": "improved", "text": "Dashboard widgets honor the appearance settings: font-size, corner-rounding and a shared gauge" },
+      { "type": "improved", "text": "Guest VLANs resolved from host bond sub-interfaces so tagged guests group correctly" },
+      { "type": "improved", "text": "Backups show the real local backup time with Proxmox-style columns; the empty Backups tab explains why" },
+      { "type": "improved", "text": "Security hardening: TOFU host-key verification, per-connection ws-proxy TLS, dependency advisories cleared, Node 26 pipeline hardening" },
+      { "type": "fix", "text": "Partial-VM cleanup no longer leaks the target VMID after a failed conversion" },
+      { "type": "fix", "text": "Grant Sys.Modify in token setup, with an actionable Rolling Update permission warning" },
+      { "type": "fix", "text": "Backups 'Run now' works again (a missing route returned an HTML 404)" },
+      { "type": "fix", "text": "VM User role gains the read access the Inventory needs to load" },
+      { "type": "fix", "text": "Standalone hosts behind NAT: node management connects to the public host, not the private interface" },
+      { "type": "fix", "text": "Serial and headless VMs show a badge instead of looping on a failing screenshot" },
+      { "type": "fix", "text": "Resume paused VMs; allow dots in tags; the guest icon dims when off; tree sections stay open on header click" }
+    ]
+  },
+  {
     "version": "1.4.0",
     "title": "MSP / IaaS — vDC, IPAM, PBS multi-tenant & Postgres",
     "items": [

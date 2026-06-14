@@ -35,6 +35,7 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { useTranslations, useLocale } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
+import { runBackupJobNow } from '@/lib/backups/runBackupJob'
 
 interface BackupJob {
   id: string
@@ -76,6 +77,24 @@ function parsePruneBackups(raw: string | null | undefined) {
     if (k === 'keep-yearly') result.keepYearly = v || ''
   }
   return result
+}
+
+// Renders a VM/CT option row in the backup-job include/exclude pickers.
+// Shared so the two Autocompletes do not duplicate the markup.
+function renderVmJobOption(props: any, option: any) {
+  const { key, ...optionProps } = props
+
+  return (
+    <li key={key} {...optionProps}>
+      <Chip
+        size="small"
+        label={option.type === 'qemu' ? 'VM' : 'CT'}
+        sx={{ mr: 1, fontSize: 10 }}
+        color={option.type === 'qemu' ? 'primary' : 'secondary'}
+      />
+      {option.vmid} - {option.name}
+    </li>
+  )
 }
 
 export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPanelProps) {
@@ -376,15 +395,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   // Run now
   const handleRunNow = async (job: BackupJob) => {
     try {
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/${encodeURIComponent(job.id)}/run`,
-        { method: 'POST' }
-      )
+      const result = await runBackupJobNow(connectionId, job.id)
 
-      const json = await res.json()
-
-      if (json.error) {
-        setError(json.error)
+      if (!result.ok) {
+        setError(result.error || t('inventory.failedToRunBackupJob'))
       } else {
         loadJobs()
       }
@@ -716,14 +730,18 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   onInputChange={(_, newInput, reason) => {
                     if (reason === 'input') setFormData(prev => ({ ...prev, schedule: newInput }))
                   }}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 2 }}>
-                        <Typography variant="body2">{typeof option === 'string' ? option : option.label}</Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.5, fontFamily: 'monospace' }}>{typeof option === 'string' ? '' : option.value}</Typography>
-                      </Box>
-                    </li>
-                  )}
+                  renderOption={(props, option) => {
+                    const { key, ...optionProps } = props
+
+                    return (
+                      <li key={key} {...optionProps}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 2 }}>
+                          <Typography variant="body2">{typeof option === 'string' ? option : option.label}</Typography>
+                          <Typography variant="caption" sx={{ opacity: 0.5 }}>{typeof option === 'string' ? '' : option.value}</Typography>
+                        </Box>
+                      </li>
+                    )
+                  }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -757,17 +775,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   value={vms.filter(vm => formData.vmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, vmids: newValue.map(v => v.vmid) }))}
                   renderInput={(params) => <TextField {...params} label={t('inventory.selectVms')} />}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      <Chip 
-                        size="small" 
-                        label={option.type === 'qemu' ? 'VM' : 'CT'} 
-                        sx={{ mr: 1, fontSize: 10 }}
-                        color={option.type === 'qemu' ? 'primary' : 'secondary'}
-                      />
-                      {option.vmid} - {option.name}
-                    </li>
-                  )}
+                  renderOption={renderVmJobOption}
                 />
               )}
 
@@ -780,17 +788,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   value={vms.filter(vm => formData.excludedVmids.includes(vm.vmid))}
                   onChange={(_, newValue) => setFormData(prev => ({ ...prev, excludedVmids: newValue.map(v => v.vmid) }))}
                   renderInput={(params) => <TextField {...params} label={t('inventory.excludeVms')} />}
-                  renderOption={(props, option) => (
-                    <li {...props}>
-                      <Chip 
-                        size="small" 
-                        label={option.type === 'qemu' ? 'VM' : 'CT'} 
-                        sx={{ mr: 1, fontSize: 10 }}
-                        color={option.type === 'qemu' ? 'primary' : 'secondary'}
-                      />
-                      {option.vmid} - {option.name}
-                    </li>
-                  )}
+                  renderOption={renderVmJobOption}
                 />
               )}
 

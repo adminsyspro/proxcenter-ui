@@ -322,7 +322,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             <ListItemIcon>
               <i className="ri-play-fill" style={{ fontSize: 18, color: '#4caf50' }} />
             </ListItemIcon>
-            <ListItemText>{t('audit.actions.start')}</ListItemText>
+            <ListItemText>{contextMenu?.status === 'paused' ? t('vmActions.resume') : t('audit.actions.start')}</ListItemText>
           </MenuItem>,
 
           <MenuItem
@@ -901,6 +901,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           currentNode={cloneTarget.node}
           vmName={cloneTarget.name || `VM ${cloneTarget.vmid}`}
           vmid={cloneTarget.vmid}
+          vmType={cloneTarget.type}
           nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
           existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
           pools={[]}

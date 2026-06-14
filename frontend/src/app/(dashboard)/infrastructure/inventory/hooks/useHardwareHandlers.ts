@@ -364,6 +364,7 @@ export function useHardwareHandlers({
   const [backupsError, setBackupsError] = useState<string | null>(null)
   const [backupsStats, setBackupsStats] = useState<any>(null)
   const [backupsWarnings, setBackupsWarnings] = useState<string[]>([])
+  const [backupsPbsConfigured, setBackupsPbsConfigured] = useState<boolean | null>(null)
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
   const backupsLoadedForIdRef = useRef<string | null>(null) // Track which selection ID backups were loaded for
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
@@ -569,7 +570,7 @@ export function useHardwareHandlers({
   useCephLogLive(nodeCephLogLive, selection?.type, selection?.id, data?.clusterName, setNodeCephData)
 
   // Charger les sauvegardes d'une VM
-  const loadBackups = useCallback(async (vmid: string, type: string) => {
+  const loadBackups = useCallback(async (vmid: string, type: string, connId?: string) => {
     if (!vmid) return
 
     setBackupsLoading(true)
@@ -577,12 +578,16 @@ export function useHardwareHandlers({
     setBackups([])
     setBackupsStats(null)
     setBackupsWarnings([])
+    setBackupsPbsConfigured(null)
 
     try {
       const params = new URLSearchParams()
 
       if (type === 'lxc') params.set('type', 'ct')
       else if (type === 'qemu') params.set('type', 'vm')
+      // Pass the guest's PVE connection so the route can tell whether a
+      // connected PBS actually backs up this cluster (drives the empty state).
+      if (connId) params.set('connectionId', connId)
 
       const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmid)}/backups?${params}`, { cache: 'no-store' })
       const json = await res.json()
@@ -593,6 +598,7 @@ export function useHardwareHandlers({
         setBackups(json.data?.backups || [])
         setBackupsStats(json.data?.stats || null)
         setBackupsWarnings(json.data?.warnings || [])
+        setBackupsPbsConfigured(json.data?.pbsConfigured ?? null)
       }
     } catch (e: any) {
       setBackupsError(e.message || t('errors.loadingError'))
@@ -1383,6 +1389,7 @@ return explorerFiles.filter((file: any) =>
     backupsError, setBackupsError,
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
+    backupsPbsConfigured, setBackupsPbsConfigured,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
     selectedBackup, setSelectedBackup,

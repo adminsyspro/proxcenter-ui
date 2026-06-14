@@ -63,3 +63,38 @@ describe('pveSetVmConfig', () => {
     ).rejects.toThrow('PVE 500')
   })
 })
+
+describe('destroyPveVm', () => {
+  // The whole point of this helper (issue #400): purge + destroy-unreferenced-disks
+  // MUST be in the query string and the request MUST NOT carry a body. PVE rejects a
+  // body on DELETE with 501 "Unexpected content for method 'DELETE'", which silently
+  // leaked the VMID + its disk on failed-migration cleanup.
+  it('DELETEs with purge flags in the query string and NO request body (issue #400)', async () => {
+    const { destroyPveVm } = await import('./pve-vm-config')
+
+    await destroyPveVm(pveConn, 'pve-node-1', 112)
+
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    const [conn, path, init] = pveFetchMock.mock.calls[0]
+    expect(conn).toBe(pveConn)
+    expect(path).toBe('/nodes/pve-node-1/qemu/112?purge=1&destroy-unreferenced-disks=1')
+    expect(init.method).toBe('DELETE')
+    expect(init.body).toBeUndefined()
+  })
+
+  it('accepts a string vmid and URL-encodes the node name', async () => {
+    const { destroyPveVm } = await import('./pve-vm-config')
+
+    await destroyPveVm(pveConn, 'node with space', '101')
+
+    const [, path] = pveFetchMock.mock.calls[0]
+    expect(path).toBe('/nodes/node%20with%20space/qemu/101?purge=1&destroy-unreferenced-disks=1')
+  })
+
+  it('propagates pveFetch errors to the caller (cleanup is best-effort at call sites)', async () => {
+    pveFetchMock.mockReset().mockRejectedValueOnce(new Error('PVE 500 /qemu/112: boom'))
+    const { destroyPveVm } = await import('./pve-vm-config')
+
+    await expect(destroyPveVm(pveConn, 'n', 112)).rejects.toThrow('PVE 500')
+  })
+})

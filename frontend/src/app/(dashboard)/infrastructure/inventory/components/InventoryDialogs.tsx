@@ -195,7 +195,7 @@ export interface InventoryDialogsProps {
   creatingBackup: boolean
   setCreatingBackup: (v: boolean) => void
   backupStorages: any[]
-  loadBackups: (vmid: string, vmType: string) => void
+  loadBackups: (vmid: string, vmType: string, connId?: string) => void
 
   // Delete VM dialog
   deleteVmDialogOpen: boolean
@@ -1183,6 +1183,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               currentNode={node}
               vmName={data?.name || `VM ${vmid}`}
               vmid={vmid}
+              vmType={type}
               nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
               existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
               pools={[]}
@@ -1218,6 +1219,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           currentNode={tableCloneVm.node}
           vmName={tableCloneVm.name}
           vmid={tableCloneVm.vmid}
+          vmType={tableCloneVm.type}
           nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
           existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
           pools={[]}
@@ -1704,9 +1706,9 @@ return
                 // Recharger les backups après un délai
                 setTimeout(() => {
                   if (selection?.type === 'vm') {
-                    const { type: vmType, vmid } = parseVmId(selection.id)
+                    const { connId, type: vmType, vmid } = parseVmId(selection.id)
 
-                    loadBackups(vmid, vmType)
+                    loadBackups(vmid, vmType, connId)
                   }
                 }, 5000)
               } catch (e: any) {
@@ -2204,7 +2206,7 @@ return
                     }}
                   />
                   {/* Migration type selector — hidden for Hyper-V / Nutanix (cold only).
-                      vCenter and direct ESXi both support cold + live. */}
+                      vCenter and direct ESXi both support cold + warm. */}
                   {esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && (
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 0.75, color: 'text.secondary', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -2213,10 +2215,10 @@ return
                     <Stack direction="row" spacing={1}>
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                        // Warm (CBT, no in-transit data loss) is ESXi-direct only (hostType
-                        // 'vmware'). vCenter keeps its existing Live, and any other source that
-                        // reaches this selector (e.g. XCP-ng) keeps Live too — the backend rejects
-                        // warm for non-VMware sources.
+                        // Warm (CBT, no in-transit data loss) covers both direct ESXi (hostType
+                        // 'vmware') and vCenter. Any other source that reaches this selector
+                        // (e.g. XCP-ng) keeps Live, since the backend rejects warm for
+                        // non-VMware sources.
                         (esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter')
                           ? { value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }
                           : { value: 'live' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeLive', descKey: 'migrationTypeLiveDesc' },

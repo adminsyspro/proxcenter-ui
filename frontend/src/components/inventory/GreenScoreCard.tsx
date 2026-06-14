@@ -215,6 +215,22 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
           {t('green.score.breakdownRuntime', { pct: runningPct })}
         </Typography>
       </Box>
+
+      {insight && (
+        <Box sx={{ pt: 0.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+          <Box component="i" className={sevIcon} sx={{ fontSize: 14, color: sevColor, mt: '2px', flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="caption" component="div" sx={{ fontWeight: 700 }}>
+              {t(insight.titleKey, insight.placeholders)}
+            </Typography>
+            {suggestion ? (
+              <Typography variant="caption" component="div" sx={{ opacity: 0.85 }}>
+                {suggestion}
+              </Typography>
+            ) : null}
+          </Box>
+        </Box>
+      )}
     </Box>
   )
 
@@ -248,20 +264,6 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
           </Typography>
         </Box>
       </Tooltip>
-      {insight && (
-        <>
-          <Box component="i" className={sevIcon} sx={{ fontSize: 14, color: sevColor, flexShrink: 0, ml: 0.5 }} />
-          <Typography component="span" variant="caption" sx={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {t(insight.titleKey, insight.placeholders)}
-            {suggestion ? (
-              <>
-                {' · '}
-                <Box component="span" sx={{ opacity: 0.85 }}>{suggestion}</Box>
-              </>
-            ) : null}
-          </Typography>
-        </>
-      )}
     </Box>
   )
 

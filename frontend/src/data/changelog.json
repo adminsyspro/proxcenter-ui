@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.4.3",
+    "title": "MSP mode, multi-license stacking & connection diagnostics",
+    "items": [
+      { "type": "new", "text": "MSP mode: an MSP tenant can own entire Proxmox clusters (full-cluster view) alongside vDC / IaaS slicing; the provider / NOC sees the whole fleet for supervision and license aggregation" },
+      { "type": "new", "text": "Provider provisioning of connections to MSP tenants from Settings, with a Tenant / vDC ownership column and an owner selector when creating a connection" },
+      { "type": "new", "text": "MSP tenants get fleet-wide scope on their owned clusters: inventory, dashboard, alerts, reports, backup jobs and VM migration among owned connections" },
+      { "type": "new", "text": "Multi-license stacking (opt-in): import additional licenses to grow fleet capacity, with fleet-total quota, per-tenant rollup, Licensed-to per import, edit-mapping and remove" },
+      { "type": "new", "text": "Connection health diagnostics: a per-connection column and modal running read-only reachability, auth, version, cluster / Ceph, storage and SSH checks; works in Community mode" },
+      { "type": "improved", "text": "Guest names in VM and CT alerts and event emails: the guest name shows next to the vmid in the alerts table, the navbar dropdown and the email template" },
+      { "type": "improved", "text": "Connections Nodes column collapses to the first node plus a count, with the full list on hover" },
+      { "type": "improved", "text": "Deploy wizard exposes real bridges and an editable VLAN tag for provider and MSP modes" },
+      { "type": "improved", "text": "Green Score insight moves to its own row so longer suggestions stay readable" },
+      { "type": "fix", "text": "Orchestrator API authentication now reads PROXCENTER_API_API_KEY (the value docker-compose injects), so auth can be enabled and matches the frontend; an unset key keeps auth disabled as a safe fallback" }
+    ]
+  },
+  {
     "version": "1.4.2",
     "title": "Warm migration, SPICE consoles, Ceph topology & security",
     "items": [

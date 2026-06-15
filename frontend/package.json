@@ -98,7 +98,7 @@
     "postcss": "^8.5.10",
     "postcss-styled-syntax": "0.7.1",
     "prettier": "3.8.1",
-    "stylelint": "17.11.0",
+    "stylelint": "17.13.0",
     "stylelint-use-logical-spec": "5.0.1",
     "stylis": "4.3.6",
     "stylis-plugin-rtl": "2.1.1",

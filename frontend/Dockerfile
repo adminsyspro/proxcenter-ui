@@ -92,6 +92,14 @@ ARG GIT_SHA=""
 
 WORKDIR /app
 
+# Patch Alpine OpenSSL libraries (libssl3 / libcrypto3) to clear the 2026
+# CVE round (CVE-2026-45447 PKCS7_verify use-after-free et al.). The
+# node:26-alpine base ships 3.5.6-r0; Alpine has published the fixed
+# 3.5.7-r0. Pulling the patched packages explicitly keeps the runtime
+# image clean regardless of the base image's rebuild cadence. Runs as
+# root, before the USER switch further down.
+RUN apk upgrade --no-cache libssl3 libcrypto3
+
 # Patch npm to a version whose bundled dependencies clear the latest
 # CVE round (ip-address < 10.1.1 / CVE-2026-42338, brace-expansion <
 # 5.0.6 / CVE-2026-45149, etc.). Pinning the version keeps the build

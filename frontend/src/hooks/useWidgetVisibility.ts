@@ -27,7 +27,7 @@ export type WidgetVisibility = {
  */
 export function useWidgetVisibility(): WidgetVisibility {
   const { scopeTypes, isAdmin, hiddenWidgets: hiddenWidgetIds, loading } = useRBAC()
-  const { currentTenant, loading: tenantLoading } = useTenant()
+  const { isFullClusterView, loading: tenantLoading } = useTenant()
 
   return useMemo(() => {
     const hiddenWidgets = new Set<string>(
@@ -38,11 +38,11 @@ export function useWidgetVisibility(): WidgetVisibility {
       return { hasInfraScope: true, hiddenWidgets, loading: true }
     }
 
-    // Non-provider tenants get the cloud-style abstraction: nodes / clusters
-    // are an implementation detail, never surfaced regardless of RBAC scope.
-    const isProviderTenant = !currentTenant || currentTenant.id === 'default'
-
-    if (!isProviderTenant) {
+    // IaaS/vDC tenants get the cloud-style abstraction: nodes / clusters are
+    // an implementation detail, never surfaced regardless of RBAC scope.
+    // Provider AND MSP tenants both have full-cluster visibility; MSP data is
+    // already scoped to the tenant's own connections server-side.
+    if (!isFullClusterView) {
       return { hasInfraScope: false, hiddenWidgets, loading: false }
     }
 
@@ -55,5 +55,5 @@ export function useWidgetVisibility(): WidgetVisibility {
     const hasInfra = userScopes.some((s: string) => INFRA_SCOPES.has(s))
 
     return { hasInfraScope: hasInfra, hiddenWidgets, loading: false }
-  }, [scopeTypes, isAdmin, hiddenWidgetIds, loading, currentTenant, tenantLoading])
+  }, [scopeTypes, isAdmin, hiddenWidgetIds, loading, isFullClusterView, tenantLoading])
 }

@@ -2,10 +2,11 @@ import { NextResponse } from "next/server"
 
 import { getServerSession } from "next-auth"
 
-import { getSessionPrisma } from "@/lib/tenant"
+import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { DEFAULT_LAYOUT } from "@/components/dashboard/types"
 import { authOptions } from "@/lib/auth/config"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { prisma as globalPrisma } from "@/lib/db/prisma"
 
 export const runtime = "nodejs"
 
@@ -89,8 +90,14 @@ export async function GET(req: Request) {
       })
     }
 
+    // MSP tenants get the default widget set on first load; provider and IaaS/vDC
+    // tenants get an empty canvas (cloud abstraction hides infra widgets anyway).
+    const tenantId = await getCurrentTenantId()
+    const tenant = await globalPrisma.tenant.findUnique({ where: { id: tenantId }, select: { operatingModel: true } })
+    const defaultWidgets = tenant?.operatingModel === 'msp' ? DEFAULT_LAYOUT : []
+
     return NextResponse.json({
-      data: { id: null, name: 'Default', widgets: [], isActive: true, updatedAt: null }
+      data: { id: null, name: 'Default', widgets: defaultWidgets, isActive: true, updatedAt: null }
     })
   } catch (e: any) {
     console.error("[dashboard/layout] GET error:", e)
@@ -112,6 +119,7 @@ export async function PUT(req: Request) {
     const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
     const userId = getUserId(session)
+    const tenantId = await getCurrentTenantId()
     const body = await req.json()
     const { name = 'Default', widgets } = body
 
@@ -126,7 +134,7 @@ export async function PUT(req: Request) {
     })
 
     const layout = await prisma.dashboardLayout.upsert({
-      where: { userId_name: { userId, name } },
+      where: { tenantId_userId_name: { tenantId, userId, name } },
       create: { userId, name, widgets, isActive: true },
       update: { widgets, isActive: true, updatedAt: new Date() },
     })

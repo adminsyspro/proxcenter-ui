@@ -217,7 +217,9 @@
     "french": "Français",
     "english": "English",
     "horizontalLayout": "水平布局",
-    "verticalLayout": "垂直布局"
+    "verticalLayout": "垂直布局",
+    "switchTenant": "Switch tenant",
+    "searchTenants": "Search tenants"
   },
   "pxcore": {
     "operational": "运行正常",

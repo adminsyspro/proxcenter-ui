@@ -92,7 +92,7 @@ model DashboardLayout {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, name])
+  @@unique([tenantId, userId, name])
 }
 
 model Alert {

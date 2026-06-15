@@ -17,7 +17,6 @@ import {
   ListItemIcon,
   Menu,
   MenuItem,
-  Select,
   Tooltip,
   Typography
 } from '@mui/material'
@@ -49,6 +48,9 @@ import WhatsNewDialog, { useWhatsNew } from '@components/dialogs/WhatsNewDialog'
 
 // Command Palette
 import CommandPalette from '@components/layout/shared/CommandPalette'
+
+// Tenant Switcher
+import TenantSwitcher from '@components/layout/shared/TenantSwitcher'
 
 // Page Title Context
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -168,7 +170,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const { title, subtitle, icon } = usePageTitle()
   const { hasFeature, loading: licenseLoading, status: licenseStatus, isEnterprise } = useLicense()
   const { roles: rbacRoles, hasPermission } = useRBAC()
-  const { currentTenant, availableTenants, switchTenant, isMultiTenant } = useTenant()
+  const { currentTenant } = useTenant()
   // Provider-only notifications (ProxCenter update, license / node limit
   // warnings, DRS recommendations) are gated on this flag. Tenant admins
   // see only the alerts and changes scoped to their own connections.
@@ -693,6 +695,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
               <i className={targetLayout === 'vertical' ? 'ri-layout-left-line' : 'ri-layout-top-line'} />
             </IconButton>
           </Tooltip>
+
+          {/* Tenant Switcher */}
+          <TenantSwitcher />
 
           {/* Profile */}
           <Tooltip title={t('navbar.profile')}>
@@ -1265,41 +1270,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
                  t('pxcore.unknown')}
               </Typography>
             </Box>
-          </Box>
-        )}
-
-        {isMultiTenant && availableTenants.length > 1 && <Divider />}
-        {isMultiTenant && availableTenants.length > 1 && (
-          <Box sx={{ px: 2, py: 1 }}>
-            <Typography variant='caption' sx={{ opacity: 0.6, fontWeight: 600, textTransform: 'uppercase', fontSize: '0.65rem' }}>
-              {t('settings.tenant', { defaultMessage: 'Tenant' })}
-            </Typography>
-            <Select
-              size='small'
-              fullWidth
-              value={currentTenant?.id || ''}
-              onChange={(e) => {
-                if (e.target.value !== currentTenant?.id) {
-                  switchTenant(e.target.value)
-                }
-              }}
-              sx={{ mt: 0.5, height: 32, fontSize: '0.8rem' }}
-              renderValue={(val) => (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <i className={val === 'default' ? 'ri-stack-line' : 'ri-building-line'} style={{ fontSize: 14, opacity: 0.7 }} />
-                  {availableTenants.find(tn => tn.id === val)?.name || val}
-                </Box>
-              )}
-            >
-              {availableTenants.map((tenant) => (
-                <MenuItem key={tenant.id} value={tenant.id}>
-                  <ListItemIcon sx={{ minWidth: 28 }}>
-                    <i className={tenant.id === currentTenant?.id ? 'ri-checkbox-circle-fill' : (tenant.id === 'default' ? 'ri-stack-line' : 'ri-building-line')} style={{ fontSize: 16 }} />
-                  </ListItemIcon>
-                  {tenant.name}
-                </MenuItem>
-              ))}
-            </Select>
           </Box>
         )}
 

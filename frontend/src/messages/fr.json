@@ -218,7 +218,9 @@
     "french": "Français",
     "english": "English",
     "horizontalLayout": "Disposition horizontale",
-    "verticalLayout": "Disposition verticale"
+    "verticalLayout": "Disposition verticale",
+    "switchTenant": "Changer de tenant",
+    "searchTenants": "Rechercher un tenant"
   },
   "pxcore": {
     "operational": "Opérationnel",

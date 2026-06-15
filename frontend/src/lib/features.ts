@@ -1,11 +1,12 @@
 /**
- * Feature detection for the multi-license stacking feature (Pillar C).
+ * Detection for whether the multi-license management UI should be shown.
  *
- * The orchestrator only registers the `/api/v1/license/import(s)` routes when
- * its `FEATURE_MULTI_LICENSE` flag is on. So a successful (200) response from
- * `GET /api/v1/license/imports` means the feature is enabled; a 404 (route not
- * registered) or 503 (orchestrator down) means it is off. This keeps the flag
- * single-sourced on the orchestrator with no separate frontend env var.
+ * The orchestrator always registers the `/api/v1/license/import(s)` routes
+ * (multi-license is the product behaviour, not a flag). A 200 from
+ * `GET /api/v1/license/imports` therefore means the orchestrator is reachable
+ * and new enough to expose the multi-license API; a 404 (an older orchestrator
+ * without the routes) or 503 (orchestrator down) falls back to the basic
+ * single-license view.
  */
 export function isMultiLicenseEnabled(importsHttpStatus: number): boolean {
   return importsHttpStatus === 200

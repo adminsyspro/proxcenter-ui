@@ -7,8 +7,8 @@
 - **Provider provisioning.** Assign or release connections to MSP tenants from Settings, with a "Tenant / vDC" ownership column on the connection lists and an owner selector when creating a connection.
 - **Scoped operations.** MSP tenants get fleet-wide scope on their owned clusters: inventory tree, dashboard, alerts, reports, backup jobs, and VM migration among their owned connections (intra-cluster always, cross-cluster between two owned clusters).
 
-## Multi-license (opt-in)
-- **License stacking** (`FEATURE_MULTI_LICENSE`). Import additional licenses to grow fleet capacity without regenerating the primary license. Fleet-total node quota, per-tenant rollup, "Licensed to" per import, plus edit-mapping and remove, all from the Settings license tab. Off by default; single-license installs are unchanged.
+## Multi-license
+- **License stacking.** Import additional licenses to grow fleet capacity without regenerating the primary license. Fleet-total node quota, per-tenant rollup, "Licensed to" per import, plus edit-mapping and remove, all from the Settings license tab. A single-license install behaves exactly as before (one license, no imports).
 
 ## Connections
 - **Connection health diagnostics.** A per-connection Diagnostic column and modal run read-only checks: reachability, authentication and permissions, version, cluster health / quorum / Ceph, storage, and SSH for PVE; version, auth and datastores for PBS; basic reachability for external migration sources. Works in Community mode (no orchestrator dependency).
@@ -23,3 +23,4 @@
 ## Fixes
 - **Orchestrator API authentication.** The orchestrator now reads the API key from `PROXCENTER_API_API_KEY` (the value docker-compose already injects, identical to the frontend's key), so authentication can be enabled and matches the frontend. An unset key keeps authentication disabled as a safe fallback, so installs without a shared key are unaffected.
 - **Green Score insight** moves to its own row so longer suggestions stay fully readable.
+- **The What's New panel no longer opens automatically** on a new version; open it any time from the profile menu.

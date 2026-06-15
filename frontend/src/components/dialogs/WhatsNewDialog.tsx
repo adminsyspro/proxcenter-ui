@@ -59,16 +59,14 @@ export function useWhatsNew() {
 
   const latestVersion = (changelog as ChangelogEntry[])[0]?.version
 
+  // Detect a new version to surface the "What's New" badge, but do NOT auto-open
+  // the dialog. It opens only on demand from the profile menu (handleOpen).
   useEffect(() => {
     if (!latestVersion) return
     const seen = localStorage.getItem(STORAGE_KEY)
 
     if (seen !== latestVersion) {
       setHasUnseen(true)
-      // Small delay so the app renders first
-      const timer = setTimeout(() => setOpen(true), 1500)
-
-      return () => clearTimeout(timer)
     }
   }, [latestVersion])
 

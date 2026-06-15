@@ -545,6 +545,7 @@
     "storageSnippets": "Snippets",
     "storageTemplates": "Templates CT",
     "storageEmpty": "Aucun contenu trouvé dans ce stockage",
+    "networkLoadFailed": "Chargement échoué, cliquer pour réessayer",
     "pbsBackupList": "Sauvegardes PBS",
     "pbsName": "Nom",
     "pbsNotes": "Notes",

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { isSharedStorage } from '@/lib/proxmox/storage'
-import { foldEffectiveVlanTags } from '@/lib/proxmox/hostVlanMap'
+import { fetchConnectionsNetworks } from '@/lib/proxmox/fetchConnectionsNetworks'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
@@ -2306,6 +2306,7 @@ return favorites.has(vmKey)
   type VmNetData = { vmid: string; name: string; node: string; type: string; status: string; connId?: string; nets: NetIface[] }
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
   const [networkLoading, setNetworkLoading] = useState(false)
+  const [networkFailedConnIds, setNetworkFailedConnIds] = useState<string[]>([])
   const networkFetchedRef = useRef(false)
 
   // Tenant VNet view — replaces the conn/node/VLAN/VM walk for non-provider
@@ -2382,22 +2383,17 @@ return favorites.has(vmKey)
       return
     }
     setNetworkLoading(true)
-    Promise.all(
-      connIds.map(async (connId) => {
-        try {
-          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
-          if (!res.ok) return []
-          const json = await res.json()
-          // Fold each guest's server-computed host VLAN into `tag` so the VLAN tree resolves
-          // traditional bondX.N-bridge layouts instead of bucketing them Untagged (see helper).
-          return (json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) }))
-        } catch { return [] }
-      })
-    ).then((results) => {
-      const all = results.flat()
-      networkCacheRef.current = { connIds: cacheKey, data: all }
-      setNetworkData(all)
+    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, failedConnIds }) => {
+      setNetworkData(data)
       setNetworkLoading(false)
+      setNetworkFailedConnIds(failedConnIds)
+      // Only cache when all connections succeeded so re-opening retries any partial failure
+      if (failedConnIds.length === 0) {
+        networkCacheRef.current = { connIds: cacheKey, data }
+      } else {
+        // Allow the next expand to re-fetch
+        networkFetchedRef.current = false
+      }
     })
   }, [clusters])
   const fetchNetworksRef = useRef(fetchNetworks)
@@ -3904,8 +3900,8 @@ return (
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <ClusterIcon nodes={clusters.find(c => c.connId === cId)?.nodes || []} />
-                      <span style={{ fontSize: 13 }}>{connName}</span>
-                      <span style={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</span>
+                      <Typography variant="body2" sx={{ fontSize: 13 }}>{connName}</Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.4, fontSize: 11 }}>({nodes.length} nodes)</Typography>
                     </Box>
                   }
                 >
@@ -3970,6 +3966,40 @@ return (
               ))}
               </SimpleTreeView>
             )}
+            {networkFailedConnIds.length > 0 && networkFailedConnIds.map((failedId) => {
+              const connName = clusters.find(c => c.connId === failedId)?.name || failedId
+              return (
+                <Box
+                  key={`net-fail:${failedId}`}
+                  onClick={() => {
+                    networkFetchedRef.current = true
+                    fetchNetworks()
+                  }}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.75,
+                    px: 2, py: 0.5, cursor: 'pointer',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <i
+                    className="ri-error-warning-line"
+                    style={{ fontSize: 14, color: 'inherit' }}
+                  />
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'warning.main', fontSize: 12 }}
+                  >
+                    {connName}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'text.secondary', fontSize: 11, opacity: 0.7 }}
+                  >
+                    {t('inventory.networkLoadFailed')}
+                  </Typography>
+                </Box>
+              )
+            })}
           </Collapse>
         </>
       )}

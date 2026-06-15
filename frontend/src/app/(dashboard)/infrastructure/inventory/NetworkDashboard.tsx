@@ -23,7 +23,7 @@ import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
 import { useTenant } from '@/contexts/TenantContext'
-import { foldEffectiveVlanTags } from '@/lib/proxmox/hostVlanMap'
+import { fetchConnectionsNetworks } from '@/lib/proxmox/fetchConnectionsNetworks'
 
 type VmNetData = {
   vmid: string
@@ -289,20 +289,9 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const ids = connIdsKey.split(',')
     let alive = true
     setLoading(true)
-    Promise.all(
-      ids.map(async (connId) => {
-        try {
-          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/networks`)
-          if (!res.ok) return []
-          const json = await res.json()
-          // Fold each guest's server-computed host VLAN into `tag` so the VLAN KPI and
-          // breakdown count traditional bondX.N-bridge layouts, not just NIC-tagged guests.
-          return (json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) }))
-        } catch { return [] }
-      })
-    ).then((results) => {
+    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data }) => {
       if (!alive) return
-      setNetworkData(results.flat())
+      setNetworkData(data)
     }).finally(() => {
       if (!alive) return
       setLoading(false)

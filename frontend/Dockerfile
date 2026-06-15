@@ -152,6 +152,14 @@ COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/package.json ./packa
 
 # No extra runtime dependencies — start.js runs as single process
 
+# Next.js writes its runtime cache (ISR / data / image optimisation) under
+# .next/cache. The standalone tree is copied read-only (chmod 0555) and the
+# app runs as the non-root `nextjs` user, so pre-create a writable cache dir
+# owned by that user. Without it Next floods the logs with
+# "EACCES: permission denied, mkdir '/app/.next/cache'" and serves every
+# route uncached (re-rendered on each request).
+RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app/.next/cache
+
 # Switch to non-root user
 USER nextjs
 

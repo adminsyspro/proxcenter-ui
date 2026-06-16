@@ -183,6 +183,7 @@ export const ROLES: RoleSeed[] = [
       "backup.job.view", "backup.job.create", "backup.job.edit", "backup.job.delete", "backup.job.run",
       "admin.users", "admin.rbac", "admin.settings", "admin.audit",
       "alerts.view", "alerts.manage",
+      "events.view", "tasks.view",
       "reports.view",
       "sdn.vnet.view", "sdn.vnet.create", "sdn.vnet.edit", "sdn.vnet.delete", "sdn.vnet.firewall",
     ],

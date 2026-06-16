@@ -35,3 +35,16 @@ describe('role_vm_user — Inventory read permissions (issue #378)', () => {
     expect(vmUser?.permissions).toContain('vm.view')
   })
 })
+
+describe('role_tenant_admin — task center + events (issue #430)', () => {
+  const tenantAdmin = ROLES.find(r => r.id === 'role_tenant_admin')
+
+  it('exists in the system-role catalogue', () => {
+    expect(tenantAdmin).toBeDefined()
+  })
+
+  it('can view the task center and events (shared tasks footer)', () => {
+    expect(tenantAdmin?.permissions).toContain('tasks.view')
+    expect(tenantAdmin?.permissions).toContain('events.view')
+  })
+})

@@ -30,6 +30,7 @@ describe("mergeSharedTasks", () => {
     expect(byId["migration-b"].readOnly).toBe(false)
     expect(byId["migration-c"].status).toBe("error")
     expect(byId["migration-c"].rawStatus).toBe("cancelled")
+    expect(byId["migration-a"].jobId).toBe("a")
   })
 
   it("passes through local non-migration tasks untouched", () => {

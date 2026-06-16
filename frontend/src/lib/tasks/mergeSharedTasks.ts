@@ -6,6 +6,7 @@ export interface MergedPCTask extends PCTask {
   readOnly?: boolean
   rawStatus?: string
   startedByName?: string
+  jobId?: string
 }
 
 function statusFor(raw: string): PCTaskStatus {
@@ -28,6 +29,7 @@ function mapServerTask(st: SharedTask): MergedPCTask {
     readOnly: !st.isMine,
     rawStatus: st.status,
     startedByName: st.createdByName,
+    jobId: st.id,
   }
 }
 

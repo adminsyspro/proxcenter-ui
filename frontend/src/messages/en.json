@@ -3384,7 +3384,12 @@
       "running": "In progress",
       "ok": "OK",
       "stopped": "Stopped",
-      "completed": "Completed"
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "shared": {
+      "detailTitle": "Migration task",
+      "startedBy": "Started by {name}"
     },
     "types": {
       "qmstart": "VM Start",

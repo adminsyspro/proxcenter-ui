@@ -3384,7 +3384,12 @@
       "running": "En cours",
       "ok": "OK",
       "stopped": "Arrêté",
-      "completed": "Terminé"
+      "completed": "Terminé",
+      "cancelled": "Annulé"
+    },
+    "shared": {
+      "detailTitle": "Tâche de migration",
+      "startedBy": "Lancé par {name}"
     },
     "types": {
       "qmstart": "Démarrage VM",

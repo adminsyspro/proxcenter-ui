@@ -3345,7 +3345,12 @@
       "running": "进行中",
       "ok": "正常",
       "stopped": "已停止",
-      "completed": "已完成"
+      "completed": "已完成",
+      "cancelled": "已取消"
+    },
+    "shared": {
+      "detailTitle": "迁移任务",
+      "startedBy": "由 {name} 发起"
     },
     "types": {
       "qmstart": "VM 启动",

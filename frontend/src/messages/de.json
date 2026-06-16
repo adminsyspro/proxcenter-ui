@@ -3343,7 +3343,12 @@
       "running": "In Bearbeitung",
       "ok": "OK",
       "stopped": "Gestoppt",
-      "completed": "Abgeschlossen"
+      "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen"
+    },
+    "shared": {
+      "detailTitle": "Migrationsaufgabe",
+      "startedBy": "Gestartet von {name}"
     },
     "types": {
       "qmstart": "VM-Start",

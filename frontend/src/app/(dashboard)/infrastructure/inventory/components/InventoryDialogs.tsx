@@ -25,6 +25,7 @@ import {
   InputAdornment,
   InputLabel,
   LinearProgress,
+  Link,
   MenuItem,
   Select,
   Snackbar,
@@ -2298,7 +2299,18 @@ return
                           </Typography>
                         )}
                         <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
-                          {t('inventoryPage.esxiMigration.warmPreflightDocsHint')}
+                          {t.rich('inventoryPage.esxiMigration.warmPreflightDocsHint', {
+                            link: (chunks) => (
+                              <Link
+                                href="https://docs.proxcenter.io/automation/migration#warm-migration-node-setup"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                sx={{ fontWeight: 600 }}
+                              >
+                                {chunks}
+                              </Link>
+                            ),
+                          })}
                         </Typography>
                       </Alert>
                     )

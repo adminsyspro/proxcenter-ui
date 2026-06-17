@@ -1906,7 +1906,7 @@
       "warmPreflightReady": "Zielknoten ist bereit fur die Warm-Migration (nbdkit, nbd-client und das VDDK sind vorhanden).",
       "warmPreflightFailedTitle": "Zielknoten ist nicht bereit fur die Warm-Migration",
       "warmPreflightMissing": "Fehlt auf dem Knoten: {items}.",
-      "warmPreflightDocsHint": "Bereiten Sie zuerst den Proxmox-Knoten vor (nbdkit, das nbdkit-VDDK-Plugin, nbd-client und das Broadcom-VDDK installieren), dann wahlen Sie den Knoten erneut aus. Siehe die Anleitung zur Knotenvorbereitung fur die Warm-Migration.",
+      "warmPreflightDocsHint": "Bereiten Sie zuerst den Proxmox-Knoten vor (nbdkit, das nbdkit-VDDK-Plugin, nbd-client und das Broadcom-VDDK installieren), dann wahlen Sie den Knoten erneut aus. Siehe die <link>Anleitung zur Knotenvorbereitung fur die Warm-Migration</link>.",
       "migrationTypeSshfsBoot": "SSHFS Boot (Experimentell)",
       "migrationTypeSshfsBootDesc": "Nahezu null Ausfallzeit: VM startet auf Proxmox von entfernten ESXi-Disks in Sekunden. Experimentell: der Gast muss unbeaufsichtigt auf dem Ziel-Controller booten; kann bei EFI-Windows oder Gasten fehlschlagen, die eine Treiberinjektion benotigen. Fur Produktion Live oder Offline bevorzugen.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot ist experimentell und funktioniert nur, wenn der Gast ohne Treiberanpassung auf dem Ziel korrekt bootet. Fur EFI-Windows, vCenter-VMs oder produktionskritische Systeme Live oder Offline verwenden.",

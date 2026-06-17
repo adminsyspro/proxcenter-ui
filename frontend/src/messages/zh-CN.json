@@ -1908,7 +1908,7 @@
       "warmPreflightReady": "目标节点已就绪，可进行温迁移（nbdkit、nbd-client 和 VDDK 均已就位）。",
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
-      "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅温迁移节点准备指南。",
+      "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅<link>温迁移节点准备指南</link>。",
       "migrationTypeSshfsBoot": "SSHFS 启动（实验性）",
       "migrationTypeSshfsBootDesc": "近零停机：虚拟机在数秒内从远程 ESXi 磁盘启动到 Proxmox。实验性：Guest 必须能在目标控制器上无人值守地启动；可能在 EFI Windows 或需要驱动注入的 Guest 上失败。生产环境请优先使用 Live 或离线迁移。",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 启动是实验性功能，仅当 Guest 能在目标上无需驱动适配而正确启动时才有效。对于 EFI Windows、来自 vCenter 的虚拟机或任何关键生产场景，请使用 Live 或离线模式。",

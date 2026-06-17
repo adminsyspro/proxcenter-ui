@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRBACContext, hasPermission } from "@/lib/rbac"
+import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 
 export const runtime = "nodejs"
 
@@ -19,8 +20,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
-    if (denied) return denied
+    const rbac = await getRBACContext()
+    if (!rbac) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
 
     const body = await req.json()
     const paths: string[] = body.paths || []
@@ -35,6 +38,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "Too many paths (max 50)" }, { status: 400 })
     }
 
+    // Gate each path on the resource it addresses (node.view for a node path,
+    // vm.view for a VM path). Paths the caller can't see are dropped from the
+    // batch rather than failing the whole request, so a scoped user still gets
+    // graphs for the nodes they can see. See resolveRrdScope (issue #378).
+    const allowedPaths = (
+      await Promise.all(
+        paths.map(async (path) => {
+          const scope = resolveRrdScope(id, path)
+          if (!scope) return null
+          const ok = await hasPermission({
+            userId: rbac.userId,
+            permission: scope.permission,
+            resourceType: scope.resourceType,
+            resourceId: scope.resourceId,
+            tenantId: rbac.tenantId,
+          })
+          return ok ? path : null
+        }),
+      )
+    ).filter((p): p is string => p !== null)
+
+    if (allowedPaths.length === 0) {
+      return NextResponse.json({ data: {} })
+    }
+
     const allowed = new Set(["hour", "day", "week", "month", "year"])
     const tf = allowed.has(timeframe) ? timeframe : "hour"
 
@@ -42,10 +70,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Fetch all RRD data in parallel
     const results = await Promise.allSettled(
-      paths.map(async (path) => {
-        if (!path.startsWith("/nodes/")) {
-          return { path, data: null, error: "Invalid path" }
-        }
+      allowedPaths.map(async (path) => {
         const rrdPath = `${path.replace(/\/$/, "")}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
         const data = await pveFetch<any[]>(conn, rrdPath)
         return { path, data }

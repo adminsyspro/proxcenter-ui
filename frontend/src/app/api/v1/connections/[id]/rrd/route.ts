@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission } from "@/lib/rbac"
+import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
@@ -24,12 +25,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
   try {
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
-    if (denied) return denied
-
-    if (!path.startsWith("/nodes/")) {
+    // Gate on the resource the path actually addresses (vm.view for a VM path,
+    // node.view for a node/storage path) so VM- and node-scoped users can read
+    // the Performance graphs of resources they already see in the inventory.
+    // A connection-scoped check would 403 them (see resolveRrdScope).
+    const scope = resolveRrdScope(id, path)
+    if (!scope) {
       return NextResponse.json({ error: "Invalid path (must start with /nodes/)" }, { status: 400 })
     }
+
+    const denied = await checkPermission(scope.permission, scope.resourceType, scope.resourceId)
+    if (denied) return denied
 
     const allowed = new Set(["hour", "day", "week", "month", "year"])
     const tf = allowed.has(timeframe) ? timeframe : "hour"

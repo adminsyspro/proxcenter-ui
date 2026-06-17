@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { ppmToJpeg } from "@/lib/console/ppm"
 import { pveFetch } from "@/lib/proxmox/client"
 import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -9,8 +10,10 @@ import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
 
-// In-memory screenshot cache: key = "connId:node:vmid", value = { data, timestamp }
-const screenshotCache = new Map<string, { data: string; timestamp: number }>()
+// In-memory screenshot cache: key = "connId:node:vmid", value = { jpeg, timestamp }.
+// We cache the already-encoded JPEG (not the raw PPM) so cache hits are served
+// without re-running the PPM->JPEG conversion.
+const screenshotCache = new Map<string, { jpeg: Buffer; timestamp: number }>()
 const CACHE_TTL = 5_000 // 5 seconds
 
 // Whether a VM has a graphical framebuffer (vga != serial/none), cached so the
@@ -34,10 +37,28 @@ export function pruneScreenshotCaches(now: number = Date.now()): void {
 // Cleanup old cache entries periodically
 setInterval(() => pruneScreenshotCaches(), 30_000)
 
+// Serve an encoded frame as a binary image/jpeg response. Returning a real
+// image (rather than a base64 PPM wrapped in JSON) is what keeps each poll at
+// ~100 KB instead of multiple MB of uncompressed bitmap.
+function jpegResponse(jpeg: Buffer, extraHeaders?: Record<string, string>): NextResponse {
+  return new NextResponse(new Uint8Array(jpeg), {
+    status: 200,
+    headers: {
+      "Content-Type": "image/jpeg",
+      // Live frame: never let a cache hand back a stale screen. The 5s in-memory
+      // cache above already de-dupes bursts on the server side.
+      "Cache-Control": "no-store",
+      ...extraHeaders,
+    },
+  })
+}
+
 /**
  * GET /api/v1/connections/[id]/guests/[type]/[node]/[vmid]/screenshot
  * Captures a screenshot of a running QEMU VM via SSH.
- * Uses `qm monitor` to run screendump, then reads the PPM file back as base64.
+ * Uses `qm monitor` to run screendump, reads the PPM file back as base64, then
+ * re-encodes it to JPEG server-side and returns a binary `image/jpeg` body.
+ * Non-capture outcomes (lxc, no_display, ssh_failed, ...) are returned as JSON.
  * Only works for QEMU VMs with SSH enabled on the connection.
  */
 export async function GET(
@@ -62,7 +83,7 @@ export async function GET(
   const cached = screenshotCache.get(cacheKey)
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return NextResponse.json({ data: cached.data, format: 'ppm', cached: true })
+    return jpegResponse(cached.jpeg, { "X-Screenshot-Cache": "hit" })
   }
 
   const conn = await getConnectionById(id)
@@ -127,15 +148,25 @@ export async function GET(
       return NextResponse.json({ data: null, reason: 'ssh_failed', error: sshResult.error, movedTo })
     }
 
-    // Cache the result under the resolved node so subsequent calls coming
-    // through the stale node URL still hit the cache.
-    const b64Data = sshResult.output.trim()
-    screenshotCache.set(`${id}:${resolvedNode}:${vmid}`, { data: b64Data, timestamp: Date.now() })
-    if (resolvedNode !== node) {
-      screenshotCache.set(cacheKey, { data: b64Data, timestamp: Date.now() })
+    // The node returns the framebuffer as a base64-encoded PPM (raw RGB bitmap).
+    // Re-encode it to JPEG here so the browser-facing payload is ~100 KB instead
+    // of several MB. A malformed/partial capture decodes to null — surface that
+    // as JSON so the client treats it like any other transient failure.
+    const ppmBuffer = Buffer.from(sshResult.output.trim(), "base64")
+    const jpeg = ppmToJpeg(ppmBuffer)
+    if (!jpeg) {
+      return NextResponse.json({ data: null, reason: "decode_failed", movedTo })
     }
 
-    return NextResponse.json({ data: b64Data, format: 'ppm', movedTo })
+    // Cache the encoded frame under the resolved node so subsequent calls coming
+    // through the stale node URL still hit the cache.
+    const now = Date.now()
+    screenshotCache.set(`${id}:${resolvedNode}:${vmid}`, { jpeg, timestamp: now })
+    if (resolvedNode !== node) {
+      screenshotCache.set(cacheKey, { jpeg, timestamp: now })
+    }
+
+    return jpegResponse(jpeg, movedTo ? { "X-Screenshot-Moved-To": movedTo } : undefined)
   } catch (e: any) {
     return NextResponse.json({ data: null, reason: 'error', error: e?.message || String(e) })
   }

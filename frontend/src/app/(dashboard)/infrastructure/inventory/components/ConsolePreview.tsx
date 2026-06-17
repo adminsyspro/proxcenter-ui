@@ -11,83 +11,6 @@ import {
   Typography,
 } from '@mui/material'
 
-/**
- * Decode a base64-encoded PPM (P6 binary) image and draw it onto a canvas.
- * Returns a data URL (JPEG) or null on failure.
- */
-function decodePpmToDataUrl(b64Data: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    try {
-      const binary = atob(b64Data)
-      const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.codePointAt(i) ?? 0
-
-      // Parse PPM P6 header: "P6\n<width> <height>\n<maxval>\n"
-      let offset = 0
-      const readLine = (): string => {
-        let line = ''
-        while (offset < bytes.length) {
-          const ch = bytes[offset++]
-          if (ch === 10) break // \n
-          line += String.fromCodePoint(ch)
-        }
-        // Skip comment lines
-        if (line.startsWith('#')) return readLine()
-        return line.trim()
-      }
-
-      const magic = readLine()
-      if (magic !== 'P6') { resolve(null); return }
-
-      // Width and height might be on one line or two
-      let dims = readLine()
-      const parts = dims.split(/\s+/)
-      let width: number, height: number
-      if (parts.length >= 2) {
-        width = Number.parseInt(parts[0])
-        height = Number.parseInt(parts[1])
-      } else {
-        width = Number.parseInt(parts[0])
-        height = Number.parseInt(readLine())
-      }
-
-      const maxVal = Number.parseInt(readLine())
-      if (!width || !height || !maxVal) { resolve(null); return }
-
-      // Create canvas and draw pixel data
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) { resolve(null); return }
-
-      const imageData = ctx.createImageData(width, height)
-      const data = imageData.data
-      const pixelBytes = maxVal > 255 ? 6 : 3
-
-      for (let i = 0; i < width * height; i++) {
-        const srcIdx = offset + i * pixelBytes
-        if (pixelBytes === 3) {
-          data[i * 4] = bytes[srcIdx]       // R
-          data[i * 4 + 1] = bytes[srcIdx + 1] // G
-          data[i * 4 + 2] = bytes[srcIdx + 2] // B
-        } else {
-          // 16-bit: take high byte
-          data[i * 4] = bytes[srcIdx]
-          data[i * 4 + 1] = bytes[srcIdx + 2]
-          data[i * 4 + 2] = bytes[srcIdx + 4]
-        }
-        data[i * 4 + 3] = 255 // A
-      }
-
-      ctx.putImageData(imageData, 0, 0)
-      resolve(canvas.toDataURL('image/jpeg', 0.75))
-    } catch {
-      resolve(null)
-    }
-  })
-}
-
 function ConsolePreview({
   height = 210,
   connId,
@@ -116,6 +39,9 @@ function ConsolePreview({
   const [screenshotFailed, setScreenshotFailed] = useState(false)
   const [noDisplay, setNoDisplay] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Tracks the active blob: object URL so we can revoke the previous frame and
+  // avoid leaking one Blob per 10s poll.
+  const objectUrlRef = useRef<string | null>(null)
 
   const isLxc = type === 'lxc'
   const base = connId && node && type && vmid
@@ -139,12 +65,27 @@ function ConsolePreview({
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/screenshot`
       )
-      const json = await res.json()
+      const contentType = res.headers.get('content-type') || ''
+
+      // Happy path: the server returns a ready-to-display JPEG (re-encoded from
+      // the node's PPM). Swap it in via a blob URL and revoke the previous one.
+      if (res.ok && contentType.startsWith('image/')) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = url
+        setScreenshotUrl(url)
+        setScreenshotFailed(false)
+        return
+      }
+
+      // Otherwise it's a JSON status (no_display, ssh_failed, decode_failed, ...).
+      const json = await res.json().catch(() => null)
 
       // Serial-only / headless VM: no graphical framebuffer to capture, ever.
       // Stop polling so we don't hammer a guaranteed-failing screendump every
       // 10s, and let the render show a "serial console" badge.
-      if (json.reason === 'no_display') {
+      if (json?.reason === 'no_display') {
         setNoDisplay(true)
         if (intervalRef.current) {
           clearInterval(intervalRef.current)
@@ -153,15 +94,7 @@ function ConsolePreview({
         return
       }
 
-      if (json.data) {
-        const dataUrl = await decodePpmToDataUrl(json.data)
-        if (dataUrl) {
-          setScreenshotUrl(dataUrl)
-          setScreenshotFailed(false)
-          return
-        }
-      }
-      // No data or decode failed - keep existing screenshot if any, mark as failed for fresh attempts
+      // Transient failure - keep the existing frame, mark failed for fresh attempts.
       setScreenshotFailed(true)
     } catch {
       setScreenshotFailed(true)
@@ -204,11 +137,18 @@ function ConsolePreview({
     }
   }, [fetchScreenshot, isRunning, isQemu])
 
-  // Reset screenshot when VM changes
+  // Reset screenshot when VM changes. The cleanup also runs on unmount, so the
+  // last blob URL is always revoked rather than leaked.
   useEffect(() => {
     setScreenshotUrl(null)
     setScreenshotFailed(false)
     setNoDisplay(false)
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
+    }
   }, [vmid, connId])
 
   // Determine OS icon

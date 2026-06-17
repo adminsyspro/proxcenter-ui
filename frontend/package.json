@@ -49,6 +49,7 @@
     "flatted": "^3.4.0",
     "form-data": "^4.0.5",
     "html-to-image": "^1.11.13",
+    "jpeg-js": "^0.4.4",
     "leaflet": "^1.9.4",
     "nanoid": "^5.1.11",
     "next": "^16.2.6",

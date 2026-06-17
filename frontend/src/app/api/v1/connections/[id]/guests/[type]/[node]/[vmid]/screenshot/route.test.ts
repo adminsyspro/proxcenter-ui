@@ -37,6 +37,13 @@ vi.mock('@/lib/ssh/node-ip', () => ({
 
 import { GET, pruneScreenshotCaches } from './route'
 
+// A minimal valid P6 PPM (2x1: red, green) as the node would return it over
+// SSH: base64-encoded. The route re-encodes this to JPEG.
+const PPM_B64 = Buffer.concat([
+  Buffer.from('P6\n2 1\n255\n', 'ascii'),
+  Buffer.from([255, 0, 0, 0, 255, 0]),
+]).toString('base64')
+
 // Each test uses a unique id/vmid so the module-level screenshot and
 // framebuffer caches (keyed by `id:node:vmid`) never bleed across cases.
 let seq = 0
@@ -85,25 +92,68 @@ describe('GET .../screenshot — display detection', () => {
     expect(executeSSHMock).not.toHaveBeenCalled()
   })
 
-  it('captures a screenshot for a graphical VM (vga: std)', async () => {
+  it('captures a screenshot for a graphical VM (vga: std) and returns image/jpeg', async () => {
     pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
-    executeSSHMock.mockResolvedValueOnce({ success: true, output: 'QkFTRTY0\n' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: `${PPM_B64}\n` })
 
     const res = await GET(new Request('http://localhost'), makeCtx())
-    const body = await res.json()
 
-    expect(body).toMatchObject({ data: 'QkFTRTY0', format: 'ppm' })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('image/jpeg')
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    // JPEG Start-Of-Image marker.
+    expect([bytes[0], bytes[1]]).toEqual([0xff, 0xd8])
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
   })
 
   it('treats an absent vga (default std) as graphical and proceeds to SSH', async () => {
     pveFetchMock.mockResolvedValueOnce({})
-    executeSSHMock.mockResolvedValueOnce({ success: true, output: 'ZGF0YQ==' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+
+    const res = await GET(new Request('http://localhost'), makeCtx())
+
+    expect(res.headers.get('content-type')).toContain('image/jpeg')
+    expect(executeSSHMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries on the relocated node and reports it via X-Screenshot-Moved-To', async () => {
+    pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
+    // First node has no such VM (migrated away); locate finds it on pve2.
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'no such vm' })
+    locateVmInClusterMock.mockResolvedValueOnce({ node: 'pve2' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+
+    const res = await GET(new Request('http://localhost'), makeCtx({ node: 'pve1' }))
+
+    expect(res.headers.get('content-type')).toContain('image/jpeg')
+    expect(res.headers.get('x-screenshot-moved-to')).toBe('pve2')
+    expect(executeSSHMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns reason=decode_failed when the capture is not a valid PPM', async () => {
+    pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
+    // 'QkFTRTY0' decodes to "BASE64" — not a P6 PPM, so JPEG encoding fails.
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: 'QkFTRTY0\n' })
 
     const res = await GET(new Request('http://localhost'), makeCtx())
     const body = await res.json()
 
-    expect(body.format).toBe('ppm')
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(body.reason).toBe('decode_failed')
+  })
+
+  it('serves the cached frame as image/jpeg on the second poll without re-running SSH', async () => {
+    const ctxArgs = { id: 'screenshot-cache', node: 'pve1', vmid: '999' }
+    pveFetchMock.mockResolvedValue({ vga: 'std' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+
+    const first = await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+    const second = await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+
+    expect(first.headers.get('content-type')).toContain('image/jpeg')
+    expect(second.headers.get('content-type')).toContain('image/jpeg')
+    expect(second.headers.get('x-screenshot-cache')).toBe('hit')
+    // Second poll hit the cache, so SSH ran exactly once.
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
   })
 
@@ -122,12 +172,11 @@ describe('GET .../screenshot — display detection', () => {
 
   it('falls through to the screendump path when the config probe fails', async () => {
     pveFetchMock.mockRejectedValueOnce(new Error('node down'))
-    executeSSHMock.mockResolvedValueOnce({ success: true, output: 'b2s=' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
 
     const res = await GET(new Request('http://localhost'), makeCtx())
-    const body = await res.json()
 
-    expect(body.format).toBe('ppm')
+    expect(res.headers.get('content-type')).toContain('image/jpeg')
     expect(executeSSHMock).toHaveBeenCalledTimes(1)
   })
 

@@ -23,7 +23,10 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { useTaskEvents } from '@/hooks/useTaskEvents'
 import { useProxCenterTasks, type PCTask } from '@/contexts/ProxCenterTasksContext'
+import { useSharedTasks } from '@/hooks/useSharedTasks'
+import { mergeSharedTasks, type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
 import TaskDetailDialog from './TaskDetailDialog'
+import SharedTaskDetailDialog from '@/components/SharedTaskDetailDialog'
 
 // ============================================
 // Types
@@ -159,7 +162,10 @@ export default function TasksFooter({
 
   // ProxCenter tasks
   const { tasks: pcTasks, clearDone: clearPCDone, restoreTask } = useProxCenterTasks()
-  const pcRunningCount = pcTasks.filter(t => t.status === 'running').length
+  const { data: sharedResp } = useSharedTasks()
+  const mergedPcTasks: MergedPCTask[] = mergeSharedTasks(pcTasks, sharedResp?.data ?? [])
+  const [detailJobId, setDetailJobId] = useState<string | null>(null)
+  const pcRunningCount = mergedPcTasks.filter(t => t.status === 'running').length
 
   // SWR hook for task events
   const { data: tasksRaw, mutate: mutateTasks, isLoading: loading } = useTaskEvents(50)
@@ -560,10 +566,10 @@ export default function TasksFooter({
                 )}
               </>
             )}
-            {activeTab === 'proxcenter' && pcTasks.length > 0 && (
+            {activeTab === 'proxcenter' && mergedPcTasks.length > 0 && (
               <Chip
                 size="small"
-                label={pcTasks.length}
+                label={mergedPcTasks.length}
                 sx={{
                   height: 18,
                   fontSize: '0.7rem',
@@ -600,16 +606,16 @@ export default function TasksFooter({
           {/* ProxCenter tasks tab */}
           {activeTab === 'proxcenter' && (
             <Box sx={{ height: maxHeight, overflow: 'auto', bgcolor: '#1e1e2d' }}>
-              {pcTasks.length === 0 ? (
+              {mergedPcTasks.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4 }}>
                   <Typography variant="body2">No ProxCenter tasks</Typography>
                 </Box>
               ) : (
                 <>
-                  {pcTasks.map((task) => (
+                  {mergedPcTasks.map((task) => (
                     <Box
                       key={task.id}
-                      onClick={() => restoreTask(task.id)}
+                      onClick={() => task.shared ? setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, '')) : restoreTask(task.id)}
                       sx={{
                         px: 2, py: 1,
                         borderBottom: '1px solid rgba(231,227,252,0.08)',
@@ -637,6 +643,11 @@ export default function TasksFooter({
                             {task.detail}
                           </Typography>
                         )}
+                        {task.shared && task.readOnly && task.startedByName && (
+                          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem' }} noWrap>
+                            {t('tasks.shared.startedBy', { name: task.startedByName })}
+                          </Typography>
+                        )}
                       </Box>
                       {/* Progress */}
                       <Box sx={{ width: 120, flexShrink: 0 }}>
@@ -658,7 +669,7 @@ export default function TasksFooter({
                       {/* Status */}
                       <Chip
                         size="small"
-                        label={task.status === 'running' ? t('tasks.status.running') : task.status === 'done' ? 'Done' : 'Error'}
+                        label={task.status === 'running' ? t('tasks.status.running') : task.rawStatus === 'cancelled' ? t('tasks.status.cancelled') : task.status === 'done' ? 'Done' : 'Error'}
                         color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : 'error'}
                         variant={task.status === 'running' ? 'outlined' : 'filled'}
                         icon={task.status === 'running' ? (
@@ -668,7 +679,7 @@ export default function TasksFooter({
                       />
                     </Box>
                   ))}
-                  {pcTasks.some(t => t.status !== 'running') && (
+                  {mergedPcTasks.some(t => t.status !== 'running' && !t.shared) && (
                     <Box sx={{ px: 2, py: 0.75, display: 'flex', justifyContent: 'flex-end' }}>
                       <Typography
                         variant="caption"
@@ -768,6 +779,9 @@ return ''
         }
       `}</style>
     </ThemeProvider>
+
+    {/* Shared Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
+    <SharedTaskDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />
 
     {/* Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
     {selectedTask && (

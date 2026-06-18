@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
 import { extractGroupsFromClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
-import { getOidcConfig, resolveOidcRole } from "./oidc"
+import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -399,7 +399,9 @@ export const authOptions: NextAuthOptions = {
         if (existing) {
           if (!existing.enabled) return false
 
-          // Update existing user
+          // Update existing user. The legacy users.role column is left as-is
+          // (mirrors LDAP); the authoritative RBAC assignment is re-synced from
+          // the current groups below (issue #383).
           await prisma.user.update({
             where: { id: existing.id },
             data: {
@@ -446,17 +448,16 @@ export const authOptions: NextAuthOptions = {
           if (!oidcConfig.autoProvision) return false
 
           const id = nanoid()
-          const resolvedRole = resolveOidcRole(groups, oidcConfig)
-          // Normalize: support both "role_viewer" (new) and "viewer" (legacy) formats
-          const oidcRoleId = resolvedRole.startsWith('role_') ? resolvedRole : `role_${resolvedRole}`
-          const role = oidcRoleId.replace(/^role_/, '') // Simple name for users table
+          // Legacy users.role display column (the authoritative RBAC assignment
+          // is created by syncOidcRoleAssignment below).
+          const roleName = oidcRoleId(groups, oidcConfig).replace(/^role_/, '')
 
           await prisma.user.create({
             data: {
               id,
               email,
               name,
-              role,
+              role: roleName,
               authProvider: "oidc",
               oidcSub: sub,
               enabled: true,
@@ -473,33 +474,24 @@ export const authOptions: NextAuthOptions = {
             create: { userId: id, tenantId: "default", isDefault: true, joinedAt: now },
           })
 
-          // Create RBAC role assignment from OIDC groups (Postgres / Prisma).
-          // scopeType "inherit" so the assignment follows the role's default
-          // scope automatically (issue #383). Resolves to global when the role
-          // has no default scope, matching the previous behaviour.
-          const oidcRoleExists = await prisma.rbacRole.findUnique({
-            where: { id: oidcRoleId },
-            select: { id: true },
-          })
-          const finalOidcRoleId = oidcRoleExists ? oidcRoleExists.id : "role_viewer"
-
-          await prisma.rbacUserRole.create({
-            data: {
-              id: `oidc_${nanoid(12)}`,
-              userId: id,
-              roleId: finalOidcRoleId,
-              scopeType: "inherit",
-              tenantId: "default",
-              grantedAt: now,
-            },
-          })
-
           user.id = id
           user.email = email
           user.name = name
-          user.role = role as UserRole
+          user.role = roleName as UserRole
           user.authProvider = 'oidc'
         }
+
+        // Re-sync the RBAC assignment from the current IdP groups on every
+        // login (new or existing), mirroring the LDAP path. scopeType "inherit"
+        // follows the role's default scope; only the oidc_ row is touched, so
+        // manual assignments are preserved (issue #383).
+        await syncOidcRoleAssignment(prisma, {
+          userId: user.id,
+          groups,
+          config: oidcConfig,
+          now,
+          newId: () => `oidc_${nanoid(12)}`,
+        })
       }
 
       return true

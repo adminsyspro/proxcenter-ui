@@ -5,6 +5,7 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { syncProviderRoleAssignment, type ProviderSyncDb } from "./roleSync"
 
 export interface OidcConfig {
   enabled: boolean
@@ -101,4 +102,38 @@ export function resolveOidcRole(
   }
 
   return config.defaultRole
+}
+
+/**
+ * Normalise a resolved OIDC role into a `role_`-prefixed RBAC role id. The
+ * group->role mapping accepts both "role_db" (new) and "db" (legacy) values,
+ * and the default role is stored either way too.
+ */
+export function oidcRoleId(groups: string[] | undefined, config: OidcConfig): string {
+  const resolved = resolveOidcRole(groups, config)
+  return resolved.startsWith("role_") ? resolved : `role_${resolved}`
+}
+
+/**
+ * Re-sync a user's OIDC-derived RBAC assignment on every login (issue #383).
+ *
+ * Unlike LDAP, resolveOidcRole always resolves to a concrete role (its default
+ * on no match), so this is a full re-evaluation: the user follows their current
+ * IdP groups on each sign-in, and leaving a mapped group demotes them to the
+ * default role at the next login. The `oidc_`-prefixed row is the only one
+ * touched, so manual assignments are preserved (assignments are additive).
+ */
+export async function syncOidcRoleAssignment(
+  db: ProviderSyncDb,
+  params: { userId: string; groups: string[] | undefined; config: OidcConfig; now: Date; newId: () => string },
+): Promise<void> {
+  const { userId, groups, config, now, newId } = params
+  await syncProviderRoleAssignment(db, {
+    userId,
+    resolvedRoleId: oidcRoleId(groups, config),
+    defaultRoleId: "role_viewer",
+    now,
+    idPrefix: "oidc_",
+    newId,
+  })
 }

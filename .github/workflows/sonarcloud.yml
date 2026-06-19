@@ -110,14 +110,16 @@ jobs:
           # Wait for the Quality Gate result so the workflow status reflects
           # pass/fail. With branch protection requiring this check, a failed
           # gate blocks the merge before the rating can degrade.
-          # node.maxspace gives the JS/TS analyzer's Node bridge a 4 GB heap.
-          # The default heap OOMs on the full main analysis (~182k LOC): every
-          # push to main was failing with "bridge server is unresponsive"
-          # (gRPC Goaway) since 2026-06-14, so the main coverage/rating never
-          # refreshed. PR analysis (changed files only) stayed under the limit.
+          # node.maxspace gives the JS/TS analyzer's Node bridge an 8 GB heap.
+          # The default heap AND 4 GB both OOM on the full main analysis (~182k
+          # LOC): the run logged "running out of memory (heap size limit 4288
+          # MB)" then "bridge server is unresponsive" (gRPC Goaway), failing
+          # every push to main since 2026-06-14 so the main coverage/rating
+          # never refreshed. The runner has ~16 GB, so 8 GB leaves room for the
+          # JVM scanner. PR analysis (changed files only) stayed under the limit.
           args: >
             -Dsonar.qualitygate.wait=true
-            -Dsonar.javascript.node.maxspace=4096
+            -Dsonar.javascript.node.maxspace=8192
 
       - name: Coverage ratchet (main only)
         # The SonarCloud scan above already populated the branch measures.

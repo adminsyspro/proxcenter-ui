@@ -190,10 +190,19 @@ describe('VmActions — vmStatus=paused', () => {
   it('tooltip aria-label switches to Resume when paused (not Start)', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="paused" />)
-    // MUI Tooltip sets an aria-label on its internal clone <span> wrapper.
+    // MUI places the Tooltip accessible name as aria-label on the wrapper <span> (not the <button>), so the span is queried deliberately.
     // When paused the component passes t('vmActions.resume') = 'Resume'.
     const startSpan = container.querySelectorAll('button')[0].closest('span')
     expect(startSpan?.getAttribute('aria-label')).toBe('Resume')
+  })
+
+  it('tooltip aria-label is Start when not paused (stopped)', () => {
+    const cbs = makeCallbacks()
+    const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="stopped" />)
+    // MUI places the Tooltip accessible name as aria-label on the wrapper <span> (not the <button>), so the span is queried deliberately.
+    // When not paused the component passes t('audit.actions.start') = 'Start'.
+    const startSpan = container.querySelectorAll('button')[0].closest('span')
+    expect(startSpan?.getAttribute('aria-label')).toBe('Start')
   })
 })
 

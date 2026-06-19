@@ -104,6 +104,29 @@ const SNAPSHOT_PREFIX = "proxcenter-warm"
 const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
 
 /**
+ * Build the node-side command that zeroes a freshly-allocated *thick* block
+ * device before the CBT copy. Unwritten regions on a thick LV are not
+ * guaranteed to read as zero, and the CBT pass only writes the allocated/changed
+ * map, so any gap left un-zeroed would surface a previous tenant's bytes (a
+ * correctness AND information-leak bug). We prefer `blkdiscard -z` (offloaded
+ * write-zeroes where the array supports it) and fall back to streaming zeros.
+ *
+ * The fallback streams `head -c <size> /dev/zero | dd …` rather than the earlier
+ * `dd if=/dev/zero of=DEV` (no count): a bare unbounded dd fills the device and
+ * then issues one write *past* end-of-device, which returns ENOSPC and makes dd
+ * exit 1 — even though every block was already zeroed — so the thick-zero step
+ * could never succeed (this is what broke #445's disk 1 after a full 45-min
+ * zero). Bounding the stream to `blockdev --getsize64` writes exactly the device
+ * and exits 0. `iflag=fullblock` reassembles 4 MiB blocks across the pipe so
+ * O_DIRECT accepts every write, including a sub-4 MiB final block (still
+ * logical-block aligned because a device size is always a sector multiple).
+ */
+export function buildThickZeroScript(dev: string): string {
+  const d = shellEscape(dev)
+  return `sz=$(blockdev --getsize64 ${d}); blkdiscard -z ${d} 2>&1 || head -c "$sz" /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=direct status=none 2>&1`
+}
+
+/**
  * Warm migration orchestrator (ESXi-direct source, Proxmox block target).
  * Keeps the source online through a full copy + N delta passes, then a short
  * cutover with a CONFIRMED power-off. CBT (QueryChangedDiskAreas) is the
@@ -253,9 +276,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       if (preZeroed) {
         await executeSSH(config.targetConnectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
       } else {
-        const z = await executeSSH(config.targetConnectionId, nodeIp,
-          `blkdiscard -z ${shellEscape(dev)} 2>&1 || dd if=/dev/zero of=${shellEscape(dev)} bs=4M oflag=direct status=none 2>&1`, APPLY_TIMEOUT_MS)
-        if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.error || z.output}`)
+        const z = await executeSSH(config.targetConnectionId, nodeIp, buildThickZeroScript(dev), APPLY_TIMEOUT_MS)
+        // Surface z.output first: the script merges stderr into stdout (2>&1), so
+        // the real cause (e.g. "No space left on device", an array I/O error)
+        // lands in output while error is just "Exit code N" on the ssh2 path.
+        if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.output || z.error}`)
         await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
       }
       await appendLog(jobId, `Disk ${i}: target ${alloc.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)

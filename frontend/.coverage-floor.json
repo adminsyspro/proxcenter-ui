@@ -1,4 +1,4 @@
 {
   "comment": "Overall SonarCloud line coverage must never drop below `floor`. Bump only in a dedicated reviewed commit when a milestone is reached (see spec section 8).",
-  "floor": 7.0
+  "floor": 11.0
 }

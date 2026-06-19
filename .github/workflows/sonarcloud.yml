@@ -106,3 +106,15 @@ jobs:
           # gate blocks the merge before the rating can degrade.
           args: >
             -Dsonar.qualitygate.wait=true
+
+      - name: Coverage ratchet (main only)
+        # The SonarCloud scan above already populated the branch measures.
+        # Per-PR coverage is enforced by the Quality Gate (new-code >=80%);
+        # this step guards the OVERALL number on main against silent drift.
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: frontend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: adminsyspro_proxcenter-ui
+          SONAR_BRANCH: main
+        run: node scripts/coverage-ratchet.mjs

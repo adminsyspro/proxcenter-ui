@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
 import { getVmIcon, StatusIcon, NodeIcon, ClusterIcon } from './TreeIcons'
 
 /* ------------------------------------------------------------------ */

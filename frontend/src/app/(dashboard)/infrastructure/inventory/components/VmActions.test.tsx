@@ -43,7 +43,7 @@ function makeCallbacks() {
 // Branch 1: vmStatus='running'
 // Start disabled; Shutdown/Stop/Pause enabled; ConvertTemplate/Delete disabled
 // ------------------------------------------------------------------ //
-describe('VmActions — vmStatus=running', () => {
+describe('VmActions - vmStatus=running', () => {
   it('renders 8 buttons', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="running" />)
@@ -110,7 +110,7 @@ describe('VmActions — vmStatus=running', () => {
 // Branch 2: vmStatus='stopped' and vmStatus='unknown'
 // Start enabled; Shutdown/Stop/Pause disabled
 // ------------------------------------------------------------------ //
-describe('VmActions — vmStatus=stopped', () => {
+describe('VmActions - vmStatus=stopped', () => {
   it('Start button (index 0) is enabled when stopped', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="stopped" />)
@@ -145,7 +145,7 @@ describe('VmActions — vmStatus=stopped', () => {
   })
 })
 
-describe('VmActions — vmStatus=unknown', () => {
+describe('VmActions - vmStatus=unknown', () => {
   it('Start button is enabled when status is unknown', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="unknown" />)
@@ -161,11 +161,11 @@ describe('VmActions — vmStatus=unknown', () => {
 
 // ------------------------------------------------------------------ //
 // Branch 3: vmStatus='paused'
-// Start acts as Resume — the tooltip switches to the resume label.
+// Start acts as Resume - the tooltip switches to the resume label.
 // 'paused' is NOT in the isStopped guard (isStopped = stopped | unknown),
 // so Start is enabled (not running) and Shutdown/Stop/Pause are disabled.
 // ------------------------------------------------------------------ //
-describe('VmActions — vmStatus=paused', () => {
+describe('VmActions - vmStatus=paused', () => {
   it('Start button (index 0) is enabled when paused', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="paused" />)
@@ -209,7 +209,7 @@ describe('VmActions — vmStatus=paused', () => {
 // ------------------------------------------------------------------ //
 // Branch 4: canMigrate=false hides the Migrate button entirely
 // ------------------------------------------------------------------ //
-describe('VmActions — canMigrate=false', () => {
+describe('VmActions - canMigrate=false', () => {
   it('renders one fewer button when canMigrate is false', () => {
     const cbs = makeCallbacks()
     const { container: c1 } = renderWithProviders(
@@ -238,7 +238,7 @@ describe('VmActions — canMigrate=false', () => {
 // ------------------------------------------------------------------ //
 // Branch 5: isLocked / onUnlock
 // ------------------------------------------------------------------ //
-describe('VmActions — isLocked with onUnlock', () => {
+describe('VmActions - isLocked with onUnlock', () => {
   it('Unlock button appears when isLocked=true and onUnlock is provided', () => {
     const cbs = makeCallbacks()
     const onUnlock = vi.fn()
@@ -294,9 +294,9 @@ describe('VmActions — isLocked with onUnlock', () => {
 })
 
 // ------------------------------------------------------------------ //
-// Branch 6: disabled=true — all action buttons become disabled
+// Branch 6: disabled=true - all action buttons become disabled
 // ------------------------------------------------------------------ //
-describe('VmActions — disabled=true', () => {
+describe('VmActions - disabled=true', () => {
   it('all buttons are disabled when disabled=true', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(
@@ -320,7 +320,7 @@ describe('VmActions — disabled=true', () => {
 // ------------------------------------------------------------------ //
 // Clone and ConvertTemplate
 // ------------------------------------------------------------------ //
-describe('VmActions — Clone and ConvertTemplate', () => {
+describe('VmActions - Clone and ConvertTemplate', () => {
   it('clicking Clone (index 5) fires onClone', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(<VmActions {...cbs} vmStatus="stopped" />)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { cleanup, within, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import { inventoryFixture } from '@/__tests__/fixtures/inventory'
@@ -19,7 +19,7 @@ function seedInventory() {
 // ------------------------------------------------------------------ //
 // 1. Renders existing scope entries as chips and remove deletes them
 // ------------------------------------------------------------------ //
-describe('RoleDefaultScopeEditor — chip rendering and removal', () => {
+describe('RoleDefaultScopeEditor - chip rendering and removal', () => {
   beforeEach(() => {
     cleanup()
     seedInventory()
@@ -70,7 +70,7 @@ describe('RoleDefaultScopeEditor — chip rendering and removal', () => {
 // ------------------------------------------------------------------ //
 // 2. Adding a new entry: open target Select, pick option, click Add
 // ------------------------------------------------------------------ //
-describe('RoleDefaultScopeEditor — adding a new scope entry', () => {
+describe('RoleDefaultScopeEditor - adding a new scope entry', () => {
   beforeEach(() => {
     cleanup()
     seedInventory()
@@ -114,7 +114,7 @@ describe('RoleDefaultScopeEditor — adding a new scope entry', () => {
 // ------------------------------------------------------------------ //
 // 3. Guard: clicking Add with no target selected does not call onChange
 // ------------------------------------------------------------------ //
-describe('RoleDefaultScopeEditor — Add guard (no target selected)', () => {
+describe('RoleDefaultScopeEditor - Add guard (no target selected)', () => {
   beforeEach(() => {
     cleanup()
     seedInventory()
@@ -127,7 +127,7 @@ describe('RoleDefaultScopeEditor — Add guard (no target selected)', () => {
     )
 
     // The Add button is disabled when target='', so it cannot be clicked directly.
-    // Verify it is disabled — this is the guard the component enforces.
+    // Verify it is disabled - this is the guard the component enforces.
     const addBtn = screen.getByRole('button', { name: 'common.add' })
     expect(addBtn).toBeDisabled()
 

@@ -58,7 +58,7 @@ function findPopover(): HTMLElement {
 // ------------------------------------------------------------------ //
 // 1. Renders existing tags as chips
 // ------------------------------------------------------------------ //
-describe('TagManager — renders existing tags', () => {
+describe('TagManager - renders existing tags', () => {
   it('shows each tag from the tags prop as a visible chip label', () => {
     const { container } = renderWithProviders(<TagManager {...makeProps()} />)
     expect(within(container).getByText('prod')).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe('TagManager — renders existing tags', () => {
 // ------------------------------------------------------------------ //
 // 2. Opens popover and loads suggestions from the resources endpoint
 // ------------------------------------------------------------------ //
-describe('TagManager — popover opens and loads suggestions', () => {
+describe('TagManager - popover opens and loads suggestions', () => {
   beforeEach(() => {
     // Ensure a clean DOM between tests in this describe block.
     cleanup()
@@ -129,7 +129,7 @@ describe('TagManager — popover opens and loads suggestions', () => {
 // ------------------------------------------------------------------ //
 // 3. Adding a tag via the text input triggers onTagsChange
 // ------------------------------------------------------------------ //
-describe('TagManager — adding a tag via input calls onTagsChange', () => {
+describe('TagManager - adding a tag via input calls onTagsChange', () => {
   beforeEach(() => {
     cleanup()
   })
@@ -201,7 +201,7 @@ describe('TagManager — adding a tag via input calls onTagsChange', () => {
 // ------------------------------------------------------------------ //
 // 4. Removing a tag (chip delete) triggers onTagsChange
 // ------------------------------------------------------------------ //
-describe('TagManager — removing a tag calls onTagsChange', () => {
+describe('TagManager - removing a tag calls onTagsChange', () => {
   beforeEach(() => {
     cleanup()
   })

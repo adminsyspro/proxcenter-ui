@@ -107,9 +107,11 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
         with:
-          # Wait for the Quality Gate result so the workflow status reflects
-          # pass/fail. With branch protection requiring this check, a failed
-          # gate blocks the merge before the rating can degrade.
+          # Wait for the Quality Gate ONLY on pull requests, so a failing gate
+          # blocks the merge before it can degrade the rating. On push to main
+          # the analysis just refreshes the new-code baseline; that post-merge
+          # run must not fail on the gate (the merge already happened), or
+          # main's check goes red for new code that already landed.
           # node.maxspace gives the JS/TS analyzer's Node bridge an 8 GB heap.
           # The default heap AND 4 GB both OOM on the full main analysis (~182k
           # LOC): the run logged "running out of memory (heap size limit 4288
@@ -118,7 +120,7 @@ jobs:
           # never refreshed. The runner has ~16 GB, so 8 GB leaves room for the
           # JVM scanner. PR analysis (changed files only) stayed under the limit.
           args: >
-            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.wait=${{ github.event_name == 'pull_request' }}
             -Dsonar.javascript.node.maxspace=8192
 
       - name: Coverage ratchet (main only)

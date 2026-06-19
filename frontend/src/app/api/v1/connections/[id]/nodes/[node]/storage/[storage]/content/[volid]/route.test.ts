@@ -11,7 +11,6 @@ vi.mock('@/lib/rbac', () => ({
 
 vi.mock('@/lib/vdc/scope', () => ({
   guardTenantStorageWrite: vi.fn<(connId: string, storage: string) => Promise<Response | null>>(),
-  getTenantInfrastructureScope: vi.fn<(...args: any[]) => Promise<any>>(),
 }))
 
 vi.mock('@/lib/connections/getConnection', () => ({
@@ -98,7 +97,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/storage/[storage]/content
     // then re-encoded for the URL segment
     expect(pveFetchMock).toHaveBeenCalledWith(
       { id: 'conn-1' },
-      expect.stringContaining('/nodes/pve-node-01/storage/local/content/'),
+      '/nodes/pve-node-01/storage/local/content/local%3Aiso%2Fubuntu-22.04.iso',
       { method: 'DELETE' },
     )
   })

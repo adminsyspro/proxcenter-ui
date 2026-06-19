@@ -7,14 +7,16 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 export function evaluateRatchet({ coverage, floor }) {
-  const ok = Number(coverage) >= Number(floor)
+  const c = Number(coverage)
+  const f = Number(floor)
+  const ok = c >= f
   return {
     ok,
-    coverage: Number(coverage),
-    floor: Number(floor),
+    coverage: c,
+    floor: f,
     message: ok
-      ? `coverage ${coverage}% >= floor ${floor}%`
-      : `coverage ${coverage}% is below floor ${floor}% (regression)`,
+      ? `coverage ${c}% >= floor ${f}%`
+      : `coverage ${c}% is below floor ${f}% (regression)`,
   }
 }
 
@@ -23,7 +25,7 @@ export async function fetchSonarCoverage({ token, projectKey, branch }) {
   url.searchParams.set('component', projectKey)
   url.searchParams.set('metricKeys', 'coverage')
   if (branch) url.searchParams.set('branch', branch)
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(url, { headers: { Authorization: 'Basic ' + Buffer.from(`${token}:`).toString('base64') } })
   if (!res.ok) throw new Error(`SonarCloud API ${res.status}`)
   const json = await res.json()
   const measure = json?.component?.measures?.find((m) => m.metric === 'coverage')

@@ -120,7 +120,6 @@ describe('GET /api/v1/guests/[vmid]/tasks', () => {
   })
 
   it('uses url-encoded node name in the api path', async () => {
-    getConnectionByIdMock.mockResolvedValue({ id: 'conn-1' })
     pveFetchMock.mockResolvedValue([])
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: 'conn-1:qemu:pve node/01:101' }) })
     expect(res.status).toBe(200)
@@ -151,6 +150,8 @@ describe('GET /api/v1/guests/[vmid]/tasks', () => {
   it('500 on a malformed vmKey', async () => {
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: 'bad-key' }) })
     expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toMatch(/vmKey|Invalid/i)
   })
 
   it('500 when pveFetch throws', async () => {

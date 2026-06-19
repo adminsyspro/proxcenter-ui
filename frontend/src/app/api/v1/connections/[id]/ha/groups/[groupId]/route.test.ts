@@ -147,10 +147,7 @@ describe('PUT /api/v1/connections/[id]/ha/groups/[groupId]', () => {
     expect(path).toBe('/cluster/ha/groups/ha-grp-prod')
     expect(opts.method).toBe('PUT')
     expect(opts.headers).toEqual({ 'Content-Type': 'application/x-www-form-urlencoded' })
-    expect(opts.body).toContain('nodes=pve1%3A2%2Cpve2%3A1')
-    expect(opts.body).toContain('restricted=1')
-    expect(opts.body).toContain('nofailback=0')
-    expect(opts.body).toContain('comment=prod+group')
+    expect(opts.body).toBe('nodes=pve1%3A2%2Cpve2%3A1&restricted=1&nofailback=0&comment=prod+group')
   })
 
   it('sends delete param when provided', async () => {
@@ -163,7 +160,7 @@ describe('PUT /api/v1/connections/[id]/ha/groups/[groupId]', () => {
     })
 
     const [, , opts] = pveFetchMock.mock.calls[0]
-    expect(opts.body).toContain('delete=comment')
+    expect(opts.body).toBe('delete=comment')
   })
 
   it('omits optional fields when not present in request body', async () => {
@@ -176,7 +173,7 @@ describe('PUT /api/v1/connections/[id]/ha/groups/[groupId]', () => {
     })
 
     const [, , opts] = pveFetchMock.mock.calls[0]
-    expect(opts.body).toContain('nodes=pve1%3A1')
+    expect(opts.body).toBe('nodes=pve1%3A1')
     expect(opts.body).not.toContain('restricted')
     expect(opts.body).not.toContain('nofailback')
     expect(opts.body).not.toContain('comment')

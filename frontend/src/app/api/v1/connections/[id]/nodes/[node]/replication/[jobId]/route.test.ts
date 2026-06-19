@@ -98,7 +98,7 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () => 
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toContain('limit=100')
+    expect(path).toBe('/nodes/pve-node-01/replication/1-pve-node-02/log?limit=100')
   })
 
   it('defaults to limit=50 when no query param', async () => {
@@ -109,7 +109,7 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () => 
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toContain('limit=50')
+    expect(path).toBe('/nodes/pve-node-01/replication/1-pve-node-02/log?limit=50')
   })
 
   it('encodes node and jobId in the pveFetch path', async () => {
@@ -120,7 +120,7 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () => 
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toContain('/nodes/node%2Fwith%2Fslash/replication/job%3Aid/log')
+    expect(path).toBe('/nodes/node%2Fwith%2Fslash/replication/job%3Aid/log?limit=50')
   })
 
   it('404 when connection not found', async () => {

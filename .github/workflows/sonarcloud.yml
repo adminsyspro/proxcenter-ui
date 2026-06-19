@@ -71,6 +71,12 @@ jobs:
         # per-run schema; ubuntu-latest images ship without it.
         run: sudo apt-get install -y --no-install-recommends postgresql-client
 
+      - name: Run scripts unit tests
+        # The coverage ratchet's own unit test (pure logic, no DB). Isolated
+        # scripts config, so it is not part of the coverage suite.
+        working-directory: frontend
+        run: npm run test:scripts
+
       - name: Run tests with coverage
         working-directory: frontend
         env:

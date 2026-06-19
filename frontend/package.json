@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:scripts": "vitest run --config vitest.scripts.config.ts",
     "clean": "rm -rf .next",
     "clear": "rm -rf node_modules .next"
   },

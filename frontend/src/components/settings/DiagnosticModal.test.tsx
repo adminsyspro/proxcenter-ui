@@ -278,17 +278,9 @@ describe('DiagnosticModal - close button', () => {
     const onClose = vi.fn()
     renderWithProviders(<DiagnosticModal {...makeProps({ onClose })} />)
 
-    // The IconButton in DialogTitle has no accessible label; it is the only
-    // button that is not "Re-run" or "Close".
+    // The close IconButton in DialogTitle wraps an icon with no visible text;
+    // it is the only button with empty text content.
     const allButtons = screen.getAllByRole('button')
-    const xBtn = allButtons.find(
-      b => b.getAttribute('aria-label') === null &&
-           b.textContent?.trim() === '' ||
-      (!b.textContent?.match(/re-run|close/i) && b !== allButtons[allButtons.length - 1])
-    )
-    // We use the simpler approach: the close IconButton wraps an <i> with no text;
-    // click every button that is neither Re-run nor Close and assert onClose fired.
-    // More precise: find by querying buttons and picking the one with no text.
     const iconBtns = allButtons.filter(b => !b.textContent?.trim())
     // There is exactly one icon-only button: the X in the title.
     expect(iconBtns).toHaveLength(1)

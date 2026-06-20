@@ -85,13 +85,12 @@ describe('WhatsNewDialog component', () => {
   })
 
   it('hides dialog from accessibility tree after transition to open=false', () => {
-    // Render open first, then rerender closed. MUI keeps the Dialog subtree in
-    // the DOM during the exit transition under jsdom (no CSS animations) but
-    // marks the outer MuiModal-root with aria-hidden="true", which removes
-    // the whole dialog from the accessibility tree.
-    // Strategy: locate the portal container via the live [role="dialog"] before
-    // rerender, then re-query from that same container after rerender to pick
-    // up the updated aria-hidden attribute on the (possibly replaced) modal root.
+    // NOTE: WhatsNewDialog keeps its subtree mounted even when rendered with
+    // open=false from the start (it uses MUI keepMounted or an equivalent
+    // pattern). The fresh-render content-absence strategy therefore does not
+    // apply here. Closure is verified via the aria-hidden="true" attribute that
+    // MUI places on the MuiModal-root, which removes the whole dialog from the
+    // accessibility tree while leaving the DOM nodes present.
     const { rerender } = renderWithProviders(<WhatsNewDialog open={true} onClose={vi.fn()} />)
     // When open, the accessible dialog is present.
     const dialogEl = screen.getByRole('dialog')
@@ -102,7 +101,7 @@ describe('WhatsNewDialog component', () => {
     expect(modalRoot).not.toBeNull()
     const portalContainer = modalRoot.parentElement as Element
     expect(portalContainer).not.toBeNull()
-    // The wrapper for THIS open dialog must not be aria-hidden.
+    // The wrapper for this open dialog must not be aria-hidden.
     expect(modalRoot.getAttribute('aria-hidden')).toBeNull()
 
     rerender(<WhatsNewDialog open={false} onClose={vi.fn()} />)

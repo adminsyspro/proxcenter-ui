@@ -62,3 +62,33 @@ export const templates = [
 
 /** nextid is not used by CreateLxcDialog (it computes locally from allVms). */
 export const nextid = 100
+
+// ------------------------------------------------------------------ //
+// VM dialog additions (EXTEND-only -- do NOT mutate the exports above)
+// ------------------------------------------------------------------ //
+
+/**
+ * vmStorage: storage entries used by CreateVmDialog tests.
+ *
+ * The single entry has both 'iso' and 'images' content and shared=true, so:
+ *   - filteredIso (content.includes('iso') && shared) picks 'local-vm' for ISO storage.
+ *   - filteredDisk (content.includes('images') && shared) picks 'local-vm' for disk storage.
+ *
+ * This causes the dialog to auto-select the ISO storage and auto-fill the
+ * first disk's storage field, which unblocks the Create button (resolvedNode
+ * and vmid are set via the nextid fetch; disk storage set here).
+ */
+export const vmStorage = [
+  {
+    storage: 'local-vm',
+    content: 'images,iso,rootdir',
+    shared: true,
+  },
+]
+
+/**
+ * vdcs: empty list -- no vDC quota applies to the provider tenant (admin).
+ * The dialog reads json.data and finds a match by connectionId; no match
+ * means vdcQuota stays null and all quota checks pass unconditionally.
+ */
+export const vdcs: unknown[] = []

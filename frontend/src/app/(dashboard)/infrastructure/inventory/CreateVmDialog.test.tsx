@@ -162,11 +162,10 @@ async function waitForDataLoad() {
   })
   // Also wait for the Next button to be enabled so bridges and quota are resolved.
   // Use exact name 'Next' to avoid matching other buttons.
+  // getByRole throws if the button is absent, so this waitFor only resolves
+  // once Next is both present AND enabled (non-skippable invariant).
   await waitFor(() => {
-    const nextBtn = screen.queryByRole('button', { name: 'Next' })
-    if (nextBtn) {
-      expect(nextBtn).not.toBeDisabled()
-    }
+    expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled()
   })
 }
 
@@ -585,22 +584,43 @@ describe('CreateVmDialog - OS tab', () => {
     seedAllHandlers()
   })
 
-  it('clicking an OS preset highlights it', async () => {
+  it('clicking an OS preset updates the Guest OS type', async () => {
     renderWithProviders(<CreateVmDialog {...makeProps()} />)
     await waitForDataLoad()
 
     fireEvent.click(screen.getByRole('tab', { name: 'OS' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Ubuntu')).toBeInTheDocument()
+      expect(screen.getByText('Windows 11')).toBeInTheDocument()
     })
 
-    // Click the Ubuntu preset card -- this sets selectedOsPreset='ubuntu'.
-    // The card text is data-driven from the osPresets array, not always-present.
-    fireEvent.click(screen.getByText('Ubuntu'))
+    // The default Guest OS type is Linux (guestOsType='Linux'). Clicking the
+    // "Windows 11" preset card calls setGuestOsType('Windows') + setGuestOsVersion('win11').
+    // The Guest OS type Select then renders "Windows" as its visible value via
+    // renderValue -- this is a behavior-gated DOM change (absent if the click
+    // were a no-op, since the initial value is 'Linux').
+    // Before clicking: the OS type combobox shows "Linux" content.
+    // Locate the OS type combobox: on the OS tab the Guest OS section renders
+    // two comboboxes (OS Type, OS Version). The first one is the type selector.
+    const comboboxesBefore = screen.getAllByRole('combobox')
+    // The OS type combobox textContent contains "Linux" before selection.
+    const osTypeComboboxBefore = comboboxesBefore.find(cb => cb.textContent?.includes('Linux'))
+    expect(osTypeComboboxBefore).toBeTruthy()
 
-    // After clicking, the Debian card is still in the DOM (all presets render).
-    expect(screen.getByText('Debian')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Windows 11'))
+
+    // After clicking, the Guest OS type combobox should now show "Windows".
+    // getAllByRole('combobox') re-queries the live DOM after the state update.
+    await waitFor(() => {
+      const comboboxesAfter = screen.getAllByRole('combobox')
+      const osTypeComboboxAfter = comboboxesAfter.find(cb => cb.textContent?.includes('Windows'))
+      expect(osTypeComboboxAfter).toBeTruthy()
+    })
+    // The "Linux" value must NO LONGER appear in that same OS type combobox,
+    // confirming the preset click genuinely changed state and was not a no-op.
+    const finalComboboxes = screen.getAllByRole('combobox')
+    const stillLinux = finalComboboxes.find(cb => cb.textContent === 'Linux')
+    expect(stillLinux).toBeUndefined()
   })
 
   it('toggling installation media off hides the storage/ISO selects', async () => {
@@ -613,31 +633,30 @@ describe('CreateVmDialog - OS tab', () => {
       expect(screen.getByText('Installation media')).toBeInTheDocument()
     })
 
-    // The media section has a Switch; find it by label proximity.
-    // The label text "Installation media" is adjacent to the Switch.
-    // After toggling off, osMediaType='none' and the "Do not use any media"
-    // line appears (inventory.createVm.doNotUseMedia).
-    const installMediaSection = screen.getByText('Installation media')
-      .closest('div') as HTMLElement
-    const switchInput = installMediaSection
-      .closest('[class*="MuiBox"]')
+    // The Switch sits in the header row next to the "Installation media" label.
+    // Walk up from the label text to find the closest MuiFormControlLabel root
+    // (the FormControlLabel wrapping the Switch), then grab its checkbox input.
+    // This mirrors the pattern used in CreateLxcDialog.test.tsx and avoids
+    // fragile ancestor traversal through unnamed MuiBox containers.
+    const installMediaLabel = screen.getByText('Installation media')
+    // The label and the Switch share a flex row inside a Box; the Switch's
+    // FormControlLabel is the sibling rendered after the Box spacer.
+    // Walking up to the common ancestor Box (the header row div) and querying
+    // down for the checkbox is reliable under jsdom because MUI renders the
+    // FormControlLabel as a direct child of that row.
+    const headerRow = installMediaLabel.closest('div') as HTMLElement
+    const switchInput = headerRow
+      .closest('div')
       ?.querySelector('input[type="checkbox"]') as HTMLInputElement | null
 
-    // Fallback: find the switch by traversing to the outer section.
-    // The switch is inside the media box header -- toggling it sets osMediaType.
-    // We use the parent box to locate the switch safely.
-    if (switchInput) {
-      const wasChecked = switchInput.checked
-      fireEvent.click(switchInput)
-      // After toggle, the checked state flips.
-      expect(switchInput.checked).toBe(!wasChecked)
-    } else {
-      // The switch renders within the Installation media section header.
-      // Find all checkboxes on the OS tab and use the one inside the media card.
-      const allSwitches = document.querySelectorAll('input[type="checkbox"]')
-      // At minimum 1 switch (the media toggle) must be present.
-      expect(allSwitches.length).toBeGreaterThanOrEqual(1)
-    }
+    // The switch must be found -- if this fails the component structure changed.
+    expect(switchInput).not.toBeNull()
+
+    // Record current state, click, and assert the checked value flipped.
+    const wasChecked = switchInput!.checked
+    fireEvent.click(switchInput!)
+    // After toggling off, osMediaType becomes 'none' and the checked state flips.
+    expect(switchInput!.checked).toBe(!wasChecked)
   })
 })
 

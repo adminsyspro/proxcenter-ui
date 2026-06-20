@@ -84,20 +84,33 @@ describe('WhatsNewDialog component', () => {
     expect(screen.getByText(latestVersion)).toBeInTheDocument()
   })
 
-  it('marks the modal root aria-hidden after transition to open=false', () => {
+  it('hides dialog from accessibility tree after transition to open=false', () => {
     // Render open first, then rerender closed. MUI keeps the Dialog subtree in
-    // the DOM during the exit transition but marks the outer modal root with
-    // aria-hidden="true" so AT ignores it. In jsdom (no CSS animations) the
-    // node stays mounted; assert the aria attribute, not DOM removal.
+    // the DOM during the exit transition under jsdom (no CSS animations) but
+    // marks the outer MuiModal-root with aria-hidden="true", which removes
+    // the whole dialog from the accessibility tree.
+    // Strategy: locate the portal container via the live [role="dialog"] before
+    // rerender, then re-query from that same container after rerender to pick
+    // up the updated aria-hidden attribute on the (possibly replaced) modal root.
     const { rerender } = renderWithProviders(<WhatsNewDialog open={true} onClose={vi.fn()} />)
     // When open, the accessible dialog is present.
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    const dialogEl = screen.getByRole('dialog')
+    expect(dialogEl).toBeInTheDocument()
+    // Find the portal container: the body-level div that MUI injects to host
+    // the dialog portal. This parent is stable across rerenders.
+    const modalRoot = dialogEl.closest('.MuiModal-root') as Element
+    expect(modalRoot).not.toBeNull()
+    const portalContainer = modalRoot.parentElement as Element
+    expect(portalContainer).not.toBeNull()
+    // The wrapper for THIS open dialog must not be aria-hidden.
+    expect(modalRoot.getAttribute('aria-hidden')).toBeNull()
 
     rerender(<WhatsNewDialog open={false} onClose={vi.fn()} />)
-    // After closing, the outer MUI Modal wrapper gains aria-hidden="true".
-    const modalRoot = document.querySelector('.MuiModal-root')
-    expect(modalRoot).not.toBeNull()
-    expect(modalRoot!.getAttribute('aria-hidden')).toBe('true')
+    // After closing, MUI marks the modal root aria-hidden="true". Re-query
+    // from the stable portal container to get the current (possibly new) node.
+    const modalRootAfter = portalContainer.querySelector('.MuiModal-root') as Element
+    expect(modalRootAfter).not.toBeNull()
+    expect(modalRootAfter.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('calls onClose when the close IconButton is clicked', async () => {
@@ -132,7 +145,6 @@ describe('WhatsNewDialog component', () => {
     // since jsdom may duplicate portal nodes across renders in the same suite.
     const firstTitle = (changelog as { version: string; title: string }[])[0].title
     const matches = screen.getAllByText(firstTitle)
-    expect(matches.length).toBeGreaterThan(0)
-    expect(matches[0]).toBeInTheDocument()
+    expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 })

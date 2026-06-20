@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
+import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 
 export const runtime = "nodejs"
 
@@ -26,11 +26,14 @@ function parseVmKey(vmKey: string) {
 
 async function getConnection(id: string) {
   // Use the shared helper so vDC tenants reach provider-owned connections
-  // through their vDC scope instead of getting a tenant-scoped 404.
+  // through their vDC scope. Only a genuine not-found becomes a 404; real
+  // DB/infra errors propagate to the outer catch (500) instead of being
+  // masked as "feature unavailable".
   try {
     return await getConnectionById(id)
-  } catch {
-    return null
+  } catch (e) {
+    if (isConnectionNotFoundError(e)) return null
+    throw e
   }
 }
 
@@ -73,6 +76,7 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Feature check error:", e?.message)
-    return NextResponse.json({ data: { hasFeature: false } })
+    const status = /invalid vmkey/i.test(e?.message || "") ? 400 : 500
+    return NextResponse.json({ error: e?.message || "Feature check failed" }, { status })
   }
 }

@@ -4,6 +4,9 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
+  // Real pure helper: matches the production "connection not found" detection.
+  isConnectionNotFoundError: (err: unknown) =>
+    /connection not found/i.test((err as { message?: string } | null)?.message || ''),
 }))
 
 vi.mock('@/lib/proxmox/client', () => ({
@@ -91,14 +94,14 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(body.data.maintenance).toBeNull()
   })
 
-  it('returns maintenance=null when pveFetch rejects (swallowed via .catch)', async () => {
+  it('500 when pveFetch rejects (cluster error now surfaces)', async () => {
     pveFetchMock.mockRejectedValue(new Error('cluster unreachable'))
     const res = await GET(new Request('http://test.local/_'), {
       params: Promise.resolve(baseParams),
     })
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(500)
     const body = await readJson<any>(res)
-    expect(body.data.maintenance).toBeNull()
+    expect(body.error).toMatch(/cluster unreachable/i)
   })
 
   it('403 when RBAC denies node.view', async () => {
@@ -116,6 +119,16 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
       params: Promise.resolve(baseParams),
     })
     expect(res.status).toBe(500)
+  })
+
+  it('404 when getConnectionById rejects with a not-found error', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
+    const res = await GET(new Request('http://test.local/_'), {
+      params: Promise.resolve(baseParams),
+    })
+    expect(res.status).toBe(404)
+    const body = await readJson<any>(res)
+    expect(body.error).toMatch(/not found/i)
   })
 
   it('calls pveFetch with correct cluster resources path', async () => {
@@ -145,12 +158,21 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
   })
 
   it('404 when connection not found', async () => {
-    getConnectionByIdMock.mockResolvedValue(null)
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await callRoute(POST as any, {
       method: 'POST',
       params: baseParams,
     })
     expect(res.status).toBe(404)
+  })
+
+  it('500 when getConnectionById rejects with a non-not-found error', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('DB error'))
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      params: baseParams,
+    })
+    expect(res.status).toBe(500)
   })
 
   it('200 happy path: executes enable SSH command and returns output', async () => {
@@ -212,12 +234,21 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
   })
 
   it('404 when connection not found', async () => {
-    getConnectionByIdMock.mockResolvedValue(null)
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
       params: baseParams,
     })
     expect(res.status).toBe(404)
+  })
+
+  it('500 when getConnectionById rejects with a non-not-found error', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('DB error'))
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: baseParams,
+    })
+    expect(res.status).toBe(500)
   })
 
   it('200 happy path: executes disable SSH command and returns output', async () => {

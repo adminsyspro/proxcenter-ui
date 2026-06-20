@@ -104,6 +104,7 @@ export async function DELETE(
     // Our IPAM is keyed on vmid so we don't need to re-parse netN/ipconfigN
     // out of the (already-deleted) qm config. Idempotent: missing rows are
     // ignored.
+    let ipamWarning: string | undefined
     if (type === 'qemu') {
       try {
         const numericVmid = Number(vmid)
@@ -111,6 +112,7 @@ export async function DELETE(
           await releaseAllocationsForVm(id, numericVmid)
         }
       } catch (err: any) {
+        ipamWarning = `IPAM release failed: ${err?.message || String(err)}`
         console.warn(`[vm-delete] IPAM release failed for ${type}/${vmid}: ${err?.message}`)
       }
     }
@@ -123,13 +125,14 @@ export async function DELETE(
       category: type === 'lxc' ? 'containers' : 'vms',
       resourceType: type,
       resourceId: vmid,
-      details: { node, connectionId: id },
+      details: { node, connectionId: id, ipamReleaseError: ipamWarning },
     })
 
     return NextResponse.json({
       success: true,
       data: result,
-      message: `VM ${vmid} supprimée avec succès`
+      message: `VM ${vmid} supprimée avec succès`,
+      ...(ipamWarning ? { warning: ipamWarning } : {}),
     })
   } catch (e: any) {
     console.error("[DELETE VM] Error:", e)

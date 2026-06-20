@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
+import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getDateLocale } from "@/lib/i18n/date"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -32,11 +32,14 @@ return {
 
 async function getConnection(id: string) {
   // Use the shared helper so vDC tenants reach provider-owned connections
-  // through their vDC scope instead of getting a tenant-scoped 404.
+  // through their vDC scope. Only a genuine not-found becomes a 404; real
+  // DB/infra errors propagate to the outer catch (500) instead of being
+  // masked as a tenant-scoped 404.
   try {
     return await getConnectionById(id)
-  } catch {
-    return null
+  } catch (e) {
+    if (isConnectionNotFoundError(e)) return null
+    throw e
   }
 }
 

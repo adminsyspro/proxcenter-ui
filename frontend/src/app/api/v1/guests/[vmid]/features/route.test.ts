@@ -4,6 +4,9 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
+  // Real pure helper: matches the production "connection not found" detection.
+  isConnectionNotFoundError: (err: unknown) =>
+    /connection not found/i.test((err as { message?: string } | null)?.message || ''),
 }))
 
 vi.mock('@/lib/proxmox/client', () => ({
@@ -90,7 +93,7 @@ describe('GET /api/v1/guests/[vmid]/features', () => {
   })
 
   it('404 when the connection cannot be resolved for lxc', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('nope'))
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await callRoute(GET as any, {
       method: 'GET',
       params: { vmid: LXC_VM_KEY },
@@ -101,29 +104,41 @@ describe('GET /api/v1/guests/[vmid]/features', () => {
     expect(body.error).toMatch(/not found/i)
   })
 
-  it('returns hasFeature: false (not 500) when pveFetch throws', async () => {
+  it('500 when getConnection fails with a non-not-found error (no longer masked)', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('DB error'))
+    const res = await callRoute(GET as any, {
+      method: 'GET',
+      params: { vmid: LXC_VM_KEY },
+      searchParams: { feature: 'snapshot' },
+    })
+    expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toMatch(/DB error/i)
+  })
+
+  it('500 with the error message when pveFetch throws', async () => {
     pveFetchMock.mockRejectedValue(new Error('PVE unreachable'))
     const res = await callRoute(GET as any, {
       method: 'GET',
       params: { vmid: LXC_VM_KEY },
       searchParams: { feature: 'snapshot' },
     })
-    // The handler catches all errors and returns hasFeature: false, never a 500
-    expect(res.status).toBe(200)
+    // A real PVE error must surface as a 500, not be masked as hasFeature: false
+    expect(res.status).toBe(500)
     const body = await readJson<any>(res)
-    expect(body.data.hasFeature).toBe(false)
+    expect(body.error).toMatch(/PVE unreachable/i)
   })
 
-  it('returns hasFeature: false (not 500) on a malformed vmKey', async () => {
+  it('400 on a malformed vmKey', async () => {
     const res = await callRoute(GET as any, {
       method: 'GET',
       params: { vmid: 'bad-key' },
       searchParams: { feature: 'snapshot' },
     })
-    // parseVmKey throws, caught by outer try/catch, returns hasFeature: false
-    expect(res.status).toBe(200)
+    // parseVmKey throws "Invalid vmKey ..." which is a client error
+    expect(res.status).toBe(400)
     const body = await readJson<any>(res)
-    expect(body.data.hasFeature).toBe(false)
+    expect(body.error).toMatch(/invalid vmkey/i)
   })
 
   it('url-encodes the feature name in the PVE api path', async () => {

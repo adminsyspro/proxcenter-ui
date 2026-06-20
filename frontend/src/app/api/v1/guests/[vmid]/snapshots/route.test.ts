@@ -8,6 +8,9 @@ vi.mock('next/headers', () => ({
 
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
+  // Real pure helper: matches the production "connection not found" detection.
+  isConnectionNotFoundError: (err: unknown) =>
+    /connection not found/i.test((err as { message?: string } | null)?.message || ''),
 }))
 
 vi.mock('@/lib/proxmox/client', () => ({
@@ -106,12 +109,22 @@ describe('GET /api/v1/guests/[vmid]/snapshots', () => {
   })
 
   it('404 when connection not found', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('not found'))
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await GET(new Request('http://test.local/_'), {
       params: Promise.resolve({ vmid: VM_KEY }),
     })
-    // getConnection wrapper catches and returns null -> 404
+    // getConnection wrapper maps a genuine not-found to null -> 404
     expect(res.status).toBe(404)
+  })
+
+  it('500 when getConnection fails with a non-not-found error (no longer masked as 404)', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('DB error'))
+    const res = await GET(new Request('http://test.local/_'), {
+      params: Promise.resolve({ vmid: VM_KEY }),
+    })
+    expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toMatch(/DB error/i)
   })
 
   it('403 when RBAC denies vm.view', async () => {
@@ -168,7 +181,7 @@ describe('POST /api/v1/guests/[vmid]/snapshots', () => {
   })
 
   it('404 when connection not found', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('not found'))
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await callRoute(POST as any, {
       method: 'POST',
       params: { vmid: VM_KEY },
@@ -295,7 +308,7 @@ describe('DELETE /api/v1/guests/[vmid]/snapshots', () => {
   })
 
   it('404 when connection not found', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('not found'))
+    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
     const res = await callRoute(DELETE as any, {
       method: 'DELETE',
       params: { vmid: VM_KEY },

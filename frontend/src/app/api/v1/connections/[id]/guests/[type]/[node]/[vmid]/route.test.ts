@@ -176,7 +176,7 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
     expect(body.error).toBe('PVE 500')
   })
 
-  it('IPAM release failure is swallowed (does not affect 200 response)', async () => {
+  it('IPAM release failure is surfaced as a warning, VM still deleted', async () => {
     pveFetchMock
       .mockResolvedValueOnce({ status: 'stopped' })
       .mockResolvedValueOnce('UPID:delete:task')
@@ -184,7 +184,19 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
     const res = await DELETE(makeReq(), {
       params: Promise.resolve(baseParams),
     })
-    // Handler catches IPAM errors internally and returns 200 anyway
+    // The VM is already gone in PVE, so we must not fail the request: it still
+    // succeeds (200) but the IPAM failure is reported via body.warning + audit.
     expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.success).toBe(true)
+    expect(body.warning).toMatch(/IPAM release failed/i)
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'delete',
+        details: expect.objectContaining({
+          ipamReleaseError: expect.stringMatching(/IPAM release failed/i),
+        }),
+      })
+    )
   })
 })

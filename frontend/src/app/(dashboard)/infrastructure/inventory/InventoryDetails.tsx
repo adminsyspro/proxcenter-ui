@@ -2347,7 +2347,7 @@ return (
       setConfirmAction({
         action: 'info',
         title: t('common.success'),
-        message: `${t('common.delete')} "${vmName}" ${t('common.success')}`,
+        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${json.warning ? ` (${json.warning})` : ''}`,
         vmName: undefined,
         onConfirm: async () => {
           setConfirmAction(null)

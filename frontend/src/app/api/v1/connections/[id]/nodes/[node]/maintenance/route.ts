@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
+import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { getNodeIp } from "@/lib/ssh/node-ip"
@@ -24,17 +24,17 @@ export async function GET(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    if (!conn) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
 
-    const nodeResources = await pveFetch<any[]>(conn, '/cluster/resources?type=node').catch(() => [])
+    const nodeResources = await pveFetch<any[]>(conn, '/cluster/resources?type=node')
     const nodeResource = (nodeResources || []).find((nr: any) => nr?.node === node)
     const maintenance = nodeResource?.hastate === 'maintenance' ? 'maintenance' : null
 
     return NextResponse.json({ data: { maintenance } })
   } catch (e: any) {
     console.error("[maintenance] GET Error:", e?.message)
+    if (isConnectionNotFoundError(e)) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: e?.message || "Failed to get maintenance status" }, { status: 500 })
   }
 }
@@ -56,9 +56,6 @@ export async function POST(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    if (!conn) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
 
     const nodeIp = await getNodeIp(conn, node)
     const command = `ha-manager crm-command node-maintenance enable ${node}`
@@ -76,6 +73,9 @@ export async function POST(
     }
   } catch (e: any) {
     console.error("[maintenance] POST Error:", e?.message)
+    if (isConnectionNotFoundError(e)) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: e?.message || "Failed to enter maintenance mode" }, { status: 500 })
   }
 }
@@ -97,9 +97,6 @@ export async function DELETE(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    if (!conn) {
-      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-    }
 
     const nodeIp = await getNodeIp(conn, node)
     const command = `ha-manager crm-command node-maintenance disable ${node}`
@@ -117,6 +114,9 @@ export async function DELETE(
     }
   } catch (e: any) {
     console.error("[maintenance] DELETE Error:", e?.message)
+    if (isConnectionNotFoundError(e)) {
+      return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: e?.message || "Failed to exit maintenance mode" }, { status: 500 })
   }
 }

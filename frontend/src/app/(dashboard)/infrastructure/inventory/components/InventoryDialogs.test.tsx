@@ -29,6 +29,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -515,9 +516,10 @@ describe('InventoryDialogs', () => {
 
     // The VGA select: first combobox in the dialog is the VGA type selector
     const comboboxes = screen.getAllByRole('combobox')
-    // The VGA type combobox should be present
-    expect(comboboxes.length).toBeGreaterThanOrEqual(1)
-    // Open first combobox (VGA type selector)
+    // With value='std' (a MEMORY_CAPABLE type), both the VGA-type Select ([0])
+    // and the clipboard Select ([1]) render, so we expect at least 2 comboboxes.
+    expect(comboboxes.length).toBeGreaterThanOrEqual(2)
+    // Open first combobox (VGA type selector); [1] is the clipboard Select
     fireEvent.mouseDown(comboboxes[0])
 
     const noneOption = screen.getByRole('option', { name: 'None' })
@@ -531,8 +533,14 @@ describe('InventoryDialogs', () => {
     const props = makeProps({ createBackupDialogOpen: true })
     renderWithProviders(<InventoryDialogs {...props} />)
 
-    const backupTexts = screen.getAllByText('Backup')
-    expect(backupTexts.length).toBeGreaterThanOrEqual(1)
+    const dialog = screen.getByRole('dialog')
+    // The backup dialog heading ("Backup") is an <h2> scoped to this dialog.
+    // Asserting via getByRole('heading') confirms the backup dialog opened, not
+    // just that the word "Backup" appeared somewhere on the page.
+    expect(within(dialog).getByRole('heading', { name: /^backup$/i })).toBeInTheDocument()
+    // The "Note (optional)" textarea is unique to the backup dialog; its <label>
+    // is linked via for/id so getByRole resolves it as a named textbox.
+    expect(within(dialog).getByRole('textbox', { name: 'Note (optional)' })).toBeInTheDocument()
   })
 
   // 10. deleteVmDialog

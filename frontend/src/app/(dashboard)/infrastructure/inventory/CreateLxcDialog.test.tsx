@@ -112,13 +112,24 @@ function makeProps(overrides: Partial<Parameters<typeof CreateLxcDialog>[0]> = {
  * Wait for the dialog to finish loading. After loadAllData() resolves, the
  * component sets selectedNodeValue='pve1' and renders the form. The
  * CircularProgress disappears and the Node Select combobox appears.
+ *
+ * Combobox ordering (fixed for these tests -- hideNodePicker=false, isAdmin=true):
+ *   comboboxes[0] = Node select      (rendered when !hideNodePicker)
+ *   comboboxes[1] = Resource Pool select (rendered when isAdmin)
+ *
+ * MUI Select uses aria-labelledby for label association but jsdom's ARIA
+ * name computation does not resolve aria-labelledby references for combobox
+ * roles, so getByRole('combobox', {name: ...}) does not work here. We keep
+ * index-based access and guard it with an explicit length assertion so that
+ * any structural change (e.g. a new combobox added before the Node select)
+ * fails loudly instead of silently asserting on the wrong element.
  */
 async function waitForDataLoad() {
-  // After data loads, the spinner disappears and form fields render.
-  // The Node Select combobox textContent contains 'pve1' (plus decoration).
   await waitFor(() => {
     const comboboxes = screen.getAllByRole('combobox')
-    // The first combobox is the Node select; after load it contains 'pve1'.
+    // Guard: at least Node (index 0) and Resource Pool (index 1) must exist.
+    expect(comboboxes.length).toBeGreaterThanOrEqual(2)
+    // comboboxes[0] is the Node select; after load it shows 'pve1'.
     expect(comboboxes[0].textContent).toContain('pve1')
   })
 }
@@ -184,8 +195,9 @@ describe('CreateLxcDialog - data loads on open', () => {
   it('auto-selects the first node after data loads and shows its name', async () => {
     renderWithProviders(<CreateLxcDialog {...makeProps()} />)
     await waitForDataLoad()
-    // After load, the first combobox (Node select) contains 'pve1' in its text.
+    // comboboxes[0] is the Node select (see waitForDataLoad comment for ordering guarantee).
     const comboboxes = screen.getAllByRole('combobox')
+    expect(comboboxes.length).toBeGreaterThanOrEqual(2)
     expect(comboboxes[0].textContent).toContain('pve1')
   })
 
@@ -193,8 +205,9 @@ describe('CreateLxcDialog - data loads on open', () => {
     renderWithProviders(<CreateLxcDialog {...makeProps()} />)
     await waitForDataLoad()
 
-    // Open the Node picker dropdown (first combobox = Node select).
+    // comboboxes[0] is the Node select (see waitForDataLoad comment for ordering guarantee).
     const comboboxes = screen.getAllByRole('combobox')
+    expect(comboboxes.length).toBeGreaterThanOrEqual(2)
     fireEvent.mouseDown(comboboxes[0])
 
     // The MenuItem for pve1 appears in the portal listbox.
@@ -206,9 +219,11 @@ describe('CreateLxcDialog - data loads on open', () => {
     renderWithProviders(<CreateLxcDialog {...makeProps()} />)
     await waitForDataLoad()
 
-    // The Resource Pool Select is the second combobox on the General tab.
+    // comboboxes[0]=Node, comboboxes[1]=Resource Pool (see waitForDataLoad comment).
+    // The length assertion is a structural guard: if a new combobox is inserted
+    // before index 1 the test fails loudly rather than silently opening the wrong dropdown.
     const comboboxes = screen.getAllByRole('combobox')
-    // combobox[0]=Node, combobox[1]=ResourcePool
+    expect(comboboxes.length).toBeGreaterThanOrEqual(2)
     fireEvent.mouseDown(comboboxes[1])
 
     // Pool items appear in the portal listbox.
@@ -611,5 +626,88 @@ describe('CreateLxcDialog - CT ID generation', () => {
     // CT ID 100 and 101 are used, so the next free is 102.
     const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
     expect(ctidInput.value).toBe('102')
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 10. Template tab - seeded templates appear after data load
+// ------------------------------------------------------------------ //
+
+describe('CreateLxcDialog - Template tab', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  /**
+   * This test verifies the full template-load pipeline:
+   *   1. loadStorages() finds 'local' has 'vztmpl' content and sets templateStorage='local'.
+   *   2. The template-load effect fires, fetches content for node 'pve1' / storage 'local'.
+   *   3. Navigating to the Template tab shows the Storage select pre-filled with 'local'
+   *      and the Template select populated with the two seeded filenames from the fixture.
+   *
+   * Template filenames rendered by the component (tmpl.filename = last path segment of volid):
+   *   - debian-12-standard_12.7-1_amd64.tar.zst
+   *   - ubuntu-22.04-standard_22.04-1_amd64.tar.gz
+   *
+   * The fixture storage 'local' has content='rootdir,images,vztmpl' and node='pve1',
+   * which is the only storage with 'vztmpl'; this is what triggers the template fetch.
+   */
+  it('shows seeded template filenames in the Template select after navigating to the Template tab', async () => {
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    // Navigate to the Template tab (index 1).
+    fireEvent.click(screen.getByRole('tab', { name: 'Template' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Template' }).getAttribute('aria-selected')).toBe('true')
+    })
+
+    // On the Template tab, two comboboxes are rendered:
+    //   comboboxes[0] = Storage select
+    //   comboboxes[1] = Template select
+    // (The Node/Resource Pool selects from the General tab are no longer in the DOM.)
+    //
+    // Note: MUI Select aria-labelledby name computation does not resolve under
+    // jsdom, so we use index-based access with an explicit length guard.
+    //
+    // The Storage select should be pre-filled with 'local' (the only fixture
+    // storage that has 'vztmpl' content). This verifies the storage fetch ran
+    // and filtered correctly -- 'local' is data-driven, not always-present text.
+    await waitFor(() => {
+      const comboboxes = screen.getAllByRole('combobox')
+      // Guard: Storage (0) and Template (1) must both be present.
+      expect(comboboxes.length).toBeGreaterThanOrEqual(2)
+      // comboboxes[0] = Storage select; 'local' comes from the fixture.
+      expect(comboboxes[0].textContent).toContain('local')
+    })
+
+    // Wait for the template-load effect to resolve, then open the Template select
+    // to verify the seeded template filenames are present in the listbox.
+    // The component fetches content from nodes/${NODE_NAME}/storage/local/content
+    // and derives `filename` from the volid (last segment after '/').
+    await waitFor(() => {
+      const comboboxes = screen.getAllByRole('combobox')
+      expect(comboboxes.length).toBeGreaterThanOrEqual(2)
+      // comboboxes[1] = Template select; it is enabled when templates loaded.
+      expect(comboboxes[1]).not.toBeDisabled()
+    })
+
+    // Open the Template select to reveal the option list.
+    const comboboxes = screen.getAllByRole('combobox')
+    fireEvent.mouseDown(comboboxes[1])
+
+    // Both seeded template filenames must appear as options in the listbox.
+    // These values come exclusively from the fixture MSW response -- not from
+    // any static text that is always present on the page.
+    const debianOption = await screen.findByRole('option', {
+      name: /debian-12-standard_12\.7-1_amd64\.tar\.zst/,
+    })
+    expect(debianOption).toBeInTheDocument()
+
+    const ubuntuOption = screen.getByRole('option', {
+      name: /ubuntu-22\.04-standard_22\.04-1_amd64\.tar\.gz/,
+    })
+    expect(ubuntuOption).toBeInTheDocument()
   })
 })

@@ -112,8 +112,6 @@ describe('VmsTable - density toggle', () => {
     const { container } = renderWithProviders(
       <VmsTable vms={vmRowsFixture} showDensityToggle />,
     )
-    // The toolbar contains a Box with "Compact" text
-    const toolbar = container.querySelector('.MuiBox-root')
     // Find the element containing exactly "Compact" in the toolbar
     const allTexts = Array.from(container.querySelectorAll('*')).filter(
       el => el.textContent?.trim() === 'Compact' && el.children.length <= 1,
@@ -194,7 +192,7 @@ describe('VmsTable - action buttons', () => {
     expect(rowButtons.length).toBeGreaterThan(0)
   })
 
-  it('Start button (index 0) is disabled for running vm', () => {
+  it('Start button is disabled and Shutdown enabled for running vm', () => {
     const cbs = makeCallbacks()
     const { container } = renderWithProviders(
       <VmsTable
@@ -205,10 +203,11 @@ describe('VmsTable - action buttons', () => {
       />,
     )
     const rowButtons = container.querySelectorAll<HTMLButtonElement>('.MuiDataGrid-row button')
-    // First button in the row is the favorite star (column 1), second group is actions
-    // Find the first disabled button - Start is disabled when running
-    const disabledBtn = Array.from(rowButtons).find(b => b.disabled)
-    expect(disabledBtn).toBeDefined()
+    // Button order (desktop, matchMedia matches:false): [0]=favorite-star, [1]=Start, [2]=Shutdown,
+    //   [3]=Stop, [4]=Pause, [5]=Console, [6]=Migrate, [7]=Details
+    // web-01 is 'running': Start (index 1) must be disabled, Shutdown (index 2) must be enabled.
+    expect(rowButtons[1].disabled).toBe(true)   // Start: disabled when running
+    expect(rowButtons[2].disabled).toBe(false)  // Shutdown: enabled when running
   })
 
   it('clicking Shutdown on running vm fires onVmAction with "shutdown"', () => {
@@ -306,14 +305,11 @@ describe('VmsTable - action buttons', () => {
         onVmAction={cbs.onVmAction}
       />,
     )
-    // With showActions=false, the only row button is the favorite star
+    // With showActions=false the only row button is the favorite star (no start/stop/migrate).
     const rowButtons = container.querySelectorAll<HTMLButtonElement>('.MuiDataGrid-row button')
-    // Favorite column always renders a star button; that is all there should be
-    // (showActions=false means no start/stop/migrate buttons)
-    // Verify onVmAction is never called from the star button
-    if (rowButtons.length > 0) {
-      fireEvent.click(rowButtons[0])
-    }
+    expect(rowButtons.length).toBe(1)  // only the favorite star
+    // Clicking the star must not trigger onVmAction (it calls onToggleFavorite instead).
+    fireEvent.click(rowButtons[0])
     expect(cbs.onVmAction).not.toHaveBeenCalled()
   })
 })
@@ -518,7 +514,7 @@ describe('VmsTable - trend column absent by default', () => {
 // ------------------------------------------------------------------ //
 
 describe('VmsTable - context menu', () => {
-  it('does not crash on contextmenu event on a row', () => {
+  it('opens the internal context menu on contextmenu event on a row', () => {
     const { container } = renderWithProviders(
       <VmsTable
         vms={[vmRowsFixture[0]]}
@@ -526,14 +522,16 @@ describe('VmsTable - context menu', () => {
         onMigrate={vi.fn()}
       />,
     )
+    // Capture baseline: 'web-01' appears once in the DataGrid cell before the menu opens.
+    const before = screen.getAllByText('web-01').length
     const row = container.querySelector('.MuiDataGrid-row')
-    if (row) {
-      fireEvent.contextMenu(row)
-    }
-    // After contextmenu the MUI Menu opens and renders the vm name in its header.
-    // Use getAllByText to handle both the grid cell and the menu header.
-    const nameEls = screen.getAllByText('web-01')
-    expect(nameEls.length).toBeGreaterThan(0)
+    expect(row).not.toBeNull()
+    fireEvent.contextMenu(row!)
+    // After contextmenu, VmsTable opens an internal MUI Menu whose header renders the
+    // vm name (contextMenu?.vm.name). The count must increase because the menu header
+    // adds a second occurrence -- proving the menu actually opened, not just the grid cell.
+    const after = screen.getAllByText('web-01').length
+    expect(after).toBeGreaterThan(before)
   })
 })
 

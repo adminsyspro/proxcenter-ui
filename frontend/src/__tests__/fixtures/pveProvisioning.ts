@@ -92,3 +92,29 @@ export const vmStorage = [
  * means vdcQuota stays null and all quota checks pass unconditionally.
  */
 export const vdcs: unknown[] = []
+
+// ------------------------------------------------------------------ //
+// RestoreVmDialog additions (EXTEND-only -- do NOT mutate exports above)
+// ------------------------------------------------------------------ //
+
+/**
+ * resources: a minimal slice of the /api/v1/connections/:id/resources
+ * response used by RestoreVmDialog to populate usedVmIds. Each entry
+ * must carry a numeric vmid field. We seed one VM (100) as already existing
+ * so the dialog auto-enables the "Unique MACs" toggle for VMID 100.
+ */
+export const resources = [
+  { vmid: 100, name: 'test-vm', status: 'running', type: 'qemu', node: 'pve1' },
+]
+
+/**
+ * backupRef: a minimal BackupRef using the volid path so the dialog does not
+ * fall through to the "Backup reference incomplete" error branch. The volid
+ * is a valid PVE backup volume reference that the backend accepts directly
+ * without PBS coordinate resolution.
+ */
+export const backupRef = {
+  volid: 'local:backup/vzdump-qemu-100-2025_01_15-10_00_00.vma.zst',
+  vmid: 100,
+  backupTime: 1736935200,
+}

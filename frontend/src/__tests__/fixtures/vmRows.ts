@@ -1,0 +1,67 @@
+import type { VmRow } from '@/components/VmsTable'
+
+/**
+ * Static fixture for VmsTable tests.
+ * Covers: running qemu with tags + ip + snapshots, stopped lxc, template, locked vm.
+ */
+export const vmRowsFixture: VmRow[] = [
+  {
+    id: 'conn1:100',
+    connId: 'conn1',
+    node: 'pve1',
+    vmid: 100,
+    name: 'web-01',
+    type: 'qemu',
+    status: 'running',
+    cpu: 42,
+    maxcpu: 4,
+    ram: 65,
+    maxmem: 8589934592,
+    disk: 21474836480,
+    maxdisk: 107374182400,
+    uptime: 7200,
+    ip: '192.168.1.10',
+    snapshots: 2,
+    tags: ['prod', 'web'],
+    isCluster: true,
+    hastate: 'started',
+    hagroup: 'ha-group1',
+  },
+  {
+    id: 'conn1:101',
+    connId: 'conn1',
+    node: 'pve1',
+    vmid: 101,
+    name: 'db-lxc',
+    type: 'lxc',
+    status: 'stopped',
+    maxmem: 4294967296,
+    maxdisk: 21474836480,
+    tags: ['db'],
+    isCluster: true,
+  },
+  {
+    id: 'conn1:200',
+    connId: 'conn1',
+    node: 'pve1',
+    vmid: 200,
+    name: 'ubuntu-template',
+    type: 'qemu',
+    status: 'stopped',
+    template: true,
+    maxmem: 2147483648,
+    maxdisk: 21474836480,
+  },
+  {
+    id: 'conn1:102',
+    connId: 'conn1',
+    node: 'pve1',
+    vmid: 102,
+    name: 'locked-vm',
+    type: 'qemu',
+    status: 'stopped',
+    lock: 'migrate',
+    maxmem: 4294967296,
+    maxdisk: 21474836480,
+  },
+]

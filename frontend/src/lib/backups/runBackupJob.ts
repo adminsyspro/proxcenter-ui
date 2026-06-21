@@ -9,15 +9,14 @@
  * `Unexpected token '<', "<!DOCTYPE "... is not valid JSON`
  * (issue #397, discussion #396).
  *
- * This helper (a) uses the correct URL and (b) reads the body defensively so
- * any future non-JSON response (an HTML error page from a reverse proxy, a
- * 404/502/504) surfaces a clean HTTP error instead of a JSON-parse exception.
+ * The defensive body parsing now lives in {@link fetchJsonSafe}, shared with
+ * the rest of the backup panel so any non-JSON response (an HTML error page
+ * from a reverse proxy, a 404/502/504) surfaces a clean HTTP error instead of
+ * a JSON-parse exception.
  */
-export interface RunBackupJobResult {
-  ok: boolean
-  error?: string
-  data?: unknown
-}
+import { fetchJsonSafe, type JsonResult } from "@/lib/api/fetchJsonSafe"
+
+export type RunBackupJobResult = JsonResult
 
 export async function runBackupJobNow(
   connectionId: string,
@@ -25,24 +24,5 @@ export async function runBackupJobNow(
   fetchImpl: typeof fetch = fetch,
 ): Promise<RunBackupJobResult> {
   const url = `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/${encodeURIComponent(jobId)}?action=run`
-  const res = await fetchImpl(url, { method: 'POST' })
-
-  const text = await res.text()
-  let body: { error?: string; data?: unknown } | undefined
-
-  if (text) {
-    try {
-      body = JSON.parse(text)
-    } catch {
-      // Non-JSON body (HTML error page, wrong path). Don't let JSON.parse
-      // leak its cryptic "Unexpected token '<'" message to the user.
-      return { ok: false, error: `HTTP ${res.status}` }
-    }
-  }
-
-  if (!res.ok || body?.error) {
-    return { ok: false, error: body?.error || `HTTP ${res.status}` }
-  }
-
-  return { ok: true, data: body?.data }
+  return fetchJsonSafe(url, { method: "POST" }, fetchImpl)
 }

@@ -36,6 +36,13 @@ import { useTranslations, useLocale } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
 import { runBackupJobNow } from '@/lib/backups/runBackupJob'
+import {
+  loadBackupJobs,
+  loadBackupVms,
+  saveBackupJob,
+  deleteBackupJob,
+  toggleBackupJob,
+} from '@/lib/backups/backupJobsApi'
 
 interface BackupJob {
   id: string
@@ -171,24 +178,24 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     setError(null)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs`)
-      const json = await res.json()
+      const result = await loadBackupJobs(connectionId)
 
-      if (json.error) {
-        setError(json.error)
-        onError?.(json.error)
+      if (!result.ok) {
+        const msg = result.error || t('inventory.failedToLoadBackupJobs')
+        setError(msg)
+        onError?.(msg)
       } else {
         // Les jobs sont déjà parsés par l'API (selectionMode, vmids, excludedVmids)
         // On s'assure juste que les vmids sont des nombres pour le formulaire
-        const parsedJobs = (json.data?.jobs || []).map((job: any) => ({
+        const parsedJobs = ((result.data?.jobs as any[]) || []).map((job: any) => ({
           ...job,
           vmids: (job.vmids || []).map((v: any) => Number(v)).filter((v: number) => !Number.isNaN(v)),
           excludedVmids: (job.excludedVmids || []).map((v: any) => Number(v)).filter((v: number) => !Number.isNaN(v))
         }))
 
         setJobs(parsedJobs)
-        setStorages(json.data?.storages || [])
-        setNodes(json.data?.nodes || [])
+        setStorages((result.data?.storages as any[]) || [])
+        setNodes((result.data?.nodes as any[]) || [])
       }
     } catch (e: any) {
       const msg = e?.message || t('inventory.failedToLoadBackupJobs')
@@ -204,11 +211,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     if (!connectionId) return
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connectionId)}/resources?type=vm`)
-      const json = await res.json()
+      const result = await loadBackupVms(connectionId)
 
-      if (!json.error) {
-        const allVms = (json.data || []).filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
+      if (result.ok) {
+        const allVms = ((result.data as any[]) || []).filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
         setVms(allVms.map((vm: any) => ({
           vmid: vm.vmid,
           name: vm.name,
@@ -317,20 +323,15 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     setError(null)
 
     try {
-      const url = dialogMode === 'create'
-        ? `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs`
-        : `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/${encodeURIComponent(editingJob?.id || '')}`
+      const result = await saveBackupJob(
+        connectionId,
+        dialogMode === 'create' ? 'create' : 'edit',
+        editingJob?.id || '',
+        formData
+      )
 
-      const res = await fetch(url, {
-        method: dialogMode === 'create' ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      const json = await res.json()
-
-      if (json.error) {
-        setError(json.error)
+      if (!result.ok) {
+        setError(result.error || t('inventory.failedToSaveBackupJob'))
       } else {
         setDialogOpen(false)
         loadJobs()
@@ -349,15 +350,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     setDeleting(true)
 
     try {
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/${encodeURIComponent(jobToDelete.id)}`,
-        { method: 'DELETE' }
-      )
+      const result = await deleteBackupJob(connectionId, jobToDelete.id)
 
-      const json = await res.json()
-
-      if (json.error) {
-        setError(json.error)
+      if (!result.ok) {
+        setError(result.error || t('inventory.failedToDeleteBackupJob'))
       } else {
         setDeleteDialogOpen(false)
         setJobToDelete(null)
@@ -373,18 +369,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   // Toggle enabled
   const handleToggleEnabled = async (job: BackupJob) => {
     try {
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connectionId)}/backup-jobs/${encodeURIComponent(job.id)}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: !job.enabled })
-        }
-      )
+      const result = await toggleBackupJob(connectionId, job.id, !job.enabled)
 
-      const json = await res.json()
-
-      if (!json.error) {
+      if (result.ok) {
         loadJobs()
       }
     } catch (e) {

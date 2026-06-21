@@ -34,10 +34,12 @@
 
 ## Overview
 
-**ProxCenter** is a modern web interface for monitoring, managing, and optimizing Proxmox VE infrastructure. Multi-cluster management, cross-hypervisor migration, workload balancing, and more — from a single pane of glass.
+<p align="center">
+  <strong>ProxCenter</strong> is a modern web interface for monitoring, managing, and optimizing Proxmox VE infrastructure. Multi-cluster management, cross-hypervisor migration, workload balancing, and more, all from a single pane of glass.
+</p>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
+  <img src="docs/screenshots/multi-cluster-inventory.png" alt="Multi-cluster Inventory" width="100%">
 </p>
 
 ---
@@ -56,7 +58,40 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
 
 ## Features
 
-[See the full feature comparison (Community vs Enterprise)](https://proxcenter.io/#comparison)
+- **Multi-cluster management**: monitor and operate every Proxmox cluster from one console
+- **Inventory & topology**: nodes, guests, storage, networks, and the Ceph CRUSH tree at a glance
+- **Cross-hypervisor migration**: bring VMs over from VMware, Hyper-V, Nutanix, and XCP-ng, including warm (CBT) migration
+- **In-browser consoles**: noVNC and SPICE for QEMU guests
+- **Backups & replication**: fleet-wide visibility and reporting
+- **RBAC & SSO**: granular roles and scopes
+- **DRS workload balancing** *(Enterprise)*: automatic load distribution via the Go orchestrator
+- **Alerts, reports & notifications** *(Enterprise)*: email digests, severity routing, and scheduled reports
+- **MSP mode** *(Enterprise)*: multi-tenant fleet management with license stacking
+
+See the [documentation](https://docs.proxcenter.io/) for the full feature list and the Community vs Enterprise breakdown.
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/dashboard.png" alt="Modular Dashboard" width="100%"><br><sub><b>Modular Dashboard</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/drs.png" alt="DRS Load Balancing" width="100%"><br><sub><b>DRS Load Balancing</b></sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/migration.png" alt="Hypervisor Migration" width="100%"><br><sub><b>Hypervisor Migration</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/ceph.png" alt="Real-Time Ceph Monitoring" width="100%"><br><sub><b>Real-Time Ceph Monitoring</b></sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/site-recovery.png" alt="Site Recovery" width="100%"><br><sub><b>Site Recovery</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/alerts.png" alt="Multi-channel Alerts" width="100%"><br><sub><b>Multi-channel Alerts</b></sub></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/network-security.png" alt="Micro-segmentation (NSX)" width="100%"><br><sub><b>Micro-segmentation (NSX)</b></sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/topology.png" alt="Network Topology Map" width="100%"><br><sub><b>Network Topology Map</b></sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -66,8 +101,8 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
   <img src="docs/screenshots/architecture.png" alt="Architecture" width="100%">
 </p>
 
-- **Single port** (3000) — HTTP + WebSocket from one process
-- **Nginx optional** — SSL termination + reverse proxy
+- **Single port** (3000): HTTP + WebSocket from one process
+- **Nginx optional**: SSL termination and reverse proxy
 - **Enterprise** adds a Go orchestrator for DRS, alerts, reports, etc.
 
 ---
@@ -77,8 +112,8 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
 After install, ProxCenter runs at `http://your-server:3000`.
 
 Files in `/opt/proxcenter/`:
-- `.env` — Environment variables
-- `config/orchestrator.yaml` — Backend config (Enterprise only)
+- `.env`: Environment variables
+- `config/orchestrator.yaml`: Backend config (Enterprise only)
 
 **Reverse proxy**: Enable the *"Behind reverse proxy"* toggle in connection settings to prevent failover from switching to internal node IPs.
 

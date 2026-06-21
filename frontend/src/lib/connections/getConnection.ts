@@ -179,6 +179,25 @@ export async function getConnectionById(id: string, tenantId?: string): Promise<
   return result
 }
 
+/**
+ * getConnectionById, but tolerant of a missing/denied connection: returns null
+ * for a genuine not-found (so the caller can answer 404) while letting real
+ * DB/crypto/config errors propagate to the caller's 500 path. Centralises the
+ * try/catch wrapper that the guest proxy routes (features, snapshots) shared
+ * verbatim. See isConnectionNotFoundError.
+ */
+export async function getConnectionByIdOrNull(
+  id: string,
+  tenantId?: string
+): Promise<PveConn | null> {
+  try {
+    return await getConnectionById(id, tenantId)
+  } catch (e) {
+    if (isConnectionNotFoundError(e)) return null
+    throw e
+  }
+}
+
 
 /**
  * Loads a PBS connection by id WITHOUT tenant ownership check.

@@ -3,10 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/connections/getConnection', () => ({
-  getConnectionById: vi.fn<(id: string) => Promise<any>>(),
-  // Real pure helper: matches the production "connection not found" detection.
-  isConnectionNotFoundError: (err: unknown) =>
-    /connection not found/i.test((err as { message?: string } | null)?.message || ''),
+  // The not-found vs real-error mapping now lives in getConnectionByIdOrNull
+  // (unit-tested in getConnection.test.ts); the route just consumes its result.
+  getConnectionByIdOrNull: vi.fn<(id: string) => Promise<any>>(),
 }))
 
 vi.mock('@/lib/proxmox/client', () => ({
@@ -14,10 +13,10 @@ vi.mock('@/lib/proxmox/client', () => ({
 }))
 
 import { GET } from './route'
-import { getConnectionById } from '@/lib/connections/getConnection'
+import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 
-const getConnectionByIdMock = getConnectionById as any
+const getConnectionByIdOrNullMock = getConnectionByIdOrNull as any
 const pveFetchMock = pveFetch as any
 
 const QEMU_VM_KEY = 'conn-1:qemu:pve-node-01:101'
@@ -25,7 +24,7 @@ const LXC_VM_KEY = 'conn-1:lxc:pve-node-01:200'
 
 beforeEach(() => {
   vi.clearAllMocks()
-  getConnectionByIdMock.mockResolvedValue({ id: 'conn-1' })
+  getConnectionByIdOrNullMock.mockResolvedValue({ id: 'conn-1' })
 })
 
 describe('GET /api/v1/guests/[vmid]/features', () => {
@@ -93,7 +92,8 @@ describe('GET /api/v1/guests/[vmid]/features', () => {
   })
 
   it('404 when the connection cannot be resolved for lxc', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('Connection not found: conn-1'))
+    // getConnectionByIdOrNull maps a genuine not-found to null
+    getConnectionByIdOrNullMock.mockResolvedValue(null)
     const res = await callRoute(GET as any, {
       method: 'GET',
       params: { vmid: LXC_VM_KEY },
@@ -105,7 +105,7 @@ describe('GET /api/v1/guests/[vmid]/features', () => {
   })
 
   it('500 when getConnection fails with a non-not-found error (no longer masked)', async () => {
-    getConnectionByIdMock.mockRejectedValue(new Error('DB error'))
+    getConnectionByIdOrNullMock.mockRejectedValue(new Error('DB error'))
     const res = await callRoute(GET as any, {
       method: 'GET',
       params: { vmid: LXC_VM_KEY },

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
+import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getDateLocale } from "@/lib/i18n/date"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -30,19 +30,6 @@ return {
   }
 }
 
-async function getConnection(id: string) {
-  // Use the shared helper so vDC tenants reach provider-owned connections
-  // through their vDC scope. Only a genuine not-found becomes a 404; real
-  // DB/infra errors propagate to the outer catch (500) instead of being
-  // masked as a tenant-scoped 404.
-  try {
-    return await getConnectionById(id)
-  } catch (e) {
-    if (isConnectionNotFoundError(e)) return null
-    throw e
-  }
-}
-
 /**
  * GET /api/v1/guests/[vmid]/snapshots
  * Liste les snapshots d'une VM
@@ -65,7 +52,7 @@ export async function GET(
     const cookieStore = await cookies()
     const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
 
-    const conn = await getConnection(connId)
+    const conn = await getConnectionByIdOrNull(connId)
 
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
@@ -135,7 +122,7 @@ export async function POST(
       }, { status: 400 })
     }
 
-    const conn = await getConnection(connId)
+    const conn = await getConnectionByIdOrNull(connId)
 
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
@@ -231,7 +218,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Snapshot name is required" }, { status: 400 })
     }
 
-    const conn = await getConnection(connId)
+    const conn = await getConnectionByIdOrNull(connId)
 
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })

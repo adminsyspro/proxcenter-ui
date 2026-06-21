@@ -24,7 +24,7 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn(() => { throw new Error('getCurrentTenantId must not be called in these tests') }),
 }))
 
-import { getConnectionById, isConnectionNotFoundError } from './getConnection'
+import { getConnectionById, getConnectionByIdOrNull, isConnectionNotFoundError } from './getConnection'
 
 const MSP_CONNECTION = {
   id: 'c-msp',
@@ -93,5 +93,35 @@ describe('isConnectionNotFoundError', () => {
 
   it('returns false for a non-Error value', () => {
     expect(isConnectionNotFoundError('Connection not found')).toBe(false)
+  })
+})
+
+describe('getConnectionByIdOrNull', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFindFirst.mockResolvedValue(null)
+  })
+
+  it('returns the connection when it resolves', async () => {
+    mockFindUnique.mockResolvedValue({ ...MSP_CONNECTION, id: 'c-ok', tenantId: 't-ok' })
+
+    const result = await getConnectionByIdOrNull('c-ok', 't-ok')
+
+    expect(result).not.toBeNull()
+    expect(result?.id).toBe('c-ok')
+  })
+
+  it('returns null for a genuine not-found error', async () => {
+    mockFindUnique.mockResolvedValue(null)
+
+    const result = await getConnectionByIdOrNull('c-missing', 't-x')
+
+    expect(result).toBeNull()
+  })
+
+  it('rethrows a non-not-found error (config/infra) instead of swallowing it', async () => {
+    mockFindUnique.mockResolvedValue({ ...MSP_CONNECTION, id: 'c-nobase', tenantId: 't-nb', baseUrl: null })
+
+    await expect(getConnectionByIdOrNull('c-nobase', 't-nb')).rejects.toThrow(/baseUrl/)
   })
 })

@@ -129,6 +129,26 @@ describe('GET /api/v1/guests/[vmid]/features', () => {
     expect(body.error).toMatch(/PVE unreachable/i)
   })
 
+  it('sanitizes CR/LF out of the logged error message (log injection)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      pveFetchMock.mockRejectedValue(new Error('boom\r\nFAKE 200 OK injected log line'))
+      const res = await callRoute(GET as any, {
+        method: 'GET',
+        params: { vmid: LXC_VM_KEY },
+        searchParams: { feature: 'snapshot' },
+      })
+      expect(res.status).toBe(500)
+      // The message is logged through safeLog: no raw CR/LF reaches the log line
+      expect(errSpy).toHaveBeenCalledTimes(1)
+      const loggedArg = String(errSpy.mock.calls[0][1])
+      expect(loggedArg).not.toMatch(/[\r\n]/)
+      expect(loggedArg).toContain('FAKE 200 OK injected log line')
+    } finally {
+      errSpy.mockRestore()
+    }
+  })
+
   it('400 on a malformed vmKey', async () => {
     const res = await callRoute(GET as any, {
       method: 'GET',

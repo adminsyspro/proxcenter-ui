@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
+import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
 
@@ -62,7 +63,7 @@ export async function GET(
       data: { hasFeature: !!result?.hasFeature }
     })
   } catch (e: any) {
-    console.error("Feature check error:", e?.message)
+    console.error("Feature check error:", safeLog(e?.message))
     const status = /invalid vmkey/i.test(e?.message || "") ? 400 : 500
     return NextResponse.json({ error: e?.message || "Feature check failed" }, { status })
   }

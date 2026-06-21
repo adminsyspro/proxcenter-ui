@@ -103,7 +103,7 @@
     "eslint-plugin-import": "2.31.0",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.15",
     "postcss-styled-syntax": "0.7.1",
     "prettier": "3.8.1",
     "stylelint": "17.13.0",

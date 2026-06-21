@@ -100,13 +100,15 @@ WORKDIR /app
 # root, before the USER switch further down.
 RUN apk upgrade --no-cache libssl3 libcrypto3
 
-# Patch npm to a version whose bundled dependencies clear the latest
-# CVE round (tar < 7.5.16 / CVE-2026-53655 PAX header smuggling, plus the
-# bundled undici advisories CVE-2026-12151 et al.). Pinning the version
-# keeps the build reproducible; bump this line when a newer bundle
-# becomes available. The npm cache is wiped afterwards so the layer does
-# not grow.
-RUN npm install -g npm@11.17.0 && npm cache clean --force
+# Remove npm/npx from the runtime image. The app never invokes them at
+# run time (docker-entrypoint.sh runs the Prisma CLI via `node
+# node_modules/prisma/build/index.js` directly, and start.js spawns no
+# npm), so the global npm under /usr/local/lib only contributes its
+# bundled dependencies (undici, tar, ...) to the Trivy attack surface
+# without being reachable. Dropping it clears those findings at the
+# source instead of chasing each npm bundle bump, and trims the image.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

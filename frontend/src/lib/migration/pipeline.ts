@@ -27,6 +27,7 @@ import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from 
 import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
+import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -520,7 +521,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Build streaming script: curl pipes directly to dd on block device
       // status=progress makes dd write periodic progress to stderr
       await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk --fail -b '${safeCookie}' '${vmdkUrl}' 2>"${stderrFile}" | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\nCURL_EXIT=\${PIPESTATUS[0]}\nDD_EXIT=\${PIPESTATUS[1]}\nif [ \$CURL_EXIT -ne 0 ]; then echo \$CURL_EXIT > "${pidFile}.exit"; else echo \$DD_EXIT > "${pidFile}.exit"; fi\nDLEOF`
+        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk --fail -b '${safeCookie}' '${vmdkUrl}' 2>"${stderrFile}" | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\n${capturePipelineStatus()}\n${writePipelineExit(pidFile + ".exit")}\nDLEOF`
       )
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,
@@ -716,7 +717,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const sshCmd = `${sshPrefix} -p ${esxiSshPort} ${esxiSshUser}@${esxiHost} "dd if='${downloadPath}' bs=4M" | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"`
 
       await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${dlScript}" << 'DLEOF'\n${setupCmd}\n${sshCmd}\nSSH_EXIT=\${PIPESTATUS[0]}\nDD_EXIT=\${PIPESTATUS[1]}\n${cleanupCmd}\nif [ \$SSH_EXIT -ne 0 ]; then echo \$SSH_EXIT > "${pidFile}.exit"; else echo \$DD_EXIT > "${pidFile}.exit"; fi\nDLEOF`
+        `cat > "${dlScript}" << 'DLEOF'\n${setupCmd}\n${sshCmd}\n${capturePipelineStatus()}\n${cleanupCmd}\n${writePipelineExit(pidFile + ".exit")}\nDLEOF`
       )
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,

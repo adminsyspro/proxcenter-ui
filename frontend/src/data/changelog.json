@@ -1,5 +1,24 @@
 [
   {
+    "version": "1.4.4",
+    "title": "Stability, security & shared migration tasks",
+    "items": [
+      { "type": "new", "text": "Header tenant switcher with per-tenant dashboards for MSP: switch the active tenant from the navbar and see dashboards scoped to that tenant" },
+      { "type": "new", "text": "Shared migration tasks in the footer, visible across users so the whole team sees in-flight migrations, with a warm-setup docs link" },
+      { "type": "improved", "text": "VM console screenshots are served as JPEG instead of raw PPM, for lighter and faster previews" },
+      { "type": "fix", "text": "RRD performance charts show dates on the axes for multi-day timeframes, not just times" },
+      { "type": "fix", "text": "The Backups tab surfaces the real gateway error instead of failing with \"Unexpected token '<'\" when a proxy returns an HTML error page" },
+      { "type": "fix", "text": "A failed migration block-device transfer is reported as a failure instead of being masked as success" },
+      { "type": "fix", "text": "Warm migration to a thick target bounds the zero-fill so it can no longer exit on a false ENOSPC" },
+      { "type": "fix", "text": "Guest and node API routes no longer swallow real errors, so failures surface instead of empty data" },
+      { "type": "fix", "text": "OIDC users re-sync their role from IdP group membership on every login, so group changes take effect immediately" },
+      { "type": "fix", "text": "RRD performance graphs are scoped to the resource rather than the whole connection, closing an RBAC scope leak" },
+      { "type": "fix", "text": "The inventory NETWORK section stays stable when a connection briefly blips instead of collapsing" },
+      { "type": "fix", "text": "Replication writes the DR config with cp -f on pmxcfs, avoiding a transient failure window" },
+      { "type": "fix", "text": "Security: removed the unused npm from the runtime image, patched dependency CVEs (undici, OpenSSL on the orchestrator) and refreshed front-end dependencies" }
+    ]
+  },
+  {
     "version": "1.4.3",
     "title": "MSP mode, multi-license stacking & connection diagnostics",
     "items": [

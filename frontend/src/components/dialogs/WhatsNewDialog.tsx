@@ -109,7 +109,7 @@ export default function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <DialogContent dividers sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0, overflowY: 'auto' }}>
         {entries.map((entry, idx) => {
           const isExpanded = expandedVersion === entry.version
           const isLatest = idx === 0
@@ -122,6 +122,7 @@ export default function WhatsNewDialog({ open, onClose }: WhatsNewDialogProps) {
               disableGutters
               elevation={0}
               sx={{
+                flexShrink: 0,
                 border: '1px solid',
                 borderColor: isExpanded
                   ? alpha(theme.palette.primary.main, 0.3)

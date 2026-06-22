@@ -19,7 +19,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
-import { formatBps, fetchDetails } from '../helpers'
+import { formatBps, formatRrdTick, fetchDetails } from '../helpers'
 import ExpandableChart from './ExpandableChart'
 import StorageContentGroup from './StorageContentGroup'
 import { UploadDialog } from '@/components/storage/StorageContentBrowser'
@@ -255,7 +255,7 @@ export default function StorageDetailPanel({
                   >
                     <ChartContainer>
                       <AreaChart data={storageRrdHistory}>
-                        <XAxis dataKey="time" tickFormatter={(v: any) => { const d = new Date(v); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
+                        <XAxis dataKey="time" tickFormatter={(v: any) => formatRrdTick(Number(v), storageRrdTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
                         <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                         <Tooltip
                           wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}

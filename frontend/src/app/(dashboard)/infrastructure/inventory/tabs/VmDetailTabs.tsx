@@ -75,7 +75,7 @@ const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachCo
 const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
+import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
@@ -616,7 +616,7 @@ export default function VmDetailTabs(props: any) {
                                     <stop offset="100%" stopColor="#2196f3" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={25} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
@@ -625,7 +625,7 @@ export default function VmDetailTabs(props: any) {
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#2196f3', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
                                         <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
-                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), tf)}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
@@ -654,7 +654,7 @@ export default function VmDetailTabs(props: any) {
                                     <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={25} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
@@ -663,7 +663,7 @@ export default function VmDetailTabs(props: any) {
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-ram-line" style={{ fontSize: 13, color: '#10b981' }} />
                                         <Typography variant="caption" sx={{ fontWeight: 700, color: '#10b981' }}>Memory</Typography>
-                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), tf)}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => { const v = Number(entry.value); const c = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
@@ -696,7 +696,7 @@ export default function VmDetailTabs(props: any) {
                                     <stop offset="100%" stopColor="#67e8f9" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
@@ -705,7 +705,7 @@ export default function VmDetailTabs(props: any) {
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
                                         <Typography variant="caption" sx={{ fontWeight: 700, color: '#06b6d4' }}>Network</Typography>
-                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), tf)}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => (
@@ -739,7 +739,7 @@ export default function VmDetailTabs(props: any) {
                                     <stop offset="100%" stopColor="#fca5a5" stopOpacity={0} />
                                   </linearGradient>
                                 </defs>
-                                <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                                <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), tf)} minTickGap={40} tick={{ fontSize: 9 }} />
                                 <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                 <Tooltip wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }} content={({ active, payload, label }) => {
                                   if (!active || !payload?.length) return null
@@ -748,7 +748,7 @@ export default function VmDetailTabs(props: any) {
                                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#ef4444', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: '#ef4444' }} />
                                         <Typography variant="caption" sx={{ fontWeight: 700, color: '#ef4444' }}>Disk I/O</Typography>
-                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), tf)}</Typography>
                                       </Box>
                                       <Box sx={{ px: 1.5, py: 0.75 }}>
                                         {payload.map(entry => (

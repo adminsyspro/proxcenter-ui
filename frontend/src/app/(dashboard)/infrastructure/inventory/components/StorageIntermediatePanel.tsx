@@ -23,7 +23,7 @@ import ChartContainer from '@/components/ChartContainer'
 
 import type { InventorySelection } from '../types'
 import ExpandableChart from './ExpandableChart'
-import { pickNumber, fetchRrd } from '../helpers'
+import { pickNumber, fetchRrd, formatRrdTick, formatRrdTooltipTs } from '../helpers'
 import type { TreeClusterStorage } from '../InventoryTree'
 
 export default function StorageIntermediatePanel({ selection, clusterStorages, onSelect }: {
@@ -139,7 +139,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
         >
           <ChartContainer>
             <AreaChart data={points}>
-              <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
+              <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), rrdTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
               <Tooltip
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
@@ -150,7 +150,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(primaryColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-hard-drive-2-line" style={{ fontSize: 13, color: primaryColor }} />
                         <Typography variant="caption" sx={{ fontWeight: 700, color: primaryColor }}>Storage Usage</Typography>
-                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), rrdTimeframe)}</Typography>
                       </Box>
                       <Box sx={{ px: 1.5, py: 0.75 }}>
                         {payload.map(entry => (

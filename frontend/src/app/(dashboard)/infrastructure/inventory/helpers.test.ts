@@ -21,6 +21,9 @@ import {
   pickNumber,
   buildSeriesFromRrd,
   fetchDetails,
+  formatRrdTick,
+  formatRrdTooltipTs,
+  rrdTimeframeFromSeries,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -696,5 +699,80 @@ describe('fetchDetails — cluster allVms isCluster', () => {
     const payload = await fetchDetails({ type: 'cluster', id: connId } as any)
 
     expect(payload?.allVms?.[0].isCluster).toBe(false)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* RRD time-axis formatting (issue #474)                              */
+/* ------------------------------------------------------------------ */
+
+const RRD_TS = Date.UTC(2026, 5, 15, 10, 30) // 2026-06-15 10:30 UTC
+const rrdDate = new Date(RRD_TS)
+
+describe('formatRrdTick', () => {
+  it('shows time only for intraday timeframes (hour, day)', () => {
+    const expected = rrdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    expect(formatRrdTick(RRD_TS, 'hour')).toBe(expected)
+    expect(formatRrdTick(RRD_TS, 'day')).toBe(expected)
+  })
+
+  it('shows a day/month date for multi-day timeframes (week, month)', () => {
+    const expected = rrdDate.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+    expect(formatRrdTick(RRD_TS, 'week')).toBe(expected)
+    expect(formatRrdTick(RRD_TS, 'month')).toBe(expected)
+  })
+
+  it('shows a short month for the year timeframe', () => {
+    expect(formatRrdTick(RRD_TS, 'year')).toBe(rrdDate.toLocaleDateString([], { month: 'short' }))
+  })
+
+  it('renders a different label for week than for hour (date is added)', () => {
+    expect(formatRrdTick(RRD_TS, 'week')).not.toBe(formatRrdTick(RRD_TS, 'hour'))
+  })
+})
+
+describe('formatRrdTooltipTs', () => {
+  it('shows time only for intraday timeframes (hour, day)', () => {
+    const expected = rrdDate.toLocaleTimeString()
+    expect(formatRrdTooltipTs(RRD_TS, 'hour')).toBe(expected)
+    expect(formatRrdTooltipTs(RRD_TS, 'day')).toBe(expected)
+  })
+
+  it('prefixes the date for timeframes wider than a day', () => {
+    const datePart = rrdDate.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+    const timePart = rrdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    expect(formatRrdTooltipTs(RRD_TS, 'week')).toBe(`${datePart} ${timePart}`)
+    expect(formatRrdTooltipTs(RRD_TS, 'month')).toContain(datePart)
+    expect(formatRrdTooltipTs(RRD_TS, 'year')).toContain(datePart)
+  })
+})
+
+describe('rrdTimeframeFromSeries', () => {
+  const DAY = 86_400_000
+  const pt = (t: number) => ({ t } as any)
+
+  it('defaults to hour for missing, empty or single-point series', () => {
+    expect(rrdTimeframeFromSeries(undefined)).toBe('hour')
+    expect(rrdTimeframeFromSeries([])).toBe('hour')
+    expect(rrdTimeframeFromSeries([pt(0)])).toBe('hour')
+  })
+
+  it('returns hour for an intraday span (<= 2 days)', () => {
+    expect(rrdTimeframeFromSeries([pt(0), pt(DAY)])).toBe('hour')
+    expect(rrdTimeframeFromSeries([pt(0), pt(2 * DAY)])).toBe('hour')
+  })
+
+  it('returns week for spans of several days up to ~60 days', () => {
+    expect(rrdTimeframeFromSeries([pt(0), pt(7 * DAY)])).toBe('week')
+    expect(rrdTimeframeFromSeries([pt(0), pt(30 * DAY)])).toBe('week')
+  })
+
+  it('returns year for very long spans', () => {
+    expect(rrdTimeframeFromSeries([pt(0), pt(365 * DAY)])).toBe('year')
+  })
+
+  it('falls back to hour when timestamps are not finite', () => {
+    expect(rrdTimeframeFromSeries([pt(NaN), pt(NaN)])).toBe('hour')
+    expect(rrdTimeframeFromSeries([{ t: 'x' } as any, { t: 'y' } as any])).toBe('hour')
   })
 })

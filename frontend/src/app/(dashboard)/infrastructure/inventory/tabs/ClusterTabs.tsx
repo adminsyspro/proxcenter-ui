@@ -64,7 +64,7 @@ import SnapshotsTab from '@/components/SnapshotsTab'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatTime, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
+import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import HaGroupDialog from '../HaGroupDialog'
@@ -1395,7 +1395,7 @@ export default function ClusterTabs(props: any) {
                                   </linearGradient>
                                 ))}
                               </defs>
-                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
@@ -1435,7 +1435,7 @@ export default function ClusterTabs(props: any) {
                                   </linearGradient>
                                 ))}
                               </defs>
-                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
@@ -1475,7 +1475,7 @@ export default function ClusterTabs(props: any) {
                                   </linearGradient>
                                 ))}
                               </defs>
-                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
@@ -1522,7 +1522,7 @@ export default function ClusterTabs(props: any) {
                                   </linearGradient>
                                 ))}
                               </defs>
-                              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                               <YAxis tick={{ fontSize: 9 }} width={30} domain={[0, 'auto']} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
@@ -2846,13 +2846,13 @@ export default function ClusterTabs(props: any) {
                               >
                                 <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), clusterCephTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
                                       wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
-                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        const ts = payload[0]?.payload?.time ? formatRrdTooltipTs(Number(payload[0].payload.time), clusterCephTimeframe) : ''
                                         return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#3b82f6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -2904,13 +2904,13 @@ export default function ClusterTabs(props: any) {
                               >
                                 <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), clusterCephTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={50} domain={[0, 'auto']} />
                                     <Tooltip
                                       wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
-                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        const ts = payload[0]?.payload?.time ? formatRrdTooltipTs(Number(payload[0].payload.time), clusterCephTimeframe) : ''
                                         return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#8b5cf6', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -2962,13 +2962,13 @@ export default function ClusterTabs(props: any) {
                               >
                                 <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), clusterCephTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
                                       wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
-                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        const ts = payload[0]?.payload?.time ? formatRrdTooltipTs(Number(payload[0].payload.time), clusterCephTimeframe) : ''
                                         return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#10b981', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -3020,13 +3020,13 @@ export default function ClusterTabs(props: any) {
                               >
                                 <ChartContainer>
                                   <AreaChart data={clusterCephPerfFiltered} margin={{ top: 2, right: 4, bottom: 0, left: 4 }}>
-                                    <XAxis dataKey="time" tickFormatter={v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} minTickGap={40} tick={{ fontSize: 9 }} />
+                                    <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), clusterCephTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} />
                                     <YAxis tick={{ fontSize: 9 }} width={40} domain={[0, 'auto']} />
                                     <Tooltip
                                       wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                                       content={({ active, payload }) => {
                                         if (!active || !payload?.length) return null
-                                        const ts = payload[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''
+                                        const ts = payload[0]?.payload?.time ? formatRrdTooltipTs(Number(payload[0].payload.time), clusterCephTimeframe) : ''
                                         return (
                                           <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', boxShadow: '0 4px 14px rgba(0,0,0,0.15)', fontSize: 11, minWidth: 160 }}>
                                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#f59e0b', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>

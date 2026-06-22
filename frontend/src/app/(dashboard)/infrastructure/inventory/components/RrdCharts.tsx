@@ -8,7 +8,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import type { SeriesPoint } from '../types'
-import { formatTime, formatBps } from '../helpers'
+import { formatBps, formatRrdTick, formatRrdTooltipTs, rrdTimeframeFromSeries } from '../helpers'
 
 function AreaPctChart({
   title,
@@ -27,6 +27,7 @@ function AreaPctChart({
   const chartColor = color || theme.palette.primary.main
   const icon = dataKey === 'cpuPct' ? 'ri-cpu-line' : 'ri-ram-line'
   const iconColor = dataKey === 'cpuPct' ? '#2196f3' : '#10b981'
+  const seriesTf = rrdTimeframeFromSeries(data)
 
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
@@ -38,7 +39,7 @@ function AreaPctChart({
         <Box sx={{ width: '100%', height }}>
           <ChartContainer>
             <AreaChart data={data}>
-              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
+              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
               <Tooltip
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
@@ -49,7 +50,7 @@ function AreaPctChart({
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className={icon} style={{ fontSize: 13, color: iconColor }} />
                         <Typography variant="caption" sx={{ fontWeight: 700, color: iconColor }}>{title}</Typography>
-                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), seriesTf)}</Typography>
                       </Box>
                       <Box sx={{ px: 1.5, py: 0.75 }}>
                         {payload.map(entry => {
@@ -111,6 +112,7 @@ function AreaBpsChart2({
   const chartColorA = colorA || theme.palette.primary.main
   const chartColorB = colorB || lighten(theme.palette.primary.main, 0.3)
   const iconColor = '#06b6d4'
+  const seriesTf = rrdTimeframeFromSeries(data)
 
   return (
     <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
@@ -122,7 +124,7 @@ function AreaBpsChart2({
         <Box sx={{ width: '100%', height }}>
           <ChartContainer>
             <AreaChart data={data}>
-              <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={24} tick={{ fontSize: 10 }} />
+              <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={24} tick={{ fontSize: 10 }} />
               <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
               <Tooltip
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
@@ -133,7 +135,7 @@ function AreaBpsChart2({
                       <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <i className="ri-exchange-line" style={{ fontSize: 13, color: iconColor }} />
                         <Typography variant="caption" sx={{ fontWeight: 700, color: iconColor }}>{title}</Typography>
-                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                        <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), seriesTf)}</Typography>
                       </Box>
                       <Box sx={{ px: 1.5, py: 0.75 }}>
                         {payload.map(entry => (

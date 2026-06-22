@@ -46,7 +46,7 @@ import { BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem } from './InventoryTree'
 import type { InventorySelection } from './types'
-import { fetchRrd, fetchRrdBatch, buildSeriesFromRrd, formatTime, formatBps } from './helpers'
+import { fetchRrd, fetchRrdBatch, buildSeriesFromRrd, formatRrdTick, formatRrdTooltipTs, formatBps } from './helpers'
 import { useResourceData } from '../resources/hooks/useResourceData'
 import { calculateImprovedPredictions } from '../resources/algorithms/improvedPrediction'
 import { calculateHealthScoreWithDetails } from '../resources/algorithms/healthScore'
@@ -824,7 +824,7 @@ function RootInventoryView({
                       </linearGradient>
                     ))}
                   </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
@@ -836,7 +836,7 @@ function RootInventoryView({
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
                               <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
-                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                             </Box>
                             <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => {
@@ -879,7 +879,7 @@ function RootInventoryView({
                       </linearGradient>
                     ))}
                   </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 8 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 8 }} />
                     <YAxis tick={{ fontSize: 8 }} width={30} domain={[0, 'auto']} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
@@ -891,7 +891,7 @@ function RootInventoryView({
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#9c27b0' }} />
                               <Typography variant="caption" sx={{ fontWeight: 700, color: '#9c27b0' }}>Server Load</Typography>
-                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                             </Box>
                             <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => (
@@ -931,7 +931,7 @@ function RootInventoryView({
                       </linearGradient>
                     ))}
                   </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
@@ -943,7 +943,7 @@ function RootInventoryView({
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-ram-line" style={{ fontSize: 13, color: '#4caf50' }} />
                               <Typography variant="caption" sx={{ fontWeight: 700, color: '#4caf50' }}>RAM</Typography>
-                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                             </Box>
                             <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => {
@@ -988,7 +988,7 @@ function RootInventoryView({
                       </React.Fragment>
                     ))}
                   </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 9 }} width={45} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
@@ -1000,7 +1000,7 @@ function RootInventoryView({
                             <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(255,152,0,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <i className="ri-wifi-line" style={{ fontSize: 13, color: '#ff9800' }} />
                               <Typography variant="caption" sx={{ fontWeight: 700, color: '#ff9800' }}>Network</Typography>
-                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                              <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                             </Box>
                             <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => {
@@ -1075,7 +1075,7 @@ function RootInventoryView({
                         </linearGradient>
                       ))}
                     </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
@@ -1086,7 +1086,7 @@ function RootInventoryView({
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(33,150,243,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-cpu-line" style={{ fontSize: 13, color: '#2196f3' }} />
                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#2196f3' }}>CPU</Typography>
-                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
@@ -1114,7 +1114,7 @@ function RootInventoryView({
                         </linearGradient>
                       ))}
                     </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} width={35} domain={[0, 'auto']} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
@@ -1125,7 +1125,7 @@ function RootInventoryView({
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(156,39,176,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-dashboard-3-line" style={{ fontSize: 13, color: '#9c27b0' }} />
                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#9c27b0' }}>Server Load</Typography>
-                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => (
@@ -1153,7 +1153,7 @@ function RootInventoryView({
                         </linearGradient>
                       ))}
                     </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
                     <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
@@ -1164,7 +1164,7 @@ function RootInventoryView({
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(76,175,80,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-ram-line" style={{ fontSize: 13, color: '#4caf50' }} />
                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#4caf50' }}>RAM</Typography>
-                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => { const v = Number(entry.value); const valColor = v >= 80 ? '#f44336' : v >= 60 ? '#ff9800' : '#4caf50'; return (
@@ -1194,7 +1194,7 @@ function RootInventoryView({
                         </React.Fragment>
                       ))}
                     </defs>
-                    <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
                     <YAxis tickFormatter={v => formatBps(Number(v))} tick={{ fontSize: 10 }} width={50} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
@@ -1205,7 +1205,7 @@ function RootInventoryView({
                           <Box sx={{ px: 1.5, py: 0.75, bgcolor: 'rgba(255,152,0,0.1)', borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             <i className="ri-wifi-line" style={{ fontSize: 13, color: '#ff9800' }} />
                             <Typography variant="caption" sx={{ fontWeight: 700, color: '#ff9800' }}>Network</Typography>
-                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                            <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), infraRrdTf)}</Typography>
                           </Box>
                           <Box sx={{ px: 1.5, py: 0.75 }}>
                             {sorted.map(entry => {

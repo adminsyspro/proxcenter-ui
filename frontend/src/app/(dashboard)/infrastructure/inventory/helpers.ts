@@ -215,6 +215,58 @@ export function formatTime(tsMs: number) {
 return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+/**
+ * X-axis tick label for RRD charts. Shows time alone for short timeframes,
+ * but switches to a date once the window spans more than a day so the user
+ * can tell which day a point belongs to (hour/day -> HH:MM, week/month ->
+ * DD/MM, year -> short month).
+ */
+export function formatRrdTick(tsMs: number, tf: RrdTimeframe) {
+  const d = new Date(tsMs)
+
+  switch (tf) {
+    case 'week':
+    case 'month':
+      return d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })
+    case 'year':
+      return d.toLocaleDateString([], { month: 'short' })
+    default:
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+}
+
+/**
+ * Tooltip timestamp for RRD charts. Adds the date alongside the time for
+ * timeframes wider than a day, mirroring the storage-panel tooltip.
+ */
+export function formatRrdTooltipTs(tsMs: number, tf: RrdTimeframe) {
+  const d = new Date(tsMs)
+
+  if (tf === 'hour' || tf === 'day') return d.toLocaleTimeString()
+
+
+return `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
+
+/**
+ * Derives a representative timeframe from a series' time span, for charts that
+ * render shared components without a timeframe selector in scope. Maps the
+ * span onto the three axis modes used by formatRrdTick/formatRrdTooltipTs:
+ * intraday -> time, up-to-weeks -> date, long range -> month.
+ */
+export function rrdTimeframeFromSeries(data: SeriesPoint[] | undefined): RrdTimeframe {
+  if (!data || data.length < 2) return 'hour'
+  const first = Number(data[0]?.t)
+  const last = Number(data[data.length - 1]?.t)
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 'hour'
+  const spanDays = (last - first) / 86_400_000
+  if (spanDays > 60) return 'year'
+  if (spanDays > 2) return 'week'
+
+
+return 'hour'
+}
+
 export function formatUptime(seconds: number): string {
   if (!seconds || seconds <= 0) return '—'
   const days = Math.floor(seconds / 86400)

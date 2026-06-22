@@ -16,7 +16,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
-import { buildSeriesFromRrd } from './helpers'
+import { buildSeriesFromRrd, formatRrdTick, formatRrdTooltipTs, rrdTimeframeFromSeries } from './helpers'
 
 type PbsServer = {
   connId: string
@@ -71,11 +71,6 @@ function getUsageColor(pct: number): string {
   return '#4caf50'
 }
 
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
 function formatNetworkValue(bps: number): string {
   if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} Gb/s`
   if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} Mb/s`
@@ -126,6 +121,7 @@ function MetricGraph({
   onExpand?: () => void
   height?: number
 }) {
+  const seriesTf = rrdTimeframeFromSeries(series)
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.75, pr: 0.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
@@ -147,7 +143,7 @@ function MetricGraph({
                 </linearGradient>
               ))}
             </defs>
-            <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+            <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={40} tick={{ fontSize: 9 }} />
             <YAxis domain={yDomain || ['auto', 'auto']} tickFormatter={v => yFormatter(Number(v))} tick={{ fontSize: 9 }} width={30} />
             <RechartsTooltip
               wrapperStyle={{ zIndex: 10 }}
@@ -159,7 +155,7 @@ function MetricGraph({
                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(iconColor, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className={icon} style={{ fontSize: 13, color: iconColor }} />
                       <Typography variant="caption" sx={{ fontWeight: 700, color: iconColor }}>{title}</Typography>
-                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), seriesTf)}</Typography>
                     </Box>
                     <Box sx={{ px: 1.5, py: 0.75 }}>
                       {sorted.map(entry => (
@@ -216,6 +212,7 @@ function NetworkGraph({
   onExpand?: () => void
   height?: number
 }) {
+  const seriesTf = rrdTimeframeFromSeries(series)
   return (
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 0.75, pr: 0.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.25 }}>
@@ -237,7 +234,7 @@ function NetworkGraph({
                 </linearGradient>
               ))}
             </defs>
-            <XAxis dataKey="t" tickFormatter={v => formatTime(Number(v))} minTickGap={40} tick={{ fontSize: 9 }} />
+            <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={40} tick={{ fontSize: 9 }} />
             <YAxis tickFormatter={v => formatNetworkValue(Number(v))} tick={{ fontSize: 9 }} width={50} />
             <RechartsTooltip
               wrapperStyle={{ zIndex: 10 }}
@@ -248,7 +245,7 @@ function NetworkGraph({
                     <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha('#06b6d4', 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-exchange-line" style={{ fontSize: 13, color: '#06b6d4' }} />
                       <Typography variant="caption" sx={{ fontWeight: 700, color: '#06b6d4' }}>Network Traffic</Typography>
-                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{new Date(Number(label)).toLocaleTimeString()}</Typography>
+                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{formatRrdTooltipTs(Number(label), seriesTf)}</Typography>
                     </Box>
                     <Box sx={{ px: 1.5, py: 0.75 }}>
                       {payload.map(entry => {

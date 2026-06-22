@@ -447,6 +447,15 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // cluster view like the provider, not the vDC abstraction.
   const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
   const isFullClusterView = isProviderTenant || isMspTenant
+  // Expand/collapse persistence is scoped per tenant. In MSP mode each tenant
+  // owns different clusters (different connIds), so the persisted expand IDs
+  // (`cluster:<connId>`, `node:<connId>:<n>`, ...) of one tenant never match
+  // another tenant's tree. With a single global localStorage bucket, switching
+  // tenant (which full-reloads via window.location) re-hydrated stale IDs that
+  // matched nothing (the tree rendered collapsed), and re-expanding overwrote
+  // the shared bucket, so every tenant collapsed the others (discussion #471).
+  // Keying each bucket by tenant id gives every tenant its own remembered state.
+  const tenantScope = currentTenant?.id ?? 'default'
   const { trackTask } = useTaskTracker()
   const { getColor: getTagColor, loadConnection } = useTagColors()
   const [loading, setLoading] = useState(true)
@@ -572,41 +581,63 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     })
   }
 
-  // Hydrate from localStorage
+  // Hydrate from localStorage, scoped to the active tenant. We wait for the
+  // tenant to resolve so the bucket suffix is known before reading; the persist
+  // effects below stay inert until `isHydrated` flips, so nothing is written
+  // under a wrong scope in the meantime.
   useEffect(() => {
+    if (tenantLoading) return
+    const k = (base: string) => `${base}::${tenantScope}`
     try {
-      const savedExpanded = localStorage.getItem('inventoryExpandedItems')
+      // One-time migration: expand state used to live in un-suffixed global
+      // keys. Adopt them into the default scope so existing (single-tenant)
+      // installs keep their expand state after upgrading to per-tenant keys.
+      if (tenantScope === 'default') {
+        for (const base of [
+          'inventoryExpandedItems', 'inventoryCollapsedSections',
+          'inventoryStorageExpandedItems', 'inventoryBackupExpandedItems',
+          'inventoryMigrationExpandedItems', 'inventoryExpandedNetSections',
+          'inventoryNetworkTreeExpandedItems',
+        ]) {
+          const legacy = localStorage.getItem(base)
+          if (legacy !== null && localStorage.getItem(k(base)) === null) {
+            localStorage.setItem(k(base), legacy)
+          }
+        }
+      }
+
+      const savedExpanded = localStorage.getItem(k('inventoryExpandedItems'))
       if (savedExpanded) setManualExpandedItems(JSON.parse(savedExpanded))
 
-      const savedCollapsed = localStorage.getItem('inventoryCollapsedSections')
+      const savedCollapsed = localStorage.getItem(k('inventoryCollapsedSections'))
       if (savedCollapsed) {
         const parsed = JSON.parse(savedCollapsed)
         setCollapsedSections(new Set(parsed))
       }
 
-      const savedStorageExpanded = localStorage.getItem('inventoryStorageExpandedItems')
+      const savedStorageExpanded = localStorage.getItem(k('inventoryStorageExpandedItems'))
       if (savedStorageExpanded) setStorageExpandedItems(JSON.parse(savedStorageExpanded))
 
-      const savedBackupExpanded = localStorage.getItem('inventoryBackupExpandedItems')
+      const savedBackupExpanded = localStorage.getItem(k('inventoryBackupExpandedItems'))
       if (savedBackupExpanded) setBackupExpandedItems(JSON.parse(savedBackupExpanded))
 
-      const savedMigrationExpanded = localStorage.getItem('inventoryMigrationExpandedItems')
+      const savedMigrationExpanded = localStorage.getItem(k('inventoryMigrationExpandedItems'))
       if (savedMigrationExpanded) setMigrationExpandedItems(JSON.parse(savedMigrationExpanded))
 
       // Network state is persisted too so "Expand all" survives navigation
       // symmetrically with the other sub-trees. The actual fetch is deferred
       // until `clusters` arrives via SSE — see the effect that watches
       // `expandedNetSections` + `clusters.length` below.
-      const savedNetSections = localStorage.getItem('inventoryExpandedNetSections')
+      const savedNetSections = localStorage.getItem(k('inventoryExpandedNetSections'))
       if (savedNetSections) {
         const parsed = JSON.parse(savedNetSections)
         if (Array.isArray(parsed)) setExpandedNetSections(new Set(parsed))
       }
-      const savedNetTreeExpanded = localStorage.getItem('inventoryNetworkTreeExpandedItems')
+      const savedNetTreeExpanded = localStorage.getItem(k('inventoryNetworkTreeExpandedItems'))
       if (savedNetTreeExpanded) setNetworkTreeExpandedItems(JSON.parse(savedNetTreeExpanded))
     } catch {}
     setIsHydrated(true)
-  }, [])
+  }, [tenantLoading, tenantScope])
 
   // Persist viewMode (only when not externally controlled)
   useEffect(() => {
@@ -615,28 +646,28 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
   // Persist expandedItems
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryExpandedItems', JSON.stringify(manualExpandedItems))
-  }, [manualExpandedItems, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryExpandedItems::${tenantScope}`, JSON.stringify(manualExpandedItems))
+  }, [manualExpandedItems, isHydrated, tenantScope])
 
   // Persist collapsedSections
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryCollapsedSections', JSON.stringify([...collapsedSections]))
-  }, [collapsedSections, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryCollapsedSections::${tenantScope}`, JSON.stringify([...collapsedSections]))
+  }, [collapsedSections, isHydrated, tenantScope])
 
   // Persist storageExpandedItems
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryStorageExpandedItems', JSON.stringify(storageExpandedItems))
-  }, [storageExpandedItems, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryStorageExpandedItems::${tenantScope}`, JSON.stringify(storageExpandedItems))
+  }, [storageExpandedItems, isHydrated, tenantScope])
 
   // Persist backupExpandedItems
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryBackupExpandedItems', JSON.stringify(backupExpandedItems))
-  }, [backupExpandedItems, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryBackupExpandedItems::${tenantScope}`, JSON.stringify(backupExpandedItems))
+  }, [backupExpandedItems, isHydrated, tenantScope])
 
   // Persist migrationExpandedItems
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryMigrationExpandedItems', JSON.stringify(migrationExpandedItems))
-  }, [migrationExpandedItems, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryMigrationExpandedItems::${tenantScope}`, JSON.stringify(migrationExpandedItems))
+  }, [migrationExpandedItems, isHydrated, tenantScope])
 
   // Persistence + re-trigger effects for `expandedNetSections` /
   // `networkTreeExpandedItems` live further down, after their `useState`
@@ -2404,11 +2435,11 @@ return favorites.has(vmKey)
   // `expandedNetSections` / `networkTreeExpandedItems` useState declarations
   // above, to avoid a TDZ on the dependency arrays.
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryExpandedNetSections', JSON.stringify([...expandedNetSections]))
-  }, [expandedNetSections, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryExpandedNetSections::${tenantScope}`, JSON.stringify([...expandedNetSections]))
+  }, [expandedNetSections, isHydrated, tenantScope])
   useEffect(() => {
-    if (isHydrated) localStorage.setItem('inventoryNetworkTreeExpandedItems', JSON.stringify(networkTreeExpandedItems))
-  }, [networkTreeExpandedItems, isHydrated])
+    if (isHydrated) localStorage.setItem(`inventoryNetworkTreeExpandedItems::${tenantScope}`, JSON.stringify(networkTreeExpandedItems))
+  }, [networkTreeExpandedItems, isHydrated, tenantScope])
 
   // After hydration, if the Network section was persisted as open, the data
   // fetch has to be re-triggered manually — Network is lazy-loaded and the

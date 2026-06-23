@@ -6434,8 +6434,14 @@
       "controlsAssessed": "controls assessed",
       "assessedOk": "assessed OK",
       "noAssessed": "No controls assessed yet",
+      "noAssessedShort": "N/A",
       "reportFailed": "Report generation failed",
-      "loadFailed": "Could not load framework assessments"
+      "loadFailed": "Could not load framework assessments",
+      "perNodeTitle": "Per-node results",
+      "colCategory": "Category",
+      "colCheck": "Check",
+      "colStatus": "Status",
+      "colDetail": "Detail"
     }
   },
   "changes": {

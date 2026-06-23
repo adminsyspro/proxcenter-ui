@@ -1,4 +1,5 @@
 import type { FrameworkAssessment } from '@/lib/compliance/frameworkAssessment'
+import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 
 export function buildReportUrl(frameworkId: string, connectionId: string): string {
   return `/api/v1/compliance/frameworks/${frameworkId}/report?connectionId=${encodeURIComponent(connectionId)}`
@@ -23,4 +24,37 @@ export function scoreColor(score: number): string {
   if (score >= 80) return '#22c55e'
   if (score >= 50) return '#f59e0b'
   return '#ef4444'
+}
+
+/** Returns the donut color for a given score (null = not assessed). */
+export function gaugeColor(score: number | null): string {
+  if (score === null) return '#94a3b8'
+  return scoreColor(score)
+}
+
+const STATUS_ORDER: Record<string, number> = {
+  fail: 0,
+  warning: 1,
+  partial: 2,
+  pass: 3,
+  satisfied: 4,
+  skip: 5,
+}
+
+function statusRank(status: string): number {
+  const key = status.toLowerCase()
+  return STATUS_ORDER[key] ?? 3
+}
+
+/** Sorts checks so failing/warning come first, then pass, then skip. */
+export function sortNodeChecks(checks: NodeCheckResult[]): NodeCheckResult[] {
+  return [...checks].sort((a, b) => statusRank(a.status) - statusRank(b.status))
+}
+
+/** Count of non-pass, non-skip checks (fail + warning + partial). */
+export function nodeFailCount(checks: NodeCheckResult[]): number {
+  return checks.filter(c => {
+    const key = c.status.toLowerCase()
+    return key !== 'pass' && key !== 'satisfied' && key !== 'skip'
+  }).length
 }

@@ -6358,8 +6358,14 @@
       "controlsAssessed": "Kontrollen bewertet",
       "assessedOk": "bewertet OK",
       "noAssessed": "Noch keine Kontrollen bewertet",
+      "noAssessedShort": "N/A",
       "reportFailed": "Berichtgenerierung fehlgeschlagen",
-      "loadFailed": "Framework-Bewertungen konnten nicht geladen werden"
+      "loadFailed": "Framework-Bewertungen konnten nicht geladen werden",
+      "perNodeTitle": "Ergebnisse pro Knoten",
+      "colCategory": "Kategorie",
+      "colCheck": "Pruefpunkt",
+      "colStatus": "Status",
+      "colDetail": "Detail"
     }
   },
   "changes": {

@@ -6363,8 +6363,14 @@
       "controlsAssessed": "个控制项已评估",
       "assessedOk": "评估通过",
       "noAssessed": "暂无已评估的控制项",
+      "noAssessedShort": "N/A",
       "reportFailed": "报告生成失败",
-      "loadFailed": "无法加载框架评估数据"
+      "loadFailed": "无法加载框架评估数据",
+      "perNodeTitle": "各节点结果",
+      "colCategory": "类别",
+      "colCheck": "检查项",
+      "colStatus": "状态",
+      "colDetail": "详情"
     }
   },
   "changes": {

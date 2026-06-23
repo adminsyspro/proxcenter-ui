@@ -6435,8 +6435,14 @@
       "controlsAssessed": "contrôles évalués",
       "assessedOk": "évalués OK",
       "noAssessed": "Aucun contrôle évalué pour l'instant",
+      "noAssessedShort": "N/A",
       "reportFailed": "Échec de génération du rapport",
-      "loadFailed": "Impossible de charger les évaluations"
+      "loadFailed": "Impossible de charger les évaluations",
+      "perNodeTitle": "Résultats par noeud",
+      "colCategory": "Catégorie",
+      "colCheck": "Contrôle",
+      "colStatus": "Statut",
+      "colDetail": "Détail"
     }
   },
   "changes": {

@@ -17,8 +17,8 @@ import { useFrameworkAssessments } from '@/hooks/useFrameworkAssessments'
 import { getFramework } from '@/lib/compliance/frameworks'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 import {
+  breakdownSegments,
   buildReportUrl,
-  coverageLabel,
   gaugeColor,
   nodeFailCount,
   scoreColor,
@@ -130,7 +130,7 @@ export default function FrameworksTab() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minHeight: 0 }}>
-      {/* Connection selector (mirrors page.tsx lines ~304-313) */}
+      {/* Connection selector */}
       <Box sx={{ flexShrink: 0 }}>
         <Autocomplete
           options={connections}
@@ -158,6 +158,7 @@ export default function FrameworksTab() {
 
       {!isLoading && !error && (
         <>
+          {/* 3-up card grid: md=4 each => 3 cards side-by-side on md+ */}
           <Grid container spacing={2}>
             {assessments.map((a) => {
               let def: ReturnType<typeof getFramework> | null = null
@@ -169,42 +170,54 @@ export default function FrameworksTab() {
 
               const color = gaugeColor(a.score)
               const label = a.score === null ? t('noAssessedShort') : `${a.score}%`
+              const segments = breakdownSegments(a)
+              const contextText = t(`context.${a.frameworkId}`)
 
               return (
-                <Grid size={{ xs: 12, md: 4 }} key={a.frameworkId}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={a.frameworkId}>
                   <Card sx={{ height: '100%' }}>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-                        <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
-                          {def.name} {def.version}
-                        </Typography>
-                        <Tooltip
-                          title={t(`context.${a.frameworkId}`)}
-                          placement="top"
-                          slotProps={tooltipSlotProps}
-                        >
-                          <Box
-                            component="span"
-                            sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', cursor: 'default' }}
-                            aria-label={`info-${a.frameworkId}`}
+                    <CardContent
+                      sx={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.5,
+                        pb: '16px !important',
+                      }}
+                    >
+                      {/* Header: name + version/baseline + info icon */}
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                            {def.name}
+                          </Typography>
+                          <Tooltip
+                            title={contextText}
+                            placement="top"
+                            slotProps={tooltipSlotProps}
                           >
-                            <i className="ri-information-line" style={{ fontSize: '1rem' }} />
-                          </Box>
-                        </Tooltip>
+                            <Box
+                              component="span"
+                              sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', cursor: 'default' }}
+                              aria-label={`info-${a.frameworkId}`}
+                            >
+                              <i className="ri-information-line" style={{ fontSize: '1rem' }} />
+                            </Box>
+                          </Tooltip>
+                        </Box>
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          {def.version}
+                          {def.baselineLabel ? ` . ${def.baselineLabel}` : ''}
+                        </Typography>
                       </Box>
 
-                      {def.baselineLabel && (
-                        <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1 }}>
-                          {def.baselineLabel}
-                        </Typography>
-                      )}
-
-                      <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
+                      {/* Donut gauge, centered */}
+                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                         <CircularGauge
                           value={a.score ?? 0}
                           color={color}
                           trackColor={theme.palette.divider}
-                          size="5.5em"
+                          size="5em"
                         >
                           <Box
                             component="span"
@@ -219,50 +232,106 @@ export default function FrameworksTab() {
                         </CircularGauge>
                       </Box>
 
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        {coverageLabel(a)} {t('controlsAssessed')}
+                      {/* Assessed count */}
+                      <Typography variant="body2" align="center">
+                        {a.score === null
+                          ? t('noAssessed')
+                          : `${a.assessedControls} ${t('controlsAssessed')}`}
                       </Typography>
 
-                      {def.provenanceNote && (
-                        <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1 }}>
-                          {def.provenanceNote}
-                        </Typography>
-                      )}
-
-                      {def.sourceUrl && (
-                        <Typography variant="caption" display="block" sx={{ mb: 1 }}>
-                          <Link href={def.sourceUrl} target="_blank" rel="noopener noreferrer">
-                            {t('sourceLink')}
-                          </Link>
-                        </Typography>
-                      )}
-
-                      {a.families.length > 0 && (
-                        <Box sx={{ mb: 1 }}>
-                          {a.families.map((f) => (
-                            <Typography variant="caption" display="block" key={f.family}>
-                              {f.family}: {f.satisfied}/{f.satisfied + f.partial + f.failed + f.notAssessed}
+                      {/* Breakdown bar + legend */}
+                      <Box>
+                        {a.assessedControls > 0 ? (
+                          <>
+                            {/* Stacked proportional bar */}
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                height: 8,
+                                borderRadius: 1,
+                                overflow: 'hidden',
+                                bgcolor: 'divider',
+                              }}
+                            >
+                              {segments.map((seg) =>
+                                seg.pct > 0 ? (
+                                  <Box
+                                    key={seg.key}
+                                    sx={{ width: `${seg.pct}%`, bgcolor: seg.color }}
+                                  />
+                                ) : null,
+                              )}
+                            </Box>
+                            {/* Legend */}
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              color="text.secondary"
+                              sx={{ mt: 0.5 }}
+                            >
+                              {segments[0].count} {t('satisfiedShort')}
+                              {' . '}
+                              {segments[1].count} {t('partialShort')}
+                              {' . '}
+                              {segments[2].count} {t('failedShort')}
                             </Typography>
-                          ))}
-                        </Box>
-                      )}
+                          </>
+                        ) : (
+                          <Box
+                            sx={{
+                              height: 8,
+                              borderRadius: 1,
+                              bgcolor: 'divider',
+                              opacity: 0.4,
+                            }}
+                          />
+                        )}
+                      </Box>
 
-                      <Button
-                        sx={{ mt: 1 }}
-                        variant="outlined"
-                        size="small"
-                        disabled={busy === a.frameworkId || !selectedConnection}
-                        onClick={() => download(a.frameworkId)}
-                        startIcon={
-                          busy === a.frameworkId ? (
-                            <CircularProgress size={14} color="inherit" />
-                          ) : (
-                            <i className="ri-file-download-line" />
-                          )
-                        }
+                      {/* Context: visible clamped to 3 lines */}
+                      <Typography
+                        variant="caption"
+                        display="block"
+                        color="text.secondary"
+                        data-testid={`context-${a.frameworkId}`}
+                        sx={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          flex: 1,
+                        }}
                       >
-                        {t('downloadReport')}
-                      </Button>
+                        {contextText}
+                      </Typography>
+
+                      {/* Footer: source link + download */}
+                      <Box>
+                        {def.sourceUrl && (
+                          <Typography variant="caption" display="block" sx={{ mb: 0.75 }}>
+                            <Link href={def.sourceUrl} target="_blank" rel="noopener noreferrer">
+                              {t('sourceLink')}
+                            </Link>
+                          </Typography>
+                        )}
+
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          fullWidth
+                          disabled={busy === a.frameworkId || !selectedConnection}
+                          onClick={() => download(a.frameworkId)}
+                          startIcon={
+                            busy === a.frameworkId ? (
+                              <CircularProgress size={14} color="inherit" />
+                            ) : (
+                              <i className="ri-file-download-line" />
+                            )
+                          }
+                        >
+                          {t('downloadReport')}
+                        </Button>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>
@@ -270,6 +339,7 @@ export default function FrameworksTab() {
             })}
           </Grid>
 
+          {/* Per-node results (unchanged) */}
           {nodes.length > 1 && (
             <Box>
               <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600 }}>

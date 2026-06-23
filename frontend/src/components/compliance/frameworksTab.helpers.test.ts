@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildReportUrl, coverageLabel, gaugeColor, nodeFailCount, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
+import { breakdownSegments, buildReportUrl, coverageLabel, gaugeColor, nodeFailCount, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 
 describe('frameworksTab helpers', () => {
@@ -104,6 +104,43 @@ describe('frameworksTab helpers', () => {
       const input = [makeCheck('pass'), makeCheck('fail')]
       sortNodeChecks(input)
       expect(input[0].status).toBe('pass')
+    })
+  })
+
+  describe('breakdownSegments', () => {
+    it('returns three segments with proportional pct for a normal case', () => {
+      const a = { satisfied: 6, partial: 2, failed: 2, assessedControls: 10 }
+      const segs = breakdownSegments(a)
+      expect(segs).toHaveLength(3)
+      expect(segs[0]).toMatchObject({ key: 'satisfied', color: '#22c55e', pct: 60, count: 6 })
+      expect(segs[1]).toMatchObject({ key: 'partial',   color: '#f59e0b', pct: 20, count: 2 })
+      expect(segs[2]).toMatchObject({ key: 'failed',    color: '#ef4444', pct: 20, count: 2 })
+    })
+
+    it('pct values sum to ~100 for a normal case (rounding)', () => {
+      const a = { satisfied: 1, partial: 1, failed: 1, assessedControls: 3 }
+      const segs = breakdownSegments(a)
+      const sum = segs.reduce((acc, s) => acc + s.pct, 0)
+      // each is 33.3 -> rounded to 33, sum = 99 (acceptable)
+      expect(sum).toBeGreaterThanOrEqual(99)
+      expect(sum).toBeLessThanOrEqual(101)
+    })
+
+    it('returns pct 0 for all segments when assessedControls is 0', () => {
+      const a = { satisfied: 0, partial: 0, failed: 0, assessedControls: 0 }
+      const segs = breakdownSegments(a)
+      for (const s of segs) {
+        expect(s.pct).toBe(0)
+        expect(s.count).toBe(0)
+      }
+    })
+
+    it('returns pct 100 for satisfied when all are satisfied', () => {
+      const a = { satisfied: 5, partial: 0, failed: 0, assessedControls: 5 }
+      const segs = breakdownSegments(a)
+      expect(segs[0].pct).toBe(100)
+      expect(segs[1].pct).toBe(0)
+      expect(segs[2].pct).toBe(0)
     })
   })
 

@@ -6370,6 +6370,9 @@
       "colStatus": "状态",
       "colDetail": "详情",
       "sourceLink": "框架参考",
+      "satisfiedShort": "满足",
+      "partialShort": "部分",
+      "failedShort": "未通过",
       "context": {
         "nist-800-53-r5": "NIST SP 800-53 是美国联邦信息系统与组织的安全与隐私控制目录。Moderate 基线适用于机密性、完整性或可用性丧失会造成严重影响的系统。",
         "nist-800-171-r2": "NIST SP 800-171 规定了在非联邦系统与组织中保护受控非机密信息（CUI）的要求：14 个族共 110 项要求。它是 CMMC 二级的技术基础。",

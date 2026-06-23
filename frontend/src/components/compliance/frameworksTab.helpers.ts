@@ -9,6 +9,25 @@ export function coverageLabel(a: Pick<FrameworkAssessment, 'assessedControls' | 
   return `${a.assessedControls} / ${a.totalControls}`
 }
 
+export interface BreakdownSegment {
+  key: 'satisfied' | 'partial' | 'failed'
+  color: string
+  pct: number
+  count: number
+}
+
+export function breakdownSegments(
+  a: Pick<FrameworkAssessment, 'satisfied' | 'partial' | 'failed' | 'assessedControls'>,
+): BreakdownSegment[] {
+  const total = a.assessedControls
+  const calc = (count: number) => total > 0 ? Math.round((count / total) * 100) : 0
+  return [
+    { key: 'satisfied', color: '#22c55e', pct: calc(a.satisfied), count: a.satisfied },
+    { key: 'partial',   color: '#f59e0b', pct: calc(a.partial),   count: a.partial },
+    { key: 'failed',    color: '#ef4444', pct: calc(a.failed),    count: a.failed },
+  ]
+}
+
 export function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')

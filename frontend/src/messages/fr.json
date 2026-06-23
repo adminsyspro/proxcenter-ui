@@ -6442,6 +6442,9 @@
       "colStatus": "Statut",
       "colDetail": "Détail",
       "sourceLink": "Référentiel source",
+      "satisfiedShort": "satisfaits",
+      "partialShort": "partiels",
+      "failedShort": "échoués",
       "context": {
         "nist-800-53-r5": "NIST SP 800-53 est le catalogue fédéral américain de contrôles de sécurité et de protection de la vie privée pour les systèmes d'information. La baseline Moderate s'applique aux systèmes où une perte de confidentialité, d'intégrité ou de disponibilité aurait un impact sérieux.",
         "nist-800-171-r2": "NIST SP 800-171 définit les exigences de protection des informations non classifiées contrôlées (CUI) dans les systèmes non fédéraux : 110 exigences réparties en 14 familles. C'est le socle technique sur lequel repose CMMC niveau 2.",

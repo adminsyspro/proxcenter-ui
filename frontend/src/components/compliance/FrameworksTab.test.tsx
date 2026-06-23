@@ -9,7 +9,14 @@ vi.mock('next-intl', () => ({
 }))
 
 vi.mock('@/lib/compliance/frameworks', () => ({
-  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework' }),
+  getFramework: (id: string) => ({
+    id,
+    name: 'Test FW',
+    version: 'Rev 5',
+    baselineLabel: 'Moderate baseline',
+    controls: [],
+    sourceUrl: 'https://example.com/framework',
+  }),
 }))
 
 vi.mock('@/hooks/useConnections', () => ({
@@ -50,22 +57,22 @@ const TWO_NODES_MOCK = [
   },
 ]
 
+const BASE_ASSESSMENT = {
+  frameworkId: 'nist-800-171-r2',
+  score: 60,
+  satisfied: 3,
+  partial: 1,
+  failed: 1,
+  notAssessed: 105,
+  assessedControls: 5,
+  totalControls: 110,
+  coverage: 0.04,
+  families: [],
+  controls: [],
+}
+
 const TWO_NODES_RETURN = {
-  assessments: [
-    {
-      frameworkId: 'nist-800-171-r2',
-      score: 60,
-      satisfied: 3,
-      partial: 1,
-      failed: 1,
-      notAssessed: 105,
-      assessedControls: 5,
-      totalControls: 110,
-      coverage: 0.04,
-      families: [],
-      controls: [],
-    },
-  ],
+  assessments: [BASE_ASSESSMENT],
   nodes: TWO_NODES_MOCK,
   isLoading: false,
   error: null,
@@ -92,9 +99,12 @@ describe('FrameworksTab', () => {
     expect(screen.getAllByText(/Test FW/).length).toBeGreaterThan(0)
   })
 
-  it('renders the coverage label', () => {
+  it('renders the assessed count (new style, no slash-total)', () => {
     render(<FrameworksTab />)
-    expect(screen.getAllByText(/5 \/ 110/).length).toBeGreaterThan(0)
+    // New design shows "5 controlsAssessed" without "/110"
+    expect(screen.getByText(/5.*controlsAssessed/)).toBeInTheDocument()
+    // Old coverage label "5 / 110" must NOT appear as standalone text
+    expect(screen.queryByText(/5 \/ 110/)).toBeNull()
   })
 
   it('renders the download button', () => {
@@ -124,30 +134,29 @@ describe('FrameworksTab', () => {
 
   it('renders the info icon tooltip trigger for the framework context', () => {
     render(<FrameworksTab />)
-    // The tooltip trigger has aria-label="info-<frameworkId>"
     const trigger = screen.getByLabelText('info-nist-800-171-r2')
     expect(trigger).toBeInTheDocument()
+  })
+
+  it('renders visible context text on the card (not tooltip-only)', () => {
+    render(<FrameworksTab />)
+    // The context key is rendered via t(`context.${frameworkId}`) = "context.nist-800-171-r2"
+    const contextEl = screen.getByTestId('context-nist-800-171-r2')
+    expect(contextEl).toBeInTheDocument()
+    expect(contextEl.textContent).toContain('context.nist-800-171-r2')
+  })
+
+  it('does NOT render the old per-family list (e.g. "Access Control:" text)', () => {
+    render(<FrameworksTab />)
+    // The 19-family list entries like "Access Control: 0/24" must be gone
+    expect(screen.queryByText(/Access Control:/)).toBeNull()
   })
 })
 
 describe('FrameworksTab with single node', () => {
   beforeEach(() => {
     vi.mocked(useFrameworkAssessmentsModule.useFrameworkAssessments).mockReturnValue({
-      assessments: [
-        {
-          frameworkId: 'nist-800-171-r2',
-          score: 60,
-          satisfied: 3,
-          partial: 1,
-          failed: 1,
-          notAssessed: 105,
-          assessedControls: 5,
-          totalControls: 110,
-          coverage: 0.04,
-          families: [],
-          controls: [],
-        },
-      ],
+      assessments: [BASE_ASSESSMENT],
       nodes: [{ node: 'pve1', checks: [] }],
       isLoading: false,
       error: null,
@@ -157,5 +166,27 @@ describe('FrameworksTab with single node', () => {
   it('does not show per-node section when nodes.length <= 1', () => {
     render(<FrameworksTab />)
     expect(screen.queryByText('perNodeTitle')).toBeNull()
+  })
+})
+
+describe('FrameworksTab with null score', () => {
+  beforeEach(() => {
+    vi.mocked(useFrameworkAssessmentsModule.useFrameworkAssessments).mockReturnValue({
+      assessments: [{ ...BASE_ASSESSMENT, score: null, assessedControls: 0 }],
+      nodes: [],
+      isLoading: false,
+      error: null,
+    })
+  })
+
+  it('renders noAssessedShort in gauge when score is null', () => {
+    render(<FrameworksTab />)
+    const gauge = screen.getByTestId('gauge')
+    expect(gauge.textContent).toContain('noAssessedShort')
+  })
+
+  it('renders noAssessed label when score is null', () => {
+    render(<FrameworksTab />)
+    expect(screen.getByText('noAssessed')).toBeInTheDocument()
   })
 })

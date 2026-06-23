@@ -6365,6 +6365,9 @@
       "colStatus": "Status",
       "colDetail": "Detail",
       "sourceLink": "Referenz des Frameworks",
+      "satisfiedShort": "erfüllt",
+      "partialShort": "teilweise",
+      "failedShort": "fehlgeschlagen",
       "context": {
         "nist-800-53-r5": "NIST SP 800-53 ist der US-Bundeskatalog für Sicherheits- und Datenschutzkontrollen für Informationssysteme und Organisationen. Die Moderate-Baseline gilt für Systeme, bei denen ein Verlust von Vertraulichkeit, Integrität oder Verfügbarkeit schwerwiegende Auswirkungen hätte.",
         "nist-800-171-r2": "NIST SP 800-171 definiert Anforderungen zum Schutz von Controlled Unclassified Information (CUI) in nicht-föderalen Systemen: 110 Anforderungen in 14 Familien. Es ist die technische Grundlage von CMMC Level 2.",

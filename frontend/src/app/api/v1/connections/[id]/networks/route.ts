@@ -5,7 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
-import { buildBridgeVlanMap, resolveEffectiveTag } from "@/lib/proxmox/hostVlanMap"
+import { buildBridgeVlanMap, extractHostBridges, resolveEffectiveTag, type HostBridge } from "@/lib/proxmox/hostVlanMap"
 
 export const runtime = "nodejs"
 
@@ -96,7 +96,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Get all VMs/CTs from cluster resources
     const allResources = await pveFetch<any[]>(conn, "/cluster/resources?type=vm")
     if (!allResources || !Array.isArray(allResources)) {
-      return NextResponse.json({ data: [] })
+      return NextResponse.json({ data: [], bridges: [], vnetAliases: {} })
     }
 
     // Restrict to the tenant's vDC pool(s) on this connection. Without this,
@@ -115,25 +115,80 @@ export async function GET(_req: Request, ctx: RouteContext) {
         : []
     }
 
+    const isProviderScope = !vdcScope
+
+    // For provider scope, fetch SDN VNet aliases so the UI can display friendly
+    // names instead of raw VNet ids (e.g. "v42fc503"). Fault-tolerant: if SDN is
+    // unavailable the map stays empty and raw ids are shown.
+    let vnetAliases: Record<string, string> = {}
+    if (isProviderScope) {
+      try {
+        const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets")
+        if (Array.isArray(vnets)) {
+          for (const v of vnets) {
+            if (
+              v &&
+              typeof v.vnet === "string" &&
+              typeof v.alias === "string" &&
+              v.alias.length > 0 &&
+              v.alias !== v.vnet
+            ) {
+              vnetAliases[v.vnet] = v.alias
+            }
+          }
+        }
+      } catch { /* SDN unavailable — fall back to raw bridge names */ }
+    }
+
+    // For provider scope, enumerate ALL cluster nodes so host bridges are surfaced
+    // even when no VMs exist on them. For tenant scope, only visit nodes that
+    // actually host the tenant's VMs (avoids extra PVE calls outside the pool).
+    let nodeNames: string[]
+    if (isProviderScope) {
+      try {
+        const clusterNodes = await pveFetch<any[]>(conn, "/cluster/resources?type=node")
+        nodeNames = Array.isArray(clusterNodes)
+          ? clusterNodes
+              .map((n: any) => n?.node)
+              .filter((n: any): n is string => typeof n === "string" && n.length > 0)
+          : []
+      } catch {
+        nodeNames = []
+      }
+    } else {
+      nodeNames = [...new Set(
+        resources.map((vm: any) => vm?.node).filter((n: any): n is string => typeof n === "string" && n.length > 0)
+      )]
+    }
+
     // Build a per-node `bridge -> VLAN` map from each node's host networking.
     // This lets us resolve the effective VLAN of guests on the traditional
     // layout (a `bondX.N` sub-interface feeding a dedicated bridge), which carry
     // no per-NIC tag and would otherwise all show up as Untagged (discussion #389).
-    const nodeNames = [...new Set(
-      resources.map((vm: any) => vm?.node).filter((n: any): n is string => typeof n === "string" && n.length > 0)
-    )]
     const bridgeVlanByNode = new Map<string, Map<string, number>>()
+    const hostBridgesIfacesByNode = new Map<string, any[]>()
     await Promise.all(
       nodeNames.map(async (node) => {
         try {
           const ifaces = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/network`)
-          bridgeVlanByNode.set(node, buildBridgeVlanMap(Array.isArray(ifaces) ? ifaces : []))
+          const ifaceArr = Array.isArray(ifaces) ? ifaces : []
+          bridgeVlanByNode.set(node, buildBridgeVlanMap(ifaceArr))
+          if (isProviderScope) hostBridgesIfacesByNode.set(node, ifaceArr)
         } catch {
           // Host network unavailable for this node — guests fall back to NIC tags only.
           bridgeVlanByNode.set(node, new Map())
         }
       })
     )
+
+    // Collect host bridges for provider scope
+    const hostBridges: HostBridge[] = []
+    if (isProviderScope) {
+      for (const [node, ifaces] of hostBridgesIfacesByNode) {
+        const map = bridgeVlanByNode.get(node) ?? new Map<string, number>()
+        hostBridges.push(...extractHostBridges(node, ifaces, map))
+      }
+    }
 
     // Batch fetch configs with concurrency limit
     const CONCURRENCY = 15
@@ -187,7 +242,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       }
     }
 
-    return NextResponse.json({ data: results })
+    return NextResponse.json({ data: results, bridges: isProviderScope ? hostBridges : [], vnetAliases })
   } catch (e: any) {
     console.error("[networks] Error:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

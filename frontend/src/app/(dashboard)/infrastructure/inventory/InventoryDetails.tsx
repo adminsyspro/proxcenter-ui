@@ -2439,7 +2439,7 @@ return vm?.isCluster ?? false
             connectionNames={Object.fromEntries(clusterStorages.map(cs => [cs.connId, cs.connName]))}
           />
         </Box>
-      ) : selection?.type === 'net-conn' || selection?.type === 'net-node' || selection?.type === 'net-vlan' ? (
+      ) : selection?.type === 'net-conn' || selection?.type === 'net-node' || selection?.type === 'net-vlan' || selection?.type === 'net-bridge' ? (
         <NetworkDetailPanel selection={selection} onSelect={onSelect} />
       ) : selection?.type === 'tvnet' ? (
         <Box sx={{ p: 2.5, height: '100%', overflow: 'auto' }}>

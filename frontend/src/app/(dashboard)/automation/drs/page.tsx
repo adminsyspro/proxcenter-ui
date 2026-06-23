@@ -2171,7 +2171,7 @@ return next
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} opacity={0.3} vertical={false} />
                         <XAxis dataKey="name" hide />
-                        <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={{ stroke: theme.palette.divider }} tickLine={false} width={35} />
+                        <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={{ stroke: theme.palette.divider }} tickLine={false} width={40} />
                         <RechartsTooltip
                           cursor={false}
                           wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}

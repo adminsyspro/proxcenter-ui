@@ -703,6 +703,22 @@ describe('fetchDetails — cluster allVms isCluster', () => {
 })
 
 /* ------------------------------------------------------------------ */
+/* fetchDetails — section/network selections have no generic details   */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails — section selections return null (no generic CPU/RAM panel)', () => {
+  // net-bridge is a host-bridge selection (#490); like the other net-*/section
+  // types it must NOT fall through to the generic 'UNKNOWN' details payload.
+  it.each([
+    'root', 'storage-root', 'network-root', 'backup-root', 'migration-root',
+    'net-conn', 'net-node', 'net-vlan', 'net-bridge', 'tvnet',
+    'storage-cluster', 'storage-node',
+  ])('returns null for %s', async (type) => {
+    expect(await fetchDetails({ type, id: 'x' } as any)).toBeNull()
+  })
+})
+
+/* ------------------------------------------------------------------ */
 /* RRD time-axis formatting (issue #474)                              */
 /* ------------------------------------------------------------------ */
 

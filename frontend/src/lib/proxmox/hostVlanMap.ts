@@ -22,6 +22,8 @@ export type HostNetIface = {
   'vlan-id'?: number | string
   vlan_id?: number | string
   bridge_vlan_aware?: number | boolean
+  active?: number | boolean
+  autostart?: number | boolean
   [key: string]: unknown
 }
 
@@ -105,6 +107,14 @@ export function resolveEffectiveTag(
   return undefined
 }
 
+/** Resolve a bridge name to its friendly label: the SDN VNet alias when the
+ *  bridge is a VNet, otherwise the bridge name unchanged. Null-safe. */
+export function bridgeLabel(aliases: Record<string, string> | undefined, bridge: string): string {
+  if (!bridge) return bridge
+  const a = aliases?.[bridge]
+  return a && a.length > 0 ? a : bridge
+}
+
 /**
  * Client-side boundary helper: fold each net's server-computed `effectiveTag`
  * into `tag` so the inventory VLAN grouping (tree, dashboard, detail panel)
@@ -116,4 +126,63 @@ export function foldEffectiveVlanTags<T extends { tag?: number; effectiveTag?: n
   nets: T[] | undefined,
 ): T[] {
   return (nets ?? []).map((n) => ({ ...n, tag: n.effectiveTag ?? n.tag }))
+}
+
+/**
+ * A host-level bridge interface as reported by `/nodes/{node}/network`, enriched
+ * with a derived VLAN tag from the node's bridge-to-VLAN map.
+ */
+export type HostBridge = {
+  node: string
+  iface: string
+  type: 'bridge' | 'OVSBridge'
+  active?: boolean
+  autostart?: boolean
+  vlanAware?: boolean
+  ports?: string
+  cidr?: string
+  tag?: number
+}
+
+/**
+ * Extract all host bridge interfaces from a node's network config, enriched
+ * with a VLAN tag derived from the node's bridge-to-VLAN map.
+ *
+ * Includes only entries where `type === 'bridge'` or `type === 'OVSBridge'`.
+ * Results are sorted by interface name. Array- and null-safe.
+ */
+export function extractHostBridges(
+  node: string,
+  ifaces: HostNetIface[],
+  bridgeVlanMap: Map<string, number>,
+): HostBridge[] {
+  if (!Array.isArray(ifaces)) return []
+
+  const bridges: HostBridge[] = []
+  for (const iface of ifaces) {
+    if (!iface || typeof iface.iface !== 'string') continue
+    if (iface.type !== 'bridge' && iface.type !== 'OVSBridge') continue
+
+    const rawPorts = String(iface.bridge_ports ?? iface.ovs_ports ?? '').trim()
+    const ports = rawPorts || undefined
+
+    const bridge: HostBridge = {
+      node,
+      iface: iface.iface,
+      type: iface.type as 'bridge' | 'OVSBridge',
+      active: Boolean(iface.active),
+      autostart: Boolean(iface.autostart),
+      vlanAware: Boolean(iface.bridge_vlan_aware),
+      ...(ports !== undefined ? { ports } : {}),
+      ...(typeof iface.cidr === 'string' ? { cidr: iface.cidr } : {}),
+    }
+
+    const tag = bridgeVlanMap.get(iface.iface)
+    if (tag !== undefined) bridge.tag = tag
+
+    bridges.push(bridge)
+  }
+
+  bridges.sort((a, b) => a.iface.localeCompare(b.iface))
+  return bridges
 }

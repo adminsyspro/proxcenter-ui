@@ -1139,31 +1139,32 @@ export default function ConnectionDialog({
 
                 {sshTestResult && (
                   <Box sx={{ mt: 2 }}>
-                    {sshTestResult.success ? (
-                      <Alert severity="success">
-                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                          {t('settings.sshTestSuccess')}
-                        </Typography>
-                        {sshTestResult.nodes?.map(node => (
-                          <Box key={node.node} sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
-                            <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"} 
-                               style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
-                            <Typography variant="body2">
-                              {node.node} ({node.ip})
+                    <Alert severity={sshTestResult.success ? 'success' : 'error'}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: sshTestResult.nodes?.length ? 1 : 0 }}>
+                        {sshTestResult.success
+                          ? t('settings.sshTestSuccess')
+                          : (sshTestResult.error || t('settings.sshTestFailed'))}
+                      </Typography>
+                      {/* Always render the per-node breakdown when present, even when the
+                          overall test failed. In a cluster a single unreachable or
+                          misconfigured node fails the whole test; the user needs to see
+                          WHICH node failed and why instead of a bare "SSH test failed"
+                          (issue #492). */}
+                      {sshTestResult.nodes?.map(node => (
+                        <Box key={node.node} sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 1 }}>
+                          <i className={node.status === 'ok' ? "ri-check-line" : "ri-close-line"}
+                             style={{ color: node.status === 'ok' ? '#22c55e' : '#ef4444' }} />
+                          <Typography variant="body2">
+                            {node.node} ({node.ip})
+                          </Typography>
+                          {node.error && (
+                            <Typography variant="caption" color="error">
+                              - {node.error}
                             </Typography>
-                            {node.error && (
-                              <Typography variant="caption" color="error">
-                                - {node.error}
-                              </Typography>
-                            )}
-                          </Box>
-                        ))}
-                      </Alert>
-                    ) : (
-                      <Alert severity="error">
-                        {sshTestResult.error || t('settings.sshTestFailed')}
-                      </Alert>
-                    )}
+                          )}
+                        </Box>
+                      ))}
+                    </Alert>
                   </Box>
                 )}
               </Box>

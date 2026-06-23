@@ -9,7 +9,7 @@ vi.mock('next-intl', () => ({
 }))
 
 vi.mock('@/lib/compliance/frameworks', () => ({
-  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework' }),
+  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework', description: 'A concise description of the test framework.' }),
 }))
 
 vi.mock('@/hooks/useConnections', () => ({
@@ -120,6 +120,11 @@ describe('FrameworksTab', () => {
     expect(link).toHaveAttribute('href', 'https://example.com/framework')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('renders the framework description text', () => {
+    render(<FrameworksTab />)
+    expect(screen.getAllByText('A concise description of the test framework.').length).toBeGreaterThan(0)
   })
 })
 

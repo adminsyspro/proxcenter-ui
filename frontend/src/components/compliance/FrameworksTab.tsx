@@ -169,6 +169,12 @@ export default function FrameworksTab() {
                         </Typography>
                       )}
 
+                      {def.description && (
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                          {def.description}
+                        </Typography>
+                      )}
+
                       <Box sx={{ display: 'flex', justifyContent: 'center', my: 1.5 }}>
                         <CircularGauge
                           value={a.score ?? 0}

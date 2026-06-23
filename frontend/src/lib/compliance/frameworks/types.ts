@@ -13,6 +13,7 @@ export interface FrameworkDef {
   version: string
   sourceUrl: string
   baselineLabel?: string
+  description?: string
   provenanceNote?: string
   controls: FrameworkControl[]
 }

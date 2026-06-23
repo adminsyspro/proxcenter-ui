@@ -43,4 +43,28 @@ describe('ISO/IEC 27001:2022 catalogue', () => {
     const ids = ISO_27001_2022_CONTROLS.map(c => c.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
+
+  it('every Organizational control has an id starting A.5.', () => {
+    for (const c of ISO_27001_2022_CONTROLS.filter(c => c.family === 'Organizational')) {
+      expect(c.id).toMatch(/^A\.5\./)
+    }
+  })
+
+  it('every People control has an id starting A.6.', () => {
+    for (const c of ISO_27001_2022_CONTROLS.filter(c => c.family === 'People')) {
+      expect(c.id).toMatch(/^A\.6\./)
+    }
+  })
+
+  it('every Physical control has an id starting A.7.', () => {
+    for (const c of ISO_27001_2022_CONTROLS.filter(c => c.family === 'Physical')) {
+      expect(c.id).toMatch(/^A\.7\./)
+    }
+  })
+
+  it('every Technological control has an id starting A.8.', () => {
+    for (const c of ISO_27001_2022_CONTROLS.filter(c => c.family === 'Technological')) {
+      expect(c.id).toMatch(/^A\.8\./)
+    }
+  })
 })

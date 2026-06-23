@@ -38,7 +38,7 @@ const CHECK_CROSSWALK: Record<string, Entry> = {
   access_password_aging:   { c80053: ['IA-5'], c800171: ['3.5.7'],            c27001: ['A.5.17'],              rationale: 'Password lifetime policy.' },
   access_pw_quality:       { c80053: ['IA-5'], c800171: ['3.5.7'],            c27001: ['A.5.17'],              rationale: 'Password complexity enforcement.' },
   access_shell_timeout:    { c80053: ['AC-12'], c800171: ['3.1.11'],          c27001: ['A.8.5'],               rationale: 'Terminate idle local sessions.' },
-  access_login_banner:     { c80053: ['AC-8'], c800171: ['3.1.9'],            c27001: ['A.5.10'],              rationale: 'System-use notification banner.' },
+  access_login_banner:     { c80053: ['AC-8'], c800171: ['3.1.9'],            c27001: [],                      rationale: 'System-use notification banner.' },
   ssh_strong_ciphers:      { c80053: ['SC-8', 'SC-13'], c800171: ['3.13.8', '3.13.11'], c27001: ['A.8.24'],  rationale: 'Strong transport ciphers.' },
   ssh_strong_kex:          { c80053: ['SC-8', 'SC-13'], c800171: ['3.13.8', '3.13.11'], c27001: ['A.8.24'],  rationale: 'Strong key-exchange algorithms.' },
   ssh_strong_macs:         { c80053: ['SC-8', 'SC-13'], c800171: ['3.13.8', '3.13.11'], c27001: ['A.8.24'],  rationale: 'Strong message authentication codes.' },

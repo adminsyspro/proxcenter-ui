@@ -6372,7 +6372,7 @@
         "nist-800-53-r5": "NIST SP 800-53 ist der US-Bundeskatalog für Sicherheits- und Datenschutzkontrollen für Informationssysteme und Organisationen. Die Moderate-Baseline gilt für Systeme, bei denen ein Verlust von Vertraulichkeit, Integrität oder Verfügbarkeit schwerwiegende Auswirkungen hätte.",
         "nist-800-171-r2": "NIST SP 800-171 definiert Anforderungen zum Schutz von Controlled Unclassified Information (CUI) in nicht-föderalen Systemen: 110 Anforderungen in 14 Familien. Es ist die technische Grundlage von CMMC Level 2.",
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) ist das Rahmenwerk des US-Verteidigungsministeriums zum Schutz von CUI in der Lieferkette. Level 2 entspricht eins zu eins den 110 Anforderungen von NIST SP 800-171 Rev 2.",
-        "iso-27001-2022": "ISO/IEC 27001 ist die internationale Norm für Informationssicherheits-Managementsysteme (ISMS). Anhang A umfasst 93 Massnahmen in den Bereichen Organisation, Personal, Physisches und Technologie."
+        "iso-27001-2022": "ISO/IEC 27001 ist die internationale Norm für Informationssicherheits-Managementsysteme (ISMS). Anhang A umfasst 93 Maßnahmen in den Bereichen Organisation, Personal, Physisches und Technologie."
       }
     }
   },

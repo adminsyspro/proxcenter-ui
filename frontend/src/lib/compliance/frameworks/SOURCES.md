@@ -35,4 +35,7 @@ public-domain NIST OSCAL content. Regenerate after bumping a pinned source.
   People, Physical, Technological). Control identifiers (A.5.1..A.8.34) and concise titles only.
   ISO normative text is copyright ISO and is not redistributed here.
 - Crosswalk: conservative first-pass mapping of ProxCenter hardening checks to Annex A controls,
-  pending formal GRC review. Checks with no clear ISO mapping carry an empty c27001 list.
+  pending formal GRC review. 61 of the 62 hardening checks map to at least one Annex A control
+  in this first pass. The login-banner / system-use notification check (`access_login_banner`)
+  has no clear Annex A equivalent (ISO 27001:2022 includes no control equivalent to NIST AC-8 /
+  NIST SP 800-171 3.1.9) and carries an empty c27001 list, pending GRC review.

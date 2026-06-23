@@ -6427,7 +6427,16 @@
     "confirmDeleteProfile": "Are you sure you want to delete this profile?",
     "noProfiles": "No profiles yet. Create one to customize which checks are run and their weights.",
     "recommendation": "Recommendation",
-    "twoFactorPolicy": "Two-Factor Authentication Policy"
+    "twoFactorPolicy": "Two-Factor Authentication Policy",
+    "frameworks": {
+      "tab": "Frameworks",
+      "downloadReport": "Download report (PDF)",
+      "controlsAssessed": "controls assessed",
+      "assessedOk": "assessed OK",
+      "noAssessed": "No controls assessed yet",
+      "reportFailed": "Report generation failed",
+      "loadFailed": "Could not load framework assessments"
+    }
   },
   "changes": {
     "title": "Change Tracking",

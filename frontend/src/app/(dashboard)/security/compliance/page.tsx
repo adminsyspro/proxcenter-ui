@@ -19,6 +19,7 @@ import {
   useHardeningChecks, useSecurityPolicies,
   useComplianceProfiles,
 } from '@/hooks/useHardeningChecks'
+import FrameworksTab from '@/components/compliance/FrameworksTab'
 
 // Severity config
 const severityColors: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
@@ -1247,11 +1248,17 @@ export default function CompliancePage() {
             iconPosition="start"
             label={t('compliance.policies')}
           />
+          <Tab
+            icon={<i className="ri-government-line" />}
+            iconPosition="start"
+            label={t('compliance.frameworks.tab')}
+          />
         </Tabs>
 
         {tab === 0 && <HardeningTab />}
         {tab === 1 && <ProfilesTab />}
         {tab === 2 && <PoliciesTab />}
+        {tab === 3 && <FrameworksTab />}
       </Box>
     </EnterpriseGuard>
   )

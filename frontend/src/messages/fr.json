@@ -6428,7 +6428,16 @@
     "confirmDeleteProfile": "Êtes-vous sûr de vouloir supprimer ce profil ?",
     "noProfiles": "Aucun profil. Créez-en un pour personnaliser les vérifications exécutées et leur pondération.",
     "recommendation": "Recommandation",
-    "twoFactorPolicy": "Politique d'authentification à deux facteurs"
+    "twoFactorPolicy": "Politique d'authentification à deux facteurs",
+    "frameworks": {
+      "tab": "Référentiels",
+      "downloadReport": "Télécharger le rapport (PDF)",
+      "controlsAssessed": "contrôles évalués",
+      "assessedOk": "évalués OK",
+      "noAssessed": "Aucun contrôle évalué pour l'instant",
+      "reportFailed": "Échec de génération du rapport",
+      "loadFailed": "Impossible de charger les évaluations"
+    }
   },
   "changes": {
     "title": "Suivi des changements",

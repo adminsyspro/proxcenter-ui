@@ -61,6 +61,13 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
   })
 
   it('streams a PDF with sanitized attachment filename (hostile conn name)', async () => {
+    // Capture the html arg passed to renderPdf to verify i18n keys are resolved
+    let capturedHtml = ''
+    renderPdfMock.mockImplementation(async (html: string) => {
+      capturedHtml = html
+      return { ok: true, pdf: Buffer.from([1, 2, 3]) }
+    })
+
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
       params: { frameworkId: 'nist-800-171-r2' },
@@ -72,8 +79,12 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
 
     const disposition = res.headers.get('content-disposition') ?? ''
     expect(disposition).toContain('attachment')
-    // The filename must not contain any dangerous characters
-    expect(disposition).not.toMatch(/[/\\"<>]/)
+    // RFC 6266 quoted form; the filename portion (inside quotes) must be sanitized
+    expect(disposition).toMatch(/^attachment; filename="[^"/\\<>]+\.pdf"$/)
+
+    // Verify PDF HTML contains readable English text, not raw i18n keys
+    expect(capturedHtml).toContain('controls assessed')
+    expect(capturedHtml).not.toContain('compliance.frameworks.controlsAssessed')
   })
 
   it('returns 400 when connectionId is missing', async () => {

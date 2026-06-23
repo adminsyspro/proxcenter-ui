@@ -69,7 +69,11 @@ const CMMC_DOMAIN: Record<string, string> = {
   '3.1': 'AC', '3.2': 'AT', '3.3': 'AU', '3.4': 'CM', '3.5': 'IA', '3.6': 'IR', '3.7': 'MA',
   '3.8': 'MP', '3.9': 'PS', '3.10': 'PE', '3.11': 'RA', '3.12': 'CA', '3.13': 'SC', '3.14': 'SI',
 }
-const toCmmc = (id: string) => `${CMMC_DOMAIN[id.split('.').slice(0, 2).join('.')]}.L2-${id}`
+const toCmmc = (id: string) => {
+  const domain = CMMC_DOMAIN[id.split('.').slice(0, 2).join('.')]
+  if (domain === undefined) throw new Error('toCmmc: unknown 800-171 family prefix for ' + id)
+  return `${domain}.L2-${id}`
+}
 
 export function getCrosswalk(id: FrameworkId): Crosswalk {
   const out: Crosswalk = {}

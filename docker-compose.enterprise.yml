@@ -24,6 +24,8 @@ services:
       - APP_URL=${APP_URL:-http://localhost:3000}
       - ORCHESTRATOR_URL=http://orchestrator:8080
       - ORCHESTRATOR_API_KEY=${ORCHESTRATOR_API_KEY:-}
+      # PDF report renderer (WeasyPrint sidecar). Required for Compliance > Frameworks PDF export.
+      - PROXCENTER_REPORTING_URL=http://weasyprint:5000
       #
       # Docker Secrets support (Swarm / file-based):
       # Instead of setting secrets directly, point to a secret file:

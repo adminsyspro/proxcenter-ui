@@ -25,19 +25,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get('connectionId')
 
-    // Guard: connectionId required
+    // Guard: connectionId required (cheap presence check first)
     if (!connectionId) {
       return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
     }
 
-    // Guard: known frameworkId
+    // Guard 1: Enterprise-only feature (before exposing framework ID validity to non-enterprise callers)
+    const entGuard = await requireEnterprise()
+    if (entGuard) return entGuard
+
+    // Guard: known frameworkId (after enterprise check to avoid info leak)
     if (!FRAMEWORKS.some(f => f.id === frameworkId)) {
       return NextResponse.json({ error: 'unknown framework' }, { status: 400 })
     }
-
-    // Guard 1: Enterprise-only feature
-    const entGuard = await requireEnterprise()
-    if (entGuard) return entGuard
 
     // Guard 2: Tenant ownership (mirrors Task 8 route)
     const ownershipError = await verifyConnectionOwnership(connectionId)
@@ -73,6 +73,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     const assessment = assessFramework(checks, def, getCrosswalk(def.id))
 
     // Build HTML report
+    // Literal-English translator: frameworkReportHtml calls t() with full dot-path keys
+    // (e.g. 'compliance.frameworks.controlsAssessed'). getTranslations from next-intl
+    // requires a request context that is not reliably available in Route handlers, so we
+    // use a static map keyed by the suffix after 'compliance.frameworks.'.
+    const EN_LABELS: Record<string, string> = {
+      assessedOk: 'assessed OK',
+      controlsAssessed: 'controls assessed',
+      noAssessed: 'No controls assessed yet',
+    }
+    const reportT = (k: string): string => {
+      const suffix = k.replace('compliance.frameworks.', '')
+      return EN_LABELS[suffix] ?? k
+    }
     const date = new Date().toISOString().slice(0, 10)
     const html = frameworkReportHtml(
       assessment,
@@ -82,7 +95,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         generatedAt: date,
         locale: 'en',
       },
-      (k: string) => k, // i18n wired in Task 12
+      reportT,
     )
 
     // Render PDF via WeasyPrint sidecar
@@ -94,13 +107,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     const filename =
       sanitizeFilename(`${def.id}-${conn.name ?? connectionId}-${date}`) + '.pdf'
 
-    return new NextResponse(out.pdf, {
+    return new NextResponse(new Uint8Array(out.pdf), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        // sanitizeFilename strips spaces, so no quoting is needed here.
-        // Avoiding quotes keeps the header free of " chars (RFC 6266 allows unquoted tokens).
-        'Content-Disposition': `attachment; filename=${filename}`,
+        'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
   } catch (e: any) {

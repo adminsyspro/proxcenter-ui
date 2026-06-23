@@ -39,7 +39,7 @@ export async function getServerLicense(): Promise<ServerLicense> {
       await res.json()
 
     return {
-      enterprise: data.edition === "enterprise" && data.licensed === true,
+      enterprise: data.licensed === true && (data.edition === "enterprise" || data.edition === "enterprise_plus"),
       edition: data.edition ?? "community",
       licensed: data.licensed ?? false,
       features: data.features ?? [],

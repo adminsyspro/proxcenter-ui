@@ -35,6 +35,18 @@ describe('requireEnterprise', () => {
     expect(result).toBeNull()
   })
 
+  it('returns null when enterprise_plus + licensed', async () => {
+    const mod = await import('./requireEnterprise')
+    vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
+      enterprise: true,
+      edition: 'enterprise_plus',
+      licensed: true,
+      features: [],
+    })
+    const result = await mod.requireEnterprise()
+    expect(result).toBeNull()
+  })
+
   it('fail-closed: getServerLicense returns enterprise:false when fetch rejects', async () => {
     vi.stubGlobal(
       'fetch',

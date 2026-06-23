@@ -12,6 +12,7 @@ import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk, getFramework } from '@/lib/compliance/frameworks'
 import type { FrameworkId } from '@/lib/compliance/frameworks/types'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
+import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 import { frameworkReportHtml } from '@/lib/compliance/report/frameworkReportHtml'
 import { sanitizeFilename } from '@/lib/compliance/report/escapeHtml'
 import { renderPdf } from '@/lib/reporting/weasyprintClient'
@@ -87,6 +88,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       return EN_LABELS[suffix] ?? k
     }
     const date = new Date().toISOString().slice(0, 10)
+    const nodeBreakdown = computeNodeBreakdown(hardeningData)
     const html = frameworkReportHtml(
       assessment,
       def,
@@ -96,6 +98,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         locale: 'en',
       },
       reportT,
+      nodeBreakdown,
     )
 
     // Render PDF via WeasyPrint sidecar

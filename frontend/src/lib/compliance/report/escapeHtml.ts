@@ -7,7 +7,7 @@ export function sanitizeFilename(s: string): string {
   return String(s)
     .replace(/\.\.+/g, '')
     .replace(/[/\\]+/g, '-')
-    .replace(/["'`]+/g, '-')
+    .replace(/["'`<>]+/g, '-')
     .replace(/\s+/g, '')
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-')

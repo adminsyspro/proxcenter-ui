@@ -227,4 +227,16 @@ describe('frameworkReportHtml', () => {
     expect(html).not.toContain('<a href="javascript:')
     expect(html).not.toContain('href="javascript:')
   })
+
+  it('rejects a data: sourceUrl and emits no <a href="data:', () => {
+    const defWithData = { ...getFramework('nist-800-171-r2'), sourceUrl: 'data:text/html,<script>x</script>' }
+    const html = frameworkReportHtml(a, defWithData, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('href="data:')
+  })
+
+  it('rejects a file: sourceUrl and emits no <a href="file:', () => {
+    const defWithFile = { ...getFramework('nist-800-171-r2'), sourceUrl: 'file:///etc/passwd' }
+    const html = frameworkReportHtml(a, defWithFile, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('href="file:')
+  })
 })

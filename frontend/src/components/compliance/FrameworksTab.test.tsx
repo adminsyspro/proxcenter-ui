@@ -9,7 +9,7 @@ vi.mock('next-intl', () => ({
 }))
 
 vi.mock('@/lib/compliance/frameworks', () => ({
-  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [] }),
+  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework' }),
 }))
 
 vi.mock('@/hooks/useConnections', () => ({
@@ -111,6 +111,15 @@ describe('FrameworksTab', () => {
   it('shows the perNodeTitle heading when nodes.length > 1', () => {
     render(<FrameworksTab />)
     expect(screen.getAllByText('perNodeTitle').length).toBeGreaterThan(0)
+  })
+
+  it('renders a link to the framework sourceUrl', () => {
+    render(<FrameworksTab />)
+    const link = screen.getByRole('link', { name: 'sourceLink' })
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveAttribute('href', 'https://example.com/framework')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 })
 

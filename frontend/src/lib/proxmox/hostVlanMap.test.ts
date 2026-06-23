@@ -5,6 +5,8 @@ import {
   buildBridgeVlanMap,
   resolveEffectiveTag,
   foldEffectiveVlanTags,
+  extractHostBridges,
+  bridgeLabel,
   type HostNetIface,
 } from './hostVlanMap'
 
@@ -160,5 +162,143 @@ describe('foldEffectiveVlanTags', () => {
 
   it('is null-safe', () => {
     expect(foldEffectiveVlanTags(undefined)).toEqual([])
+  })
+})
+
+describe('extractHostBridges', () => {
+  const IFACES: HostNetIface[] = [
+    { iface: 'bond0', type: 'bond' },
+    { iface: 'bond0.10', type: 'vlan' },
+    { iface: 'vmbr0V10', type: 'bridge', bridge_ports: 'bond0.10', bridge_vlan_aware: 1 },
+    { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+    { iface: 'ovs0', type: 'OVSBridge', ovs_ports: 'bond0.20' },
+  ]
+  const VLAN_MAP = buildBridgeVlanMap(IFACES)
+
+  it('includes bridge and OVSBridge interfaces, excludes non-bridge types', () => {
+    const result = extractHostBridges('pve1', IFACES, VLAN_MAP)
+    const ifaces = result.map((b) => b.iface)
+    expect(ifaces).toContain('vmbr0V10')
+    expect(ifaces).toContain('vmbr0')
+    expect(ifaces).toContain('ovs0')
+    expect(ifaces).not.toContain('bond0')
+    expect(ifaces).not.toContain('bond0.10')
+  })
+
+  it('stamps the correct node on every entry', () => {
+    const result = extractHostBridges('mynode', IFACES, VLAN_MAP)
+    expect(result.every((b) => b.node === 'mynode')).toBe(true)
+  })
+
+  it('maps bridge type correctly', () => {
+    const result = extractHostBridges('pve1', IFACES, VLAN_MAP)
+    const bridge = result.find((b) => b.iface === 'vmbr0')
+    const ovs = result.find((b) => b.iface === 'ovs0')
+    expect(bridge?.type).toBe('bridge')
+    expect(ovs?.type).toBe('OVSBridge')
+  })
+
+  it('attaches the VLAN tag from the bridgeVlanMap', () => {
+    const result = extractHostBridges('pve1', IFACES, VLAN_MAP)
+    const tagged = result.find((b) => b.iface === 'vmbr0V10')
+    expect(tagged?.tag).toBe(10)
+  })
+
+  it('leaves tag undefined for a bridge not in the vlan map', () => {
+    const result = extractHostBridges('pve1', IFACES, VLAN_MAP)
+    const untagged = result.find((b) => b.iface === 'vmbr0')
+    expect(untagged?.tag).toBeUndefined()
+  })
+
+  it('sets vlanAware from bridge_vlan_aware truthy field', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+      { iface: 'vmbr1', type: 'bridge', bridge_ports: 'bond1', bridge_vlan_aware: 0 },
+      { iface: 'vmbr2', type: 'bridge', bridge_ports: 'bond2' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.find((b) => b.iface === 'vmbr0')?.vlanAware).toBe(true)
+    expect(result.find((b) => b.iface === 'vmbr1')?.vlanAware).toBe(false)
+    expect(result.find((b) => b.iface === 'vmbr2')?.vlanAware).toBe(false)
+  })
+
+  it('omits ports field when bridge_ports is empty or absent', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: '' },
+      { iface: 'vmbr1', type: 'bridge' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.find((b) => b.iface === 'vmbr0')?.ports).toBeUndefined()
+    expect(result.find((b) => b.iface === 'vmbr1')?.ports).toBeUndefined()
+  })
+
+  it('sets ports from bridge_ports (trimmed) when present', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: '  bond0  ' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.find((b) => b.iface === 'vmbr0')?.ports).toBe('bond0')
+  })
+
+  it('prefers bridge_ports over ovs_ports for port field', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'ovsBr', type: 'OVSBridge', ovs_ports: 'bond0.20' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.find((b) => b.iface === 'ovsBr')?.ports).toBe('bond0.20')
+  })
+
+  it('sets cidr when the iface carries a cidr field', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', cidr: '192.168.1.1/24' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.find((b) => b.iface === 'vmbr0')?.cidr).toBe('192.168.1.1/24')
+  })
+
+  it('sorts results by iface name', () => {
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr2', type: 'bridge' },
+      { iface: 'vmbr0', type: 'bridge' },
+      { iface: 'vmbr1', type: 'bridge' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.map((b) => b.iface)).toEqual(['vmbr0', 'vmbr1', 'vmbr2'])
+  })
+
+  it('returns an empty array for empty input', () => {
+    expect(extractHostBridges('pve1', [], new Map())).toEqual([])
+  })
+
+  it('is null-safe for non-array input', () => {
+    expect(extractHostBridges('pve1', undefined as unknown as HostNetIface[], new Map())).toEqual([])
+  })
+
+  it('skips entries without a string iface field', () => {
+    const ifaces: HostNetIface[] = [
+      null as unknown as HostNetIface,
+      { iface: 'vmbr0', type: 'bridge' },
+      { iface: 42 as unknown as string, type: 'bridge' },
+    ]
+    const result = extractHostBridges('pve1', ifaces, new Map())
+    expect(result.map((b) => b.iface)).toEqual(['vmbr0'])
+  })
+})
+
+describe('bridgeLabel', () => {
+  it('returns the alias when present and non-empty', () => {
+    expect(bridgeLabel({ v42fc503: 'Production LAN' }, 'v42fc503')).toBe('Production LAN')
+  })
+
+  it('returns the bridge name unchanged when no alias is present', () => {
+    expect(bridgeLabel({ v42fc503: 'Production LAN' }, 'vmbr0')).toBe('vmbr0')
+  })
+
+  it('returns the bridge name when the alias map is undefined', () => {
+    expect(bridgeLabel(undefined, 'vmbr0')).toBe('vmbr0')
+  })
+
+  it('returns the bridge name when the alias is an empty string', () => {
+    expect(bridgeLabel({ v42fc503: '' }, 'v42fc503')).toBe('v42fc503')
   })
 })

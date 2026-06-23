@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import {
   Box,
   Card,
@@ -23,7 +24,7 @@ import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
 import { useTenant } from '@/contexts/TenantContext'
-import { fetchConnectionsNetworks } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { fetchConnectionsNetworks, type HostBridgeItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 
 type VmNetData = {
   vmid: string
@@ -157,7 +158,7 @@ type VlanEntry = {
   vms: Array<{ vmid: string; name: string; node: string; status: string; bridge: string }>
 }
 
-function VlanVmsList({ vlans }: { vlans: VlanEntry[] }) {
+function VlanVmsList({ vlans, aliases }: { vlans: VlanEntry[]; aliases?: Record<string, string> }) {
   const theme = useTheme()
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
@@ -198,7 +199,7 @@ function VlanVmsList({ vlans }: { vlans: VlanEntry[] }) {
                     sx={{ height: 22, fontSize: 11, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }}
                   />
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                    {v.bridges.join(', ')}
+                    {v.bridges.map(br => bridgeLabel(aliases, br)).join(', ')}
                   </Typography>
                   <Box sx={{ flex: 1 }} />
                   <Chip
@@ -234,7 +235,7 @@ function VlanVmsList({ vlans }: { vlans: VlanEntry[] }) {
                                 <span>{vm.node}</span>
                               </Stack>
                             </TableCell>
-                            <TableCell sx={{ py: 0.5, fontSize: 12, fontFamily: 'JetBrains Mono, monospace', opacity: 0.7 }}>{vm.bridge}</TableCell>
+                            <TableCell sx={{ py: 0.5, fontSize: 12, opacity: 0.7 }}>{bridgeLabel(aliases, vm.bridge)}</TableCell>
                             <TableCell sx={{ py: 0.5 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: vm.status === 'running' ? '#4caf50' : '#9e9e9e' }} />
@@ -276,6 +277,8 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   const isProviderTenant = currentTenant?.id === 'default' || !currentTenant
   const [loading, setLoading] = useState(false)
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
+  const [hostBridges, setHostBridges] = useState<HostBridgeItem[]>([])
+  const [vnetAliasesByConn, setVnetAliasesByConn] = useState<Record<string, Record<string, string>>>({})
   // VNet KPIs are computed from the same data VnetsSection fetches; pulling
   // it up here lets the donut row and the list stay in sync without a
   // duplicate burst of requests. Only fetched on the tenant view.
@@ -289,9 +292,11 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const ids = connIdsKey.split(',')
     let alive = true
     setLoading(true)
-    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data }) => {
+    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vnetAliasesByConn }) => {
       if (!alive) return
       setNetworkData(data)
+      setHostBridges(bridges)
+      setVnetAliasesByConn(vnetAliasesByConn)
     }).finally(() => {
       if (!alive) return
       setLoading(false)
@@ -350,6 +355,31 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const vlanMap = new Map<number, { vlan: number; vmCount: number; bridges: Set<string>; vms: Array<{ vmid: string; name: string; node: string; status: string; bridge: string }> }>()
     let totalVmsWithNetwork = 0
 
+    // Seed bridgeMap and vlanMap from host bridges so bridges/VLANs appear
+    // even when no VMs are attached. The VM loop below increments vmCount on
+    // top of these seeded entries (0 → N). Only populated for provider scope
+    // (tenant view receives bridges: []).
+    for (const b of hostBridges) {
+      const key = `${b.connId}:${b.node}:${b.iface}`
+      if (!bridgeMap.has(key)) {
+        bridgeMap.set(key, {
+          bridge: b.iface,
+          node: b.node,
+          connName: connectionNames[b.connId] || b.connId,
+          type: b.type === 'OVSBridge' ? 'ovs_bridge' : 'bridge',
+          vmCount: 0,
+        })
+      }
+      if (b.tag != null) {
+        const existing = vlanMap.get(b.tag)
+        if (existing) {
+          existing.bridges.add(b.iface)
+        } else {
+          vlanMap.set(b.tag, { vlan: b.tag, vmCount: 0, bridges: new Set([b.iface]), vms: [] })
+        }
+      }
+    }
+
     for (const vm of networkData) {
       if (vm.nets.length > 0) totalVmsWithNetwork++
       for (const net of vm.nets) {
@@ -392,12 +422,18 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       vlanBreakdown: [...vlanMap.values()].map(v => ({ ...v, bridges: [...v.bridges] })).sort((a, b) => b.vmCount - a.vmCount),
       bridgeBreakdown: [...bridgeMap.values()],
     }
-  }, [networkData, connectionNames])
+  }, [networkData, connectionNames, hostBridges])
+
+  // Flat map of vnet id → alias across all connections (vnet ids are globally unique within a cluster)
+  const flatAliases = useMemo(
+    () => Object.assign({}, ...Object.values(vnetAliasesByConn)) as Record<string, string>,
+    [vnetAliasesByConn],
+  )
 
   // Only block the dashboard with a spinner on the initial load — after
   // that, background refetches keep the existing KPIs / tables visible
   // so the page doesn't flicker on every inventory poll.
-  if (loading && networkData.length === 0) {
+  if (loading && networkData.length === 0 && hostBridges.length === 0) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
@@ -511,7 +547,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
 
       {/* VMs by VLAN */}
       {summary.vlanBreakdown.length > 0 && (
-        <VlanVmsList vlans={summary.vlanBreakdown} />
+        <VlanVmsList vlans={summary.vlanBreakdown} aliases={flatAliases} />
       )}
 
       {/* Bridge Table — provider/MSP only. vDC tenants don't see / can't act
@@ -553,7 +589,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
                           <TableCell sx={{ py: 1 }}>
                             <Stack direction="row" alignItems="center" spacing={1}>
                               <i className="ri-share-line" style={{ fontSize: 14, color: theme.palette.primary.main, opacity: 0.7 }} />
-                              <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{bridge.bridge}</Typography>
+                              <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{bridgeLabel(flatAliases, bridge.bridge)}</Typography>
                             </Stack>
                           </TableCell>
                           <TableCell sx={{ py: 1 }}>

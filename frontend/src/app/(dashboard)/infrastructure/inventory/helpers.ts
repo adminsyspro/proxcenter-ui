@@ -562,7 +562,7 @@ export async function fetchRrdBatch(
 
 export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
   // Root / section selections don't have details — skip fetching
-  if (sel.type === 'root' || sel.type === 'storage-root' || sel.type === 'network-root' || sel.type === 'backup-root' || sel.type === 'migration-root' || sel.type === 'net-conn' || sel.type === 'net-node' || sel.type === 'net-vlan' || sel.type === 'tvnet' || sel.type === 'storage-cluster' || sel.type === 'storage-node') return null
+  if (sel.type === 'root' || sel.type === 'storage-root' || sel.type === 'network-root' || sel.type === 'backup-root' || sel.type === 'migration-root' || sel.type === 'net-conn' || sel.type === 'net-node' || sel.type === 'net-vlan' || sel.type === 'net-bridge' || sel.type === 'tvnet' || sel.type === 'storage-cluster' || sel.type === 'storage-node') return null
 
   const lastUpdated = new Date().toLocaleString()
 

@@ -22,7 +22,8 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import type { InventorySelection } from '../types'
-import { foldEffectiveVlanTags } from '@/lib/proxmox/hostVlanMap'
+import { bridgeLabel, foldEffectiveVlanTags, type HostBridge } from '@/lib/proxmox/hostVlanMap'
+import { StatusIcon } from '../InventoryTree'
 
 type NetIface = { id: string; model: string; bridge: string; macaddr?: string; tag?: number; firewall?: boolean; rate?: number }
 type VmNet = { vmid: string; name: string; node: string; type: string; status: string; connId?: string; nets: NetIface[] }
@@ -34,6 +35,8 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   const t = useTranslations()
   const theme = useTheme()
   const [netData, setNetData] = React.useState<VmNet[]>([])
+  const [hostBridges, setHostBridges] = React.useState<HostBridge[]>([])
+  const [vnetAliases, setVnetAliases] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(true)
 
   // Parse selection id
@@ -41,6 +44,8 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   const connId = parts[0]
   const nodeName = selection.type === 'net-node' || selection.type === 'net-vlan' ? parts[1] : undefined
   const vlanTag = selection.type === 'net-vlan' ? parts[2] : undefined
+  const bridgeNode = selection.type === 'net-bridge' ? parts[1] : undefined
+  const bridgeIface = selection.type === 'net-bridge' ? parts[2] : undefined
 
   React.useEffect(() => {
     if (!connId) return
@@ -49,8 +54,13 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       .then(r => r.json())
       // Fold each guest's server-computed host VLAN into `tag` so guests on a
       // bondX.N bridge with no per-NIC tag group under their real VLAN (see helper).
-      .then(json => setNetData((json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) }))))
-      .catch(() => setNetData([]))
+      .then(json => {
+        setNetData((json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) })))
+        // raw HostBridge[] (no connId — this panel is scoped to a single connection)
+        setHostBridges(json.bridges || [])
+        setVnetAliases(json.vnetAliases || {})
+      })
+      .catch(() => { setNetData([]); setHostBridges([]); setVnetAliases({}) })
       .finally(() => setLoading(false))
   }, [connId])
 
@@ -77,6 +87,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   // --- NET-CONN: Cluster-level network overview ---
   if (selection.type === 'net-conn') {
     const nodeMap = new Map<string, { vlans: Set<string | number>; bridges: Set<string>; vms: Set<string> }>()
+    // Seed nodeMap from host bridges so VM-less nodes appear in the table.
+    for (const b of hostBridges) {
+      if (!nodeMap.has(b.node)) nodeMap.set(b.node, { vlans: new Set(), bridges: new Set(), vms: new Set() })
+      const nd = nodeMap.get(b.node)!
+      nd.bridges.add(b.iface)
+    }
     for (const vm of netData) {
       if (!nodeMap.has(vm.node)) nodeMap.set(vm.node, { vlans: new Set(), bridges: new Set(), vms: new Set() })
       const nd = nodeMap.get(vm.node)!
@@ -87,8 +103,17 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       }
     }
     const nodes = Array.from(nodeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-    const totalVlans = new Set(netData.flatMap(vm => vm.nets.map(n => n.tag ?? 'untagged'))).size
-    const totalBridges = new Set(netData.flatMap(vm => vm.nets.map(n => n.bridge))).size
+    // VLANs are VM-derived only; bridges include host bridges so VM-less nodes
+    // still report a bridge count.
+    const allVlans = new Set<string | number>(
+      netData.flatMap(vm => vm.nets.map(n => n.tag ?? 'untagged'))
+    )
+    const allBridges = new Set<string>([
+      ...netData.flatMap(vm => vm.nets.map(n => n.bridge)),
+      ...hostBridges.map(b => b.iface),
+    ])
+    const totalVlans = allVlans.size
+    const totalBridges = allBridges.size
     const totalVms = new Set(netData.map(vm => vm.vmid)).size
 
     return (
@@ -177,6 +202,8 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   // --- NET-NODE: Node-level network view ---
   if (selection.type === 'net-node' && nodeName) {
     const nodeVms = netData.filter(vm => vm.node === nodeName)
+    const nodeHostBridges = hostBridges.filter(b => b.node === nodeName).slice().sort((a, b) => a.iface.localeCompare(b.iface))
+    // Build vlanMap from VMs only (no host bridge seeding)
     const vlanMap = new Map<string | number, { bridges: Set<string>; vms: VmNet[] }>()
     for (const vm of nodeVms) {
       for (const net of vm.nets) {
@@ -192,7 +219,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       if (b[0] === 'untagged') return -1
       return Number(a[0]) - Number(b[0])
     })
-    const totalBridges = new Set(nodeVms.flatMap(vm => vm.nets.map(n => n.bridge))).size
+    const totalBridges = nodeHostBridges.length
 
     return (
       <Box sx={{ p: 2.5 }}>
@@ -228,6 +255,54 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
           ))}
         </Box>
 
+        {/* Host Bridges section */}
+        {nodeHostBridges.length > 0 && (
+          <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                  Bridges
+                </Typography>
+              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Bridge</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Type</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>IP / CIDR</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {nodeHostBridges.map((b) => (
+                      <TableRow
+                        key={b.iface}
+                        hover
+                        sx={{ cursor: 'pointer' }}
+                        onClick={() => onSelect?.({ type: 'net-bridge', id: `${connId}:${nodeName}:${b.iface}:${b.tag ?? 'untagged'}` })}
+                      >
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-share-line" style={{ fontSize: 14, opacity: 0.6 }} />
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{bridgeLabel(vnetAliases, b.iface)}</Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{b.type}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{b.cidr || '—'}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        )}
+
         {/* VLANs list */}
         <Stack spacing={1.5}>
           {vlans.map(([tag, data]) => (
@@ -246,15 +321,15 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
                   <Box sx={{ flex: 1 }} />
                   <Chip size="small" label={`${data.vms.length} VM${data.vms.length > 1 ? 's' : ''}`} sx={{ fontSize: 11, height: 22 }} />
                   {Array.from(data.bridges).map(br => (
-                    <Chip key={br} size="small" variant="outlined" label={br} sx={{ fontSize: 11, height: 22, fontFamily: 'JetBrains Mono, monospace' }} />
+                    <Chip key={br} size="small" variant="outlined" label={bridgeLabel(vnetAliases, br)} sx={{ fontSize: 11, height: 22 }} />
                   ))}
                 </Box>
                 <Box>
                   {data.vms.slice(0, 5).map(vm => (
                     <Box key={vm.vmid} sx={{ px: 2, py: 0.5, display: 'flex', alignItems: 'center', gap: 1, '&:hover': { bgcolor: 'action.hover' } }}>
-                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: vm.status === 'running' ? 'success.main' : 'text.disabled', flexShrink: 0 }} />
+                      <StatusIcon status={vm.status} type="vm" vmType={vm.type} size={16} />
                       <Typography variant="body2" sx={{ fontSize: 12 }}>{vm.name}</Typography>
-                      <Typography variant="caption" sx={{ opacity: 0.4, fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }}>{vm.vmid}</Typography>
+                      <Typography variant="caption" sx={{ opacity: 0.4, fontSize: 10 }}>{vm.vmid}</Typography>
                     </Box>
                   ))}
                   {data.vms.length > 5 && (
@@ -284,6 +359,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
         }
       }
     }
+    // Bridges used by the VMs in this VLAN only (no host-bridge seeding)
     const bridges = [...new Set(vlanVms.map(v => v.net.bridge))]
 
     return (
@@ -337,9 +413,9 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
 
         {/* Bridges */}
         {bridges.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
             {bridges.map(br => (
-              <Chip key={br} variant="outlined" label={br} sx={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }} />
+              <Chip key={br} variant="outlined" label={bridgeLabel(vnetAliases, br)} sx={{ fontWeight: 600 }} />
             ))}
           </Box>
         )}
@@ -379,25 +455,27 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
                       }}
                     >
                       <TableCell>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: vm.status === 'running' ? 'success.main' : 'text.disabled' }} />
+                        <StatusIcon status={vm.status} type="vm" vmType={vm.type} size={16} />
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{vm.name}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                          <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{vm.name}</Typography>
+                        </Box>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', opacity: 0.6 }}>{vm.vmid}</Typography>
+                        <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.6 }}>{vm.vmid}</Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>{net.id}</Typography>
+                        <Typography variant="body2" sx={{ fontSize: 12 }}>{net.id}</Typography>
                       </TableCell>
                       <TableCell>
-                        <Chip size="small" label={net.bridge} variant="outlined" sx={{ fontSize: 11, height: 22, fontFamily: 'JetBrains Mono, monospace' }} />
+                        <Chip size="small" label={bridgeLabel(vnetAliases, net.bridge)} variant="outlined" sx={{ fontSize: 11, height: 22 }} />
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.6 }}>{net.model}</Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', opacity: 0.6 }}>{net.macaddr || '—'}</Typography>
+                        <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.6 }}>{net.macaddr || '—'}</Typography>
                       </TableCell>
                       <TableCell>
                         {net.firewall ? (
@@ -411,6 +489,164 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
                 </TableBody>
               </Table>
             </TableContainer>
+          </CardContent>
+        </Card>
+      </Box>
+    )
+  }
+
+  // --- NET-BRIDGE: Host bridge detail view ---
+  if (selection.type === 'net-bridge' && bridgeNode && bridgeIface) {
+    const bridge = hostBridges.find(b => b.node === bridgeNode && b.iface === bridgeIface)
+    // Find VMs attached to this bridge on this node
+    const bridgeVms: { vm: VmNet; net: NetIface }[] = []
+    for (const vm of netData) {
+      if (vm.node !== bridgeNode) continue
+      for (const net of vm.nets) {
+        if (net.bridge === bridgeIface) {
+          bridgeVms.push({ vm, net })
+        }
+      }
+    }
+
+    return (
+      <Box sx={{ p: 2.5 }}>
+        {/* Breadcrumb header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Chip size="small" label="NETWORK" icon={<i className="ri-global-line" style={{ fontSize: 14, marginLeft: 8 }} />} />
+          <Typography
+            variant="body2"
+            sx={{ opacity: 0.5, cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
+            onClick={() => onSelect?.({ type: 'net-conn', id: connId })}
+          >
+            {connName}
+          </Typography>
+          <i className="ri-arrow-right-s-line" style={{ opacity: 0.3 }} />
+          <Typography
+            variant="body2"
+            sx={{ opacity: 0.5, cursor: 'pointer', '&:hover': { opacity: 0.8 }, display: 'flex', alignItems: 'center', gap: 0.5 }}
+            onClick={() => onSelect?.({ type: 'net-node', id: `${connId}:${bridgeNode}` })}
+          >
+            <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} />
+            {bridgeNode}
+          </Typography>
+          <i className="ri-arrow-right-s-line" style={{ opacity: 0.3 }} />
+          <Typography variant="h6" fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
+            {bridgeLabel(vnetAliases, bridgeIface)}
+          </Typography>
+        </Box>
+
+        {/* Details card */}
+        <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className="ri-share-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                Bridge Details
+              </Typography>
+            </Box>
+            {!bridge ? (
+              <Box sx={{ px: 2, py: 2 }}>
+                <Typography variant="body2" sx={{ opacity: 0.5 }}>Bridge details unavailable.</Typography>
+              </Box>
+            ) : (
+              <Table size="small">
+                <TableBody>
+                  {[
+                    { label: 'Type', value: bridge.type },
+                    { label: 'VLAN', value: bridge.tag != null ? `VLAN ${bridge.tag}` : 'Untagged' },
+                    { label: 'IP / CIDR', value: bridge.cidr || '—' },
+                    { label: 'Ports / Uplinks', value: bridge.ports || '—' },
+                    { label: 'VLAN-aware', value: bridge.vlanAware ? 'Yes' : 'No' },
+                    { label: 'Active', value: bridge.active ? 'Yes' : 'No' },
+                    { label: 'Autostart', value: bridge.autostart ? 'Yes' : 'No' },
+                    ...(bridgeLabel(vnetAliases, bridgeIface!) !== bridgeIface
+                      ? [{ label: 'VNet ID', value: bridgeIface! }]
+                      : []),
+                  ].map(({ label, value }) => (
+                    <TableRow key={label}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, width: 160, opacity: 0.6, borderBottom: 'none', py: 0.75 }}>{label}</TableCell>
+                      <TableCell sx={{ fontSize: 12, borderBottom: 'none', py: 0.75 }}>{value}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Attached VMs table */}
+        <Card variant="outlined" sx={{ borderRadius: 2 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className="ri-computer-line" style={{ fontSize: 18, opacity: 0.7 }} />{' '}
+                Virtual Machines
+              </Typography>
+            </Box>
+            {bridgeVms.length === 0 ? (
+              <Box sx={{ px: 2, py: 2 }}>
+                <Typography variant="body2" sx={{ opacity: 0.5 }}>No VMs attached to this bridge.</Typography>
+              </Box>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VM</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VMID</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Interface</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Model</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>MAC</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Firewall</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {bridgeVms.map(({ vm, net }, idx) => (
+                      <TableRow
+                        key={`${vm.vmid}-${net.id}-${idx}`}
+                        hover
+                        sx={{ cursor: 'pointer' }}
+                        onClick={() => {
+                          const vmKey = `${vm.connId || connId}:${vm.node}:${vm.type}:${vm.vmid}`
+                          onSelect?.({ type: 'vm', id: vmKey })
+                        }}
+                      >
+                        <TableCell>
+                          <StatusIcon status={vm.status} type="vm" vmType={vm.type} size={16} />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{vm.name}</Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.6 }}>{vm.vmid}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12 }}>{net.id}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.6 }}>{net.model}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 11, opacity: 0.6 }}>{net.macaddr || '—'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          {net.firewall ? (
+                            <i className="ri-shield-check-fill" style={{ fontSize: 14, color: theme.palette.success.main }} />
+                          ) : (
+                            <i className="ri-shield-line" style={{ fontSize: 14, opacity: 0.2 }} />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </CardContent>
         </Card>
       </Box>

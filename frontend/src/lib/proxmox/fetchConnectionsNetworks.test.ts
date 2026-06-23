@@ -133,4 +133,134 @@ describe('fetchConnectionsNetworks', () => {
     expect(result.failedConnIds).toEqual([])
     expect(fetchImpl).not.toHaveBeenCalled()
   })
+
+  it('threads bridges from route response, tagging each with connId', async () => {
+    const fetchImpl = makeOkFetch({
+      conn1: {
+        data: [],
+        bridges: [
+          { node: 'pve1', iface: 'vmbr0', type: 'bridge' },
+          { node: 'pve1', iface: 'vmbr1', type: 'bridge', tag: 10 },
+        ],
+      } as any,
+      conn2: {
+        data: [],
+        bridges: [
+          { node: 'pve2', iface: 'vmbr0', type: 'OVSBridge' },
+        ],
+      } as any,
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1', 'conn2'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.bridges).toHaveLength(3)
+    expect(result.bridges.every((b) => typeof b.connId === 'string')).toBe(true)
+    const conn1Bridges = result.bridges.filter((b) => b.connId === 'conn1')
+    expect(conn1Bridges).toHaveLength(2)
+    const conn2Bridges = result.bridges.filter((b) => b.connId === 'conn2')
+    expect(conn2Bridges).toHaveLength(1)
+    expect(conn2Bridges[0].node).toBe('pve2')
+  })
+
+  it('contributes no bridges from a failed connection', async () => {
+    const fetchImpl = makeFailFetch('bad-conn', {
+      'good-conn': {
+        data: [],
+        bridges: [{ node: 'pve1', iface: 'vmbr0', type: 'bridge' }],
+      } as any,
+    })
+
+    const result = await fetchConnectionsNetworks(['good-conn', 'bad-conn'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.failedConnIds).toEqual(['bad-conn'])
+    expect(result.bridges).toHaveLength(1)
+    expect(result.bridges[0].connId).toBe('good-conn')
+  })
+
+  it('returns bridges: [] when the route response has no bridges field (backward compat)', async () => {
+    // Old route response without bridges
+    const fetchImpl = makeOkFetch({
+      conn1: { data: [] },
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.bridges).toEqual([])
+  })
+
+  it('collects vnetAliases per connection into vnetAliasesByConn', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      const match = /\/connections\/([^/]+)\/networks/.exec(url)
+      const connId = match ? decodeURIComponent(match[1]) : '__unknown__'
+      const bodies: Record<string, any> = {
+        conn1: { data: [], bridges: [], vnetAliases: { v42fc503: 'Production LAN' } },
+        conn2: { data: [], bridges: [], vnetAliases: { vaaaabbb: 'Dev Network' } },
+      }
+      const body = bodies[connId]
+      if (!body) throw new Error(`Unexpected connId: ${connId}`)
+      return new Response(JSON.stringify(body), { status: 200 })
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1', 'conn2'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.vnetAliasesByConn).toEqual({
+      conn1: { v42fc503: 'Production LAN' },
+      conn2: { vaaaabbb: 'Dev Network' },
+    })
+  })
+
+  it('sets vnetAliasesByConn[connId] to {} when route response omits vnetAliases (backward compat)', async () => {
+    const fetchImpl = makeOkFetch({
+      conn1: { data: [] },
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.vnetAliasesByConn).toEqual({ conn1: {} })
+  })
+
+  it('returns vnetAliasesByConn: {} immediately for empty connIds input', async () => {
+    const result = await fetchConnectionsNetworks([], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: vi.fn() as any,
+    })
+
+    expect(result.vnetAliasesByConn).toEqual({})
+  })
+
+  it('does not include failed connections in vnetAliasesByConn', async () => {
+    const fetchImpl = makeFailFetch('bad-conn', {
+      'good-conn': { data: [] },
+    })
+
+    const result = await fetchConnectionsNetworks(['good-conn', 'bad-conn'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(Object.keys(result.vnetAliasesByConn)).toEqual(['good-conn'])
+    expect(result.failedConnIds).toContain('bad-conn')
+  })
 })

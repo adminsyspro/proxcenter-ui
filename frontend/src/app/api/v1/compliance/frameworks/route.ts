@@ -1,5 +1,5 @@
 // GET /api/v1/compliance/frameworks?connectionId=
-// Returns a FrameworkAssessment for each of the 3 compliance frameworks,
+// Returns a FrameworkAssessment for each registered compliance framework,
 // scored against the raw (unfiltered) hardening checks for the connection.
 import { NextResponse } from 'next/server'
 

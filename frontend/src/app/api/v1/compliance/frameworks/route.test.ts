@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
+import { FRAMEWORK_IDS } from '@/lib/compliance/frameworks/types'
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -56,22 +57,20 @@ describe('GET /api/v1/compliance/frameworks', () => {
     })
   })
 
-  it('returns 200 with assessments for all 3 frameworks (enterprise + permitted)', async () => {
+  it('returns 200 with assessments for all registered frameworks (enterprise + permitted)', async () => {
     const { GET } = await import('./route')
 
     const res = await callRoute(GET, { searchParams: { connectionId: 'conn-1' } })
 
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
-    expect(body.data).toHaveLength(3)
+    expect(body.data).toHaveLength(FRAMEWORK_IDS.length)
     expect(body.data[0]).toHaveProperty('score')
     expect(body.data[0]).toHaveProperty('frameworkId')
     expect(body.data[0]).toHaveProperty('controls')
-    // All three known framework IDs present
+    // Every registered framework ID is present
     const ids = body.data.map((a: any) => a.frameworkId)
-    expect(ids).toContain('nist-800-53-r5')
-    expect(ids).toContain('nist-800-171-r2')
-    expect(ids).toContain('cmmc-l2')
+    for (const id of FRAMEWORK_IDS) expect(ids).toContain(id)
     // Per-node breakdown: nodes array present with one entry per node in hardeningData
     expect(Array.isArray(body.nodes)).toBe(true)
     expect(body.nodes).toHaveLength(1)

@@ -16,9 +16,9 @@ const fetcher = async (url: string): Promise<FrameworksResponse> => {
 }
 
 /**
- * Fetches framework assessments (NIST 800-53, NIST 800-171, CMMC L2) and
- * per-node check breakdowns for a given connection. Returns empty arrays while
- * loading or when connectionId is not yet available.
+ * Fetches framework assessments (one per registered framework) and per-node
+ * check breakdowns for a given connection. Returns empty arrays while loading
+ * or when connectionId is not yet available.
  */
 export function useFrameworkAssessments(connectionId: string | null) {
   const { data, error, isLoading } = useSWR(

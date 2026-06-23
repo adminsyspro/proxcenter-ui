@@ -5,7 +5,7 @@ export type ControlStatus = 'satisfied' | 'partial' | 'failed' | 'not_assessed'
 
 export interface AssessedControl {
   id: string; title: string; family: string; status: ControlStatus
-  checks: { id: string; name: string; status: string }[]
+  checks: { id: string; name: string; status: string; details?: string }[]
 }
 export interface FamilyBreakdown {
   family: string; satisfied: number; partial: number; failed: number; notAssessed: number
@@ -41,7 +41,7 @@ export function assessFramework(checks: HardeningCheck[], def: FrameworkDef, cro
     else if (applicable.every(c => c.status === 'pass')) status = 'satisfied'
     else if (applicable.every(c => c.status === 'fail')) status = 'failed'
     else status = 'partial'
-    return { id: ctrl.id, title: ctrl.title, family: ctrl.family, status, checks: mapped.map(c => ({ id: c.id, name: c.name, status: c.status })) }
+    return { id: ctrl.id, title: ctrl.title, family: ctrl.family, status, checks: mapped.map(c => ({ id: c.id, name: c.name, status: c.status, details: c.details })) }
   })
 
   const count = (s: ControlStatus) => controls.filter(c => c.status === s).length

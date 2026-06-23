@@ -350,11 +350,18 @@ export function frameworkReportHtml(
   const controlRows = assessedControls.map(c => {
     const badgeStyle = statusBadgeStyle(c.status)
     const label = STATUS_LABEL[c.status] ?? c.status
+    const detailLines = c.checks
+      .filter(ch => ch.details)
+      .map(ch => `${e(STATUS_LABEL[ch.status] ?? ch.status)}: ${e(ch.details!)}`)
+    const detailCell = detailLines.length > 0
+      ? `<span style="font-size:9pt;line-height:1.5;">${detailLines.join('<br>')}</span>`
+      : '<span style="color:#94a3b8;">-</span>'
     return `<tr>
       <td>${e(c.id)}</td>
       <td>${e(c.title)}</td>
       <td><span class="badge" style="${badgeStyle}">${e(label)}</span></td>
       <td>${c.checks.map(ch => e(ch.name)).join(', ')}</td>
+      <td style="font-size:9pt;word-break:break-word;">${detailCell}</td>
     </tr>`
   }).join('')
 
@@ -363,7 +370,7 @@ export function frameworkReportHtml(
   <div class="section-header"><h2>Controls</h2></div>
   <table>
     <thead><tr>
-      <th>ID</th><th>Control</th><th>Status</th><th>Contributing Checks</th>
+      <th>ID</th><th>Control</th><th>Status</th><th>Contributing Checks</th><th>${e(t('compliance.frameworks.colDetail'))}</th>
     </tr></thead>
     <tbody>${controlRows}</tbody>
   </table>

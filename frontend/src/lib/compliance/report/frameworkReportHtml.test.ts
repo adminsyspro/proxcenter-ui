@@ -239,4 +239,67 @@ describe('frameworkReportHtml', () => {
     const html = frameworkReportHtml(a, defWithFile, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('href="file:')
   })
+
+  // -- Details column in control table --
+
+  it('renders check details for a partial control in the Details column', () => {
+    const withDetails: FrameworkAssessment = {
+      ...a,
+      controls: [{
+        id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'partial',
+        checks: [
+          { id: 'ssh_root_login', name: 'SSH root login', status: 'fail', details: 'node2: PermitRootLogin=yes' },
+          { id: 'node_fw', name: 'Node firewall', status: 'pass' },
+        ],
+      }],
+    }
+    const html = frameworkReportHtml(withDetails, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('node2: PermitRootLogin=yes')
+    expect(html).toContain('Fail: node2: PermitRootLogin=yes')
+  })
+
+  it('escapes hostile details value in the Details column', () => {
+    const withHostile: FrameworkAssessment = {
+      ...a,
+      controls: [{
+        id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'failed',
+        checks: [
+          { id: 'check_x', name: 'Check X', status: 'fail', details: '<script>x</script>' },
+        ],
+      }],
+    }
+    const html = frameworkReportHtml(withHostile, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('<script>x</script>')
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;')
+  })
+
+  it('renders placeholder when no check has details', () => {
+    const noDetails: FrameworkAssessment = {
+      ...a,
+      controls: [{
+        id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'satisfied',
+        checks: [{ id: 'ssh_root_login', name: 'SSH root login', status: 'pass' }],
+      }],
+    }
+    const html = frameworkReportHtml(noDetails, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    // Should render the placeholder, not an empty cell
+    expect(html).toContain('#94a3b8')
+  })
+
+  it('skips checks with no details and only renders lines for checks that have details', () => {
+    const mixed: FrameworkAssessment = {
+      ...a,
+      controls: [{
+        id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'partial',
+        checks: [
+          { id: 'check_a', name: 'Check A', status: 'fail', details: 'reason A' },
+          { id: 'check_b', name: 'Check B', status: 'pass' },
+        ],
+      }],
+    }
+    const html = frameworkReportHtml(mixed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('reason A')
+    // check_b has no details; its name should not appear in a "status: details" pattern in the details column
+    expect(html).not.toContain('Pass: Check B')
+  })
 })

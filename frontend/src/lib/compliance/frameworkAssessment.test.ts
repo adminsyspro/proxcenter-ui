@@ -16,8 +16,8 @@ const crosswalk: Crosswalk = {
   chk_pass: { controlIds: ['A'], rationale: '' },
   chk_fail: { controlIds: ['B'], rationale: '' },
 }
-const check = (id: string, status: HardeningCheck['status']): HardeningCheck =>
-  ({ id, name: id, category: 'os', severity: 'low', maxPoints: 5, status, earned: 0 })
+const check = (id: string, status: HardeningCheck['status'], details?: string): HardeningCheck =>
+  ({ id, name: id, category: 'os', severity: 'low', maxPoints: 5, status, earned: 0, details })
 
 describe('assessFramework', () => {
   it('derives control statuses and a pass-rate score over assessed controls', () => {
@@ -53,6 +53,18 @@ describe('assessFramework', () => {
     const a = assessFramework([check('chk_warn', 'warning')], def, cw)
     expect(a.controls.find(c => c.id === 'A')!.status).toBe('partial')
     expect(a.assessedControls).toBeGreaterThanOrEqual(1)
+  })
+  it('carries details from HardeningCheck into AssessedControl.checks', () => {
+    const cw: Crosswalk = { chk_with_details: { controlIds: ['A'], rationale: '' }, chk_no_details: { controlIds: ['A'], rationale: '' } }
+    const a = assessFramework([
+      check('chk_with_details', 'fail', 'node2: PermitRootLogin=yes'),
+      check('chk_no_details', 'pass'),
+    ], def, cw)
+    const ctrl = a.controls.find(c => c.id === 'A')!
+    const withDetails = ctrl.checks.find(c => c.id === 'chk_with_details')!
+    const noDetails = ctrl.checks.find(c => c.id === 'chk_no_details')!
+    expect(withDetails.details).toBe('node2: PermitRootLogin=yes')
+    expect(noDetails.details).toBeUndefined()
   })
   it('mixed pass+skip -> control status satisfied (skip filtered from applicable)', () => {
     // The skip check is excluded from applicable checks; the remaining pass check yields satisfied.

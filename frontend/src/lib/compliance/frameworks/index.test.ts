@@ -9,17 +9,6 @@ describe('framework registry integrity', () => {
     expect(FRAMEWORKS.map(f => f.id).sort()).toEqual([...FRAMEWORK_IDS].sort())
   })
 
-  it('every framework has a non-empty description', () => {
-    for (const f of FRAMEWORKS) {
-      expect(f.description).toBeTruthy()
-    }
-  })
-
-  it('no framework description contains an em-dash', () => {
-    for (const f of FRAMEWORKS) {
-      expect(f.description).not.toContain('—')
-    }
-  })
   for (const id of FRAMEWORK_IDS) {
     it(`${id}: every crosswalk checkId is a real check`, () => {
       const cw = getCrosswalk(id)

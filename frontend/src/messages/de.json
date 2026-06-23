@@ -3734,8 +3734,6 @@
       "sitesHealth": "Site-Zustand",
       "primarySite": "Primär",
       "drSite": "DR",
-      "nodes": "Nodes",
-      "vms": "VMs",
       "flowSyncing": "{count} läuft",
       "flowIdle": "Replikationsverbindung",
       "flowJobs": "{count} Jobs",
@@ -4658,12 +4656,12 @@
     "groupMappingDesc": "Map LDAP groups to RBAC roles. At each login, the user's Global role is synchronized from their LDAP groups.",
     "groupName": "LDAP-Gruppe (DN oder CN)",
     "role": "RBAC-Rolle",
-    "addMapping": "hinzuf\u00fcgen mapping",
-    "accessRestriction": "Zugriffsbeschr\u00e4nkung",
-    "accessRestrictionDesc": "Wenn aktiviert, k\u00f6nnen sich nur Benutzer anmelden, die mindestens einer erlaubten Gruppe angeh\u00f6ren. Benutzern, die keiner erlaubten Gruppe angeh\u00f6ren, wird der Zugriff verweigert.",
-    "requireGroup": "Gruppenmitgliedschaft f\u00fcr Anmeldung erforderlich",
+    "addMapping": "hinzufügen mapping",
+    "accessRestriction": "Zugriffsbeschränkung",
+    "accessRestrictionDesc": "Wenn aktiviert, können sich nur Benutzer anmelden, die mindestens einer erlaubten Gruppe angehören. Benutzern, die keiner erlaubten Gruppe angehören, wird der Zugriff verweigert.",
+    "requireGroup": "Gruppenmitgliedschaft für Anmeldung erforderlich",
     "allowedGroup": "Erlaubte Gruppe",
-    "addAllowedGroup": "Erlaubte Gruppe hinzuf\u00fcgen"
+    "addAllowedGroup": "Erlaubte Gruppe hinzufügen"
   },
   "oidc": {
     "description": "Konfigurieren Sie OIDC/SSO-Authentifizierung, damit Benutzer sich mit ihrem Unternehmens-Identity-Provider anmelden können (Keycloak, Azure AD, Okta, Google, Auth0 usw.).",
@@ -6366,7 +6364,12 @@
       "colCheck": "Prüfpunkt",
       "colStatus": "Status",
       "colDetail": "Detail",
-      "sourceLink": "Referenz des Frameworks"
+      "sourceLink": "Referenz des Frameworks",
+      "context": {
+        "nist-800-53-r5": "NIST SP 800-53 ist der US-Bundeskatalog für Sicherheits- und Datenschutzkontrollen für Informationssysteme und Organisationen. Die Moderate-Baseline gilt für Systeme, bei denen ein Verlust von Vertraulichkeit, Integrität oder Verfügbarkeit schwerwiegende Auswirkungen hätte.",
+        "nist-800-171-r2": "NIST SP 800-171 definiert Anforderungen zum Schutz von Controlled Unclassified Information (CUI) in nicht-föderalen Systemen: 110 Anforderungen in 14 Familien. Es ist die technische Grundlage von CMMC Level 2.",
+        "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) ist das Rahmenwerk des US-Verteidigungsministeriums zum Schutz von CUI in der Lieferkette. Level 2 entspricht eins zu eins den 110 Anforderungen von NIST SP 800-171 Rev 2."
+      }
     }
   },
   "changes": {

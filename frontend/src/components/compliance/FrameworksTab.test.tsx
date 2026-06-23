@@ -9,7 +9,7 @@ vi.mock('next-intl', () => ({
 }))
 
 vi.mock('@/lib/compliance/frameworks', () => ({
-  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework', description: 'A concise description of the test framework.' }),
+  getFramework: (id: string) => ({ id, name: 'Test FW', version: 'vX', controls: [], sourceUrl: 'https://example.com/framework' }),
 }))
 
 vi.mock('@/hooks/useConnections', () => ({
@@ -122,9 +122,11 @@ describe('FrameworksTab', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  it('renders the framework description text', () => {
+  it('renders the info icon tooltip trigger for the framework context', () => {
     render(<FrameworksTab />)
-    expect(screen.getAllByText('A concise description of the test framework.').length).toBeGreaterThan(0)
+    // The tooltip trigger has aria-label="info-<frameworkId>"
+    const trigger = screen.getByLabelText('info-nist-800-171-r2')
+    expect(trigger).toBeInTheDocument()
   })
 })
 

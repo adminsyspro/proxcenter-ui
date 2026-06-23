@@ -7,7 +7,7 @@ import {
   Accordion, AccordionDetails, AccordionSummary,
   Alert, Autocomplete, Box, Button, Card, CardContent,
   Chip, CircularProgress, Grid, Link, Table, TableBody,
-  TableCell, TableHead, TableRow, TextField, Typography,
+  TableCell, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
@@ -25,6 +25,21 @@ import {
   sortNodeChecks,
   triggerDownload,
 } from './frameworksTab.helpers'
+
+// Theme-aware tooltip overrides (mirrors InventoryTree.tsx tooltipSlotProps)
+const tooltipSlotProps = {
+  tooltip: {
+    sx: {
+      bgcolor: 'background.paper',
+      color: 'text.primary',
+      border: '1px solid',
+      borderColor: 'divider',
+      borderRadius: 1.5,
+      boxShadow: 3,
+      maxWidth: 320,
+    },
+  },
+} as const
 
 function statusChipColor(status: string): 'success' | 'warning' | 'error' | 'default' {
   const key = status.toLowerCase()
@@ -159,19 +174,28 @@ export default function FrameworksTab() {
                 <Grid size={{ xs: 12, md: 4 }} key={a.frameworkId}>
                   <Card sx={{ height: '100%' }}>
                     <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        {def.name} {def.version}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                        <Typography variant="h6" sx={{ lineHeight: 1.3 }}>
+                          {def.name} {def.version}
+                        </Typography>
+                        <Tooltip
+                          title={t(`context.${a.frameworkId}`)}
+                          placement="top"
+                          slotProps={tooltipSlotProps}
+                        >
+                          <Box
+                            component="span"
+                            sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', cursor: 'default' }}
+                            aria-label={`info-${a.frameworkId}`}
+                          >
+                            <i className="ri-information-line" style={{ fontSize: '1rem' }} />
+                          </Box>
+                        </Tooltip>
+                      </Box>
 
                       {def.baselineLabel && (
                         <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1 }}>
                           {def.baselineLabel}
-                        </Typography>
-                      )}
-
-                      {def.description && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                          {def.description}
                         </Typography>
                       )}
 

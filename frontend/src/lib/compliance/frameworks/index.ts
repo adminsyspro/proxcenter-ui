@@ -14,7 +14,6 @@ export const FRAMEWORKS: FrameworkDef[] = [
     version: 'Rev 5',
     sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final',
     baselineLabel: 'Moderate baseline',
-    description: 'NIST SP 800-53 is the U.S. federal catalog of security and privacy controls for information systems and organizations. The Moderate baseline applies to systems where a loss of confidentiality, integrity, or availability would have a serious adverse effect.',
     controls: NIST_800_53_R5_CONTROLS,
   },
   {
@@ -22,7 +21,6 @@ export const FRAMEWORKS: FrameworkDef[] = [
     name: 'NIST SP 800-171',
     version: 'Rev 2',
     sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final',
-    description: 'NIST SP 800-171 defines requirements for protecting Controlled Unclassified Information (CUI) in nonfederal systems and organizations: 110 requirements across 14 families. It is the technical baseline that CMMC Level 2 builds on.',
     provenanceNote: REV2_NOTE,
     controls: NIST_800_171_R2_CONTROLS,
   },
@@ -31,7 +29,6 @@ export const FRAMEWORKS: FrameworkDef[] = [
     name: 'CMMC',
     version: 'Level 2',
     sourceUrl: 'https://dodcio.defense.gov/CMMC/',
-    description: 'CMMC (Cybersecurity Maturity Model Certification) is the U.S. Department of Defense framework for safeguarding CUI across the defense supply chain. Level 2 maps one-to-one to the 110 NIST SP 800-171 Rev 2 requirements.',
     provenanceNote: REV2_NOTE,
     controls: CMMC_L2_CONTROLS,
   },

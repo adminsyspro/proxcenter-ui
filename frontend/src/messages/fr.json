@@ -3760,7 +3760,7 @@
     "dashboard": {
       "primary": "Primaire",
       "disasterRecovery": "DR",
-      "nodes": "Nœuds",
+      "nodes": "nœuds",
       "vms": "VMs",
       "connected": "Connecté",
       "degraded": "Dégradé",
@@ -3775,8 +3775,6 @@
       "sitesHealth": "Santé des sites",
       "primarySite": "Primaire",
       "drSite": "DR",
-      "nodes": "nœuds",
-      "vms": "VMs",
       "flowSyncing": "{count} en cours",
       "flowIdle": "Lien de réplication",
       "flowJobs": "{count} jobs",
@@ -4700,11 +4698,11 @@
     "groupName": "Groupe LDAP (DN ou CN)",
     "role": "Rôle RBAC",
     "addMapping": "Ajouter un mapping",
-    "accessRestriction": "Restriction d'acc\u00e8s",
-    "accessRestrictionDesc": "Lorsque cette option est activ\u00e9e, seuls les utilisateurs appartenant \u00e0 au moins un groupe autoris\u00e9 peuvent se connecter. Les utilisateurs n'appartenant \u00e0 aucun groupe autoris\u00e9 se verront refuser l'acc\u00e8s.",
-    "requireGroup": "Exiger l'appartenance \u00e0 un groupe pour se connecter",
-    "allowedGroup": "Groupe autoris\u00e9",
-    "addAllowedGroup": "Ajouter un groupe autoris\u00e9"
+    "accessRestriction": "Restriction d'accès",
+    "accessRestrictionDesc": "Lorsque cette option est activée, seuls les utilisateurs appartenant à au moins un groupe autorisé peuvent se connecter. Les utilisateurs n'appartenant à aucun groupe autorisé se verront refuser l'accès.",
+    "requireGroup": "Exiger l'appartenance à un groupe pour se connecter",
+    "allowedGroup": "Groupe autorisé",
+    "addAllowedGroup": "Ajouter un groupe autorisé"
   },
   "oidc": {
     "description": "Configurez l'authentification OIDC/SSO pour permettre aux utilisateurs de se connecter via leur fournisseur d'identité d'entreprise (Keycloak, Azure AD, Okta, Google, Auth0, etc.).",
@@ -6443,7 +6441,12 @@
       "colCheck": "Contrôle",
       "colStatus": "Statut",
       "colDetail": "Détail",
-      "sourceLink": "Référentiel source"
+      "sourceLink": "Référentiel source",
+      "context": {
+        "nist-800-53-r5": "NIST SP 800-53 est le catalogue fédéral américain de contrôles de sécurité et de protection de la vie privée pour les systèmes d'information. La baseline Moderate s'applique aux systèmes où une perte de confidentialité, d'intégrité ou de disponibilité aurait un impact sérieux.",
+        "nist-800-171-r2": "NIST SP 800-171 définit les exigences de protection des informations non classifiées contrôlées (CUI) dans les systèmes non fédéraux : 110 exigences réparties en 14 familles. C'est le socle technique sur lequel repose CMMC niveau 2.",
+        "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) est le cadre du département de la Défense américain pour protéger les CUI dans la chaîne d'approvisionnement de défense. Le niveau 2 correspond exactement aux 110 exigences NIST SP 800-171 Rev 2."
+      }
     }
   },
   "changes": {

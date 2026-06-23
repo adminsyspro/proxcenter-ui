@@ -3760,7 +3760,7 @@
     "dashboard": {
       "primary": "Primary",
       "disasterRecovery": "DR",
-      "nodes": "Nodes",
+      "nodes": "nodes",
       "vms": "VMs",
       "connected": "Connected",
       "degraded": "Degraded",
@@ -3775,8 +3775,6 @@
       "sitesHealth": "Sites health",
       "primarySite": "Primary",
       "drSite": "DR",
-      "nodes": "nodes",
-      "vms": "VMs",
       "flowSyncing": "{count} syncing now",
       "flowIdle": "Replication link",
       "flowJobs": "{count} jobs",
@@ -6442,7 +6440,12 @@
       "colCheck": "Check",
       "colStatus": "Status",
       "colDetail": "Detail",
-      "sourceLink": "Framework reference"
+      "sourceLink": "Framework reference",
+      "context": {
+        "nist-800-53-r5": "NIST SP 800-53 is the U.S. federal catalog of security and privacy controls for information systems and organizations. The Moderate baseline applies to systems where a loss of confidentiality, integrity, or availability would have a serious adverse effect.",
+        "nist-800-171-r2": "NIST SP 800-171 defines requirements for protecting Controlled Unclassified Information (CUI) in nonfederal systems and organizations: 110 requirements across 14 families. It is the technical baseline that CMMC Level 2 builds on.",
+        "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) is the U.S. Department of Defense framework for safeguarding CUI across the defense supply chain. Level 2 maps one-to-one to the 110 NIST SP 800-171 Rev 2 requirements."
+      }
     }
   },
   "changes": {

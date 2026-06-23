@@ -3722,7 +3722,7 @@
       "primary": "主站点",
       "disasterRecovery": "灾备",
       "nodes": "节点",
-      "vms": "VM",
+      "vms": "虚拟机",
       "connected": "已连接",
       "degraded": "降级",
       "noConnection": "无连接",
@@ -3736,8 +3736,6 @@
       "sitesHealth": "站点健康",
       "primarySite": "主站",
       "drSite": "灾备站",
-      "nodes": "节点",
-      "vms": "虚拟机",
       "flowSyncing": "{count} 个同步中",
       "flowIdle": "复制链路",
       "flowJobs": "{count} 个任务",
@@ -4657,15 +4655,15 @@
     "groupMappingDesc": "将 LDAP 组映射到 RBAC 角色。每次登录时，用户的全局角色将从其 LDAP 组同步。",
     "groupName": "LDAP 组（DN 或 CN）",
     "role": "RBAC 角色",
-    "addMapping": "\u6dfb\u52a0\u6620\u5c04",
-    "accessRestriction": "\u8bbf\u95ee\u9650\u5236",
-    "accessRestrictionDesc": "\u542f\u7528\u540e\uff0c\u53ea\u6709\u5c5e\u4e8e\u81f3\u5c11\u4e00\u4e2a\u5141\u8bb8\u7ec4\u7684\u7528\u6237\u624d\u80fd\u767b\u5f55\u3002\u4e0d\u5c5e\u4e8e\u4efb\u4f55\u5141\u8bb8\u7ec4\u7684\u7528\u6237\u5c06\u88ab\u62d2\u7edd\u8bbf\u95ee\u3002",
-    "requireGroup": "\u767b\u5f55\u65f6\u8981\u6c42\u7ec4\u6210\u5458\u8d44\u683c",
-    "allowedGroup": "\u5141\u8bb8\u7684\u7ec4",
-    "addAllowedGroup": "\u6dfb\u52a0\u5141\u8bb8\u7684\u7ec4"
+    "addMapping": "添加映射",
+    "accessRestriction": "访问限制",
+    "accessRestrictionDesc": "启用后，只有属于至少一个允许组的用户才能登录。不属于任何允许组的用户将被拒绝访问。",
+    "requireGroup": "登录时要求组成员资格",
+    "allowedGroup": "允许的组",
+    "addAllowedGroup": "添加允许的组"
   },
   "oidc": {
-    "description": "\u914d\u7f6e OIDC/SSO \u8eab\u4efd\u9a8c\u8bc1，允许用户使用企业身份提供商（Keycloak、Azure AD、Okta、Google、Auth0 等）登录。",
+    "description": "配置 OIDC/SSO 身份验证，允许用户使用企业身份提供商（Keycloak、Azure AD、Okta、Google、Auth0 等）登录。",
     "securityInfo": "OIDC 身份验证使用行业标准协议。客户端密钥在静态存储时加密，绝不会暴露给浏览器。",
     "loadError": "加载 OIDC 配置时出错",
     "saveError": "保存 OIDC 配置时出错",
@@ -6371,7 +6369,12 @@
       "colCheck": "检查项",
       "colStatus": "状态",
       "colDetail": "详情",
-      "sourceLink": "框架参考"
+      "sourceLink": "框架参考",
+      "context": {
+        "nist-800-53-r5": "NIST SP 800-53 是美国联邦信息系统与组织的安全与隐私控制目录。Moderate 基线适用于机密性、完整性或可用性丧失会造成严重影响的系统。",
+        "nist-800-171-r2": "NIST SP 800-171 规定了在非联邦系统与组织中保护受控非机密信息（CUI）的要求：14 个族共 110 项要求。它是 CMMC 二级的技术基础。",
+        "cmmc-l2": "CMMC（网络安全成熟度模型认证）是美国国防部用于在国防供应链中保护 CUI 的框架。二级与 NIST SP 800-171 Rev 2 的 110 项要求一一对应。"
+      }
     }
   },
   "changes": {

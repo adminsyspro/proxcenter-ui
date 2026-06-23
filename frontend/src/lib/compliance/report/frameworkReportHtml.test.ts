@@ -43,6 +43,88 @@ describe('frameworkReportHtml', () => {
     expect(html).toContain('&lt;b&gt;none&lt;/b&gt;')
   })
 
+  // -- Not-assessed hiding --
+
+  it('hides not_assessed controls from the control table', () => {
+    const withNotAssessed: FrameworkAssessment = {
+      ...a,
+      controls: [
+        { id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'satisfied', checks: [] },
+        { id: '3.1.99', title: 'Policy review', family: 'Policy', status: 'not_assessed', checks: [] },
+      ],
+    }
+    const html = frameworkReportHtml(withNotAssessed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('3.1.1')
+    expect(html).not.toContain('3.1.99')
+  })
+
+  it('does not include a "Not Assessed" stat card', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    // The stat card with "Not Assessed" label must be gone
+    expect(html).not.toMatch(/stat-label[^<]*Not Assessed/)
+  })
+
+  it('omits families with zero assessed controls from the by-family table', () => {
+    const allNotAssessed: FrameworkAssessment = {
+      ...a,
+      families: [
+        { family: 'Policy', satisfied: 0, partial: 0, failed: 0, notAssessed: 5 },
+        { family: 'Access Control', satisfied: 1, partial: 0, failed: 0, notAssessed: 2 },
+      ],
+    }
+    const html = frameworkReportHtml(allNotAssessed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('Access Control')
+    // Policy has no assessed controls so it should be omitted
+    expect(html).not.toContain('>Policy<')
+  })
+
+  it('does not show "Not Assessed" column header in the by-family table', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toMatch(/<th[^>]*>Not Assessed<\/th>/)
+  })
+
+  it('includes a scope note about omitted organizational controls', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('outside the scope of automated infrastructure assessment')
+  })
+
+  // -- Brand color --
+
+  it('injects a valid hex brand color into --primary', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FF5500' }, t)
+    expect(html).toContain('--primary: #FF5500')
+  })
+
+  it('falls back to #E57000 when brandColor is an invalid / hostile value', () => {
+    const hostile = 'red;}body{x:1'
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: hostile }, t)
+    expect(html).not.toContain(hostile)
+    expect(html).toContain('--primary: #E57000')
+  })
+
+  it('falls back to #E57000 when brandColor is absent', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('--primary: #E57000')
+  })
+
+  // -- Logo --
+
+  it('renders logo img when logoDataUri starts with data:', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
+    expect(html).toContain('<img class="cover-logo" src="data:image/png;base64,AAAA"')
+  })
+
+  it('rejects non-data: logoDataUri (no img rendered)', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'http://evil.com/logo.png' }, t)
+    expect(html).not.toContain('http://evil.com')
+    expect(html).not.toContain('<img class="cover-logo"')
+  })
+
+  it('omits logo img when logoDataUri is absent', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('<img class="cover-logo"')
+  })
+
   // -- Per-node section tests --
 
   it('emits a per-node section when nodeBreakdown has more than 1 node', () => {
@@ -119,5 +201,14 @@ describe('frameworkReportHtml', () => {
     expect(html).not.toMatch(/src=["']file:/)
     expect(html).not.toMatch(/@import\s+['"]https?:/)
     expect(html).not.toMatch(/<link/)
+  })
+
+  it('allows data: URI logo without treating it as a remote resource', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
+    // data: URI is allowed
+    expect(html).toContain('data:image/png;base64,AAAA')
+    // still no http/file
+    expect(html).not.toMatch(/src=["']https?:/)
+    expect(html).not.toMatch(/src=["']file:/)
   })
 })

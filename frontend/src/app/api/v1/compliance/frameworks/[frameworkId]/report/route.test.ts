@@ -12,6 +12,7 @@ const verifyConnectionOwnershipMock = vi.fn<(id: string) => Promise<Response | n
 const collectHardeningDataMock = vi.fn<(opts: any) => Promise<any>>()
 const requireEnterpriseMock = vi.fn<() => Promise<Response | null>>()
 const renderPdfMock = vi.fn<(html: string) => Promise<any>>()
+const getSettingMock = vi.fn<(key: string, tenantId: string) => Promise<any>>()
 
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
@@ -19,6 +20,10 @@ vi.mock('@/lib/tenant', () => ({
   }),
   verifyConnectionOwnership: verifyConnectionOwnershipMock,
   getCurrentTenantId: vi.fn(async () => 'tenant-1'),
+}))
+
+vi.mock('@/lib/db/settings', () => ({
+  getSetting: getSettingMock,
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -42,6 +47,16 @@ vi.mock('@/lib/reporting/weasyprintClient', () => ({
   renderPdf: renderPdfMock,
 }))
 
+// Mock node:fs so logo disk reads never hit the real filesystem in tests
+vi.mock('node:fs', () => ({
+  default: {
+    existsSync: vi.fn(() => false),
+    readFileSync: vi.fn(() => Buffer.from('')),
+  },
+  existsSync: vi.fn(() => false),
+  readFileSync: vi.fn(() => Buffer.from('')),
+}))
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -58,6 +73,8 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     findUniqueMock.mockResolvedValue({ sshEnabled: false })
     collectHardeningDataMock.mockResolvedValue({})
     renderPdfMock.mockResolvedValue({ ok: true, pdf: Buffer.from([1, 2, 3]) })
+    // Default: no branding settings
+    getSettingMock.mockResolvedValue(null)
   })
 
   it('streams a PDF with sanitized attachment filename (hostile conn name)', async () => {
@@ -183,5 +200,15 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     expect(collectHardeningDataMock).toHaveBeenCalledWith(
       expect.objectContaining({ connectionId: 'c1', sshEnabled: true })
     )
+  })
+
+  it('still returns 200 when getSetting throws (branding hiccup)', async () => {
+    getSettingMock.mockRejectedValue(new Error('DB connection lost'))
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, {
+      params: { frameworkId: 'nist-800-171-r2' },
+      searchParams: { connectionId: 'c1' },
+    })
+    expect(res.status).toBe(200)
   })
 })

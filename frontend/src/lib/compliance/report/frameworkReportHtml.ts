@@ -3,11 +3,13 @@ import type { FrameworkDef } from '../frameworks/types'
 import type { NodeBreakdown } from '../nodeBreakdown'
 import { escapeHtml } from './escapeHtml'
 
-export interface ReportMeta { connectionName: string; generatedAt: string; locale: string }
-
-// Color tokens shared by status badges and stat cards.
-// These are static strings -- no user input -- so no escaping needed here.
-const PRIMARY = '#6366f1'
+export interface ReportMeta {
+  connectionName: string
+  generatedAt: string
+  locale: string
+  brandColor?: string
+  logoDataUri?: string
+}
 
 function scoreColor(score: number | null): string {
   if (score === null) return '#64748b'
@@ -40,11 +42,11 @@ const STATUS_LABEL: Record<string, string> = {
   skip: 'Skip',
 }
 
-// CSS design system ported from backend templates/reports/base.html and report_compliance.html.
-// Inline only -- no @import, no <link>, no remote refs. WeasyPrint runs base_url=None.
-const CSS = `
+function buildCss(primary: string): string {
+  return `
   :root {
-    --primary: ${PRIMARY};
+    --primary: ${primary};
+    --indigo: #6366f1;
     --green: #22c55e;
     --amber: #f59e0b;
     --red: #ef4444;
@@ -61,19 +63,19 @@ const CSS = `
     margin: 15mm;
     @top-center {
       content: "ProxCenter  |  Compliance Report";
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 8pt;
       color: var(--slate-500);
     }
     @bottom-center {
       content: "Page " counter(page) " / " counter(pages);
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 8pt;
       color: var(--slate-500);
     }
     @bottom-right {
       content: "Confidential";
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: Inter, sans-serif;
       font-size: 7pt;
       color: var(--slate-500);
       font-style: italic;
@@ -108,6 +110,7 @@ const CSS = `
   .cover-app-name { font-size: 20pt; font-weight: 700; letter-spacing: 1px; }
   .cover-subtitle  { font-size: 11pt; opacity: 0.9; margin-top: 2mm; }
   .cover-body { text-align: center; padding-top: 30mm; }
+  .cover-logo { width: 25mm; height: auto; margin-bottom: 8mm; }
   .cover-title {
     font-size: 26pt; font-weight: 700; color: var(--slate-900); margin-bottom: 6mm;
   }
@@ -194,7 +197,7 @@ const CSS = `
     padding: 0.5mm 2mm; border-radius: 1mm; white-space: nowrap;
   }
 
-  /* Info box (provenance) */
+  /* Info box (provenance / scope note) */
   .info-box {
     background: var(--slate-50); border-left: 3pt solid var(--primary);
     border-radius: 2mm; padding: 4mm 5mm; margin-bottom: 5mm;
@@ -217,6 +220,7 @@ const CSS = `
   .mb-4       { margin-bottom: 4mm; }
   .no-break   { page-break-inside: avoid; }
 `
+}
 
 export function frameworkReportHtml(
   a: FrameworkAssessment,
@@ -226,6 +230,12 @@ export function frameworkReportHtml(
   nodeBreakdown?: NodeBreakdown[],
 ): string {
   const e = escapeHtml
+
+  // Validate brand color to prevent CSS injection; validated value goes directly into CSS (not escaped).
+  const primary = /^#[0-9a-fA-F]{3,8}$/.test(meta.brandColor ?? '') ? meta.brandColor! : '#E57000'
+
+  // Logo: only allow data: URIs. Never escapeHtml a data URI (corrupts base64).
+  const safeLogoUri = (meta.logoDataUri && meta.logoDataUri.startsWith('data:')) ? meta.logoDataUri : ''
 
   // Score display
   const score = a.score
@@ -237,6 +247,8 @@ export function frameworkReportHtml(
     ? `${e(def.name)} ${e(def.version)} - ${e(def.baselineLabel)}`
     : `${e(def.name)} ${e(def.version)}`
 
+  const logoHtml = safeLogoUri ? `<img class="cover-logo" src="${safeLogoUri}" alt="">` : ''
+
   const cover = `
 <div class="cover">
   <div class="cover-header">
@@ -244,6 +256,7 @@ export function frameworkReportHtml(
     <div class="cover-subtitle">Compliance Assessment Report</div>
   </div>
   <div class="cover-body">
+    ${logoHtml}
     <div class="cover-title">${frameworkLabel}</div>
     <div class="cover-type">Compliance Assessment</div>
     <div class="cover-divider"></div>
@@ -265,13 +278,10 @@ export function frameworkReportHtml(
 </div>`
 
   // -- Section 2: Summary --
-  // Score progress bar (static width computed from numeric score, no user data)
   const barWidth = score !== null ? `${Math.max(0, Math.min(100, score))}%` : '0%'
   const scoreCardClass = score === null ? 'muted' : score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error'
 
-  // Stat cards: all values here are numeric counts (no user input).
-  // t() is called for the "controls assessed" label to keep the route test's assertion intact.
-  const controlsAssessedLabel = e(t('compliance.frameworks.controlsAssessed'))
+  // Stat cards: Score, Assessed (count), Satisfied, Partial, Failed. "Not Assessed" card dropped.
   const statCards = `
 <div class="stat-cards">
   <div class="stat-card ${scoreCardClass}">
@@ -280,8 +290,8 @@ export function frameworkReportHtml(
     <div class="bar-track"><div class="bar-fill" style="width:${barWidth};background:${color};"></div></div>
   </div>
   <div class="stat-card info">
-    <div class="stat-value">${a.assessedControls} / ${a.totalControls}</div>
-    <div class="stat-label">${controlsAssessedLabel}</div>
+    <div class="stat-value">${a.assessedControls}</div>
+    <div class="stat-label">${e(t('compliance.frameworks.controlsAssessed'))}</div>
   </div>
   <div class="stat-card success">
     <div class="stat-value">${a.satisfied}</div>
@@ -295,15 +305,12 @@ export function frameworkReportHtml(
     <div class="stat-value">${a.failed}</div>
     <div class="stat-label">Failed</div>
   </div>
-  <div class="stat-card muted">
-    <div class="stat-value">${a.notAssessed}</div>
-    <div class="stat-label">Not Assessed</div>
-  </div>
 </div>`
 
-  // Per-family summary table
-  const famRows = a.families.map(f => {
-    const total = f.satisfied + f.partial + f.failed + f.notAssessed
+  // Per-family summary table: only families with >= 1 assessed control; no not-assessed column.
+  const assessedFamilies = a.families.filter(f => (f.satisfied + f.partial + f.failed) > 0)
+  const famRows = assessedFamilies.map(f => {
+    const total = f.satisfied + f.partial + f.failed
     const fScore = total > 0 ? Math.round((f.satisfied / total) * 100) : 0
     const fColor = scoreColor(fScore)
     const fWidth = `${fScore}%`
@@ -312,7 +319,6 @@ export function frameworkReportHtml(
       <td>${f.satisfied}</td>
       <td>${f.partial}</td>
       <td>${f.failed}</td>
-      <td>${f.notAssessed}</td>
       <td>
         <div class="bar-track" style="margin-top:0;"><div class="bar-fill" style="width:${fWidth};background:${fColor};"></div></div>
         <span class="text-sm text-muted">${fScore}%</span>
@@ -320,21 +326,28 @@ export function frameworkReportHtml(
     </tr>`
   }).join('')
 
+  const scopeNote = `
+<div class="info-box">
+  <div class="info-box-content">Organizational, physical and personnel controls are outside the scope of automated infrastructure assessment and are omitted from this report.</div>
+</div>`
+
   const summarySection = `
 <div class="section">
   <div class="section-header"><h2>Summary</h2></div>
+  ${scopeNote}
   ${statCards}
   <h3 class="sub-header">By Family</h3>
   <table>
     <thead><tr>
-      <th>Family</th><th>Satisfied</th><th>Partial</th><th>Failed</th><th>Not Assessed</th><th>Score</th>
+      <th>Family</th><th>Satisfied</th><th>Partial</th><th>Failed</th><th>Score</th>
     </tr></thead>
     <tbody>${famRows}</tbody>
   </table>
 </div>`
 
-  // -- Section 3: Per-control table --
-  const controlRows = a.controls.map(c => {
+  // -- Section 3: Per-control table (assessed controls only) --
+  const assessedControls = a.controls.filter(c => c.status !== 'not_assessed')
+  const controlRows = assessedControls.map(c => {
     const badgeStyle = statusBadgeStyle(c.status)
     const label = STATUS_LABEL[c.status] ?? c.status
     return `<tr>
@@ -360,14 +373,12 @@ export function frameworkReportHtml(
   let nodeSection = ''
   if (nodeBreakdown && nodeBreakdown.length > 1) {
     const nodeBlocks = nodeBreakdown.map(nb => {
-      // Sort checks by category for readability
       const sorted = [...nb.checks].sort((x, y) =>
         x.category < y.category ? -1 : x.category > y.category ? 1 : 0,
       )
       const nodeRows = sorted.map(ch => {
         const badgeStyle = statusBadgeStyle(ch.status)
         const label = STATUS_LABEL[ch.status] ?? ch.status
-        // ch.details is a dynamic string from check results -- MUST be escaped
         const detail = ch.details ? e(ch.details) : ''
         return `<tr>
           <td>${e(ch.category)}</td>
@@ -376,7 +387,6 @@ export function frameworkReportHtml(
           <td>${detail}</td>
         </tr>`
       }).join('')
-      // nb.node is a dynamic node name from Proxmox API -- MUST be escaped
       return `
 <div class="no-break">
   <div class="node-header">Node: ${e(nb.node)}</div>
@@ -414,7 +424,7 @@ export function frameworkReportHtml(
 <head>
 <meta charset="utf-8">
 <title>ProxCenter - ${e(def.name)} Compliance Report</title>
-<style>${CSS}</style>
+<style>${buildCss(primary)}</style>
 </head>
 <body>
 ${cover}

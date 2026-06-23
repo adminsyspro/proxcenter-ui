@@ -2,11 +2,14 @@
 // Assesses one compliance framework for a connection, renders HTML,
 // and streams the result as a PDF via the WeasyPrint sidecar.
 import { NextResponse } from 'next/server'
+import fs from 'node:fs'
+import path from 'node:path'
 
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireEnterprise } from '@/lib/auth/requireEnterprise'
-import { verifyConnectionOwnership, getSessionPrisma } from '@/lib/tenant'
+import { verifyConnectionOwnership, getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
+import { getSetting } from '@/lib/db/settings'
 import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk, getFramework } from '@/lib/compliance/frameworks'
@@ -61,6 +64,40 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       select: { sshEnabled: true },
     })
 
+    // Fetch branding settings server-side. Wrapped in try/catch so a DB or FS
+    // hiccup never crashes the report; falls back to defaults.
+    let brandColor = '#E57000'
+    let logoDataUri = ''
+    try {
+      const tenantId = await getCurrentTenantId()
+      const branding = await getSetting<any>('branding', tenantId)
+      if (branding?.enabled && branding?.primaryColor) {
+        brandColor = String(branding.primaryColor)
+      }
+
+      let logoPath = ''
+      if (branding?.enabled && branding?.logoUrl) {
+        // path.basename prevents any directory traversal in a stored URL
+        const filename = path.basename(String(branding.logoUrl).split('?')[0])
+        const candidate = path.join(process.cwd(), 'data', 'uploads', 'branding', tenantId, filename)
+        if (fs.existsSync(candidate)) logoPath = candidate
+      }
+      if (!logoPath) {
+        const def = path.join(process.cwd(), 'public', 'images', 'proxcenter.png')
+        if (fs.existsSync(def)) logoPath = def
+      }
+      if (logoPath) {
+        const mime = logoPath.endsWith('.svg')
+          ? 'image/svg+xml'
+          : (logoPath.endsWith('.jpg') || logoPath.endsWith('.jpeg'))
+            ? 'image/jpeg'
+            : 'image/png'
+        logoDataUri = `data:${mime};base64,${fs.readFileSync(logoPath).toString('base64')}`
+      }
+    } catch {
+      // Branding/logo failures are non-fatal; report renders with defaults.
+    }
+
     // Collect raw data (no profile, mirrors Task 8)
     const hardeningData = await collectHardeningData({
       connectionId,
@@ -96,6 +133,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         connectionName: conn.name ?? connectionId,
         generatedAt: date,
         locale: 'en',
+        brandColor,
+        logoDataUri,
       },
       reportT,
       nodeBreakdown,

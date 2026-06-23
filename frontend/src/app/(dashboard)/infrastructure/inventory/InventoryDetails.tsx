@@ -87,7 +87,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
-import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails } from './helpers'
+import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useRouter } from 'next/navigation'
@@ -1347,6 +1347,11 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   // Entity tags (cluster/node) - stored in ProxCenter DB
   const [entityTags, setEntityTags] = useState<string[]>([])
+  // baseUrl of the selected connection + whether it sits behind a reverse proxy,
+  // used to link to the native Proxmox web UI (cluster, standalone host, or a
+  // specific cluster node via its own management IP)
+  const [proxmoxBaseUrl, setProxmoxBaseUrl] = useState<string | null>(null)
+  const [proxmoxBehindProxy, setProxmoxBehindProxy] = useState(false)
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
 
   // Hosts data via shared SWR (dedup with NodeTabs)
@@ -1355,6 +1360,8 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   useEffect(() => {
     setEntityTags([])
+    setProxmoxBaseUrl(null)
+    setProxmoxBehindProxy(false)
     if (!selection) return
     if (selection.type === 'cluster') {
       fetch(`/api/v1/connections/${encodeURIComponent(selection.id)}`)
@@ -1362,14 +1369,25 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
         .then(json => {
           const tags = json?.data?.tags
           setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
+          setProxmoxBaseUrl(json?.data?.baseUrl ?? null)
+          setProxmoxBehindProxy(!!json?.data?.behindProxy)
         })
         .catch(() => {})
     } else if (selection.type === 'node') {
-      const { node } = parseNodeId(selection.id)
+      const { connId, node } = parseNodeId(selection.id)
       const hosts = hostsData?.data?.hosts || []
       const host = hosts.find((h: any) => h.node === node)
       const tags = host?.managedHost?.tags || host?.tags
       setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
+      // baseUrl + behindProxy let the node link to the native Proxmox web UI
+      // (cluster nodes deep-link to their own management IP via proxmoxNodeWebUiOrigin).
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          setProxmoxBaseUrl(json?.data?.baseUrl ?? null)
+          setProxmoxBehindProxy(!!json?.data?.behindProxy)
+        })
+        .catch(() => {})
     }
   }, [selection?.id, selection?.type, hostsData])
 
@@ -3015,6 +3033,30 @@ return vm?.isCluster ?? false
               <Typography variant="subtitle1" fontWeight={900}>
                 {data.title}
               </Typography>
+
+              {/* Open the native Proxmox web UI, right next to the cluster/node name.
+                  Clusters and standalone hosts use the connection origin; a cluster
+                  node deep-links to its own management IP. */}
+              {(selection?.type === 'cluster' || selection?.type === 'node') && (() => {
+                const proxmoxUiUrl = selection?.type === 'node'
+                  ? proxmoxNodeWebUiOrigin(proxmoxBaseUrl, data?.nodeIp, proxmoxBehindProxy)
+                  : proxmoxWebUiOrigin(proxmoxBaseUrl)
+                if (!proxmoxUiUrl) return null
+                return (
+                  <MuiTooltip title={t('inventory.openProxmoxUi')}>
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={proxmoxUiUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'action.hover' } }}
+                    >
+                      <i className="ri-external-link-line" style={{ fontSize: 16 }} />
+                    </IconButton>
+                  </MuiTooltip>
+                )
+              })()}
 
               {/* Entity tags (cluster/node) */}
               {(selection?.type === 'cluster' || selection?.type === 'node') && (

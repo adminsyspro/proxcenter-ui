@@ -17,6 +17,8 @@ import {
   parseMarkdown,
   parseNodeId,
   parseVmId,
+  proxmoxWebUiOrigin,
+  proxmoxNodeWebUiOrigin,
   getMetricIcon,
   pickNumber,
   buildSeriesFromRrd,
@@ -509,6 +511,61 @@ describe('parseVmId', () => {
       type: 'lxc',
       vmid: '200',
     })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* proxmoxWebUiOrigin                                                   */
+/* ------------------------------------------------------------------ */
+
+describe('proxmoxWebUiOrigin', () => {
+  it('returns the origin (scheme + host + port) of a baseUrl', () => {
+    expect(proxmoxWebUiOrigin('https://pve.example.com:8006/api2/json')).toBe('https://pve.example.com:8006')
+  })
+
+  it('drops any path, query and fragment', () => {
+    expect(proxmoxWebUiOrigin('https://10.0.0.5:8006/api2/json/cluster/status?x=1#y')).toBe('https://10.0.0.5:8006')
+  })
+
+  it('preserves a non-8006 port (reverse-proxy on default https port)', () => {
+    expect(proxmoxWebUiOrigin('https://proxmox.example.com/api2/json')).toBe('https://proxmox.example.com')
+  })
+
+  it('returns null for null, undefined or empty input', () => {
+    expect(proxmoxWebUiOrigin(null)).toBeNull()
+    expect(proxmoxWebUiOrigin(undefined)).toBeNull()
+    expect(proxmoxWebUiOrigin('')).toBeNull()
+  })
+
+  it('returns null for a malformed baseUrl', () => {
+    expect(proxmoxWebUiOrigin('not a url')).toBeNull()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* proxmoxNodeWebUiOrigin                                               */
+/* ------------------------------------------------------------------ */
+
+describe('proxmoxNodeWebUiOrigin', () => {
+  it('swaps the host for the node IP while keeping scheme and port', () => {
+    expect(proxmoxNodeWebUiOrigin('https://pve1.example.com:8006/api2/json', '10.0.0.7')).toBe('https://10.0.0.7:8006')
+  })
+
+  it('falls back to the connection origin when the node IP is unknown', () => {
+    expect(proxmoxNodeWebUiOrigin('https://pve1.example.com:8006', null)).toBe('https://pve1.example.com:8006')
+    expect(proxmoxNodeWebUiOrigin('https://pve1.example.com:8006', undefined)).toBe('https://pve1.example.com:8006')
+  })
+
+  it('falls back to the connection origin when behind a reverse proxy (internal node IPs unreachable)', () => {
+    expect(proxmoxNodeWebUiOrigin('https://proxmox.example.com', '10.0.0.7', true)).toBe('https://proxmox.example.com')
+  })
+
+  it('returns null when there is no baseUrl to derive scheme/port from', () => {
+    expect(proxmoxNodeWebUiOrigin(null, '10.0.0.7')).toBeNull()
+  })
+
+  it('falls back to the connection origin for a malformed baseUrl', () => {
+    expect(proxmoxNodeWebUiOrigin('not a url', '10.0.0.7')).toBeNull()
   })
 })
 

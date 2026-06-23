@@ -252,6 +252,9 @@ export type DetailsPayload = {
   }>
   vmsCount?: number
   clusterName?: string | null
+  // Selected node's management IP (node selections only), used to deep-link to
+  // that specific node's native Proxmox web UI.
+  nodeIp?: string | null
 
   pbsInfo?: {
     version?: string

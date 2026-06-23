@@ -1773,6 +1773,7 @@
     "userName": "User Name",
     "newBackup": "New Backup",
     "deployFromTemplate": "Deploy from template",
+    "openProxmoxUi": "Open Proxmox web interface",
     "backupContent": "Backup Content",
     "recommended": "Recommended",
     "usePbsDirectly": "Use PBS directly for this feature",

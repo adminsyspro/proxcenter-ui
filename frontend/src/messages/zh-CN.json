@@ -1742,6 +1742,7 @@
     "userName": "用户名",
     "newBackup": "新建备份",
     "deployFromTemplate": "从模板部署",
+    "openProxmoxUi": "打开 Proxmox 网页界面",
     "backupContent": "备份内容",
     "recommended": "推荐",
     "usePbsDirectly": "直接使用 PBS 进行此功能",

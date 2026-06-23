@@ -1740,6 +1740,7 @@
     "userName": "Benutzername",
     "newBackup": "Neues Backup",
     "deployFromTemplate": "Aus Vorlage bereitstellen",
+    "openProxmoxUi": "Proxmox-Weboberfläche öffnen",
     "backupContent": "Backup-Inhalt",
     "recommended": "Empfohlen",
     "usePbsDirectly": "Verwenden Sie PBS direkt für diese Funktion",

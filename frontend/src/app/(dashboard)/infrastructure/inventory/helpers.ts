@@ -398,6 +398,46 @@ export function parseVmId(id: string) {
 return { connId, node, type, vmid }
 }
 
+/**
+ * Resolve the native Proxmox web UI origin from a connection baseUrl.
+ * Proxmox serves both its API and web interface on the same origin (port 8006
+ * by default), so the connection baseUrl origin IS the web UI. Using the origin
+ * also transparently handles the behind-a-reverse-proxy case (no hard-coded port).
+ * Returns null for a missing or malformed baseUrl so callers can hide the link.
+ */
+export function proxmoxWebUiOrigin(baseUrl: string | null | undefined): string | null {
+  if (!baseUrl) return null
+  try {
+    return new URL(baseUrl).origin
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolve the native Proxmox web UI origin for a specific cluster node.
+ * Keeps the connection baseUrl scheme + port but swaps the host for the node's
+ * own management IP, so the link opens THAT node's web interface directly.
+ * Falls back to the connection origin when:
+ *  - behind a reverse proxy (node management IPs are internal/unreachable; only
+ *    the proxied connection host is), or
+ *  - the node IP is unknown / the baseUrl is malformed.
+ */
+export function proxmoxNodeWebUiOrigin(
+  baseUrl: string | null | undefined,
+  nodeIp: string | null | undefined,
+  behindProxy?: boolean,
+): string | null {
+  if (behindProxy || !nodeIp || !baseUrl) return proxmoxWebUiOrigin(baseUrl)
+  try {
+    const u = new URL(baseUrl)
+    u.hostname = nodeIp
+    return u.origin
+  } catch {
+    return proxmoxWebUiOrigin(baseUrl)
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Metric icon                                                        */
 /* ------------------------------------------------------------------ */
@@ -947,6 +987,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       vmsData,
       clusterName,
       isCluster,
+      nodeIp: n.ip ?? null,
     }
   }
 

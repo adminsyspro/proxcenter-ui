@@ -408,13 +408,18 @@ export function frameworkReportHtml(
   }
 
   // -- Section 5: Provenance --
+  const safeSourceUrl = (def.sourceUrl && /^https?:\/\//.test(def.sourceUrl)) ? def.sourceUrl : ''
+  const sourceUrlHtml = safeSourceUrl
+    ? `<div>${e(t('compliance.frameworks.sourceLink'))}: <a href="${e(safeSourceUrl)}">${e(safeSourceUrl)}</a></div>`
+    : ''
+
   let provenanceSection = ''
-  if (def.provenanceNote) {
+  if (def.provenanceNote || safeSourceUrl) {
     provenanceSection = `
 <div class="section">
   <div class="section-header"><h2>Provenance</h2></div>
   <div class="info-box">
-    <div class="info-box-content">${e(def.provenanceNote)}</div>
+    <div class="info-box-content">${def.provenanceNote ? e(def.provenanceNote) : ''}${def.provenanceNote && safeSourceUrl ? '<br>' : ''}${sourceUrlHtml}</div>
   </div>
 </div>`
   }

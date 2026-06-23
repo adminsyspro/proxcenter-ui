@@ -6370,7 +6370,8 @@
       "colCategory": "类别",
       "colCheck": "检查项",
       "colStatus": "状态",
-      "colDetail": "详情"
+      "colDetail": "详情",
+      "sourceLink": "框架参考"
     }
   },
   "changes": {

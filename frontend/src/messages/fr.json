@@ -6442,7 +6442,8 @@
       "colCategory": "Catégorie",
       "colCheck": "Contrôle",
       "colStatus": "Statut",
-      "colDetail": "Détail"
+      "colDetail": "Détail",
+      "sourceLink": "Référentiel source"
     }
   },
   "changes": {

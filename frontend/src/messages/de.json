@@ -6365,7 +6365,8 @@
       "colCategory": "Kategorie",
       "colCheck": "Prüfpunkt",
       "colStatus": "Status",
-      "colDetail": "Detail"
+      "colDetail": "Detail",
+      "sourceLink": "Referenz des Frameworks"
     }
   },
   "changes": {

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Alert, Autocomplete, Box, Button, Card, CardContent,
-  Chip, CircularProgress, Grid, Table, TableBody,
+  Chip, CircularProgress, Grid, Link, Table, TableBody,
   TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
@@ -196,6 +196,14 @@ export default function FrameworksTab() {
                       {def.provenanceNote && (
                         <Typography variant="caption" display="block" color="text.secondary" sx={{ mb: 1 }}>
                           {def.provenanceNote}
+                        </Typography>
+                      )}
+
+                      {def.sourceUrl && (
+                        <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+                          <Link href={def.sourceUrl} target="_blank" rel="noopener noreferrer">
+                            {t('sourceLink')}
+                          </Link>
                         </Typography>
                       )}
 

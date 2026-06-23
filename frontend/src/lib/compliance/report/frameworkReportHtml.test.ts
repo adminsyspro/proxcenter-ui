@@ -211,4 +211,20 @@ describe('frameworkReportHtml', () => {
     expect(html).not.toMatch(/src=["']https?:/)
     expect(html).not.toMatch(/src=["']file:/)
   })
+
+  // -- sourceUrl link --
+
+  it('renders a clickable <a> for a valid https sourceUrl', () => {
+    const defWithUrl = { ...getFramework('nist-800-171-r2'), sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final' }
+    const html = frameworkReportHtml(a, defWithUrl, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).toContain('<a href="https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final">')
+    expect(html).toContain('https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final</a>')
+  })
+
+  it('rejects a javascript: sourceUrl and emits no <a href="javascript:', () => {
+    const defWithHostile = { ...getFramework('nist-800-171-r2'), sourceUrl: 'javascript:alert(1)' }
+    const html = frameworkReportHtml(a, defWithHostile, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('<a href="javascript:')
+    expect(html).not.toContain('href="javascript:')
+  })
 })

@@ -27,3 +27,12 @@ public-domain NIST OSCAL content. Regenerate after bumping a pinned source.
 - CMMC Level 2 practices are derived 1:1 from NIST SP 800-171 Rev 2 (same 110 requirements).
   Control IDs are prefixed with the domain abbreviation: e.g., `AC.L2-3.1.1`.
 - Provenance: same FATHOM5 OSCAL mirror as 800-171 Rev 2 above (same integrity check applies).
+
+## ISO/IEC 27001:2022
+
+- Authority: ISO/IEC 27001:2022 (https://www.iso.org/standard/27001)
+- Catalogue: authored from the Annex A control set (93 controls across 4 themes: Organizational,
+  People, Physical, Technological). Control identifiers (A.5.1..A.8.34) and concise titles only.
+  ISO normative text is copyright ISO and is not redistributed here.
+- Crosswalk: conservative first-pass mapping of ProxCenter hardening checks to Annex A controls,
+  pending formal GRC review. Checks with no clear ISO mapping carry an empty c27001 list.

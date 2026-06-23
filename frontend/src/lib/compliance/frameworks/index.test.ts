@@ -5,7 +5,7 @@ import { FRAMEWORKS, getFramework, getCrosswalk } from './index'
 import { FRAMEWORK_IDS } from './types'
 
 describe('framework registry integrity', () => {
-  it('exposes the three frameworks', () => {
+  it('exposes all registered frameworks', () => {
     expect(FRAMEWORKS.map(f => f.id).sort()).toEqual([...FRAMEWORK_IDS].sort())
   })
 

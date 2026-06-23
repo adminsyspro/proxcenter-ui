@@ -47,4 +47,20 @@ describe('assessFramework', () => {
     expect(sum('satisfied')).toBe(a.satisfied)
     expect(sum('notAssessed')).toBe(a.notAssessed)
   })
+  it('warning-only mapped check -> control status partial, counts as assessed', () => {
+    // A control whose sole applicable check has status warning must be partial, not satisfied/failed/not_assessed.
+    const cw: Crosswalk = { chk_warn: { controlIds: ['A'], rationale: '' } }
+    const a = assessFramework([check('chk_warn', 'warning')], def, cw)
+    expect(a.controls.find(c => c.id === 'A')!.status).toBe('partial')
+    expect(a.assessedControls).toBeGreaterThanOrEqual(1)
+  })
+  it('mixed pass+skip -> control status satisfied (skip filtered from applicable)', () => {
+    // The skip check is excluded from applicable checks; the remaining pass check yields satisfied.
+    const cw: Crosswalk = {
+      chk_pass2: { controlIds: ['A'], rationale: '' },
+      chk_skip2: { controlIds: ['A'], rationale: '' },
+    }
+    const a = assessFramework([check('chk_pass2', 'pass'), check('chk_skip2', 'skip')], def, cw)
+    expect(a.controls.find(c => c.id === 'A')!.status).toBe('satisfied')
+  })
 })

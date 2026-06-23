@@ -153,4 +153,122 @@ describe('GET /api/v1/compliance/hardening/[connectionId]', () => {
       expect(nodeCategories).toContain(check.category)
     }
   })
+
+  it('uses explicit profileId when provided and profile is found', async () => {
+    getProfileMock.mockResolvedValue({ id: 'prof-1', name: 'Strict' })
+    getProfileChecksMock.mockResolvedValue([
+      { check_id: 'firewall_enabled', enabled: 1, weight: 2, control_ref: 'SI-1', category: 'cluster' },
+    ])
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+      searchParams: { profileId: 'prof-1' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.profileId).toBe('prof-1')
+    expect(body.summary).toBeDefined()
+  })
+
+  it('falls through to default checks when explicit profileId is not found', async () => {
+    getProfileMock.mockResolvedValue(null)
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+      searchParams: { profileId: 'nonexistent-prof' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    // Profile not found -> falls through to default path (profileId null)
+    expect(body.profileId).toBeNull()
+  })
+
+  it('uses active profile when no explicit profileId and an active profile exists', async () => {
+    getActiveProfileMock.mockResolvedValue({
+      id: 'active-prof-1',
+      checks: [
+        { check_id: 'firewall_enabled', enabled: 1, weight: 3, control_ref: null, category: 'cluster' },
+      ],
+    })
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.profileId).toBe('active-prof-1')
+    expect(body.summary).toBeDefined()
+  })
+
+  it('includes sshStatus.enabled true when sshEnabled is set on the connection', async () => {
+    findUniqueMock.mockResolvedValue({ sshEnabled: true })
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    // sshEnabled true wires SSH collection; sshData may or may not populate
+    // nodes but the flag itself must be reflected
+    expect(body.sshStatus.enabled).toBe(true)
+  })
+
+  it('returns 404 when verifyConnectionOwnership denies', async () => {
+    verifyConnectionOwnershipMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })
+    )
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-other' },
+    })
+
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 500 when an unexpected error is thrown', async () => {
+    getConnectionByIdMock.mockRejectedValue(new Error('DB failure'))
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+    })
+
+    expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toContain('DB failure')
+  })
+
+  it('uses active profile with profileId path and node filter applied together', async () => {
+    getActiveProfileMock.mockResolvedValue({
+      id: 'prof-node',
+      checks: [
+        { check_id: 'firewall_enabled', enabled: 1, weight: 1, control_ref: null, category: 'cluster' },
+        { check_id: 'kernel_updates', enabled: 1, weight: 1, control_ref: null, category: 'node' },
+      ],
+    })
+    const { GET } = await import('./route')
+
+    const res = await callRoute(GET, {
+      params: { connectionId: 'conn-1' },
+      searchParams: { node: 'pve1' },
+    })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.node).toBe('pve1')
+    expect(body.profileId).toBe('prof-node')
+    const nodeCategories = ['node', 'vm', 'os', 'ssh', 'network', 'services', 'filesystem', 'logging']
+    for (const check of body.checks) {
+      expect(nodeCategories).toContain(check.category)
+    }
+  })
 })

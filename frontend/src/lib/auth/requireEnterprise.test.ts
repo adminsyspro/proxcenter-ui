@@ -59,4 +59,76 @@ describe('requireEnterprise', () => {
     expect(lic.licensed).toBe(false)
     expect(lic.features).toEqual([])
   })
+
+  it('getServerLicense returns community fallback when orchestrator returns non-2xx', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('Service Unavailable', { status: 503 }))
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    const lic = await getServerLicense()
+    expect(lic.enterprise).toBe(false)
+    expect(lic.edition).toBe('community')
+    expect(lic.licensed).toBe(false)
+  })
+
+  it('getServerLicense parses enterprise edition and returns enterprise:true', async () => {
+    const payload = { licensed: true, edition: 'enterprise', features: ['reports'] }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+      )
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    const lic = await getServerLicense()
+    expect(lic.enterprise).toBe(true)
+    expect(lic.edition).toBe('enterprise')
+    expect(lic.licensed).toBe(true)
+    expect(lic.features).toEqual(['reports'])
+  })
+
+  it('getServerLicense parses enterprise_plus edition and returns enterprise:true', async () => {
+    const payload = { licensed: true, edition: 'enterprise_plus', features: [] }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+      )
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    const lic = await getServerLicense()
+    expect(lic.enterprise).toBe(true)
+    expect(lic.edition).toBe('enterprise_plus')
+  })
+
+  it('getServerLicense returns enterprise:false for licensed community edition', async () => {
+    const payload = { licensed: true, edition: 'community', features: [] }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+      )
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    const lic = await getServerLicense()
+    expect(lic.enterprise).toBe(false)
+    expect(lic.edition).toBe('community')
+    expect(lic.licensed).toBe(true)
+  })
+
+  it('getServerLicense uses defaults when JSON fields are missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } })
+      )
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    const lic = await getServerLicense()
+    expect(lic.enterprise).toBe(false)
+    expect(lic.edition).toBe('community')
+    expect(lic.licensed).toBe(false)
+    expect(lic.features).toEqual([])
+  })
 })

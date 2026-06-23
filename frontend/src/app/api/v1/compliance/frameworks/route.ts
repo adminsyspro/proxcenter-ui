@@ -65,7 +65,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ data: assessments, nodes })
   } catch (e: any) {
-    console.error('Error running framework assessments:', e)
+    console.error('Error running framework assessments:', e?.message)
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }

@@ -1045,3 +1045,10 @@ export function computeScore(checks: HardeningCheck[]): HardeningScore {
     color: score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error',
   }
 }
+
+// Canonical list of every check id runAllChecks can emit (PVE + SSH).
+// Consumers (e.g. the framework crosswalk integrity test) validate against this.
+export const ALL_CHECK_IDS: readonly string[] = [
+  ...Object.keys(PVE_CHECK_FUNCTIONS),
+  ...SSH_CHECK_META.map(m => m.id),
+]

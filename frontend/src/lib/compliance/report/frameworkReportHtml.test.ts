@@ -24,4 +24,19 @@ describe('frameworkReportHtml', () => {
     expect(html).toContain('&lt;script&gt;')
     expect(html).not.toMatch(/src=["']https?:|src=["']file:/)
   })
+  it('escapes hostile status value in class attribute and hostile t() output', () => {
+    const hostile: FrameworkAssessment = {
+      ...a,
+      score: null,
+      controls: [{ ...a.controls[0], status: '"><x' as any }],
+    }
+    const tHostile = (k: string) => k.endsWith('noAssessed') ? '<b>none</b>' : k
+    const html = frameworkReportHtml(hostile, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, tHostile)
+    // status must not break out of the class attribute
+    expect(html).not.toContain('s-"><x')
+    expect(html).toContain('s-&quot;&gt;')
+    // t() return value for noAssessed branch (score === null) must be escaped
+    expect(html).not.toContain('<b>none</b>')
+    expect(html).toContain('&lt;b&gt;none&lt;/b&gt;')
+  })
 })

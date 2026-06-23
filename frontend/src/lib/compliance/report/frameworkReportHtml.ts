@@ -10,11 +10,11 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function frameworkReportHtml(a: FrameworkAssessment, def: FrameworkDef, meta: ReportMeta, t: (k: string) => string): string {
   const e = escapeHtml
-  const scoreText = a.score === null ? t('compliance.frameworks.noAssessed') : `${a.score}%`
+  const scoreText = a.score === null ? e(t('compliance.frameworks.noAssessed')) : `${a.score}%`
   const rows = a.controls.map(c => `
     <tr>
       <td>${e(c.id)}</td><td>${e(c.title)}</td>
-      <td class="s-${c.status}">${e(STATUS_LABEL[c.status] ?? c.status)}</td>
+      <td class="s-${e(c.status)}">${e(STATUS_LABEL[c.status] ?? c.status)}</td>
       <td>${c.checks.map(ch => e(ch.name)).join(', ')}</td>
     </tr>`).join('')
   const fams = a.families.map(f => `<li>${e(f.family)}: ${f.satisfied}/${f.satisfied + f.partial + f.failed + f.notAssessed}</li>`).join('')
@@ -32,8 +32,8 @@ export function frameworkReportHtml(a: FrameworkAssessment, def: FrameworkDef, m
   <h1>${e(def.name)} ${e(def.version)}${def.baselineLabel ? ` - ${e(def.baselineLabel)}` : ''}</h1>
   <p class="meta">${e(meta.connectionName)} - ${e(meta.generatedAt)}</p>
   ${note}
-  <p><strong>${scoreText}</strong> - ${a.satisfied}/${a.assessedControls} ${t('compliance.frameworks.assessedOk')};
-     ${a.assessedControls}/${a.totalControls} ${t('compliance.frameworks.controlsAssessed')}</p>
+  <p><strong>${scoreText}</strong> - ${a.satisfied}/${a.assessedControls} ${e(t('compliance.frameworks.assessedOk'))};
+     ${a.assessedControls}/${a.totalControls} ${e(t('compliance.frameworks.controlsAssessed'))}</p>
   <ul>${fams}</ul>
   <table><thead><tr><th>ID</th><th>Control</th><th>Status</th><th>Checks</th></tr></thead><tbody>${rows}</tbody></table>
 </body></html>`

@@ -52,7 +52,9 @@ const CONFIGS: Record<string, any> = {
 function wireProxmox() {
   pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
     if (path === '/cluster/resources?type=vm') return RESOURCES
+    if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
     if (path === '/nodes/pve1/network') return HOST_NETWORK
+    if (path === '/cluster/sdn/vnets') return []
     if (path in CONFIGS) return CONFIGS[path]
     throw new Error(`unexpected pveFetch path: ${path}`)
   })
@@ -105,6 +107,7 @@ describe('GET /api/v1/connections/[id]/networks — effectiveTag', () => {
   it('still succeeds when a node network fetch fails (no effectiveTag enrichment)', async () => {
     pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
       if (path === '/cluster/resources?type=vm') return RESOURCES
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
       if (path === '/nodes/pve1/network') throw new Error('network unreachable')
       if (path in CONFIGS) return CONFIGS[path]
       throw new Error(`unexpected pveFetch path: ${path}`)
@@ -152,5 +155,128 @@ describe('parseNetString', () => {
     expect(iface.bridge).toBe('vmbr1')
     expect(iface.tag).toBeUndefined()
     expect(iface.firewall).toBeUndefined()
+  })
+})
+
+describe('GET /api/v1/connections/[id]/networks — host bridges', () => {
+  const NODE_NETWORK = [
+    { iface: 'bond0', type: 'bond' },
+    { iface: 'bond0.10', type: 'vlan' },
+    { iface: 'vmbr0V10', type: 'bridge', bridge_ports: 'bond0.10', bridge_vlan_aware: 1 },
+    { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+  ]
+
+  it('returns bridges populated from cluster nodes when VM list is empty (provider scope)', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }, { node: 'pve2' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      if (path === '/nodes/pve2/network') return NODE_NETWORK
+      if (path === '/cluster/sdn/vnets') return []
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const res = await callRoute(await importGET(), { params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+
+    expect(body.data).toEqual([])
+    expect(Array.isArray(body.bridges)).toBe(true)
+    expect(body.bridges.length).toBeGreaterThan(0)
+
+    const bridge = body.bridges.find((b: any) => b.iface === 'vmbr0V10' && b.node === 'pve1')
+    expect(bridge).toBeDefined()
+    expect(bridge.type).toBe('bridge')
+    expect(bridge.tag).toBe(10)
+  })
+
+  it('returns bridges with entries for each node in the cluster', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }, { node: 'pve2' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      if (path === '/nodes/pve2/network') return NODE_NETWORK
+      if (path === '/cluster/sdn/vnets') return []
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const body = await readJson<any>(await callRoute(await importGET(), { params: { id: 'c1' } }))
+    const nodes = [...new Set(body.bridges.map((b: any) => b.node))]
+    expect(nodes).toContain('pve1')
+    expect(nodes).toContain('pve2')
+  })
+
+  it('returns bridges: [] for tenant (vDC) scope even when host networks exist', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    // Truthy vdcScope = iaas tenant (vdcScope returned from getVdcScope is truthy)
+    getVdcScopeMock.mockResolvedValue({
+      connectionIds: new Set(['c1']),
+      poolsByConnection: new Map([['c1', new Set(['pool1'])]]),
+      vdcIds: new Set(),
+      vdcNames: new Set(),
+    })
+
+    const body = await readJson<any>(await callRoute(await importGET(), { params: { id: 'c1' } }))
+    expect(body.bridges).toEqual([])
+    expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), '/cluster/resources?type=node')
+  })
+})
+
+describe('GET /api/v1/connections/[id]/networks — vnetAliases', () => {
+  const NODE_NETWORK = [
+    { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+  ]
+
+  it('populates vnetAliases from /cluster/sdn/vnets for provider scope', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      if (path === '/cluster/sdn/vnets') return [
+        { vnet: 'v42fc503', alias: 'Production LAN', zone: 'zone1' },
+        { vnet: 'v99aa001', alias: 'v99aa001', zone: 'zone1' },   // alias === vnet → omit
+        { vnet: 'v11bb002', alias: '', zone: 'zone1' },            // blank alias → omit
+        { vnet: 'v22cc003', zone: 'zone1' },                       // no alias → omit
+        { vnet: 'v33dd004', alias: 'Dev Network', zone: 'zone1' },
+      ]
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const res = await callRoute(await importGET(), { params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+
+    expect(body.vnetAliases).toEqual({
+      v42fc503: 'Production LAN',
+      v33dd004: 'Dev Network',
+    })
+  })
+
+  it('returns vnetAliases: {} for tenant (vDC) scope and does not call /cluster/sdn/vnets', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue({
+      connectionIds: new Set(['c1']),
+      poolsByConnection: new Map([['c1', new Set(['pool1'])]]),
+      vdcIds: new Set(),
+      vdcNames: new Set(),
+    })
+
+    const res = await callRoute(await importGET(), { params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+
+    expect(body.vnetAliases).toEqual({})
+    expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), '/cluster/sdn/vnets')
   })
 })

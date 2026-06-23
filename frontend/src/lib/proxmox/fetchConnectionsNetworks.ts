@@ -1,4 +1,4 @@
-import { foldEffectiveVlanTags } from './hostVlanMap'
+import { foldEffectiveVlanTags, type HostBridge } from './hostVlanMap'
 
 export type VmNetItem = {
   vmid: string
@@ -10,6 +10,8 @@ export type VmNetItem = {
   nets: any[]
 }
 
+export type HostBridgeItem = HostBridge & { connId: string }
+
 const DEFAULT_RETRIES = 2
 const DEFAULT_RETRY_DELAY_MS = 300
 
@@ -18,7 +20,7 @@ async function fetchWithRetry(
   retries: number,
   retryDelayMs: number,
   fetchImpl: typeof fetch,
-): Promise<{ ok: true; items: VmNetItem[] } | { ok: false }> {
+): Promise<{ ok: true; items: VmNetItem[]; bridges: HostBridgeItem[]; vnetAliases: Record<string, string> } | { ok: false }> {
   let attempt = 0
   while (attempt <= retries) {
     try {
@@ -32,7 +34,12 @@ async function fetchWithRetry(
         connId,
         nets: foldEffectiveVlanTags(vm.nets),
       }))
-      return { ok: true, items }
+      const bridges: HostBridgeItem[] = (json.bridges ?? []).map((b: HostBridge) => ({
+        ...b,
+        connId,
+      }))
+      const vnetAliases: Record<string, string> = json.vnetAliases ?? {}
+      return { ok: true, items, bridges, vnetAliases }
     } catch {
       if (attempt < retries) {
         if (retryDelayMs > 0) {
@@ -49,14 +56,15 @@ async function fetchWithRetry(
 
 /**
  * Fetch VM network data from multiple connections concurrently with per-connection
- * retry logic. Returns flat data plus the list of connection IDs that failed after
- * all retries. Never rejects — partial failure is surfaced via failedConnIds.
+ * retry logic. Returns flat data, flat host bridges (tagged with connId), plus the
+ * list of connection IDs that failed after all retries. Never rejects — partial
+ * failure is surfaced via failedConnIds.
  */
 export async function fetchConnectionsNetworks(
   connIds: string[],
   opts?: { retries?: number; retryDelayMs?: number; fetchImpl?: typeof fetch },
-): Promise<{ data: VmNetItem[]; failedConnIds: string[] }> {
-  if (connIds.length === 0) return { data: [], failedConnIds: [] }
+): Promise<{ data: VmNetItem[]; bridges: HostBridgeItem[]; vnetAliasesByConn: Record<string, Record<string, string>>; failedConnIds: string[] }> {
+  if (connIds.length === 0) return { data: [], bridges: [], vnetAliasesByConn: {}, failedConnIds: [] }
 
   const retries = opts?.retries ?? DEFAULT_RETRIES
   const retryDelayMs = opts?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
@@ -67,16 +75,20 @@ export async function fetchConnectionsNetworks(
   )
 
   const data: VmNetItem[] = []
+  const bridges: HostBridgeItem[] = []
+  const vnetAliasesByConn: Record<string, Record<string, string>> = {}
   const failedConnIds: string[] = []
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i]
     if (result.ok) {
       data.push(...result.items)
+      bridges.push(...result.bridges)
+      vnetAliasesByConn[connIds[i]] = result.vnetAliases
     } else {
       failedConnIds.push(connIds[i])
     }
   }
 
-  return { data, failedConnIds }
+  return { data, bridges, vnetAliasesByConn, failedConnIds }
 }

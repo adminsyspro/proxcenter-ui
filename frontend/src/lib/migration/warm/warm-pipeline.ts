@@ -20,7 +20,7 @@ import { decideNextPass, type PassStat, type ConvergenceConfig, type Convergence
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
-import { buildApplyScript } from "./block-applier"
+import { buildApplyScripts } from "./block-applier"
 import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
@@ -286,6 +286,20 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, `Disk ${i}: target ${alloc.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
     }
 
+    // Apply a disk's changed extents to its target. buildApplyScripts splits the
+    // dd batch into one or more commands, each bounded so no single command
+    // exceeds the OS argument-length limit (see MAX_APPLY_CMD_BYTES) — a large
+    // change set in one command was rejected at exec and surfaced as an opaque
+    // "EOF" (#445). We run the commands in order and stop on the first failure,
+    // so the original abort-on-first-error (`set -e`) semantics hold across the
+    // split. `label` distinguishes the delta/full path from the checksum path.
+    async function applyExtents(nbdDev: string, dev: string, extents: Extent[], capacityBytes: number, label: string, diskIndex: number): Promise<void> {
+      for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
+        const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS)
+        if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.error || res.output}`)
+      }
+    }
+
     // Read one disk of a snapshot through VDDK and apply its extents to the target.
     async function readAndApply(disk: EsxiDiskInfo, diskIndex: number, snapMor: string, extents: Extent[]): Promise<number> {
       const bytes = extents.reduce((s, e) => s + e.length, 0)
@@ -297,9 +311,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password, nbdDev)
       activeReaders.push(reader)
       try {
-        const script = buildApplyScript(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes)
-        const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS)
-        if (!res.success) throw new Error(`block apply failed on disk ${diskIndex}: ${res.error || res.output}`)
+        await applyExtents(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes, "block apply failed", diskIndex)
         return bytes
       } finally {
         await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -399,9 +411,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           try {
             const dev = targetDev.get(disk.deviceKey)!
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes)
-            const script = buildApplyScript(reader.nbdDev, dev, extents, disk.capacityBytes)
-            const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS)
-            if (!res.success) throw new Error(`checksum apply failed on disk ${i}: ${res.error || res.output}`)
+            await applyExtents(reader.nbdDev, dev, extents, disk.capacityBytes, "checksum apply failed", i)
           } finally {
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
             const idx = activeReaders.indexOf(reader)

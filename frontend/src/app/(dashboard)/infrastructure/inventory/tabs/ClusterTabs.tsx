@@ -1396,7 +1396,7 @@ export default function ClusterTabs(props: any) {
                                 ))}
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
-                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={36} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
                                 content={({ active, payload, label }) => {
@@ -1436,7 +1436,7 @@ export default function ClusterTabs(props: any) {
                                 ))}
                               </defs>
                               <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), clusterNodeRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
-                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={36} />
                               <Tooltip
                                 wrapperStyle={{ zIndex: 10 }}
                                 content={({ active, payload, label }) => {

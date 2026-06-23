@@ -256,7 +256,7 @@ export default function StorageDetailPanel({
                     <ChartContainer>
                       <AreaChart data={storageRrdHistory}>
                         <XAxis dataKey="time" tickFormatter={(v: any) => formatRrdTick(Number(v), storageRrdTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
-                        <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                        <YAxis domain={[0, 100]} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9 }} width={36} />
                         <Tooltip
                           wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                           content={({ active, payload, label }) => {

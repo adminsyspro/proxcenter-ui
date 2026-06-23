@@ -40,7 +40,7 @@ function AreaPctChart({
           <ChartContainer>
             <AreaChart data={data}>
               <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={24} tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
+              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={40} />
               <Tooltip
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                 content={({ active, payload, label }) => {

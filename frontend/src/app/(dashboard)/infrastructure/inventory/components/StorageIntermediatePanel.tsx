@@ -140,7 +140,7 @@ export default function StorageIntermediatePanel({ selection, clusterStorages, o
           <ChartContainer>
             <AreaChart data={points}>
               <XAxis dataKey="time" tickFormatter={v => formatRrdTick(Number(v), rrdTimeframe)} minTickGap={40} tick={{ fontSize: 9 }} type="number" domain={['dataMin', 'dataMax']} />
-              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+              <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={36} />
               <Tooltip
                 wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                 content={({ active, payload, label }) => {

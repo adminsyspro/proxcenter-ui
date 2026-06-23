@@ -144,7 +144,7 @@ function MetricGraph({
               ))}
             </defs>
             <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), seriesTf)} minTickGap={40} tick={{ fontSize: 9 }} />
-            <YAxis domain={yDomain || ['auto', 'auto']} tickFormatter={v => yFormatter(Number(v))} tick={{ fontSize: 9 }} width={30} />
+            <YAxis domain={yDomain || ['auto', 'auto']} tickFormatter={v => yFormatter(Number(v))} tick={{ fontSize: 9 }} width={36} />
             <RechartsTooltip
               wrapperStyle={{ zIndex: 10 }}
               content={({ active, payload, label }) => {

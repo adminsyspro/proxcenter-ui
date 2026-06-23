@@ -825,7 +825,7 @@ function RootInventoryView({
                     ))}
                   </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={36} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
                       content={({ active, payload, label }) => {
@@ -932,7 +932,7 @@ function RootInventoryView({
                     ))}
                   </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 9 }} />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={30} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 9 }} width={36} />
                     <RechartsTooltip
                       wrapperStyle={{ zIndex: 10 }}
                       content={({ active, payload, label }) => {
@@ -1076,7 +1076,7 @@ function RootInventoryView({
                       ))}
                     </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={40} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null
@@ -1154,7 +1154,7 @@ function RootInventoryView({
                       ))}
                     </defs>
                     <XAxis dataKey="t" tickFormatter={v => formatRrdTick(Number(v), infraRrdTf)} minTickGap={40} tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={35} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} width={40} />
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                     <RechartsTooltip wrapperStyle={{ zIndex: 1400 }} content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null

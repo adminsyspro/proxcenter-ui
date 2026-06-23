@@ -1,17 +1,24 @@
 import useSWR from 'swr'
 
 import type { FrameworkAssessment } from '@/lib/compliance/frameworkAssessment'
+import type { NodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 
-const fetcher = async (url: string): Promise<FrameworkAssessment[]> => {
+interface FrameworksResponse {
+  assessments: FrameworkAssessment[]
+  nodes: NodeBreakdown[]
+}
+
+const fetcher = async (url: string): Promise<FrameworksResponse> => {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`API error: ${res.status}`)
-  return (await res.json()).data
+  const json = await res.json()
+  return { assessments: json.data ?? [], nodes: json.nodes ?? [] }
 }
 
 /**
- * Fetches framework assessments (NIST 800-53, NIST 800-171, CMMC L2) for a
- * given connection. Returns null assessments while loading or when
- * connectionId is not yet available.
+ * Fetches framework assessments (NIST 800-53, NIST 800-171, CMMC L2) and
+ * per-node check breakdowns for a given connection. Returns empty arrays while
+ * loading or when connectionId is not yet available.
  */
 export function useFrameworkAssessments(connectionId: string | null) {
   const { data, error, isLoading } = useSWR(
@@ -20,5 +27,5 @@ export function useFrameworkAssessments(connectionId: string | null) {
       : null,
     fetcher,
   )
-  return { assessments: data ?? [], isLoading, error }
+  return { assessments: data?.assessments ?? [], nodes: data?.nodes ?? [], isLoading, error }
 }

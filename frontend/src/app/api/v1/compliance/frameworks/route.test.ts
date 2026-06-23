@@ -50,8 +50,10 @@ describe('GET /api/v1/compliance/frameworks', () => {
     verifyConnectionOwnershipMock.mockResolvedValue(null)
     getConnectionByIdMock.mockResolvedValue({ id: 'conn-1', name: 'Test Cluster' })
     findUniqueMock.mockResolvedValue({ sshEnabled: false })
-    // collectHardeningData returns minimal HardeningData (empty objects are fine -- runAllChecks handles them)
-    collectHardeningDataMock.mockResolvedValue({})
+    // collectHardeningData returns minimal HardeningData with one node so nodes[] is populated
+    collectHardeningDataMock.mockResolvedValue({
+      nodes: [{ node: 'pve1', status: 'online' }],
+    })
   })
 
   it('returns 200 with assessments for all 3 frameworks (enterprise + permitted)', async () => {
@@ -70,6 +72,11 @@ describe('GET /api/v1/compliance/frameworks', () => {
     expect(ids).toContain('nist-800-53-r5')
     expect(ids).toContain('nist-800-171-r2')
     expect(ids).toContain('cmmc-l2')
+    // Per-node breakdown: nodes array present with one entry per node in hardeningData
+    expect(Array.isArray(body.nodes)).toBe(true)
+    expect(body.nodes).toHaveLength(1)
+    expect(body.nodes[0]).toHaveProperty('node', 'pve1')
+    expect(Array.isArray(body.nodes[0].checks)).toBe(true)
   })
 
   it('returns 400 when connectionId is missing', async () => {

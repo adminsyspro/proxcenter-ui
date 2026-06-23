@@ -11,6 +11,7 @@ import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk } from '@/lib/compliance/frameworks'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
+import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,7 +60,10 @@ export async function GET(req: Request) {
     const checks = runAllChecks(hardeningData)
     const assessments = FRAMEWORKS.map(def => assessFramework(checks, def, getCrosswalk(def.id)))
 
-    return NextResponse.json({ data: assessments })
+    // Per-node breakdown: re-run checks for each node using a node-scoped slice
+    const nodes = computeNodeBreakdown(hardeningData)
+
+    return NextResponse.json({ data: assessments, nodes })
   } catch (e: any) {
     console.error('Error running framework assessments:', e)
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })

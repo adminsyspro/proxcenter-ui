@@ -30,7 +30,7 @@ function statusChipColor(status: string): 'success' | 'warning' | 'error' | 'def
   const key = status.toLowerCase()
   if (key === 'pass' || key === 'satisfied') return 'success'
   if (key === 'warning' || key === 'partial') return 'warning'
-  if (key === 'fail') return 'error'
+  if (key === 'fail' || key === 'failed') return 'error'
   return 'default'
 }
 

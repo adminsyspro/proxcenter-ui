@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
 
 import FrameworksTab from './FrameworksTab'
+import * as useFrameworkAssessmentsModule from '@/hooks/useFrameworkAssessments'
 
 vi.mock('next-intl', () => ({
   useTranslations: () => (k: string) => k,
@@ -29,6 +30,10 @@ vi.mock('@/components/dashboard/widgets/CircularGauge', () => ({
   default: ({ children }: any) => <div data-testid="gauge">{children}</div>,
 }))
 
+vi.mock('@/hooks/useFrameworkAssessments', () => ({
+  useFrameworkAssessments: vi.fn(),
+}))
+
 const TWO_NODES_MOCK = [
   {
     node: 'pve1',
@@ -45,27 +50,34 @@ const TWO_NODES_MOCK = [
   },
 ]
 
-vi.mock('@/hooks/useFrameworkAssessments', () => ({
-  useFrameworkAssessments: () => ({
-    assessments: [
-      {
-        frameworkId: 'nist-800-171-r2',
-        score: 60,
-        satisfied: 3,
-        partial: 1,
-        failed: 1,
-        notAssessed: 105,
-        assessedControls: 5,
-        totalControls: 110,
-        coverage: 0.04,
-        families: [],
-      },
-    ],
-    nodes: TWO_NODES_MOCK,
-    isLoading: false,
-    error: null,
-  }),
-}))
+const TWO_NODES_RETURN = {
+  assessments: [
+    {
+      frameworkId: 'nist-800-171-r2',
+      score: 60,
+      satisfied: 3,
+      partial: 1,
+      failed: 1,
+      notAssessed: 105,
+      assessedControls: 5,
+      totalControls: 110,
+      coverage: 0.04,
+      families: [],
+      controls: [],
+    },
+  ],
+  nodes: TWO_NODES_MOCK,
+  isLoading: false,
+  error: null,
+}
+
+beforeEach(() => {
+  vi.mocked(useFrameworkAssessmentsModule.useFrameworkAssessments).mockReturnValue(TWO_NODES_RETURN)
+})
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('FrameworksTab', () => {
   it('renders a framework card with its score inside the gauge', () => {
@@ -103,22 +115,31 @@ describe('FrameworksTab', () => {
 })
 
 describe('FrameworksTab with single node', () => {
-  it('does not show per-node section when nodes.length <= 1', () => {
-    vi.doMock('@/hooks/useFrameworkAssessments', () => ({
-      useFrameworkAssessments: () => ({
-        assessments: [],
-        nodes: [{ node: 'pve1', checks: [] }],
-        isLoading: false,
-        error: null,
-      }),
-    }))
+  beforeEach(() => {
+    vi.mocked(useFrameworkAssessmentsModule.useFrameworkAssessments).mockReturnValue({
+      assessments: [
+        {
+          frameworkId: 'nist-800-171-r2',
+          score: 60,
+          satisfied: 3,
+          partial: 1,
+          failed: 1,
+          notAssessed: 105,
+          assessedControls: 5,
+          totalControls: 110,
+          coverage: 0.04,
+          families: [],
+          controls: [],
+        },
+      ],
+      nodes: [{ node: 'pve1', checks: [] }],
+      isLoading: false,
+      error: null,
+    })
+  })
 
-    // Re-import to pick up the new mock is not straightforward in vitest without
-    // module cache clearing — test the condition via the DOM: with the main mock
-    // (2 nodes) both names appear; we verify that the perNodeTitle element exists
-    // only due to the 2-node mock already tested above, so here we simply
-    // confirm the gateway condition in the component (nodes.length > 1).
-    // The unit condition is fully covered by the helper tests for nodeFailCount.
-    expect(TWO_NODES_MOCK.length).toBeGreaterThan(1)
+  it('does not show per-node section when nodes.length <= 1', () => {
+    render(<FrameworksTab />)
+    expect(screen.queryByText('perNodeTitle')).toBeNull()
   })
 })

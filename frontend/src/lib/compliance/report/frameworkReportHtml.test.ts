@@ -125,6 +125,24 @@ describe('frameworkReportHtml', () => {
     expect(html).not.toContain('<img class="cover-logo"')
   })
 
+  // -- Framework badge --
+
+  it('renders the framework badge when frameworkLogoDataUri starts with data:', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'data:image/png;base64,BBBB' }, t)
+    expect(html).toContain('<img class="cover-framework-logo" src="data:image/png;base64,BBBB"')
+  })
+
+  it('rejects a non-data: frameworkLogoDataUri (no badge rendered)', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'https://evil.com/badge.png' }, t)
+    expect(html).not.toContain('evil.com')
+    expect(html).not.toContain('<img class="cover-framework-logo"')
+  })
+
+  it('omits the framework badge when frameworkLogoDataUri is absent', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(html).not.toContain('<img class="cover-framework-logo"')
+  })
+
   // -- Per-node section tests --
 
   it('emits a per-node section when nodeBreakdown has more than 1 node', () => {

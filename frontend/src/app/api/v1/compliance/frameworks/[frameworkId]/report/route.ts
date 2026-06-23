@@ -14,6 +14,7 @@ import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk, getFramework } from '@/lib/compliance/frameworks'
 import type { FrameworkId } from '@/lib/compliance/frameworks/types'
+import { FRAMEWORK_LOGO_FILES } from '@/lib/compliance/frameworks/logos'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
 import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 import { frameworkReportHtml } from '@/lib/compliance/report/frameworkReportHtml'
@@ -110,6 +111,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     const def = getFramework(frameworkId as FrameworkId)
     const assessment = assessFramework(checks, def, getCrosswalk(def.id))
 
+    // Framework badge, embedded as a base64 data URI (WeasyPrint runs with
+    // base_url=None, so file/URL paths do not resolve). Non-fatal on failure.
+    let frameworkLogoDataUri = ''
+    try {
+      const logoFile = FRAMEWORK_LOGO_FILES[def.id]
+      if (logoFile) {
+        const logoPath = path.join(process.cwd(), 'public', 'images', 'frameworks', logoFile)
+        if (fs.existsSync(logoPath)) {
+          frameworkLogoDataUri = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`
+        }
+      }
+    } catch {
+      // Missing/unreadable badge is non-fatal; report renders without it.
+    }
+
     // Build HTML report
     // Literal-English translator: frameworkReportHtml calls t() with full dot-path keys
     // (e.g. 'compliance.frameworks.controlsAssessed'). getTranslations from next-intl
@@ -135,6 +151,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         locale: 'en',
         brandColor,
         logoDataUri,
+        frameworkLogoDataUri,
       },
       reportT,
       nodeBreakdown,

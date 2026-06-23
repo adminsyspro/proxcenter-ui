@@ -1,5 +1,12 @@
 import type { FrameworkAssessment } from '@/lib/compliance/frameworkAssessment'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
+import { FRAMEWORK_LOGO_DIR, FRAMEWORK_LOGO_FILES } from '@/lib/compliance/frameworks/logos'
+
+// Public URL of each framework badge, derived from the shared file map so the
+// Frameworks tab and the PDF report use the same assets.
+export const FRAMEWORK_LOGOS: Record<string, string> = Object.fromEntries(
+  Object.entries(FRAMEWORK_LOGO_FILES).map(([id, file]) => [id, `${FRAMEWORK_LOGO_DIR}/${file}`]),
+)
 
 export function buildReportUrl(frameworkId: string, connectionId: string): string {
   return `/api/v1/compliance/frameworks/${frameworkId}/report?connectionId=${encodeURIComponent(connectionId)}`

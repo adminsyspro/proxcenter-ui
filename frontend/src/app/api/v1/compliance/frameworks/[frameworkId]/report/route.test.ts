@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import fs from 'node:fs'
 import { callRoute } from '@/__tests__/setup/route-test'
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,9 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     renderPdfMock.mockResolvedValue({ ok: true, pdf: Buffer.from([1, 2, 3]) })
     // Default: no branding settings
     getSettingMock.mockResolvedValue(null)
+    // Default: no logo files on disk (clearAllMocks does not reset implementations)
+    vi.mocked(fs.existsSync).mockReturnValue(false)
+    vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from(''))
   })
 
   it('streams a PDF with sanitized attachment filename (hostile conn name)', async () => {
@@ -200,6 +204,22 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     expect(collectHardeningDataMock).toHaveBeenCalledWith(
       expect.objectContaining({ connectionId: 'c1', sshEnabled: true })
     )
+  })
+
+  it('embeds the framework badge as a data URI when the logo file exists', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    let capturedHtml = ''
+    renderPdfMock.mockImplementation(async (html: string) => {
+      capturedHtml = html
+      return { ok: true, pdf: Buffer.from([1, 2, 3]) }
+    })
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, {
+      params: { frameworkId: 'iso-27001-2022' },
+      searchParams: { connectionId: 'c1' },
+    })
+    expect(res.status).toBe(200)
+    expect(capturedHtml).toContain('<img class="cover-framework-logo" src="data:image/png;base64,')
   })
 
   it('still returns 200 when getSetting throws (branding hiccup)', async () => {

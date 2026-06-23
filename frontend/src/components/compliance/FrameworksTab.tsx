@@ -19,6 +19,7 @@ import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 import {
   breakdownSegments,
   buildReportUrl,
+  FRAMEWORK_LOGOS,
   gaugeColor,
   nodeFailCount,
   scoreColor,
@@ -172,6 +173,7 @@ export default function FrameworksTab() {
               const label = a.score === null ? t('noAssessedShort') : `${a.score}%`
               const segments = breakdownSegments(a)
               const contextText = t(`context.${a.frameworkId}`)
+              const logoSrc = FRAMEWORK_LOGOS[a.frameworkId]
 
               return (
                 <Grid size={{ xs: 12, sm: 6, md: 4 }} key={a.frameworkId}>
@@ -185,30 +187,56 @@ export default function FrameworksTab() {
                         pb: '16px !important',
                       }}
                     >
-                      {/* Header: name + version/baseline + info icon */}
-                      <Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-                            {def.name}
-                          </Typography>
-                          <Tooltip
-                            title={contextText}
-                            placement="top"
-                            slotProps={tooltipSlotProps}
+                      {/* Header: logo + name + version/baseline + info icon */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {logoSrc && (
+                          <Box
+                            sx={{
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              bgcolor: '#fff',
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              px: 0.75,
+                              py: 0.5,
+                              height: 40,
+                            }}
                           >
                             <Box
-                              component="span"
-                              sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', cursor: 'default' }}
-                              aria-label={`info-${a.frameworkId}`}
+                              component="img"
+                              src={logoSrc}
+                              alt={def.name}
+                              sx={{ height: 28, width: 'auto', maxWidth: 80, objectFit: 'contain', display: 'block' }}
+                            />
+                          </Box>
+                        )}
+                        <Box sx={{ minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                              {def.name}
+                            </Typography>
+                            <Tooltip
+                              title={contextText}
+                              placement="top"
+                              slotProps={tooltipSlotProps}
                             >
-                              <i className="ri-information-line" style={{ fontSize: '1rem' }} />
-                            </Box>
-                          </Tooltip>
+                              <Box
+                                component="span"
+                                sx={{ display: 'inline-flex', alignItems: 'center', color: 'text.secondary', cursor: 'default' }}
+                                aria-label={`info-${a.frameworkId}`}
+                              >
+                                <i className="ri-information-line" style={{ fontSize: '1rem' }} />
+                              </Box>
+                            </Tooltip>
+                          </Box>
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            {def.version}
+                            {def.baselineLabel ? ` . ${def.baselineLabel}` : ''}
+                          </Typography>
                         </Box>
-                        <Typography variant="caption" display="block" color="text.secondary">
-                          {def.version}
-                          {def.baselineLabel ? ` . ${def.baselineLabel}` : ''}
-                        </Typography>
                       </Box>
 
                       {/* Donut gauge, centered */}

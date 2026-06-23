@@ -9,6 +9,7 @@ export interface ReportMeta {
   locale: string
   brandColor?: string
   logoDataUri?: string
+  frameworkLogoDataUri?: string
 }
 
 function scoreColor(score: number | null): string {
@@ -111,6 +112,13 @@ function buildCss(primary: string): string {
   .cover-subtitle  { font-size: 11pt; opacity: 0.9; margin-top: 2mm; }
   .cover-body { text-align: center; padding-top: 30mm; }
   .cover-logo { width: 25mm; height: auto; margin-bottom: 8mm; }
+  .cover-framework {
+    display: inline-block; background: #ffffff;
+    border: 0.5pt solid var(--slate-200); border-radius: 3mm;
+    padding: 4mm 6mm; margin-bottom: 8mm;
+    box-shadow: 0 2pt 6pt rgba(15,23,42,0.06);
+  }
+  .cover-framework-logo { height: 16mm; width: auto; max-width: 60mm; display: block; }
   .cover-title {
     font-size: 26pt; font-weight: 700; color: var(--slate-900); margin-bottom: 6mm;
   }
@@ -236,6 +244,7 @@ export function frameworkReportHtml(
 
   // Logo: only allow data: URIs. Never escapeHtml a data URI (corrupts base64).
   const safeLogoUri = (meta.logoDataUri && meta.logoDataUri.startsWith('data:')) ? meta.logoDataUri : ''
+  const safeFwLogoUri = (meta.frameworkLogoDataUri && meta.frameworkLogoDataUri.startsWith('data:')) ? meta.frameworkLogoDataUri : ''
 
   // Score display
   const score = a.score
@@ -248,6 +257,9 @@ export function frameworkReportHtml(
     : `${e(def.name)} ${e(def.version)}`
 
   const logoHtml = safeLogoUri ? `<img class="cover-logo" src="${safeLogoUri}" alt="">` : ''
+  const frameworkLogoHtml = safeFwLogoUri
+    ? `<div class="cover-framework"><img class="cover-framework-logo" src="${safeFwLogoUri}" alt=""></div>`
+    : ''
 
   const cover = `
 <div class="cover">
@@ -257,6 +269,7 @@ export function frameworkReportHtml(
   </div>
   <div class="cover-body">
     ${logoHtml}
+    ${frameworkLogoHtml}
     <div class="cover-title">${frameworkLabel}</div>
     <div class="cover-type">Compliance Assessment</div>
     <div class="cover-divider"></div>

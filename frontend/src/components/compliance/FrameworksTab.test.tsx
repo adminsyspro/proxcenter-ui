@@ -99,6 +99,13 @@ describe('FrameworksTab', () => {
     expect(screen.getAllByText(/Test FW/).length).toBeGreaterThan(0)
   })
 
+  it('renders the framework logo image with the framework name as alt', () => {
+    render(<FrameworksTab />)
+    const logos = screen.getAllByRole('img', { name: 'Test FW' })
+    expect(logos.length).toBeGreaterThan(0)
+    expect(logos[0]).toHaveAttribute('src', expect.stringContaining('/images/frameworks/'))
+  })
+
   it('renders the assessed count (new style, no slash-total)', () => {
     render(<FrameworksTab />)
     // New design shows "5 controlsAssessed" without "/110"

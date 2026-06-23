@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { breakdownSegments, buildReportUrl, coverageLabel, gaugeColor, nodeFailCount, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
+import { breakdownSegments, buildReportUrl, coverageLabel, FRAMEWORK_LOGOS, gaugeColor, nodeFailCount, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
+import { FRAMEWORK_IDS } from '@/lib/compliance/frameworks/types'
 
 describe('frameworksTab helpers', () => {
   describe('buildReportUrl', () => {
@@ -141,6 +142,18 @@ describe('frameworksTab helpers', () => {
       expect(segs[0].pct).toBe(100)
       expect(segs[1].pct).toBe(0)
       expect(segs[2].pct).toBe(0)
+    })
+  })
+
+  describe('FRAMEWORK_LOGOS', () => {
+    it('maps every registered framework to a logo asset path', () => {
+      for (const id of FRAMEWORK_IDS) {
+        expect(FRAMEWORK_LOGOS[id]).toMatch(/^\/images\/frameworks\/.+\.(png|webp)$/)
+      }
+    })
+
+    it('reuses the NIST wordmark for both NIST frameworks', () => {
+      expect(FRAMEWORK_LOGOS['nist-800-53-r5']).toBe(FRAMEWORK_LOGOS['nist-800-171-r2'])
     })
   })
 

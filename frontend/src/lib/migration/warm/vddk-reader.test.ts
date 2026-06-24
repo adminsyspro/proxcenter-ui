@@ -16,8 +16,14 @@ const OPTS: VddkOpts = {
 }
 
 describe("pure builders", () => {
-  it("connects the unix socket to a kernel nbd device", () => {
-    expect(buildNbdConnectCmd("/tmp/v.sock", "/dev/nbd3")).toContain("nbd-client -unix /tmp/v.sock /dev/nbd3")
+  it("frees a stale device, then connects the unix socket to a kernel nbd device", () => {
+    const c = buildNbdConnectCmd("/tmp/v.sock", "/dev/nbd3")
+    expect(c).toContain("nbd-client -unix /tmp/v.sock /dev/nbd3")
+    // Defensively detach /dev/nbd3 first: a device left allocated by a previous
+    // failed/aborted attempt otherwise blocks the attach with "Failed to setup
+    // device" on every retry (#503). The detach must precede the attach.
+    expect(c).toContain("nbd-client -d /dev/nbd3")
+    expect(c.indexOf("nbd-client -d /dev/nbd3")).toBeLessThan(c.indexOf("nbd-client -unix"))
   })
   it("tears down device, nbdkit, socket, password file", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })

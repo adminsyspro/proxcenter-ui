@@ -20,6 +20,7 @@ import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 import { frameworkReportHtml } from '@/lib/compliance/report/frameworkReportHtml'
 import { sanitizeFilename } from '@/lib/compliance/report/escapeHtml'
 import { renderPdf } from '@/lib/reporting/weasyprintClient'
+import { safeLog } from '@/lib/log/sanitize'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -174,7 +175,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       },
     })
   } catch (e: any) {
-    console.error('[compliance/frameworks/report] Error:', e?.message)
+    console.error('[compliance/frameworks/report] Error:', safeLog(e?.message))
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })
   }
 }

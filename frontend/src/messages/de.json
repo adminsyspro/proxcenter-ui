@@ -5032,6 +5032,7 @@
     "usedMode": "Genutzt (tatsächliche Nutzung)",
     "assignedMode": "Assigned (allocated Ressourcen)",
     "guestTypesToBalance": "Zu balancierende Guest-Typen",
+    "helpGuestTypesScope": "Gilt nur für den DRS-Lastausgleich. Wartungsevakuierung und Affinitätsregeln verschieben weiterhin alle Gast-Typen, unabhängig von dieser Einstellung. Mindestens ein Typ muss ausgewählt bleiben.",
     "thresholds": "Auslöseschwellen",
     "cpuHighThreshold": "CPU oberer Schwellenwert: {value}%",
     "cpuLowThreshold": "CPU unterer Schwellenwert: {value}%",

@@ -5085,6 +5085,7 @@
     "usedMode": "Utilisé (usage réel)",
     "assignedMode": "Assigné (ressources allouées)",
     "guestTypesToBalance": "Types de guests à équilibrer",
+    "helpGuestTypesScope": "S'applique uniquement au rééquilibrage de charge DRS. L'évacuation pour maintenance et les règles d'affinité déplacent tous les types de guests, indépendamment de ce réglage. Au moins un type doit rester sélectionné.",
     "thresholds": "Seuils de déclenchement",
     "cpuHighThreshold": "CPU Seuil haut: {value}%",
     "cpuLowThreshold": "CPU Seuil bas: {value}%",

@@ -134,6 +134,7 @@ const LabeledSlider = ({ label, help, value, onChange, min, max, step = 1, marks
 // ============================================
 
 import { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings } from './drsSettings'
+import { toggleBalanceType } from './balanceTypes'
 // Re-export so existing consumers of DRSSettingsPanel keep working.
 export { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings }
 
@@ -559,31 +560,22 @@ export default function DRSSettingsPanel({
       </Grid>
 
       <Grid size={{ xs: 12 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('drsPage.guestTypesToBalance')}</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          {t('drsPage.guestTypesToBalance')}
+          <HelpTip text={t('drsPage.helpGuestTypesScope')} />
+        </Typography>
         <Stack direction="row" spacing={1}>
           <Chip
             label="VMs (QEMU)"
             color={settings.balance_types.includes('vm') ? 'primary' : 'default'}
-            onClick={() => {
-              const types = settings.balance_types.includes('vm')
-                ? settings.balance_types.filter(t => t !== 'vm')
-                : [...settings.balance_types, 'vm' as const]
-
-              handleChange('balance_types', types)
-            }}
+            onClick={() => handleChange('balance_types', toggleBalanceType(settings.balance_types, 'vm'))}
             variant={settings.balance_types.includes('vm') ? 'filled' : 'outlined'}
             sx={{ cursor: 'pointer' }}
           />
           <Chip
             label="Containers (LXC)"
             color={settings.balance_types.includes('ct') ? 'primary' : 'default'}
-            onClick={() => {
-              const types = settings.balance_types.includes('ct')
-                ? settings.balance_types.filter(t => t !== 'ct')
-                : [...settings.balance_types, 'ct' as const]
-
-              handleChange('balance_types', types)
-            }}
+            onClick={() => handleChange('balance_types', toggleBalanceType(settings.balance_types, 'ct'))}
             variant={settings.balance_types.includes('ct') ? 'filled' : 'outlined'}
             sx={{ cursor: 'pointer' }}
           />

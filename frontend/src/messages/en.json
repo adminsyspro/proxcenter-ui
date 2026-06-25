@@ -5085,6 +5085,7 @@
     "usedMode": "Used (actual usage)",
     "assignedMode": "Assigned (allocated resources)",
     "guestTypesToBalance": "Guest types to balance",
+    "helpGuestTypesScope": "Applies to DRS load rebalancing only. Maintenance evacuation and affinity rules still move all guest types regardless of this setting. At least one type must stay selected.",
     "thresholds": "Trigger thresholds",
     "cpuHighThreshold": "CPU High threshold: {value}%",
     "cpuLowThreshold": "CPU Low threshold: {value}%",

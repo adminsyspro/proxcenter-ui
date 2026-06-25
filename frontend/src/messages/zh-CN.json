@@ -5037,6 +5037,7 @@
     "usedMode": "已使用（实际使用量）",
     "assignedMode": "已分配（分配的资源）",
     "guestTypesToBalance": "要平衡的虚拟机类型",
+    "helpGuestTypesScope": "仅适用于 DRS 负载再平衡。维护疏散和亲和性规则仍会迁移所有客户机类型，与此设置无关。必须至少选择一种类型。",
     "thresholds": "触发阈值",
     "cpuHighThreshold": "CPU 高阈值：{value}%",
     "cpuLowThreshold": "CPU 低阈值：{value}%",

@@ -35,7 +35,6 @@ import {
 } from '@mui/material'
 // RemixIcon replacements for @mui/icons-material
 const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 // Help tooltip component
@@ -135,14 +134,14 @@ const LabeledSlider = ({ label, help, value, onChange, min, max, step = 1, marks
 
 import { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings } from './drsSettings'
 import { toggleBalanceType } from './balanceTypes'
+import { ClusterIcon, NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 // Re-export so existing consumers of DRSSettingsPanel keep working.
 export { type DRSSettings, type ClusterVersionInfo, defaultDRSSettings }
 
 interface DRSSettingsPanelProps {
   settings: DRSSettings
   clusterNodes: Record<string, string[]>
-  clusters?: { id: string; name: string }[]
-  clusterVersions?: ClusterVersionInfo[]
+  clusters?: { id: string; name: string; nodes?: { node: string; status?: string; maintenance?: boolean }[] }[]
   onSave: (settings: DRSSettings) => Promise<void>
   loading?: boolean
 }
@@ -170,7 +169,6 @@ export default function DRSSettingsPanel({
   settings: initialSettings,
   clusterNodes,
   clusters = [],
-  clusterVersions = [],
   onSave,
   loading = false
 }: DRSSettingsPanelProps) {
@@ -181,11 +179,6 @@ export default function DRSSettingsPanel({
   const [saving, setSaving] = useState(false)
   const [activeSection, setActiveSection] = useState<SectionKey>('general')
   const [hasChanges, setHasChanges] = useState(false)
-
-  // Check PSI support
-  const hasPSISupport = clusterVersions.some(v => v.version >= 9)
-  const allSupportPSI = clusterVersions.length > 0 && clusterVersions.every(v => v.version >= 9)
-  const pve8Clusters = clusterVersions.filter(v => v.version < 9)
 
   useEffect(() => {
     // Fall back to 1h when the persisted value is not one of the options we
@@ -266,43 +259,41 @@ export default function DRSSettingsPanel({
             onChange={(e) => handleChange('mode', e.target.value as DRSSettings['mode'])}
           >
             <MenuItem value="manual">
-              <Box>
-                <Typography variant="body2">{t('drsPage.modeManual')}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t('drsPage.modeManualDesc')}
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className="ri-cursor-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                <Box>
+                  <Typography variant="body2">{t('drsPage.modeManual')}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t('drsPage.modeManualDesc')}
+                  </Typography>
+                </Box>
               </Box>
             </MenuItem>
             <MenuItem value="partial">
-              <Box>
-                <Typography variant="body2">{t('drsPage.modePartial')}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t('drsPage.modePartialDesc')}
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className="ri-contrast-2-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                <Box>
+                  <Typography variant="body2">{t('drsPage.modePartial')}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t('drsPage.modePartialDesc')}
+                  </Typography>
+                </Box>
               </Box>
             </MenuItem>
             <MenuItem value="automatic">
-              <Box>
-                <Typography variant="body2">{t('drsPage.modeAutomatic')}</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {t('drsPage.modeAutomaticDesc')}
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <i className="ri-flashlight-line" style={{ fontSize: 18, opacity: 0.8 }} />
+                <Box>
+                  <Typography variant="body2">{t('drsPage.modeAutomatic')}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t('drsPage.modeAutomaticDesc')}
+                  </Typography>
+                </Box>
               </Box>
             </MenuItem>
           </Select>
         </FormControl>
       </Grid>
-
-      {settings.mode !== 'manual' && settings.max_concurrent_migrations > 1 && (
-        <Grid size={12}>
-          <Alert severity="warning" icon={<i className="ri-alert-line" style={{ fontSize: 20 }} />}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('drsPage.concurrentMigrationWarningTitle')}</Typography>
-            <Typography variant="caption">
-              {t('drsPage.concurrentMigrationWarningDesc')}
-            </Typography>
-          </Alert>
-        </Grid>
-      )}
 
       {/* Active clusters selector */}
       {clusters.length > 0 && (
@@ -335,6 +326,7 @@ export default function DRSSettingsPanel({
                 <Chip
                   {...getTagProps({ index })}
                   key={option.id}
+                  icon={<ClusterIcon nodes={option.nodes || []} size={14} />}
                   label={option.name}
                   size="small"
                 />
@@ -359,7 +351,10 @@ export default function DRSSettingsPanel({
             <Stack spacing={1}>
               {activeClusters.map(cluster => (
                 <Box key={cluster.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Typography variant="body2" sx={{ minWidth: 140, fontWeight: 500 }}>{cluster.name}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 140 }}>
+                    <ClusterIcon nodes={cluster.nodes || []} size={16} />
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>{cluster.name}</Typography>
+                  </Box>
                   <FormControl size="small" sx={{ minWidth: 220 }}>
                     <Select
                       value={settings.cluster_modes[cluster.id] || ''}
@@ -380,9 +375,24 @@ export default function DRSSettingsPanel({
                           {t('drsPage.clusterModeGlobalDefault', { mode: t(`drsPage.mode${settings.mode.charAt(0).toUpperCase() + settings.mode.slice(1)}`) })}
                         </Typography>
                       </MenuItem>
-                      <MenuItem value="manual">{t('drsPage.modeManual')}</MenuItem>
-                      <MenuItem value="partial">{t('drsPage.modePartial')}</MenuItem>
-                      <MenuItem value="automatic">{t('drsPage.modeAutomatic')}</MenuItem>
+                      <MenuItem value="manual">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-cursor-line" style={{ fontSize: 16, opacity: 0.8 }} />
+                          {t('drsPage.modeManual')}
+                        </Box>
+                      </MenuItem>
+                      <MenuItem value="partial">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-contrast-2-line" style={{ fontSize: 16, opacity: 0.8 }} />
+                          {t('drsPage.modePartial')}
+                        </Box>
+                      </MenuItem>
+                      <MenuItem value="automatic">
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-flashlight-line" style={{ fontSize: 16, opacity: 0.8 }} />
+                          {t('drsPage.modeAutomatic')}
+                        </Box>
+                      </MenuItem>
                     </Select>
                   </FormControl>
                 </Box>
@@ -408,9 +418,13 @@ export default function DRSSettingsPanel({
               {activeClusters.map(cluster => {
                 const nodesForCluster = clusterNodes[cluster.id] || []
                 if (nodesForCluster.length === 0) return null
+                const nodeInfo = new Map((cluster.nodes || []).map(n => [n.node, n]))
                 return (
                   <Box key={cluster.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                    <Typography variant="body2" sx={{ minWidth: 140, fontWeight: 500, mt: 1 }}>{cluster.name}</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 140, mt: 1 }}>
+                      <ClusterIcon nodes={cluster.nodes || []} size={16} />
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{cluster.name}</Typography>
+                    </Box>
                     <Autocomplete
                       multiple
                       size="small"
@@ -432,11 +446,18 @@ export default function DRSSettingsPanel({
                           placeholder={t('drsPage.excludedNodesPlaceholder')}
                         />
                       )}
+                      renderOption={(props, node) => (
+                        <li {...props} key={node} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <NodeIcon status={nodeInfo.get(node)?.status} maintenance={nodeInfo.get(node)?.maintenance ? 'maintenance' : undefined} size={16} />
+                          {node}
+                        </li>
+                      )}
                       renderTags={(value, getTagProps) =>
                         value.map((node, index) => (
                           <Chip
                             {...getTagProps({ index })}
                             key={node}
+                            icon={<NodeIcon status={nodeInfo.get(node)?.status} maintenance={nodeInfo.get(node)?.maintenance ? 'maintenance' : undefined} size={14} />}
                             label={node}
                             size="small"
                             color="error"
@@ -519,46 +540,6 @@ export default function DRSSettingsPanel({
         </>
       )}
 
-      <Grid size={{ xs: 12, md: 6 }}>
-        <FormControl fullWidth size="small">
-          <InputLabel>{t('drsPage.priorityResource')}</InputLabel>
-          <Select
-            value={settings.balancing_method}
-            label={t('drsPage.priorityResource')}
-            onChange={(e) => handleChange('balancing_method', e.target.value as DRSSettings['balancing_method'])}
-          >
-            <MenuItem value="memory">{t('drsPage.memoryResource')}</MenuItem>
-            <MenuItem value="cpu">{t('drsPage.cpuResource')}</MenuItem>
-            <MenuItem value="disk">{t('drsPage.diskResource')}</MenuItem>
-          </Select>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-            {t('drsPage.helpPriorityResource')}
-          </Typography>
-        </FormControl>
-      </Grid>
-
-      <Grid size={{ xs: 12, md: 6 }}>
-        <FormControl fullWidth size="small">
-          <InputLabel>{t('drsPage.measurementMode')}</InputLabel>
-          <Select
-            value={settings.balancing_mode}
-            label={t('drsPage.measurementMode')}
-            onChange={(e) => handleChange('balancing_mode', e.target.value as DRSSettings['balancing_mode'])}
-          >
-            <MenuItem value="used">{t('drsPage.usedMode')}</MenuItem>
-            <MenuItem value="assigned">{t('drsPage.assignedMode')}</MenuItem>
-            <MenuItem value="psi" disabled={!hasPSISupport}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                PSI (Pressure Stall Info)
-                {!hasPSISupport && (
-                  <Chip label="PVE 9+" size="small" color="warning" />
-                )}
-              </Box>
-            </MenuItem>
-          </Select>
-        </FormControl>
-      </Grid>
-
       <Grid size={{ xs: 12 }}>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
           {t('drsPage.guestTypesToBalance')}
@@ -567,6 +548,7 @@ export default function DRSSettingsPanel({
         <Stack direction="row" spacing={1}>
           <Chip
             label="VMs (QEMU)"
+            icon={<i className="ri-computer-line" style={{ fontSize: 16 }} />}
             color={settings.balance_types.includes('vm') ? 'primary' : 'default'}
             onClick={() => handleChange('balance_types', toggleBalanceType(settings.balance_types, 'vm'))}
             variant={settings.balance_types.includes('vm') ? 'filled' : 'outlined'}
@@ -574,6 +556,7 @@ export default function DRSSettingsPanel({
           />
           <Chip
             label="Containers (LXC)"
+            icon={<i className="ri-instance-line" style={{ fontSize: 16 }} />}
             color={settings.balance_types.includes('ct') ? 'primary' : 'default'}
             onClick={() => handleChange('balance_types', toggleBalanceType(settings.balance_types, 'ct'))}
             variant={settings.balance_types.includes('ct') ? 'filled' : 'outlined'}
@@ -817,8 +800,8 @@ export default function DRSSettingsPanel({
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
         {t('drsPage.helpResourceWeightsDesc')}
       </Typography>
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, md: 4 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="caption">{t('drsPage.cpuWeight', { value: settings.cpu_weight.toFixed(1) })}</Typography>
           <Slider
             value={settings.cpu_weight}
@@ -828,8 +811,8 @@ export default function DRSSettingsPanel({
             step={0.1}
             valueLabelDisplay="auto"
           />
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="caption">{t('drsPage.memoryWeight', { value: settings.memory_weight.toFixed(1) })}</Typography>
           <Slider
             value={settings.memory_weight}
@@ -839,8 +822,8 @@ export default function DRSSettingsPanel({
             step={0.1}
             valueLabelDisplay="auto"
           />
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="caption">{t('drsPage.storageWeight', { value: settings.storage_weight.toFixed(1) })}</Typography>
           <Slider
             value={settings.storage_weight}
@@ -850,8 +833,8 @@ export default function DRSSettingsPanel({
             step={0.1}
             valueLabelDisplay="auto"
           />
-        </Grid>
-      </Grid>
+        </Box>
+      </Stack>
     </>
   )
 
@@ -887,17 +870,6 @@ export default function DRSSettingsPanel({
         </Button>
       </Box>
 
-      {/* PSI Warning for mixed environments */}
-      {settings.balancing_mode === 'psi' && !allSupportPSI && pve8Clusters.length > 0 && (
-        <Alert severity="warning" sx={{ mb: 2 }} icon={<WarningIcon />}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            {t('drsPage.psiMixedEnvironment')}
-          </Typography>
-          <Typography variant="body2">
-            {t('drsPage.psiPve8Fallback', { clusters: pve8Clusters.map(c => c.name).join(', ') })}
-          </Typography>
-        </Alert>
-      )}
 
       {/* Mobile: horizontal tabs */}
       {isMobile ? (

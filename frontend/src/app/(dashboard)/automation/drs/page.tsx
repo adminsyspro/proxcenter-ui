@@ -50,7 +50,6 @@ const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ font
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CheckIcon = (props: any) => <i className="ri-check-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const SpeedIcon = (props: any) => <i className="ri-speed-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const StorageIcon = (props: any) => <i className="ri-hard-drive-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -77,8 +76,7 @@ import { CardsSkeleton } from '@/components/skeletons'
 // Import des nouveaux composants DRS
 import DRSSettingsPanel, { 
   defaultDRSSettings, 
-  type DRSSettings, 
-  type ClusterVersionInfo 
+  type DRSSettings
 } from '@/components/automation/drs/DRSSettingsPanel'
 import AffinityRulesManager, {
   type AffinityRule, 
@@ -1590,14 +1588,6 @@ return Object.entries(metricsData as any)
   }, [metricsData, pendingRecs, connectionNames])
 
   // Cluster versions for PSI support check
-  const clusterVersions: ClusterVersionInfo[] = useMemo(() => {
-    return clusters.map(c => ({
-      connectionId: c.id,
-      name: c.name,
-      version: c.metrics.pve_version || 8
-    }))
-  }, [clusters])
-
   // All nodes list
   const allNodes = useMemo(() => {
     return clusters.flatMap(c => c.metrics.nodes?.map(n => n.node) || [])
@@ -1950,7 +1940,12 @@ return next
 
   // Settings handlers
   const handleSaveSettings = useCallback(async (settings: DRSSettings) => {
-    await apiAction('/api/v1/orchestrator/drs/settings', 'PUT', settings)
+    // Strip DRS knobs the engine ignores (backend "DEAD KNOBS"): sending them is
+    // a no-op and makes the backend log a warning for each. The settings object
+    // is hydrated from GET, so it can carry these even when no UI control sets them.
+    const DEAD_KNOBS = ['balancing_method', 'balancing_mode', 'maintenance_nodes', 'ignore_nodes', 'storage_high_threshold', 'balance_larger_first']
+    const body = Object.fromEntries(Object.entries(settings).filter(([k]) => !DEAD_KNOBS.includes(k)))
+    await apiAction('/api/v1/orchestrator/drs/settings', 'PUT', body)
     await mutateSettings()
   }, [mutateSettings])
 
@@ -2099,15 +2094,22 @@ return next
                   )
                 })}
               </Stack>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={actionLoading === 'evaluate' ? <CircularProgress size={16} /> : <SpeedIcon />}
-                onClick={handleTriggerEvaluation}
-                disabled={!!actionLoading}
-              >
-                {t('drsPage.evaluate')}
-              </Button>
+              <Tooltip title={t('drsPage.evaluate')} arrow>
+                <span>
+                  <IconButton
+                    size="small"
+                    color="primary"
+                    onClick={handleTriggerEvaluation}
+                    disabled={!!actionLoading}
+                    sx={actionLoading === 'evaluate' ? {
+                      '@keyframes drsEvalSpin': { to: { transform: 'rotate(360deg)' } },
+                      '& i': { animation: 'drsEvalSpin 0.9s linear infinite' },
+                    } : undefined}
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Stack>
           </Box>
 
@@ -2421,8 +2423,11 @@ return next
             <DRSSettingsPanel
               settings={drsSettings || defaultDRSSettings}
               clusterNodes={Object.fromEntries(clusters.map(c => [c.id, c.metrics.nodes?.map(n => n.node) || []]))}
-              clusters={clusters.map(c => ({ id: c.id, name: c.name }))}
-              clusterVersions={clusterVersions}
+              clusters={clusters.map(c => ({
+                id: c.id,
+                name: c.name,
+                nodes: c.metrics.nodes?.map(n => ({ node: n.node, status: n.status, maintenance: n.in_maintenance })) || []
+              }))}
               onSave={handleSaveSettings}
               loading={!drsSettings}
             />

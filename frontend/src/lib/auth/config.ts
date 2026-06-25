@@ -379,7 +379,13 @@ export const authOptions: NextAuthOptions = {
         const sub = (profile as any).sub as string
         const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
         const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
-        const groups = extractGroupsFromClaim((profile as any)[oidcConfig.claimGroups || 'groups'])
+        const rawGroupsClaim = (profile as any)[oidcConfig.claimGroups || 'groups']
+        // Whether the IdP actually sent a groups array (even an empty one) on this
+        // login. Captured before extraction because extractGroupsFromClaim collapses
+        // missing / non-array / empty all to []. syncOidcRoleAssignment uses it to
+        // decide whether the group->role re-sync is authoritative (issue #442).
+        const groupsClaimIsArray = Array.isArray(rawGroupsClaim)
+        const groups = extractGroupsFromClaim(rawGroupsClaim)
 
         if (!email) return false
 
@@ -491,6 +497,7 @@ export const authOptions: NextAuthOptions = {
           config: oidcConfig,
           now,
           newId: () => `oidc_${nanoid(12)}`,
+          groupsClaimIsArray,
         })
       }
 

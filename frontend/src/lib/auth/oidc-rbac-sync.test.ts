@@ -44,6 +44,8 @@ const baseParams = (extra: any = {}) => ({
   config: makeConfig({ db: 'role_db' }),
   now: new Date('2026-06-18T00:00:00Z'),
   newId: () => 'oidc_fixed',
+  // The IdP sent an actual groups array (authoritative) unless a test overrides it.
+  groupsClaimIsArray: true,
   ...extra,
 })
 
@@ -101,6 +103,81 @@ describe('syncOidcRoleAssignment (issue #383)', () => {
   it('falls back to role_viewer when the resolved role no longer exists', async () => {
     db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue(null) } })
     await syncOidcRoleAssignment(db, baseParams({ config: makeConfig({ db: 'role_ghost' }) }))
+    const created = db.rbacUserRole.create.mock.calls[0][0].data
+    expect(created.roleId).toBe('role_viewer')
+    expect(created.scopeType).toBe('inherit')
+  })
+})
+
+describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)', () => {
+  // A pre-existing assignment is represented by findFirst returning a row.
+  const withExistingRole = () =>
+    makeDb({
+      rbacUserRole: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'manual_row' }),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+    })
+
+  it('preserves an existing role when no group mapping is configured', async () => {
+    // Deployments that assign roles manually (empty group_role_mapping) must
+    // never have the OIDC sync rewrite the role — that was the 1.4.4 demotion.
+    const db = withExistingRole()
+    await syncOidcRoleAssignment(
+      db,
+      baseParams({ groups: ['anything'], config: makeConfig({}, 'role_viewer') }),
+    )
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('seeds the configured default role (not hardcoded viewer) for a first-login user when no mapping is configured', async () => {
+    // findFirst → null (makeDb default) means the user has no role yet.
+    const db = makeDb()
+    await syncOidcRoleAssignment(
+      db,
+      baseParams({ groups: [], config: makeConfig({}, 'operator') }),
+    )
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    const created = db.rbacUserRole.create.mock.calls[0][0].data
+    expect(created.roleId).toBe('role_operator')
+    expect(created.scopeType).toBe('inherit')
+  })
+
+  it('preserves an existing role when the groups claim is absent / not an array, even with a mapping', async () => {
+    // A missing or non-array groups claim is not authoritative: do not demote.
+    const db = withExistingRole()
+    await syncOidcRoleAssignment(
+      db,
+      baseParams({ groups: [], groupsClaimIsArray: false, config: makeConfig({ db: 'role_db' }, 'role_viewer') }),
+    )
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+
+  it('demotes to the default role when the IdP sends an empty groups array and a mapping exists (authoritative revoke)', async () => {
+    const db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue({ id: 'role_viewer' }) } })
+    await syncOidcRoleAssignment(
+      db,
+      baseParams({ groups: [], groupsClaimIsArray: true, config: makeConfig({ db: 'role_db' }, 'role_viewer') }),
+    )
+    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
+      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
+    })
+    const created = db.rbacUserRole.create.mock.calls[0][0].data
+    expect(created.roleId).toBe('role_viewer')
+  })
+
+  it('seeds role_viewer when the configured default role no longer exists (first login, no mapping, Codex P2)', async () => {
+    // A custom default role that was later deleted must not FK-fail the
+    // first-login seed — fall back to role_viewer like the resolved-role branch.
+    const db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue(null) } })
+    await syncOidcRoleAssignment(
+      db,
+      baseParams({ groups: [], config: makeConfig({}, 'role_ghost') }),
+    )
+    expect(db.rbacUserRole.deleteMany).not.toHaveBeenCalled()
     const created = db.rbacUserRole.create.mock.calls[0][0].data
     expect(created.roleId).toBe('role_viewer')
     expect(created.scopeType).toBe('inherit')

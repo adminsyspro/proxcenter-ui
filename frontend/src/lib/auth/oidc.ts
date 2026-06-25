@@ -105,33 +105,62 @@ export function resolveOidcRole(
 }
 
 /**
+ * Normalise a role value to a `role_`-prefixed RBAC role id. Both the
+ * group->role mapping and the default role accept either "role_db" (new) or
+ * "db" (legacy); falls back to "role_viewer" for an empty/missing value.
+ */
+export function toRoleId(role: string | null | undefined): string {
+  const r = (role || "viewer").trim()
+  return r.startsWith("role_") ? r : `role_${r}`
+}
+
+/**
  * Normalise a resolved OIDC role into a `role_`-prefixed RBAC role id. The
  * group->role mapping accepts both "role_db" (new) and "db" (legacy) values,
  * and the default role is stored either way too.
  */
 export function oidcRoleId(groups: string[] | undefined, config: OidcConfig): string {
-  const resolved = resolveOidcRole(groups, config)
-  return resolved.startsWith("role_") ? resolved : `role_${resolved}`
+  return toRoleId(resolveOidcRole(groups, config))
 }
 
 /**
- * Re-sync a user's OIDC-derived RBAC assignment on every login (issue #383).
+ * Re-sync a user's OIDC-derived RBAC assignment on login (issues #383, #442).
  *
- * Unlike LDAP, resolveOidcRole always resolves to a concrete role (its default
- * on no match), so this is a full re-evaluation: the user follows their current
- * IdP groups on each sign-in, and leaving a mapped group demotes them to the
- * default role at the next login. The `oidc_`-prefixed row is the only one
- * touched, so manual assignments are preserved (assignments are additive).
+ * The re-sync is AUTHORITATIVE (allowed to overwrite/demote the `oidc_` row)
+ * only when a group->role mapping is actually configured AND the IdP sent a
+ * real groups array on this login. An empty array still counts as authoritative
+ * ("removed from every mapped group" must demote to the configured default).
+ *
+ * When there is no mapping, or the groups claim is missing / not an array, the
+ * resolved role is `null`: syncProviderRoleAssignment then PRESERVES the user's
+ * existing assignment (mirroring LDAP) and only seeds the configured default for
+ * a first login. This is the #442 fix — a 1.4.4 re-sync demoted every OIDC user
+ * with no mapped group back to viewer on each login, locking out admins whose
+ * role was assigned manually. The `oidc_`-prefixed row is the only one touched,
+ * so manual assignments are preserved.
  */
 export async function syncOidcRoleAssignment(
   db: ProviderSyncDb,
-  params: { userId: string; groups: string[] | undefined; config: OidcConfig; now: Date; newId: () => string },
+  params: {
+    userId: string
+    groups: string[] | undefined
+    config: OidcConfig
+    now: Date
+    newId: () => string
+    groupsClaimIsArray: boolean
+  },
 ): Promise<void> {
-  const { userId, groups, config, now, newId } = params
+  const { userId, groups, config, now, newId, groupsClaimIsArray } = params
+
+  const hasMapping =
+    !!config.groupRoleMapping && Object.keys(config.groupRoleMapping).length > 0
+  const resolvedRoleId =
+    hasMapping && groupsClaimIsArray ? oidcRoleId(groups, config) : null
+
   await syncProviderRoleAssignment(db, {
     userId,
-    resolvedRoleId: oidcRoleId(groups, config),
-    defaultRoleId: "role_viewer",
+    resolvedRoleId,
+    defaultRoleId: toRoleId(config.defaultRole),
     now,
     idPrefix: "oidc_",
     newId,

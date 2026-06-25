@@ -35,10 +35,12 @@ export type ProviderSyncDb = {
  *  - null, no role yet  -> assign the default role (first login)
  *  - null, role exists  -> preserve whatever the user already has
  *
- * LDAP passes null when no group matches (preserve existing). OIDC always
- * resolves to a concrete role (its default on no match), so an OIDC re-sync is
- * a full re-evaluation: leaving a mapped group demotes the provider row to the
- * default role on the next login, while manual assignments stay untouched.
+ * Both providers pass null when the re-sync is NOT authoritative (LDAP: no
+ * group matched; OIDC: no mapping configured or the IdP sent no groups array,
+ * issue #442), which preserves an existing role. When OIDC is authoritative it
+ * resolves to a concrete role (its default on no match), so leaving every mapped
+ * group demotes the provider row to the default on the next login, while manual
+ * assignments stay untouched.
  */
 export async function syncProviderRoleAssignment(
   db: ProviderSyncDb,
@@ -85,11 +87,18 @@ export async function syncProviderRoleAssignment(
     select: { id: true },
   })
   if (!hasAnyRole) {
+    // Validate the configured default still exists, falling back to role_viewer
+    // like the resolved-role branch above. A stale/deleted custom default would
+    // otherwise FK-fail the insert and break the first-login sign-in.
+    const defaultExists = await db.rbacRole.findUnique({
+      where: { id: defaultRoleId },
+      select: { id: true },
+    })
     await db.rbacUserRole.create({
       data: {
         id: newId(),
         userId,
-        roleId: defaultRoleId,
+        roleId: defaultExists ? defaultRoleId : "role_viewer",
         scopeType: "inherit",
         tenantId,
         grantedById: null,

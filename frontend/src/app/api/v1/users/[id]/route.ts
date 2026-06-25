@@ -135,6 +135,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const data: Record<string, unknown> = {}
     if (name !== undefined) data.name = name
     if (enabled !== undefined) data.enabled = !!enabled
+    // Password is owned by the external IdP for SSO/LDAP accounts. Refuse to set
+    // a local password on them — it would open a credentials login path that
+    // bypasses SSO/MFA. Covers both admin edits and self-service profile changes.
+    if (password && (user.authProvider === "ldap" || user.authProvider === "oidc")) {
+      return NextResponse.json(
+        { error: "Le mot de passe est géré par le fournisseur d'identité (OIDC/LDAP) et ne peut pas être défini ici." },
+        { status: 403 }
+      )
+    }
     if (password) {
       if (password.length < 8) {
         return NextResponse.json(

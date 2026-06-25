@@ -7,7 +7,7 @@ import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
-import { extractGroupsFromClaim, isLdapGroupAllowed } from "./groupMapping"
+import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
 
@@ -379,13 +379,9 @@ export const authOptions: NextAuthOptions = {
         const sub = (profile as any).sub as string
         const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
         const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
-        const rawGroupsClaim = (profile as any)[oidcConfig.claimGroups || 'groups']
-        // Whether the IdP actually sent a groups array (even an empty one) on this
-        // login. Captured before extraction because extractGroupsFromClaim collapses
-        // missing / non-array / empty all to []. syncOidcRoleAssignment uses it to
-        // decide whether the group->role re-sync is authoritative (issue #442).
-        const groupsClaimIsArray = Array.isArray(rawGroupsClaim)
-        const groups = extractGroupsFromClaim(rawGroupsClaim)
+        // groups + whether the IdP actually sent an array (even empty); the
+        // latter decides whether the group->role re-sync is authoritative (#442).
+        const { groups, groupsClaimIsArray } = readGroupsClaim(profile as any, oidcConfig.claimGroups)
 
         if (!email) return false
 

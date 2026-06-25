@@ -45,6 +45,22 @@ export function extractGroupsFromClaim(claim: unknown): string[] {
 }
 
 /**
+ * Read the raw groups claim from an OIDC profile and report BOTH the extracted
+ * group list and whether the IdP actually sent an array (even an empty one).
+ * The array flag is captured before extraction because extractGroupsFromClaim
+ * collapses missing / non-array / empty all to []. The OIDC role re-sync uses it
+ * to decide whether the group->role mapping is authoritative (issue #442): a
+ * real array (even empty) is authoritative, a missing / non-array claim is not.
+ */
+export function readGroupsClaim(
+  profile: Record<string, unknown>,
+  claimKey: string | null | undefined,
+): { groups: string[]; groupsClaimIsArray: boolean } {
+  const raw = profile[claimKey || "groups"]
+  return { groups: extractGroupsFromClaim(raw), groupsClaimIsArray: Array.isArray(raw) }
+}
+
+/**
  * Decide whether a user with the given groups is in any of the allowed
  * groups for an LDAP login. Accepts full DN strings on either side and
  * also matches by extracting the CN from a user-side DN so admins can

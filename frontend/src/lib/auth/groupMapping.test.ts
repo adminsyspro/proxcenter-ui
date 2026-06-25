@@ -4,6 +4,7 @@ import {
   extractGroupsFromClaim,
   isLdapGroupAllowed,
   normalizeGroupRoleMapping,
+  readGroupsClaim,
 } from './groupMapping'
 
 describe('normalizeGroupRoleMapping', () => {
@@ -118,5 +119,34 @@ describe('isLdapGroupAllowed', () => {
 
   it('trims the extracted CN before comparing', () => {
     expect(isLdapGroupAllowed(['CN= admin ,OU=Groups'], ['admin'])).toBe(true)
+  })
+})
+
+describe('readGroupsClaim (issue #442)', () => {
+  it('reports a real array claim as authoritative and extracts the groups', () => {
+    expect(readGroupsClaim({ groups: [' admin ', '', 'ops'] }, 'groups'))
+      .toEqual({ groups: ['admin', 'ops'], groupsClaimIsArray: true })
+  })
+
+  it('treats an empty array as authoritative (intended revoke)', () => {
+    expect(readGroupsClaim({ groups: [] }, 'groups'))
+      .toEqual({ groups: [], groupsClaimIsArray: true })
+  })
+
+  it('treats a missing groups claim as non-authoritative', () => {
+    expect(readGroupsClaim({}, 'groups'))
+      .toEqual({ groups: [], groupsClaimIsArray: false })
+  })
+
+  it('treats a non-array claim as non-authoritative', () => {
+    expect(readGroupsClaim({ groups: 'admin' }, 'groups'))
+      .toEqual({ groups: [], groupsClaimIsArray: false })
+  })
+
+  it('reads a custom claim key and falls back to "groups" when the key is unset', () => {
+    expect(readGroupsClaim({ roles: ['ops'] }, 'roles'))
+      .toEqual({ groups: ['ops'], groupsClaimIsArray: true })
+    expect(readGroupsClaim({ groups: ['ops'] }, null))
+      .toEqual({ groups: ['ops'], groupsClaimIsArray: true })
   })
 })

@@ -108,6 +108,9 @@ function AuthProviderChip({ provider, t }) {
     return <Chip size='small' label={t('usersPage.ldapAuth')} variant='outlined' icon={<i className='ri-server-line' style={{ fontSize: 14 }} />} />
   }
 
+  if (provider === 'oidc') {
+    return <Chip size='small' label={t('usersPage.oidcAuth')} variant='outlined' icon={<i className='ri-shield-keyhole-line' style={{ fontSize: 14 }} />} />
+  }
 
 return <Chip size='small' label={t('usersPage.localAuth')} variant='outlined' icon={<i className='ri-user-line' style={{ fontSize: 14 }} />} />
 }
@@ -152,6 +155,9 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [showPassword, setShowPassword] = useState(false)
 
   const isEdit = !!user
+  // Password is owned by the external IdP for SSO/LDAP accounts — never let the
+  // app set a local password on them (would open a credentials path bypassing SSO).
+  const isExternalAuth = isEdit && (user?.auth_provider === 'ldap' || user?.auth_provider === 'oidc')
   // Super admins are pinned to every tenant by design — disable the
   // multi-select but still display their current memberships so the
   // operator sees the rule rather than an empty field.
@@ -376,13 +382,14 @@ return
           fullWidth
           label={isEdit ? (t ? t('usersPage.newPassword') : 'New password (leave empty to keep current)') : (t ? t('auth.password') : 'Password')}
           type={showPassword ? 'text' : 'password'}
-          value={password}
+          value={isExternalAuth ? '' : password}
           onChange={e => setPassword(e.target.value)}
           sx={{ mb: 2 }}
           required={!isEdit}
-          helperText={t ? t('usersPage.minChars') : 'Minimum 8 characters'}
+          disabled={isExternalAuth}
+          helperText={isExternalAuth ? (t ? t('usersPage.passwordManagedByIdp') : 'Password is managed by the identity provider') : (t ? t('usersPage.minChars') : 'Minimum 8 characters')}
           InputProps={{
-            endAdornment: (
+            endAdornment: isExternalAuth ? undefined : (
               <InputAdornment position='end'>
                 <IconButton size='small' onClick={() => setShowPassword(!showPassword)}>
                   <i className={showPassword ? 'ri-eye-off-line' : 'ri-eye-line'} />
@@ -429,6 +436,7 @@ return
             : rbacRoles).filter(r => r.id !== 'role_super_admin' && r.id !== 'role_provider_admin')
 
           return (
+          <>
           <Autocomplete
             options={visibleRoles}
             value={selectedRole}
@@ -463,6 +471,12 @@ return
             )}
             sx={{ mb: 2 }}
           />
+          <Alert severity='info' icon={<i className='ri-information-line' />} sx={{ mt: -0.5, mb: 2, py: 0.25, '& .MuiAlert-message': { py: 0.5 } }}>
+            <Typography variant='caption'>
+              {t ? t('usersPage.protectedRolesNote') : 'Super Admin / Provider Admin are managed in Security › RBAC.'}
+            </Typography>
+          </Alert>
+          </>
           )
         })()}
 

@@ -80,6 +80,18 @@ export function mapEsxiToPveConfig(
       ? `,tag=${vlanTag}`
       : ""
 
+  // Preserve the source NIC's MAC so the guest keeps its network identity.
+  // Without this Proxmox assigns a fresh MAC, the guest (notably Windows) sees
+  // a brand new adapter and its IP is stranded on the old "ghost" NIC. The
+  // cold/virt-v2v path already does this (see v2vConfigMapper). Only set a
+  // well-formed unicast MAC; the target boots after the source is powered off
+  // (warm cutover / direct-ESXi power-off), so there is no MAC collision.
+  const sourceMac = esxiConfig.nics[0]?.macAddress
+  const macSuffix =
+    sourceMac && /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(sourceMac)
+      ? `,macaddr=${sourceMac}`
+      : ""
+
   const params: PveVmCreateParams = {
     vmid: targetVmid,
     name: esxiConfig.name.replace(/[^a-zA-Z0-9-]/g, "-").replace(/^-+|-+$/g, '').substring(0, 63) || 'vm',
@@ -93,7 +105,7 @@ export function mapEsxiToPveConfig(
     machine: "q35",
     boot: "order=scsi0",
     agent: "1",
-    net0: `${nicModel},bridge=${networkBridge}${tagSuffix}`,
+    net0: `${nicModel},bridge=${networkBridge}${macSuffix}${tagSuffix}`,
   }
 
   if (isEfi) {

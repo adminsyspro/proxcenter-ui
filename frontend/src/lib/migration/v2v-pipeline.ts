@@ -457,7 +457,7 @@ async function runVcenterNfcExport(
    */
   snapshotMor: string | null = null,
 ): Promise<string[]> {
-  await appendLog(jobId, "vSAN datastore detected, switching to NFC transport (HttpNfcLease)", "info")
+  await appendLog(jobId, "Opening NFC export lease via vCenter (HttpNfcLease)...", "info")
 
   // Make sure the staging directory exists on the PVE node.
   await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(outputDir)}`)

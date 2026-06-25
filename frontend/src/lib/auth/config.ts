@@ -7,7 +7,7 @@ import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword } from "./password"
-import { extractGroupsFromClaim, isLdapGroupAllowed } from "./groupMapping"
+import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
 
@@ -379,7 +379,9 @@ export const authOptions: NextAuthOptions = {
         const sub = (profile as any).sub as string
         const email = ((profile as any)[oidcConfig.claimEmail] || (profile as any).email || '').toLowerCase().trim()
         const name = (profile as any)[oidcConfig.claimName] || (profile as any).name || email
-        const groups = extractGroupsFromClaim((profile as any)[oidcConfig.claimGroups || 'groups'])
+        // groups + whether the IdP actually sent an array (even empty); the
+        // latter decides whether the group->role re-sync is authoritative (#442).
+        const { groups, groupsClaimIsArray } = readGroupsClaim(profile as any, oidcConfig.claimGroups)
 
         if (!email) return false
 
@@ -491,6 +493,7 @@ export const authOptions: NextAuthOptions = {
           config: oidcConfig,
           now,
           newId: () => `oidc_${nanoid(12)}`,
+          groupsClaimIsArray,
         })
       }
 

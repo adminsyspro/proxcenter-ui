@@ -772,13 +772,27 @@ export default function InventoryDetails({
         setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
       }
     }).catch(() => {})
-    // Also fetch network bridges
-    fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/network`).then(r => r.json()).then(d => {
-      const bridges = (d.data || d || []).filter((iface: any) => iface.type === 'bridge' || iface.type === 'OVSBridge')
-      setMigBridges(bridges)
-      if (bridges.length > 0) {
+    // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),
+    // merged into one selector list. A migrated NIC accepts a VNet name in its
+    // bridge= slot exactly like a vmbr, so nodes that use SDN are no longer stuck
+    // with an empty/limited dropdown.
+    Promise.all([
+      fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/network`).then(r => r.json()).catch(() => null),
+      fetch(`/api/v1/connections/${migTargetConn}/sdn/vnets`).then(r => r.json()).catch(() => null),
+    ]).then(([net, sdn]) => {
+      const bridges = ((net?.data || net || []) as any[]).filter((iface: any) => iface.type === 'bridge' || iface.type === 'OVSBridge')
+      const vnets = ((sdn?.data?.vnets || []) as any[])
+        .filter((v: any) => typeof v.vnet === 'string' && v.vnet.length > 0)
+        .map((v: any) => ({
+          iface: v.vnet,
+          type: 'vnet',
+          comments: v.alias && v.alias !== v.vnet ? `VNet · ${v.alias}` : `VNet${v.zone ? ' · ' + v.zone : ''}`,
+        }))
+      const merged = [...bridges, ...vnets]
+      setMigBridges(merged)
+      if (merged.length > 0) {
         const vmbr0 = bridges.find((b: any) => b.iface === 'vmbr0')
-        setMigNetworkBridge(vmbr0 ? 'vmbr0' : bridges[0].iface)
+        setMigNetworkBridge(vmbr0 ? 'vmbr0' : merged[0].iface)
       }
     }).catch(() => {})
   }, [migTargetConn, migTargetNode, migNodeOptions.length])

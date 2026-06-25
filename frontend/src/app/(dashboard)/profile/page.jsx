@@ -201,7 +201,7 @@ return
 
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('auth.loginMethod')}</Typography>
                 <Typography variant='body2' sx={{ fontWeight: 500 }}>
-                  {user?.authProvider === 'ldap' ? t('auth.ldapAd') : t('auth.localAccount')}
+                  {user?.authProvider === 'ldap' ? t('auth.ldapAd') : user?.authProvider === 'oidc' ? t('auth.oidcSso') : t('auth.localAccount')}
                 </Typography>
 
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>ID</Typography>
@@ -260,7 +260,7 @@ return
         </Card>
 
         {/* Changement de mot de passe */}
-        {user?.authProvider !== 'ldap' ? (
+        {user?.authProvider !== 'ldap' && user?.authProvider !== 'oidc' ? (
           <Card variant='outlined'>
             <CardContent sx={{ p: 3 }}>
               <Typography variant='h6' sx={{ fontWeight: 600, mb: 3 }}>
@@ -314,9 +314,11 @@ return
           <Card variant='outlined'>
             <CardContent sx={{ p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
               <Alert severity='info'>
-                <Typography variant='body2' dangerouslySetInnerHTML={{ __html: t('profilePage.ldapAccountNotice') }} />
+                <Typography variant='body2'>
+                  {t.rich(user?.authProvider === 'oidc' ? 'profilePage.oidcAccountNotice' : 'profilePage.ldapAccountNotice', { strong: chunks => <strong>{chunks}</strong> })}
+                </Typography>
                 <Typography variant='body2' sx={{ mt: 1 }}>
-                  {t('profilePage.ldapPasswordChangeNotice')}
+                  {t(user?.authProvider === 'oidc' ? 'profilePage.oidcPasswordChangeNotice' : 'profilePage.ldapPasswordChangeNotice')}
                 </Typography>
               </Alert>
             </CardContent>

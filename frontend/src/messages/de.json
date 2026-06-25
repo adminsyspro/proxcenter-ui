@@ -693,6 +693,7 @@
     "confirmExitMaintenance": "Möchten Sie den Wartungsmodus für diesen Node beenden?",
     "maintenanceModeActive": "Dieser Node befindet sich derzeit im Wartungsmodus",
     "maintenanceRequiresSsh": "Diese Aktion erfordert eine SSH-Konfiguration für diese Verbindung.",
+    "maintenanceNonHaNote": "Von HA verwaltete VMs und Container werden automatisch migriert, wenn dieser Node in den Wartungsmodus wechselt. Nicht von HA verwaltete (auch Gäste auf lokalem Speicher) werden nicht verschoben. Migrieren Sie sie oder fahren Sie sie bei Bedarf manuell herunter.",
     "nodeOffline": "Node ist offline",
     "nodeOfflineDesc": "Dieser Node ist derzeit nicht erreichbar. Er wird wieder angezeigt, sobald er wieder online ist.",
     "nodeReboot": "Node neustarten",

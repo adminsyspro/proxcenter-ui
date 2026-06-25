@@ -7,8 +7,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -199,14 +197,6 @@ export interface TreeDialogsProps {
   maintenanceTarget: { connId: string; node: string; maintenance?: string } | null
   setMaintenanceTarget: React.Dispatch<React.SetStateAction<{ connId: string; node: string; maintenance?: string } | null>>
   maintenanceError: string | null
-  maintenanceLocalVms: Set<string>
-  maintenanceStorageLoading: boolean
-  maintenanceMigrateTarget: string
-  setMaintenanceMigrateTarget: React.Dispatch<React.SetStateAction<string>>
-  maintenanceShutdownLocal: boolean
-  setMaintenanceShutdownLocal: React.Dispatch<React.SetStateAction<boolean>>
-  maintenanceStep: string | null
-  setMaintenanceStep: React.Dispatch<React.SetStateAction<string | null>>
   handleMaintenanceConfirm: () => Promise<void>
   getNodeVms: (connId: string, nodeName: string) => any[]
   getOtherNodes: (connId: string, nodeName: string) => string[]
@@ -257,9 +247,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
     clusterContextMenu, setClusterContextMenu, openTagDialog,
     nodeContextMenu, handleCloseNodeContextMenu, handleMaintenanceClick, handleBulkActionClick, handleOpenShell,
     onCreateVm, onCreateLxc, onNodeAction, clusters, isAdmin,
-    maintenanceBusy, maintenanceTarget, setMaintenanceTarget, maintenanceError, maintenanceLocalVms,
-    maintenanceStorageLoading, maintenanceMigrateTarget, setMaintenanceMigrateTarget,
-    maintenanceShutdownLocal, setMaintenanceShutdownLocal, maintenanceStep, setMaintenanceStep,
+    maintenanceBusy, maintenanceTarget, setMaintenanceTarget, maintenanceError,
     handleMaintenanceConfirm, getNodeVms, getOtherNodes,
     bulkActionDialog, setBulkActionDialog, bulkActionBusy, handleBulkActionConfirm,
     handleTakeSnapshot, handleBackupNow, handleOpenConsole, handleUnlock,
@@ -643,18 +631,11 @@ export default function TreeDialogs(props: TreeDialogsProps) {
       {/* Dialog confirmation maintenance */}
       {(() => {
         const entering = maintenanceTarget && !maintenanceTarget.maintenance
-        const mConnId = maintenanceTarget?.connId || ''
-        const mNode = maintenanceTarget?.node || ''
-        const mRunningVms = entering ? getNodeVms(mConnId, mNode).filter(v => v.status === 'running') : []
-        const mOtherNodes = entering ? (clusters.find(c => c.connId === mConnId)?.nodes.filter(n => n.node !== mNode) || []) : []
-        const mIsCluster = mOtherNodes.length > 0
-        const mSharedVms = mIsCluster ? mRunningVms.filter(v => !maintenanceLocalVms.has(`${mConnId}:${v.vmid}`)) : []
-        const mLocalVms = mIsCluster ? mRunningVms.filter(v => maintenanceLocalVms.has(`${mConnId}:${v.vmid}`)) : mRunningVms
-
+        const mSshEnabled = !!clusters.find(c => c.connId === maintenanceTarget?.connId)?.sshEnabled
         return (
         <Dialog
           open={maintenanceTarget !== null}
-          onClose={() => { if (!maintenanceBusy) { setMaintenanceTarget(null); setMaintenanceStep(null); setMaintenanceMigrateTarget(''); setMaintenanceShutdownLocal(false) } }}
+          onClose={() => { if (!maintenanceBusy) setMaintenanceTarget(null) }}
           maxWidth="sm"
           fullWidth
         >
@@ -678,101 +659,19 @@ export default function TreeDialogs(props: TreeDialogsProps) {
                 : t('inventory.confirmEnterMaintenance')}
             </DialogContentText>
 
-            {/* VM handling — only when entering maintenance with running VMs */}
-            {entering && mRunningVms.length > 0 && mIsCluster && (<>
-              {/* Loading storage check */}
-              {maintenanceStorageLoading && (
-                <Alert severity="info" icon={<CircularProgress size={18} />}>
-                  <Typography variant="body2">{t('inventory.nodeActionAnalyzingStorage')}</Typography>
-                </Alert>
-              )}
-
-              {/* Shared storage VMs */}
-              {!maintenanceStorageLoading && mSharedVms.length > 0 && (
-                <Alert severity="success" icon={<i className="ri-upload-2-line" style={{ fontSize: 20 }} />}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {t('inventory.nodeActionSharedVms', { count: mSharedVms.length })}
-                  </Typography>
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {mSharedVms.slice(0, 8).map(vm => (
-                      <Chip key={`${mConnId}:${vm.vmid}`} size="small" label={`${vm.vmid} ${vm.name}`}
-                        icon={<i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14 }} />}
-                        variant="outlined" color="success" />
-                    ))}
-                    {mSharedVms.length > 8 && <Chip size="small" label={`+${mSharedVms.length - 8}`} variant="outlined" />}
-                  </Box>
-                </Alert>
-              )}
-
-              {/* Local storage VMs */}
-              {!maintenanceStorageLoading && mLocalVms.length > 0 && (
-                <Alert severity="warning" icon={<i className="ri-hard-drive-2-line" style={{ fontSize: 20 }} />}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {t('inventory.nodeActionLocalVms', { count: mLocalVms.length })}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
-                    {t('inventory.nodeActionLocalVmsDesc')}
-                  </Typography>
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {mLocalVms.slice(0, 8).map(vm => (
-                      <Chip key={`${mConnId}:${vm.vmid}`} size="small" label={`${vm.vmid} ${vm.name}`}
-                        icon={<i className={vm.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line'} style={{ fontSize: 14 }} />}
-                        variant="outlined" color="warning" />
-                    ))}
-                    {mLocalVms.length > 8 && <Chip size="small" label={`+${mLocalVms.length - 8}`} variant="outlined" />}
-                  </Box>
-                  <Box
-                    onClick={() => !maintenanceBusy && setMaintenanceShutdownLocal(!maintenanceShutdownLocal)}
-                    sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, cursor: maintenanceBusy ? 'default' : 'pointer' }}
-                  >
-                    <Checkbox size="small" checked={maintenanceShutdownLocal} disabled={maintenanceBusy} sx={{ p: 0 }} />
-                    <Typography variant="body2">{t('inventory.nodeActionShutdownLocalOption')}</Typography>
-                  </Box>
-                </Alert>
-              )}
-
-              {/* Target node selector */}
-              {!maintenanceStorageLoading && mSharedVms.length > 0 && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>{t('inventory.nodeActionMigrateTarget')}</InputLabel>
-                  <Select
-                    value={maintenanceMigrateTarget}
-                    label={t('inventory.nodeActionMigrateTarget')}
-                    onChange={(e) => setMaintenanceMigrateTarget(e.target.value)}
-                    disabled={maintenanceBusy}
-                  >
-                    {mOtherNodes.map(n => (
-                      <MenuItem key={n.node} value={n.node}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <NodeIcon status={n.status} size={14} />
-                          {n.node}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </>)}
-
-            {/* Standalone with running VMs */}
-            {entering && mRunningVms.length > 0 && !mIsCluster && (
-              <Alert severity="info" icon={<i className="ri-information-line" style={{ fontSize: 20 }} />}>
+            {/* Non-HA guests are not evacuated by node-maintenance; operator handles them */}
+            {entering && (
+              <Alert severity="warning" icon={<i className="ri-information-line" style={{ fontSize: 20 }} />}>
                 <Typography variant="body2">
-                  {t('inventory.nodeActionRunningVms', { count: mRunningVms.length })}
+                  {t('inventory.maintenanceNonHaNote')}
                 </Typography>
               </Alert>
             )}
 
-            <Typography variant="caption" sx={{ opacity: 0.6 }}>
-              {t('inventory.maintenanceRequiresSsh')}
-            </Typography>
-
-            {/* Progress steps */}
-            {maintenanceStep && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CircularProgress size={18} />
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>{maintenanceStep}</Typography>
-              </Box>
+            {!mSshEnabled && (
+              <Alert severity="warning" icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>
+                <Typography variant="body2">{t('inventory.maintenanceRequiresSsh')}</Typography>
+              </Alert>
             )}
 
             {maintenanceError && (
@@ -781,7 +680,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button
-              onClick={() => { setMaintenanceTarget(null); setMaintenanceStep(null); setMaintenanceMigrateTarget(''); setMaintenanceShutdownLocal(false) }}
+              onClick={() => setMaintenanceTarget(null)}
               color="inherit"
               disabled={maintenanceBusy}
             >
@@ -791,14 +690,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               onClick={handleMaintenanceConfirm}
               variant="contained"
               color={maintenanceTarget?.maintenance ? 'success' : 'warning'}
-              disabled={(() => {
-                if (maintenanceBusy || maintenanceStorageLoading) return true
-                if (entering && mRunningVms.length > 0 && mIsCluster) {
-                  if (mSharedVms.length > 0 && !maintenanceMigrateTarget) return true
-                  if (mLocalVms.length > 0 && !maintenanceShutdownLocal) return true
-                }
-                return false
-              })()}
+              disabled={maintenanceBusy || !mSshEnabled}
               startIcon={maintenanceBusy ? <CircularProgress size={16} /> : undefined}
             >
               {t('common.confirm')}

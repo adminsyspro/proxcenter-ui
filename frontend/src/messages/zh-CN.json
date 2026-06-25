@@ -696,6 +696,7 @@
     "confirmExitMaintenance": "您要退出此节点的维护模式吗？",
     "maintenanceModeActive": "此节点当前处于维护模式",
     "maintenanceRequiresSsh": "此操作需要在此连接上配置 SSH。",
+    "maintenanceNonHaNote": "由 HA 管理的虚拟机和容器在此节点进入维护模式时会自动迁移。未纳入 HA 管理的（包括使用本地存储的虚拟机）不会被迁移。如有需要，请手动迁移或关闭它们。",
     "nodeOffline": "节点离线",
     "nodeOfflineDesc": "此节点当前不可访问。节点重新上线后将再次显示。",
     "nodeReboot": "重启节点",

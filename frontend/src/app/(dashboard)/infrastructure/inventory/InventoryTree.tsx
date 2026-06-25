@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { isSharedStorage } from '@/lib/proxmox/storage'
 import { fetchConnectionsNetworks, type HostBridgeItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 
@@ -874,7 +873,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [maintenanceBusy, setMaintenanceBusy] = useState(false)
   const [maintenanceTarget, setMaintenanceTarget] = useState<{ connId: string; node: string; maintenance?: string } | null>(null)
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
-  const [maintenanceLocalVms, setMaintenanceLocalVms] = useState<Set<string>>(new Set())
 
   // Tag management dialog for clusters/nodes
   const [tagDialog, setTagDialog] = useState<{ type: 'connection' | 'host'; entityId: string; connId?: string; node?: string; name: string; nodeStatus?: string; nodeMaintenance?: string; clusterNodes?: { status?: string }[] } | null>(null)
@@ -904,10 +902,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         .catch(() => {})
     }
   }, [])
-  const [maintenanceStorageLoading, setMaintenanceStorageLoading] = useState(false)
-  const [maintenanceMigrateTarget, setMaintenanceMigrateTarget] = useState('')
-  const [maintenanceShutdownLocal, setMaintenanceShutdownLocal] = useState(false)
-  const [maintenanceStep, setMaintenanceStep] = useState<string | null>(null)
   // Bulk action dialog state
   const [bulkActionDialog, setBulkActionDialog] = useState<{
     open: boolean
@@ -1048,57 +1042,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     handleCloseNodeContextMenu()
   }
 
-  // Check storage when entering maintenance
-  useEffect(() => {
-    if (!maintenanceTarget || maintenanceTarget.maintenance) return // skip for exit maintenance
-    const { connId, node } = maintenanceTarget
-
-    const otherNodes = clusters.find(c => c.connId === connId)?.nodes.filter(n => n.node !== node) || []
-    if (otherNodes.length === 0) return // standalone
-
-    const runningVms = getNodeVms(connId, node).filter(v => v.status === 'running')
-    if (runningVms.length === 0) return
-
-    const cs = clusterStorages.find(c => c.connId === connId)
-    const sharedSet = new Set<string>()
-    if (cs) {
-      for (const s of cs.sharedStorages) sharedSet.add(s.storage)
-      for (const n of cs.nodes) for (const s of n.storages) if (isSharedStorage(s)) sharedSet.add(s.storage)
-    }
-
-    let alive = true
-    setMaintenanceStorageLoading(true)
-
-    ;(async () => {
-      const localKeys = new Set<string>()
-      for (let i = 0; i < runningVms.length; i += 5) {
-        const batch = runningVms.slice(i, i + 5)
-        await Promise.all(batch.map(async (vm) => {
-          try {
-            const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/config`)
-            if (!res.ok) return
-            const json = await res.json()
-            const config = json.data || {}
-            for (const [key, val] of Object.entries(config)) {
-              if (/^(scsi|virtio|ide|sata|efidisk)\d+$/.test(key) && typeof val === 'string' && !val.includes('media=cdrom') && val !== 'none') {
-                const storageName = val.split(':')[0]
-                if (storageName && storageName !== 'none' && !sharedSet.has(storageName)) {
-                  localKeys.add(`${connId}:${vm.vmid}`)
-                  break
-                }
-              }
-            }
-          } catch { /* ignore */ }
-        }))
-      }
-      if (!alive) return
-      setMaintenanceLocalVms(localKeys)
-      setMaintenanceStorageLoading(false)
-    })()
-
-    return () => { alive = false }
-  }, [maintenanceTarget?.connId, maintenanceTarget?.node, maintenanceTarget?.maintenance])
-
   const handleMaintenanceConfirm = async () => {
     if (!maintenanceTarget) return
     const { connId, node, maintenance } = maintenanceTarget
@@ -1107,48 +1050,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     setMaintenanceBusy(true)
     setMaintenanceError(null)
     try {
-      // When entering maintenance: handle VMs first
-      if (entering) {
-        const runningVms = getNodeVms(connId, node).filter(v => v.status === 'running')
-        const otherNodes = clusters.find(c => c.connId === connId)?.nodes.filter(n => n.node !== node) || []
-        const isCluster = otherNodes.length > 0
-
-        if (runningVms.length > 0 && isCluster) {
-          const sharedVms = runningVms.filter(v => !maintenanceLocalVms.has(`${connId}:${v.vmid}`))
-          const localVms = runningVms.filter(v => maintenanceLocalVms.has(`${connId}:${v.vmid}`))
-
-          // Migrate shared-storage VMs
-          if (sharedVms.length > 0 && maintenanceMigrateTarget) {
-            setMaintenanceStep(t('inventory.nodeActionMigratingStep', { done: 0, total: sharedVms.length }))
-            let done = 0
-            for (let i = 0; i < sharedVms.length; i += 3) {
-              const batch = sharedVms.slice(i, i + 3)
-              await Promise.all(batch.map(async (vm) => {
-                try {
-                  const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/migrate`
-                  await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: maintenanceMigrateTarget, online: true }) })
-                } catch { /* ignore */ }
-                done++
-                setMaintenanceStep(t('inventory.nodeActionMigratingStep', { done, total: sharedVms.length }))
-              }))
-            }
-          }
-
-          // Shutdown local-storage VMs
-          if (localVms.length > 0 && maintenanceShutdownLocal) {
-            setMaintenanceStep(t('inventory.nodeActionShutdownVmsStep', { done: 0, total: localVms.length }))
-            let done = 0
-            for (const vm of localVms) {
-              const url = `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/shutdown`
-              await fetch(url, { method: 'POST' }).catch(() => {})
-              done++
-              setMaintenanceStep(t('inventory.nodeActionShutdownVmsStep', { done, total: localVms.length }))
-            }
-          }
-        }
-        setMaintenanceStep(t('inventory.nodeActionMaintenanceStep'))
-      }
-
+      // HA-managed guests are evacuated automatically by Proxmox node-maintenance.
+      // Non-HA guests are left for the operator to handle (see dialog note).
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`,
         { method: entering ? 'POST' : 'DELETE' }
@@ -1159,13 +1062,9 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         return
       }
       setMaintenanceTarget(null)
-      setMaintenanceStep(null)
-      setMaintenanceMigrateTarget('')
-      setMaintenanceShutdownLocal(false)
       setReloadTick(x => x + 1)
     } catch (e: any) {
       setMaintenanceError(e?.message || t('inventory.unknownError'))
-      setMaintenanceStep(null)
     } finally {
       setMaintenanceBusy(false)
     }
@@ -4597,14 +4496,6 @@ return (
         maintenanceTarget={maintenanceTarget}
         setMaintenanceTarget={setMaintenanceTarget}
         maintenanceError={maintenanceError}
-        maintenanceLocalVms={maintenanceLocalVms}
-        maintenanceStorageLoading={maintenanceStorageLoading}
-        maintenanceMigrateTarget={maintenanceMigrateTarget}
-        setMaintenanceMigrateTarget={setMaintenanceMigrateTarget}
-        maintenanceShutdownLocal={maintenanceShutdownLocal}
-        setMaintenanceShutdownLocal={setMaintenanceShutdownLocal}
-        maintenanceStep={maintenanceStep}
-        setMaintenanceStep={setMaintenanceStep}
         handleMaintenanceConfirm={handleMaintenanceConfirm}
         getNodeVms={getNodeVms}
         getOtherNodes={getOtherNodes}

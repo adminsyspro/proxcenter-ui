@@ -726,6 +726,7 @@
     "confirmExitMaintenance": "Do you want to exit maintenance mode for this node?",
     "maintenanceModeActive": "This node is currently in maintenance mode",
     "maintenanceRequiresSsh": "This action requires SSH to be configured on this connection.",
+    "maintenanceNonHaNote": "VMs and containers managed by HA are migrated automatically when this node enters maintenance. Those not managed by HA (including guests on local storage) are not moved. Migrate or shut them down manually if needed.",
     "nodeOffline": "Node is offline",
     "nodeOfflineDesc": "This node is currently unreachable. It will appear here again once it comes back online.",
     "nodeReboot": "Reboot node",

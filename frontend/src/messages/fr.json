@@ -726,6 +726,7 @@
     "confirmExitMaintenance": "Voulez-vous sortir ce nœud du mode maintenance ?",
     "maintenanceModeActive": "Ce nœud est actuellement en mode maintenance",
     "maintenanceRequiresSsh": "Cette action nécessite une connexion SSH configurée sur cette connexion.",
+    "maintenanceNonHaNote": "Les VM et conteneurs gérés par la HA sont migrés automatiquement quand ce nœud passe en maintenance. Ceux qui ne sont pas gérés par la HA (y compris les invités sur stockage local) ne sont pas déplacés. Migrez-les ou arrêtez-les manuellement si besoin.",
     "nodeOffline": "Nœud hors ligne",
     "nodeOfflineDesc": "Ce nœud est actuellement inaccessible. Il réapparaîtra ici lorsqu'il sera de nouveau en ligne.",
     "nodeReboot": "Redémarrer le nœud",

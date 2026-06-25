@@ -14,11 +14,16 @@ export interface VddkReaderHandle {
  * Attach an nbdkit unix socket to a kernel NBD device. `modprobe nbd` is a
  * no-op when the module is already loaded; `max_part=0` keeps the kernel from
  * scanning the source disk's partition table (we read it as a flat image).
+ * The `nbd-client -d` before the attach defensively frees the device: a
+ * /dev/nbdN left allocated by a previous failed or aborted attempt (whose
+ * teardown never ran) otherwise blocks every retry with "Failed to setup
+ * device, check dmesg" (#503). It is a no-op (suppressed) when the device is
+ * already free, so it is safe in the normal case.
  * sock/nbdDev are system-generated paths (no spaces/metacharacters), so they
  * are interpolated unescaped to match the validated spike command.
  */
 export function buildNbdConnectCmd(sock: string, nbdDev: string): string {
-  return `modprobe nbd max_part=0 2>/dev/null; nbd-client -unix ${sock} ${nbdDev} 2>&1`
+  return `modprobe nbd max_part=0 2>/dev/null; nbd-client -d ${nbdDev} 2>/dev/null; nbd-client -unix ${sock} ${nbdDev} 2>&1`
 }
 
 /**

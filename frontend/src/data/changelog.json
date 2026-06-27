@@ -1,5 +1,30 @@
 [
   {
+    "version": "1.4.5",
+    "title": "Compliance frameworks, DRS load balancing & OIDC role fix",
+    "items": [
+      { "type": "new", "text": "Security compliance frameworks (Enterprise): assess a connection against NIST 800-53, NIST 800-171, CMMC Level 2 and ISO/IEC 27001 from a new Frameworks tab, with a score donut, satisfied / partial / failed breakdown, per-node results and a styled PDF report" },
+      { "type": "new", "text": "Open in Proxmox: a button next to the cluster or node name opens the native Proxmox web interface in a new tab, deep-linking a member node to its own management IP" },
+      { "type": "new", "text": "The migration target-network selector now lists SDN VNets alongside classic bridges, so nodes whose guest networks are VNets no longer get an empty list" },
+      { "type": "improved", "text": "Inventory Network view shows host bridges and VLANs per node, so clusters with no VMs are no longer empty; bridges open a detail panel and SDN VNet ids resolve to their friendly alias" },
+      { "type": "improved", "text": "Node maintenance is simpler: entering maintenance triggers Proxmox node-maintenance (HA guests evacuated by Proxmox) with a note that non-HA guests must be migrated or shut down manually" },
+      { "type": "improved", "text": "DRS now honors the Balance Types setting (previously a dead knob): load-balancing candidates are filtered by guest type for both reactive balancing and homogenization, with a guest-type gate applied at execution time" },
+      { "type": "improved", "text": "DRS settings cleanup: removed the dead balancing-method and balancing-mode knobs, guarded balance-types at a minimum of one, one-row resource weights, and status icons on exclusions and balance-types" },
+      { "type": "improved", "text": "The inventory tree expand/collapse state is now scoped per tenant, so switching tenant no longer carries over the previous expansion" },
+      { "type": "improved", "text": "The cluster SSH test shows the per-node ok / error breakdown on failure too, not just on success" },
+      { "type": "improved", "text": "The VM delete confirmation dialog spells out exactly what will be removed" },
+      { "type": "fix", "text": "OIDC role preserved on login: v1.4.4 demoted OIDC users with no IdP group match to viewer on every sign-in (locking out manually assigned admins); the re-sync is now authoritative only when a group-to-role mapping is configured and groups are sent" },
+      { "type": "fix", "text": "OIDC accounts are labelled correctly and can no longer be given a local password, closing a credentials login path that would bypass SSO and MFA" },
+      { "type": "fix", "text": "Warm and direct-ESXi migrations preserve the source NIC MAC, so the migrated guest keeps its network identity instead of stranding its IP on a ghost adapter" },
+      { "type": "fix", "text": "Warm migration reliability: a stale /dev/nbdN device is released before attaching and the delta-apply is chunked under the SSH argument-size limit" },
+      { "type": "fix", "text": "Migrating a running LXC container now uses restart mode instead of online=1 (which Proxmox rejects for containers), so an online CT migration no longer fails outright" },
+      { "type": "fix", "text": "Dropped the misleading \"vSAN datastore detected\" log line on the vCenter migration path" },
+      { "type": "fix", "text": "The percent chart Y-axis is widened so the \"100%\" label is no longer clipped" },
+      { "type": "fix", "text": "Old completed tasks are no longer re-alerted as new events about a week after they ran" },
+      { "type": "fix", "text": "Security: patched Go orchestrator CVEs by bumping golang.org/x/crypto, x/net and x/sys (SSH, HTML and IDNA advisories)" }
+    ]
+  },
+  {
     "version": "1.4.4",
     "title": "Stability, security & shared migration tasks",
     "items": [

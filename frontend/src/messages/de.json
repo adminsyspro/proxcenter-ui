@@ -560,6 +560,7 @@
     "addTag": "hinzufügen tag",
     "deleteVm": "löschen VM",
     "deleteVmDisks": "Also löschen associated disks",
+    "deleteVmConfirmHint": "Zum Bestätigen geben Sie die ID oder den Namen der VM ein:",
     "deleteVmLockedError": "Die VM ist im Zustand „{lock}“ gesperrt. Klicken Sie mit der rechten Maustaste auf die VM in der Baumansicht und wählen Sie Entsperren, um die Sperre aufzuheben (benötigt SSH auf der Verbindung).",
     "deleteVmRunningError": "Die VM muss vor dem Löschen gestoppt werden. Stoppen Sie die VM zuerst.",
     "vmRunningWarning": "Stoppen Sie die VM vor dem Löschen",

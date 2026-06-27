@@ -60,6 +60,7 @@ import type { InventorySelection, DetailsPayload } from '../types'
 import { parseNodeId, parseVmId } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
+import { StatusIcon } from './TreeIcons'
 import { useToast } from '@/contexts/ToastContext'
 
 /* ------------------------------------------------------------------ */
@@ -1732,12 +1733,25 @@ return
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-          <i className="ri-delete-bin-line" style={{ fontSize: 24 }} />
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <i className="ri-delete-bin-line" style={{ fontSize: 24, color: 'var(--mui-palette-error-main)' }} />
           {t('inventory.deleteVm')}
+          <StatusIcon
+            type="vm"
+            status={data?.vmRealStatus || data?.status}
+            vmType={data?.vmType}
+            template={data?.isTemplate}
+            size={22}
+          />
+          <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            {data?.title || 'VM'}
+            <Box component="span" sx={{ fontWeight: 400, opacity: 0.6, ml: 0.5 }}>
+              (ID: {selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''})
+            </Box>
+          </Box>
         </DialogTitle>
         <DialogContent>
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mt: 3, mb: 3 }}>
             <Typography variant="body2" fontWeight={600}>
               {t('common.warning')}
             </Typography>
@@ -1746,13 +1760,6 @@ return
             </Typography>
           </Alert>
 
-          <Box sx={{ mb: 3, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('common.delete')}:</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              {data?.title || 'VM'} <Typography component="span" variant="body2" sx={{ opacity: 0.6 }}>(ID: {selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''})</Typography>
-            </Typography>
-          </Box>
-          
           <FormControlLabel
             control={
               <Switch
@@ -1765,12 +1772,11 @@ return
           />
           
           <Typography variant="body2" sx={{ mb: 1 }}>
-            {t('common.confirm')}: <strong>{selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''}</strong> / <strong>{data?.title}</strong>
+            {t('inventory.deleteVmConfirmHint')} <strong>{selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''}</strong> {t('common.or')} <strong>{data?.title}</strong>
           </Typography>
           <TextField
             fullWidth
             size="small"
-            placeholder={`${selection?.type === 'vm' ? parseVmId(selection.id).vmid : ''} / ${data?.title}`}
             value={deleteVmConfirmText}
             onChange={(e) => setDeleteVmConfirmText(e.target.value)}
             error={deleteVmConfirmText !== '' && deleteVmConfirmText !== (selection?.type === 'vm' ? parseVmId(selection.id).vmid : '') && deleteVmConfirmText !== data?.title}

@@ -172,6 +172,10 @@ EXPOSE 3000
 # Environment variables (can be overridden)
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+# Default the PDF report renderer to the bundled WeasyPrint sidecar so the
+# Compliance > Frameworks PDF export works out of the box. Override
+# PROXCENTER_REPORTING_URL (compose / env) to point at a different renderer.
+ENV PROXCENTER_REPORTING_URL=http://weasyprint:5000
 # DATABASE_URL has no default on purpose — the entrypoint refuses to boot
 # without it. The bundled docker-compose stack injects the right Postgres
 # connection string.

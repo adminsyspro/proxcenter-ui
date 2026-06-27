@@ -40,9 +40,9 @@ def render() -> Response:
         # base_url=None disables remote resource fetching by default; the Go
         # caller embeds CSS / images inline in the report templates.
         pdf_bytes = HTML(string=html).write_pdf()
-    except Exception as exc:  # noqa: BLE001 — surface the rendering failure verbatim.
+    except Exception as exc:  # noqa: BLE001 — log full details, return generic message.
         log.exception("PDF rendering failed")
-        return jsonify(error=str(exc)), 500
+        return jsonify(error="PDF rendering failed"), 500
 
     return Response(pdf_bytes, mimetype="application/pdf")
 

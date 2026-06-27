@@ -43,14 +43,23 @@ export async function POST(req: NextRequest) {
   // Update the user's default tenant: clear any other default, mark this one.
   // Wrapped in a transaction so a partial failure can't leave a user with
   // zero or two default memberships.
+  //
+  // The target membership is upserted, not just updated: a super-admin sees
+  // every tenant in the switcher (cross-tenant access by design) but only has
+  // a user_tenants row for tenants created while they were already super-admin
+  // (createTenant auto-attaches them). Without the create branch, switching to
+  // a tenant the user has no row for updated zero rows, left no default, and
+  // silently fell back to `default`. userHasAccessToTenant already authorised
+  // the target above, so creating the row here is safe.
   await prisma.$transaction([
     prisma.userTenant.updateMany({
       where: { userId: session.user.id },
       data: { isDefault: false },
     }),
-    prisma.userTenant.updateMany({
-      where: { userId: session.user.id, tenantId },
-      data: { isDefault: true },
+    prisma.userTenant.upsert({
+      where: { userId_tenantId: { userId: session.user.id, tenantId } },
+      update: { isDefault: true },
+      create: { userId: session.user.id, tenantId, isDefault: true, joinedAt: new Date() },
     }),
   ])
 

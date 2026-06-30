@@ -33,6 +33,7 @@ import {
 } from '@mui/material'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
+import { buildDeployIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
@@ -174,16 +175,19 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [bridges, setBridges] = useState<BridgeChoice[]>([])
   const [agent, setAgent] = useState(true)
 
-  // Cloud-init step.
-  // - ipOverride: optional IP the user wants pinned (else IPAM auto-allocates).
-  //   Empty string is the canonical "auto" state.
-  // - We don't carry an `ipconfig0` raw string anymore — the wizard composes
-  //   it at submit time from (subnet.gateway + ipOverride or "" → backend
-  //   IPAM injects the static config server-side).
+  // Cloud-init step. The IP fields differ by bridge:
+  // - With an IPAM subnet: `ipOverride` holds an optional bare host IP (else
+  //   IPAM auto-allocates). Empty string is the canonical "auto" state.
+  // - Without a subnet: the user fills structured fields instead — a DHCP
+  //   toggle (`useDhcp`), an IP/CIDR (`manualIpCidr`) and an editable gateway
+  //   (`manualGateway`). The wizard composes `ipconfig0` at submit time.
   const [ciuser, setCiuser] = useState('')
   const [cipassword, setCipassword] = useState('')
   const [sshKeys, setSshKeys] = useState('')
   const [ipOverride, setIpOverride] = useState('')
+  const [manualIpCidr, setManualIpCidr] = useState('')
+  const [manualGateway, setManualGateway] = useState('')
+  const [useDhcp, setUseDhcp] = useState(false)
   const [nameserver, setNameserver] = useState('')
   const [searchdomain, setSearchdomain] = useState('')
 
@@ -365,10 +369,20 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           setCiuser(ci.ciuser || '')
           setCipassword(ci.cipassword || '')
           setSshKeys(ci.sshKeys || '')
-          // Try to extract a manual IP from a saved blueprint's ipconfig0;
-          // anything else (dhcp, manual, empty) → leave empty so IPAM wins.
-          const m = String(ci.ipconfig0 || '').match(/(?:^|,)\s*ip=([0-9.]+)(?:\/\d+)?/)
-          setIpOverride(m ? m[1] : '')
+          // Re-hydrate the IP fields from a saved blueprint's ipconfig0. The
+          // bare host part feeds the subnet (IPAM) layout; the full ip/cidr +
+          // gw and the DHCP flag feed the no-subnet layout. We don't know the
+          // target bridge yet, so populate both and let the active layout read
+          // whichever it needs.
+          const cfg = String(ci.ipconfig0 || '')
+          const dhcp = /(?:^|,)\s*ip=dhcp\b/i.test(cfg)
+          const ipCidr = cfg.match(/(?:^|,)\s*ip=([0-9.]+\/\d+)/)?.[1] ?? ''
+          const gw = cfg.match(/(?:^|,)\s*gw=([0-9.]+)/)?.[1] ?? ''
+          const host = cfg.match(/(?:^|,)\s*ip=([0-9.]+)(?:\/\d+)?/)?.[1] ?? ''
+          setUseDhcp(dhcp)
+          setManualIpCidr(ipCidr)
+          setManualGateway(gw)
+          setIpOverride(host)
           setNameserver(ci.nameserver || '')
           setSearchdomain(ci.searchdomain || '')
         }
@@ -635,19 +649,19 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // the backend skips the configure step. Cloud-image deployments
         // keep their existing cloud-init payload.
         cloudInit: isIsoMode ? null : (() => {
-          // Build ipconfig0 from the structured fields:
-          //   - ipOverride empty → send empty so the backend's IPAM hook
-          //     auto-allocates and injects the static config server-side
-          //   - ipOverride set   → compose `ip=<ip>/<prefix>,gw=<gateway>`
-          //     using the bridge's subnet (gateway is read-only in the UI)
+          // Compose ipconfig0 from the cloud-init network fields. With an IPAM
+          // subnet the field holds a bare host IP (prefix + gateway come from
+          // the subnet); without one the user fills DHCP / IP-CIDR / gateway
+          // directly. Empty → the backend's IPAM hook auto-allocates
+          // server-side. See #526 (no-subnet input was dropped entirely).
           const selectedBridge = bridges.find(b => b.iface === networkBridge)
-          const subnet = selectedBridge?.subnet ?? null
-          let ipconfig0 = ''
-          if (ipOverride && subnet) {
-            const prefixMatch = subnet.cidr.match(/\/(\d+)$/)
-            const prefix = prefixMatch ? prefixMatch[1] : '24'
-            ipconfig0 = `ip=${ipOverride}/${prefix},gw=${subnet.gateway}`
-          }
+          const ipconfig0 = buildDeployIpconfig0({
+            subnet: selectedBridge?.subnet ?? null,
+            ipOverride,
+            manualIpCidr,
+            manualGateway,
+            useDhcp,
+          })
           return {
             ciuser: ciuser || undefined,
             cipassword: cipassword || undefined,
@@ -739,11 +753,25 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         }
         return baseOk
       }
-      case 3: return true
+      // Cloud-Init step: block advancing with a malformed IP so the deploy
+      // doesn't fail at Proxmox. With a subnet the override IP is optional but
+      // must be a bare IPv4 (and not the gateway). Without a subnet, DHCP needs
+      // nothing; a static config needs a valid IP/CIDR and an optional gateway.
+      case 3: {
+        const sel = bridges.find(b => b.iface === networkBridge)
+        const sn = sel?.subnet
+        if (sn) {
+          return !ipOverride || (/^\d{1,3}(\.\d{1,3}){3}$/.test(ipOverride) && ipOverride !== sn.gateway)
+        }
+        if (useDhcp) return true
+        const ipOk = !manualIpCidr || /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(manualIpCidr.trim())
+        const gwOk = !manualGateway || /^\d{1,3}(\.\d{1,3}){3}$/.test(manualGateway.trim())
+        return ipOk && gwOk
+      }
       case 4: return !quotaBlocked
       default: return false
     }
-  }, [activeStep, image, connectionId, node, storage, vmid, vmName, cores, memory, diskSize, quotaBlocked, isIsoMode, isoStorage, isoNeedsReservation, ostypeOverride, staticIp, staticMac])
+  }, [activeStep, image, connectionId, node, storage, vmid, vmName, cores, memory, diskSize, quotaBlocked, isIsoMode, isoStorage, isoNeedsReservation, ostypeOverride, staticIp, staticMac, bridges, networkBridge, ipOverride, manualIpCidr, manualGateway, useDhcp])
 
   // ─── Step renderers ────────────────────────────────────────────────
 
@@ -1354,6 +1382,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     // the UI before submit.
     const ipOverrideValid = !ipOverride
       || (/^\d{1,3}(\.\d{1,3}){3}$/.test(ipOverride) && ipOverride !== subnet?.gateway)
+    // No-subnet manual entry: the IP must carry a CIDR (no subnet to derive a
+    // prefix from); the gateway is optional. Both IPv4-shaped. DHCP needs none.
+    const manualIpCidrValid = !manualIpCidr
+      || /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(manualIpCidr.trim())
+    const manualGatewayValid = !manualGateway
+      || /^\d{1,3}(\.\d{1,3}){3}$/.test(manualGateway.trim())
 
     // Pre-fill nameserver from the subnet's DNS servers the first time the
     // user lands on this step with a subnet attached and hasn't typed
@@ -1423,16 +1457,43 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           />
         </Box>
       )}
+      {/* No IPAM subnet on the bridge: the user configures the address by
+          hand. DHCP toggle, else a static IP/CIDR + an editable gateway. */}
       {!subnet && (
-        <TextField
-          size="small"
-          label={t('templates.deploy.cloudInit.ipAddress')}
-          value={ipOverride}
-          onChange={e => setIpOverride(e.target.value.trim())}
-          placeholder="ip=dhcp"
-          helperText={t('templates.deploy.cloudInit.ipNoSubnet')}
-          fullWidth
-        />
+        <Stack spacing={2}>
+          <FormControlLabel
+            control={<Switch checked={useDhcp} onChange={(_, v) => setUseDhcp(v)} size="small" />}
+            label={t('templates.deploy.cloudInit.useDhcp')}
+          />
+          {!useDhcp && (
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <TextField
+                size="small"
+                label={t('templates.deploy.cloudInit.ipCidr')}
+                value={manualIpCidr}
+                onChange={e => setManualIpCidr(e.target.value.trim())}
+                placeholder="10.0.1.4/25"
+                error={!manualIpCidrValid}
+                helperText={!manualIpCidrValid
+                  ? t('templates.deploy.cloudInit.ipCidrInvalid')
+                  : t('templates.deploy.cloudInit.ipCidrHelp')}
+                fullWidth
+              />
+              <TextField
+                size="small"
+                label={t('templates.deploy.cloudInit.gateway')}
+                value={manualGateway}
+                onChange={e => setManualGateway(e.target.value.trim())}
+                placeholder="10.0.1.253"
+                error={!manualGatewayValid}
+                helperText={!manualGatewayValid
+                  ? t('templates.deploy.cloudInit.gatewayInvalid')
+                  : t('templates.deploy.cloudInit.gatewayManualHelp')}
+                fullWidth
+              />
+            </Box>
+          )}
+        </Stack>
       )}
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
         <TextField
@@ -1508,9 +1569,19 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                 {ciuser ? `${t('templates.deploy.cloudInit.user')}: ${ciuser}` : t('templates.deploy.cloudInit.noUser')}
                 {cipassword ? ` · ${t('templates.deploy.cloudInit.password')}: ••••••` : ''}
                 {' · '}
-                {ipOverride
-                  ? `${t('templates.deploy.cloudInit.ipAddress')}: ${ipOverride}`
-                  : t('templates.deploy.cloudInit.ipAutoSummary')}
+                {(() => {
+                  const sel = bridges.find(b => b.iface === networkBridge)
+                  if (sel?.subnet) {
+                    return ipOverride
+                      ? `${t('templates.deploy.cloudInit.ipAddress')}: ${ipOverride}`
+                      : t('templates.deploy.cloudInit.ipAutoSummary')
+                  }
+                  if (useDhcp) return t('templates.deploy.cloudInit.dhcpSummary')
+                  if (manualIpCidr) {
+                    return `${t('templates.deploy.cloudInit.ipAddress')}: ${manualIpCidr}${manualGateway ? `, gw ${manualGateway}` : ''}`
+                  }
+                  return t('templates.deploy.cloudInit.ipAutoSummary')
+                })()}
               </Typography>
               {sshKeys && (
                 <Typography variant="caption" sx={{ opacity: 0.6 }}>
@@ -1634,7 +1705,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       <DialogContent>
         <Stepper
           activeStep={isIsoMode && activeStep > 3 ? activeStep - 1 : activeStep}
-          sx={{ mb: 3 }}
+          sx={{ mt: 3, mb: 3 }}
           alternativeLabel
         >
           {STEP_LABELS

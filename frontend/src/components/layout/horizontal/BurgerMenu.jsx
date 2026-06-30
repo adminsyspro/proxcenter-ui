@@ -8,6 +8,7 @@ import { useTheme, alpha } from '@mui/material/styles'
 
 import { menuData } from '@/@menu/menuData'
 import { useRBAC } from '@/contexts/RBACContext'
+import { hasInfraScope } from '@/lib/rbac/scopeKinds'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { useTenant } from '@/contexts/TenantContext'
@@ -27,11 +28,12 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
   const pathname = usePathname()
   const t = useTranslations()
   const theme = useTheme()
-  const { hasPermission, loading: rbacLoading } = useRBAC()
+  const { hasPermission, scopeTypes, isAdmin, loading: rbacLoading } = useRBAC()
   const { hasFeature } = useLicense()
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const sections = useMemo(() => {
     const data = menuData(t)
@@ -46,6 +48,7 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
       if (entry.requires?.hasVdc === true && !hasVdc) return false
       if (entry.requires?.hasVdc === false && hasVdc) return false
       if (entry.requires?.isProviderTenant === true && !isProviderTenant) return false
+      if (entry.requires?.infraScope === true && !infraScoped) return false
       return true
     }
 
@@ -90,7 +93,7 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
     }
 
     return result
-  }, [t, hasPermission, hasFeature, hasVdc, isProviderTenant, rbacLoading, vdcLoading, tenantLoading])
+  }, [t, hasPermission, hasFeature, hasVdc, isProviderTenant, infraScoped, rbacLoading, vdcLoading, tenantLoading])
 
   const handleNavigate = (href, locked) => {
     if (locked) return

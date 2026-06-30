@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { callRoute } from "../../../../../__tests__/setup/route-test"
 
 // Hoist mocks so vi.mock factories can reference them
-const { getInfraMock, subscribeMock, tenantConnectionIdsMock } = vi.hoisted(() => ({
+const { getInfraMock, subscribeMock, tenantConnectionIdsMock, getRbacInfraScopeMock, getRBACContextMock } = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   subscribeMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
+  getRbacInfraScopeMock: vi.fn(),
+  getRBACContextMock: vi.fn(),
 }))
 
 // Keep real maskingScope; only stub getTenantInfrastructureScope
@@ -20,10 +22,17 @@ vi.mock("@/lib/tenant", () => ({
   getTenantConnectionIds: (...a: any[]) => tenantConnectionIdsMock(...a),
 }))
 
-vi.mock("@/lib/rbac", () => ({
-  checkPermission: vi.fn().mockResolvedValue(null),
-  PERMISSIONS: { VM_VIEW: "vm.view" },
-}))
+// Use real isConnectionVisible from infraScope; mock only the DB-touching helpers
+vi.mock("@/lib/rbac", async (orig) => {
+  const real = await orig<typeof import("@/lib/rbac")>()
+  return {
+    ...real,
+    checkPermission: vi.fn().mockResolvedValue(null),
+    PERMISSIONS: { VM_VIEW: "vm.view" },
+    getRBACContext: (...a: any[]) => getRBACContextMock(...a),
+    getRbacInfraScope: (...a: any[]) => getRbacInfraScopeMock(...a),
+  }
+})
 
 vi.mock("@/lib/demo/demo-api", () => ({
   demoResponse: vi.fn().mockReturnValue(null),
@@ -78,6 +87,9 @@ const VM_EVENT = {
 beforeEach(() => {
   vi.clearAllMocks()
   tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+  // Default: admin context — no RBAC pruning.
+  getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "t1" })
+  getRbacInfraScopeMock.mockResolvedValue(null)
   // Default: subscribe immediately calls the handler with the VM_EVENT and
   // returns a no-op unsubscribe.
   subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
@@ -163,5 +175,164 @@ describe("GET /api/v1/inventory/events scope routing", () => {
 
     expect(getInfraMock).toHaveBeenCalled()
     expect(getVdcScope).not.toHaveBeenCalled()
+  })
+
+  it("RBAC scope: vm:* event is DROPPED when connection not in user scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    // Non-admin user whose scope only covers connection c2, not c1
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set(["c2"]),
+      nodesByConnection: new Map(),
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res, { stopAfterConnected: true })
+    expect(text).toContain("event: connected")
+    // VM_EVENT is on c1 which is not in the scope -> must be dropped
+    expect(text).not.toContain("event: vm:update")
+  })
+
+  it("RBAC scope: vm:* event PASSES when connection is in user scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    // Non-admin user whose scope covers connection c1
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set(["c1"]),
+      nodesByConnection: new Map(),
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res)
+    expect(text).toContain("event: vm:update")
+    expect(text).toContain('"connId":"c1"')
+  })
+
+  it("RBAC scope: admin context passes all events regardless of scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    // Admin: getRbacInfraScope should not even be called; isAdmin=true => rbacScope=null
+    getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "t1" })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res)
+    expect(text).toContain("event: vm:update")
+    // Scope lookup must not be called for admins
+    expect(getRbacInfraScopeMock).not.toHaveBeenCalled()
+  })
+
+  it("RBAC scope: node:update is DROPPED when node not in user scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    // User can see c1 but only node2, not node1
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["node2"])]]),
+    })
+
+    const NODE_EVENT = {
+      event: "node:update" as const,
+      connId: "c1",
+      node: "node1",
+      status: "online",
+    }
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      fn([NODE_EVENT])
+      return () => {}
+    })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res, { stopAfterConnected: true })
+    expect(text).not.toContain("event: node:update")
+  })
+
+  it("RBAC node-scope: vm:update is DROPPED when node not in user scope (leak fix)", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    // User can see c1 but only node2; VM_EVENT is on node1 -> must be dropped
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["node2"])]]),
+    })
+    // VM_EVENT.node = "node1" which is NOT granted
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      fn([VM_EVENT])
+      return () => {}
+    })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res, { stopAfterConnected: true })
+    expect(text).toContain("event: connected")
+    expect(text).not.toContain("event: vm:update")
+  })
+
+  it("RBAC node-scope: vm:update PASSES when node is in user scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    // User can see c1 node1; VM_EVENT is on node1 -> must pass
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["node1"])]]),
+    })
+    // VM_EVENT.node = "node1" which IS granted; no pool masking (kind: provider)
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      fn([VM_EVENT])
+      return () => {}
+    })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res)
+    expect(text).toContain("event: vm:update")
+    expect(text).toContain('"connId":"c1"')
+  })
+
+  it("RBAC scope: node:update PASSES when node is in user scope", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    // User can see c1 node1
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["node1"])]]),
+    })
+
+    const NODE_EVENT = {
+      event: "node:update" as const,
+      connId: "c1",
+      node: "node1",
+      status: "online",
+    }
+    subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+      fn([NODE_EVENT])
+      return () => {}
+    })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const text = await collectSseText(res)
+    expect(text).toContain("event: node:update")
+    expect(text).toContain('"node":"node1"')
   })
 })

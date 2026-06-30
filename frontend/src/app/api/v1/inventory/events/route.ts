@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 import { subscribe, type InventoryEvent } from "@/lib/cache/inventoryPoller"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, isConnectionVisible, type RbacInfraScope } from "@/lib/rbac"
 import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
@@ -48,6 +48,13 @@ export async function GET(request: NextRequest) {
   const tenantId = await getCurrentTenantId()
   const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
 
+  // Resolve RBAC infra scope once per request; null = admin/unrestricted (no pruning).
+  // Prunes events for connections (and nodes) the user has no infra grant for.
+  const rbacCtx = await getRBACContext()
+  const rbacScope: RbacInfraScope | null = rbacCtx && !rbacCtx.isAdmin
+    ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
+    : null
+
   const encoder = new TextEncoder()
 
   let unsubscribe: (() => void) | null = null
@@ -76,15 +83,27 @@ export async function GET(request: NextRequest) {
 
       // Subscribe to inventory changes — filter by tenant connections AND,
       // for VM events on a vDC-scoped tenant, by allowed pools.
+      // Also filter by RBAC infra scope when the user is not an admin.
       unsubscribe = subscribe((events: InventoryEvent[]) => {
         if (closed) return
         for (const ev of events) {
           if (!tenantConnIds.has(ev.connId)) continue
 
-          // node:update isn't pool-bound — pass through.
-          if (ev.event === 'node:update') {
-            send(ev.event, ev)
-            continue
+          // RBAC infra scope: drop events for connections the user cannot see.
+          if (rbacScope && !isConnectionVisible(rbacScope, ev.connId)) continue
+
+          // Generic node-level gate: applies to ALL event types that carry a node.
+          // When the user holds a node-scoped grant on this connection (i.e. the
+          // connection is NOT in fullConnections), every event whose node is not in
+          // the granted set must be dropped. Connection-level events without a node
+          // field already passed the connection gate above and are kept as-is.
+          // This subsumes the old node:update-only check and also covers vm:* events.
+          if (rbacScope && !rbacScope.fullConnections.has(ev.connId)) {
+            const evNode = (ev as { node?: string }).node
+            if (evNode !== undefined) {
+              const allowedNodes = rbacScope.nodesByConnection.get(ev.connId)
+              if (!allowedNodes || !allowedNodes.has(evNode)) continue
+            }
           }
 
           // vm:* events: enforce vDC pool boundary when scope active.

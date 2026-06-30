@@ -6,7 +6,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
-import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
+import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
   getInventoryFromCache,
@@ -600,10 +600,16 @@ export async function GET(request: NextRequest) {
       raw = await blockingFetch(tenantId, infra)
     }
 
-    // 2) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache)
-    //    Also filter by vDC connection scope — only include clusters whose
-    //    connection is part of the tenant's vDC assignments.
-    const visibleRawClusters = mask ? raw.clusters.filter(c => mask.connectionIds.has(c.id)) : raw.clusters
+    // 2) Resolve RBAC context + infra scope once, before any filtering
+    const rbacCtx = await getRBACContext()
+    const rbacScope = rbacCtx && !rbacCtx.isAdmin
+      ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
+      : null
+
+    // 3) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache).
+    //    Filter by vDC connection scope first, then by RBAC infra scope (intersection).
+    let visibleRawClusters = mask ? raw.clusters.filter(c => mask.connectionIds.has(c.id)) : raw.clusters
+    visibleRawClusters = filterVisibleConnections(visibleRawClusters, rbacScope)
 
     let clusters: ClusterData[] = visibleRawClusters.map(c => ({
       ...c,
@@ -613,11 +619,10 @@ export async function GET(request: NextRequest) {
       }))
     }))
 
-    // 3) RBAC + vDC: Filter guests by user permissions, then by vDC scope (nodes + pools)
-    const rbacCtx = await getRBACContext()
-
+    // 4) RBAC + vDC: Filter guests by user permissions, then apply both
+    //    vDC mask (nodes+pools) and RBAC infra scope (node prune), composed.
     clusters = await Promise.all(clusters.map(async cluster => {
-      // Apply RBAC first
+      // Apply RBAC guest filter first (unchanged)
       let filtered = cluster
       if (rbacCtx && !rbacCtx.isAdmin) {
         const filteredNodes = await Promise.all(
@@ -641,11 +646,15 @@ export async function GET(request: NextRequest) {
           nodes: filteredNodes,
         }
       }
-      // Then apply vDC filter (nodes + pool membership)
-      return applyVdcFilter(filtered, mask)
+      // Apply vDC filter (nodes + pool membership), then RBAC node prune (composed)
+      return applyRbacInfraFilter(applyVdcFilter(filtered, mask), rbacScope)
     }))
 
-    // 4) Recalculer les stats après filtrage RBAC
+    // 5) Prune PBS servers and external hypervisors by RBAC infra scope (.id = connection id)
+    const visiblePbs = filterVisibleConnections(raw.pbsServers, rbacScope)
+    const visibleExternalHypervisors = filterVisibleConnections(raw.externalHypervisors, rbacScope)
+
+    // 6) Recalculer les stats après filtrage RBAC
     let totalNodes = 0
     let onlineNodes = 0
     let totalGuests = 0
@@ -666,7 +675,7 @@ export async function GET(request: NextRequest) {
     let totalDatastores = 0
     let totalBackups = 0
 
-    for (const pbs of raw.pbsServers) {
+    for (const pbs of visiblePbs) {
       totalDatastores += pbs.stats.datastoreCount
       totalBackups += pbs.stats.backupCount
     }
@@ -674,8 +683,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: {
         clusters,
-        pbsServers: raw.pbsServers,
-        externalHypervisors: raw.externalHypervisors,
+        pbsServers: visiblePbs,
+        externalHypervisors: visibleExternalHypervisors,
         cached: cacheResult.status !== 'miss',
         stats: {
           totalClusters: clusters.length,
@@ -683,7 +692,7 @@ export async function GET(request: NextRequest) {
           totalGuests,
           onlineNodes,
           runningGuests,
-          totalPbsServers: raw.pbsServers.length,
+          totalPbsServers: visiblePbs.length,
           totalDatastores,
           totalBackups,
         }

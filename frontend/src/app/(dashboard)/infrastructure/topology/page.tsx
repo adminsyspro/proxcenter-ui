@@ -9,6 +9,8 @@ import { ReactFlowProvider } from '@xyflow/react'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
+import { hasInfraScope } from '@/lib/rbac/scopeKinds'
 
 import type { TopologyFilters, SelectedNodeInfo } from './types'
 import { useTopologyData } from './hooks/useTopologyData'
@@ -21,17 +23,22 @@ import TopologyGeoView from './components/TopologyGeoView'
 export default function TopologyPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
-  // Topology view is provider-only — also gated in the menu via
-  // requires.isProviderTenant. Redirect tenants who hit the URL directly
-  // (bookmark, copy-paste) instead of letting them load a graph that
-  // would re-leak node names hidden everywhere else in the tenant view.
+  // Topology view is provider-only and infra-scope-only. It is also gated in
+  // the menu via requires.isProviderTenant + requires.infraScope. Redirect
+  // anyone who hits the URL directly (bookmark, copy-paste) without those
+  // rights, instead of letting them load a graph that would re-leak node
+  // names hidden everywhere else: tenants, and VM / tag / pool scoped roles
+  // (which legitimately keep vm.view to see and start/stop their own guests).
   const { currentTenant, loading: tenantLoading } = useTenant()
+  const { scopeTypes, isAdmin, loading: rbacLoading } = useRBAC()
+  const isProvider = !currentTenant || currentTenant.id === 'default'
+  const allowed = isProvider && hasInfraScope(scopeTypes, isAdmin)
   const router = useRouter()
   useEffect(() => {
-    if (!tenantLoading && currentTenant && currentTenant.id !== 'default') {
+    if (!tenantLoading && !rbacLoading && !allowed) {
       router.replace('/')
     }
-  }, [tenantLoading, currentTenant, router])
+  }, [tenantLoading, rbacLoading, allowed, router])
 
   const [filters, setFilters] = useState<TopologyFilters>({
     vmThreshold: 8,
@@ -64,10 +71,10 @@ export default function TopologyPage() {
     setSelectedNode(node)
   }, [])
 
-  // Hold the render until the tenant context has loaded and the redirect
-  // above has had a chance to fire. Avoids a one-frame flash of the graph
-  // for tenants who landed via direct URL.
-  if (tenantLoading || (currentTenant && currentTenant.id !== 'default')) {
+  // Hold the render until the tenant + RBAC contexts have loaded and the
+  // redirect above has had a chance to fire. Avoids a one-frame flash of the
+  // graph for users who landed via direct URL without infra rights.
+  if (tenantLoading || rbacLoading || !allowed) {
     return null
   }
 

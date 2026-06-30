@@ -15,7 +15,15 @@ import { prisma } from "@/lib/db/prisma"
 import { authOptions } from "@/lib/auth/config"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
+import {
+  deriveRbacInfraScope,
+  isConnectionVisible,
+  applyRbacInfraFilter,
+  filterVisibleConnections,
+  type RbacInfraScope,
+} from './infraScope'
 
+export { isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, type RbacInfraScope }
 
 export interface PermissionCheck {
   userId: string
@@ -649,4 +657,18 @@ export async function filterNodesByPermission<T extends { connId: string; node: 
     }
   }
   return result
+}
+
+/**
+ * Resolve the RBAC infrastructure-scope tree mask for a user. Mirrors
+ * filterVmsByPermission's grant-loading. Returns null when unrestricted
+ * (super admin / global scope) -- callers skip tree pruning then.
+ */
+export async function getRbacInfraScope(
+  userId: string,
+  tenantId?: string,
+): Promise<RbacInfraScope | null> {
+  const tid = tenantId ?? DEFAULT_TENANT_ID
+  const grants = await loadUserGrants(userId, tid)
+  return deriveRbacInfraScope(grants)
 }

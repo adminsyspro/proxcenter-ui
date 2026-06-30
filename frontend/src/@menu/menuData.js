@@ -33,9 +33,11 @@ export const menuData = (t = (key) => key) => [
         href: '/infrastructure/topology',
         permissions: ['vm.view', 'node.view'],
         // Cluster-wide layout (nodes / shared storages / SDN graph) is a
-        // provider concern — tenants don't manage placement and it would
-        // re-leak the node names we hide elsewhere.
-        requires: { isProviderTenant: true }
+        // provider concern. Hidden for tenants (isProviderTenant) and for
+        // VM / tag / pool scoped roles (infraScope). Both would re-leak the
+        // node names we hide everywhere else in those views, even though such
+        // roles legitimately keep vm.view to see and start/stop their guests.
+        requires: { isProviderTenant: true, infraScope: true }
       },
       {
         label: t('navigation.storage'),

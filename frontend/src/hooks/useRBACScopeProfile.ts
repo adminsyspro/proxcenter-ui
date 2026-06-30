@@ -2,11 +2,14 @@ import { useMemo } from 'react'
 
 import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { INFRA_SCOPE_TYPES } from '@/lib/rbac/scopeKinds'
 
 import type { ViewMode } from '@/app/(dashboard)/infrastructure/inventory/InventoryTree'
 
-/** Scope types that reveal infrastructure details (cluster/node names) */
-const INFRA_SCOPES = new Set(['global', 'connection', 'node'])
+/** Scope types that reveal infrastructure details (cluster/node names).
+ *  Shared with the nav/topology gate via INFRA_SCOPE_TYPES so "what counts as
+ *  infra scope" has a single source of truth. */
+const INFRA_SCOPES = new Set<string>(INFRA_SCOPE_TYPES)
 
 /** View modes that are always safe — they only show VMs the user can access */
 const ALWAYS_ALLOWED: ViewMode[] = ['vms', 'favorites', 'templates']

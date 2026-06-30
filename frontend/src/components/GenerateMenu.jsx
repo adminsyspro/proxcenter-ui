@@ -9,6 +9,7 @@ import { SubMenu as VerticalSubMenu, MenuItem as VerticalMenuItem, MenuSection }
 
 // RBAC Hook
 import { useRBAC } from '@/contexts/RBACContext'
+import { hasInfraScope } from '@/lib/rbac/scopeKinds'
 
 // License Hook
 import { useLicense } from '@/contexts/LicenseContext'
@@ -21,11 +22,12 @@ import { useTenant } from '@/contexts/TenantContext'
 
 // Generate a menu from the menu data array
 export const GenerateVerticalMenu = ({ menuData }) => {
-  const { hasAnyPermission, loading } = useRBAC()
+  const { hasAnyPermission, scopeTypes, isAdmin, loading } = useRBAC()
   const { hasFeature, loading: licenseLoading } = useLicense()
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   // Fonction pour vérifier si un item doit être affiché (RBAC)
   const canView = (item) => {
@@ -33,6 +35,7 @@ export const GenerateVerticalMenu = ({ menuData }) => {
     if (item.requires?.hasVdc === true && !hasVdc) return false
     if (item.requires?.hasVdc === false && hasVdc) return false
     if (item.requires?.isProviderTenant === true && !isProviderTenant) return false
+    if (item.requires?.infraScope === true && !infraScoped) return false
     if (!item.permissions || item.permissions.length === 0) return true
 
     return hasAnyPermission(item.permissions)
@@ -141,17 +144,19 @@ export const GenerateVerticalMenu = ({ menuData }) => {
 
 // Generate a menu from the menu data array
 export const GenerateHorizontalMenu = ({ menuData }) => {
-  const { hasAnyPermission, loading } = useRBAC()
+  const { hasAnyPermission, scopeTypes, isAdmin, loading } = useRBAC()
   const { hasFeature, loading: licenseLoading } = useLicense()
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const canView = (item) => {
     if (loading || vdcLoading || tenantLoading) return true // Afficher pendant le chargement
     if (item.requires?.hasVdc === true && !hasVdc) return false
     if (item.requires?.hasVdc === false && hasVdc) return false
     if (item.requires?.isProviderTenant === true && !isProviderTenant) return false
+    if (item.requires?.infraScope === true && !infraScoped) return false
     if (!item.permissions || item.permissions.length === 0) return true
 
     return hasAnyPermission(item.permissions)

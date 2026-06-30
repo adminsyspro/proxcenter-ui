@@ -6,7 +6,7 @@ import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/t
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -39,6 +39,13 @@ export async function GET(req: Request) {
     // msp sees the connections it directly owns (Connection.tenant_id).
     const tenantId = await getCurrentTenantId()
     const infra = await getTenantInfrastructureScope(tenantId)
+
+    // RBAC infra-scope: resolve once before the query so post-fetch filtering
+    // is O(1). Null means unrestricted (admin or global-scope grant).
+    const rbacCtx = await getRBACContext()
+    const rbacScope = rbacCtx && !rbacCtx.isAdmin
+      ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
+      : null
 
     let prisma: typeof globalPrisma | Awaited<ReturnType<typeof getSessionPrisma>>
     if (infra.kind === "provider") {
@@ -123,8 +130,14 @@ export async function GET(req: Request) {
       },
     })
 
+    // RBAC post-query filter: applied in memory after the prisma query so the
+    // provider branch where clause is not touched (preserves existing behaviour
+    // for admin/null scope). filterVisibleConnections is a no-op when rbacScope
+    // is null (admin or unrestricted user).
+    const visibleConnections = filterVisibleConnections(connections, rbacScope)
+
     // Calculer sshConfigured en mémoire sans N+1 queries
-    const connectionsWithSSHStatus = connections.map((conn) => {
+    const connectionsWithSSHStatus = visibleConnections.map((conn) => {
       const { sshKeyEnc, sshPassEnc, ...rest } = conn
 
       return {

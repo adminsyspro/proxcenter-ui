@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDeployIpconfig0 } from './deployIpconfig'
+import { buildDeployIpconfig0, parseIpconfig0 } from './deployIpconfig'
 
 const sn = (over: Partial<{ cidr: string; gateway: string }> = {}) => ({
   cidr: over.cidr ?? '10.0.1.0/25',
@@ -15,6 +15,93 @@ const base = {
   manualGateway: '',
   useDhcp: false,
 }
+
+describe('parseIpconfig0', () => {
+  it('returns useDhcp true for "ip=dhcp"', () => {
+    expect(parseIpconfig0('ip=dhcp')).toEqual({
+      useDhcp: true,
+      manualIpCidr: '',
+      manualGateway: '',
+      host: '',
+    })
+  })
+
+  it('is case-insensitive for DHCP ("IP=DHCP")', () => {
+    const result = parseIpconfig0('IP=DHCP')
+    expect(result.useDhcp).toBe(true)
+  })
+
+  it('parses ip/cidr and gateway from a full static string', () => {
+    expect(parseIpconfig0('ip=10.0.1.4/24,gw=10.0.1.1')).toEqual({
+      useDhcp: false,
+      manualIpCidr: '10.0.1.4/24',
+      manualGateway: '10.0.1.1',
+      host: '10.0.1.4',
+    })
+  })
+
+  it('parses ip/cidr with no gateway', () => {
+    expect(parseIpconfig0('ip=10.0.1.4/24')).toEqual({
+      useDhcp: false,
+      manualIpCidr: '10.0.1.4/24',
+      manualGateway: '',
+      host: '10.0.1.4',
+    })
+  })
+
+  it('parses bare host IP with no prefix (no manualIpCidr)', () => {
+    expect(parseIpconfig0('ip=10.0.1.4')).toEqual({
+      useDhcp: false,
+      manualIpCidr: '',
+      manualGateway: '',
+      host: '10.0.1.4',
+    })
+  })
+
+  it('returns all-empty for an empty string', () => {
+    expect(parseIpconfig0('')).toEqual({
+      useDhcp: false,
+      manualIpCidr: '',
+      manualGateway: '',
+      host: '',
+    })
+  })
+
+  it('returns all-empty / useDhcp false for a garbage string', () => {
+    const result = parseIpconfig0('notavalidipconfig')
+    expect(result.useDhcp).toBe(false)
+    expect(result.manualIpCidr).toBe('')
+    expect(result.manualGateway).toBe('')
+    expect(result.host).toBe('')
+  })
+
+  it('round-trips DHCP: build → parse → useDhcp true', () => {
+    const built = buildDeployIpconfig0({
+      subnet: null,
+      ipOverride: '',
+      manualIpCidr: '',
+      manualGateway: '',
+      useDhcp: true,
+    })
+    expect(built).toBe('ip=dhcp')
+    expect(parseIpconfig0(built).useDhcp).toBe(true)
+  })
+
+  it('round-trips static: build → parse → same fields', () => {
+    const built = buildDeployIpconfig0({
+      subnet: null,
+      ipOverride: '',
+      manualIpCidr: '192.168.1.10/24',
+      manualGateway: '192.168.1.1',
+      useDhcp: false,
+    })
+    const parsed = parseIpconfig0(built)
+    expect(parsed.useDhcp).toBe(false)
+    expect(parsed.manualIpCidr).toBe('192.168.1.10/24')
+    expect(parsed.manualGateway).toBe('192.168.1.1')
+    expect(parsed.host).toBe('192.168.1.10')
+  })
+})
 
 describe('buildDeployIpconfig0', () => {
   describe('with an IPAM subnet (field holds a bare host IP)', () => {

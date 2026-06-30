@@ -35,6 +35,26 @@ export interface DeployIpconfigInput {
   useDhcp: boolean
 }
 
+export interface ParsedIpconfig0 {
+  /** true when the value requests DHCP (ip=dhcp) */
+  useDhcp: boolean
+  /** static IPv4 with CIDR, e.g. "10.0.1.4/24" (empty if none) */
+  manualIpCidr: string
+  /** IPv4 gateway, e.g. "10.0.1.1" (empty if none) */
+  manualGateway: string
+  /** bare host IPv4 without prefix, e.g. "10.0.1.4" (empty if none) — used by the wizard's IPAM/subnet layout */
+  host: string
+}
+
+export function parseIpconfig0(cfg: string): ParsedIpconfig0 {
+  const s = String(cfg ?? '')
+  const useDhcp = /(?:^|,)\s*ip=dhcp\b/i.test(s)
+  const manualIpCidr = s.match(/(?:^|,)\s*ip=([0-9.]+\/\d+)/)?.[1] ?? ''
+  const manualGateway = s.match(/(?:^|,)\s*gw=([0-9.]+)/)?.[1] ?? ''
+  const host = s.match(/(?:^|,)\s*ip=([0-9.]+)(?:\/\d+)?/)?.[1] ?? ''
+  return { useDhcp, manualIpCidr, manualGateway, host }
+}
+
 export function buildDeployIpconfig0(input: DeployIpconfigInput): string {
   const { subnet, ipOverride, manualIpCidr, manualGateway, useDhcp } = input
 

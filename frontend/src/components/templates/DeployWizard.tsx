@@ -33,7 +33,7 @@ import {
 } from '@mui/material'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
-import { buildDeployIpconfig0 } from '@/lib/templates/deployIpconfig'
+import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
@@ -375,14 +375,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           // target bridge yet, so populate both and let the active layout read
           // whichever it needs.
           const cfg = String(ci.ipconfig0 || '')
-          const dhcp = /(?:^|,)\s*ip=dhcp\b/i.test(cfg)
-          const ipCidr = cfg.match(/(?:^|,)\s*ip=([0-9.]+\/\d+)/)?.[1] ?? ''
-          const gw = cfg.match(/(?:^|,)\s*gw=([0-9.]+)/)?.[1] ?? ''
-          const host = cfg.match(/(?:^|,)\s*ip=([0-9.]+)(?:\/\d+)?/)?.[1] ?? ''
-          setUseDhcp(dhcp)
-          setManualIpCidr(ipCidr)
-          setManualGateway(gw)
-          setIpOverride(host)
+          const parsed = parseIpconfig0(cfg)
+          setUseDhcp(parsed.useDhcp)
+          setManualIpCidr(parsed.manualIpCidr)
+          setManualGateway(parsed.manualGateway)
+          setIpOverride(parsed.host)
           setNameserver(ci.nameserver || '')
           setSearchdomain(ci.searchdomain || '')
         }

@@ -91,6 +91,8 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   const [useDhcp, setUseDhcp] = useState(true)
   const [manualIpCidr, setManualIpCidr] = useState('')
   const [manualGateway, setManualGateway] = useState('')
+  const [ipCidrTouched, setIpCidrTouched] = useState(false)
+  const [gatewayTouched, setGatewayTouched] = useState(false)
 
   // Catalog images fetched on dialog open
   const [catalogImages, setCatalogImages] = useState<CatalogImage[]>([])
@@ -125,6 +127,8 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       setUseDhcp(p.useDhcp)
       setManualIpCidr(p.manualIpCidr)
       setManualGateway(p.manualGateway)
+      setIpCidrTouched(false)
+      setGatewayTouched(false)
     } else {
       setName('')
       setDescription('')
@@ -136,6 +140,8 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       setUseDhcp(true)
       setManualIpCidr('')
       setManualGateway('')
+      setIpCidrTouched(false)
+      setGatewayTouched(false)
     }
   }, [open, blueprint])
 
@@ -328,7 +334,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                   type="number"
                   size="small"
                   value={hardware.memory}
-                  onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 512 }))}
+                  onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 128 }))}
                   sx={{ width: 92 }}
                   helperText="MB"
                   slotProps={{ htmlInput: { min: 128, step: 256 } }}
@@ -415,10 +421,10 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                         size="small"
                         label={t('templates.deploy.cloudInit.ipCidr')}
                         value={manualIpCidr}
-                        onChange={e => setManualIpCidr(e.target.value.trim())}
+                        onChange={e => { setManualIpCidr(e.target.value.trim()); setIpCidrTouched(true) }}
                         placeholder="10.0.1.4/25"
-                        error={!ipCidrValid}
-                        helperText={!ipCidrValid
+                        error={ipCidrTouched && !ipCidrValid}
+                        helperText={ipCidrTouched && !ipCidrValid
                           ? t('templates.deploy.cloudInit.ipCidrInvalid')
                           : t('templates.deploy.cloudInit.ipCidrHelp')}
                         fullWidth
@@ -427,10 +433,10 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                         size="small"
                         label={t('templates.deploy.cloudInit.gateway')}
                         value={manualGateway}
-                        onChange={e => setManualGateway(e.target.value.trim())}
+                        onChange={e => { setManualGateway(e.target.value.trim()); setGatewayTouched(true) }}
                         placeholder="10.0.1.253"
-                        error={!gatewayValid}
-                        helperText={!gatewayValid
+                        error={gatewayTouched && !gatewayValid}
+                        helperText={gatewayTouched && !gatewayValid
                           ? t('templates.deploy.cloudInit.gatewayInvalid')
                           : t('templates.deploy.cloudInit.gatewayManualHelp')}
                         fullWidth

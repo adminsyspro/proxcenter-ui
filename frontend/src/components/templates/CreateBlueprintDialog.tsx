@@ -421,18 +421,21 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                 ...h,
                 networkBridge: v == null ? '' : typeof v === 'string' ? v : v.pveName,
               }))}
-              renderOption={(props, o) => (
-                <li {...props} key={o.pveName}>
-                  <Box>
-                    <Typography variant="body2">{o.displayName}</Typography>
-                    {o.subnet && (
-                      <Typography variant="caption" color="text.secondary">
-                        {o.subnet.cidr}
-                      </Typography>
-                    )}
-                  </Box>
-                </li>
-              )}
+              renderOption={(props, o) => {
+                const { key, ...optionProps } = props as any
+                return (
+                  <li key={key ?? (typeof o === 'string' ? o : o.pveName)} {...optionProps}>
+                    <Box>
+                      <Typography variant="body2">{typeof o === 'string' ? o : o.displayName}</Typography>
+                      {typeof o !== 'string' && o.subnet && (
+                        <Typography variant="caption" color="text.secondary">
+                          {o.subnet.cidr}
+                        </Typography>
+                      )}
+                    </Box>
+                  </li>
+                )
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}

@@ -139,6 +139,7 @@ describe('GET /api/v1/templates/network-options', () => {
     expect(vdcFindManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { enabled: true },
+        include: { vnets: { include: { subnet: true } } },
       }),
     )
   })

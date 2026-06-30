@@ -4078,6 +4078,7 @@
       "minimumSpecs": "Minimum",
       "addCustom": "Ajouter une image",
       "editCustom": "Modifier l'image",
+      "builtInLabel": "Intégrées",
       "customLabel": "Custom",
       "volume": "Volume",
       "sourceType": "Source de l'image",

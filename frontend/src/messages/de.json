@@ -4036,6 +4036,7 @@
       "minimumSpecs": "minimal",
       "addCustom": "hinzufügen Benutzerdefiniert Image",
       "editCustom": "bearbeiten Benutzerdefiniert Image",
+      "builtInLabel": "Integriert",
       "customLabel": "Benutzerdefiniert",
       "volume": "Volume",
       "sourceType": "Image-Quelle",

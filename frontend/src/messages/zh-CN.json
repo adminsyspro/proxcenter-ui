@@ -4039,6 +4039,7 @@
       "minimumSpecs": "最低配置",
       "addCustom": "添加自定义镜像",
       "editCustom": "编辑自定义镜像",
+      "builtInLabel": "内置",
       "customLabel": "自定义",
       "volume": "卷",
       "sourceType": "镜像来源",

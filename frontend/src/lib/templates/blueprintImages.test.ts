@@ -88,6 +88,20 @@ describe('splitCatalogImages', () => {
     expect(result.custom).toHaveLength(0)
   })
 
+  it('places images with undefined isCustom into the builtIn group', () => {
+    // CloudImage (from CLOUD_IMAGES fallback) has no isCustom field; it must not
+    // be silently dropped or put into the custom group.
+    const plainCloud = img({ slug: 'plain-cloud' }) as CloudImage
+    // Strip isCustom to simulate a bare CloudImage coming from the fallback list
+    delete (plainCloud as any).isCustom
+
+    const result = splitCatalogImages([plainCloud])
+
+    expect(result.builtIn).toHaveLength(1)
+    expect(result.builtIn[0].slug).toBe('plain-cloud')
+    expect(result.custom).toHaveLength(0)
+  })
+
   it('preserves the original order within each group', () => {
     const images = [
       img({ slug: 'z-built-in', isCustom: false }),

@@ -126,8 +126,12 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   useEffect(() => {
     if (!open) return
     setCatalogLoading(true)
+    setCatalogImages([])
     fetch('/api/v1/templates/catalog')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('catalog fetch failed')
+        return r.json()
+      })
       .then(res => {
         const imgs: CatalogImage[] = res.data?.images || []
         setCatalogImages(imgs.length > 0 ? imgs : CLOUD_IMAGES)
@@ -227,7 +231,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                 </MenuItem>
               )}
               {builtIn.length > 0 && (
-                <ListSubheader>Built-in</ListSubheader>
+                <ListSubheader>{t('templates.catalog.builtInLabel')}</ListSubheader>
               )}
               {builtIn.map(img => (
                 <MenuItem key={img.slug} value={img.slug}>{img.name}</MenuItem>

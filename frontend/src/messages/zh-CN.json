@@ -4079,7 +4079,9 @@
       "updated": "蓝图已更新",
       "deleted": "蓝图已删除",
       "tagsHelp": "使用分号分隔标签（例如 prod;web;linux）",
-      "public": "公开（所有用户可见）"
+      "public": "公开（所有用户可见）",
+      "cloudInitSection": "Cloud-init（可选）",
+      "cloudInitHelp": "已写入蓝图并在部署时预填充。蓝图中绝不存储密码。"
     },
     "deploy": {
       "title": "部署 VM",

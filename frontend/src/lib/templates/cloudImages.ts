@@ -39,6 +39,24 @@ export const VENDORS = [
 
 export const CLOUD_IMAGES: CloudImage[] = [
   {
+    slug: 'ubuntu-2604',
+    name: 'Ubuntu 26.04 LTS (Resolute Reindeer)',
+    vendor: 'ubuntu',
+    version: '26.04',
+    arch: 'amd64',
+    format: 'qcow2',
+    downloadUrl: 'https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img',
+    checksumUrl: 'https://cloud-images.ubuntu.com/resolute/current/SHA256SUMS',
+    defaultDiskSize: '20G',
+    minMemory: 512,
+    recommendedMemory: 2048,
+    minCores: 1,
+    recommendedCores: 2,
+    ostype: 'l26',
+    tags: ['lts', 'cloud-init', 'popular'],
+    logoIcon: 'ri-ubuntu-fill',
+  },
+  {
     slug: 'ubuntu-2404',
     name: 'Ubuntu 24.04 LTS (Noble Numbat)',
     vendor: 'ubuntu',

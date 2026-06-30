@@ -4118,7 +4118,9 @@
       "updated": "Blueprint mis à jour",
       "deleted": "Blueprint supprimé",
       "tagsHelp": "Séparez les tags par des points-virgules (ex: prod;web;linux)",
-      "public": "Public (visible par tous les utilisateurs)"
+      "public": "Public (visible par tous les utilisateurs)",
+      "cloudInitSection": "Cloud-init (optionnel)",
+      "cloudInitHelp": "Intégré au blueprint et pré-rempli au déploiement. Les mots de passe ne sont jamais enregistrés dans un blueprint."
     },
     "deploy": {
       "title": "Déployer une VM",

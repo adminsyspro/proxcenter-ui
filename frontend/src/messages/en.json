@@ -4118,7 +4118,9 @@
       "updated": "Blueprint updated",
       "deleted": "Blueprint deleted",
       "tagsHelp": "Separate tags with semicolons (e.g. prod;web;linux)",
-      "public": "Public (visible to all users)"
+      "public": "Public (visible to all users)",
+      "cloudInitSection": "Cloud-init (optional)",
+      "cloudInitHelp": "Baked into the blueprint and pre-filled at deploy time. Passwords are never stored in a blueprint."
     },
     "deploy": {
       "title": "Deploy VM",

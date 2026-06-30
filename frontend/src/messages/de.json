@@ -4076,7 +4076,9 @@
       "updated": "Blueprint aktualisierend",
       "deleted": "Blueprint löschend",
       "tagsHelp": "Tags durch Semikolons trennen (z.B. prod;web;linux)",
-      "public": "Public (visible to all Benutzer)"
+      "public": "Public (visible to all Benutzer)",
+      "cloudInitSection": "Cloud-init (optional)",
+      "cloudInitHelp": "Im Blueprint gespeichert und beim Deployment vorausgefüllt. Passwörter werden nie in einem Blueprint gespeichert."
     },
     "deploy": {
       "title": "VM bereitstellen",

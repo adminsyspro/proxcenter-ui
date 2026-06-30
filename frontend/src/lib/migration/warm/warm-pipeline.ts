@@ -21,6 +21,7 @@ import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { buildApplyScripts } from "./block-applier"
+import { parseDdProgress } from "./dd-progress"
 import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
@@ -99,6 +100,13 @@ export function planPasses(stats: PassStat[], cfg: ConvergenceConfig): Convergen
 
 // Long-running SSH operations (block apply, checksum scan) need a generous timeout.
 const APPLY_TIMEOUT_MS = 12 * 60 * 60 * 1000
+// Inactivity guard for the block-apply dd (which runs with status=progress, ~1
+// line/s): if no output arrives for this long the transfer has genuinely stalled,
+// so fail fast instead of waiting out the 12h absolute cap. A healthy copy emits
+// progress continuously and never trips it (#445).
+const APPLY_INACTIVITY_MS = 10 * 60 * 1000
+// Throttle live throughput log lines so a multi-hour copy doesn't flood the job log.
+const PROGRESS_LOG_INTERVAL_MS = 30_000
 const SNAPSHOT_PREFIX = "proxcenter-warm"
 // Ping the SOAP session every 60 s to prevent idle-expiry during long dd copies (issue #394).
 const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
@@ -294,8 +302,21 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // so the original abort-on-first-error (`set -e`) semantics hold across the
     // split. `label` distinguishes the delta/full path from the checksum path.
     async function applyExtents(nbdDev: string, dev: string, extents: Extent[], capacityBytes: number, label: string, diskIndex: number): Promise<void> {
+      // Live progress: parse dd's status=progress lines off the stream and log the
+      // current throughput (throttled). Also feeds executeSSH's inactivity guard,
+      // which resets on every byte — so a moving copy is never cut off and a stalled
+      // one fails within APPLY_INACTIVITY_MS instead of hanging to the 12h cap.
+      let lastLog = 0
+      const onData = (chunk: string): void => {
+        const p = parseDdProgress(chunk)
+        if (!p) return
+        const now = Date.now()
+        if (now - lastLog < PROGRESS_LOG_INTERVAL_MS) return
+        lastLog = now
+        void appendLog(jobId, `Disk ${diskIndex}: copying ${(p.bytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`).catch(() => {})
+      }
       for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
-        const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS)
+        const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
         if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.error || res.output}`)
       }
     }

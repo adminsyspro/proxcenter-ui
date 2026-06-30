@@ -11,4 +11,11 @@ describe("buildDeltaApplyCmd", () => {
     expect(cmd).toContain("count=65536")
     expect(cmd).toContain("seek=1048576")
   })
+
+  it("emits periodic progress (status=progress) so a healthy copy keeps the SSH channel active", () => {
+    const cmd = buildDeltaApplyCmd("/dev/nbd0", "/dev/dm-3", { offset: 0, length: 65536 })
+    expect(cmd).toContain("status=progress")
+    // progress goes to stderr, so it must be merged onto stdout for the reader to see it
+    expect(cmd.trimEnd().endsWith("2>&1")).toBe(true)
+  })
 })

@@ -4079,7 +4079,8 @@
       "tagsHelp": "Tags durch Semikolons trennen (z.B. prod;web;linux)",
       "public": "Public (visible to all Benutzer)",
       "cloudInitSection": "Cloud-init (optional)",
-      "cloudInitHelp": "Im Blueprint gespeichert und beim Deployment vorausgefüllt. Passwörter werden nie in einem Blueprint gespeichert."
+      "cloudInitHelp": "Im Blueprint gespeichert und beim Deployment vorausgefüllt. Passwörter werden nie in einem Blueprint gespeichert.",
+      "staticIpWarning": "Eine statische IP wird von allen aus diesem Blueprint erstellten VMs geteilt. Verwenden Sie DHCP, außer dieses Preset ist für eine einzelne VM."
     },
     "deploy": {
       "title": "VM bereitstellen",

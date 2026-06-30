@@ -4082,7 +4082,8 @@
       "tagsHelp": "使用分号分隔标签（例如 prod;web;linux）",
       "public": "公开（所有用户可见）",
       "cloudInitSection": "Cloud-init（可选）",
-      "cloudInitHelp": "已写入蓝图并在部署时预填充。蓝图中绝不存储密码。"
+      "cloudInitHelp": "已写入蓝图并在部署时预填充。蓝图中绝不存储密码。",
+      "staticIpWarning": "静态 IP 会被该蓝图创建的所有虚拟机共用。除非此预设仅用于单台虚拟机，否则请使用 DHCP。"
     },
     "deploy": {
       "title": "部署 VM",

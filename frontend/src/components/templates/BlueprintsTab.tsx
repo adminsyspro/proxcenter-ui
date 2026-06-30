@@ -13,7 +13,7 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { useToast } from '@/contexts/ToastContext'
-import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import CreateBlueprintDialog from './CreateBlueprintDialog'
 
@@ -38,11 +38,8 @@ interface BlueprintsTabProps {
 export default function BlueprintsTab({ onDeploy }: BlueprintsTabProps) {
   const t = useTranslations()
   const { showToast } = useToast()
-  // Provider manages the blueprint catalogue; tenants can deploy from it but
-  // can't create / edit / delete entries (they would pollute the shared list).
-  const { currentTenant, loading: tenantLoading } = useTenant()
-  const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
-  const canManage = !tenantLoading && (currentTenant === null || isProviderTenant)
+  const { hasPermission } = useRBAC()
+  const canManage = hasPermission('vm.create')
   const [blueprints, setBlueprints] = useState<Blueprint[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)

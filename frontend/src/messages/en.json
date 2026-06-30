@@ -4121,7 +4121,8 @@
       "tagsHelp": "Separate tags with semicolons (e.g. prod;web;linux)",
       "public": "Public (visible to all users)",
       "cloudInitSection": "Cloud-init (optional)",
-      "cloudInitHelp": "Baked into the blueprint and pre-filled at deploy time. Passwords are never stored in a blueprint."
+      "cloudInitHelp": "Baked into the blueprint and pre-filled at deploy time. Passwords are never stored in a blueprint.",
+      "staticIpWarning": "A static IP is shared by every VM created from this blueprint. Use DHCP unless this preset is for a single VM."
     },
     "deploy": {
       "title": "Deploy VM",

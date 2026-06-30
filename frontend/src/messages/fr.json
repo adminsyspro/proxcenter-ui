@@ -4121,7 +4121,8 @@
       "tagsHelp": "Séparez les tags par des points-virgules (ex: prod;web;linux)",
       "public": "Public (visible par tous les utilisateurs)",
       "cloudInitSection": "Cloud-init (optionnel)",
-      "cloudInitHelp": "Intégré au blueprint et pré-rempli au déploiement. Les mots de passe ne sont jamais enregistrés dans un blueprint."
+      "cloudInitHelp": "Intégré au blueprint et pré-rempli au déploiement. Les mots de passe ne sont jamais enregistrés dans un blueprint.",
+      "staticIpWarning": "Une IP statique est partagée par toutes les VMs créées depuis ce blueprint. Utilisez DHCP sauf si ce preset ne sert qu'à une seule VM."
     },
     "deploy": {
       "title": "Déployer une VM",

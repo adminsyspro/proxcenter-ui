@@ -11,13 +11,14 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormControlLabel,
   InputLabel,
   ListSubheader,
   MenuItem,
   Select,
+  Slider,
   Stack,
   Switch,
-  FormControlLabel,
   TextField,
   Typography,
 } from '@mui/material'
@@ -25,7 +26,9 @@ import {
 import { CLOUD_IMAGES } from '@/lib/templates/cloudImages'
 import type { CatalogImage } from '@/lib/templates/blueprintImages'
 import { splitCatalogImages, hasMeaningfulCloudInit } from '@/lib/templates/blueprintImages'
+import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { useToast } from '@/contexts/ToastContext'
+import { useTenant } from '@/contexts/TenantContext'
 
 function safeJsonParse(s: string): any {
   try { return JSON.parse(s) } catch { return null }
@@ -73,6 +76,7 @@ const defaultCloudInit = {
 export default function CreateBlueprintDialog({ open, onClose, blueprint }: CreateBlueprintDialogProps) {
   const t = useTranslations()
   const { showToast } = useToast()
+  const { isProvider } = useTenant()
   const [saving, setSaving] = useState(false)
 
   const [name, setName] = useState('')
@@ -82,6 +86,11 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   const [isPublic, setIsPublic] = useState(true)
   const [hardware, setHardware] = useState({ ...defaultHardware })
   const [cloudInit, setCloudInit] = useState({ ...defaultCloudInit })
+
+  // Decomposed IP state
+  const [useDhcp, setUseDhcp] = useState(true)
+  const [manualIpCidr, setManualIpCidr] = useState('')
+  const [manualGateway, setManualGateway] = useState('')
 
   // Catalog images fetched on dialog open
   const [catalogImages, setCatalogImages] = useState<CatalogImage[]>([])
@@ -110,6 +119,12 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
           ? safeJsonParse(blueprint.cloudInit)
           : blueprint.cloudInit
       setCloudInit(ci ? { ...defaultCloudInit, ...ci } : { ...defaultCloudInit })
+
+      // Decompose the stored ipconfig0 into structured fields
+      const p = parseIpconfig0((ci?.ipconfig0) || 'ip=dhcp')
+      setUseDhcp(p.useDhcp)
+      setManualIpCidr(p.manualIpCidr)
+      setManualGateway(p.manualGateway)
     } else {
       setName('')
       setDescription('')
@@ -118,8 +133,19 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
       setIsPublic(true)
       setHardware({ ...defaultHardware })
       setCloudInit({ ...defaultCloudInit })
+      setUseDhcp(true)
+      setManualIpCidr('')
+      setManualGateway('')
     }
   }, [open, blueprint])
+
+  // Keep cloudInit.ipconfig0 in sync with the decomposed IP state
+  useEffect(() => {
+    setCloudInit(ci => ({
+      ...ci,
+      ipconfig0: buildDeployIpconfig0({ subnet: null, ipOverride: '', manualIpCidr, manualGateway, useDhcp }),
+    }))
+  }, [useDhcp, manualIpCidr, manualGateway])
 
   // Fetch the catalog on each open so custom images always appear.
   // Falls back to CLOUD_IMAGES if the fetch fails.
@@ -145,8 +171,13 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
 
   const { builtIn, custom } = splitCatalogImages(catalogImages)
 
+  // IP validation (mirrors DeployWizard)
+  const ipCidrValid = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(manualIpCidr.trim())
+  const gatewayValid = !manualGateway.trim() || /^\d{1,3}(\.\d{1,3}){3}$/.test(manualGateway.trim())
+
   const handleSave = useCallback(async () => {
     if (!name.trim() || !imageSlug) return
+    if (!useDhcp && !ipCidrValid) return
     setSaving(true)
 
     try {
@@ -185,7 +216,10 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
     } finally {
       setSaving(false)
     }
-  }, [name, description, imageSlug, hardware, cloudInit, tags, isPublic, blueprint, onClose, showToast, t])
+  }, [name, description, imageSlug, hardware, cloudInit, tags, isPublic, blueprint, onClose, showToast, t, useDhcp, ipCidrValid])
+
+  // Disk size as integer GB
+  const diskGb = Number.parseInt(hardware.diskSize) || 20
 
   return (
     <Dialog open={open} onClose={() => onClose()} maxWidth="sm" fullWidth>
@@ -245,38 +279,102 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
             </Select>
           </FormControl>
 
-          {/* Hardware section */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <TextField
-              label={t('templates.deploy.hardware.cores')}
-              type="number"
-              value={hardware.cores}
-              onChange={e => setHardware(h => ({ ...h, cores: Number.parseInt(e.target.value) || 1 }))}
-              size="small"
-              slotProps={{ htmlInput: { min: 1, max: 128 } }}
-            />
-            <TextField
-              label={t('templates.deploy.hardware.memory')}
-              type="number"
-              value={hardware.memory}
-              onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 512 }))}
-              size="small"
-              helperText="MB"
-              slotProps={{ htmlInput: { min: 128, step: 256 } }}
-            />
-            <TextField
-              label={t('templates.deploy.hardware.diskSize')}
-              value={hardware.diskSize}
-              onChange={e => setHardware(h => ({ ...h, diskSize: e.target.value }))}
-              size="small"
-            />
+          {/* Hardware section — sliders + synced numeric inputs */}
+          <Stack spacing={1.5}>
+            {/* CPU cores */}
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                {t('templates.deploy.hardware.cores')}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+                <Slider
+                  size="small"
+                  min={1}
+                  max={32}
+                  step={1}
+                  value={Math.min(hardware.cores, 32)}
+                  onChange={(_, v) => setHardware(h => ({ ...h, cores: v as number }))}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  value={hardware.cores}
+                  onChange={e => setHardware(h => ({ ...h, cores: Number.parseInt(e.target.value) || 1 }))}
+                  sx={{ width: 92 }}
+                  slotProps={{ htmlInput: { min: 1, max: 128 } }}
+                />
+              </Box>
+            </Box>
+
+            {/* Memory */}
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                {t('templates.deploy.hardware.memory')}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+                <Slider
+                  size="small"
+                  min={512}
+                  max={32768}
+                  step={512}
+                  value={Math.min(hardware.memory, 32768)}
+                  onChange={(_, v) => setHardware(h => ({ ...h, memory: v as number }))}
+                  valueLabelDisplay="auto"
+                  valueLabelFormat={(v) => `${v / 1024} GB`}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  value={hardware.memory}
+                  onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 512 }))}
+                  sx={{ width: 92 }}
+                  helperText="MB"
+                  slotProps={{ htmlInput: { min: 128, step: 256 } }}
+                />
+              </Box>
+            </Box>
+
+            {/* Disk size */}
+            <Box>
+              <Typography variant="caption" color="text.secondary">
+                {t('templates.deploy.hardware.diskSize')}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+                <Slider
+                  size="small"
+                  min={10}
+                  max={500}
+                  step={5}
+                  value={Math.min(diskGb, 500)}
+                  onChange={(_, v) => setHardware(h => ({ ...h, diskSize: `${v as number}G` }))}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  value={diskGb}
+                  onChange={e => {
+                    const gb = Number.parseInt(e.target.value) || 1
+                    setHardware(h => ({ ...h, diskSize: `${gb}G` }))
+                  }}
+                  sx={{ width: 92 }}
+                  helperText="GB"
+                  slotProps={{ htmlInput: { min: 1 } }}
+                />
+              </Box>
+            </Box>
+
+            {/* Network bridge — plain TextField */}
             <TextField
               label={t('templates.deploy.hardware.bridge')}
               value={hardware.networkBridge}
               onChange={e => setHardware(h => ({ ...h, networkBridge: e.target.value }))}
               size="small"
+              sx={{ alignSelf: 'flex-start', width: 200 }}
             />
-          </Box>
+          </Stack>
 
           {/* Cloud-init section */}
           <Box>
@@ -303,14 +401,48 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                 multiline
                 rows={2}
               />
-              <TextField
-                label={t('templates.deploy.cloudInit.ipConfig')}
-                value={cloudInit.ipconfig0}
-                onChange={e => setCloudInit(ci => ({ ...ci, ipconfig0: e.target.value }))}
-                size="small"
-                fullWidth
-                helperText={t('templates.deploy.cloudInit.ipConfigHelp')}
-              />
+
+              {/* Decomposed IP config: DHCP switch + static fields */}
+              <Stack spacing={1}>
+                <FormControlLabel
+                  control={<Switch checked={useDhcp} onChange={(_, v) => setUseDhcp(v)} size="small" />}
+                  label={t('templates.deploy.cloudInit.useDhcp')}
+                />
+                {!useDhcp && (
+                  <>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                      <TextField
+                        size="small"
+                        label={t('templates.deploy.cloudInit.ipCidr')}
+                        value={manualIpCidr}
+                        onChange={e => setManualIpCidr(e.target.value.trim())}
+                        placeholder="10.0.1.4/25"
+                        error={!ipCidrValid}
+                        helperText={!ipCidrValid
+                          ? t('templates.deploy.cloudInit.ipCidrInvalid')
+                          : t('templates.deploy.cloudInit.ipCidrHelp')}
+                        fullWidth
+                      />
+                      <TextField
+                        size="small"
+                        label={t('templates.deploy.cloudInit.gateway')}
+                        value={manualGateway}
+                        onChange={e => setManualGateway(e.target.value.trim())}
+                        placeholder="10.0.1.253"
+                        error={!gatewayValid}
+                        helperText={!gatewayValid
+                          ? t('templates.deploy.cloudInit.gatewayInvalid')
+                          : t('templates.deploy.cloudInit.gatewayManualHelp')}
+                        fullWidth
+                      />
+                    </Box>
+                    <Typography variant="caption" color="warning.main">
+                      {t('templates.blueprints.staticIpWarning')}
+                    </Typography>
+                  </>
+                )}
+              </Stack>
+
               <TextField
                 label={t('templates.deploy.cloudInit.nameserver')}
                 value={cloudInit.nameserver}
@@ -336,10 +468,12 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
             helperText={t('templates.blueprints.tagsHelp')}
           />
 
-          <FormControlLabel
-            control={<Switch checked={isPublic} onChange={(_, v) => setIsPublic(v)} size="small" />}
-            label={t('templates.blueprints.public')}
-          />
+          {isProvider && (
+            <FormControlLabel
+              control={<Switch checked={isPublic} onChange={(_, v) => setIsPublic(v)} size="small" />}
+              label={t('templates.blueprints.public')}
+            />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -347,7 +481,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
         <Button
           variant="contained"
           onClick={handleSave}
-          disabled={saving || !name.trim() || !imageSlug}
+          disabled={saving || !name.trim() || !imageSlug || (!useDhcp && !ipCidrValid)}
         >
           {saving ? <CircularProgress size={20} /> : t('common.save')}
         </Button>

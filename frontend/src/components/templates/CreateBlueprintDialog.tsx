@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -27,8 +28,10 @@ import { CLOUD_IMAGES } from '@/lib/templates/cloudImages'
 import type { CatalogImage } from '@/lib/templates/blueprintImages'
 import { splitCatalogImages, hasMeaningfulCloudInit } from '@/lib/templates/blueprintImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
+import type { NetworkOption } from '@/lib/templates/networkOptions'
 import { useToast } from '@/contexts/ToastContext'
 import { useTenant } from '@/contexts/TenantContext'
+import VendorLogo from './VendorLogo'
 
 function safeJsonParse(s: string): any {
   try { return JSON.parse(s) } catch { return null }
@@ -97,6 +100,9 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   // Catalog images fetched on dialog open
   const [catalogImages, setCatalogImages] = useState<CatalogImage[]>([])
   const [catalogLoading, setCatalogLoading] = useState(false)
+
+  // Network options fetched on dialog open (VDC VNets)
+  const [networkOptions, setNetworkOptions] = useState<NetworkOption[]>([])
 
   // Reset form on open / populate from editing blueprint
   useEffect(() => {
@@ -173,6 +179,24 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
         setCatalogImages(CLOUD_IMAGES)
       })
       .finally(() => setCatalogLoading(false))
+  }, [open])
+
+  // Fetch network options (vDC VNets) on each open. On failure, leave empty
+  // so the field still works as free text.
+  useEffect(() => {
+    if (!open) return
+    setNetworkOptions([])
+    fetch('/api/v1/templates/network-options')
+      .then(r => {
+        if (!r.ok) throw new Error('network-options fetch failed')
+        return r.json()
+      })
+      .then(res => {
+        setNetworkOptions(res.data?.options || [])
+      })
+      .catch(() => {
+        // Leave empty — field operates as free-text fallback.
+      })
   }, [open])
 
   const { builtIn, custom } = splitCatalogImages(catalogImages)
@@ -274,13 +298,23 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                 <ListSubheader>{t('templates.catalog.builtInLabel')}</ListSubheader>
               )}
               {builtIn.map(img => (
-                <MenuItem key={img.slug} value={img.slug}>{img.name}</MenuItem>
+                <MenuItem key={img.slug} value={img.slug}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <VendorLogo vendor={img.vendor || 'custom'} size={20} />
+                    <span>{img.name}</span>
+                  </Box>
+                </MenuItem>
               ))}
               {custom.length > 0 && (
                 <ListSubheader>{t('templates.catalog.customLabel')}</ListSubheader>
               )}
               {custom.map(img => (
-                <MenuItem key={img.slug} value={img.slug}>{img.name}</MenuItem>
+                <MenuItem key={img.slug} value={img.slug}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <VendorLogo vendor={img.vendor || 'custom'} size={20} />
+                    <span>{img.name}</span>
+                  </Box>
+                </MenuItem>
               ))}
             </Select>
           </FormControl>
@@ -372,13 +406,41 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
               </Box>
             </Box>
 
-            {/* Network bridge — plain TextField */}
-            <TextField
-              label={t('templates.deploy.hardware.bridge')}
-              value={hardware.networkBridge}
-              onChange={e => setHardware(h => ({ ...h, networkBridge: e.target.value }))}
+            {/* Network bridge — freeSolo Autocomplete (vDC VNets or typed bridge) */}
+            <Autocomplete
+              freeSolo
               size="small"
-              sx={{ alignSelf: 'flex-start', width: 200 }}
+              options={networkOptions}
+              getOptionLabel={(o) => typeof o === 'string'
+                ? o
+                : (o.subnet ? `${o.displayName} (${o.subnet.cidr})` : o.displayName)}
+              isOptionEqualToValue={(o, v) =>
+                (typeof o === 'string' ? o : o.pveName) === (typeof v === 'string' ? v : v.pveName)}
+              value={networkOptions.find(o => o.pveName === hardware.networkBridge) ?? hardware.networkBridge}
+              onChange={(_, v) => setHardware(h => ({
+                ...h,
+                networkBridge: v == null ? '' : typeof v === 'string' ? v : v.pveName,
+              }))}
+              renderOption={(props, o) => (
+                <li {...props} key={o.pveName}>
+                  <Box>
+                    <Typography variant="body2">{o.displayName}</Typography>
+                    {o.subnet && (
+                      <Typography variant="caption" color="text.secondary">
+                        {o.subnet.cidr}
+                      </Typography>
+                    )}
+                  </Box>
+                </li>
+              )}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={t('templates.deploy.hardware.bridge')}
+                  helperText={t('templates.blueprints.bridgeHelp')}
+                />
+              )}
+              sx={{ alignSelf: 'flex-start', width: 280 }}
             />
           </Stack>
 

@@ -4122,7 +4122,8 @@
       "public": "Public (visible to all users)",
       "cloudInitSection": "Cloud-init (optional)",
       "cloudInitHelp": "Baked into the blueprint and pre-filled at deploy time. Passwords are never stored in a blueprint.",
-      "staticIpWarning": "A static IP is shared by every VM created from this blueprint. Use DHCP unless this preset is for a single VM."
+      "staticIpWarning": "A static IP is shared by every VM created from this blueprint. Use DHCP unless this preset is for a single VM.",
+      "bridgeHelp": "Pick a vDC VNet, or type a bridge name (e.g. vmbr0)."
     },
     "deploy": {
       "title": "Deploy VM",

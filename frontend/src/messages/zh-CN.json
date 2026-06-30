@@ -4083,7 +4083,8 @@
       "public": "公开（所有用户可见）",
       "cloudInitSection": "Cloud-init（可选）",
       "cloudInitHelp": "已写入蓝图并在部署时预填充。蓝图中绝不存储密码。",
-      "staticIpWarning": "静态 IP 会被该蓝图创建的所有虚拟机共用。除非此预设仅用于单台虚拟机，否则请使用 DHCP。"
+      "staticIpWarning": "静态 IP 会被该蓝图创建的所有虚拟机共用。除非此预设仅用于单台虚拟机，否则请使用 DHCP。",
+      "bridgeHelp": "选择一个 vDC VNet，或输入网桥名称（例如 vmbr0）。"
     },
     "deploy": {
       "title": "部署 VM",

@@ -4080,7 +4080,8 @@
       "public": "Public (visible to all Benutzer)",
       "cloudInitSection": "Cloud-init (optional)",
       "cloudInitHelp": "Im Blueprint gespeichert und beim Deployment vorausgefüllt. Passwörter werden nie in einem Blueprint gespeichert.",
-      "staticIpWarning": "Eine statische IP wird von allen aus diesem Blueprint erstellten VMs geteilt. Verwenden Sie DHCP, außer dieses Preset ist für eine einzelne VM."
+      "staticIpWarning": "Eine statische IP wird von allen aus diesem Blueprint erstellten VMs geteilt. Verwenden Sie DHCP, außer dieses Preset ist für eine einzelne VM.",
+      "bridgeHelp": "Wählen Sie ein vDC-VNet oder geben Sie einen Bridge-Namen ein (z. B. vmbr0)."
     },
     "deploy": {
       "title": "VM bereitstellen",

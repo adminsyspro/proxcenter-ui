@@ -124,7 +124,7 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
 
       // Decompose the stored ipconfig0 into structured fields
       const p = parseIpconfig0((ci?.ipconfig0) || 'ip=dhcp')
-      setUseDhcp(p.useDhcp)
+      setUseDhcp(p.useDhcp || !p.manualIpCidr)
       setManualIpCidr(p.manualIpCidr)
       setManualGateway(p.manualGateway)
       setIpCidrTouched(false)

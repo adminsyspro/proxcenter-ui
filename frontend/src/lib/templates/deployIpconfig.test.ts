@@ -27,8 +27,7 @@ describe('parseIpconfig0', () => {
   })
 
   it('is case-insensitive for DHCP ("IP=DHCP")', () => {
-    const result = parseIpconfig0('IP=DHCP')
-    expect(result.useDhcp).toBe(true)
+    expect(parseIpconfig0('IP=DHCP')).toEqual({ useDhcp: true, manualIpCidr: '', manualGateway: '', host: '' })
   })
 
   it('parses ip/cidr and gateway from a full static string', () => {
@@ -68,11 +67,7 @@ describe('parseIpconfig0', () => {
   })
 
   it('returns all-empty / useDhcp false for a garbage string', () => {
-    const result = parseIpconfig0('notavalidipconfig')
-    expect(result.useDhcp).toBe(false)
-    expect(result.manualIpCidr).toBe('')
-    expect(result.manualGateway).toBe('')
-    expect(result.host).toBe('')
+    expect(parseIpconfig0('notavalidipconfig')).toEqual({ useDhcp: false, manualIpCidr: '', manualGateway: '', host: '' })
   })
 
   it('round-trips DHCP: build → parse → useDhcp true', () => {

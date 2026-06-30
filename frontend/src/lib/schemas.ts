@@ -323,7 +323,9 @@ export const deploySchema = z.object({
   // the resolved image is an install-media ISO (image.format === 'iso').
   isoStorage: z.string().optional(),
   vmid: z.number().int().min(100).max(999999999),
-  vmName: z.string().max(63).regex(/^[a-zA-Z][a-zA-Z0-9._-]*$/, 'Invalid VM name').optional(),
+  // Proxmox VM names follow DNS-hostname rules (RFC 1123): a label may start
+  // with a digit, so names like "2604-kdcs-002" are valid (see issue #522).
+  vmName: z.string().max(63).regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, 'Invalid VM name').optional(),
   imageSlug: z.string().min(1, 'imageSlug is required'),
   blueprintId: z.string().optional(),
   hardware: z.object({

@@ -5171,6 +5171,7 @@
     "rolesDefinePermissions": "Roles define user Berechtigungen",
     "roleDefinesPermissions": "The role defines user Berechtigungen",
     "protectedRolesNote": "Super Admin und Provider Admin werden unter Sicherheit › RBAC › Zuweisungen verwaltet.",
+    "communityAdminNotice": "In der Community Edition hat jeder Benutzer vollen Administratorzugriff. Rollenbasierte, eingeschränkte Berechtigungen erfordern die Enterprise Edition.",
     "newPassword": "Neues Passwort (leer lassen, um das aktuelle beizubehalten)",
     "minChars": "minimal 8 characters",
     "accountActive": "Konto aktiv",

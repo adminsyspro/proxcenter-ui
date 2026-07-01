@@ -5177,6 +5177,7 @@
     "rolesDefinePermissions": "角色定义用户权限",
     "roleDefinesPermissions": "角色定义用户权限",
     "protectedRolesNote": "超级管理员和提供商管理员在 安全 › RBAC › 分配 中管理。",
+    "communityAdminNotice": "在社区版中，每个用户都拥有完整的管理员权限。基于角色的精细化权限需要企业版。",
     "newPassword": "新密码（留空保持不变）",
     "minChars": "至少 8 个字符",
     "accountActive": "账户已激活",

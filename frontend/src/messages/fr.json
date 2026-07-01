@@ -5235,6 +5235,7 @@
     "rolesDefinePermissions": "Les rôles définissent les permissions de l'utilisateur",
     "roleDefinesPermissions": "Le rôle définit les permissions de l'utilisateur",
     "protectedRolesNote": "Super Admin et Provider Admin se gèrent dans Sécurité › RBAC › Assignations.",
+    "communityAdminNotice": "En édition Community, chaque utilisateur dispose d'un accès administrateur complet. Les permissions scopées basées sur les rôles nécessitent l'édition Enterprise.",
     "newPassword": "Nouveau mot de passe (laisser vide pour ne pas changer)",
     "minChars": "Minimum 8 caractères",
     "accountActive": "Compte actif",

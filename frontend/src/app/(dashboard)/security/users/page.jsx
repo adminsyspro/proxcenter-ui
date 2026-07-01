@@ -480,6 +480,14 @@ return
           )
         })()}
 
+        {!showRbac && !isSelf && (
+          <Alert severity='info' icon={<i className='ri-information-line' />} sx={{ mb: 2 }}>
+            <Typography variant='caption'>
+              {t ? t('usersPage.communityAdminNotice') : 'In Community edition, every user has full administrator access. Scoped, role-based permissions require the Enterprise edition.'}
+            </Typography>
+          </Alert>
+        )}
+
         {isEdit && !isSelf && (
           <FormControlLabel
             control={

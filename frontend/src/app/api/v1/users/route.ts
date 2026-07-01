@@ -10,6 +10,7 @@ import { hashPassword } from "@/lib/auth/password"
 import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
+import { getServerLicense } from "@/lib/auth/requireEnterprise"
 
 export const runtime = "nodejs"
 
@@ -214,6 +215,17 @@ export async function POST(req: Request) {
       initialTenantIds = [callerTenantId]
     }
 
+    // Community edition has no RBAC role-management UI (that is Enterprise
+    // only), so a user created here would otherwise receive zero grants and
+    // see nothing after logging in (issue #512). On Community we therefore
+    // grant every new user full super-admin access, mirroring the initial
+    // setup account, so additional users can actually manage the platform.
+    // Enterprise leaves the grant out: scoped roles are assigned separately
+    // through the RBAC picker. A fail-closed license (orchestrator
+    // unreachable) is treated as Community, consistent with the rest of the app.
+    const license = await getServerLicense()
+    const grantSuperAdmin = !license.enterprise
+
     await prisma.$transaction([
       prisma.user.create({
         data: {
@@ -221,7 +233,7 @@ export async function POST(req: Request) {
           email: normalisedEmail,
           password: hashedPassword,
           name: name || null,
-          role: "user",
+          role: grantSuperAdmin ? "super_admin" : "user",
           authProvider: "credentials",
           enabled: true,
           createdAt: now,
@@ -238,6 +250,21 @@ export async function POST(req: Request) {
           },
         })
       ),
+      ...(grantSuperAdmin
+        ? [
+            prisma.rbacUserRole.create({
+              data: {
+                id: nanoid(),
+                userId: id,
+                roleId: "role_super_admin",
+                scopeType: "global",
+                scopeTarget: null,
+                tenantId: DEFAULT_TENANT_ID,
+                grantedAt: now,
+              },
+            }),
+          ]
+        : []),
     ])
 
     // Audit
@@ -248,7 +275,7 @@ export async function POST(req: Request) {
       resourceType: "user",
       resourceId: id,
       resourceName: normalisedEmail,
-      details: { name: name || null },
+      details: { name: name || null, superAdminGranted: grantSuperAdmin },
       status: "success",
     })
 

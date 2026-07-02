@@ -327,9 +327,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       if (extents.length === 0) return 0
       const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-      const nbdDev = `/dev/nbd${diskIndex}`
       const opts: VddkOpts = { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
-      const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password, nbdDev)
+      const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
       activeReaders.push(reader)
       try {
         await applyExtents(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes, "block apply failed", diskIndex)
@@ -425,9 +424,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           const disk = vmConfig.disks[i]
           const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
           const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-          const nbdDev = `/dev/nbd${i}`
           const opts: VddkOpts = { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
-          const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password, nbdDev)
+          const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
           activeReaders.push(reader)
           try {
             const dev = targetDev.get(disk.deviceKey)!
@@ -460,7 +458,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.pw`
       try {
         const reader = await startVddkReader(config.targetConnectionId, nodeIp,
-          { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password, `/dev/nbd${i}`)
+          { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)
         try {
           const [src, dst] = await Promise.all([
             scanBlockChecksums(config.targetConnectionId, nodeIp, reader.nbdDev, 256 * 1024 * 1024, 1),

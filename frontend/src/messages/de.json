@@ -1681,6 +1681,7 @@
     "failedToSaveBackupJob": "fehlgeschlagen to speichern backup job",
     "failedToDeleteBackupJob": "fehlgeschlagen to löschen backup job",
     "failedToRunBackupJob": "fehlgeschlagen to run backup job",
+    "backupJobStarted": "Sicherung auf {count} Knoten gestartet",
     "allNodes": "— Alle —",
     "quorateYes": "Quorum: Ja",
     "healthLabel": "Zustand",

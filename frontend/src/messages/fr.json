@@ -1741,6 +1741,7 @@
     "failedToSaveBackupJob": "Échec de l'enregistrement du job de sauvegarde",
     "failedToDeleteBackupJob": "Échec de la suppression du job de sauvegarde",
     "failedToRunBackupJob": "Échec de l'exécution du job de sauvegarde",
+    "backupJobStarted": "Sauvegarde lancée sur {count} nœud(s)",
     "allNodes": "— Tous —",
     "quorateYes": "Quorum : Oui",
     "healthLabel": "Santé",

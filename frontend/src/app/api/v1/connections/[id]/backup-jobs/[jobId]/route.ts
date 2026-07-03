@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { applyMaxfilesTranslation } from "@/lib/backups/prune"
+import { buildSharedVzdumpParams, planBackupRunDispatch, type VmLocation } from "@/lib/backups/runDispatch"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -330,46 +331,76 @@ export async function POST(req: Request, ctx: RouteContext) {
     const conn = await getConnectionById(id)
 
     if (action === 'run') {
-      // Exécuter le job immédiatement
-      // Note: Proxmox n'a pas d'endpoint direct pour ça, on doit utiliser vzdump
-      // avec les mêmes paramètres que le job
+      // Proxmox has no "run job by id" endpoint: an immediate run must POST to
+      // /nodes/{node}/vzdump, and vzdump is strictly node-local. We resolve the
+      // node(s) that actually host the job's selection and issue one vzdump per
+      // node, mirroring the scheduler. The old code sent the job to an
+      // arbitrary nodes[0], so it backed up nothing when the guest lived on a
+      // different node (issue #537).
       const owned = await loadJobForTenant(conn, id, jobId)
       if ('error' in owned) return owned.error
       const job = owned.job
 
-      // Construire la commande vzdump
-      const params = new URLSearchParams()
+      const nodesList = (await pveFetch<any[]>(conn, `/nodes`)) || []
+      const onlineNodes = nodesList
+        .filter((n: any) => n.status === 'online')
+        .map((n: any) => n.node)
 
-      params.set('storage', job.storage)
-      if (job.mode) params.set('mode', job.mode)
-      if (job.compress) params.set('compress', job.compress)
-
-      // VMs à sauvegarder
-      if (job.all) {
-        params.set('all', '1')
-        if (job.exclude) params.set('exclude', job.exclude)
-      } else if (job.vmid) {
-        params.set('vmid', job.vmid)
-      } else if (job.pool) {
-        params.set('pool', job.pool)
+      // Pinned jobs run exactly where configured and need no guest lookup.
+      let vmLocations: VmLocation[] = []
+      let poolVmids: number[] | undefined
+      if (!job.node) {
+        if (job.pool) {
+          const pool = await pveFetch<any>(conn, `/pools/${encodeURIComponent(job.pool)}`)
+          poolVmids = (pool?.members || [])
+            .map((m: any) => Number(m.vmid))
+            .filter((n: number) => Number.isFinite(n))
+        }
+        const resources = (await pveFetch<any[]>(conn, `/cluster/resources?type=vm`)) || []
+        vmLocations = resources
+          .filter((r: any) => Number.isFinite(Number(r.vmid)))
+          .map((r: any) => ({ vmid: Number(r.vmid), node: r.node, status: r.status }))
       }
 
-      // Déterminer le node (si spécifié ou premier node disponible)
-      const targetNode = job.node || (await pveFetch<any[]>(conn, `/nodes`))?.[0]?.node
+      const { entries, unresolved } = planBackupRunDispatch({ job, vmLocations, onlineNodes, poolVmids })
 
-      if (!targetNode) {
-        return NextResponse.json({ error: "No node available" }, { status: 400 })
+      if (entries.length === 0) {
+        const msg = unresolved.length > 0
+          ? "Selected guests are not on an online node"
+          : "No node available"
+        return NextResponse.json({ error: msg }, { status: 400 })
       }
 
-      const result = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(targetNode)}/vzdump`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      })
+      // Replay the job's real options (retention, fleecing, notes, ...) on
+      // every target node so a manual run matches the scheduled one.
+      const shared = buildSharedVzdumpParams(job)
+
+      const tasks: Array<{ node: string; upid: any }> = []
+      const errors: Array<{ node: string; error: string }> = []
+      for (const entry of entries) {
+        const params = new URLSearchParams(shared)
+        for (const [k, v] of Object.entries(entry.selection)) params.set(k, v)
+        try {
+          const upid = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(entry.node)}/vzdump`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+          })
+          tasks.push({ node: entry.node, upid })
+        } catch (err: any) {
+          errors.push({ node: entry.node, error: err?.message || String(err) })
+        }
+      }
+
+      // Nothing started — surface the failure instead of silently doing nothing.
+      if (tasks.length === 0) {
+        const detail = errors.map((e) => `${e.node}: ${e.error}`).join('; ')
+        return NextResponse.json({ error: detail || "Backup failed to start" }, { status: 502 })
+      }
 
       return NextResponse.json({
-        data: result,
-        message: 'Backup job started'
+        data: { tasks, errors, unresolved },
+        message: `Backup job started on ${tasks.length} node(s)`,
       })
     }
 

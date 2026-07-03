@@ -1715,6 +1715,7 @@
     "failedToSaveBackupJob": "Failed to save backup job",
     "failedToDeleteBackupJob": "Failed to delete backup job",
     "failedToRunBackupJob": "Failed to run backup job",
+    "backupJobStarted": "Backup started on {count} node(s)",
     "allNodes": "— All —",
     "quorateYes": "Quorate: Yes",
     "healthLabel": "Health",

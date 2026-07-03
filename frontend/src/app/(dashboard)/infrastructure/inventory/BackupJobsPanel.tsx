@@ -117,6 +117,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   const [vms, setVms] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [runInfo, setRunInfo] = useState<string | null>(null)
 
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -381,14 +382,26 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
   // Run now
   const handleRunNow = async (job: BackupJob) => {
+    setError(null)
+    setRunInfo(null)
     try {
       const result = await runBackupJobNow(connectionId, job.id)
 
       if (!result.ok) {
         setError(result.error || t('inventory.failedToRunBackupJob'))
-      } else {
-        loadJobs()
+        return
       }
+
+      const data = result.data as
+        | { tasks?: unknown[]; errors?: Array<{ node: string; error: string }> }
+        | undefined
+      const started = data?.tasks?.length ?? 0
+      setRunInfo(t('inventory.backupJobStarted', { count: started }))
+      // A run can start on some nodes and fail on others — surface both.
+      if (data?.errors?.length) {
+        setError(data.errors.map((e) => `${e.node}: ${e.error}`).join('; '))
+      }
+      loadJobs()
     } catch (e: any) {
       setError(e?.message || t('inventory.failedToRunBackupJob'))
     }
@@ -571,6 +584,13 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {/* Run confirmation */}
+      {runInfo && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setRunInfo(null)}>
+          {runInfo}
         </Alert>
       )}
 

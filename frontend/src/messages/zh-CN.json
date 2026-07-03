@@ -1684,6 +1684,7 @@
     "failedToSaveBackupJob": "保存备份任务失败",
     "failedToDeleteBackupJob": "删除备份任务失败",
     "failedToRunBackupJob": "运行备份任务失败",
+    "backupJobStarted": "已在 {count} 个节点上启动备份",
     "allNodes": "— 全部 —",
     "quorateYes": "法定人数：是",
     "healthLabel": "健康状况",

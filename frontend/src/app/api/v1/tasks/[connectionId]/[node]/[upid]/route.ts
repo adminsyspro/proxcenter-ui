@@ -5,6 +5,7 @@ import { isVmConfigNotFoundError } from '@/lib/proxmox/locateVm'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { assertVmid } from '@/lib/ssh/validate'
 
 export const runtime = 'nodejs'
 
@@ -36,6 +37,16 @@ async function handleSourceVmCleanupAfterMigration(args: {
   deleteSource: boolean
 }): Promise<{ message: string | null }> {
   const { connection, connectionId, node, vmid, deleteSource } = args
+  // vmid comes from the PVE task status `id`; re-derive it before it can reach
+  // the `qm unlock ${vmid}` shell command below (defence-in-depth against a
+  // crafted upstream task id).
+  let safeVmid: string
+  try {
+    safeVmid = assertVmid(vmid)
+  } catch {
+    console.warn(`[task-api] skipping cleanup: invalid vmid ${JSON.stringify(vmid)}`)
+    return { message: null }
+  }
   let vmConfig: any
   try {
     vmConfig = await pveFetch<any>(
@@ -57,7 +68,7 @@ async function handleSourceVmCleanupAfterMigration(args: {
       const { executeSSH } = await import('@/lib/ssh/exec')
       const { getNodeIp } = await import('@/lib/ssh/node-ip')
       const nodeIp = await getNodeIp(connection, node)
-      const result = await executeSSH(connectionId, nodeIp, `qm unlock ${vmid}`)
+      const result = await executeSSH(connectionId, nodeIp, `qm unlock ${safeVmid}`)
       if (result.success) {
         console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after cross-cluster migration`)
         unlocked = true

@@ -78,6 +78,25 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(warm).not.toHaveBeenCalled()
   })
 
+  // targetStorage is interpolated into `qm disk import ... ${targetStorage}` on
+  // the target node by the pipelines, so a value carrying shell metacharacters
+  // must be rejected before any job is created (command injection).
+  it.each([
+    "local-lvm; rm -rf /",
+    "$(id)",
+    "store`whoami`",
+    "a/b",
+    "store with spaces",
+  ])("rejects a malformed targetStorage %j before creating a job", async (targetStorage) => {
+    const res = await callRoute(POST, { body: { ...body, targetStorage } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/targetStorage/i)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(warm).not.toHaveBeenCalled()
+    expect(cold).not.toHaveBeenCalled()
+  })
+
   it("dispatches a vCenter warm request to runWarmMigration, never the cold pipeline", async () => {
     h.prisma.connection.findUnique
       .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })

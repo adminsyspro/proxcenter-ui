@@ -3,6 +3,7 @@ import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { executeSSHDirect, shellEscape, type SSHResult } from '@/lib/ssh/exec'
+import { assertVmid } from '@/lib/ssh/validate'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { safeLog } from '@/lib/log/sanitize'
 import { orchestratorHeaders } from '@/lib/orchestrator/headers'
@@ -121,6 +122,17 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
   const { connectionId, tenantId, sourceConn, sourceNode, vmid, upid, deleteSource } = opts
   const tag = `[migrate-watcher:${safeLog(vmid)}]`
 
+  // Defence in depth: the remote-migrate route already validates vmid, but
+  // re-derive it here so the value interpolated into `qm unlock ${vmid}` below
+  // can never carry shell metacharacters even if a future caller forgets to.
+  let safeVmid: string
+  try {
+    safeVmid = assertVmid(vmid)
+  } catch {
+    console.warn(`${tag} invalid vmid, skipping cleanup`)
+    return
+  }
+
   console.log(`${tag} started (deleteSource=${deleteSource}, upid=${safeLog(upid)})`)
 
   let taskStatus: any = null
@@ -173,7 +185,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     )
     if (vmConfig?.lock) {
       const nodeIp = await getNodeIp(sourceConn, sourceNode)
-      const result = await runSshForWatcher(connectionId, tenantId, nodeIp, `qm unlock ${vmid}`)
+      const result = await runSshForWatcher(connectionId, tenantId, nodeIp, `qm unlock ${safeVmid}`)
       if (result.success) {
         console.log(`${tag} auto-unlocked VM on ${sourceNode}`)
         unlocked = true

@@ -6,6 +6,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
 import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
+import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
@@ -41,8 +42,22 @@ export async function POST(
       )
     }
 
+    // Constrain the node name and VMID before either can reach a shell command
+    // on the node: the fire-and-forget cleanup watcher runs `qm unlock ${vmid}`
+    // over SSH, and getNodeIp() may fall back to the raw node name as the SSH
+    // host. Both are re-derived here so no attacker-controlled characters flow
+    // through (command injection / log injection in the SSH layer).
+    let safeVmid: string
+    let safeNode: string
+    try {
+      safeVmid = assertVmid(vmid)
+      safeNode = assertNodeName(node)
+    } catch {
+      return NextResponse.json({ error: "Invalid node name or vmid" }, { status: 400 })
+    }
+
     // RBAC: Check vm.migrate permission
-    const resourceId = buildVmResourceId(id, node, type, vmid)
+    const resourceId = buildVmResourceId(id, safeNode, type, safeVmid)
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
@@ -256,8 +271,8 @@ export async function POST(
         connectionId: id,
         tenantId,
         sourceConn,
-        sourceNode: node,
-        vmid,
+        sourceNode: safeNode,
+        vmid: safeVmid,
         upid: result,
         deleteSource,
       }).catch(err => {

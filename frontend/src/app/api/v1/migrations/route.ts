@@ -10,6 +10,7 @@ import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { assertStorageName } from "@/lib/ssh/validate"
 
 export const runtime = "nodejs"
 
@@ -42,6 +43,15 @@ export async function POST(req: Request) {
 
     if (!sourceConnectionId || !sourceVmId || !targetConnectionId || !targetNode || !targetStorage) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // targetStorage is interpolated into the `qm disk import ... ${targetStorage}`
+    // shell command run on the target node by the migration pipelines, so
+    // constrain it to the PVE storage-id grammar here (command injection).
+    try {
+      assertStorageName(targetStorage)
+    } catch {
+      return NextResponse.json({ error: "Invalid targetStorage" }, { status: 400 })
     }
 
     // Optional caller-supplied target VMID. When omitted, the pipeline falls

@@ -292,3 +292,47 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(body.error).toBe('timeout')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Command-injection guard: the [node] path segment is interpolated into the
+// `ha-manager crm-command ... ${node}` shell command, so a name carrying shell
+// metacharacters must be rejected with 400 before any SSH runs.
+// ---------------------------------------------------------------------------
+describe('node-name validation (command injection)', () => {
+  const MALICIOUS = [
+    'pve1; touch /tmp/pwn',
+    'pve1$(id)',
+    'pve1`whoami`',
+    'pve1 && reboot',
+    'pve1|cat /etc/passwd',
+    '-injected',
+    'a\nb',
+  ]
+
+  for (const node of MALICIOUS) {
+    it(`POST rejects ${JSON.stringify(node)} with 400 and never runs SSH`, async () => {
+      const res = await callRoute(POST as any, { method: 'POST', params: { id: CONN_ID, node } })
+      expect(res.status).toBe(400)
+      const body = await readJson<any>(res)
+      expect(body.error).toMatch(/invalid node name/i)
+      expect(executeSSHMock).not.toHaveBeenCalled()
+      expect(getNodeIpMock).not.toHaveBeenCalled()
+    })
+
+    it(`DELETE rejects ${JSON.stringify(node)} with 400 and never runs SSH`, async () => {
+      const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: CONN_ID, node } })
+      expect(res.status).toBe(400)
+      expect(executeSSHMock).not.toHaveBeenCalled()
+    })
+  }
+
+  it('accepts a well-formed node name and reaches SSH', async () => {
+    const res = await callRoute(POST as any, { method: 'POST', params: { id: CONN_ID, node: 'pve-node-02' } })
+    expect(res.status).toBe(200)
+    expect(executeSSHMock).toHaveBeenCalledWith(
+      CONN_ID,
+      NODE_IP,
+      'ha-manager crm-command node-maintenance enable pve-node-02',
+    )
+  })
+})

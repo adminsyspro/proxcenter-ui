@@ -204,3 +204,21 @@ describe('GET .../screenshot — display detection', () => {
     expect(pveFetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+// The [vmid] segment is interpolated into `qm monitor ${vmid}` / the tmp file
+// path in the SSH command, so a non-numeric vmid must be rejected up front —
+// before the config probe or any SSH runs.
+describe('GET .../screenshot — vmid validation (command injection)', () => {
+  const MALICIOUS = ['1; touch /tmp/pwn', '$(id)', '`whoami`', '1 && reboot', '100abc', '../../etc']
+
+  for (const vmid of MALICIOUS) {
+    it(`rejects ${JSON.stringify(vmid)} with 400 and never probes or runs SSH`, async () => {
+      const res = await GET(new Request('http://localhost'), makeCtx({ vmid }))
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body).toEqual({ data: null, reason: 'invalid_vmid' })
+      expect(pveFetchMock).not.toHaveBeenCalled()
+      expect(executeSSHMock).not.toHaveBeenCalled()
+    })
+  }
+})

@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { orchestratorFetch } from "@/lib/orchestrator"
-import { executeSSH } from "@/lib/ssh/exec"
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+
+// sFlow collector target: an "ip:port" / "host:port" string. Constrain it to
+// hostname / IPv4 / IPv6 characters plus the port colon so it can be safely
+// interpolated into the ovs-vsctl shell command below.
+const COLLECTOR_TARGET_RE = /^[A-Za-z0-9._:[\]-]{1,255}$/
 
 export const runtime = "nodejs"
 
@@ -167,6 +172,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Collector target is required (ip:port)" }, { status: 400 })
     }
 
+    // These three values are interpolated into the ovs-vsctl shell command run
+    // on every node, so constrain them before use (command injection):
+    // collectorTarget to a host:port charset, and the two rates to integers.
+    if (typeof collectorTarget !== "string" || !COLLECTOR_TARGET_RE.test(collectorTarget)) {
+      return NextResponse.json({ error: "Invalid collector target (expected ip:port)" }, { status: 400 })
+    }
+    const safeSampling = Number(samplingRate)
+    const safePolling = Number(pollingInterval)
+    if (!Number.isInteger(safeSampling) || safeSampling < 1 || safeSampling > 1_000_000_000) {
+      return NextResponse.json({ error: "samplingRate must be an integer between 1 and 1000000000" }, { status: 400 })
+    }
+    if (!Number.isInteger(safePolling) || safePolling < 1 || safePolling > 86_400) {
+      return NextResponse.json({ error: "pollingInterval must be an integer between 1 and 86400" }, { status: 400 })
+    }
+
     const prisma = await getSessionPrisma()
     const connections = await prisma.connection.findMany({
       where: { type: "pve", sshEnabled: true },
@@ -185,7 +205,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Configure sFlow on all OVS bridges
-        const cmd = `for br in $(ovs-vsctl list-br); do ovs-vsctl -- clear Bridge $br sflow; ovs-vsctl -- set Bridge $br sflow=@s -- --id=@s create sflow agent=$br target=\\"${collectorTarget}\\" header=128 sampling=${samplingRate} polling=${pollingInterval}; done`
+        const cmd = `for br in $(ovs-vsctl list-br); do ovs-vsctl -- clear Bridge $br sflow; ovs-vsctl -- set Bridge $br sflow=@s -- --id=@s create sflow agent=$br target=${shellEscape(collectorTarget)} header=128 sampling=${safeSampling} polling=${safePolling}; done`
 
         const result = await executeSSH(conn.id, ip, cmd)
 

@@ -177,3 +177,35 @@ describe("POST .../remote-migrate — MSP ownership gate", () => {
     expect(res.status).toBe(400)
   })
 })
+
+// The [vmid] segment reaches `qm unlock ${vmid}` in the cleanup watcher and the
+// [node] segment can become the SSH host (getNodeIp fallback), so both are
+// re-derived at the boundary and injection payloads must 400 before the gate.
+describe("POST .../remote-migrate — node/vmid validation (command injection)", () => {
+  it("rejects a vmid with shell metacharacters (400, before the RBAC gate / watcher)", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { ...PARAMS, vmid: "100; touch /tmp/pwn" },
+      body: VALID_BODY,
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/invalid node name or vmid/i)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("rejects a node name with shell metacharacters (400, before the RBAC gate / watcher)", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { ...PARAMS, node: "pve1$(reboot)" },
+      body: VALID_BODY,
+    })
+    expect(res.status).toBe(400)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+})

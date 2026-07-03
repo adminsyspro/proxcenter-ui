@@ -6,6 +6,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
+import { assertVmid } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
@@ -72,6 +73,15 @@ export async function GET(
     return NextResponse.json({ data: null, reason: 'lxc' })
   }
 
+  // Constrain the VMID to a positive integer before it reaches the
+  // `qm monitor ... ${vmid}` / `${tmpFile}` shell command run on the node.
+  let safeVmid: string
+  try {
+    safeVmid = assertVmid(vmid)
+  } catch {
+    return NextResponse.json({ data: null, reason: 'invalid_vmid' }, { status: 400 })
+  }
+
   // RBAC: Check vm.console permission
   const resourceId = buildVmResourceId(id, node, type, vmid)
   const denied = await checkPermission(PERMISSIONS.VM_CONSOLE, "vm", resourceId)
@@ -121,8 +131,8 @@ export async function GET(
   }
 
   try {
-    const tmpFile = `/tmp/pxc-screen-${vmid}.ppm`
-    const cmd = `qm monitor ${vmid} <<< 'screendump ${tmpFile}' > /dev/null 2>&1 && base64 -w0 ${tmpFile} && rm -f ${tmpFile}`
+    const tmpFile = `/tmp/pxc-screen-${safeVmid}.ppm`
+    const cmd = `qm monitor ${safeVmid} <<< 'screendump ${tmpFile}' > /dev/null 2>&1 && base64 -w0 ${tmpFile} && rm -f ${tmpFile}`
 
     // Try the originally-requested node first.
     let resolvedNode = node
@@ -135,7 +145,7 @@ export async function GET(
     // is still holding the stale source node. Re-resolve via /cluster/resources
     // and retry once before surfacing the failure.
     if (!sshResult.success) {
-      const located = await locateVmInCluster(conn, vmid, "qemu")
+      const located = await locateVmInCluster(conn, safeVmid, "qemu")
       if (located && located.node !== resolvedNode) {
         resolvedNode = located.node
         movedTo = located.node

@@ -42,8 +42,12 @@ export function assertVmid(raw: unknown): string {
     throw new InvalidShellArgError(`vmid out of range: ${s}`)
   }
 
-  
-return s
+  // Return the value re-derived from the parsed integer (not the original
+  // string). For any input that passes VMID_RE this is character-identical to
+  // `s`, but routing it through Number() severs the string taint so a value
+  // interpolated into a shell command can no longer carry attacker-controlled
+  // characters (also satisfies CodeQL js/command-line-injection).
+  return String(n)
 }
 
 /**

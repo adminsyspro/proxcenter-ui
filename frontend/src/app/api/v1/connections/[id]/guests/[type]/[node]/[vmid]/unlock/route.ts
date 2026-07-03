@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
+import { assertVmid } from "@/lib/ssh/validate"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 
 export const runtime = "nodejs"
@@ -26,6 +27,15 @@ export async function POST(
 
     if (type !== 'qemu' && type !== 'lxc') {
       return NextResponse.json({ error: "Invalid type. Must be 'qemu' or 'lxc'" }, { status: 400 })
+    }
+
+    // Constrain the VMID to a positive integer before it is interpolated into
+    // the `qm/pct unlock` shell command executed on the node (command injection).
+    let safeVmid: string
+    try {
+      safeVmid = assertVmid(vmid)
+    } catch {
+      return NextResponse.json({ error: "Invalid vmid" }, { status: 400 })
     }
 
     // RBAC
@@ -53,7 +63,7 @@ export async function POST(
 
     // Get node IP and execute unlock via SSH
     const nodeIp = await getNodeIp(conn, node)
-    const unlockCmd = type === 'qemu' ? `qm unlock ${vmid}` : `pct unlock ${vmid}`
+    const unlockCmd = type === 'qemu' ? `qm unlock ${safeVmid}` : `pct unlock ${safeVmid}`
     const sshResult = await executeSSH(id, nodeIp, unlockCmd)
 
     if (sshResult.success) {

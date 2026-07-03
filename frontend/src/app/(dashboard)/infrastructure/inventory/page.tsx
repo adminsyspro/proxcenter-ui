@@ -72,8 +72,13 @@ export default function InventoryPage() {
 
   // Favoris (derived from SWR above)
   
-  // État pour collapse la tree
-  const [isTreeCollapsed, setIsTreeCollapsed] = useState(false)
+  // État pour collapse la tree (persisté — #538)
+  const [isTreeCollapsed, setIsTreeCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('pxc-inventory-tree-collapsed') === 'true'
+    }
+    return false
+  })
 
   // Show VM ID in tree
   const [showVmId, setShowVmId] = useState(() => {
@@ -386,8 +391,16 @@ return () => setPageInfo('', '', '')
     }
   }, [favorites, mutateFavorites])
 
-  // Largeur du panneau gauche (resizable)
-  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH)
+  // Largeur du panneau gauche (resizable, persistée — #538)
+  const [leftWidth, setLeftWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = Number(localStorage.getItem('pxc-inventory-tree-width'))
+      if (Number.isFinite(saved) && saved > 0) {
+        return Math.min(MAX_LEFT_WIDTH, Math.max(MIN_LEFT_WIDTH, saved))
+      }
+    }
+    return DEFAULT_LEFT_WIDTH
+  })
   const [isResizing, setIsResizing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -444,6 +457,19 @@ return () => setPageInfo('', '', '')
       document.removeEventListener('mouseup', handleMouseUp)
     }
   }, [isResizing])
+
+  // Persiste la largeur du panneau pour la conserver après navigation/reload (#538).
+  // Écrit une fois par redimensionnement (au relâchement), pas à chaque mousemove.
+  useEffect(() => {
+    if (isResizing || typeof window === 'undefined') return
+    localStorage.setItem('pxc-inventory-tree-width', String(leftWidth))
+  }, [isResizing, leftWidth])
+
+  // Persiste l'état replié du panneau (#538).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('pxc-inventory-tree-collapsed', String(isTreeCollapsed))
+  }, [isTreeCollapsed])
 
   // Charger les IP, Snapshots et Uptime pour toutes les VMs
   const loadIpSnap = useCallback(async () => {

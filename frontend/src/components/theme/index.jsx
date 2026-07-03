@@ -1115,10 +1115,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentText: '--nord-bg-primary',
         hover: '--nord-bg-tertiary'
       }),
-      '.MuiChip-colorSuccess': { color: 'var(--nord-success) !important', border: '1px solid var(--nord-success) !important' },
-      '.MuiChip-colorError': { color: 'var(--nord-error) !important', border: '1px solid var(--nord-error) !important' },
-      '.MuiChip-colorWarning': { color: 'var(--nord-warning) !important', border: '1px solid var(--nord-warning) !important' },
-      '.MuiChip-colorInfo': { color: 'var(--nord-info) !important', border: '1px solid var(--nord-info) !important' }
+      // #538 : badges pleins (couleurs sémantiques par défaut), lisibles en clair comme en sombre
+      '.MuiChip-colorSuccess': { backgroundColor: 'var(--mui-palette-success-main) !important', color: 'var(--mui-palette-success-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorError': { backgroundColor: 'var(--mui-palette-error-main) !important', color: 'var(--mui-palette-error-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorWarning': { backgroundColor: 'var(--mui-palette-warning-main) !important', color: 'var(--mui-palette-warning-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorInfo': { backgroundColor: 'var(--mui-palette-info-main) !important', color: 'var(--mui-palette-info-contrastText) !important', border: 'none !important' }
     }),
 
     // Dracula Theme
@@ -1173,10 +1174,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentText: '--dracula-bg',
         hover: '--dracula-hover'
       }),
-      '.MuiChip-colorSuccess': { color: 'var(--dracula-green) !important', border: '1px solid var(--dracula-green) !important' },
-      '.MuiChip-colorError': { color: 'var(--dracula-red) !important', border: '1px solid var(--dracula-red) !important' },
-      '.MuiChip-colorWarning': { color: 'var(--dracula-orange) !important', border: '1px solid var(--dracula-orange) !important' },
-      '.MuiChip-colorInfo': { color: 'var(--dracula-cyan) !important', border: '1px solid var(--dracula-cyan) !important' }
+      // #538 : badges pleins (couleurs sémantiques par défaut), lisibles en clair comme en sombre
+      '.MuiChip-colorSuccess': { backgroundColor: 'var(--mui-palette-success-main) !important', color: 'var(--mui-palette-success-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorError': { backgroundColor: 'var(--mui-palette-error-main) !important', color: 'var(--mui-palette-error-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorWarning': { backgroundColor: 'var(--mui-palette-warning-main) !important', color: 'var(--mui-palette-warning-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorInfo': { backgroundColor: 'var(--mui-palette-info-main) !important', color: 'var(--mui-palette-info-contrastText) !important', border: 'none !important' }
     }),
 
     // One Dark Theme (Atom/VS Code)
@@ -1231,10 +1233,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentText: '--onedark-bg',
         hover: '--onedark-hover'
       }),
-      '.MuiChip-colorSuccess': { color: 'var(--onedark-green) !important', border: '1px solid var(--onedark-green) !important' },
-      '.MuiChip-colorError': { color: 'var(--onedark-red) !important', border: '1px solid var(--onedark-red) !important' },
-      '.MuiChip-colorWarning': { color: 'var(--onedark-yellow) !important', border: '1px solid var(--onedark-yellow) !important' },
-      '.MuiChip-colorInfo': { color: 'var(--onedark-cyan) !important', border: '1px solid var(--onedark-cyan) !important' }
+      // #538 : badges pleins (couleurs sémantiques par défaut), lisibles en clair comme en sombre
+      '.MuiChip-colorSuccess': { backgroundColor: 'var(--mui-palette-success-main) !important', color: 'var(--mui-palette-success-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorError': { backgroundColor: 'var(--mui-palette-error-main) !important', color: 'var(--mui-palette-error-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorWarning': { backgroundColor: 'var(--mui-palette-warning-main) !important', color: 'var(--mui-palette-warning-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorInfo': { backgroundColor: 'var(--mui-palette-info-main) !important', color: 'var(--mui-palette-info-contrastText) !important', border: 'none !important' }
     }),
 
     // Glassmorphism Theme - special glass effects on sidebar too
@@ -1396,10 +1399,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentHover: '--corp-accent-hover',
         hover: '--corp-hover'
       }),
-      '.MuiChip-colorSuccess': { color: 'var(--corp-success) !important' },
-      '.MuiChip-colorError': { color: 'var(--corp-error) !important' },
-      '.MuiChip-colorWarning': { color: 'var(--corp-warning) !important' },
-      '.MuiChip-colorInfo': { color: 'var(--corp-info) !important' },
+      // #538 : badges pleins (couleurs sémantiques par défaut), lisibles en clair comme en sombre
+      '.MuiChip-colorSuccess': { backgroundColor: 'var(--mui-palette-success-main) !important', color: 'var(--mui-palette-success-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorError': { backgroundColor: 'var(--mui-palette-error-main) !important', color: 'var(--mui-palette-error-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorWarning': { backgroundColor: 'var(--mui-palette-warning-main) !important', color: 'var(--mui-palette-warning-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorInfo': { backgroundColor: 'var(--mui-palette-info-main) !important', color: 'var(--mui-palette-info-contrastText) !important', border: 'none !important' },
       '.MuiButton-containedPrimary': {
         backgroundColor: 'var(--corp-accent) !important',
         color: '#ffffff !important',
@@ -1460,10 +1464,11 @@ const getGlobalThemeStyles = (globalTheme, mode, customBorderRadius, blurIntensi
         accentHover: '--round-accent-hover',
         hover: '--round-hover'
       }),
-      '.MuiChip-colorSuccess': { color: 'var(--round-success) !important' },
-      '.MuiChip-colorError': { color: 'var(--round-error) !important' },
-      '.MuiChip-colorWarning': { color: 'var(--round-warning) !important' },
-      '.MuiChip-colorInfo': { color: 'var(--round-info) !important' },
+      // #538 : badges pleins (couleurs sémantiques par défaut), lisibles en clair comme en sombre
+      '.MuiChip-colorSuccess': { backgroundColor: 'var(--mui-palette-success-main) !important', color: 'var(--mui-palette-success-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorError': { backgroundColor: 'var(--mui-palette-error-main) !important', color: 'var(--mui-palette-error-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorWarning': { backgroundColor: 'var(--mui-palette-warning-main) !important', color: 'var(--mui-palette-warning-contrastText) !important', border: 'none !important' },
+      '.MuiChip-colorInfo': { backgroundColor: 'var(--mui-palette-info-main) !important', color: 'var(--mui-palette-info-contrastText) !important', border: 'none !important' },
       '.MuiButton-containedPrimary': {
         backgroundColor: 'var(--round-accent) !important',
         color: 'var(--round-bg) !important',

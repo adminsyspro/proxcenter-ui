@@ -4525,7 +4525,7 @@
     "cloneTitle": "克隆 VM {vmName}（{vmid}）",
     "vmIdRequired": "需要 VM ID",
     "vmIdPlaceholder": "输入或生成 VM ID",
-    "generateVmId": "生成随机可用 ID",
+    "generateVmId": "生成下一个可用 ID",
     "vmIdTooLarge": "VM ID 过大",
     "optional": "（可选）",
     "none": "（无）",

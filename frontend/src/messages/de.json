@@ -4522,7 +4522,7 @@
     "cloneTitle": "VM {vmName} ({vmid}) klonen",
     "vmIdRequired": "VM ID erforderlich",
     "vmIdPlaceholder": "VM-ID eingeben oder generieren",
-    "generateVmId": "Generate random verfügbar ID",
+    "generateVmId": "Generate next verfügbar ID",
     "vmIdTooLarge": "VM-ID zu groß",
     "optional": "(optional)",
     "none": "(Keine)",

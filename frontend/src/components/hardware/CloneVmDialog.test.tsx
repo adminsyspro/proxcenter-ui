@@ -8,9 +8,10 @@
  *
  * Provider view (isFullClusterView=true, our default mock):
  *   isProviderTenant=true => full grid form (node/storage/VMID/pool).
- *   The VMID field starts empty; user fills it manually (dice or type).
- *   The /cluster/nextid effect fires ONLY for tenant (isProviderTenant=false),
- *   so it is seeded for completeness but does not prefill the field here.
+ *   The VMID field is pre-filled with the cluster's next free id on open
+ *   (/cluster/nextid, mirroring the "New VM" screen — see #543); a "next id"
+ *   button re-fetches it. A manual edit sets a flag so the async prefill never
+ *   clobbers what the user typed.
  *
  * Not covered here:
  *   - Clone-from-snapshot Select (snapshot endpoint returns empty list so the
@@ -98,8 +99,8 @@ function seedAllHandlers() {
       HttpResponse.json({ data: { snapshots: [] } }),
     ),
 
-    // 5. Cluster next available VMID (fetched by tenant path only; seeded for
-    //    completeness so MSW does not raise an unhandled-request error)
+    // 5. Cluster next available VMID (fetched on open in both views to prefill
+    //    the field, and again when the "next id" button is clicked)
     http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
       HttpResponse.json({ data: NEXT_VMID }),
     ),
@@ -201,11 +202,19 @@ describe('CloneVmDialog - open/closed state', () => {
     expect(screen.queryByText(`Clone VM ${VM_NAME} (${VM_ID})`)).not.toBeInTheDocument()
   })
 
-  it('Clone button is disabled initially because VMID is empty', () => {
+  it('prefills the VMID with the cluster next id on open and enables Clone', async () => {
     renderWithProviders(<CloneVmDialog {...makeProps()} />)
-    // The VMID starts as '' in provider view (not prefilled); button must be disabled
-    const cloneBtn = screen.getByRole('button', { name: /^clone$/i })
-    expect(cloneBtn).toBeDisabled()
+    await waitForDataLoad()
+
+    // Provider view now prefills the VMID field from /cluster/nextid (#543),
+    // instead of leaving it empty for a random dice pick.
+    await waitFor(() => {
+      const input = screen.getAllByRole('spinbutton')[0] as HTMLInputElement
+      expect(input.value).toBe(String(NEXT_VMID))
+    })
+
+    // A valid prefilled id (not in existingVmids) means Clone is enabled.
+    expect(screen.getByRole('button', { name: /^clone$/i })).not.toBeDisabled()
   })
 })
 
@@ -349,6 +358,58 @@ describe('CloneVmDialog - VMID validation', () => {
     })
 
     expect(screen.queryByText(/VM ID must be/i)).not.toBeInTheDocument()
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 3b. Next-available VMID button (#543)
+// ------------------------------------------------------------------ //
+
+describe('CloneVmDialog - next-available VMID button', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  it('re-fetches /cluster/nextid on click and does not clobber a manual edit', async () => {
+    renderWithProviders(<CloneVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    // User types their own id; the async open-prefill must leave it alone.
+    setVmid('200')
+    await waitFor(() => {
+      expect((screen.getAllByRole('spinbutton')[0] as HTMLInputElement).value).toBe('200')
+    })
+
+    // Cluster now reports a different next id; the button pulls the fresh value.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 555 }),
+      ),
+    )
+
+    const refreshIcon = document.querySelector('.ri-refresh-line')
+    expect(refreshIcon).not.toBeNull()
+    fireEvent.click(refreshIcon!.closest('button') as HTMLButtonElement)
+
+    await waitFor(() => {
+      expect((screen.getAllByRole('spinbutton')[0] as HTMLInputElement).value).toBe('555')
+    })
+  })
+
+  it('falls back to the nextVmid prop when /cluster/nextid fails on open', async () => {
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({}, { status: 500 }),
+      ),
+    )
+
+    renderWithProviders(<CloneVmDialog {...makeProps({ nextVmid: 321 })} />)
+    await waitForDataLoad()
+
+    // Endpoint down => the field degrades to the caller's estimate, never blank.
+    await waitFor(() => {
+      expect((screen.getAllByRole('spinbutton')[0] as HTMLInputElement).value).toBe('321')
+    })
   })
 })
 

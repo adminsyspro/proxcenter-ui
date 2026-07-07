@@ -4564,7 +4564,7 @@
     "cloneTitle": "Cloner VM {vmName} ({vmid})",
     "vmIdRequired": "VM ID requis",
     "vmIdPlaceholder": "Entrer ou générer un VM ID",
-    "generateVmId": "Générer un ID aléatoire disponible",
+    "generateVmId": "Générer le prochain ID disponible",
     "vmIdTooLarge": "VM ID trop grand",
     "optional": "(optionnel)",
     "none": "(Aucun)",

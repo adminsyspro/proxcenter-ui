@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -29,7 +29,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
-import { type NodeInfo, calculateNodeScore, formatMemory } from './utils'
+import { type NodeInfo, calculateNodeScore, formatMemory, fetchNextVmid } from './utils'
 import { useTenant } from '@/contexts/TenantContext'
 
 // ==================== CLONE VM DIALOG ====================
@@ -69,6 +69,10 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   // Form fields
   const [targetNode, setTargetNode] = useState(currentNode)
   const [newVmid, setNewVmid] = useState<number | ''>('' )
+  // Once the user types a VMID by hand, the async /cluster/nextid prefill must
+  // not clobber it (the field is visible+editable in the provider view). Reset
+  // on each open.
+  const userEditedVmidRef = useRef(false)
   const [name, setName] = useState('')
   const [targetStorage, setTargetStorage] = useState('')
   const [format, setFormat] = useState('qcow2')
@@ -81,16 +85,14 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   const [snapname, setSnapname] = useState('')
   const [snapshotsLoading, setSnapshotsLoading] = useState(false)
 
-  // Generate a random available VMID
-  const generateRandomVmid = () => {
-    const existing = new Set(existingVmids)
-    let id: number
+  // Suggest the cluster's next free VMID (PVE /cluster/nextid), mirroring the
+  // "New VM" screen. Region-based infras assign VMIDs sequentially, so a random
+  // id (the old behaviour) broke their scheme — see #543. Falls back to the
+  // parent's nextVmid estimate if the endpoint is unavailable.
+  const generateNextVmid = async () => {
+    const id = await fetchNextVmid(connId)
 
-    do {
-      id = Math.floor(Math.random() * (999999 - 100 + 1)) + 100
-    } while (existing.has(id))
-
-    setNewVmid(id)
+    setNewVmid(id ?? (nextVmid || ''))
   }
 
   // Validation du VMID
@@ -248,12 +250,12 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   useEffect(() => {
     if (open) {
       setTargetNode(currentNode)
-      // Tenant: prefill VMID with the cluster's next free id (passed in by
-      // the caller via /cluster/nextid). The form input is hidden so the
-      // user never sees it, but handleClone needs a valid number to send.
-      // Fallback to '' for the provider so the existing UX (dice button)
-      // is unchanged.
-      setNewVmid(isProviderTenant ? '' : (nextVmid || ''))
+      // Seed the VMID with the caller's next-free estimate for both views; the
+      // /cluster/nextid effect below then overrides it with the authoritative
+      // cluster value. Tenants never see the field (auto-picked), providers get
+      // it pre-filled so cloning defaults to a sequential id instead of random.
+      userEditedVmidRef.current = false
+      setNewVmid(nextVmid || '')
       setName('')
       setTargetStorage('')
       setFormat('qcow2')
@@ -262,29 +264,27 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       setSnapname('')
       setError(null)
     }
-  }, [open, currentNode, nextVmid, isProviderTenant])
+  }, [open, currentNode, nextVmid])
 
-  // Tenant: hit /cluster/nextid for a cluster-validated VMID instead of
-  // relying on Math.max(allVms) computed at the parent — that snapshot
-  // can be stale or local-cluster-only and would collide with VMIDs on
-  // another node we never saw. Falls back to the parent's nextVmid if
-  // the API fails (e.g. orchestrator hiccup).
+  // Both views: hit /cluster/nextid for a cluster-validated VMID instead of
+  // relying on Math.max(allVms) computed at the parent — that snapshot can be
+  // stale or local-cluster-only and would collide with VMIDs on another node
+  // we never saw. Falls back to the parent's nextVmid if the API fails (e.g.
+  // orchestrator hiccup).
   useEffect(() => {
-    if (!open || isProviderTenant || !connId) return
+    if (!open || !connId) return
     let cancelled = false
     ;(async () => {
-      try {
-        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/nextid`)
-        const json = await res.json()
-        const id = Number(json?.data) || 0
-        if (!cancelled && id >= 100) setNewVmid(id)
-        else if (!cancelled && nextVmid) setNewVmid(nextVmid)
-      } catch {
-        if (!cancelled && nextVmid) setNewVmid(nextVmid)
-      }
+      const id = await fetchNextVmid(connId)
+
+      // Bail if the dialog closed or the user already typed their own VMID.
+      if (cancelled || userEditedVmidRef.current) return
+      if (id !== null) setNewVmid(id)
+      else if (nextVmid) setNewVmid(nextVmid)
     })()
+
     return () => { cancelled = true }
-  }, [open, isProviderTenant, connId, nextVmid])
+  }, [open, connId, nextVmid])
 
   const getRecommendedNodeLocal = (nodeList: NodeInfo[]): NodeInfo | null => {
     if (nodeList.length === 0) return null
@@ -516,7 +516,7 @@ return currentScore > bestScore ? current : best
             label="VM ID"
             type="number"
             value={newVmid}
-            onChange={(e) => setNewVmid(e.target.value === '' ? '' : (Number.parseInt(e.target.value) || 0))}
+            onChange={(e) => { userEditedVmidRef.current = true; setNewVmid(e.target.value === '' ? '' : (Number.parseInt(e.target.value) || 0)) }}
             inputProps={{ min: 100, max: 999999999 }}
             placeholder={t('hardware.vmIdPlaceholder')}
             required
@@ -526,8 +526,8 @@ return currentScore > bestScore ? current : best
               endAdornment: (
                 <InputAdornment position="end">
                   <Tooltip title={t('hardware.generateVmId')}>
-                    <IconButton size="small" onClick={generateRandomVmid} edge="end">
-                      <i className="ri-dice-line" style={{ fontSize: 18 }} />
+                    <IconButton size="small" onClick={generateNextVmid} edge="end">
+                      <i className="ri-refresh-line" style={{ fontSize: 18 }} />
                     </IconButton>
                   </Tooltip>
                 </InputAdornment>

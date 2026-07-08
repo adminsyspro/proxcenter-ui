@@ -24,7 +24,8 @@ import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
 import { useTenant } from '@/contexts/TenantContext'
-import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
 type VmNetData = {
   vmid: string
@@ -279,6 +280,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
   const [hostBridges, setHostBridges] = useState<HostBridgeItem[]>([])
   const [hostVlans, setHostVlans] = useState<HostVlanItem[]>([])
+  const [sdnVnets, setSdnVnets] = useState<SdnVnetItem[]>([])
   const [vnetAliasesByConn, setVnetAliasesByConn] = useState<Record<string, Record<string, string>>>({})
   // VNet KPIs are computed from the same data VnetsSection fetches; pulling
   // it up here lets the donut row and the list stay in sync without a
@@ -293,11 +295,12 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const ids = connIdsKey.split(',')
     let alive = true
     setLoading(true)
-    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vlans, vnetAliasesByConn }) => {
+    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn }) => {
       if (!alive) return
       setNetworkData(data)
       setHostBridges(bridges)
       setHostVlans(vlans)
+      setSdnVnets(sdnVnets)
       setVnetAliasesByConn(vnetAliasesByConn)
     }).finally(() => {
       if (!alive) return
@@ -355,6 +358,13 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   const summary = useMemo(() => {
     const bridgeMap = new Map<string, { bridge: string; node: string; connName: string; type: string; vmCount: number }>()
     const vlanMap = new Map<number, { vlan: number; vmCount: number; bridges: Set<string>; vms: Array<{ vmid: string; name: string; node: string; status: string; bridge: string }> }>()
+    const sdnByConnVnet = new Map<string, Map<string, SdnVnet>>()
+    for (const v of sdnVnets) {
+      const cid = v.connId || ''
+      if (!sdnByConnVnet.has(cid)) sdnByConnVnet.set(cid, new Map())
+      sdnByConnVnet.get(cid)!.set(v.vnet, v)
+    }
+    const vnetMap = new Map<string, { vnet: SdnVnet; vmCount: number }>() // key: connId + ' ' + vnetId
     let totalVmsWithNetwork = 0
 
     // Seed bridgeMap and vlanMap from host bridges so bridges/VLANs appear
@@ -393,7 +403,16 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
 
     for (const vm of networkData) {
       if (vm.nets.length > 0) totalVmsWithNetwork++
+      const vnetsForConn = sdnByConnVnet.get(vm.connId || '')
       for (const net of vm.nets) {
+        const vnet = net.bridge ? vnetsForConn?.get(net.bridge) : undefined
+        if (vnet) {
+          const key = `${vm.connId || ''} ${vnet.vnet}`
+          const existing = vnetMap.get(key)
+          if (existing) existing.vmCount++
+          else vnetMap.set(key, { vnet, vmCount: 1 })
+          continue // a vnet-backed nic is neither a plain bridge nor a VLAN bucket
+        }
         if (net.bridge) {
           const key = `${vm.connId}:${vm.node}:${net.bridge}`
           const existing = bridgeMap.get(key)
@@ -429,11 +448,13 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     return {
       totalBridges: bridgeMap.size,
       totalVlans: vlanMap.size,
+      totalVnets: vnetMap.size,
       totalVmsWithNetwork,
       vlanBreakdown: [...vlanMap.values()].map(v => ({ ...v, bridges: [...v.bridges] })).sort((a, b) => b.vmCount - a.vmCount),
       bridgeBreakdown: [...bridgeMap.values()],
+      vnetBreakdown: [...vnetMap.entries()].map(([key, v]) => ({ ...v, key })).sort((a, b) => b.vmCount - a.vmCount),
     }
-  }, [networkData, connectionNames, hostBridges, hostVlans])
+  }, [networkData, connectionNames, hostBridges, hostVlans, sdnVnets])
 
   // Flat map of vnet id → alias across all connections (vnet ids are globally unique within a cluster)
   const flatAliases = useMemo(
@@ -444,7 +465,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   // Only block the dashboard with a spinner on the initial load — after
   // that, background refetches keep the existing KPIs / tables visible
   // so the page doesn't flicker on every inventory poll.
-  if (loading && networkData.length === 0 && hostBridges.length === 0 && hostVlans.length === 0) {
+  if (loading && networkData.length === 0 && hostBridges.length === 0 && hostVlans.length === 0 && sdnVnets.length === 0) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
@@ -559,6 +580,42 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       {/* VMs by VLAN */}
       {summary.vlanBreakdown.length > 0 && (
         <VlanVmsList vlans={summary.vlanBreakdown} aliases={flatAliases} />
+      )}
+
+      {/* SDN VNets with attached VMs */}
+      {summary.vnetBreakdown.length > 0 && (
+        <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className="ri-git-branch-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                SDN VNets ({summary.totalVnets})
+              </Typography>
+            </Box>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VNet</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Zone</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Segment</TableCell>
+                    <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VMs</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {summary.vnetBreakdown.map(({ vnet, vmCount, key }) => (
+                    <TableRow key={key}>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{vnet.alias || vnet.vnet}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{vnet.zone || '—'}{vnet.zoneType ? ` (${vnet.zoneType})` : ''}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{sdnSegmentLabel(vnet) || '—'}</Typography></TableCell>
+                      <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{vmCount}</Typography></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </CardContent>
+        </Card>
       )}
 
       {/* Bridge Table — provider/MSP only. vDC tenants don't see / can't act

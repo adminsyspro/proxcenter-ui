@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { buildBridgeVlanMap, extractHostBridges, extractHostVlans, resolveEffectiveTag, type HostBridge, type HostVlan } from "@/lib/proxmox/hostVlanMap"
+import { buildSdnVnets, type SdnVnet } from "@/lib/proxmox/sdnVnetMap"
 
 export const runtime = "nodejs"
 
@@ -96,7 +97,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Get all VMs/CTs from cluster resources
     const allResources = await pveFetch<any[]>(conn, "/cluster/resources?type=vm")
     if (!allResources || !Array.isArray(allResources)) {
-      return NextResponse.json({ data: [], bridges: [], vlans: [], vnetAliases: {} })
+      return NextResponse.json({ data: [], bridges: [], vlans: [], sdnVnets: [], vnetAliases: {} })
     }
 
     // Restrict to the tenant's vDC pool(s) on this connection. Without this,
@@ -121,10 +122,15 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // names instead of raw VNet ids (e.g. "v42fc503"). Fault-tolerant: if SDN is
     // unavailable the map stays empty and raw ids are shown.
     let vnetAliases: Record<string, string> = {}
+    let sdnVnetsRaw: any[] = []
+    let sdnZonesRaw: any[] = []
     if (isProviderScope) {
+      // VNets: drives both the alias map and the new sdnVnets grouping. A failure
+      // here means no SDN grouping at all.
       try {
         const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets")
         if (Array.isArray(vnets)) {
+          sdnVnetsRaw = vnets
           for (const v of vnets) {
             if (
               v &&
@@ -137,8 +143,15 @@ export async function GET(_req: Request, ctx: RouteContext) {
             }
           }
         }
-      } catch { /* SDN unavailable — fall back to raw bridge names */ }
+      } catch { /* SDN unavailable — fall back to raw bridge names, no VNet grouping */ }
+      // Zones: independent — a failure here still leaves VNets usable (zoneType '').
+      try {
+        const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones")
+        if (Array.isArray(zones)) sdnZonesRaw = zones
+      } catch { /* zone metadata unavailable — VNets keep zoneType '' */ }
     }
+    const sdnVnets: SdnVnet[] = isProviderScope ? buildSdnVnets(sdnVnetsRaw, sdnZonesRaw) : []
+    const sdnVnetIds = new Set(sdnVnets.map((v) => v.vnet))
 
     // For provider scope, enumerate ALL cluster nodes so host bridges are surfaced
     // even when no VMs exist on them. For tenant scope, only visit nodes that
@@ -190,7 +203,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (isProviderScope) {
       for (const [node, ifaces] of hostBridgesIfacesByNode) {
         const map = bridgeVlanByNode.get(node) ?? new Map<string, number>()
-        hostBridges.push(...extractHostBridges(node, ifaces, map))
+        // Drop interfaces that are actually SDN VNets so a VNet is not listed
+        // both as a bridge leaf and as a VNet bucket (only relevant when
+        // `sdn apply` materialized the VNet as a node bridge).
+        hostBridges.push(...extractHostBridges(node, ifaces, map).filter((b) => !sdnVnetIds.has(b.iface)))
         hostVlans.push(...extractHostVlans(node, ifaces))
       }
     }
@@ -247,7 +263,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       }
     }
 
-    return NextResponse.json({ data: results, bridges: isProviderScope ? hostBridges : [], vlans: isProviderScope ? hostVlans : [], vnetAliases })
+    return NextResponse.json({ data: results, bridges: isProviderScope ? hostBridges : [], vlans: isProviderScope ? hostVlans : [], sdnVnets, vnetAliases })
   } catch (e: any) {
     console.error("[networks] Error:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

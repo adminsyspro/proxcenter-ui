@@ -3,8 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
+import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
@@ -85,6 +86,7 @@ export type InventorySelection =
   | { type: 'net-conn'; id: string }
   | { type: 'net-node'; id: string }
   | { type: 'net-vlan'; id: string }
+  | { type: 'net-vnet'; id: string } // SDN VNet: id = `connId:node:vnetId`
   | { type: 'net-bridge'; id: string } // host bridge: id = `connId:node:iface:tag`
   /** Tenant-only: SDN VNet selected from the Network tree.
    *  id = `tvnet:<vdcId>:<displayName>` */
@@ -423,7 +425,7 @@ function selectionFromItemId(itemId: string): InventorySelection | null {
     return { type: type as any, id } as InventorySelection
   }
 
-  if (type === 'net-conn' || type === 'net-node' || type === 'net-vlan' || type === 'storage-cluster' || type === 'storage-node') {
+  if (type === 'net-conn' || type === 'net-node' || type === 'net-vlan' || type === 'net-vnet' || type === 'storage-cluster' || type === 'storage-node') {
     return { type: type as any, id } as InventorySelection
   }
 
@@ -2249,6 +2251,7 @@ return favorites.has(vmKey)
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
   const [networkBridges, setNetworkBridges] = useState<HostBridgeItem[]>([])
   const [networkVlans, setNetworkVlans] = useState<HostVlanItem[]>([])
+  const [networkSdnVnets, setNetworkSdnVnets] = useState<SdnVnetItem[]>([])
   const [networkVnetAliases, setNetworkVnetAliases] = useState<Record<string, Record<string, string>>>({})
   const [networkLoading, setNetworkLoading] = useState(false)
   const [networkFailedConnIds, setNetworkFailedConnIds] = useState<string[]>([])
@@ -2281,7 +2284,7 @@ return favorites.has(vmKey)
       return next
     })
   }, [])
-  const networkCacheRef = useRef<{ connIds: string; data: VmNetData[]; bridges: HostBridgeItem[]; vlans: HostVlanItem[]; vnetAliasesByConn: Record<string, Record<string, string>> } | null>(null)
+  const networkCacheRef = useRef<{ connIds: string; data: VmNetData[]; bridges: HostBridgeItem[]; vlans: HostVlanItem[]; sdnVnets: SdnVnetItem[]; vnetAliasesByConn: Record<string, Record<string, string>> } | null>(null)
 
   // Fetch the tenant's VNets (display + subnet info) — only meaningful for
   // non-provider tenants. Provider keeps the legacy bridge/VLAN walk.
@@ -2327,20 +2330,22 @@ return favorites.has(vmKey)
       setNetworkData(networkCacheRef.current.data)
       setNetworkBridges(networkCacheRef.current.bridges)
       setNetworkVlans(networkCacheRef.current.vlans)
+      setNetworkSdnVnets(networkCacheRef.current.sdnVnets)
       setNetworkVnetAliases(networkCacheRef.current.vnetAliasesByConn)
       return
     }
     setNetworkLoading(true)
-    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, vnetAliasesByConn, failedConnIds }) => {
+    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, sdnVnets, vnetAliasesByConn, failedConnIds }) => {
       setNetworkData(data)
       setNetworkBridges(bridges)
       setNetworkVlans(vlans)
+      setNetworkSdnVnets(sdnVnets)
       setNetworkVnetAliases(vnetAliasesByConn)
       setNetworkLoading(false)
       setNetworkFailedConnIds(failedConnIds)
       // Only cache when all connections succeeded so re-opening retries any partial failure
       if (failedConnIds.length === 0) {
-        networkCacheRef.current = { connIds: cacheKey, data, bridges, vlans, vnetAliasesByConn }
+        networkCacheRef.current = { connIds: cacheKey, data, bridges, vlans, sdnVnets, vnetAliasesByConn }
       } else {
         // Allow the next expand to re-fetch
         networkFetchedRef.current = false
@@ -2386,7 +2391,7 @@ return favorites.has(vmKey)
   // buckets are seeded from both guest NIC tags and host VLAN sub-interfaces so
   // VLANs with no attached VM still appear, mirroring empty bridges (issue #542).
   const networkTree = useMemo(() => {
-    if (!networkData.length && !networkBridges.length && !networkVlans.length) return []
+    if (!networkData.length && !networkBridges.length && !networkVlans.length && !networkSdnVnets.length) return []
 
     type BucketEntry = { vm: VmNetData; netId: string; bridge: string }
     type Bucket = { tag: number | 'untagged'; entries: BucketEntry[] }
@@ -2403,12 +2408,37 @@ return favorites.has(vmKey)
       return vlanMap.get(tag)!
     }
 
+    type VnetBucket = { vnet: SdnVnet; entries: BucketEntry[] }
+    // connId -> node -> vnetId -> bucket
+    const vnetConnMap = new Map<string, Map<string, Map<string, VnetBucket>>>()
+    // connId -> vnetId -> SdnVnet  (per-connection: a plain bridge on conn B must
+    // not match a vnet id from conn A)
+    const sdnByConnVnet = new Map<string, Map<string, SdnVnet>>()
+    for (const v of networkSdnVnets) {
+      const cid = v.connId || 'unknown'
+      if (!sdnByConnVnet.has(cid)) sdnByConnVnet.set(cid, new Map())
+      sdnByConnVnet.get(cid)!.set(v.vnet, v)
+    }
+    const ensureVnetBucket = (cid: string, node: string, vnet: SdnVnet): VnetBucket => {
+      if (!vnetConnMap.has(cid)) vnetConnMap.set(cid, new Map())
+      const nodeMap = vnetConnMap.get(cid)!
+      if (!nodeMap.has(node)) nodeMap.set(node, new Map())
+      const byVnet = nodeMap.get(node)!
+      if (!byVnet.has(vnet.vnet)) byVnet.set(vnet.vnet, { vnet, entries: [] })
+      return byVnet.get(vnet.vnet)!
+    }
+
     for (const vm of networkData) {
       const cid = vm.connId || 'unknown'
+      const vnetsForConn = sdnByConnVnet.get(cid)
       for (const net of vm.nets) {
-        const tag = net.tag ?? 'untagged'
-        const bucket = ensureVmBucket(cid, vm.node, tag)
-        bucket.entries.push({ vm, netId: net.id, bridge: net.bridge })
+        const vnet = vnetsForConn?.get(net.bridge)
+        if (vnet) {
+          ensureVnetBucket(cid, vm.node, vnet).entries.push({ vm, netId: net.id, bridge: net.bridge })
+        } else {
+          const tag = net.tag ?? 'untagged'
+          ensureVmBucket(cid, vm.node, tag).entries.push({ vm, netId: net.id, bridge: net.bridge })
+        }
       }
     }
 
@@ -2430,14 +2460,15 @@ return favorites.has(vmKey)
     }
 
     // Union of all connIds from VMs and bridges
-    const allConnIds = new Set([...vmConnMap.keys(), ...bridgeNodeMap.keys()])
+    const allConnIds = new Set([...vmConnMap.keys(), ...bridgeNodeMap.keys(), ...vnetConnMap.keys()])
 
     return Array.from(allConnIds).map(connId => {
       const connName = clusters.find(c => c.connId === connId)?.name || connId
       // Union of nodes from VM map and bridge map
       const vmNodeMap = vmConnMap.get(connId) ?? new Map<string, Map<number | 'untagged', Bucket>>()
       const bridgesByNode = bridgeNodeMap.get(connId) ?? new Map<string, HostBridgeItem[]>()
-      const allNodes = new Set([...vmNodeMap.keys(), ...bridgesByNode.keys()])
+      const vnetsByNode = vnetConnMap.get(connId) ?? new Map<string, Map<string, VnetBucket>>()
+      const allNodes = new Set([...vmNodeMap.keys(), ...bridgesByNode.keys(), ...vnetsByNode.keys()])
 
       const nodes = Array.from(allNodes)
         .sort((a, b) => a.localeCompare(b))
@@ -2456,12 +2487,17 @@ return favorites.has(vmKey)
             }))
           const taggedVlans = vlans.filter(v => v.tag !== 'untagged').length
           const totalVms = vlans.reduce((sum, v) => sum + v.entries.length, 0)
+          const vnets = Array.from((vnetsByNode.get(node) ?? new Map<string, VnetBucket>()).values())
+            .map((b) => ({ ...b, entries: b.entries.slice().sort((a, z) => a.vm.name.localeCompare(z.vm.name)) }))
+            .sort((a, b) => (a.vnet.alias || a.vnet.vnet).localeCompare(b.vnet.alias || b.vnet.vnet))
           const totalBridges = nodeBridges.length
-          return { node, bridges: nodeBridges, vlans, totalVlans: taggedVlans, totalVms, totalBridges }
+          const totalVnets = vnets.length
+          const vnetVms = vnets.reduce((sum, v) => sum + v.entries.length, 0)
+          return { node, bridges: nodeBridges, vlans, vnets, totalVlans: taggedVlans, totalVms: totalVms + vnetVms, totalBridges, totalVnets }
         })
       return { connId, connName, nodes }
     }).sort((a, b) => a.connName.localeCompare(b.connName))
-  }, [networkData, networkBridges, networkVlans, clusters])
+  }, [networkData, networkBridges, networkVlans, networkSdnVnets, clusters])
 
   // Expand all network tree items helper
   const expandNetworkOnLoadRef = useRef(false)
@@ -2469,9 +2505,10 @@ return favorites.has(vmKey)
     const items: string[] = []
     networkTree.forEach(({ connId, nodes }) => {
       items.push(`net-conn:${connId}`)
-      nodes.forEach(({ node, vlans }) => {
+      nodes.forEach(({ node, vlans, vnets }) => {
         items.push(`net-node:${connId}:${node}`)
         vlans.forEach(({ tag }) => items.push(`net-vlan:${connId}:${node}:${tag}`))
+        vnets.forEach(({ vnet }) => items.push(`net-vnet:${connId}:${node}:${vnet.vnet}`))
       })
     })
     setNetworkTreeExpandedItems(items)
@@ -3796,6 +3833,11 @@ return (
                 ]).size} VLANs)
               </Typography>
             )}
+            {isFullClusterView && networkSdnVnets.length > 0 && (
+              <Typography variant="caption" sx={{ opacity: 0.5 }}>
+                ({new Set(networkSdnVnets.map(v => v.vnet)).size} VNets)
+              </Typography>
+            )}
             {!isFullClusterView && tenantVnets.length > 0 && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
                 ({tenantVnets.length} VNet{tenantVnets.length > 1 ? 's' : ''})
@@ -3896,11 +3938,12 @@ return (
                     </Box>
                   }
                 >
-                  {nodes.map(({ node, bridges: nodeBridges, vlans, totalVlans, totalVms, totalBridges }) => {
+                  {nodes.map(({ node, bridges: nodeBridges, vlans, vnets, totalVlans, totalVms, totalBridges, totalVnets }) => {
                     const nodeStatus = clusters.find(c => c.connId === cId)?.nodes.find(n => n.node === node)?.status
                     const nodeCountLabel = [
                       totalBridges > 0 ? `${totalBridges} bridge${totalBridges > 1 ? 's' : ''}` : '',
                       totalVlans > 0 ? `${totalVlans} VLAN${totalVlans > 1 ? 's' : ''}` : '',
+                      totalVnets > 0 ? `${totalVnets} VNet${totalVnets > 1 ? 's' : ''}` : '',
                       totalVms > 0 ? `${totalVms} VM${totalVms > 1 ? 's' : ''}` : '',
                     ].filter(Boolean).join(', ')
                     return (
@@ -3968,6 +4011,42 @@ return (
                           })}
                         </TreeItem>
                       ))}
+                      {vnets.map(({ vnet, entries }) => {
+                        const seg = sdnSegmentLabel(vnet)
+                        return (
+                        <TreeItem
+                          key={`net-vnet:${cId}:${node}:${vnet.vnet}`}
+                          itemId={`net-vnet:${cId}:${node}:${vnet.vnet}`}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <i className="ri-git-branch-line" style={{ fontSize: 14, opacity: 0.5 }} />
+                              <span style={{ fontSize: 13 }}>{vnet.alias || vnet.vnet}</span>
+                              {seg && <span style={{ opacity: 0.55, fontSize: 11 }}>{seg}</span>}
+                              <span style={{ opacity: 0.4, fontSize: 11 }}>({entries.length})</span>
+                            </Box>
+                          }
+                        >
+                          {entries.map(({ vm, netId, bridge }) => {
+                            const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
+                            return (
+                              <TreeItem
+                                key={`${vmKey}-${netId}-${vnet.vnet}`}
+                                itemId={`vm:${vmKey}:${netId}:${vnet.vnet}`}
+                                label={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                    <StatusIcon status={vm.status} type="vm" vmType={vm.type} />
+                                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {vm.name}
+                                    </Typography>
+                                    <span style={{ opacity: 0.4, fontSize: 11 }}>{vm.vmid}</span>
+                                    <span style={{ opacity: 0.4, fontSize: 10 }}>{bridgeLabel(networkVnetAliases[cId], bridge)}</span>
+                                  </Box>
+                                }
+                              />
+                            )
+                          })}
+                        </TreeItem>
+                      )})}
                     </TreeItem>
                   )})}
                 </TreeItem>

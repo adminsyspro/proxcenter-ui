@@ -337,4 +337,31 @@ describe('fetchConnectionsNetworks', () => {
     expect(Object.keys(result.vnetAliasesByConn)).toEqual(['good-conn'])
     expect(result.failedConnIds).toContain('bad-conn')
   })
+
+  it('threads sdnVnets from route response, tagging each with connId', async () => {
+    const fetchImpl = makeOkFetch({
+      conn1: { data: [], sdnVnets: [{ vnet: 'v42fc503', alias: 'lan', zone: 'z', zoneType: 'vxlan', tag: 10000 }] } as any,
+      conn2: { data: [], sdnVnets: [{ vnet: 'vaaa', zone: 'z2', zoneType: 'vlan', tag: 30 }] } as any,
+    })
+    const result = await fetchConnectionsNetworks(['conn1', 'conn2'], { retries: 0, retryDelayMs: 0, fetchImpl: fetchImpl as any })
+    expect(result.sdnVnets).toHaveLength(2)
+    expect(result.sdnVnets.every((v) => typeof v.connId === 'string')).toBe(true)
+    expect(result.sdnVnets.find((v) => v.vnet === 'v42fc503')?.connId).toBe('conn1')
+    expect(result.sdnVnets.find((v) => v.vnet === 'vaaa')?.connId).toBe('conn2')
+  })
+
+  it('returns sdnVnets: [] when the route omits the field (back-compat) and for empty input', async () => {
+    const r1 = await fetchConnectionsNetworks(['conn1'], { retries: 0, retryDelayMs: 0, fetchImpl: makeOkFetch({ conn1: { data: [] } }) as any })
+    expect(r1.sdnVnets).toEqual([])
+    const r2 = await fetchConnectionsNetworks([], { retries: 0, retryDelayMs: 0, fetchImpl: vi.fn() as any })
+    expect(r2.sdnVnets).toEqual([])
+  })
+
+  it('contributes no sdnVnets from a failed connection', async () => {
+    const fetchImpl = makeFailFetch('bad', { good: { data: [], sdnVnets: [{ vnet: 'v1', zone: 'z', zoneType: 'vxlan', tag: 5 }] } as any })
+    const result = await fetchConnectionsNetworks(['good', 'bad'], { retries: 0, retryDelayMs: 0, fetchImpl: fetchImpl as any })
+    expect(result.failedConnIds).toEqual(['bad'])
+    expect(result.sdnVnets).toHaveLength(1)
+    expect(result.sdnVnets[0].connId).toBe('good')
+  })
 })

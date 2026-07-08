@@ -200,6 +200,80 @@ describe('fetchConnectionsNetworks', () => {
     expect(result.bridges).toEqual([])
   })
 
+  it('threads vlans from route response, tagging each with connId (#542)', async () => {
+    const fetchImpl = makeOkFetch({
+      conn1: {
+        data: [],
+        vlans: [
+          { node: 'pve1', iface: 'vmbr0.10', tag: 10 },
+          { node: 'pve1', iface: 'vmbr0.20', tag: 20 },
+        ],
+      } as any,
+      conn2: {
+        data: [],
+        vlans: [
+          { node: 'pve2', iface: 'bond0.7', tag: 7 },
+        ],
+      } as any,
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1', 'conn2'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.vlans).toHaveLength(3)
+    expect(result.vlans.every((v) => typeof v.connId === 'string')).toBe(true)
+    expect(result.vlans.filter((v) => v.connId === 'conn1').map((v) => v.tag)).toEqual([10, 20])
+    const conn2Vlans = result.vlans.filter((v) => v.connId === 'conn2')
+    expect(conn2Vlans).toHaveLength(1)
+    expect(conn2Vlans[0].node).toBe('pve2')
+  })
+
+  it('contributes no vlans from a failed connection', async () => {
+    const fetchImpl = makeFailFetch('bad-conn', {
+      'good-conn': {
+        data: [],
+        vlans: [{ node: 'pve1', iface: 'vmbr0.10', tag: 10 }],
+      } as any,
+    })
+
+    const result = await fetchConnectionsNetworks(['good-conn', 'bad-conn'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.failedConnIds).toEqual(['bad-conn'])
+    expect(result.vlans).toHaveLength(1)
+    expect(result.vlans[0].connId).toBe('good-conn')
+  })
+
+  it('returns vlans: [] when the route response has no vlans field (backward compat)', async () => {
+    const fetchImpl = makeOkFetch({
+      conn1: { data: [] },
+    })
+
+    const result = await fetchConnectionsNetworks(['conn1'], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: fetchImpl as any,
+    })
+
+    expect(result.vlans).toEqual([])
+  })
+
+  it('returns vlans: [] immediately for empty connIds input', async () => {
+    const result = await fetchConnectionsNetworks([], {
+      retries: 0,
+      retryDelayMs: 0,
+      fetchImpl: vi.fn() as any,
+    })
+
+    expect(result.vlans).toEqual([])
+  })
+
   it('collects vnetAliases per connection into vnetAliasesByConn', async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       const match = /\/connections\/([^/]+)\/networks/.exec(url)

@@ -229,6 +229,86 @@ describe('GET /api/v1/connections/[id]/networks — host bridges', () => {
   })
 })
 
+describe('GET /api/v1/connections/[id]/networks — host VLANs (#542)', () => {
+  // VLAN-aware-bridge layout: many VLAN sub-interfaces over few bridges, and
+  // none of the VLANs has an attached VM. Previously none would surface.
+  const NODE_NETWORK = [
+    { iface: 'bond0', type: 'bond' },
+    { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+    { iface: 'vmbr0.10', type: 'vlan' },
+    { iface: 'vmbr0.20', type: 'vlan' },
+    { iface: 'vmbr0.30', type: 'vlan' },
+  ]
+
+  it('returns host VLANs even when no VM is attached (provider scope)', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      if (path === '/cluster/sdn/vnets') return []
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const res = await callRoute(await importGET(), { params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+
+    expect(body.data).toEqual([])
+    expect(Array.isArray(body.vlans)).toBe(true)
+    expect(body.vlans.map((v: any) => v.tag)).toEqual([10, 20, 30])
+    expect(body.vlans.every((v: any) => v.node === 'pve1')).toBe(true)
+  })
+
+  it('surfaces VLANs across every node in the cluster', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }, { node: 'pve2' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      if (path === '/nodes/pve2/network') return NODE_NETWORK
+      if (path === '/cluster/sdn/vnets') return []
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const body = await readJson<any>(await callRoute(await importGET(), { params: { id: 'c1' } }))
+    const nodes = [...new Set(body.vlans.map((v: any) => v.node))]
+    expect(nodes).toContain('pve1')
+    expect(nodes).toContain('pve2')
+  })
+
+  it('returns empty data/bridges/vlans when the VM resource list is unavailable', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return null
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue(null)
+
+    const res = await callRoute(await importGET(), { params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body).toEqual({ data: [], bridges: [], vlans: [], vnetAliases: {} })
+  })
+
+  it('returns vlans: [] for tenant (vDC) scope even when host VLANs exist', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      if (path === '/cluster/resources?type=node') return [{ node: 'pve1' }]
+      if (path === '/nodes/pve1/network') return NODE_NETWORK
+      throw new Error(`unexpected pveFetch path: ${path}`)
+    })
+    getVdcScopeMock.mockResolvedValue({
+      connectionIds: new Set(['c1']),
+      poolsByConnection: new Map([['c1', new Set(['pool1'])]]),
+      vdcIds: new Set(),
+      vdcNames: new Set(),
+    })
+
+    const body = await readJson<any>(await callRoute(await importGET(), { params: { id: 'c1' } }))
+    expect(body.vlans).toEqual([])
+  })
+})
+
 describe('GET /api/v1/connections/[id]/networks — vnetAliases', () => {
   const NODE_NETWORK = [
     { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },

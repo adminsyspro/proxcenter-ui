@@ -6,6 +6,7 @@ import {
   resolveEffectiveTag,
   foldEffectiveVlanTags,
   extractHostBridges,
+  extractHostVlans,
   bridgeLabel,
   type HostNetIface,
 } from './hostVlanMap'
@@ -282,6 +283,108 @@ describe('extractHostBridges', () => {
     ]
     const result = extractHostBridges('pve1', ifaces, new Map())
     expect(result.map((b) => b.iface)).toEqual(['vmbr0'])
+  })
+})
+
+describe('extractHostVlans', () => {
+  it('extracts VLAN sub-interfaces with ids parsed from bondX.N names', () => {
+    // DRO34 layout: one bond sub-interface per VLAN. All must surface even
+    // though no guest is attached (issue #542).
+    const result = extractHostVlans('pve1', DRO34_IFACES)
+    expect(result.map((v) => v.tag)).toEqual([5, 7, 10])
+    expect(result.map((v) => v.iface)).toEqual(['bond0.5', 'bond1.7', 'bond0.10'])
+  })
+
+  it('excludes non-VLAN interfaces (bonds, bridges, physical NICs)', () => {
+    const result = extractHostVlans('pve1', DRO34_IFACES)
+    const ifaces = result.map((v) => v.iface)
+    expect(ifaces).not.toContain('bond0')
+    expect(ifaces).not.toContain('vmbr0V5')
+  })
+
+  it('resolves the VLAN id from an explicit vlan-id field over the name', () => {
+    const result = extractHostVlans('pve1', [
+      { iface: 'vlanA', type: 'vlan', 'vlan-id': 42, 'vlan-raw-device': 'bond0' },
+    ])
+    expect(result).toHaveLength(1)
+    expect(result[0].tag).toBe(42)
+    expect(result[0].iface).toBe('vlanA')
+  })
+
+  it('surfaces VLANs riding a vmbrX.N sub-interface (vlan-aware-bridge layout)', () => {
+    // Many VLANs over few bridges: the topology in issue #542.
+    const ifaces: HostNetIface[] = [
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0', bridge_vlan_aware: 1 },
+      { iface: 'vmbr0.10', type: 'vlan' },
+      { iface: 'vmbr0.20', type: 'vlan' },
+      { iface: 'vmbr0.30', type: 'vlan' },
+    ]
+    const result = extractHostVlans('pve1', ifaces)
+    expect(result.map((v) => v.tag)).toEqual([10, 20, 30])
+  })
+
+  it('de-duplicates by VLAN id, keeping the first interface seen', () => {
+    // Same VLAN over two uplinks collapses to a single VLAN entry.
+    const ifaces: HostNetIface[] = [
+      { iface: 'bond0.10', type: 'vlan' },
+      { iface: 'bond1.10', type: 'vlan' },
+    ]
+    const result = extractHostVlans('pve1', ifaces)
+    expect(result).toHaveLength(1)
+    expect(result[0].tag).toBe(10)
+    expect(result[0].iface).toBe('bond0.10')
+  })
+
+  it('skips VLAN interfaces whose id cannot be resolved', () => {
+    const result = extractHostVlans('pve1', [
+      { iface: 'opaqueVlan', type: 'vlan' },
+    ])
+    expect(result).toEqual([])
+  })
+
+  it('stamps the node and carries active/autostart/cidr', () => {
+    const result = extractHostVlans('mynode', [
+      { iface: 'bond0.10', type: 'vlan', active: 1, autostart: 1, cidr: '10.0.10.1/24' },
+    ])
+    expect(result[0]).toMatchObject({
+      node: 'mynode',
+      iface: 'bond0.10',
+      tag: 10,
+      active: true,
+      autostart: true,
+      cidr: '10.0.10.1/24',
+    })
+  })
+
+  it('omits cidr when absent and defaults active/autostart to false', () => {
+    const result = extractHostVlans('pve1', [{ iface: 'bond0.10', type: 'vlan' }])
+    expect(result[0].cidr).toBeUndefined()
+    expect(result[0].active).toBe(false)
+    expect(result[0].autostart).toBe(false)
+  })
+
+  it('sorts results by VLAN id ascending', () => {
+    const result = extractHostVlans('pve1', [
+      { iface: 'bond0.30', type: 'vlan' },
+      { iface: 'bond0.5', type: 'vlan' },
+      { iface: 'bond0.100', type: 'vlan' },
+    ])
+    expect(result.map((v) => v.tag)).toEqual([5, 30, 100])
+  })
+
+  it('returns an empty array for empty or non-array input', () => {
+    expect(extractHostVlans('pve1', [])).toEqual([])
+    expect(extractHostVlans('pve1', undefined as unknown as HostNetIface[])).toEqual([])
+  })
+
+  it('skips entries without a string iface field', () => {
+    const ifaces: HostNetIface[] = [
+      null as unknown as HostNetIface,
+      { iface: 42 as unknown as string, type: 'vlan' },
+      { iface: 'bond0.10', type: 'vlan' },
+    ]
+    const result = extractHostVlans('pve1', ifaces)
+    expect(result.map((v) => v.iface)).toEqual(['bond0.10'])
   })
 })
 

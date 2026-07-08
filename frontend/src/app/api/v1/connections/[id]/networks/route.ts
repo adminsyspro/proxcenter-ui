@@ -5,7 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
-import { buildBridgeVlanMap, extractHostBridges, resolveEffectiveTag, type HostBridge } from "@/lib/proxmox/hostVlanMap"
+import { buildBridgeVlanMap, extractHostBridges, extractHostVlans, resolveEffectiveTag, type HostBridge, type HostVlan } from "@/lib/proxmox/hostVlanMap"
 
 export const runtime = "nodejs"
 
@@ -96,7 +96,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     // Get all VMs/CTs from cluster resources
     const allResources = await pveFetch<any[]>(conn, "/cluster/resources?type=vm")
     if (!allResources || !Array.isArray(allResources)) {
-      return NextResponse.json({ data: [], bridges: [], vnetAliases: {} })
+      return NextResponse.json({ data: [], bridges: [], vlans: [], vnetAliases: {} })
     }
 
     // Restrict to the tenant's vDC pool(s) on this connection. Without this,
@@ -181,12 +181,17 @@ export async function GET(_req: Request, ctx: RouteContext) {
       })
     )
 
-    // Collect host bridges for provider scope
+    // Collect host bridges and host VLAN sub-interfaces for provider scope, so
+    // both surface in the inventory Network view even when no VM is attached.
+    // VLANs previously only came from guest NIC tags, so empty VLANs never
+    // appeared while empty bridges did (issue #542).
     const hostBridges: HostBridge[] = []
+    const hostVlans: HostVlan[] = []
     if (isProviderScope) {
       for (const [node, ifaces] of hostBridgesIfacesByNode) {
         const map = bridgeVlanByNode.get(node) ?? new Map<string, number>()
         hostBridges.push(...extractHostBridges(node, ifaces, map))
+        hostVlans.push(...extractHostVlans(node, ifaces))
       }
     }
 
@@ -242,7 +247,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       }
     }
 
-    return NextResponse.json({ data: results, bridges: isProviderScope ? hostBridges : [], vnetAliases })
+    return NextResponse.json({ data: results, bridges: isProviderScope ? hostBridges : [], vlans: isProviderScope ? hostVlans : [], vnetAliases })
   } catch (e: any) {
     console.error("[networks] Error:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

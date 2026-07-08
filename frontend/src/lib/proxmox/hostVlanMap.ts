@@ -186,3 +186,54 @@ export function extractHostBridges(
   bridges.sort((a, b) => a.iface.localeCompare(b.iface))
   return bridges
 }
+
+/**
+ * A host-level VLAN sub-interface as reported by `/nodes/{node}/network`
+ * (type `vlan`, e.g. `bond0.10`, `vmbr0.10` or `eno1.100`), with its resolved
+ * VLAN id.
+ */
+export type HostVlan = {
+  node: string
+  iface: string
+  tag: number
+  active?: boolean
+  autostart?: boolean
+  cidr?: string
+}
+
+/**
+ * Extract all host VLAN sub-interfaces from a node's network config.
+ *
+ * Includes only `type === 'vlan'` entries whose VLAN id resolves (an explicit
+ * `vlan-id` field, else a `.N` name suffix in 1-4094). This surfaces VLANs that
+ * exist on the host but have no attached guest — mirroring `extractHostBridges`
+ * for bridges — so the inventory Network view lists them like it already lists
+ * empty bridges (issue #542).
+ *
+ * Results are de-duplicated by VLAN id (a node may carry the same VLAN over
+ * several uplinks, e.g. `bond0.10` + `bond1.10`) and sorted by id. The first
+ * interface seen for a given id wins. Array- and null-safe.
+ */
+export function extractHostVlans(node: string, ifaces: HostNetIface[]): HostVlan[] {
+  if (!Array.isArray(ifaces)) return []
+
+  const byTag = new Map<number, HostVlan>()
+  for (const iface of ifaces) {
+    if (!iface || typeof iface.iface !== 'string') continue
+    if (iface.type !== 'vlan') continue
+
+    const tag = vlanIdOf(iface)
+    if (tag == null || byTag.has(tag)) continue
+
+    byTag.set(tag, {
+      node,
+      iface: iface.iface,
+      tag,
+      active: Boolean(iface.active),
+      autostart: Boolean(iface.autostart),
+      ...(typeof iface.cidr === 'string' ? { cidr: iface.cidr } : {}),
+    })
+  }
+
+  return [...byTag.values()].sort((a, b) => a.tag - b.tag)
+}

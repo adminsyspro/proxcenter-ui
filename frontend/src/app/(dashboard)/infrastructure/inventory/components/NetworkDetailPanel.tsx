@@ -22,7 +22,7 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import type { InventorySelection } from '../types'
-import { bridgeLabel, foldEffectiveVlanTags, type HostBridge } from '@/lib/proxmox/hostVlanMap'
+import { bridgeLabel, foldEffectiveVlanTags, type HostBridge, type HostVlan } from '@/lib/proxmox/hostVlanMap'
 import { StatusIcon } from '../InventoryTree'
 
 type NetIface = { id: string; model: string; bridge: string; macaddr?: string; tag?: number; firewall?: boolean; rate?: number }
@@ -36,6 +36,7 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   const theme = useTheme()
   const [netData, setNetData] = React.useState<VmNet[]>([])
   const [hostBridges, setHostBridges] = React.useState<HostBridge[]>([])
+  const [hostVlans, setHostVlans] = React.useState<HostVlan[]>([])
   const [vnetAliases, setVnetAliases] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(true)
 
@@ -56,11 +57,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       // bondX.N bridge with no per-NIC tag group under their real VLAN (see helper).
       .then(json => {
         setNetData((json.data || []).map((vm: any) => ({ ...vm, connId, nets: foldEffectiveVlanTags(vm.nets) })))
-        // raw HostBridge[] (no connId — this panel is scoped to a single connection)
+        // raw HostBridge[] / HostVlan[] (no connId — this panel is scoped to a single connection)
         setHostBridges(json.bridges || [])
+        setHostVlans(json.vlans || [])
         setVnetAliases(json.vnetAliases || {})
       })
-      .catch(() => { setNetData([]); setHostBridges([]); setVnetAliases({}) })
+      .catch(() => { setNetData([]); setHostBridges([]); setHostVlans([]); setVnetAliases({}) })
       .finally(() => setLoading(false))
   }, [connId])
 
@@ -93,6 +95,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       const nd = nodeMap.get(b.node)!
       nd.bridges.add(b.iface)
     }
+    // Seed nodeMap VLANs from host VLAN sub-interfaces so VLANs with no attached
+    // VM are counted per node, mirroring host bridges (issue #542).
+    for (const v of hostVlans) {
+      if (!nodeMap.has(v.node)) nodeMap.set(v.node, { vlans: new Set(), bridges: new Set(), vms: new Set() })
+      nodeMap.get(v.node)!.vlans.add(v.tag)
+    }
     for (const vm of netData) {
       if (!nodeMap.has(vm.node)) nodeMap.set(vm.node, { vlans: new Set(), bridges: new Set(), vms: new Set() })
       const nd = nodeMap.get(vm.node)!
@@ -103,11 +111,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
       }
     }
     const nodes = Array.from(nodeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-    // VLANs are VM-derived only; bridges include host bridges so VM-less nodes
-    // still report a bridge count.
-    const allVlans = new Set<string | number>(
-      netData.flatMap(vm => vm.nets.map(n => n.tag ?? 'untagged'))
-    )
+    // VLANs and bridges both include host-level interfaces so VM-less nodes
+    // still report accurate counts.
+    const allVlans = new Set<string | number>([
+      ...netData.flatMap(vm => vm.nets.map(n => n.tag ?? 'untagged')),
+      ...hostVlans.map(v => v.tag),
+    ])
     const allBridges = new Set<string>([
       ...netData.flatMap(vm => vm.nets.map(n => n.bridge)),
       ...hostBridges.map(b => b.iface),
@@ -203,8 +212,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
   if (selection.type === 'net-node' && nodeName) {
     const nodeVms = netData.filter(vm => vm.node === nodeName)
     const nodeHostBridges = hostBridges.filter(b => b.node === nodeName).slice().sort((a, b) => a.iface.localeCompare(b.iface))
-    // Build vlanMap from VMs only (no host bridge seeding)
+    // Build vlanMap from VMs plus host VLAN sub-interfaces on this node, so VLANs
+    // with no attached VM still appear (issue #542).
     const vlanMap = new Map<string | number, { bridges: Set<string>; vms: VmNet[] }>()
+    for (const v of hostVlans) {
+      if (v.node === nodeName && !vlanMap.has(v.tag)) vlanMap.set(v.tag, { bridges: new Set(), vms: [] })
+    }
     for (const vm of nodeVms) {
       for (const net of vm.nets) {
         const tag = net.tag ?? 'untagged'
@@ -361,6 +374,12 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
     }
     // Bridges used by the VMs in this VLAN only (no host-bridge seeding)
     const bridges = [...new Set(vlanVms.map(v => v.net.bridge))]
+    // Host VLAN sub-interface(s) that define this VLAN on the node. A VLAN can
+    // exist here with zero VMs (issue #542) — surface the interface so the view
+    // is informative instead of blank.
+    const hostVlanIfaces = isUntagged
+      ? []
+      : hostVlans.filter(v => v.node === nodeName && String(v.tag) === vlanTag)
 
     return (
       <Box sx={{ p: 2.5 }}>
@@ -420,6 +439,49 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
           </Box>
         )}
 
+        {/* Host VLAN interface(s) — the sub-interface(s) that define this VLAN on the node */}
+        {hostVlanIfaces.length > 0 && (
+          <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className="ri-router-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                  Host interface
+                </Typography>
+              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Interface</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>IP / CIDR</TableCell>
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Active</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {hostVlanIfaces.map(v => (
+                      <TableRow key={v.iface}>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                            <i className="ri-wifi-line" style={{ fontSize: 14, opacity: 0.6 }} />
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{v.iface}</Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{v.cidr || '—'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip size="small" label={v.active ? 'Yes' : 'No'} color={v.active ? 'success' : 'default'} sx={{ height: 20, fontSize: 10 }} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </CardContent>
+          </Card>
+        )}
+
         {/* VM table */}
         <Card variant="outlined" sx={{ borderRadius: 2 }}>
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -444,6 +506,17 @@ export default function NetworkDetailPanel({ selection, onSelect }: {
                   </TableRow>
                 </TableHead>
                 <TableBody>
+                  {vlanVms.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8}>
+                        <Typography variant="body2" sx={{ py: 1, textAlign: 'center', opacity: 0.5 }}>
+                          {hostVlanIfaces.length > 0
+                            ? 'This VLAN is configured on the host but has no attached VM.'
+                            : 'No VMs on this VLAN.'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {vlanVms.map(({ vm, net }, idx) => (
                     <TableRow
                       key={`${vm.vmid}-${net.id}-${idx}`}

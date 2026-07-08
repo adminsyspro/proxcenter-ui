@@ -24,7 +24,7 @@ import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
 import { useTenant } from '@/contexts/TenantContext'
-import { fetchConnectionsNetworks, type HostBridgeItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 
 type VmNetData = {
   vmid: string
@@ -278,6 +278,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   const [loading, setLoading] = useState(false)
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
   const [hostBridges, setHostBridges] = useState<HostBridgeItem[]>([])
+  const [hostVlans, setHostVlans] = useState<HostVlanItem[]>([])
   const [vnetAliasesByConn, setVnetAliasesByConn] = useState<Record<string, Record<string, string>>>({})
   // VNet KPIs are computed from the same data VnetsSection fetches; pulling
   // it up here lets the donut row and the list stay in sync without a
@@ -292,10 +293,11 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
     const ids = connIdsKey.split(',')
     let alive = true
     setLoading(true)
-    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vnetAliasesByConn }) => {
+    fetchConnectionsNetworks(ids, { retries: 2 }).then(({ data, bridges, vlans, vnetAliasesByConn }) => {
       if (!alive) return
       setNetworkData(data)
       setHostBridges(bridges)
+      setHostVlans(vlans)
       setVnetAliasesByConn(vnetAliasesByConn)
     }).finally(() => {
       if (!alive) return
@@ -380,6 +382,15 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       }
     }
 
+    // Seed vlanMap from host VLAN sub-interfaces so VLANs with no attached VM
+    // still appear — including VLAN-aware-bridge layouts where the bridge tag
+    // does not fold to a single VLAN (issue #542).
+    for (const v of hostVlans) {
+      if (!vlanMap.has(v.tag)) {
+        vlanMap.set(v.tag, { vlan: v.tag, vmCount: 0, bridges: new Set(), vms: [] })
+      }
+    }
+
     for (const vm of networkData) {
       if (vm.nets.length > 0) totalVmsWithNetwork++
       for (const net of vm.nets) {
@@ -422,7 +433,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
       vlanBreakdown: [...vlanMap.values()].map(v => ({ ...v, bridges: [...v.bridges] })).sort((a, b) => b.vmCount - a.vmCount),
       bridgeBreakdown: [...bridgeMap.values()],
     }
-  }, [networkData, connectionNames, hostBridges])
+  }, [networkData, connectionNames, hostBridges, hostVlans])
 
   // Flat map of vnet id → alias across all connections (vnet ids are globally unique within a cluster)
   const flatAliases = useMemo(
@@ -433,7 +444,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   // Only block the dashboard with a spinner on the initial load — after
   // that, background refetches keep the existing KPIs / tables visible
   // so the page doesn't flicker on every inventory poll.
-  if (loading && networkData.length === 0 && hostBridges.length === 0) {
+  if (loading && networkData.length === 0 && hostBridges.length === 0 && hostVlans.length === 0) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />

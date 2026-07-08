@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { fetchConnectionsNetworks, type HostBridgeItem } from '@/lib/proxmox/fetchConnectionsNetworks'
+import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
@@ -2248,6 +2248,7 @@ return favorites.has(vmKey)
   type VmNetData = { vmid: string; name: string; node: string; type: string; status: string; connId?: string; nets: NetIface[] }
   const [networkData, setNetworkData] = useState<VmNetData[]>([])
   const [networkBridges, setNetworkBridges] = useState<HostBridgeItem[]>([])
+  const [networkVlans, setNetworkVlans] = useState<HostVlanItem[]>([])
   const [networkVnetAliases, setNetworkVnetAliases] = useState<Record<string, Record<string, string>>>({})
   const [networkLoading, setNetworkLoading] = useState(false)
   const [networkFailedConnIds, setNetworkFailedConnIds] = useState<string[]>([])
@@ -2280,7 +2281,7 @@ return favorites.has(vmKey)
       return next
     })
   }, [])
-  const networkCacheRef = useRef<{ connIds: string; data: VmNetData[]; bridges: HostBridgeItem[]; vnetAliasesByConn: Record<string, Record<string, string>> } | null>(null)
+  const networkCacheRef = useRef<{ connIds: string; data: VmNetData[]; bridges: HostBridgeItem[]; vlans: HostVlanItem[]; vnetAliasesByConn: Record<string, Record<string, string>> } | null>(null)
 
   // Fetch the tenant's VNets (display + subnet info) — only meaningful for
   // non-provider tenants. Provider keeps the legacy bridge/VLAN walk.
@@ -2325,19 +2326,21 @@ return favorites.has(vmKey)
     if (networkCacheRef.current?.connIds === cacheKey) {
       setNetworkData(networkCacheRef.current.data)
       setNetworkBridges(networkCacheRef.current.bridges)
+      setNetworkVlans(networkCacheRef.current.vlans)
       setNetworkVnetAliases(networkCacheRef.current.vnetAliasesByConn)
       return
     }
     setNetworkLoading(true)
-    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vnetAliasesByConn, failedConnIds }) => {
+    fetchConnectionsNetworks(connIds, { retries: 2 }).then(({ data, bridges, vlans, vnetAliasesByConn, failedConnIds }) => {
       setNetworkData(data)
       setNetworkBridges(bridges)
+      setNetworkVlans(vlans)
       setNetworkVnetAliases(vnetAliasesByConn)
       setNetworkLoading(false)
       setNetworkFailedConnIds(failedConnIds)
       // Only cache when all connections succeeded so re-opening retries any partial failure
       if (failedConnIds.length === 0) {
-        networkCacheRef.current = { connIds: cacheKey, data, bridges, vnetAliasesByConn }
+        networkCacheRef.current = { connIds: cacheKey, data, bridges, vlans, vnetAliasesByConn }
       } else {
         // Allow the next expand to re-fetch
         networkFetchedRef.current = false
@@ -2379,9 +2382,11 @@ return favorites.has(vmKey)
     }
   }, [isHydrated, expandedNetSections, clusters.length, isFullClusterView, fetchTenantVnets])
 
-  // Build network tree: Connection → Node → [bridges] + VLAN buckets (VMs only)
+  // Build network tree: Connection → Node → [bridges] + VLAN buckets. VLAN
+  // buckets are seeded from both guest NIC tags and host VLAN sub-interfaces so
+  // VLANs with no attached VM still appear, mirroring empty bridges (issue #542).
   const networkTree = useMemo(() => {
-    if (!networkData.length && !networkBridges.length) return []
+    if (!networkData.length && !networkBridges.length && !networkVlans.length) return []
 
     type BucketEntry = { vm: VmNetData; netId: string; bridge: string }
     type Bucket = { tag: number | 'untagged'; entries: BucketEntry[] }
@@ -2405,6 +2410,13 @@ return favorites.has(vmKey)
         const bucket = ensureVmBucket(cid, vm.node, tag)
         bucket.entries.push({ vm, netId: net.id, bridge: net.bridge })
       }
+    }
+
+    // Seed a bucket for every host VLAN sub-interface so VLANs with no attached
+    // VM still appear (issue #542). ensureVmBucket is a no-op when a VM already
+    // created the bucket, so counts are never double-added.
+    for (const v of networkVlans) {
+      ensureVmBucket(v.connId || 'unknown', v.node, v.tag)
     }
 
     // Group host bridges by connId → node
@@ -2449,7 +2461,7 @@ return favorites.has(vmKey)
         })
       return { connId, connName, nodes }
     }).sort((a, b) => a.connName.localeCompare(b.connName))
-  }, [networkData, networkBridges, clusters])
+  }, [networkData, networkBridges, networkVlans, clusters])
 
   // Expand all network tree items helper
   const expandNetworkOnLoadRef = useRef(false)
@@ -3776,9 +3788,12 @@ return (
             </Box>
             <i className="ri-router-fill" style={{ fontSize: 14, opacity: 0.7 }} />
             <Typography variant="body2" sx={{ fontWeight: 700 }}>NETWORK</Typography>
-            {isFullClusterView && networkData.length > 0 && (
+            {isFullClusterView && (networkData.length > 0 || networkVlans.length > 0) && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                ({new Set(networkData.flatMap(v => v.nets.filter(n => n.tag != null).map(n => n.tag))).size} VLANs)
+                ({new Set([
+                  ...networkData.flatMap(v => v.nets.filter(n => n.tag != null).map(n => n.tag as number)),
+                  ...networkVlans.map(v => v.tag),
+                ]).size} VLANs)
               </Typography>
             )}
             {!isFullClusterView && tenantVnets.length > 0 && (

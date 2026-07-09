@@ -47,32 +47,38 @@ func New(db *sql.DB, opts ...Option) *Elector
 func (e *Elector) Start(ctx context.Context)  // goroutine: try_lock loop
 func (e *Elector) Stop()                       // release lock, close conn
 func (e *Elector) IsLeader() bool
+func (e *Elector) Check() error                // fast liveness check on dedicated conn
 ```
 
 ### 3.2 Mechanism
 
 1. `Start` opens a dedicated connection (`db.Conn(ctx)`) and launches a goroutine.
-2. Every 5s: `SELECT pg_try_advisory_lock(0x50524F58)` on this connection.
-3. Returns `true`: set `isLeader = true`, scheduler executes tasks.
-4. Returns `false`: set `isLeader = false`, scheduler silently skips.
-5. On connection loss (HAProxy closes session at failover): `isLeader = false` immediately. Goroutine reconnects with exponential backoff (1s, 2s, 4s, ..., capped at 30s) and re-acquires.
-6. `Stop()` calls `pg_advisory_unlock` then closes the connection.
+2. Every 5s the goroutine runs a heartbeat cycle:
+   - If **not leader**: `SELECT pg_try_advisory_lock(0x50524F58)`. Returns `true`: set `isLeader = true`. Returns `false`: remain standby.
+   - If **already leader**: `SELECT 1` on the dedicated connection (heartbeat, no re-acquire). This avoids the `pg_try_advisory_lock` counter-increment gotcha (each successful call increments an internal counter; re-acquiring would require matching unlocks).
+3. On connection loss (HAProxy closes session at failover): `isLeader = false` immediately. Goroutine reconnects with exponential backoff (1s, 2s, 4s, ..., capped at 30s) and re-acquires.
+4. `Stop()` calls a single `pg_advisory_unlock` then closes the connection.
 
-### 3.3 Scheduler integration
+### 3.3 `Check()` method
+
+`Check()` performs a `SELECT 1` on the dedicated connection and returns an error if the connection is dead. The scheduler calls `Check()` **before each long-running job** (DRS rebalance, migration execution, scheduled backup) and aborts immediately on error. This satisfies the parent spec requirement (Section 3.2): "re-checks lock ownership before each long-running job and stops work immediately on a DB connection drop / failover signal."
+
+### 3.4 Scheduler integration
 
 - `Scheduler` receives an `*Elector` via `SetLeader(e *Elector)`.
 - The runner in `scheduler.go` checks `e.IsLeader()` before executing. Non-leader: debug log + skip.
+- For long-running tasks (DRS rebalance, migration, backup), the task wrapper calls `e.Check()` at start and periodically (every 30s). On error: abort, log, yield leadership.
 - When no `Elector` is set (non-HA / Community mode), all tasks run (backward compatible).
 
-### 3.4 Fencing
+### 3.5 Fencing
 
 The advisory lock is session-scoped on a connection routed through HAProxy. When HAProxy repoints to the new primary, it closes existing connections (`on-marked-down shutdown-sessions`). The old leader's connection drops, the lock is released server-side, and the old leader detects the loss. No zombie window.
 
-### 3.5 Lock ID
+### 3.6 Lock ID
 
 Constant `0x50524F58` (ASCII "PROX"). Not configurable. Distinct from the Prisma migration lock ID.
 
-### 3.6 Tests
+### 3.7 Tests
 
 - Two `Elector` instances on the same DB: only one is leader.
 - Kill the leader's connection: the other acquires leadership.
@@ -243,6 +249,7 @@ ORCHESTRATOR_API_KEY=...
 
 | Service | Image | Network mode | Notes |
 |---|---|---|---|
+| `nginx` | nginx:1.27-alpine | host | TLS termination :443, reverse-proxy to frontend :3000 + orchestrator :8080. `ip_hash` for upload-progress session affinity (parent spec Section 6). |
 | `frontend` | ghcr.io/.../proxcenter-frontend | bridge | `DATABASE_URL` points to `127.0.0.1:5432` (local HAProxy) |
 | `orchestrator` | ghcr.io/.../proxcenter-orchestrator | bridge | DSN points to `127.0.0.1:5432` |
 | `weasyprint` | ghcr.io/.../proxcenter-weasyprint | bridge | Unchanged |
@@ -253,7 +260,11 @@ ORCHESTRATOR_API_KEY=...
 
 ### 7.3 Network design
 
-`network_mode: host` for Patroni, etcd, HAProxy, Keepalived: they need real L2 visibility between VMs. Frontend/orchestrator/weasyprint stay on internal bridge and access PG via `127.0.0.1:5432` (HAProxy listens on host).
+`network_mode: host` for nginx, Patroni, etcd, HAProxy, Keepalived: they need real L2 visibility between VMs and/or must bind to the VIP. Frontend/orchestrator/weasyprint stay on internal bridge and access PG via `127.0.0.1:5432` (HAProxy listens on host).
+
+### 7.4 Upload-progress session affinity
+
+The parent spec (Section 6) classifies upload progress (`upload-progress.ts`, in-memory Map) as ephemeral with session affinity as mitigation. nginx uses `ip_hash` upstream directive so a given client IP always hits the same frontend during an upload. This is best-effort: a VIP failover mid-upload loses progress, which is acceptable in v1.
 
 ## 8. Configuration Templates
 
@@ -269,13 +280,15 @@ Key settings:
 - `watchdog.device: /dev/watchdog`
 - Replication slots enabled
 - `pg_hba` entries for replication and Patroni REST
+- `restapi.listen: ${NODE_IP}:8008` (bound to node IP only, not 0.0.0.0, to avoid exposing the unauthenticated REST API beyond the cluster network)
+- `restapi.connect_address: ${NODE_IP}:8008`
 - Placeholders: `${NODE_NAME}`, `${NODE_IP}`, `${PEER*_IP}`
 
 ### 8.2 `haproxy.cfg`
 
 - Frontend: `bind 127.0.0.1:5432`
-- Backend: 3 servers (`PEER1/2/3_IP:5432`)
-- Health check: `httpchk GET /primary` on Patroni REST port 8008
+- Backend: 3 servers (`PEER1/2/3_IP:5432`), each with `check port 8008` (health check on Patroni REST port, not the PG port)
+- `option httpchk GET /primary` (returns 200 only on the current primary)
 - `on-marked-down shutdown-sessions`
 - `rise 1 fall 2 inter 1000ms`
 - Explicit `timeout connect 3s / timeout server 30s / timeout client 30s`
@@ -294,8 +307,19 @@ Key settings:
 - `initial-cluster-state: new`
 - Peer/client URLs on `${NODE_IP}`
 - TLS: self-signed certs generated at provisioning time (not by compose)
+- Auth: enabled (root + proxcenter user with restricted key prefix)
+- Auto-compaction: `auto-compaction-mode: periodic`, `auto-compaction-retention: 1h`
+- Defrag: documented in the conversion runbook as a periodic admin task (not automated by the application)
 
-### 8.5 `track_script.sh`
+### 8.5 `nginx.conf`
+
+- TLS termination on `:443` with certificate whose SAN covers the VIP hostname
+- `upstream frontend` with `ip_hash` for upload-progress session affinity
+- `proxy_pass` to `127.0.0.1:3000` (frontend) and `127.0.0.1:8080` (orchestrator API, under `/orchestrator/`)
+- WebSocket upgrade support for the SSH/console proxy
+- Redirect `:80` to `:443`
+
+### 8.6 `track_script.sh`
 
 See Section 5.3.
 
@@ -336,6 +360,8 @@ Post-deployment validation procedures:
 - **Watchdog path:** prevent Patroni from demoting Postgres (simulate hang). Expected: watchdog resets the VM.
 - **Sync standby loss:** stop one replica. Expected: second replica promoted to synchronous.
 
+- **Scheduled backup/task during failover:** trigger a scheduled backup or DRS rebalance, then kill the leader mid-job. Expected: the `Check()` call (Section 3.3) detects connection loss, job aborts cleanly, new leader picks up at next scheduled tick.
+
 For each drill: command, expected result, success criteria (RTO, RPO 0 verification).
 
 ## 10. Implementation Order
@@ -349,8 +375,8 @@ Bottom-up, code first:
 5. **Prisma migration lock** (frontend) - migrate-with-lock.js + entrypoint
 6. **Health endpoint: DB reachability** (frontend) - /api/health db field
 7. **Connection pool tuning** (frontend) - DATABASE_URL params
-8. **docker-compose.ha.yml** (frontend repo) - full HA compose
-9. **Config templates** (frontend repo) - patroni/haproxy/keepalived/etcd/track_script
+8. **docker-compose.ha.yml** (frontend repo) - full HA compose (8 services incl. nginx)
+9. **Config templates** (frontend repo) - nginx/patroni/haproxy/keepalived/etcd/track_script
 10. **Runbooks** (frontend repo) - prerequisites, conversion, drills
 
 Tasks 1-7: testable locally with unit/integration tests.

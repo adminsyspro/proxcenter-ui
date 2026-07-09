@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import path from 'path'
 import fs from 'fs'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { getAsset, slotFromFilename } from '@/lib/branding/assetStore'
 
 const BASE_UPLOAD_DIR = path.join(process.cwd(), 'data', 'uploads', 'login-bg')
 const LEGACY_DIR = path.join(process.cwd(), 'public', 'uploads', 'login-bg')
@@ -23,33 +24,26 @@ export async function GET(
     const { filename } = await params
     const sanitized = path.basename(filename)
 
-    // Resolve tenant (fallback to default for unauthenticated login page)
     let tenantId = 'default'
     try { tenantId = await getCurrentTenantId() } catch {}
 
-    // Try tenant-specific directory first
+    const asset = await getAsset(tenantId, 'login-bg', slotFromFilename(sanitized))
+    if (asset) {
+      return new NextResponse(new Uint8Array(asset.data), {
+        headers: { 'Content-Type': asset.contentType, 'Cache-Control': 'public, max-age=3600' },
+      })
+    }
+
     let filePath = path.join(BASE_UPLOAD_DIR, tenantId, sanitized)
-    // Fallback to non-tenant directory (pre-migration files)
-    if (!fs.existsSync(filePath)) {
-      filePath = path.join(BASE_UPLOAD_DIR, sanitized)
-    }
-    // Then legacy public/ location
-    if (!fs.existsSync(filePath)) {
-      filePath = path.join(LEGACY_DIR, sanitized)
-    }
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
+    if (!fs.existsSync(filePath)) filePath = path.join(BASE_UPLOAD_DIR, sanitized)
+    if (!fs.existsSync(filePath)) filePath = path.join(LEGACY_DIR, sanitized)
+    if (!fs.existsSync(filePath)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const ext = sanitized.split('.').pop()?.toLowerCase() || ''
     const contentType = MIME_TYPES[ext] || 'application/octet-stream'
     const buffer = fs.readFileSync(filePath)
-
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=3600',
-      },
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600' },
     })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

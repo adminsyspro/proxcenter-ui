@@ -56,7 +56,7 @@ func (e *Elector) Check() error                // fast liveness check on dedicat
 2. Every 5s the goroutine runs a heartbeat cycle:
    - If **not leader**: `SELECT pg_try_advisory_lock(0x50524F58)`. Returns `true`: set `isLeader = true`. Returns `false`: remain standby.
    - If **already leader**: `SELECT 1` on the dedicated connection (heartbeat, no re-acquire). This avoids the `pg_try_advisory_lock` counter-increment gotcha (each successful call increments an internal counter; re-acquiring would require matching unlocks).
-3. On connection loss (HAProxy closes session at failover): `isLeader = false` immediately. Goroutine reconnects with exponential backoff (1s, 2s, 4s, ..., capped at 30s) and re-acquires.
+3. On connection loss (HAProxy closes session at failover): `isLeader = false` detected within one heartbeat interval (up to 5s) when the next `SELECT 1` fails. The `Check()` call at job start (Section 3.3) is the real pre-job guard for long-running tasks. Goroutine reconnects with exponential backoff (1s, 2s, 4s, ..., capped at 30s) and re-acquires.
 4. `Stop()` calls a single `pg_advisory_unlock` then closes the connection.
 
 ### 3.3 `Check()` method
@@ -95,14 +95,22 @@ Three frontends boot simultaneously, each running `prisma migrate deploy` in the
 A Node.js script that wraps migration in a PostgreSQL advisory lock:
 
 ```js
-// ESM (.mjs) or wrap in async IIFE for CJS compatibility.
+// CJS, async IIFE wrapper.
 const { Client } = require('pg');
 const { execFileSync } = require('child_process');
 
 const LOCK_ID = 0x50524D49; // "PRMI" = Prisma Migration
 
+// Strip Prisma-specific query params (connection_limit, pool_timeout)
+// that the pg Client doesn't understand.
+function pgDsn(url) {
+  const u = new URL(url);
+  for (const key of ['connection_limit', 'pool_timeout']) u.searchParams.delete(key);
+  return u.toString();
+}
+
 (async () => {
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const client = new Client({ connectionString: pgDsn(process.env.DATABASE_URL) });
   await client.connect();
   await client.query('SELECT pg_advisory_lock($1)', [LOCK_ID]);
   try {
@@ -173,19 +181,24 @@ Executed periodically by Keepalived. All 3 checks must pass for the node to hold
 
 ```sh
 #!/bin/sh
-# 1. Frontend up
+# All 4 checks must pass for the node to hold the VIP.
+
+# 1. nginx up (TLS entry point)
+wget -q --spider --timeout=3 http://127.0.0.1:80/ || exit 1
+
+# 2. Frontend up
 wget -q --spider --timeout=3 http://127.0.0.1:3000/api/health || exit 1
 
-# 2. Orchestrator up
+# 3. Orchestrator up
 wget -q --spider --timeout=3 http://127.0.0.1:8080/api/v1/health || exit 1
 
-# 3. DB primary reachable via local HAProxy
-wget -q --spider --timeout=3 http://127.0.0.1:8008/primary || exit 1
+# 4. DB primary reachable via Patroni REST (bound to NODE_IP, not 127.0.0.1)
+wget -q --spider --timeout=3 http://${NODE_IP}:8008/primary || exit 1
 
 exit 0
 ```
 
-A minority-partition node fails check 3 (no reachable primary), so it never holds the VIP.
+A minority-partition node fails check 4 (no reachable primary), so it never holds the VIP.
 
 No write probe (per spec Section 4.2): the Patroni `/primary` check is read-only.
 
@@ -250,8 +263,8 @@ ORCHESTRATOR_API_KEY=...
 | Service | Image | Network mode | Notes |
 |---|---|---|---|
 | `nginx` | nginx:1.27-alpine | host | TLS termination :443, reverse-proxy to frontend :3000 + orchestrator :8080. `ip_hash` for upload-progress session affinity (parent spec Section 6). |
-| `frontend` | ghcr.io/.../proxcenter-frontend | bridge | `DATABASE_URL` points to `127.0.0.1:5432` (local HAProxy) |
-| `orchestrator` | ghcr.io/.../proxcenter-orchestrator | bridge | DSN points to `127.0.0.1:5432` |
+| `frontend` | ghcr.io/.../proxcenter-frontend | bridge | `DATABASE_URL` points to `127.0.0.1:5432` (local HAProxy). Publishes `127.0.0.1:3000:3000` so host-mode nginx can reach it. |
+| `orchestrator` | ghcr.io/.../proxcenter-orchestrator | bridge | DSN points to `127.0.0.1:5432`. Publishes `127.0.0.1:8080:8080` so host-mode nginx can reach it. |
 | `weasyprint` | ghcr.io/.../proxcenter-weasyprint | bridge | Unchanged |
 | `patroni` | Custom Dockerfile: `postgres:16-alpine` base + Patroni pip install | host | Manages Postgres, etcd connection, replication |
 | `etcd` | quay.io/coreos/etcd:v3.5 | host | Peer/client on `NODE_IP` |
@@ -278,6 +291,7 @@ Key settings:
 - `bootstrap.dcs.synchronous_node_count: 1`
 - `watchdog.mode: required`
 - `watchdog.device: /dev/watchdog`
+- `postgresql.parameters.wal_log_hints: on` (required for `pg_rewind` after failover, per parent spec Phase 3 preflight)
 - Replication slots enabled
 - `pg_hba` entries for replication and Patroni REST
 - `restapi.listen: ${NODE_IP}:8008` (bound to node IP only, not 0.0.0.0, to avoid exposing the unauthenticated REST API beyond the cluster network)
@@ -300,6 +314,7 @@ Key settings:
 - `priority = ${VRRP_PRIORITY}`
 - `nopreempt` (VIP does not auto-return to node 1 after recovery, avoids double failover)
 - `interface = ${VIP_INTERFACE}`
+- `unicast_src_ip = ${NODE_IP}` + `unicast_peer` listing the other 2 node IPs (unicast VRRP, not multicast; multicast may be blocked by some Proxmox bridge configurations)
 
 ### 8.4 `etcd.conf`
 

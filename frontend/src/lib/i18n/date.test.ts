@@ -18,6 +18,14 @@ describe('getDateLocale', () => {
     expect(getDateLocale('zh-CN')).toBe('zh-CN')
   })
 
+  it('maps "ko" to "ko-KR"', () => {
+    expect(getDateLocale('ko')).toBe('ko-KR')
+  })
+
+  it('maps "es" to "es-ES"', () => {
+    expect(getDateLocale('es')).toBe('es-ES')
+  })
+
   it('falls back to "en-US" for unknown locale', () => {
     expect(getDateLocale('zh')).toBe('en-US')
     expect(getDateLocale('')).toBe('en-US')

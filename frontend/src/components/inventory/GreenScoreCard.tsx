@@ -171,7 +171,11 @@ export default function GreenScoreCard({ connId, node, type, vmid, days = 30, in
     insight?.severity === 'success' ? 'ri-leaf-line' :
     'ri-information-line'
 
-  const currencySymbol = metrics.cost.currency === 'EUR' ? '€' : metrics.cost.currency
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    EUR: '€', USD: '$', GBP: '£', CHF: 'CHF', CAD: 'CA$', AUD: 'A$',
+    JPY: '¥', CNY: '¥', KRW: '₩', SEK: 'kr', NOK: 'kr', DKK: 'kr', PLN: 'zł',
+  }
+  const currencySymbol = CURRENCY_SYMBOLS[metrics.cost.currency] || metrics.cost.currency
   const fmtMoney = `${metrics.cost.monthly.toLocaleString()} ${currencySymbol}`
 
   const suggestion = insight && insight.suggestionKey ? t(insight.suggestionKey, insight.placeholders) : ''

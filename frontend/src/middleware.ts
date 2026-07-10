@@ -7,7 +7,7 @@ import { getToken } from "next-auth/jwt"
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
 // i18n configuration
-const locales = ['fr', 'en', 'zh-CN']
+const locales = ['fr', 'en', 'de', 'zh-CN', 'ko', 'es']
 const defaultLocale = 'en'
 
 // Routes publiques (pas besoin d'être connecté)

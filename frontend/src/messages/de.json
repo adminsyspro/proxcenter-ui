@@ -2484,6 +2484,7 @@
       "spain": "Spanien",
       "italy": "Italien",
       "poland": "Polen (Kohle)",
+      "south_korea": "Südkorea",
       "sweden": "Schweden (Wasserkraft)",
       "norway": "Norwegen (Wasserkraft)",
       "europe_avg": "Durchschnitt Europa",
@@ -6489,7 +6490,9 @@
     "fr": "Französisch",
     "en": "Englisch",
     "de": "Deutsch",
-    "zh-CN": "Chinesisch (vereinfacht)"
+    "zh-CN": "Chinesisch (vereinfacht)",
+    "ko": "Koreanisch",
+    "es": "Spanisch"
   },
   "networkFlows": {
     "tabFlows": "Flows",

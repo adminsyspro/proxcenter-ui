@@ -44,6 +44,7 @@ const CO2_COUNTRY_PRESETS: Array<{ key: string; co2Factor: number }> = [
   { key: 'spain', co2Factor: 0.210 },
   { key: 'italy', co2Factor: 0.330 },
   { key: 'poland', co2Factor: 0.650 },
+  { key: 'south_korea', co2Factor: 0.415 },
   { key: 'sweden', co2Factor: 0.045 },
   { key: 'norway', co2Factor: 0.020 },
   { key: 'europe_avg', co2Factor: 0.276 },
@@ -51,7 +52,7 @@ const CO2_COUNTRY_PRESETS: Array<{ key: string; co2Factor: number }> = [
   { key: 'custom', co2Factor: 0 }, // sentinel — keep current value
 ]
 
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY', 'SEK', 'NOK', 'DKK', 'PLN']
+const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'AUD', 'JPY', 'CNY', 'KRW', 'SEK', 'NOK', 'DKK', 'PLN']
 
 export default function DatacenterDialog({ open, initial, onClose, onSaved }: Props) {
   const t = useTranslations()

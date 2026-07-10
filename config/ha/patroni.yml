@@ -1,0 +1,60 @@
+scope: proxcenter
+name: ${PATRONI_NAME}
+
+restapi:
+  listen: ${NODE_IP}:8008
+  connect_address: ${NODE_IP}:8008
+
+etcd3:
+  hosts: ${PEER1_IP}:2379,${PEER2_IP}:2379,${PEER3_IP}:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 0
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_node_count: 1
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_log_hints: "on"
+        max_connections: 200
+        max_replication_slots: 10
+        max_wal_senders: 10
+        hot_standby: "on"
+        wal_level: replica
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+
+  users:
+    replicator:
+      password: ${PGPASSWORD}
+      options:
+        - replication
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: ${NODE_IP}:5432
+  data_dir: /var/lib/postgresql/data
+  authentication:
+    superuser:
+      username: ${PGUSER}
+      password: ${PGPASSWORD}
+    replication:
+      username: replicator
+      password: ${PGPASSWORD}
+
+watchdog:
+  mode: required
+  device: /dev/watchdog
+  safety_margin: 5

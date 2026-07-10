@@ -41,7 +41,7 @@ else
   # directly because the runner image does not preserve node_modules/.bin
   # symlinks across the COPY layers.
   echo "[entrypoint] Applying Prisma migrations..."
-  node node_modules/prisma/build/index.js migrate deploy
+  node scripts/migrate-with-lock.js
 
   # Idempotent seed: default tenant, security policy, RBAC permission
   # catalogue and system roles. Pre-bundled to a self-contained seed.js

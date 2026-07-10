@@ -43,7 +43,7 @@ bootstrap:
         - replication
 
 postgresql:
-  listen: 0.0.0.0:5432
+  listen: ${NODE_IP}:5432
   connect_address: ${NODE_IP}:5432
   data_dir: /var/lib/postgresql/data
   authentication:

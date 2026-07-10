@@ -63,10 +63,9 @@ services:
 
   # ── Layer 3: application ────────────────────────────────────────
   frontend:
-    image: ghcr.io/proxcenter/proxcenter-frontend:${APP_VERSION:-latest}
+    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    network_mode: host
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-proxcenter}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB:-proxcenter}?schema=public
       NEXTAUTH_URL: https://${VIP_HOSTNAME}
@@ -74,6 +73,7 @@ services:
       APP_SECRET: ${APP_SECRET}
       ORCHESTRATOR_URL: http://127.0.0.1:8080
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
+      PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -85,10 +85,9 @@ services:
         condition: service_started
 
   orchestrator:
-    image: ghcr.io/proxcenter/proxcenter-orchestrator:${APP_VERSION:-latest}
+    image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
+    network_mode: host
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
     volumes:
       - orchestrator_data:/app/data
     environment:
@@ -107,10 +106,10 @@ services:
         condition: service_healthy
 
   weasyprint:
-    image: ghcr.io/proxcenter/proxcenter-weasyprint:latest
+    image: ghcr.io/adminsyspro/proxcenter-weasyprint:${VERSION:-latest}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5001:5001"
+      - "127.0.0.1:5000:5000"
 
   # ── Layer 4: TLS termination + reverse proxy ────────────────────
   nginx:
@@ -152,4 +151,6 @@ services:
 volumes:
   etcd_data:
   postgres_data:
+    name: postgres_data
   orchestrator_data:
+    name: orchestrator_data

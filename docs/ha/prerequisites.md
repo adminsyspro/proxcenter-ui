@@ -21,6 +21,17 @@
 | 8008 | TCP | Patroni REST API |
 | 112 | VRRP (IP proto) | Keepalived VRRP |
 
+> **Security note:** etcd stores the Patroni DCS state including cluster topology. Ports 2379/2380/8008 MUST be firewalled to allow traffic only between the 3 cluster nodes. On each node:
+>
+> ```sh
+> for port in 2379 2380 8008; do
+>   for peer in ${PEER1_IP} ${PEER2_IP} ${PEER3_IP}; do
+>     iptables -A INPUT -p tcp --dport $port -s $peer -j ACCEPT
+>   done
+>   iptables -A INPUT -p tcp --dport $port -j DROP
+> done
+> ```
+
 ## Software
 
 - Docker Engine 24+ and Docker Compose v2 on all 3 nodes
@@ -29,15 +40,17 @@
 
 ## Secrets
 
-All 3 nodes must share identical secret values:
+All 3 nodes must share identical secret values. **For in-place conversions (existing single-node), copy the secrets from node 1's existing `.env` file.** Only generate fresh values for greenfield (new) installs:
 
 ```sh
-# Generate once, copy to all 3 nodes' .env files:
+# GREENFIELD ONLY — generate once, copy to all 3 nodes' .env files:
 openssl rand -base64 32  # NEXTAUTH_SECRET
 openssl rand -base64 32  # APP_SECRET
 openssl rand -hex 32     # ORCHESTRATOR_API_KEY
 openssl rand -base64 32  # POSTGRES_PASSWORD
 ```
+
+> **WARNING:** For in-place conversions, you MUST reuse the existing `APP_SECRET` from node 1. It encrypts stored connection credentials — generating a new one makes all stored Proxmox/SSH credentials unreadable.
 
 ## TLS
 

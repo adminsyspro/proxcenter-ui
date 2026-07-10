@@ -171,8 +171,10 @@ curl -s http://<primary-ip>:8008/cluster | jq '.members[]'
 # Then kill the Patroni primary to force a failover.
 
 # 1. Identify the orchestrator leader:
-curl -s http://${PEER1_IP}:8080/api/v1/health | jq '.leader'
-# The node returning "leader": true is the current leader.
+# Run on each node locally (orchestrator binds 127.0.0.1 only):
+for ip in ${PEER1_IP} ${PEER2_IP} ${PEER3_IP}; do
+  ssh root@$ip "curl -s http://127.0.0.1:8080/api/v1/health" | jq -r --arg ip "$ip" '"\($ip): leader=\(.leader)"'
+done
 
 # 2. Trigger a long-running task (e.g., scheduled backup via the UI).
 

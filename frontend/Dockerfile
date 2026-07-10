@@ -146,6 +146,9 @@ COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/.next/static ./.next
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/prisma.config.ts ./prisma.config.ts
 
+# Migration script with advisory lock (serializes Prisma migrate deploy across HA nodes).
+COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/scripts/migrate-with-lock.js ./scripts/migrate-with-lock.js
+
 # Unified server entry point + WebSocket proxy.
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/start.js ./start.js
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/ws-proxy.js ./ws-proxy.js

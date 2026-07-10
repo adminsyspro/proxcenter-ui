@@ -8,8 +8,8 @@ This runbook converts a single-VM ProxCenter installation into a 3-node HA clust
 
 ```sh
 # On node 1 (existing VM):
-docker compose ps          # all services running
-docker compose exec postgres pg_isready  # DB reachable
+docker compose -f docker-compose.enterprise.yml ps          # all services running
+docker compose -f docker-compose.enterprise.yml exec postgres pg_isready  # DB reachable
 cat /proc/version          # note kernel version
 ls -l /dev/watchdog        # watchdog present
 ```
@@ -29,6 +29,7 @@ Copy `.env.ha.example` to `.env` on each node. Fill in:
 - `NODE_NAME`, `NODE_IP`, `VRRP_PRIORITY` (per node)
 - `PEER1_IP`, `PEER2_IP`, `PEER3_IP`, `VIP` (same on all 3)
 - All secrets (same on all 3)
+- **Reuse node 1's existing secrets** (`APP_SECRET`, `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `ORCHESTRATOR_API_KEY`) — do NOT generate new values. `APP_SECRET` encrypts stored credentials.
 
 ---
 
@@ -89,22 +90,22 @@ docker compose -f docker-compose.ha.yml exec etcd etcdctl member list
 
 ```sh
 # On node 1:
-docker compose exec postgres psql -U proxcenter -c "SHOW wal_log_hints;"
+docker compose -f docker-compose.enterprise.yml exec postgres psql -U proxcenter -c "SHOW wal_log_hints;"
 # Must be 'on'. If not:
-docker compose exec postgres psql -U proxcenter -c "ALTER SYSTEM SET wal_log_hints = on;"
-docker compose restart postgres
+docker compose -f docker-compose.enterprise.yml exec postgres psql -U proxcenter -c "ALTER SYSTEM SET wal_log_hints = on;"
+docker compose -f docker-compose.enterprise.yml restart postgres
 ```
 
 ### 3.2 Take a fresh backup
 
 ```sh
-docker compose exec postgres pg_dumpall -U proxcenter > /backup/pre-patroni-$(date +%s).sql
+docker compose -f docker-compose.enterprise.yml exec postgres pg_dumpall -U proxcenter > /backup/pre-patroni-$(date +%s).sql
 ```
 
 ### 3.3 Stop the existing single-node stack
 
 ```sh
-docker compose down
+docker compose -f docker-compose.enterprise.yml down
 ```
 
 ### 3.4 Configure HAProxy on node 1 (POINT OF NO RETURN)

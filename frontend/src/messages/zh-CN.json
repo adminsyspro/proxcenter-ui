@@ -2487,6 +2487,7 @@
       "spain": "西班牙",
       "italy": "意大利",
       "poland": "波兰（煤炭）",
+      "south_korea": "韩国",
       "sweden": "瑞典（水电）",
       "norway": "挪威（水电）",
       "europe_avg": "欧洲平均",
@@ -6495,7 +6496,9 @@
     "fr": "法语",
     "en": "英语",
     "de": "德语",
-    "zh-CN": "简体中文"
+    "zh-CN": "简体中文",
+    "ko": "韩语",
+    "es": "西班牙语"
   },
   "networkFlows": {
     "tabFlows": "流量",

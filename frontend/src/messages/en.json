@@ -2518,6 +2518,7 @@
       "spain": "Spain",
       "italy": "Italy",
       "poland": "Poland (coal)",
+      "south_korea": "South Korea",
       "sweden": "Sweden (hydro)",
       "norway": "Norway (hydro)",
       "europe_avg": "Europe average",
@@ -6567,7 +6568,9 @@
     "fr": "French",
     "en": "English",
     "de": "German",
-    "zh-CN": "Chinese (Simplified)"
+    "zh-CN": "Chinese (Simplified)",
+    "ko": "Korean",
+    "es": "Spanish"
   },
   "networkFlows": {
     "tabFlows": "Flows",

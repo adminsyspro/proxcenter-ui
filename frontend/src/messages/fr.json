@@ -2518,6 +2518,7 @@
       "spain": "Espagne",
       "italy": "Italie",
       "poland": "Pologne (charbon)",
+      "south_korea": "Corée du Sud",
       "sweden": "Suède (hydro)",
       "norway": "Norvège (hydro)",
       "europe_avg": "Moyenne Europe",
@@ -6568,7 +6569,9 @@
     "fr": "Français",
     "en": "Anglais",
     "de": "Allemand",
-    "zh-CN": "Chinois (simplifié)"
+    "zh-CN": "Chinois (simplifié)",
+    "ko": "Coréen",
+    "es": "Espagnol"
   },
   "networkFlows": {
     "tabFlows": "Flux",

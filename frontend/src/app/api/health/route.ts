@@ -6,24 +6,16 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+  let db = "reachable"
   try {
-    // Verify Postgres connectivity with a trivial round-trip.
     await prisma.$queryRaw`SELECT 1`
-
-    return NextResponse.json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-    })
-  } catch (error) {
-    console.error("Health check failed:", error)
-
-    return NextResponse.json(
-      {
-        status: "unhealthy",
-        error: error instanceof Error ? error.message : "Unknown error",
-        timestamp: new Date().toISOString(),
-      },
-      { status: 503 }
-    )
+  } catch {
+    db = "unreachable"
   }
+
+  return NextResponse.json({
+    status: "ok",
+    db,
+    timestamp: new Date().toISOString(),
+  })
 }

@@ -68,12 +68,16 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-proxcenter}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB:-proxcenter}?schema=public
-      NEXTAUTH_URL: https://${VIP_HOSTNAME}
+      NEXTAUTH_URL: ${EXTERNAL_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       APP_SECRET: ${APP_SECRET}
       ORCHESTRATOR_URL: http://127.0.0.1:8080
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
       PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
+      HA_ENABLED: "true"
+      VIP_HOSTNAME: ${VIP_HOSTNAME}
+      VIP: ${VIP}
+      EXTERNAL_URL: ${EXTERNAL_URL}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
       interval: 10s
@@ -111,20 +115,7 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
 
-  # ── Layer 4: TLS termination + reverse proxy ────────────────────
-  nginx:
-    image: nginx:1.27-alpine
-    network_mode: host
-    restart: unless-stopped
-    volumes:
-      - ./config/ha/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ${TLS_CERT_PATH}:/etc/ssl/proxcenter/fullchain.pem:ro
-      - ${TLS_KEY_PATH}:/etc/ssl/proxcenter/privkey.pem:ro
-    depends_on:
-      frontend:
-        condition: service_healthy
-
-  # ── Layer 5: VIP management ─────────────────────────────────────
+  # ── Layer 4: VIP management ──────────────────────────────────────
   keepalived:
     build:
       context: ./config/ha
@@ -144,9 +135,11 @@ services:
       VIP: ${VIP}
       VIP_INTERFACE: ${VIP_INTERFACE:-eth0}
       VRRP_PRIORITY: ${VRRP_PRIORITY:-100}
+      EXTERNAL_URL: ${EXTERNAL_URL}
+      HA_ENABLED: "true"
     depends_on:
-      nginx:
-        condition: service_started
+      frontend:
+        condition: service_healthy
 
 volumes:
   etcd_data:

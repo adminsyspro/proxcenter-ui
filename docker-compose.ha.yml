@@ -78,6 +78,7 @@ services:
       VIP_HOSTNAME: ${VIP_HOSTNAME}
       VIP: ${VIP}
       EXTERNAL_URL: ${EXTERNAL_URL}
+      HA_REDIRECT_DISABLED: ${HA_REDIRECT_DISABLED:-}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
       interval: 10s

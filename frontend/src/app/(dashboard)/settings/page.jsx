@@ -81,6 +81,11 @@ const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionD
   ssr: false
 })
 
+const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+})
+
 const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
   ssr: false
 })
@@ -2997,7 +3002,7 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
@@ -3013,6 +3018,7 @@ export default function SettingsPage() {
     { label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
+    { label: 'High Availability', icon: 'ri-shield-check-line', component: HaTab, requiredFeature: Features.HA, providerOnly: true },
   ]
 
   // Hide provider-only tabs (Tenants, vDC) unless super admin AND currently

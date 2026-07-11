@@ -12,14 +12,12 @@ import {
   Chip,
   Collapse,
   FormControlLabel,
-  IconButton,
   LinearProgress,
   Step,
   StepLabel,
   Stepper,
   TextField,
   Typography,
-  useTheme,
 } from '@mui/material'
 
 import type { HaConfig } from './useHaConfig'
@@ -80,23 +78,26 @@ export default function HaDeployWizard({
   config: HaConfig | undefined
   onDeployed: () => void
 }) {
-  const theme = useTheme()
-
-  const resumeStep = config?.deploymentState === 'failed'
-    ? (config.deploymentStep > 0 ? 4 : 0)
+  const resumeStep = config?.deploymentState === 'deploying' || config?.deploymentState === 'failed'
+    ? 4
     : 0
   const [activeStep, setActiveStep] = useState(resumeStep)
 
   const [prereqChecked, setPrereqChecked] = useState(false)
-  const [nodes, setNodes] = useState<NodeInput[]>([
-    { name: 'proxcenter-1', ip: '', password: '', vrrpPriority: 150 },
-    { name: 'proxcenter-2', ip: '', password: '', vrrpPriority: 100 },
-    { name: 'proxcenter-3', ip: '', password: '', vrrpPriority: 50 },
-  ])
-  const [vip, setVip] = useState('')
-  const [vipHostname, setVipHostname] = useState('')
-  const [externalUrl, setExternalUrl] = useState('')
-  const [vipInterface, setVipInterface] = useState('eth0')
+  const [nodes, setNodes] = useState<NodeInput[]>(() => {
+    if (config?.nodes?.length === 3) {
+      return config.nodes.map(n => ({ name: n.name, ip: n.ip, password: '', vrrpPriority: n.vrrpPriority }))
+    }
+    return [
+      { name: 'proxcenter-1', ip: '', password: '', vrrpPriority: 150 },
+      { name: 'proxcenter-2', ip: '', password: '', vrrpPriority: 100 },
+      { name: 'proxcenter-3', ip: '', password: '', vrrpPriority: 50 },
+    ]
+  })
+  const [vip, setVip] = useState(config?.vip || '')
+  const [vipHostname, setVipHostname] = useState(config?.vipHostname || '')
+  const [externalUrl, setExternalUrl] = useState(config?.externalUrl || '')
+  const [vipInterface, setVipInterface] = useState(config?.vipInterface || 'eth0')
 
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null)
@@ -109,10 +110,26 @@ export default function HaDeployWizard({
   const [logExpanded, setLogExpanded] = useState(false)
 
   const eventSourceRef = useRef<EventSource | null>(null)
+  const deployingRef = useRef(false)
+  const deployDoneRef = useRef(false)
+
+  useEffect(() => {
+    deployingRef.current = deploying
+  }, [deploying])
+
+  useEffect(() => {
+    deployDoneRef.current = deployDone
+  }, [deployDone])
 
   const updateNode = useCallback((index: number, field: keyof NodeInput, value: string) => {
     setNodes(prev => prev.map((n, i) => i === index ? { ...n, [field]: value } : n))
+    setValidationResult(null)
   }, [])
+
+  // Any change to network inputs invalidates a previous validation run
+  useEffect(() => {
+    setValidationResult(null)
+  }, [vip, vipHostname, vipInterface])
 
   const canProceedNodes = nodes.every(n => IPV4_REGEX.test(n.ip) && n.password.length > 0)
 
@@ -172,21 +189,26 @@ export default function HaDeployWizard({
         if (data.status === 'failed') {
           setDeployError(data.error || `Step ${data.step} failed: ${data.label}`)
           setDeploying(false)
+          deployingRef.current = false
+          eventSourceRef.current?.close()
         }
         if (data.status === 'done' && data.step === data.totalSteps) {
           setDeployDone(true)
           setDeploying(false)
+          deployDoneRef.current = true
+          deployingRef.current = false
+          eventSourceRef.current?.close()
         }
       } catch {}
     }
 
     es.onerror = () => {
       es.close()
-      if (!deployDone && deploying) {
+      if (!deployDoneRef.current && deployingRef.current) {
         setTimeout(connectSSE, 5000)
       }
     }
-  }, [deployDone, deploying])
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -194,8 +216,19 @@ export default function HaDeployWizard({
     }
   }, [])
 
+  // Resume an in-progress deployment after a page reload
+  useEffect(() => {
+    if (config?.deploymentState === 'deploying' && !deployDoneRef.current) {
+      deployingRef.current = true
+      setDeploying(true)
+      connectSSE()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // only on mount
+
   const handleDeploy = useCallback(async () => {
     setDeploying(true)
+    deployingRef.current = true
     setDeployError('')
     setDeploySteps([])
 
@@ -237,6 +270,7 @@ export default function HaDeployWizard({
 
   const handleRetryDeploy = useCallback(async () => {
     setDeploying(true)
+    deployingRef.current = true
     setDeployError('')
 
     try {
@@ -440,7 +474,13 @@ export default function HaDeployWizard({
   const renderDeployment = () => (
     <Box>
       <Typography variant="h6" sx={{ mb: 2 }}>Deployment</Typography>
-      {!deploying && !deployDone && !deployError && (
+      {!deploying && !deployDone && !deployError && config?.deploymentState === 'failed' && (
+        <Box>
+          <Alert severity="error" sx={{ mb: 2 }}>Previous deployment failed. You can retry from where it left off.</Alert>
+          <Button variant="contained" color="warning" onClick={handleRetryDeploy}>Retry Deployment</Button>
+        </Box>
+      )}
+      {!deploying && !deployDone && !deployError && config?.deploymentState !== 'failed' && (
         <Box>
           <Typography variant="body2" sx={{ mb: 2 }}>
             This will deploy the HA cluster across all 3 nodes. The process takes several minutes

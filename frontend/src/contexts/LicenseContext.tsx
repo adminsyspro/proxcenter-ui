@@ -27,6 +27,7 @@ export const Features = {
   WHITE_LABEL: 'white_label',
   MULTI_TENANCY: 'multi_tenancy',
   SFLOW_MONITORING: 'sflow_monitoring',
+  HA: 'ha',
 } as const
 
 type FeatureId = typeof Features[keyof typeof Features]
@@ -57,6 +58,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.WHITE_LABEL,
     Features.MULTI_TENANCY,
     Features.SFLOW_MONITORING,
+    Features.HA,
   ],
   enterprise_plus: [
     Features.DRS,
@@ -81,6 +83,7 @@ const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     Features.CHANGE_TRACKING,
     Features.MULTI_TENANCY,
     Features.SFLOW_MONITORING,
+    Features.HA,
   ],
 }
 

@@ -6,6 +6,13 @@ import { getToken } from "next-auth/jwt"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
+// HA VIP redirect configuration
+const HA_ENABLED = process.env.HA_ENABLED === 'true'
+const VIP_HOSTNAME = process.env.VIP_HOSTNAME || ''
+const VIP = process.env.VIP || ''
+const EXTERNAL_URL = process.env.EXTERNAL_URL || ''
+const HA_REDIRECT_DISABLED = process.env.HA_REDIRECT_DISABLED === 'true'
+
 // i18n configuration
 const locales = ['fr', 'en', 'zh-CN']
 const defaultLocale = 'en'
@@ -144,6 +151,21 @@ export async function middleware(request: NextRequest) {
 
     // Static assets etc. — pass through
     return NextResponse.next()
+  }
+
+  // === HA VIP REDIRECT ===
+  if (HA_ENABLED && !HA_REDIRECT_DISABLED) {
+    const rawHost = request.headers.get('host') || ''
+    const host = rawHost.replace(/:\d+$/, '')
+
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      const isExempt = pathname === '/api/health' || pathname.startsWith('/api/v1/ha/')
+      if (!isExempt && host !== VIP_HOSTNAME && host !== VIP) {
+        const target = EXTERNAL_URL || `http://${VIP_HOSTNAME}:3000`
+        const search = request.nextUrl.search || ''
+        return NextResponse.redirect(`${target}${pathname}${search}`, 302)
+      }
+    }
   }
 
   // === NORMAL MODE (existing behavior) ===

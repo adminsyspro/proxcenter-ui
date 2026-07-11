@@ -55,7 +55,7 @@ openssl rand -base64 32  # POSTGRES_PASSWORD
 ## TLS
 
 - Certificate with SAN covering the VIP hostname (e.g., `proxcenter.example.com`)
-- Place `fullchain.pem` and `privkey.pem` at the path specified in `.env` (`TLS_CERT_PATH`, `TLS_KEY_PATH`)
+- If TLS is required, deploy a reverse proxy in front of the VIP (see EXTERNAL_URL in `.env.ha.example`)
 - Self-signed is acceptable for internal deployments
 
 ## Backup

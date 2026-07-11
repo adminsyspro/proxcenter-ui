@@ -26,10 +26,11 @@ interface HaOpsPanelProps {
   paused: boolean
   syncMode: string
   maintenanceNodes: Set<string>
+  currentNodeName: string
   onRefresh: () => void
 }
 
-export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes, onRefresh }: HaOpsPanelProps) {
+export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes, currentNodeName, onRefresh }: HaOpsPanelProps) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
@@ -291,8 +292,13 @@ export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes
                 The VIP will not land on this node. Patroni keeps replicating.
               </Typography>
               {leader?.name === maintenanceTarget && (
-                <Alert severity="warning">
+                <Alert severity="warning" sx={{ mb: 1 }}>
                   This node is the current leader. A switchover will be triggered first.
+                </Alert>
+              )}
+              {maintenanceTarget === currentNodeName && (
+                <Alert severity="error" sx={{ mb: 1 }}>
+                  This is the node serving your current session. You will lose access to this dashboard.
                 </Alert>
               )}
             </>

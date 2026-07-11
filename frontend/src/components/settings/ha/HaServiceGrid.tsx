@@ -16,7 +16,25 @@ function StatusDot({ status }: { status: string | undefined }) {
   const label = status || 'unknown'
 
   return (
-    <Tooltip title={label} arrow>
+    <Tooltip
+      title={label}
+      arrow
+      slotProps={{
+        tooltip: {
+          sx: {
+            bgcolor: 'background.paper',
+            color: 'text.primary',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: 3,
+            fontSize: '0.75rem',
+          }
+        },
+        arrow: {
+          sx: { color: 'background.paper' }
+        }
+      }}
+    >
       <Box sx={{
         width: 12,
         height: 12,

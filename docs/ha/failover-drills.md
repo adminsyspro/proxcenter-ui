@@ -56,7 +56,7 @@ docker compose -f docker-compose.ha.yml stop keepalived
 **Expected (within 3-5s):**
 - VIP migrates to the next-highest-priority node
 - Existing TCP connections to the old VIP holder are dropped
-- New connections via VIP reach the new holder's nginx
+- New connections via VIP reach the new holder's frontend
 
 **Verify:**
 ```sh

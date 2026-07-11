@@ -11,6 +11,7 @@ const HA_ENABLED = process.env.HA_ENABLED === 'true'
 const VIP_HOSTNAME = process.env.VIP_HOSTNAME || ''
 const VIP = process.env.VIP || ''
 const EXTERNAL_URL = process.env.EXTERNAL_URL || ''
+const EXTERNAL_URL_HOST = EXTERNAL_URL ? new URL(EXTERNAL_URL).hostname : ''
 const HA_REDIRECT_DISABLED = process.env.HA_REDIRECT_DISABLED === 'true'
 
 // i18n configuration
@@ -160,7 +161,7 @@ export async function middleware(request: NextRequest) {
 
     if (host !== 'localhost' && host !== '127.0.0.1') {
       const isExempt = pathname === '/api/health' || pathname.startsWith('/api/v1/ha/')
-      if (!isExempt && host !== VIP_HOSTNAME && host !== VIP) {
+      if (!isExempt && host !== VIP_HOSTNAME && host !== VIP && host !== EXTERNAL_URL_HOST) {
         const target = EXTERNAL_URL || `http://${VIP_HOSTNAME}:3000`
         const search = request.nextUrl.search || ''
         return NextResponse.redirect(`${target}${pathname}${search}`, 302)

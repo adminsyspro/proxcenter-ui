@@ -14,6 +14,7 @@ import {
 } from '@mui/material'
 
 import { useHaCluster } from './useHaCluster'
+import { useHaConfig } from './useHaConfig'
 
 import HaNodeCard from './HaNodeCard'
 import HaServiceGrid from './HaServiceGrid'
@@ -21,18 +22,15 @@ import HaOpsPanel from './HaOpsPanel'
 
 export default function HaClusterDashboard() {
   const { data: cluster, isLoading, error, mutate } = useHaCluster(true)
+  const { data: haConfig } = useHaConfig()
   const [historyOpen, setHistoryOpen] = useState(false)
 
   const maintenanceNodes = useMemo(() => {
-    if (!cluster) return new Set<string>()
-    const set = new Set<string>()
-    for (const [nodeName, services] of Object.entries(cluster.services)) {
-      if (services.frontend !== 'running' && services.orchestrator !== 'running') {
-        set.add(nodeName)
-      }
-    }
-    return set
-  }, [cluster])
+    if (!haConfig?.nodes) return new Set<string>()
+    return new Set(haConfig.nodes.filter(n => n.maintenance).map(n => n.name))
+  }, [haConfig])
+
+  const currentNodeName = haConfig?.nodes.find(n => n.isCurrentNode)?.name || ''
 
   const nodeNames = useMemo(
     () => cluster?.patroni.members.map(m => m.name) || [],
@@ -127,6 +125,7 @@ export default function HaClusterDashboard() {
             paused={cluster.patroni.paused}
             syncMode={cluster.patroni.syncMode}
             maintenanceNodes={maintenanceNodes}
+            currentNodeName={currentNodeName}
             onRefresh={() => mutate()}
           />
         </CardContent>
@@ -156,7 +155,7 @@ export default function HaClusterDashboard() {
                   <Typography variant="caption" sx={{ fontWeight: 600 }}>Reason</Typography>
                   <Typography variant="caption" sx={{ fontWeight: 600 }}>Timeline</Typography>
                   {cluster.history.map((event, i) => (
-                    <Box key={i} sx={{ display: 'contents' }}>
+                    <Box key={`${event.timeline}-${event.newLeader}-${i}`} sx={{ display: 'contents' }}>
                       <Typography variant="caption">
                         {new Date(event.timestamp).toLocaleString()}
                       </Typography>

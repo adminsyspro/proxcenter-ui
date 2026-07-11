@@ -158,6 +158,20 @@ describe('VIP redirect', () => {
     expect(res.headers.get('location')).toBe('https://proxcenter.local/settings?tab=ha')
   })
 
+  it('does not redirect when host matches EXTERNAL_URL hostname (TLS reverse proxy)', async () => {
+    vi.stubEnv('HA_ENABLED', 'true')
+    vi.stubEnv('VIP_HOSTNAME', 'proxcenter.local')
+    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('EXTERNAL_URL', 'https://proxy.example.com')
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
+
+    const { middleware } = await import('./middleware')
+    const req = makeRequest('https://proxy.example.com/home', 'proxy.example.com')
+    const res = await middleware(req as any)
+
+    expect(res.status).not.toBe(302)
+  })
+
   it('falls back to http://VIP_HOSTNAME:3000 when EXTERNAL_URL is empty', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
     vi.stubEnv('VIP_HOSTNAME', 'proxcenter.local')

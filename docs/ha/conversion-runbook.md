@@ -183,7 +183,7 @@ docker compose -f docker-compose.ha.yml exec patroni patronictl show-config
 
 ```sh
 # On each node:
-docker compose -f docker-compose.ha.yml up -d frontend orchestrator weasyprint nginx keepalived
+docker compose -f docker-compose.ha.yml up -d frontend orchestrator weasyprint keepalived
 ```
 
 ### 5.2 Verify VIP

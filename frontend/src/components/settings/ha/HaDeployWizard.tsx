@@ -164,7 +164,9 @@ export default function HaDeployWizard({
   }, [nodes, vipHostname, vip])
 
   const validationPassed = validationResult
-    ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose && r.watchdog)
+    ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose && r.watchdog
+        && Object.values(r.ping).every(Boolean))
+      && validationResult.global.vipAvailable
     : false
 
   const connectSSE = useCallback(() => {

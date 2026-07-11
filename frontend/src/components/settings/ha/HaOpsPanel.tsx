@@ -40,7 +40,6 @@ export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes
   const [reinitOpen, setReinitOpen] = useState(false)
 
   const [maintenanceTarget, setMaintenanceTarget] = useState('')
-  const [maintenanceAction, setMaintenanceAction] = useState<'enter' | 'exit'>('enter')
   const [maintenanceOpen, setMaintenanceOpen] = useState(false)
 
   const [pauseOpen, setPauseOpen] = useState(false)
@@ -55,6 +54,8 @@ export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes
 
   const nonMaintenanceCount = members.filter(m => !maintenanceNodes.has(m.name)).length
 
+  const maintenanceAction = maintenanceTarget && maintenanceNodes.has(maintenanceTarget) ? 'exit' : 'enter'
+
   const doAction = useCallback(async (url: string, method: string, body?: any) => {
     setLoading(true)
     setResult(null)
@@ -66,6 +67,9 @@ export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes
       if (res.ok) {
         setResult({ type: 'success', message: data.message || 'Operation completed' })
         onRefresh()
+        setSwitchoverTarget('')
+        setReinitTarget('')
+        setMaintenanceTarget('')
       } else {
         setResult({ type: 'error', message: data.error || `Operation failed (${res.status})` })
       }
@@ -175,10 +179,7 @@ export default function HaOpsPanel({ members, paused, syncMode, maintenanceNodes
               <InputLabel>Node</InputLabel>
               <Select
                 value={maintenanceTarget}
-                onChange={(e) => {
-                  setMaintenanceTarget(e.target.value)
-                  setMaintenanceAction(maintenanceNodes.has(e.target.value) ? 'exit' : 'enter')
-                }}
+                onChange={(e) => setMaintenanceTarget(e.target.value)}
                 label="Node"
               >
                 {members.map(m => (

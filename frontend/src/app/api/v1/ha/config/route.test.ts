@@ -30,7 +30,6 @@ describe('GET /api/v1/ha/config', () => {
     const mockConfig = {
       enabled: false,
       vip: '',
-      vipHostname: '',
       vipInterface: 'eth0',
       deploymentState: 'idle',
       deploymentStep: 0,
@@ -89,9 +88,7 @@ describe('PUT /api/v1/ha/config', () => {
         { name: 'proxcenter-3', ip: '10.24.24.103', vrrpPriority: 50 },
       ],
       vip: '10.24.24.100',
-      vipHostname: 'proxcenter.local',
       vipInterface: 'ens18',
-      externalUrl: 'https://proxcenter.local',
       sshPasswords: {
         '10.24.24.101': 'pass1',
         '10.24.24.102': 'pass2',

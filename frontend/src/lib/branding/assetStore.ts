@@ -19,8 +19,8 @@ export async function putAsset(
 ): Promise<void> {
   await prisma.uploadedAsset.upsert({
     where: { tenantId_kind_slot: { tenantId, kind, slot } },
-    update: { ext, contentType, data, updatedAt: new Date() },
-    create: { tenantId, kind, slot, ext, contentType, data },
+    update: { ext, contentType, data: data as unknown as Uint8Array<ArrayBuffer>, updatedAt: new Date() },
+    create: { tenantId, kind, slot, ext, contentType, data: data as unknown as Uint8Array<ArrayBuffer> },
   })
 }
 

@@ -46,6 +46,10 @@ postgresql:
   listen: ${NODE_IP}:5432
   connect_address: ${NODE_IP}:5432
   data_dir: /var/lib/postgresql/data
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+    - local all all trust
   authentication:
     superuser:
       username: ${PGUSER}

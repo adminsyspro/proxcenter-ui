@@ -7,6 +7,7 @@ export interface PatroniMember {
   state: string
   timeline: number
   lagBytes: number
+  version: string
 }
 
 export interface EtcdMember {

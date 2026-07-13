@@ -3046,13 +3046,13 @@ export default function SettingsPage() {
 
   const [mainTab, setMainTab] = useState(resolveTabIndex)
 
-  // Sync tab from URL changes
+  // Sync tab from URL changes or when visible tabs change (license loaded)
   useEffect(() => {
     if (tabParam) {
       const idx = tabNames.indexOf(tabParam)
       if (idx >= 0 && idx !== mainTab) setMainTab(idx)
     }
-  }, [tabParam])
+  }, [tabParam, tabNames.join(',')])
 
   // Update URL when tab changes
   const handleTabChange = (newIndex) => {
@@ -3123,7 +3123,7 @@ export default function SettingsPage() {
               if (mainTab !== idx) return null
               const TabComponent = tab.component
               return (
-                <Box key={idx}>
+                <Box key={tabNames[idx]}>
                   <TabComponent />
                 </Box>
               )

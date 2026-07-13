@@ -2,18 +2,27 @@
 
 import { Box, Tooltip, Typography } from '@mui/material'
 
-const SERVICES = ['etcd', 'patroni', 'haproxy', 'frontend', 'orchestrator', 'weasyprint', 'keepalived']
+const SERVICES: { name: string; icon: string }[] = [
+  { name: 'etcd', icon: 'ri-database-2-line' },
+  { name: 'patroni', icon: 'ri-shield-check-line' },
+  { name: 'haproxy', icon: 'ri-route-line' },
+  { name: 'frontend', icon: 'ri-window-line' },
+  { name: 'orchestrator', icon: 'ri-settings-3-line' },
+  { name: 'weasyprint', icon: 'ri-file-pdf-2-line' },
+  { name: 'keepalived', icon: 'ri-heart-pulse-line' },
+]
 
 interface HaServiceGridProps {
   services: Record<string, Record<string, string>>
   nodeNames: string[]
 }
 
-function StatusDot({ status }: { status: string | undefined }) {
-  const color = status === 'running' ? 'success.main'
-    : status === 'unknown' ? 'action.disabled'
-    : 'error.main'
+function StatusIcon({ status }: { status: string | undefined }) {
+  const isRunning = status === 'running'
+  const isUnknown = !status || status === 'unknown'
   const label = status || 'unknown'
+  const icon = isRunning ? 'ri-check-line' : isUnknown ? 'ri-question-line' : 'ri-close-line'
+  const color = isRunning ? 'success.main' : isUnknown ? 'action.disabled' : 'error.main'
 
   return (
     <Tooltip
@@ -35,13 +44,9 @@ function StatusDot({ status }: { status: string | undefined }) {
         }
       }}
     >
-      <Box sx={{
-        width: 12,
-        height: 12,
-        borderRadius: '50%',
-        bgcolor: color,
-        mx: 'auto',
-      }} />
+      <Box sx={{ textAlign: 'center', color, lineHeight: 1 }}>
+        <i className={icon} style={{ fontSize: 16 }} />
+      </Box>
     </Tooltip>
   )
 }
@@ -57,10 +62,13 @@ export default function HaServiceGrid({ services, nodeNames }: HaServiceGridProp
           </Typography>
         ))}
         {SERVICES.map(svc => (
-          <Box key={svc} sx={{ display: 'contents' }}>
-            <Typography variant="caption">{svc}</Typography>
+          <Box key={svc.name} sx={{ display: 'contents' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <i className={svc.icon} style={{ fontSize: 14, opacity: 0.7 }} />
+              <Typography variant="caption">{svc.name}</Typography>
+            </Box>
             {nodeNames.map(name => (
-              <StatusDot key={`${svc}-${name}`} status={services[name]?.[svc]} />
+              <StatusIcon key={`${svc.name}-${name}`} status={services[name]?.[svc.name]} />
             ))}
           </Box>
         ))}

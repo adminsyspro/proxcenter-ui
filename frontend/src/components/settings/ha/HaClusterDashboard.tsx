@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import {
   Alert,
@@ -9,28 +9,63 @@ import {
   Card,
   CardContent,
   Chip,
-  Collapse,
   Typography,
+  keyframes,
 } from '@mui/material'
 
-import { useHaCluster } from './useHaCluster'
+import { useHaCluster, type PatroniMember } from './useHaCluster'
 import { useHaConfig } from './useHaConfig'
 
 import HaNodeCard from './HaNodeCard'
 import HaServiceGrid from './HaServiceGrid'
-import HaOpsPanel from './HaOpsPanel'
+
+const ROLE_ORDER: Record<string, number> = { leader: 0, sync_standby: 1, replica: 2, standby_leader: 1 }
+
+const flowDots = keyframes`
+  0%   { opacity: 0.2; transform: translateX(-6px); }
+  50%  { opacity: 1;   transform: translateX(0); }
+  100% { opacity: 0.2; transform: translateX(6px); }
+`
+
+function SyncArrow({ healthy }: { healthy: boolean }) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', px: 0.5, minWidth: 36 }}>
+      <Box sx={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+        {[0, 1, 2].map(i => (
+          <Box
+            key={i}
+            sx={{
+              width: 5,
+              height: 5,
+              borderRadius: '50%',
+              bgcolor: healthy ? 'success.main' : 'error.main',
+              animation: healthy ? `${flowDots} 1.2s ease-in-out infinite` : 'none',
+              animationDelay: `${i * 0.2}s`,
+              opacity: healthy ? undefined : 0.4,
+            }}
+          />
+        ))}
+        <i
+          className="ri-arrow-right-s-line"
+          style={{ fontSize: 16, opacity: healthy ? 0.7 : 0.3 }}
+        />
+      </Box>
+    </Box>
+  )
+}
+
+function sortMembers(members: PatroniMember[]): PatroniMember[] {
+  return [...members].sort((a, b) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9))
+}
 
 export default function HaClusterDashboard() {
   const { data: cluster, isLoading, error, mutate } = useHaCluster(true)
-  const { data: haConfig } = useHaConfig()
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const { data: haConfig, mutate: mutateConfig } = useHaConfig()
 
-  const maintenanceNodes = useMemo(() => {
+  const maintenanceIPs = useMemo(() => {
     if (!haConfig?.nodes) return new Set<string>()
-    return new Set(haConfig.nodes.filter(n => n.maintenance).map(n => n.name))
+    return new Set(haConfig.nodes.filter(n => n.maintenance).map(n => n.ip))
   }, [haConfig])
-
-  const currentNodeName = haConfig?.nodes.find(n => n.isCurrentNode)?.name || ''
 
   const nodeNames = useMemo(
     () => cluster?.patroni.members.map(m => m.name) || [],
@@ -59,115 +94,72 @@ export default function HaClusterDashboard() {
   ).length
   const healthStatus = allHealthy ? 'healthy' : degradedCount >= 2 ? 'critical' : 'degraded'
 
+  const leader = cluster.patroni.members.find(m => m.role === 'leader')
+  const isSyncMode = cluster.patroni.syncMode !== 'off'
+  const switchoverCandidates = new Set(
+    cluster.patroni.members
+      .filter(m => {
+        if (m.role === 'leader' || maintenanceIPs.has(m.host)) return false
+        if (isSyncMode) return m.role === 'sync_standby'
+        return true
+      })
+      .map(m => m.name)
+  )
+
+  const sorted = sortMembers(cluster.patroni.members)
+
+  const versions = new Set(cluster.patroni.members.map(m => m.version).filter(Boolean))
+  const versionMismatch = versions.size > 1
+
   return (
     <Box sx={{ p: 2 }}>
+      {versionMismatch && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Version mismatch detected: nodes are running different versions ({[...versions].join(', ')}).
+          A rolling update may be in progress.
+        </Alert>
+      )}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h5">HA Cluster</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography variant="h5">HA Cluster</Typography>
+          <Chip
+            label={healthStatus === 'healthy' ? 'Healthy' : healthStatus === 'critical' ? 'Critical' : 'Degraded'}
+            size="small"
+            color={healthStatus === 'healthy' ? 'success' : healthStatus === 'critical' ? 'error' : 'warning'}
+          />
+          {cluster.patroni.paused && (
+            <Chip label="Failover Paused" size="small" color="warning" />
+          )}
+        </Box>
         <Button variant="outlined" size="small" onClick={() => mutate()}>
           Refresh
         </Button>
       </Box>
 
-      {/* Cluster-level indicators */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-        <Chip
-          label={healthStatus === 'healthy' ? 'Healthy' : healthStatus === 'critical' ? 'Critical' : 'Degraded'}
-          size="small"
-          color={healthStatus === 'healthy' ? 'success' : healthStatus === 'critical' ? 'error' : 'warning'}
-        />
-        <Chip
-          label={`Sync: ${cluster.patroni.syncMode.replace(/_/g, ' ')}`}
-          size="small"
-          variant="outlined"
-        />
-        {cluster.patroni.paused && (
-          <Chip label="Failover Paused" size="small" color="warning" />
-        )}
-        <Chip
-          label={`etcd: ${cluster.etcd.healthy ? 'healthy' : 'unhealthy'}`}
-          size="small"
-          color={cluster.etcd.healthy ? 'success' : 'error'}
-          variant="outlined"
-        />
-        <Chip
-          label={`VIP: ${cluster.vip.address} (${cluster.vip.holder})`}
-          size="small"
-          variant="outlined"
-        />
-      </Box>
-
-      {/* Zone 1: Node Cards */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
-        {cluster.patroni.members.map(member => (
-          <HaNodeCard
-            key={member.name}
-            member={member}
-            isVipHolder={cluster.vip.holder === member.name}
-            maintenance={maintenanceNodes.has(member.name)}
-          />
+      {/* Node Cards with sync arrows */}
+      <Box sx={{ display: 'flex', alignItems: 'stretch', mb: 3 }}>
+        {sorted.map((member, i) => (
+          <Box key={member.name} sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {i > 0 && (
+              <SyncArrow healthy={member.state === 'running' || member.state === 'streaming'} />
+            )}
+            <HaNodeCard
+              member={member}
+              vipAddress={cluster.vip.holder === member.name ? cluster.vip.address : undefined}
+              maintenance={maintenanceIPs.has(member.host)}
+              leaderName={leader?.name}
+              onSwitchover={switchoverCandidates.has(member.name) ? () => mutate() : undefined}
+              onRefresh={() => { mutate(); mutateConfig() }}
+            />
+          </Box>
         ))}
       </Box>
 
-      {/* Zone 2: Service Grid */}
-      <Card variant="outlined" sx={{ mb: 3 }}>
+      {/* Service Grid */}
+      <Card variant="outlined">
         <CardContent>
           <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>Service Health</Typography>
           <HaServiceGrid services={cluster.services} nodeNames={nodeNames} />
-        </CardContent>
-      </Card>
-
-      {/* Zone 3: Ops Panel */}
-      <Card variant="outlined" sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>Operations</Typography>
-          <HaOpsPanel
-            members={cluster.patroni.members}
-            paused={cluster.patroni.paused}
-            syncMode={cluster.patroni.syncMode}
-            maintenanceNodes={maintenanceNodes}
-            currentNodeName={currentNodeName}
-            onRefresh={() => mutate()}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Zone 4: Failover History */}
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              Failover History ({cluster.history.length})
-            </Typography>
-            <Button size="small" onClick={() => setHistoryOpen(!historyOpen)}>
-              {historyOpen ? 'Hide' : 'Show'}
-            </Button>
-          </Box>
-          <Collapse in={historyOpen}>
-            {cluster.history.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                No failover events recorded.
-              </Typography>
-            ) : (
-              <Box sx={{ mt: 1, overflowX: 'auto' }}>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 80px', gap: 1, minWidth: 400 }}>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>Timestamp</Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>New Leader</Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>Reason</Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>Timeline</Typography>
-                  {cluster.history.map((event, i) => (
-                    <Box key={`${event.timeline}-${event.newLeader}-${i}`} sx={{ display: 'contents' }}>
-                      <Typography variant="caption">
-                        {new Date(event.timestamp).toLocaleString()}
-                      </Typography>
-                      <Typography variant="caption">{event.newLeader}</Typography>
-                      <Typography variant="caption">{event.reason}</Typography>
-                      <Typography variant="caption">{event.timeline}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
-          </Collapse>
         </CardContent>
       </Card>
     </Box>

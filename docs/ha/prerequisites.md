@@ -17,8 +17,10 @@
 |------|----------|---------|
 | 2379 | TCP | etcd client |
 | 2380 | TCP | etcd peer |
+| 3000 | TCP | Frontend (HTTP) |
 | 5432 | TCP | PostgreSQL (Patroni replication) |
 | 8008 | TCP | Patroni REST API |
+| 8080 | TCP | Orchestrator API |
 | 112 | VRRP (IP proto) | Keepalived VRRP |
 
 > **Security note:** etcd stores the Patroni DCS state including cluster topology. Ports 2379/2380/8008 MUST be firewalled to allow traffic only between the 3 cluster nodes. On each node:
@@ -43,20 +45,18 @@
 All 3 nodes must share identical secret values. **For in-place conversions (existing single-node), copy the secrets from node 1's existing `.env` file.** Only generate fresh values for greenfield (new) installs:
 
 ```sh
-# GREENFIELD ONLY — generate once, copy to all 3 nodes' .env files:
+# GREENFIELD ONLY - generate once, copy to all 3 nodes' .env files:
 openssl rand -base64 32  # NEXTAUTH_SECRET
 openssl rand -base64 32  # APP_SECRET
 openssl rand -hex 32     # ORCHESTRATOR_API_KEY
 openssl rand -base64 32  # POSTGRES_PASSWORD
 ```
 
-> **WARNING:** For in-place conversions, you MUST reuse the existing `APP_SECRET` from node 1. It encrypts stored connection credentials — generating a new one makes all stored Proxmox/SSH credentials unreadable.
+> **WARNING:** For in-place conversions, you MUST reuse the existing `APP_SECRET` from node 1. It encrypts stored connection credentials; generating a new one makes all stored Proxmox/SSH credentials unreadable.
 
-## TLS
+## TLS (optional)
 
-- Certificate with SAN covering the VIP hostname (e.g., `proxcenter.example.com`)
-- If TLS is required, deploy a reverse proxy in front of the VIP (see EXTERNAL_URL in `.env.ha.example`)
-- Self-signed is acceptable for internal deployments
+ProxCenter listens on HTTP port 3000. TLS termination is the administrator's responsibility. If required, deploy a reverse proxy (nginx, Traefik, Caddy, etc.) in front of the VIP.
 
 ## Backup
 

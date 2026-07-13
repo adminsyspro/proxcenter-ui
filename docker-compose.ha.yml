@@ -7,7 +7,7 @@
 services:
   # ── Layer 0: distributed consensus ──────────────────────────────
   etcd:
-    image: quay.io/coreos/etcd:v3.5
+    image: quay.io/coreos/etcd:v3.5.17
     network_mode: host
     restart: unless-stopped
     volumes:
@@ -55,8 +55,13 @@ services:
     image: haproxy:2.9-alpine
     network_mode: host
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "sed 's/PEER1_IP/${PEER1_IP}/g; s/PEER2_IP/${PEER2_IP}/g; s/PEER3_IP/${PEER3_IP}/g' /usr/local/etc/haproxy/haproxy.cfg.template > /tmp/haproxy.cfg && exec haproxy -f /tmp/haproxy.cfg"]
+    environment:
+      PEER1_IP: ${PEER1_IP}
+      PEER2_IP: ${PEER2_IP}
+      PEER3_IP: ${PEER3_IP}
     volumes:
-      - ./config/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./config/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg.template:ro
     depends_on:
       patroni:
         condition: service_started
@@ -68,16 +73,14 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-proxcenter}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB:-proxcenter}?schema=public
-      NEXTAUTH_URL: ${EXTERNAL_URL}
+      NEXTAUTH_URL: http://${VIP}:3000
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       APP_SECRET: ${APP_SECRET}
       ORCHESTRATOR_URL: http://127.0.0.1:8080
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
       PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
       HA_ENABLED: "true"
-      VIP_HOSTNAME: ${VIP_HOSTNAME}
       VIP: ${VIP}
-      EXTERNAL_URL: ${EXTERNAL_URL}
       HA_REDIRECT_DISABLED: ${HA_REDIRECT_DISABLED:-}
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
@@ -136,8 +139,6 @@ services:
       VIP: ${VIP}
       VIP_INTERFACE: ${VIP_INTERFACE:-eth0}
       VRRP_PRIORITY: ${VRRP_PRIORITY:-100}
-      EXTERNAL_URL: ${EXTERNAL_URL}
-      HA_ENABLED: "true"
     depends_on:
       frontend:
         condition: service_healthy

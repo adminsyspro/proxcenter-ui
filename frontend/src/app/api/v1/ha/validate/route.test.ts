@@ -35,7 +35,7 @@ describe('POST /api/v1/ha/validate', () => {
           ping: { '10.24.24.102': true, '10.24.24.103': true },
         },
       ],
-      global: { vipHostnameResolvable: true, vipAvailable: true },
+      global: { vipAvailable: true },
     }
     fetchMock.mockResolvedValue({
       ok: true,
@@ -47,7 +47,6 @@ describe('POST /api/v1/ha/validate', () => {
     const res = await callRoute(POST as any, {
       body: {
         nodes: [{ ip: '10.24.24.101', password: 'pass1' }],
-        vipHostname: 'proxcenter.local',
         vip: '10.24.24.100',
       },
     })

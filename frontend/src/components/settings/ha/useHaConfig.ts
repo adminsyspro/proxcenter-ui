@@ -3,9 +3,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 export interface HaConfig {
   enabled: boolean
   vip: string
-  vipHostname: string
   vipInterface: string
-  externalUrl: string
   deploymentState: 'idle' | 'deploying' | 'deployed' | 'failed'
   deploymentStep: number
   deployedAt: string | null
@@ -21,5 +19,9 @@ export interface HaNodeConfig {
 }
 
 export function useHaConfig() {
-  return useSWRFetch<HaConfig>('/api/v1/ha/config')
+  return useSWRFetch<HaConfig>('/api/v1/ha/config', {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    shouldRetryOnError: false,
+  })
 }

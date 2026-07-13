@@ -29,7 +29,7 @@ Copy `.env.ha.example` to `.env` on each node. Fill in:
 - `NODE_NAME`, `NODE_IP`, `VRRP_PRIORITY` (per node)
 - `PEER1_IP`, `PEER2_IP`, `PEER3_IP`, `VIP` (same on all 3)
 - All secrets (same on all 3)
-- **Reuse node 1's existing secrets** (`APP_SECRET`, `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `ORCHESTRATOR_API_KEY`) — do NOT generate new values. `APP_SECRET` encrypts stored credentials.
+- **Reuse node 1's existing secrets** (`APP_SECRET`, `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `ORCHESTRATOR_API_KEY`). `APP_SECRET` encrypts stored credentials.
 
 ---
 
@@ -39,14 +39,16 @@ Copy `.env.ha.example` to `.env` on each node. Fill in:
 
 On 2 separate Proxmox hosts, create VMs matching node 1's specs. Install Docker and Docker Compose.
 
-### 1.2 Clone the ProxCenter repo
+### 1.2 Copy ProxCenter files
 
 ```sh
 # On nodes 2 and 3:
-git clone <repo-url> /opt/proxcenter
-cd /opt/proxcenter
-cp .env.ha.example .env
-# Edit .env with this node's values
+mkdir -p /opt/proxcenter
+# Copy from node 1: docker-compose.ha.yml, config/ha/, .env
+scp -r root@<NODE1_IP>:/opt/proxcenter/docker-compose.ha.yml /opt/proxcenter/
+scp -r root@<NODE1_IP>:/opt/proxcenter/config /opt/proxcenter/
+cp /opt/proxcenter/.env.ha.example /opt/proxcenter/.env
+# Edit .env with this node's values (NODE_NAME, NODE_IP, VRRP_PRIORITY)
 ```
 
 ### 1.3 Load watchdog module
@@ -67,6 +69,7 @@ ls -l /dev/watchdog
 
 ```sh
 # On each node:
+cd /opt/proxcenter
 docker compose -f docker-compose.ha.yml up -d etcd
 ```
 
@@ -108,15 +111,9 @@ docker compose -f docker-compose.enterprise.yml exec postgres pg_dumpall -U prox
 docker compose -f docker-compose.enterprise.yml down
 ```
 
-### 3.4 Configure HAProxy on node 1 (POINT OF NO RETURN)
+### 3.4 Start Patroni on node 1 (POINT OF NO RETURN)
 
-Replace `PEER1_IP`, `PEER2_IP`, `PEER3_IP` in `config/ha/haproxy.cfg`:
-
-```sh
-sed -i "s/PEER1_IP/${PEER1_IP}/g; s/PEER2_IP/${PEER2_IP}/g; s/PEER3_IP/${PEER3_IP}/g" config/ha/haproxy.cfg
-```
-
-### 3.5 Start Patroni on node 1 (adopts existing PGDATA)
+Patroni adopts the existing PGDATA directory.
 
 ```sh
 docker compose -f docker-compose.ha.yml up -d patroni
@@ -125,19 +122,19 @@ docker compose -f docker-compose.ha.yml logs -f patroni
 # Expected: "initialized a new cluster" or "bootstrapped from existing data"
 ```
 
-### 3.6 Verify Patroni owns node 1's Postgres
+### 3.5 Verify Patroni owns node 1's Postgres
 
 ```sh
 curl -s http://${NODE_IP}:8008/patroni | jq .
 # Expected: {"state": "running", "role": "master", ...}
 ```
 
-### 3.7 Start HAProxy on node 1
+### 3.6 Start HAProxy on node 1
 
 ```sh
 docker compose -f docker-compose.ha.yml up -d haproxy
-# Verify:
-psql "postgresql://proxcenter:${POSTGRES_PASSWORD}@127.0.0.1:5432/proxcenter" -c "SELECT 1;"
+# Verify local PG access via HAProxy:
+docker compose -f docker-compose.ha.yml exec patroni psql -h 127.0.0.1 -U proxcenter -c "SELECT 1;"
 ```
 
 ---
@@ -147,8 +144,8 @@ psql "postgresql://proxcenter:${POSTGRES_PASSWORD}@127.0.0.1:5432/proxcenter" -c
 ### 4.1 Start Patroni on nodes 2 and 3
 
 ```sh
-# On nodes 2 and 3 (after configuring haproxy.cfg with sed):
-sed -i "s/PEER1_IP/${PEER1_IP}/g; s/PEER2_IP/${PEER2_IP}/g; s/PEER3_IP/${PEER3_IP}/g" config/ha/haproxy.cfg
+# On nodes 2 and 3:
+cd /opt/proxcenter
 docker compose -f docker-compose.ha.yml up -d patroni haproxy
 ```
 
@@ -191,14 +188,22 @@ docker compose -f docker-compose.ha.yml up -d frontend orchestrator weasyprint k
 ```sh
 # On any node:
 ip addr show ${VIP_INTERFACE} | grep ${VIP}
-# Expected: VIP on the highest-priority node (node 1 with priority 150)
+# Expected: VIP on the highest-priority node (node 1 with VRRP_PRIORITY=150)
 ```
 
 ### 5.3 Verify application via VIP
 
 ```sh
-curl -k https://${VIP_HOSTNAME}/api/health
+curl -s http://${VIP}:3000/api/health
 # Expected: {"status":"ok","db":"reachable",...}
+```
+
+### 5.4 Verify VIP redirect
+
+```sh
+# From any machine, access a non-VIP node:
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}" http://<NODE2_IP>:3000/login
+# Expected: 302 http://<VIP>:3000/login
 ```
 
 ---
@@ -207,10 +212,11 @@ curl -k https://${VIP_HOSTNAME}/api/health
 
 Run all drills from `failover-drills.md`. Success criteria:
 
+- [ ] Login via `http://<VIP>:3000` works
+- [ ] HA dashboard shows 3 healthy nodes
 - [ ] Kill primary: replica promoted within 30s, app reconnects
 - [ ] Kill VIP holder: VIP migrates within seconds
-- [ ] Network partition: no split-brain writes
-- [ ] Watchdog: VM reset on simulated Patroni hang
-- [ ] Sync standby loss: remaining replica promoted to sync
-
-Only after all drills pass, update DNS to point to the VIP hostname.
+- [ ] Switchover: promote sync standby, clean failover
+- [ ] Maintenance: enter/exit on a node, services stop/restart
+- [ ] VIP redirect: direct access to a non-VIP node redirects to VIP
+- [ ] Version display: all nodes show the same version

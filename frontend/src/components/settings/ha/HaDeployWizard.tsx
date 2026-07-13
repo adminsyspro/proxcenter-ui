@@ -46,7 +46,6 @@ interface ValidationResult {
 interface ValidationResponse {
   results: ValidationResult[]
   global: {
-    vipHostnameResolvable: boolean
     vipAvailable: boolean
   }
 }
@@ -95,8 +94,6 @@ export default function HaDeployWizard({
     ]
   })
   const [vip, setVip] = useState(config?.vip || '')
-  const [vipHostname, setVipHostname] = useState(config?.vipHostname || '')
-  const [externalUrl, setExternalUrl] = useState(config?.externalUrl || '')
   const [vipInterface, setVipInterface] = useState(config?.vipInterface || 'eth0')
 
   const [validating, setValidating] = useState(false)
@@ -129,11 +126,11 @@ export default function HaDeployWizard({
   // Any change to network inputs invalidates a previous validation run
   useEffect(() => {
     setValidationResult(null)
-  }, [vip, vipHostname, vipInterface])
+  }, [vip, vipInterface])
 
   const canProceedNodes = nodes.every(n => IPV4_REGEX.test(n.ip) && n.password.length > 0)
 
-  const canProceedNetwork = IPV4_REGEX.test(vip) && vipHostname.length > 0 && vipInterface.length > 0
+  const canProceedNetwork = IPV4_REGEX.test(vip) && vipInterface.length > 0
 
   const handleValidate = useCallback(async () => {
     setValidating(true)
@@ -145,7 +142,6 @@ export default function HaDeployWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nodes: nodes.map(n => ({ ip: n.ip, password: n.password })),
-          vipHostname,
           vip,
         }),
       })
@@ -161,7 +157,7 @@ export default function HaDeployWizard({
     } finally {
       setValidating(false)
     }
-  }, [nodes, vipHostname, vip])
+  }, [nodes, vip])
 
   const validationPassed = validationResult
     ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose && r.watchdog
@@ -241,9 +237,7 @@ export default function HaDeployWizard({
         body: JSON.stringify({
           nodes: nodes.map(n => ({ name: n.name, ip: n.ip, vrrpPriority: n.vrrpPriority })),
           vip,
-          vipHostname,
           vipInterface,
-          externalUrl: externalUrl || `http://${vipHostname}:3000`,
           sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
         }),
       })
@@ -268,7 +262,7 @@ export default function HaDeployWizard({
       setDeployError(e.message || 'Deployment failed')
       setDeploying(false)
     }
-  }, [nodes, vip, vipHostname, vipInterface, externalUrl, connectSSE])
+  }, [nodes, vip, vipInterface, connectSSE])
 
   const handleRetryDeploy = useCallback(async () => {
     setDeploying(true)
@@ -375,23 +369,6 @@ export default function HaDeployWizard({
           fullWidth
         />
         <TextField
-          label="VIP Hostname"
-          value={vipHostname}
-          onChange={(e) => setVipHostname(e.target.value)}
-          helperText="DNS name resolving to the VIP (e.g., proxcenter.local)"
-          size="small"
-          fullWidth
-        />
-        <TextField
-          label="External URL"
-          value={externalUrl}
-          onChange={(e) => setExternalUrl(e.target.value)}
-          helperText={`Canonical URL for ProxCenter access. Becomes NEXTAUTH_URL. Default: http://${vipHostname || '<hostname>'}:3000`}
-          placeholder={vipHostname ? `http://${vipHostname}:3000` : ''}
-          size="small"
-          fullWidth
-        />
-        <TextField
           label="Network Interface"
           value={vipInterface}
           onChange={(e) => setVipInterface(e.target.value)}
@@ -401,7 +378,8 @@ export default function HaDeployWizard({
         />
       </Box>
       <Alert severity="info" sx={{ mt: 2 }}>
-        After deployment, update your OIDC/SSO callback URLs at your identity provider to use the External URL.
+        After deployment, the application will be accessible at http://{'<VIP>'}:3000.
+        If you use OIDC/SSO, update your callback URLs at your identity provider.
       </Alert>
     </Box>
   )
@@ -451,11 +429,6 @@ export default function HaDeployWizard({
             </Card>
           ))}
           <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label="VIP hostname resolves"
-              size="small"
-              color={validationResult.global.vipHostnameResolvable ? 'success' : 'warning'}
-            />
             <Chip
               label="VIP available"
               size="small"
@@ -554,8 +527,8 @@ export default function HaDeployWizard({
                 HA cluster deployed successfully.
               </Alert>
               <Alert severity="info" sx={{ mb: 2 }}>
-                NEXTAUTH_URL has been updated to {externalUrl || `http://${vipHostname}:3000`}.
-                Update your OIDC/SSO callback URLs at your identity provider.
+                NEXTAUTH_URL has been set to http://{vip}:3000.
+                Update your OIDC/SSO callback URLs at your identity provider if applicable.
               </Alert>
               <Button variant="contained" onClick={onDeployed}>View Dashboard</Button>
             </Box>

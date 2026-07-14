@@ -2404,7 +2404,7 @@
     "pveStep1": "创建专用用户",
     "pveStep2": "创建 API 令牌（privsep=0 继承用户权限）",
     "pveStep3": "在整个集群上授予 PVEAdmin 角色",
-    "pveStep4": "添加 Rolling Update 所需的 Sys.Modify 权限（刷新 apt 软件包列表）",
+    "pveStep4": "添加 Sys.Modify 和 Sys.PowerMgmt 权限（Rolling Update 刷新 apt 软件包列表，节点重启/关机）",
     "pbsStep1": "创建专用用户",
     "pbsStep2": "生成 API 令牌",
     "pbsStep3": "授予数据存储读取权限",

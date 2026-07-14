@@ -2435,7 +2435,7 @@
     "pveStep1": "Crear un usuario dedicado",
     "pveStep2": "Crear an API token (privsep=0 inherits usuario permisos)",
     "pveStep3": "Grant PVEAdmin rol en el entire cluster",
-    "pveStep4": "Añade el privilegio Sys.Modify requerido por Rolling Update (actualización de paquetes apt)",
+    "pveStep4": "Añade los privilegios Sys.Modify y Sys.PowerMgmt (actualización de paquetes apt de Rolling Update, reinicio/apagado de nodos)",
     "pbsStep1": "Crear un usuario dedicado",
     "pbsStep2": "Generar un token API",
     "pbsStep3": "Conceder acceso de lectura a datastores",

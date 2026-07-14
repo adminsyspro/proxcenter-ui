@@ -2435,7 +2435,7 @@
     "pveStep1": "전용 사용자 생성",
     "pveStep2": "API 토큰 생성 (privsep=0은 사용자 권한을 상속)",
     "pveStep3": "전체 클러스터에 PVEAdmin 역할 부여",
-    "pveStep4": "롤링 업데이트에 필요한 Sys.Modify 권한 추가 (apt 패키지 새로 고침)",
+    "pveStep4": "Sys.Modify 및 Sys.PowerMgmt 권한 추가 (롤링 업데이트 apt 새로 고침, 노드 재부팅/종료)",
     "pbsStep1": "전용 사용자 생성",
     "pbsStep2": "API 토큰 생성",
     "pbsStep3": "데이터스토어에 대한 읽기 권한 부여",

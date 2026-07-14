@@ -2435,7 +2435,7 @@
     "pveStep1": "Create a dedicated user",
     "pveStep2": "Create an API token (privsep=0 inherits user permissions)",
     "pveStep3": "Grant PVEAdmin role on the entire cluster",
-    "pveStep4": "Add the Sys.Modify privilege required by Rolling Update (apt package refresh)",
+    "pveStep4": "Add the Sys.Modify and Sys.PowerMgmt privileges (Rolling Update apt refresh, and node reboot/shutdown)",
     "pbsStep1": "Create a dedicated user",
     "pbsStep2": "Generate an API token",
     "pbsStep3": "Grant read access to datastores",

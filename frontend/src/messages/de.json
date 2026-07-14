@@ -231,6 +231,16 @@
     "drsInactive": "DRS inaktiv",
     "migrations": "{count} Migration(s)"
   },
+  "ha": {
+    "healthy": "HA: {running}/{total} Knoten OK",
+    "degraded": "HA: {running}/{total} Knoten (beeinträchtigt)",
+    "critical": "HA: {running}/{total} Knoten (kritisch)",
+    "syncMode": "Synchronisierungsmodus",
+    "syncStrict": "Strikt (kein Datenverlust)",
+    "syncAvailability": "Verfügbarkeit (Async-Fallback)",
+    "syncStrictDesc": "Blockiert Schreibvorgänge, wenn kein synchrones Replikat verfügbar ist. Garantiert keinen Datenverlust.",
+    "syncAvailabilityDesc": "Wechselt zu asynchroner Replikation, wenn kein Replikat verfügbar ist. Schreibvorgänge werden fortgesetzt, aber Datenverlust bei Failover möglich."
+  },
   "user": {
     "defaultName": "Benutzer",
     "admin": "Administrator",

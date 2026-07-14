@@ -9,18 +9,17 @@ export const dynamic = 'force-dynamic'
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 
-export async function POST(request: NextRequest) {
+export async function PUT(req: NextRequest) {
   const guard = await requireEnterprise()
   if (guard) return guard
   const perm = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (perm) return perm
 
   try {
-    let body: Record<string, unknown> = {}
-    try { body = await request.json() } catch { /* empty body is OK for retry */ }
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ha/deploy`, {
-      method: 'POST',
-      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
+    const body = await req.json()
+    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ha/sync-mode`, {
+      method: 'PUT',
+      headers: { ...orchestratorHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     const data = await res.json()

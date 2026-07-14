@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import {
   Alert,
@@ -9,9 +9,13 @@ import {
   Card,
   CardContent,
   Chip,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
   keyframes,
 } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import { useHaCluster, type PatroniMember } from './useHaCluster'
 import { useHaConfig } from './useHaConfig'
@@ -59,8 +63,36 @@ function sortMembers(members: PatroniMember[]): PatroniMember[] {
 }
 
 export default function HaClusterDashboard() {
+  const t = useTranslations('ha')
   const { data: cluster, isLoading, error, mutate } = useHaCluster(true)
   const { data: haConfig, mutate: mutateConfig } = useHaConfig()
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ type: 'success' | 'error', message: string } | null>(null)
+
+  const handleSyncModeChange = useCallback(async (_: any, value: string | null) => {
+    if (!value) return
+    const strict = value === 'strict'
+    setSyncLoading(true)
+    setSyncResult(null)
+    try {
+      const res = await fetch('/api/v1/ha/sync-mode', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ strict }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setSyncResult({ type: 'success', message: data.message || 'Sync mode updated' })
+        mutate()
+      } else {
+        setSyncResult({ type: 'error', message: data.error || `Failed (${res.status})` })
+      }
+    } catch (e: any) {
+      setSyncResult({ type: 'error', message: e.message || 'Request failed' })
+    } finally {
+      setSyncLoading(false)
+    }
+  }, [mutate])
 
   const maintenanceIPs = useMemo(() => {
     if (!haConfig?.nodes) return new Set<string>()
@@ -86,16 +118,15 @@ export default function HaClusterDashboard() {
     )
   }
 
-  const allHealthy = cluster.patroni.members.every(m =>
-    m.state === 'running' || m.state === 'streaming'
-  )
-  const degradedCount = cluster.patroni.members.filter(m =>
-    m.state !== 'running' && m.state !== 'streaming'
+  const availableCount = cluster.patroni.members.filter(m =>
+    (m.state === 'running' || m.state === 'streaming') && !maintenanceIPs.has(m.host)
   ).length
-  const healthStatus = allHealthy ? 'healthy' : degradedCount >= 2 ? 'critical' : 'degraded'
+  const totalNodes = haConfig?.nodes?.length || cluster.patroni.members.length || 3
+  const healthStatus = availableCount >= totalNodes ? 'healthy' : availableCount >= 2 ? 'degraded' : 'critical'
 
   const leader = cluster.patroni.members.find(m => m.role === 'leader')
   const isSyncMode = cluster.patroni.syncMode !== 'off'
+  const currentSyncStrict = cluster.patroni.syncMode === 'synchronous_mode_strict'
   const switchoverCandidates = new Set(
     cluster.patroni.members
       .filter(m => {
@@ -147,6 +178,7 @@ export default function HaClusterDashboard() {
               member={member}
               vipAddress={cluster.vip.holder === member.name ? cluster.vip.address : undefined}
               maintenance={maintenanceIPs.has(member.host)}
+              maintenanceLocked={maintenanceIPs.size > 0 && !maintenanceIPs.has(member.host)}
               leaderName={leader?.name}
               onSwitchover={switchoverCandidates.has(member.name) ? () => mutate() : undefined}
               onRefresh={() => { mutate(); mutateConfig() }}
@@ -154,6 +186,43 @@ export default function HaClusterDashboard() {
           </Box>
         ))}
       </Box>
+
+      {/* Sync Mode */}
+      <Card variant="outlined" sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{t('syncMode')}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {currentSyncStrict ? t('syncStrictDesc') : t('syncAvailabilityDesc')}
+              </Typography>
+            </Box>
+            <ToggleButtonGroup
+              value={currentSyncStrict ? 'strict' : 'availability'}
+              exclusive
+              onChange={handleSyncModeChange}
+              size="small"
+              disabled={syncLoading}
+            >
+              <ToggleButton value="strict">
+                <Tooltip title={t('syncStrictDesc')}>
+                  <span>{t('syncStrict')}</span>
+                </Tooltip>
+              </ToggleButton>
+              <ToggleButton value="availability">
+                <Tooltip title={t('syncAvailabilityDesc')}>
+                  <span>{t('syncAvailability')}</span>
+                </Tooltip>
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+          {syncResult && (
+            <Alert severity={syncResult.type} sx={{ mt: 1 }} onClose={() => setSyncResult(null)}>
+              {syncResult.message}
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Service Grid */}
       <Card variant="outlined">

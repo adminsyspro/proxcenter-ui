@@ -47,3 +47,18 @@ export function useOrchestratorHealth(isEnterprise: boolean) {
     { refreshInterval }
   )
 }
+
+const haClusterFetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) return null
+  return res.json()
+}
+
+export function useHaClusterHealth(enabled: boolean) {
+  const refreshInterval = useRefreshInterval(15000)
+  return useSWR(
+    enabled ? '/api/v1/ha/cluster' : null,
+    haClusterFetcher,
+    { refreshInterval, shouldRetryOnError: false }
+  )
+}

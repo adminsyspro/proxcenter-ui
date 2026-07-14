@@ -41,12 +41,13 @@ interface HaNodeCardProps {
   member: PatroniMember
   vipAddress?: string
   maintenance: boolean
+  maintenanceLocked?: boolean
   leaderName?: string
   onSwitchover?: () => void
   onRefresh?: () => void
 }
 
-export default function HaNodeCard({ member, vipAddress, maintenance, leaderName, onSwitchover, onRefresh }: HaNodeCardProps) {
+export default function HaNodeCard({ member, vipAddress, maintenance, maintenanceLocked, leaderName, onSwitchover, onRefresh }: HaNodeCardProps) {
   const roleColor = ROLE_COLORS[member.role] || 'error'
   const [confirmOpen, setConfirmOpen] = useState<'switchover' | 'maintenance' | null>(null)
   const [loading, setLoading] = useState(false)
@@ -109,9 +110,16 @@ export default function HaNodeCard({ member, vipAddress, maintenance, leaderName
     }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            {member.name}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              {member.name}
+            </Typography>
+            {member.version && (
+              <Typography variant="caption" color="text.secondary">
+                (v{member.version})
+              </Typography>
+            )}
+          </Box>
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
             {onSwitchover && (
               <Tooltip title="Promote to leader">
@@ -125,15 +133,17 @@ export default function HaNodeCard({ member, vipAddress, maintenance, leaderName
                 </IconButton>
               </Tooltip>
             )}
-            <Tooltip title={maintenance ? 'Exit maintenance' : 'Enter maintenance'}>
-              <IconButton
-                size="small"
-                color={maintenance ? 'warning' : 'default'}
-                disabled={loading}
-                onClick={() => setConfirmOpen('maintenance')}
-              >
-                <i className={maintenance ? 'ri-tools-fill' : 'ri-tools-line'} style={{ fontSize: 18 }} />
-              </IconButton>
+            <Tooltip title={maintenance ? 'Exit maintenance' : maintenanceLocked ? 'Another node is already in maintenance' : 'Enter maintenance'}>
+              <span>
+                <IconButton
+                  size="small"
+                  color={maintenance ? 'warning' : 'default'}
+                  disabled={loading || (!maintenance && maintenanceLocked)}
+                  onClick={() => setConfirmOpen('maintenance')}
+                >
+                  <i className={maintenance ? 'ri-tools-fill' : 'ri-tools-line'} style={{ fontSize: 18 }} />
+                </IconButton>
+              </span>
             </Tooltip>
             {vipAddress && <Chip label={`VIP ${vipAddress}`} size="small" color="primary" />}
             {maintenance && <Chip label="Maintenance" size="small" color="warning" />}
@@ -151,11 +161,6 @@ export default function HaNodeCard({ member, vipAddress, maintenance, leaderName
             color={member.state === 'running' || member.state === 'streaming' ? 'success' : 'error'}
           />
         </Box>
-        {member.version && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            v{member.version}
-          </Typography>
-        )}
         {result && (
           <Alert severity={result.type} sx={{ mt: 1 }} onClose={() => setResult(null)}>
             {result.message}

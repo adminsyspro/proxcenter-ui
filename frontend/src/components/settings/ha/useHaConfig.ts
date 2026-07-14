@@ -18,8 +18,8 @@ export interface HaNodeConfig {
   maintenance: boolean
 }
 
-export function useHaConfig() {
-  return useSWRFetch<HaConfig>('/api/v1/ha/config', {
+export function useHaConfig(enabled = true) {
+  return useSWRFetch<HaConfig>(enabled ? '/api/v1/ha/config' : null, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     shouldRetryOnError: false,

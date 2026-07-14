@@ -236,6 +236,16 @@
     "drsInactive": "DRS inactif",
     "migrations": "{count} migration(s)"
   },
+  "ha": {
+    "healthy": "HA : {running}/{total} noeuds OK",
+    "degraded": "HA : {running}/{total} noeuds (dégradé)",
+    "critical": "HA : {running}/{total} noeuds (critique)",
+    "syncMode": "Mode de synchronisation",
+    "syncStrict": "Strict (zero perte de donnees)",
+    "syncAvailability": "Disponibilite (bascule async)",
+    "syncStrictDesc": "Bloque les ecritures quand aucun replica synchrone n'est disponible. Garantit zero perte de donnees.",
+    "syncAvailabilityDesc": "Bascule en replication asynchrone quand aucun replica n'est disponible. Les ecritures continuent mais risque de perte en cas de failover."
+  },
   "user": {
     "defaultName": "Utilisateur",
     "admin": "Admin",

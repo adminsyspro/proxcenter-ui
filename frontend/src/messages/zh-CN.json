@@ -235,6 +235,16 @@
     "drsInactive": "DRS 未活跃",
     "migrations": "{count} 次迁移"
   },
+  "ha": {
+    "healthy": "HA: {running}/{total} 节点正常",
+    "degraded": "HA: {running}/{total} 节点 (降级)",
+    "critical": "HA: {running}/{total} 节点 (严重)",
+    "syncMode": "同步模式",
+    "syncStrict": "严格 (零数据丢失)",
+    "syncAvailability": "可用性 (异步回退)",
+    "syncStrictDesc": "当没有同步副本可用时阻止写入。保证零数据丢失。",
+    "syncAvailabilityDesc": "当没有副本可用时回退到异步复制。写入继续但故障转移时可能丢失数据。"
+  },
   "user": {
     "defaultName": "用户",
     "admin": "管理员",

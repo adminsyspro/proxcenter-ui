@@ -236,6 +236,16 @@
     "drsInactive": "DRS inactive",
     "migrations": "{count} migration(s)"
   },
+  "ha": {
+    "healthy": "HA: {running}/{total} nodes healthy",
+    "degraded": "HA: {running}/{total} nodes (degraded)",
+    "critical": "HA: {running}/{total} nodes (critical)",
+    "syncMode": "Sync mode",
+    "syncStrict": "Strict (zero data loss)",
+    "syncAvailability": "Availability (async fallback)",
+    "syncStrictDesc": "Blocks writes when no synchronous replica is available. Guarantees zero data loss.",
+    "syncAvailabilityDesc": "Falls back to asynchronous replication when no replica is available. Writes continue but may lose data on failover."
+  },
   "user": {
     "defaultName": "User",
     "admin": "Admin",

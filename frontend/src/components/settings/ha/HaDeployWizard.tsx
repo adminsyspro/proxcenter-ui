@@ -16,6 +16,12 @@ import {
   Step,
   StepLabel,
   Stepper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -38,7 +44,6 @@ interface ValidationResult {
   docker: boolean
   dockerVersion?: string
   dockerCompose: boolean
-  watchdog: boolean
   pgCompatible: boolean
   ping: Record<string, boolean>
 }
@@ -65,7 +70,6 @@ const PREREQUISITES = [
   '3 distinct Proxmox hosts (for anti-affinity)',
   'A free IP address for the VIP on the same subnet',
   'Root SSH access to all 3 VMs',
-  'Watchdog device (/dev/watchdog or softdog module) on all 3 VMs',
 ]
 
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
@@ -104,11 +108,17 @@ export default function HaDeployWizard({
   const [deploySteps, setDeploySteps] = useState<DeployStepEvent[]>([])
   const [deployError, setDeployError] = useState('')
   const [deployDone, setDeployDone] = useState(false)
-  const [logExpanded, setLogExpanded] = useState(false)
+  const [logExpanded, setLogExpanded] = useState(true)
+  const [sseReconnecting, setSseReconnecting] = useState(false)
+  const [conversionPhase, setConversionPhase] = useState(false)
+  const [vipPolling, setVipPolling] = useState(false)
+  const [conversionElapsed, setConversionElapsed] = useState(0)
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const deployingRef = useRef(false)
   const deployDoneRef = useRef(false)
+  const vipPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     deployingRef.current = deploying
@@ -160,10 +170,65 @@ export default function HaDeployWizard({
   }, [nodes, vip])
 
   const validationPassed = validationResult
-    ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose && r.watchdog
+    ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose
         && Object.values(r.ping).every(Boolean))
       && validationResult.global.vipAvailable
     : false
+
+  const stopConversionTimers = useCallback(() => {
+    if (vipPollRef.current) {
+      clearInterval(vipPollRef.current)
+      vipPollRef.current = null
+    }
+    if (elapsedRef.current) {
+      clearInterval(elapsedRef.current)
+      elapsedRef.current = null
+    }
+    setVipPolling(false)
+  }, [])
+
+  const enterConversionPhase = useCallback(() => {
+    setConversionPhase(true)
+    setSseReconnecting(true)
+    setConversionElapsed(0)
+    if (!elapsedRef.current) {
+      elapsedRef.current = setInterval(() => setConversionElapsed(e => e + 1), 1000)
+    }
+    if (!vipPollRef.current) {
+      setVipPolling(true)
+      vipPollRef.current = setInterval(async () => {
+        try {
+          const r = await fetch('/api/health', { signal: AbortSignal.timeout(5000) })
+          if (r.ok) {
+            stopConversionTimers()
+            setConversionPhase(false)
+            setSseReconnecting(false)
+            setDeployDone(true)
+            setDeploying(false)
+            deployDoneRef.current = true
+            deployingRef.current = false
+            setDeploySteps(prev => {
+              const maxStep = prev.reduce((m, s) => Math.max(m, s.step), 0)
+              const totalSteps = prev[0]?.totalSteps || 18
+              if (maxStep < totalSteps) {
+                return [...prev, {
+                  step: totalSteps,
+                  totalSteps,
+                  label: 'HA cluster online',
+                  status: 'done' as const,
+                  timestamp: new Date().toISOString(),
+                }]
+              }
+              return prev
+            })
+            setTimeout(() => {
+              window.location.href = `http://${vip}:3000`
+            }, 3000)
+          }
+        } catch {}
+      }, 6000)
+    }
+  }, [vip, stopConversionTimers])
 
   const connectSSE = useCallback(() => {
     if (eventSourceRef.current) {
@@ -189,6 +254,7 @@ export default function HaDeployWizard({
           setDeploying(false)
           deployingRef.current = false
           eventSourceRef.current?.close()
+          stopConversionTimers()
         }
         if (data.status === 'done' && data.step === data.totalSteps) {
           setDeployDone(true)
@@ -196,6 +262,10 @@ export default function HaDeployWizard({
           deployDoneRef.current = true
           deployingRef.current = false
           eventSourceRef.current?.close()
+          stopConversionTimers()
+        }
+        if (data.step >= 13) {
+          enterConversionPhase()
         }
       } catch {}
     }
@@ -203,14 +273,17 @@ export default function HaDeployWizard({
     es.onerror = () => {
       es.close()
       if (!deployDoneRef.current && deployingRef.current) {
-        setTimeout(connectSSE, 5000)
+        enterConversionPhase()
+        setTimeout(connectSSE, 8000)
       }
     }
-  }, [])
+  }, [stopConversionTimers, enterConversionPhase])
 
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) eventSourceRef.current.close()
+      if (vipPollRef.current) clearInterval(vipPollRef.current)
+      if (elapsedRef.current) clearInterval(elapsedRef.current)
     }
   }, [])
 
@@ -249,7 +322,13 @@ export default function HaDeployWizard({
         return
       }
 
-      const deployRes = await fetch('/api/v1/ha/deploy', { method: 'POST' })
+      const deployRes = await fetch('/api/v1/ha/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
+        }),
+      })
       if (!deployRes.ok) {
         const err = await deployRes.json().catch(() => ({}))
         setDeployError(err.error || 'Failed to start deployment')
@@ -270,7 +349,13 @@ export default function HaDeployWizard({
     setDeployError('')
 
     try {
-      const deployRes = await fetch('/api/v1/ha/deploy', { method: 'POST' })
+      const deployRes = await fetch('/api/v1/ha/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
+        }),
+      })
       if (!deployRes.ok) {
         const err = await deployRes.json().catch(() => ({}))
         setDeployError(err.error || 'Failed to resume deployment')
@@ -282,7 +367,7 @@ export default function HaDeployWizard({
       setDeployError(e.message || 'Deployment failed')
       setDeploying(false)
     }
-  }, [connectSSE])
+  }, [nodes, connectSSE])
 
   const currentDeployStep = deploySteps.length > 0
     ? deploySteps[deploySteps.length - 1]
@@ -409,40 +494,83 @@ export default function HaDeployWizard({
           <Button variant="outlined" onClick={handleValidate}>Retry</Button>
         </Box>
       )}
-      {validationResult && (
-        <Box>
-          {validationResult.results.map((result) => (
-            <Card key={result.ip} variant="outlined" sx={{ mb: 1 }}>
-              <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>{result.ip}</Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                  <Chip label="SSH" size="small" color={result.ssh ? 'success' : 'error'} />
-                  <Chip label={`Docker ${result.dockerVersion || ''}`} size="small" color={result.docker ? 'success' : 'error'} />
-                  <Chip label="Compose" size="small" color={result.dockerCompose ? 'success' : 'error'} />
-                  <Chip label="Watchdog" size="small" color={result.watchdog ? 'success' : 'error'} />
-                  <Chip label="PG Compatible" size="small" color={result.pgCompatible ? 'success' : 'warning'} />
-                  {Object.entries(result.ping).map(([ip, ok]) => (
-                    <Chip key={ip} label={`Ping ${ip}`} size="small" color={ok ? 'success' : 'error'} />
+      {validationResult && (() => {
+        const results = validationResult.results
+        const checkIcon = (ok: boolean | undefined, warn?: boolean) => (
+          <i
+            className={ok ? 'ri-check-line' : 'ri-close-line'}
+            style={{ color: ok ? 'var(--mui-palette-success-main)' : warn ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-error-main)', fontSize: 18 }}
+          />
+        )
+        const nodeChecks: { label: string; values: (boolean | undefined)[] }[] = [
+          { label: 'SSH', values: results.map(r => r.ssh) },
+          { label: 'Docker', values: results.map(r => r.docker) },
+          { label: 'Compose', values: results.map(r => r.dockerCompose) },
+          { label: 'PG compatible', values: results.map(r => r.pgCompatible) },
+        ]
+        const allPingTargets = [...new Set(results.flatMap(r => Object.keys(r.ping)))]
+        for (const target of allPingTargets) {
+          nodeChecks.push({
+            label: `Ping ${target}`,
+            values: results.map(r => r.ping[target] ?? undefined),
+          })
+        }
+        return (
+          <Box>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, borderBottom: 2, borderColor: 'divider' }}>Check</TableCell>
+                    {results.map((r, i) => (
+                      <TableCell key={r.ip} align="center" sx={{ fontWeight: 600, borderBottom: 2, borderColor: 'divider' }}>
+                        {nodes[i]?.name || r.ip}
+                        <Typography variant="caption" display="block" color="text.secondary">{r.ip}</Typography>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {nodeChecks.map((check) => (
+                    <TableRow key={check.label}>
+                      <TableCell sx={{ py: 0.75 }}>
+                        {check.label}
+                        {check.label === 'Docker' && results.some(r => r.dockerVersion) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                            ({results.find(r => r.dockerVersion)?.dockerVersion})
+                          </Typography>
+                        )}
+                      </TableCell>
+                      {check.values.map((ok, i) => (
+                        <TableCell key={i} align="center" sx={{ py: 0.75 }}>
+                          {ok === undefined ? <Typography variant="caption" color="text.secondary">n/a</Typography> : checkIcon(ok, check.label === 'PG compatible')}
+                        </TableCell>
+                      ))}
+                    </TableRow>
                   ))}
-                </Box>
-              </CardContent>
-            </Card>
-          ))}
-          <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip
-              label="VIP available"
-              size="small"
-              color={validationResult.global.vipAvailable ? 'success' : 'error'}
-            />
+                  <TableRow>
+                    <TableCell sx={{ py: 0.75, fontWeight: 600, borderTop: 2, borderColor: 'divider' }}>VIP available ({vip})</TableCell>
+                    {results.map((_, i) => (
+                      <TableCell key={i} align="center" sx={{ py: 0.75, borderTop: 2, borderColor: 'divider' }}>
+                        {i === 0 ? checkIcon(validationResult.global.vipAvailable) : null}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+            {validationPassed && (
+              <Alert severity="success" sx={{ mt: 2 }}>All checks passed.</Alert>
+            )}
+            {!validationPassed && (
+              <Box sx={{ mt: 2 }}>
+                <Alert severity="error" sx={{ mb: 1 }}>Some checks failed. Fix the issues and retry.</Alert>
+                <Button variant="outlined" onClick={handleValidate}>Retry Validation</Button>
+              </Box>
+            )}
           </Box>
-          {!validationPassed && (
-            <Box sx={{ mt: 2 }}>
-              <Alert severity="error" sx={{ mb: 1 }}>Some checks failed. Fix the issues and retry.</Alert>
-              <Button variant="outlined" onClick={handleValidate}>Retry Validation</Button>
-            </Box>
-          )}
-        </Box>
-      )}
+        )
+      })()}
     </Box>
   )
 
@@ -481,7 +609,7 @@ export default function HaDeployWizard({
               Step {completedSteps} of {totalSteps}
             </Typography>
           </Box>
-          {currentDeployStep && (
+          {currentDeployStep && !conversionPhase && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="body2">
                 {currentDeployStep.status === 'running' && '...'} {currentDeployStep.label}
@@ -492,6 +620,24 @@ export default function HaDeployWizard({
                 </Typography>
               )}
             </Box>
+          )}
+          {conversionPhase && deploying && !deployDone && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                Autonomous conversion in progress ({Math.floor(conversionElapsed / 60)}:{String(conversionElapsed % 60).padStart(2, '0')})
+              </Typography>
+              <Typography variant="caption" component="div" sx={{ mb: 1 }}>
+                {conversionElapsed < 15
+                  ? 'Stopping the standalone stack and backing up database...'
+                  : conversionElapsed < 45
+                    ? 'Bootstrapping Patroni leader and replicating to nodes 2 and 3...'
+                    : conversionElapsed < 90
+                      ? 'Starting application services on all 3 nodes...'
+                      : 'Still working, this can take a few minutes. Waiting for services to come back online...'
+                }
+              </Typography>
+              <LinearProgress sx={{ mt: 0.5 }} />
+            </Alert>
           )}
           <Button
             variant="text"
@@ -513,6 +659,13 @@ export default function HaDeployWizard({
                   </Typography>
                 </Box>
               ))}
+              {conversionPhase && deploying && (
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" sx={{ fontFamily: 'inherit', color: 'info.main' }}>
+                    [...] Autonomous conversion running, waiting for local node to come back online...
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Collapse>
           {deployError && (
@@ -524,7 +677,7 @@ export default function HaDeployWizard({
           {deployDone && (
             <Box sx={{ mt: 2 }}>
               <Alert severity="success" sx={{ mb: 2 }}>
-                HA cluster deployed successfully.
+                HA cluster deployed successfully. Redirecting to VIP ({vip})...
               </Alert>
               <Alert severity="info" sx={{ mb: 2 }}>
                 NEXTAUTH_URL has been set to http://{vip}:3000.

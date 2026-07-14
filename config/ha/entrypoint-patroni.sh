@@ -31,4 +31,9 @@ ensure_replicator() {
 }
 ensure_replicator &
 
+# Watchdog device is root-owned; grant access before dropping privileges
+if [ -c /dev/watchdog ]; then
+  chmod 666 /dev/watchdog
+fi
+
 exec su-exec postgres patroni /tmp/patroni.yml

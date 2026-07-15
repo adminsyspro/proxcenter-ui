@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 import { importDiskAssets } from './importDiskAssets'
-import { getAsset } from './assetStore'
+import { getAsset, putAsset } from './assetStore'
 
 let root = ''
 beforeEach(async () => {
@@ -30,13 +30,27 @@ describe('importDiskAssets', () => {
     expect(bg!.ext).toBe('jpg')
   })
 
-  it('is idempotent (re-running imports the same rows without duplication)', async () => {
+  it('is idempotent (second run inserts nothing and skips the existing row)', async () => {
     mkdirSync(path.join(root, 'branding', 'default'), { recursive: true })
     writeFileSync(path.join(root, 'branding', 'default', 'logo.png'), Buffer.from([1]))
-    await importDiskAssets(root)
-    await importDiskAssets(root)
+    const first = await importDiskAssets(root)
+    expect(first).toEqual({ imported: 1, skipped: 0 })
+    const second = await importDiskAssets(root)
+    expect(second).toEqual({ imported: 0, skipped: 1 })
     const count = await prismaTest.uploadedAsset.count()
     expect(count).toBe(1)
+  })
+
+  it('never overwrites an asset that already exists in the database', async () => {
+    mkdirSync(path.join(root, 'branding', 'default'), { recursive: true })
+    writeFileSync(path.join(root, 'branding', 'default', 'logo.png'), Buffer.from([9, 9]))
+    // The DB row is NEWER than the disk file (uploaded via the UI after the
+    // legacy file was written): a boot must not clobber it.
+    await putAsset('default', 'branding', 'logo', 'png', 'image/png', Buffer.from([1]))
+    const res = await importDiskAssets(root)
+    expect(res).toEqual({ imported: 0, skipped: 1 })
+    const kept = await getAsset('default', 'branding', 'logo')
+    expect(Buffer.from(kept!.data).equals(Buffer.from([1]))).toBe(true)
   })
 
   it('returns zero counts when the root does not exist', async () => {

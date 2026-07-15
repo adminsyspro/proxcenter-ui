@@ -4,6 +4,7 @@ export interface HaConfig {
   enabled: boolean
   vip: string
   vipInterface: string
+  externalUrl?: string
   deploymentState: 'idle' | 'deploying' | 'deployed' | 'failed'
   deploymentStep: number
   deployedAt: string | null

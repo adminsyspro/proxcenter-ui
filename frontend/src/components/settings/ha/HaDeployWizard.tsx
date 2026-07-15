@@ -13,6 +13,7 @@ import {
   Collapse,
   FormControlLabel,
   LinearProgress,
+  Link,
   Step,
   StepLabel,
   Stepper,
@@ -27,6 +28,7 @@ import {
 } from '@mui/material'
 
 import type { HaConfig } from './useHaConfig'
+import { resolveCompletionTarget } from './haRedirect'
 
 interface DeployStepEvent {
   step: number
@@ -52,6 +54,7 @@ interface ValidationResponse {
   results: ValidationResult[]
   global: {
     vipAvailable: boolean
+    externalUrl?: string
   }
 }
 
@@ -87,6 +90,7 @@ export default function HaDeployWizard({
   const [activeStep, setActiveStep] = useState(resumeStep)
 
   const [prereqChecked, setPrereqChecked] = useState(false)
+  const [snapshotConfirmed, setSnapshotConfirmed] = useState(false)
   const [nodes, setNodes] = useState<NodeInput[]>(() => {
     if (config?.nodes?.length === 3) {
       return config.nodes.map(n => ({ name: n.name, ip: n.ip, password: '', vrrpPriority: n.vrrpPriority }))
@@ -153,6 +157,7 @@ export default function HaDeployWizard({
         body: JSON.stringify({
           nodes: nodes.map(n => ({ ip: n.ip, password: n.password })),
           vip,
+          vipInterface,
         }),
       })
       if (!res.ok) {
@@ -167,13 +172,21 @@ export default function HaDeployWizard({
     } finally {
       setValidating(false)
     }
-  }, [nodes, vip])
+  }, [nodes, vip, vipInterface])
 
   const validationPassed = validationResult
     ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose
         && Object.values(r.ping).every(Boolean))
       && validationResult.global.vipAvailable
     : false
+
+  // Post-deploy destination (decision 3): the preserved external URL comes
+  // from the validation summary on a fresh run, or from the saved config
+  // when resuming after a reload.
+  const completion = resolveCompletionTarget(
+    validationResult?.global.externalUrl || config?.externalUrl,
+    vip,
+  )
 
   const stopConversionTimers = useCallback(() => {
     if (vipPollRef.current) {
@@ -222,13 +235,13 @@ export default function HaDeployWizard({
               return prev
             })
             setTimeout(() => {
-              window.location.href = `http://${vip}:3000`
+              window.location.href = completion.url
             }, 3000)
           }
         } catch {}
       }, 6000)
     }
-  }, [vip, stopConversionTimers])
+  }, [completion.url, stopConversionTimers])
 
   const connectSSE = useCallback(() => {
     if (eventSourceRef.current) {
@@ -463,8 +476,9 @@ export default function HaDeployWizard({
         />
       </Box>
       <Alert severity="info" sx={{ mt: 2 }}>
-        After deployment, the application will be accessible at http://{'<VIP>'}:3000.
-        If you use OIDC/SSO, update your callback URLs at your identity provider.
+        After deployment, the application is reachable at http://VIP:3000.
+        An existing external URL (reverse proxy, OIDC) is preserved during
+        conversion; you will only repoint your reverse proxy at the VIP.
       </Alert>
     </Box>
   )
@@ -556,6 +570,15 @@ export default function HaDeployWizard({
                       </TableCell>
                     ))}
                   </TableRow>
+                  {validationResult.global.externalUrl && (
+                    <TableRow>
+                      <TableCell colSpan={results.length + 1} sx={{ py: 0.75 }}>
+                        <Typography variant="caption">
+                          External URL kept: {validationResult.global.externalUrl}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -587,12 +610,28 @@ export default function HaDeployWizard({
         <Box>
           <Typography variant="body2" sx={{ mb: 2 }}>
             This will deploy the HA cluster across all 3 nodes. The process takes several minutes
-            and includes a brief service interruption during database conversion (Phase C).
+            and includes a brief service interruption during database conversion.
           </Typography>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            The page may briefly disconnect during application cutover (step 16) and will auto-reconnect.
+            The page may briefly disconnect during application cutover and will auto-reconnect.
           </Alert>
-          <Button variant="contained" color="primary" onClick={handleDeploy}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Before the old stack is stopped, a full database backup is written to
+            {' '}/opt/proxcenter/backup-pre-patroni.sql on this server. If the conversion fails
+            before the new cluster is viable, the previous stack is restarted automatically
+            and the failed step is shown here.
+          </Alert>
+          <FormControlLabel
+            sx={{ display: 'block', mb: 2 }}
+            control={<Checkbox checked={snapshotConfirmed} onChange={(e) => setSnapshotConfirmed(e.target.checked)} />}
+            label={(
+              <span>
+                I have taken a VM snapshot of this server
+                {' '}(<Link href="https://github.com/adminsyspro/proxcenter-ui/blob/main/docs/ha/conversion-runbook.md" target="_blank" rel="noopener noreferrer">conversion runbook</Link>)
+              </span>
+            )}
+          />
+          <Button variant="contained" color="primary" onClick={handleDeploy} disabled={!snapshotConfirmed}>
             Deploy HA Cluster
           </Button>
         </Box>
@@ -676,13 +715,27 @@ export default function HaDeployWizard({
           )}
           {deployDone && (
             <Box sx={{ mt: 2 }}>
-              <Alert severity="success" sx={{ mb: 2 }}>
-                HA cluster deployed successfully. Redirecting to VIP ({vip})...
-              </Alert>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                NEXTAUTH_URL has been set to http://{vip}:3000.
-                Update your OIDC/SSO callback URLs at your identity provider if applicable.
-              </Alert>
+              {completion.external ? (
+                <>
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    HA cluster deployed successfully. Redirecting to {completion.url}...
+                  </Alert>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Your external URL was kept. Repoint your reverse proxy at the VIP ({vip});
+                    no identity provider changes are needed.
+                  </Alert>
+                </>
+              ) : (
+                <>
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    HA cluster deployed successfully. Redirecting to VIP ({vip})...
+                  </Alert>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    NEXTAUTH_URL has been set to http://{vip}:3000.
+                    Update your OIDC/SSO callback URLs at your identity provider if applicable.
+                  </Alert>
+                </>
+              )}
               <Button variant="contained" onClick={onDeployed}>View Dashboard</Button>
             </Box>
           )}

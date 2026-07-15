@@ -250,7 +250,10 @@ export function useVmActions({
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { onRefresh?.() },
         onError: () => { onRefresh?.() },
-        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+        // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
+        // by the server-side watcher (crossClusterMigrate -> remote-migrate
+        // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
+        // as well raced it into two destroy tasks (issue #556).
       })
     }
 
@@ -382,7 +385,10 @@ export function useVmActions({
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { onRefresh?.(); setTableMigrateVm(null) },
         onError: () => { onRefresh?.(); setTableMigrateVm(null) },
-        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+        // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
+        // by the server-side watcher (crossClusterMigrate -> remote-migrate
+        // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
+        // as well raced it into two destroy tasks (issue #556).
       })
     }
 

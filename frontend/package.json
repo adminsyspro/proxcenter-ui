@@ -78,7 +78,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@iconify/json": "2.2.408",
+    "@iconify/json": "2.2.500",
     "@iconify/tools": "4.2.0",
     "@iconify/utils": "3.1.0",
     "@tailwindcss/postcss": "4.3.0",

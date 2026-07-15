@@ -145,4 +145,79 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — source-VM cleanup (
     expect(body.message).toMatch(/Migration completed \(with cleanup warnings\)/)
     expect(sawSourceVmDelete()).toBe(false)
   })
+
+  it('handles an intra-cluster migration where PVE already removed the source config', async () => {
+    // Reading the source config 500s with "Configuration file ... does not
+    // exist" — detected and handled silently (no unlock, no delete).
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (typeof path === 'string') {
+        if (path.includes('/status')) {
+          return Promise.resolve({ status: 'stopped', exitstatus: 'OK', type: 'qmigrate', id: '100', starttime: 1000, endtime: 1050 })
+        }
+        if (path.includes('/log')) return Promise.resolve([])
+        if (path.includes('/config')) {
+          return Promise.reject(new Error("Configuration file 'nodes/pve1/qemu-server/100.conf' does not exist"))
+        }
+      }
+      return Promise.resolve(undefined)
+    })
+
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(200)
+    expect(executeSSHMock).not.toHaveBeenCalled()
+    expect(sawSourceVmDelete()).toBe(false)
+  })
+
+  it('skips cleanup when the task id is not a valid vmid', async () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (typeof path === 'string') {
+        if (path.includes('/status')) {
+          return Promise.resolve({ status: 'stopped', exitstatus: 'OK', type: 'qmigrate', id: 'not-a-vmid', starttime: 1000, endtime: 1050 })
+        }
+        if (path.includes('/log')) return Promise.resolve([])
+        if (path.includes('/config')) return Promise.resolve({ name: 'vm' })
+      }
+      return Promise.resolve(undefined)
+    })
+
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(200)
+    expect(executeSSHMock).not.toHaveBeenCalled()
+    expect(sawSourceVmDelete()).toBe(false)
+  })
+
+  it('tolerates a source-VM config read error without deleting', async () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (typeof path === 'string') {
+        if (path.includes('/status')) {
+          return Promise.resolve({ status: 'stopped', exitstatus: 'OK', type: 'qmigrate', id: '100', starttime: 1000, endtime: 1050 })
+        }
+        if (path.includes('/log')) return Promise.resolve([])
+        if (path.includes('/config')) return Promise.reject(new Error('PVE 500 internal error'))
+      }
+      return Promise.resolve(undefined)
+    })
+
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(200)
+    expect(sawSourceVmDelete()).toBe(false)
+  })
+
+  it('attempts to unlock a locked source VM even when SSH unlock fails, and never deletes', async () => {
+    configResult = { name: 'vm100', lock: 'migrate' }
+    executeSSHMock.mockResolvedValue({ success: false, error: 'ssh denied' })
+
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(200)
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', '10.0.0.2', 'qm unlock 100')
+    expect(sawSourceVmDelete()).toBe(false)
+  })
 })

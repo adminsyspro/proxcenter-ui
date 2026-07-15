@@ -3295,7 +3295,7 @@ return (
         {filteredClusters.length === 0 && search.trim() ? (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant='body2' sx={{ opacity: 0.6 }}>
-              {t('common.noResults')} "{search}"
+              {t('common.noResults')} &quot;{search}&quot;
             </Typography>
           </Box>
         ) : null}

@@ -285,6 +285,127 @@ jobs:
       # to whatever it was set to on the registry; do not touch it here.
 
   # ========================================
+  # Build HA Infrastructure Images
+  # ========================================
+  # Patroni (postgres:16-alpine + patroni[etcd3]) and Keepalived images for
+  # the 3-node HA control plane, built from config/ha/. Prebuilt and pulled
+  # from GHCR so the HA conversion never runs `docker build` on customer
+  # nodes: nodes need ghcr.io egress only. Both packages stay PRIVATE
+  # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
+  build-ha-images:
+    needs: [test, test-backend]
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: proxcenter-patroni
+            dockerfile: Dockerfile.patroni
+          - image: proxcenter-keepalived
+            dockerfile: Dockerfile.keepalived
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version
+        id: resolve
+        env:
+          GH_REF: ${{ github.ref }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [[ "$GH_REF" == refs/tags/v* ]]; then
+            VERSION="$GH_REF_NAME"
+            echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "$INPUT_VERSION" && "$INPUT_VERSION" != "latest" ]]; then
+            echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract metadata for ${{ matrix.image }}
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ./config/ha
+          file: ./config/ha/${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          platforms: linux/amd64
+
+  # ========================================
+  # Mirror upstream HA images to GHCR
+  # ========================================
+  # etcd and haproxy are re-hosted under ghcr.io/adminsyspro so converted
+  # nodes only ever need ghcr.io egress (no quay.io / docker.io at
+  # conversion time). Idempotent: a tag that already exists on GHCR is
+  # skipped, which also freezes the mirrored haproxy:2.9-alpine at the
+  # digest first copied (re-mirroring is a deliberate manual act: delete
+  # the GHCR tag, then re-run the workflow).
+  mirror-ha-images:
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mirror etcd and haproxy
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          mirror() {
+            src="$1"; dst="$2"
+            if docker manifest inspect "$dst" > /dev/null 2>&1; then
+              echo "mirror: $dst already present, skipping"
+              return 0
+            fi
+            docker pull "$src"
+            docker tag "$src" "$dst"
+            docker push "$dst"
+          }
+          mirror "quay.io/coreos/etcd:v3.5.17" "ghcr.io/${OWNER}/etcd:v3.5.17"
+          mirror "haproxy:2.9-alpine" "ghcr.io/${OWNER}/haproxy:2.9-alpine"
+
+  # ========================================
   # Run Backend Tests
   # Skipped for Dependabot PRs: they cannot access ORCHESTRATOR_PAT
   # and don't modify backend code.
@@ -444,7 +565,7 @@ jobs:
   # ========================================
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-frontend, build-demo, build-orchestrator, build-weasyprint]
+    needs: [build-frontend, build-demo, build-orchestrator, build-weasyprint, build-ha-images, mirror-ha-images]
     runs-on: ubuntu-latest
     permissions:
       contents: write

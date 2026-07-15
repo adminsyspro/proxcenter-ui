@@ -33,7 +33,7 @@
     "@mui/x-data-grid": "^8.28.1",
     "@mui/x-tree-view": "^8.27.1",
     "@novnc/novnc": "^1.7.0",
-    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.6.0",
     "@tanstack/react-virtual": "^3.13.23",
     "@types/leaflet": "^1.9.21",

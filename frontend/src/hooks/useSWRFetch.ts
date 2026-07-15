@@ -1,4 +1,4 @@
-import useSWR, { SWRConfiguration } from 'swr'
+import useSWR, { type SWRConfiguration } from 'swr'
 import { dequal } from 'dequal'
 
 const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(async res => {

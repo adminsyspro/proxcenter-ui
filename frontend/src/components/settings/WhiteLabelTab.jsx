@@ -413,7 +413,7 @@ export default function WhiteLabelTab() {
             }
             label={
               <Typography variant="body2">
-                Show "Powered by ProxCenter" in footer
+                Show &quot;Powered by ProxCenter&quot; in footer
               </Typography>
             }
             sx={{ mt: 1.5 }}

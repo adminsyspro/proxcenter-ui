@@ -12,7 +12,7 @@ const VIP = process.env.VIP || ''
 const HA_REDIRECT_DISABLED = process.env.HA_REDIRECT_DISABLED === 'true'
 
 // i18n configuration
-const locales = ['fr', 'en', 'zh-CN']
+const locales = ['fr', 'en', 'de', 'zh-CN', 'ko', 'es']
 const defaultLocale = 'en'
 
 // Routes publiques (pas besoin d'être connecté)

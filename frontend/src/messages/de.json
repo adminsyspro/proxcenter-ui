@@ -2411,7 +2411,7 @@
     "pveStep1": "erstellen a dedicated user",
     "pveStep2": "API-Token erstellen (privsep=0 erbt Benutzerberechtigungen)",
     "pveStep3": "PVEAdmin-Rolle für den gesamten Cluster zuweisen",
-    "pveStep4": "Das von Rolling Update benötigte Privileg Sys.Modify hinzufügen (apt-Paketaktualisierung)",
+    "pveStep4": "Die Privilegien Sys.Modify und Sys.PowerMgmt hinzufügen (apt-Paketaktualisierung für Rolling Update, Neustart/Herunterfahren von Knoten)",
     "pbsStep1": "erstellen a dedicated user",
     "pbsStep2": "API-Token generieren",
     "pbsStep3": "Lesezugriff auf Datastores gewähren",
@@ -2494,6 +2494,7 @@
       "spain": "Spanien",
       "italy": "Italien",
       "poland": "Polen (Kohle)",
+      "south_korea": "Südkorea",
       "sweden": "Schweden (Wasserkraft)",
       "norway": "Norwegen (Wasserkraft)",
       "europe_avg": "Durchschnitt Europa",
@@ -6499,7 +6500,9 @@
     "fr": "Französisch",
     "en": "Englisch",
     "de": "Deutsch",
-    "zh-CN": "Chinesisch (vereinfacht)"
+    "zh-CN": "Chinesisch (vereinfacht)",
+    "ko": "Koreanisch",
+    "es": "Spanisch"
   },
   "networkFlows": {
     "tabFlows": "Flows",

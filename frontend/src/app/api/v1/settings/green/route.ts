@@ -25,6 +25,7 @@ const DEFAULT_GREEN_SETTINGS = {
     spain: 0.210,       // Mix renouvelable/gaz
     italy: 0.330,       // Mix gaz/renouvelable
     poland: 0.650,      // Charbon majoritaire
+    south_korea: 0.415, // Mix gaz/charbon/nucléaire
     sweden: 0.045,      // Hydro/nucléaire
     norway: 0.020,      // Hydro majoritaire
     europe_avg: 0.276,  // Moyenne européenne

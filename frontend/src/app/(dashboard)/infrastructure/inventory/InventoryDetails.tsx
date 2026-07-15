@@ -65,6 +65,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   Tabs,
   TextField,
   ToggleButton,
@@ -302,6 +303,8 @@ export default function InventoryDetails({
   const migLogsRef = useRef<HTMLDivElement>(null)
   // Bulk migration state
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
+  const [extVmSortCol, setExtVmSortCol] = useState<'name' | 'status' | 'guestOS' | 'usedSpace' | 'cpu' | 'ram'>('name')
+  const [extVmSortDir, setExtVmSortDir] = useState<'asc' | 'desc'>('asc')
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
@@ -405,6 +408,25 @@ export default function InventoryDetails({
 
   // Check which running VMs are on local storage when node action dialog opens
   const emptySet = useMemo(() => new Set<string>(), [])
+
+  const sortedExtVms = useMemo(() => {
+    const vms = data.esxiHostInfo?.vms
+    if (!vms || vms.length === 0) return []
+    const sorted = [...vms].sort((a: any, b: any) => {
+      let cmp = 0
+      switch (extVmSortCol) {
+        case 'name': cmp = (a.name || a.vmid || '').localeCompare(b.name || b.vmid || ''); break
+        case 'status': cmp = (a.status || '').localeCompare(b.status || ''); break
+        case 'guestOS': cmp = (a.guest_OS || '').localeCompare(b.guest_OS || ''); break
+        case 'usedSpace': cmp = (a.committed || 0) - (b.committed || 0); break
+        case 'cpu': cmp = (a.cpu || 0) - (b.cpu || 0); break
+        case 'ram': cmp = (a.memory_size_MiB || 0) - (b.memory_size_MiB || 0); break
+      }
+      return extVmSortDir === 'asc' ? cmp : -cmp
+    })
+    return sorted
+  }, [data.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
+
   useEffect(() => {
     if (!nodeActionDialog) return
     const connId = nodeActionDialog.connId || ''
@@ -3686,17 +3708,33 @@ return vm?.isCluster ?? false
                               }}
                             />
                           </TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>{t('common.name')}</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>{t('common.status')}</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>{t('inventoryPage.esxiMigration.guestOs')}</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="right">{t('inventoryPage.esxiMigration.usedSpace')}</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="right">CPU</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="right">RAM</TableCell>
+                          {([
+                            { id: 'name' as const, label: t('common.name'), align: 'left' as const },
+                            { id: 'status' as const, label: t('common.status'), align: 'left' as const },
+                            { id: 'guestOS' as const, label: t('inventoryPage.esxiMigration.guestOs'), align: 'left' as const },
+                            { id: 'usedSpace' as const, label: t('inventoryPage.esxiMigration.usedSpace'), align: 'right' as const },
+                            { id: 'cpu' as const, label: 'CPU', align: 'right' as const },
+                            { id: 'ram' as const, label: 'RAM', align: 'right' as const },
+                          ]).map(col => (
+                            <TableCell key={col.id} align={col.align} sx={{ fontWeight: 700, fontSize: 12 }} sortDirection={extVmSortCol === col.id ? extVmSortDir : false}>
+                              <TableSortLabel
+                                active={extVmSortCol === col.id}
+                                direction={extVmSortCol === col.id ? extVmSortDir : 'asc'}
+                                onClick={() => {
+                                  if (extVmSortCol === col.id) setExtVmSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                                  else { setExtVmSortCol(col.id); setExtVmSortDir('asc') }
+                                }}
+                                sx={{ fontSize: 12, fontWeight: 700 }}
+                              >
+                                {col.label}
+                              </TableSortLabel>
+                            </TableCell>
+                          ))}
                           <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="center">{t('inventoryPage.esxiMigration.migration')}</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {data.esxiHostInfo.vms.map((vm: any) => (
+                        {sortedExtVms.map((vm: any) => (
                           <TableRow
                             key={vm.vmid}
                             hover

@@ -410,7 +410,7 @@ export default function InventoryDetails({
   const emptySet = useMemo(() => new Set<string>(), [])
 
   const sortedExtVms = useMemo(() => {
-    const vms = data.esxiHostInfo?.vms
+    const vms = data?.esxiHostInfo?.vms
     if (!vms || vms.length === 0) return []
     const sorted = [...vms].sort((a: any, b: any) => {
       let cmp = 0
@@ -425,7 +425,7 @@ export default function InventoryDetails({
       return extVmSortDir === 'asc' ? cmp : -cmp
     })
     return sorted
-  }, [data.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
+  }, [data?.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
 
   useEffect(() => {
     if (!nodeActionDialog) return
@@ -3527,7 +3527,7 @@ return vm?.isCluster ?? false
           )}
 
           {/* External Host — Dashboard */}
-          {selection?.type === 'ext' && data.esxiHostInfo && (() => {
+          {selection?.type === 'ext' && data?.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
             const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
             const isHyperv = data.esxiHostInfo.hostType === 'hyperv'
@@ -3644,7 +3644,7 @@ return vm?.isCluster ?? false
           })()}
 
           {/* External Host — VM List with Migrate buttons */}
-          {selection?.type === 'ext' && data.esxiHostInfo && (() => {
+          {selection?.type === 'ext' && data?.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
             const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
             const isHypervHost = data.esxiHostInfo.hostType === 'hyperv'

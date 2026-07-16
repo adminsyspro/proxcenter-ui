@@ -40,6 +40,7 @@ import {
 import { COUNTRIES, findCountry } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { useTenant } from '@/contexts/TenantContext'
+import { useCopyToClipboard } from '@/lib/clipboard'
 
 export type ConnectionFormData = {
   name: string
@@ -127,6 +128,7 @@ export default function ConnectionDialog({
     arrow: { sx: { color: 'background.paper' } },
   }
   const { isProvider } = useTenant()
+  const tokenSetupCopy = useCopyToClipboard()
   const [form, setForm] = useState<ConnectionFormData>(defaultFormData)
   const [mspTenants, setMspTenants] = useState<{ id: string; name: string }[]>([])
   const [saving, setSaving] = useState(false)
@@ -886,24 +888,30 @@ export default function ConnectionDialog({
                     m: 0,
                   }}
                 >
-                  <IconButton
-                    size="small"
-                    onClick={() => {
-                      const text = isPbs
-                        ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / DatastoreReader --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / DatastoreReader --auth-id 'proxcenter@pbs!proxcenter'`
-                        : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin\npveum role add ProxCenter -privs "Sys.Modify,Sys.PowerMgmt"\npveum aclmod / -user proxcenter@pve -role ProxCenter`
-                      navigator.clipboard.writeText(text)
-                    }}
-                    sx={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      color: 'grey.400',
-                      '&:hover': { color: 'grey.100' },
-                    }}
+                  <Tooltip
+                    arrow
+                    slotProps={tooltipSlotProps}
+                    title={tokenSetupCopy.copied ? t('common.copied') : t('common.copy')}
                   >
-                    <i className="ri-file-copy-line" style={{ fontSize: 14 }} />
-                  </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        const text = isPbs
+                          ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / DatastoreReader --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / DatastoreReader --auth-id 'proxcenter@pbs!proxcenter'`
+                          : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin\npveum role add ProxCenter -privs "Sys.Modify,Sys.PowerMgmt"\npveum aclmod / -user proxcenter@pve -role ProxCenter`
+                        void tokenSetupCopy.copy(text)
+                      }}
+                      sx={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        color: 'grey.400',
+                        '&:hover': { color: 'grey.100' },
+                      }}
+                    >
+                      <i className={tokenSetupCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                   {isPbs ? (
                     <>
                       <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pbsStep1')}</Box>{'\n'}

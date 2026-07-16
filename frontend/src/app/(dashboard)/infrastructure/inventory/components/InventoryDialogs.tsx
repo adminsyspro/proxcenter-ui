@@ -62,6 +62,7 @@ import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
 import { useToast } from '@/contexts/ToastContext'
+import { copyToClipboard } from '@/lib/clipboard'
 
 /* ------------------------------------------------------------------ */
 /* Props                                                               */
@@ -315,16 +316,13 @@ export interface InventoryDialogsProps {
 function CopyableCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
-    try {
-      // navigator.clipboard is the modern API; falls back to a no-op if the
-      // browser blocked it (insecure context, permissions). Not worth a
-      // textarea-select-exec fallback given ProxCenter already requires a
-      // secure HTTPS context for auth.
-      await navigator.clipboard.writeText(command)
+    // copyToClipboard tries the modern Clipboard API first and falls back to
+    // an execCommand('copy') textarea for HTTP/LAN-IP deployments where that
+    // API is unavailable (self-hosted ProxCenter is not always behind HTTPS).
+    const ok = await copyToClipboard(command)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // swallow — user can still select + copy manually
     }
   }
   return (

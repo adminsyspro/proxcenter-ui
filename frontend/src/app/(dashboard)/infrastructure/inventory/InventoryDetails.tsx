@@ -14,6 +14,7 @@ import { useNotes } from './hooks/useNotes'
 import { useHA } from './hooks/useHA'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
+import { useCopyToClipboard } from '@/lib/clipboard'
 
 import {
   Accordion,
@@ -205,6 +206,7 @@ export default function InventoryDetails({
   }, [allVms, loadConnection])
   const { hasFeature, isEnterprise, loading: licenseLoading } = useLicense()
   const toast = useToast()
+  const logCopy = useCopyToClipboard()
   // LXC sharing the host kernel doesn't give strong-enough multi-tenant
   // isolation. Tenants on a shared cluster see only "Create VM" — the
   // provider keeps the LXC option for lightweight workloads on dedicated
@@ -4154,12 +4156,12 @@ return vm?.isCluster ?? false
                         )}
                       </Typography>
                       {vmMigJob?.logs?.length > 0 && (
-                        <MuiTooltip title={t('common.copy')}>
+                        <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
                           <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
                             const text = vmMigJob.logs.map((l: any) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '⚠' : '·'} ${l.msg}`).join('\n')
-                            navigator.clipboard.writeText(text)
+                            void logCopy.copy(text)
                           }}>
-                            <i className="ri-file-copy-line" style={{ fontSize: 14 }} />
+                            <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
                           </IconButton>
                         </MuiTooltip>
                       )}

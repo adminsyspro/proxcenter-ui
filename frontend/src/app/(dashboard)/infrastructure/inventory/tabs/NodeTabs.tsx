@@ -52,6 +52,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
+import { useCopyToClipboard } from '@/lib/clipboard'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
@@ -151,6 +152,7 @@ export default function NodeTabs(props: any) {
   const { branding } = useBranding()
   const { isAdmin } = useRBAC()
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
+  const systemReportCopy = useCopyToClipboard()
 
   const {
     clusterConfigLoaded,
@@ -4067,16 +4069,16 @@ export default function NodeTabs(props: any) {
                               <i className="ri-file-text-line" style={{ fontSize: 20 }} />
                               System Report - {selection?.id ? parseNodeId(selection.id).node : ''}
                             </Box>
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               onClick={() => {
                                 if (systemReportData) {
-                                  navigator.clipboard.writeText(systemReportData)
+                                  void systemReportCopy.copy(systemReportData)
                                 }
                               }}
-                              title="Copy to clipboard"
+                              title={systemReportCopy.copied ? t('common.copied') : 'Copy to clipboard'}
                             >
-                              <i className="ri-file-copy-line" style={{ fontSize: 18 }} />
+                              <i className={systemReportCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 18 }} />
                             </IconButton>
                           </DialogTitle>
                           <DialogContent dividers>

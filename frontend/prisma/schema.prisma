@@ -257,6 +257,9 @@ model MigrationJob {
   bytesTransferred BigInt? @map("bytes_transferred")
   totalBytes       BigInt? @map("total_bytes")
   transferSpeed    String? @map("transfer_speed")
+  // Live estimate of the cutover downtime (seconds) at the last delta pass;
+  // surfaced in the UI so the operator can decide when to trigger cutover.
+  projectedDowntimeSec Int? @map("projected_downtime_sec")
   error            String?
 
   // Logs

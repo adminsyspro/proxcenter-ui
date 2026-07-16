@@ -1910,7 +1910,6 @@
       "cutoverConfirmTitle": "Basculer maintenant ?",
       "cutoverConfirmBody": "La VM source va être arrêtée et les derniers changements copiés. Prévoyez environ {mins} min d'indisponibilité. Continuer ?",
       "cutoverNotConverging": "Cette migration ne converge pas d'elle-même. Vous pouvez basculer maintenant (en acceptant le downtime ci-dessus) ou annuler et faire une migration à froid.",
-      "cutoverRequested": "Bascule demandée — finalisation de la migration…",
       "overallProgress": "Progression globale",
       "transferSpeed": "Vitesse de transfert",
       "disk": "Disque",

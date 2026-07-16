@@ -1910,7 +1910,6 @@
       "cutoverConfirmTitle": "¿Conmutar ahora?",
       "cutoverConfirmBody": "La VM de origen se apagará y se copiarán los últimos cambios. Prevea unos {mins} min de inactividad. ¿Continuar?",
       "cutoverNotConverging": "Esta migración no converge por sí sola. Puede conmutar ahora (aceptando el downtime indicado arriba) o cancelar y usar una migración en frío.",
-      "cutoverRequested": "Conmutación solicitada — finalizando la migración…",
       "overallProgress": "Progreso general",
       "transferSpeed": "Velocidad de transferencia",
       "disk": "Disco",

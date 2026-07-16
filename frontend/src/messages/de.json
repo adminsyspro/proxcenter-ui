@@ -1876,7 +1876,6 @@
       "cutoverConfirmTitle": "Jetzt umschalten?",
       "cutoverConfirmBody": "Die Quell-VM wird heruntergefahren und die letzten Änderungen kopiert. Rechnen Sie mit etwa {mins} Min. Ausfallzeit. Fortfahren?",
       "cutoverNotConverging": "Diese Migration konvergiert nicht von selbst. Sie können jetzt umschalten (und dabei die oben genannte Ausfallzeit akzeptieren) oder abbrechen und eine Kaltmigration verwenden.",
-      "cutoverRequested": "Umschaltung angefordert — Migration wird abgeschlossen…",
       "overallProgress": "Gesamtfortschritt",
       "transferSpeed": "Übertragungsgeschwindigkeit",
       "disk": "Festplatte",

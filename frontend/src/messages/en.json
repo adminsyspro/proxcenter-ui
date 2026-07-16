@@ -1910,7 +1910,6 @@
       "cutoverConfirmTitle": "Cut over now?",
       "cutoverConfirmBody": "The source VM will be shut down and the final changes copied. Expect roughly {mins} min of downtime. Continue?",
       "cutoverNotConverging": "This migration is not converging on its own. You can cut over now (accepting the downtime above) or cancel and use a cold migration.",
-      "cutoverRequested": "Cutover requested — finishing the migration…",
       "overallProgress": "Overall Progress",
       "transferSpeed": "Transfer Speed",
       "disk": "Disk",

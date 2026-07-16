@@ -11,8 +11,7 @@ describe("decideNextPass", () => {
   })
   it("does another delta pass when over budget and passes remain", () => {
     const result = decideNextPass(1, { deltaBytes: 200 * 1024 ** 3, throughputBytesPerSec: 100 * 1024 * 1024 }, cfg)
-    expect(result.action).toBe("delta")
-    expect(result.pass).toBe(2)
+    expect(result).toMatchObject({ action: "delta", pass: 2 })
     expect(result.projectedDowntimeSec).toBeGreaterThan(cfg.downtimeBudgetSec)
   })
   it("operator-gates when over budget at the last pass", () => {
@@ -27,5 +26,15 @@ describe("decideNextPass", () => {
     const delta = decideNextPass(0, { deltaBytes: 200 * 1024 ** 3, throughputBytesPerSec: 100 * 1024 * 1024 }, cfg)
     expect(delta.action).toBe("delta")
     expect(delta.projectedDowntimeSec).toBeGreaterThan(cfg.downtimeBudgetSec)
+  })
+  it("treats a zero-byte delta as zero transfer time (empty/thin VM cuts over)", () => {
+    const d = decideNextPass(0, { deltaBytes: 0, throughputBytesPerSec: 0 }, cfg)
+    expect(d.action).toBe("cutover")
+    expect(d.projectedDowntimeSec).toBe(cfg.shutdownSec + cfg.bootSec)
+  })
+  it("keeps projected downtime finite and within the DB int range when throughput is unknown", () => {
+    const d = decideNextPass(0, { deltaBytes: 10 * 1024 ** 3, throughputBytesPerSec: 0 }, cfg)
+    expect(Number.isFinite(d.projectedDowntimeSec)).toBe(true)
+    expect(d.projectedDowntimeSec).toBeLessThanOrEqual(2_147_483_647)
   })
 })

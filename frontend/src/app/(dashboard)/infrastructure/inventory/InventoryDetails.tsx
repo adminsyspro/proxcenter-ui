@@ -4009,7 +4009,7 @@ return vm?.isCluster ?? false
                       </Typography>
                       {vmMigJob && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status) && (
+                          {['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status) && vmMigJob.projectedDowntimeSec != null && (
                             <Button
                               size="small"
                               variant={vmMigJob.status === 'awaiting_cutover' ? 'contained' : 'outlined'}

@@ -1,222 +1,212 @@
 # ProxCenter HA: In-Place Conversion Runbook
 
-This runbook converts a single-VM ProxCenter installation into a 3-node HA cluster. The existing VM becomes node 1.
+This runbook covers converting a single-VM ProxCenter installation into a
+3-node HA cluster. The existing VM becomes node 1.
 
-## Phase 0: Pre-flight
+**The supported conversion path is the wizard** (Settings, High Availability
+tab): it validates the environment, provisions nodes 2 and 3 over SSH, and
+runs the 18-step conversion with progress streaming. This document explains
+what the wizard does, where its safety artifacts live, how failures roll
+back, and how to convert or recover manually.
 
-### 0.1 Verify prerequisites
+## 1. Before you start
 
-```sh
-# On node 1 (existing VM):
-docker compose -f docker-compose.enterprise.yml ps          # all services running
-docker compose -f docker-compose.enterprise.yml exec postgres pg_isready  # DB reachable
-cat /proc/version          # note kernel version
-ls -l /dev/watchdog        # watchdog present
-```
+### 1.1 Snapshot node 1 (mandatory)
 
-### 0.2 Snapshot node 1
-
-Take a Proxmox snapshot of the existing VM. This is your rollback point if Phase 3 fails.
+Take a Proxmox snapshot of the existing VM. The wizard will not start the
+deployment until you confirm this with the "I have taken a VM snapshot of
+this server" checkbox; the snapshot is the last-resort rollback if
+everything else fails.
 
 ```sh
 # On the Proxmox host running node 1:
 qm snapshot <VMID> pre-ha-conversion --vmstate
 ```
 
-### 0.3 Prepare node-specific .env files
+### 1.2 Check the prerequisites
 
-Copy `.env.ha.example` to `.env` on each node. Fill in:
-- `NODE_NAME`, `NODE_IP`, `VRRP_PRIORITY` (per node)
-- `PEER1_IP`, `PEER2_IP`, `PEER3_IP`, `VIP` (same on all 3)
-- All secrets (same on all 3)
-- **Reuse node 1's existing secrets** (`APP_SECRET`, `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `ORCHESTRATOR_API_KEY`). `APP_SECRET` encrypts stored credentials.
+See `prerequisites.md`. The wizard's validation step enforces the
+registry-access and port checks automatically; fix anything it reports
+before deploying.
 
----
+### 1.3 Note about the compose file
 
-## Phase 1: Provision Nodes 2 and 3 (reversible)
+The official installer deploys the single-node stack as
+`/opt/proxcenter/docker-compose.yml`. The commands below use that name.
+Customized installs (renamed compose file, `COMPOSE_PROJECT_NAME`, `docker
+compose -p`) are supported: the wizard detects the running stack's actual
+compose file and project name from the postgres container's labels and
+targets exactly that stack. It refuses to proceed when no running postgres
+container is found.
 
-### 1.1 Create VMs
+### 1.4 `.env` preservation
 
-On 2 separate Proxmox hosts, create VMs matching node 1's specs. Install Docker and Docker Compose.
+The wizard first copies node 1's `.env` to `.env.pre-ha` (kept forever),
+then MERGES the HA settings into it: every existing key (`NEXTAUTH_URL`,
+`GHCR_TOKEN`, `LICENSE_KEY`, SMTP, proxies, custom keys) is preserved
+verbatim. Nothing is dropped.
 
-### 1.2 Copy ProxCenter files
+## 2. What the wizard does
+
+Steps 1-12 run from the orchestrator with live progress: SSH key injection,
+file distribution, image pre-pulls on all 3 nodes (everything from ghcr.io,
+see `prerequisites.md`), and the etcd cluster bootstrap. Step 13 hands off
+to a detached conversion script on node 1 (the old stack's shutdown takes
+the orchestrator down with it); steps 13-18 stop the old stack, adopt its
+Postgres into Patroni, clone the replicas, and start the full HA stack on
+all 3 nodes. The wizard page reconnects automatically once node 1 is back.
+
+## 3. The pre-cutover backup
+
+Right before stopping the old stack (step 13), the conversion script writes
+a full `pg_dumpall` to:
+
+```
+/opt/proxcenter/backup-pre-patroni.sql
+```
+
+- The dump is size-checked before the old stack is stopped; a failed or
+  suspiciously small dump aborts the conversion while the old stack still
+  runs.
+- The file is KEPT after a successful conversion. Delete it manually once
+  the cluster has been validated (it contains the full database).
+- Restore procedure (disaster recovery onto a fresh single-node install):
 
 ```sh
-# On nodes 2 and 3:
+cd /opt/proxcenter
+docker compose -f docker-compose.yml up -d postgres
+docker compose -f docker-compose.yml exec -T postgres psql -U proxcenter -d postgres \
+  < /opt/proxcenter/backup-pre-patroni.sql
+docker compose -f docker-compose.yml up -d
+```
+
+## 4. Failure handling and rollback
+
+- **Failure during steps 13-15** (before both replicas exist): the script's
+  error trap stops whatever HA services it started, restarts the OLD stack
+  (same compose file and project it detected), waits for its Postgres, and
+  records the failure (step, error, timestamp) in the database. The wizard
+  shows `failed` at the exact step; the old stack is serving again.
+- **Failure during steps 16-18** (replicas exist, cluster viable): no
+  rollback. The failure is recorded with step detail; use the HA dashboard
+  ops (reinit, switchover) to finish recovery.
+- **Retry Deployment** resumes safely: it never wipes a live etcd/Patroni
+  cluster.
+
+Operator artifacts on node 1:
+
+- `/opt/proxcenter/ha-convert-status.json`: last status written by the
+  conversion script, format `{"v":1, "step": <n>, "ok": <bool>, "error":
+  "<msg>", "timestamp": "<iso>"}`. This file is an operator breadcrumb; the
+  database record is the mechanism the wizard reads.
+- `/opt/proxcenter/ha-convert.log`: full script output. Removed on success,
+  kept on failure.
+- `/opt/proxcenter/.env.pre-ha`: the pre-conversion `.env`, kept forever.
+
+If even the database write failed (old stack unrestorable), those files plus
+the VM snapshot from step 1.1 are the manual-recovery path.
+
+## 5. Manual conversion (recovery / air-gap-adjacent setups)
+
+Only for recovery or when the wizard cannot be used. Every value comes from
+`.env` (see `.env.ha.example`).
+
+### Phase 1: provision nodes 2 and 3 (reversible)
+
+On 2 separate Proxmox hosts, create VMs matching node 1's specs, install
+Docker Engine 24+ and Compose v2, then:
+
+```sh
 mkdir -p /opt/proxcenter
-# Copy from node 1: docker-compose.ha.yml, config/ha/, .env
-scp -r root@<NODE1_IP>:/opt/proxcenter/docker-compose.ha.yml /opt/proxcenter/
+scp root@<NODE1_IP>:/opt/proxcenter/docker-compose.ha.yml /opt/proxcenter/
 scp -r root@<NODE1_IP>:/opt/proxcenter/config /opt/proxcenter/
-cp /opt/proxcenter/.env.ha.example /opt/proxcenter/.env
-# Edit .env with this node's values (NODE_NAME, NODE_IP, VRRP_PRIORITY)
+# Create /opt/proxcenter/.env from .env.ha.example with this node's values
+# (NODE_NAME, NODE_IP, VRRP_PRIORITY) and node 1's shared secrets.
+docker login ghcr.io   # with GHCR_USERNAME / GHCR_TOKEN
 ```
 
-### 1.3 Load watchdog module
+Rollback: destroy VMs 2 and 3. No changes to node 1 yet.
 
-```sh
-echo softdog >> /etc/modules
-modprobe softdog
-ls -l /dev/watchdog
-```
-
-### Rollback: destroy VMs 2 and 3. No changes to node 1 yet.
-
----
-
-## Phase 2: Form etcd Cluster (reversible)
-
-### 2.1 Start etcd on all 3 nodes
+### Phase 2: form the etcd cluster (reversible)
 
 ```sh
 # On each node:
 cd /opt/proxcenter
 docker compose -f docker-compose.ha.yml up -d etcd
-```
-
-### 2.2 Verify quorum
-
-```sh
 # On any node:
 docker compose -f docker-compose.ha.yml exec etcd etcdctl endpoint health --cluster
 # Expected: 3 healthy endpoints
-docker compose -f docker-compose.ha.yml exec etcd etcdctl member list
-# Expected: 3 members, all started
 ```
 
-### Rollback: `docker compose -f docker-compose.ha.yml down` on all 3 nodes. Delete etcd volumes.
+Rollback: `docker compose -f docker-compose.ha.yml down` on all 3 nodes and delete the etcd volumes.
 
----
-
-## Phase 3: Adopt Node 1 Postgres into Patroni (POINT OF NO RETURN at 3.4)
-
-### 3.1 Preflight checklist
+### Phase 3: adopt node 1's Postgres into Patroni (POINT OF NO RETURN at 3.4)
 
 ```sh
-# On node 1:
-docker compose -f docker-compose.enterprise.yml exec postgres psql -U proxcenter -c "SHOW wal_log_hints;"
+# 3.1 On node 1, ensure wal_log_hints:
+docker compose -f docker-compose.yml exec postgres psql -U proxcenter -c "SHOW wal_log_hints;"
 # Must be 'on'. If not:
-docker compose -f docker-compose.enterprise.yml exec postgres psql -U proxcenter -c "ALTER SYSTEM SET wal_log_hints = on;"
-docker compose -f docker-compose.enterprise.yml restart postgres
-```
+docker compose -f docker-compose.yml exec postgres psql -U proxcenter -c "ALTER SYSTEM SET wal_log_hints = on;"
+docker compose -f docker-compose.yml restart postgres
 
-### 3.2 Take a fresh backup
+# 3.2 Fresh backup (same location the wizard uses):
+docker compose -f docker-compose.yml exec -T postgres pg_dumpall -U proxcenter \
+  > /opt/proxcenter/backup-pre-patroni.sql
 
-```sh
-docker compose -f docker-compose.enterprise.yml exec postgres pg_dumpall -U proxcenter > /backup/pre-patroni-$(date +%s).sql
-```
+# 3.3 Stop the single-node stack:
+docker compose -f docker-compose.yml down
 
-### 3.3 Stop the existing single-node stack
-
-```sh
-docker compose -f docker-compose.enterprise.yml down
-```
-
-### 3.4 Start Patroni on node 1 (POINT OF NO RETURN)
-
-Patroni adopts the existing PGDATA directory.
-
-```sh
+# 3.4 Start Patroni on node 1 (POINT OF NO RETURN, adopts the existing PGDATA):
 docker compose -f docker-compose.ha.yml up -d patroni
-# Watch logs:
 docker compose -f docker-compose.ha.yml logs -f patroni
-# Expected: "initialized a new cluster" or "bootstrapped from existing data"
-```
 
-### 3.5 Verify Patroni owns node 1's Postgres
+# 3.5 Verify Patroni owns node 1's Postgres:
+curl -s http://${NODE_IP}:8008/patroni
+# Expected: "state": "running" and a leader role
 
-```sh
-curl -s http://${NODE_IP}:8008/patroni | jq .
-# Expected: {"state": "running", "role": "master", ...}
-```
-
-### 3.6 Start HAProxy on node 1
-
-```sh
+# 3.6 Start HAProxy on node 1:
 docker compose -f docker-compose.ha.yml up -d haproxy
-# Verify local PG access via HAProxy:
-docker compose -f docker-compose.ha.yml exec patroni psql -h 127.0.0.1 -U proxcenter -c "SELECT 1;"
 ```
 
----
-
-## Phase 4: Clone Replicas
-
-### 4.1 Start Patroni on nodes 2 and 3
+### Phase 4: clone the replicas
 
 ```sh
 # On nodes 2 and 3:
 cd /opt/proxcenter
 docker compose -f docker-compose.ha.yml up -d patroni haproxy
-```
+docker compose -f docker-compose.ha.yml logs -f patroni   # wait for the basebackup
 
-Patroni will automatically `pg_basebackup` from the primary. Monitor:
-
-```sh
-docker compose -f docker-compose.ha.yml logs -f patroni
-# Expected: "replica has been created" after base backup completes
-```
-
-### 4.2 Verify replication and sync mode
-
-```sh
 # On node 1:
-curl -s http://${NODE_IP}:8008/cluster | jq '.members[] | {name, role, state, lag}'
-# Expected: 1 master + 2 replicas, lag = 0
+curl -s http://${NODE_IP}:8008/cluster
+# Expected: 1 leader + 2 replicas, lag 0
 ```
 
-### 4.3 Verify strict synchronous mode
-
-```sh
-docker compose -f docker-compose.ha.yml exec patroni patronictl show-config
-# synchronous_mode: true
-# synchronous_mode_strict: true
-```
-
----
-
-## Phase 5: Application Stack + VIP
-
-### 5.1 Start application services on all 3 nodes
+### Phase 5: application stack and VIP
 
 ```sh
 # On each node:
 docker compose -f docker-compose.ha.yml up -d frontend orchestrator weasyprint keepalived
-```
-
-### 5.2 Verify VIP
-
-```sh
-# On any node:
+# Verify:
 ip addr show ${VIP_INTERFACE} | grep ${VIP}
-# Expected: VIP on the highest-priority node (node 1 with VRRP_PRIORITY=150)
+curl -s http://${VIP}:3000/api/health          # {"status":"healthy","db":"reachable",...}
+curl -s http://${VIP}:3000/api/health/live     # {"status":"alive",...}
 ```
 
-### 5.3 Verify application via VIP
-
-```sh
-curl -s http://${VIP}:3000/api/health
-# Expected: {"status":"ok","db":"reachable",...}
-```
-
-### 5.4 Verify VIP redirect
-
-```sh
-# From any machine, access a non-VIP node:
-curl -s -o /dev/null -w "%{http_code} %{redirect_url}" http://<NODE2_IP>:3000/login
-# Expected: 302 http://<VIP>:3000/login
-```
-
----
-
-## Phase 6: Validation
+### Phase 6: validation
 
 Run all drills from `failover-drills.md`. Success criteria:
 
-- [ ] Login via `http://<VIP>:3000` works
+- [ ] Login via the VIP (or the preserved external URL, see `reverse-proxy.md`) works
 - [ ] HA dashboard shows 3 healthy nodes
 - [ ] Kill primary: replica promoted within 30s, app reconnects
 - [ ] Kill VIP holder: VIP migrates within seconds
 - [ ] Switchover: promote sync standby, clean failover
 - [ ] Maintenance: enter/exit on a node, services stop/restart
-- [ ] VIP redirect: direct access to a non-VIP node redirects to VIP
+- [ ] VIP redirect: direct access to a non-VIP node redirects to the VIP
 - [ ] Version display: all nodes show the same version
+
+## 6. FQDN / reverse-proxy installs
+
+Installs accessed through an external URL (TLS proxy, OIDC) keep that URL
+through the conversion; the only admin action is repointing the proxy at the
+VIP. See `reverse-proxy.md`.

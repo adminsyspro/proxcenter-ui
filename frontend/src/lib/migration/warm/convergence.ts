@@ -1,8 +1,8 @@
 export interface PassStat { deltaBytes: number; throughputBytesPerSec: number }
 export interface ConvergenceConfig { downtimeBudgetSec: number; maxPasses: number; shutdownSec: number; bootSec: number }
 export type ConvergenceDecision =
-  | { action: "cutover" }
-  | { action: "delta"; pass: number }
+  | { action: "cutover"; projectedDowntimeSec: number }
+  | { action: "delta"; pass: number; projectedDowntimeSec: number }
   | { action: "operator-gate"; projectedDowntimeSec: number }
 
 /**
@@ -14,7 +14,8 @@ export type ConvergenceDecision =
 export function decideNextPass(passIndex: number, last: PassStat, cfg: ConvergenceConfig): ConvergenceDecision {
   const transferSec = last.throughputBytesPerSec > 0 ? last.deltaBytes / last.throughputBytesPerSec : Infinity
   const projected = cfg.shutdownSec + cfg.bootSec + transferSec
-  if (projected <= cfg.downtimeBudgetSec) return { action: "cutover" }
-  if (passIndex + 1 >= cfg.maxPasses) return { action: "operator-gate", projectedDowntimeSec: Math.round(projected) }
-  return { action: "delta", pass: passIndex + 1 }
+  const projectedDowntimeSec = Number.isFinite(projected) ? Math.round(projected) : Number.MAX_SAFE_INTEGER
+  if (projected <= cfg.downtimeBudgetSec) return { action: "cutover", projectedDowntimeSec }
+  if (passIndex + 1 >= cfg.maxPasses) return { action: "operator-gate", projectedDowntimeSec }
+  return { action: "delta", pass: passIndex + 1, projectedDowntimeSec }
 }

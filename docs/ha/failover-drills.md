@@ -113,31 +113,16 @@ iptables -D OUTPUT -d ${PEER3_IP} -j DROP
 
 Node 1's Patroni will rejoin as a replica via `pg_rewind`.
 
----
-
-## Drill 4: Watchdog Test
-
-**Purpose:** Verify the mandatory watchdog resets the VM when Patroni hangs.
-
-> **WARNING:** This drill will hard-reset the test VM. Only run on non-production or with a fresh snapshot.
-
-```sh
-# On the primary node, simulate a Patroni hang by pausing the container:
-docker pause $(docker compose -f docker-compose.ha.yml ps -q patroni)
-```
-
-**Expected:**
-- Patroni stops feeding the watchdog
-- After the `safety_margin` (5s) + watchdog timeout (default 60s), the VM is reset
-- On reboot, Patroni restarts and rejoins as a replica
-
-**Verify:** The VM rebooted (check `uptime` or `last reboot`).
-
-**Success criteria:** VM reset within the watchdog timeout window.
+> **Note:** Split-brain fencing is no longer hardware-watchdog based. Patroni
+> runs with `watchdog: mode: off` and no `/dev/watchdog` device is mounted;
+> a minority node is fenced instead by losing etcd quorum (Patroni cannot
+> hold the leader lock, Postgres goes read-only) combined with the keepalived
+> `track_script`, which sheds the VIP once the node's local `/api/health`
+> check fails. This drill exercises that path, and no VM reset should occur.
 
 ---
 
-## Drill 5: Sync Standby Loss
+## Drill 4: Sync Standby Loss
 
 **Purpose:** Verify that losing one replica does not block writes.
 
@@ -162,7 +147,7 @@ curl -s http://<primary-ip>:8008/cluster | jq '.members[]'
 
 ---
 
-## Drill 6: Scheduled Task During Failover
+## Drill 5: Scheduled Task During Failover
 
 **Purpose:** Verify the leader election `Check()` aborts a running task on failover.
 

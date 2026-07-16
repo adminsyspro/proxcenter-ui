@@ -47,6 +47,14 @@ describe("POST /api/v1/migrations/[id]/cutover", () => {
     expect(signal).toHaveBeenCalledWith("j2")
   })
 
+  it("returns 500 when an unexpected error is thrown", async () => {
+    h.prisma.migrationJob.findUnique.mockRejectedValue(new Error("db down"))
+    const res = await callRoute(POST, { params: { id: "j1" } })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: "db down" })
+    expect(signal).not.toHaveBeenCalled()
+  })
+
   it("propagates a permission denial", async () => {
     ;(checkPermission as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response("forbidden", { status: 403 }) as any

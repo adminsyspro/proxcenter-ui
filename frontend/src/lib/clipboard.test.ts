@@ -30,3 +30,4 @@ describe("copyToClipboard", () => {
     expect(await copyToClipboard("hello")).toBe(false)
   })
 })
+

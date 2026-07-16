@@ -82,17 +82,17 @@ export default function HaClusterDashboard() {
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setSyncResult({ type: 'success', message: data.message || 'Sync mode updated' })
+        setSyncResult({ type: 'success', message: data.message || t('dashboard.syncModeUpdated') })
         mutate()
       } else {
-        setSyncResult({ type: 'error', message: data.error || `Failed (${res.status})` })
+        setSyncResult({ type: 'error', message: data.error || t('dashboard.failedStatus', { status: res.status }) })
       }
     } catch (e: any) {
-      setSyncResult({ type: 'error', message: e.message || 'Request failed' })
+      setSyncResult({ type: 'error', message: e.message || t('common.requestFailed') })
     } finally {
       setSyncLoading(false)
     }
-  }, [mutate])
+  }, [mutate, t])
 
   const maintenanceIPs = useMemo(() => {
     if (!haConfig?.nodes) return new Set<string>()
@@ -105,14 +105,14 @@ export default function HaClusterDashboard() {
   )
 
   if (isLoading) {
-    return <Box sx={{ p: 3, textAlign: 'center' }}><Typography>Loading cluster status...</Typography></Box>
+    return <Box sx={{ p: 3, textAlign: 'center' }}><Typography>{t('dashboard.loading')}</Typography></Box>
   }
 
   if (error || !cluster) {
     return (
       <Box sx={{ p: 2 }}>
         <Alert severity="error">
-          Failed to load cluster status. {error?.message || 'Orchestrator may be unavailable.'}
+          {t('dashboard.loadFailed')} {error?.message || t('dashboard.orchestratorUnavailable')}
         </Alert>
       </Box>
     )
@@ -146,24 +146,23 @@ export default function HaClusterDashboard() {
     <Box sx={{ p: 2 }}>
       {versionMismatch && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Version mismatch detected: nodes are running different versions ({[...versions].join(', ')}).
-          A rolling update may be in progress.
+          {t('dashboard.versionMismatch', { versions: [...versions].join(', ') })}
         </Alert>
       )}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="h5">HA Cluster</Typography>
+          <Typography variant="h5">{t('dashboard.title')}</Typography>
           <Chip
-            label={healthStatus === 'healthy' ? 'Healthy' : healthStatus === 'critical' ? 'Critical' : 'Degraded'}
+            label={healthStatus === 'healthy' ? t('dashboard.healthHealthy') : healthStatus === 'critical' ? t('dashboard.healthCritical') : t('dashboard.healthDegraded')}
             size="small"
             color={healthStatus === 'healthy' ? 'success' : healthStatus === 'critical' ? 'error' : 'warning'}
           />
           {cluster.patroni.paused && (
-            <Chip label="Failover Paused" size="small" color="warning" />
+            <Chip label={t('dashboard.failoverPaused')} size="small" color="warning" />
           )}
         </Box>
         <Button variant="outlined" size="small" onClick={() => mutate()}>
-          Refresh
+          {t('dashboard.refresh')}
         </Button>
       </Box>
 
@@ -227,7 +226,7 @@ export default function HaClusterDashboard() {
       {/* Service Grid */}
       <Card variant="outlined">
         <CardContent>
-          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>Service Health</Typography>
+          <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>{t('dashboard.serviceHealth')}</Typography>
           <HaServiceGrid services={cluster.services} nodeNames={nodeNames} />
         </CardContent>
       </Card>

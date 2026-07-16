@@ -17,8 +17,10 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import type { PatroniMember } from './useHaCluster'
+import { tooltipSlotProps } from './tooltipSlotProps'
 
 const ROLE_COLORS: Record<string, 'success' | 'info' | 'default' | 'error'> = {
   leader: 'success',
@@ -27,14 +29,11 @@ const ROLE_COLORS: Record<string, 'success' | 'info' | 'default' | 'error'> = {
   standby_leader: 'info',
 }
 
-function roleLabel(role: string): string {
-  switch (role) {
-    case 'leader': return 'DB Primary'
-    case 'sync_standby': return 'DB Sync Standby'
-    case 'replica': return 'DB Replica'
-    case 'standby_leader': return 'DB Standby Leader'
-    default: return role
-  }
+const ROLE_KEYS: Record<string, string> = {
+  leader: 'node.rolePrimary',
+  sync_standby: 'node.roleSyncStandby',
+  replica: 'node.roleReplica',
+  standby_leader: 'node.roleStandbyLeader',
 }
 
 interface HaNodeCardProps {
@@ -48,7 +47,9 @@ interface HaNodeCardProps {
 }
 
 export default function HaNodeCard({ member, vipAddress, maintenance, maintenanceLocked, leaderName, onSwitchover, onRefresh }: HaNodeCardProps) {
+  const t = useTranslations('ha')
   const roleColor = ROLE_COLORS[member.role] || 'error'
+  const roleLabel = ROLE_KEYS[member.role] ? t(ROLE_KEYS[member.role]) : member.role
   const [confirmOpen, setConfirmOpen] = useState<'switchover' | 'maintenance' | null>(null)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null)
@@ -65,17 +66,17 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setResult({ type: 'success', message: data.message || 'Switchover completed' })
+        setResult({ type: 'success', message: data.message || t('node.switchoverCompleted') })
         onSwitchover?.()
       } else {
-        setResult({ type: 'error', message: data.error || `Switchover failed (${res.status})` })
+        setResult({ type: 'error', message: data.error || t('node.switchoverFailed', { status: res.status }) })
       }
     } catch (e: any) {
-      setResult({ type: 'error', message: e.message || 'Request failed' })
+      setResult({ type: 'error', message: e.message || t('common.requestFailed') })
     } finally {
       setLoading(false)
     }
-  }, [member.name, onSwitchover])
+  }, [member.name, onSwitchover, t])
 
   const handleMaintenance = useCallback(async () => {
     setConfirmOpen(null)
@@ -87,17 +88,17 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setResult({ type: 'success', message: data.message || (maintenance ? 'Exited maintenance' : 'Entered maintenance') })
+        setResult({ type: 'success', message: data.message || (maintenance ? t('node.maintenanceExited') : t('node.maintenanceEntered')) })
         onRefresh?.()
       } else {
-        setResult({ type: 'error', message: data.error || `Operation failed (${res.status})` })
+        setResult({ type: 'error', message: data.error || t('common.operationFailed', { status: res.status }) })
       }
     } catch (e: any) {
-      setResult({ type: 'error', message: e.message || 'Request failed' })
+      setResult({ type: 'error', message: e.message || t('common.requestFailed') })
     } finally {
       setLoading(false)
     }
-  }, [member.name, maintenance, onRefresh])
+  }, [member.name, maintenance, onRefresh, t])
 
   return (
     <Card variant="outlined" sx={{
@@ -122,7 +123,7 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
           </Box>
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
             {onSwitchover && (
-              <Tooltip title="Promote to leader">
+              <Tooltip title={t('node.promoteTooltip')} arrow slotProps={tooltipSlotProps}>
                 <IconButton
                   size="small"
                   color="primary"
@@ -133,7 +134,11 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
                 </IconButton>
               </Tooltip>
             )}
-            <Tooltip title={maintenance ? 'Exit maintenance' : maintenanceLocked ? 'Another node is already in maintenance' : 'Enter maintenance'}>
+            <Tooltip
+              title={maintenance ? t('node.maintenanceExitTooltip') : maintenanceLocked ? t('node.maintenanceLockedTooltip') : t('node.maintenanceEnterTooltip')}
+              arrow
+              slotProps={tooltipSlotProps}
+            >
               <span>
                 <IconButton
                   size="small"
@@ -145,15 +150,15 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
                 </IconButton>
               </span>
             </Tooltip>
-            {vipAddress && <Chip label={`VIP ${vipAddress}`} size="small" color="primary" />}
-            {maintenance && <Chip label="Maintenance" size="small" color="warning" />}
+            {vipAddress && <Chip label={t('node.vipChip', { address: vipAddress })} size="small" color="primary" />}
+            {maintenance && <Chip label={t('node.maintenanceChip')} size="small" color="warning" />}
           </Box>
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           {member.host}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Chip label={roleLabel(member.role)} size="small" color={roleColor} />
+          <Chip label={roleLabel} size="small" color={roleColor} />
           <Chip
             label={member.state}
             size="small"
@@ -169,40 +174,39 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
       </CardContent>
 
       <Dialog open={confirmOpen === 'switchover'} onClose={() => setConfirmOpen(null)}>
-        <DialogTitle>Confirm Switchover</DialogTitle>
+        <DialogTitle>{t('node.confirmSwitchoverTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Promote <strong>{member.name}</strong> to leader?
-            {leaderName && <> The current leader (<strong>{leaderName}</strong>) will become a replica.</>}
+            {t('node.confirmSwitchoverBody', { node: member.name })}
+            {leaderName && <> {t('node.confirmSwitchoverLeaderNote', { leader: leaderName })}</>}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmOpen(null)}>Cancel</Button>
+          <Button onClick={() => setConfirmOpen(null)}>{t('common.cancel')}</Button>
           <Button variant="contained" onClick={handleSwitchover}>
-            Switchover
+            {t('node.switchover')}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={confirmOpen === 'maintenance'} onClose={() => setConfirmOpen(null)}>
-        <DialogTitle>{maintenance ? 'Exit Maintenance' : 'Enter Maintenance'}</DialogTitle>
+        <DialogTitle>{maintenance ? t('node.maintenanceExitTitle') : t('node.maintenanceEnterTitle')}</DialogTitle>
         <DialogContent>
           {maintenance ? (
             <Typography>
-              Restart application services on <strong>{member.name}</strong> and return it to the cluster?
+              {t('node.maintenanceExitBody', { node: member.name })}
             </Typography>
           ) : (
             <Typography>
-              Put <strong>{member.name}</strong> into maintenance mode?
-              This will stop application services (frontend, orchestrator, weasyprint).
-              {member.role === 'leader' && ' The leader role will be switched to another node first.'}
+              {t('node.maintenanceEnterBody', { node: member.name })}
+              {member.role === 'leader' && <> {t('node.maintenanceLeaderNote')}</>}
             </Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmOpen(null)}>Cancel</Button>
+          <Button onClick={() => setConfirmOpen(null)}>{t('common.cancel')}</Button>
           <Button variant="contained" color={maintenance ? 'primary' : 'warning'} onClick={handleMaintenance}>
-            {maintenance ? 'Exit Maintenance' : 'Enter Maintenance'}
+            {maintenance ? t('node.maintenanceExitTitle') : t('node.maintenanceEnterTitle')}
           </Button>
         </DialogActions>
       </Dialog>

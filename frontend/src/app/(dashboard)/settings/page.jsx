@@ -3018,7 +3018,7 @@ export default function SettingsPage() {
     { label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
-    { label: 'High Availability', icon: 'ri-shield-check-line', component: HaTab, requiredFeature: Features.HA, providerOnly: true },
+    { label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, requiredFeature: Features.HA, providerOnly: true },
   ]
 
   // Hide provider-only tabs (Tenants, vDC) unless super admin AND currently

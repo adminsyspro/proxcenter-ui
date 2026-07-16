@@ -18,6 +18,7 @@ import {
   Select,
   Typography,
 } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import type { PatroniMember } from './useHaCluster'
 
@@ -30,6 +31,7 @@ interface HaOpsPanelProps {
 }
 
 export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefresh }: HaOpsPanelProps) {
+  const t = useTranslations('ha')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
@@ -51,18 +53,18 @@ export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefr
       const res = await fetch(url, opts)
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        setResult({ type: 'success', message: data.message || 'Operation completed' })
+        setResult({ type: 'success', message: data.message || t('ops.operationCompleted') })
         onRefresh()
         setSwitchoverTarget('')
       } else {
-        setResult({ type: 'error', message: data.error || `Operation failed (${res.status})` })
+        setResult({ type: 'error', message: data.error || t('common.operationFailed', { status: res.status }) })
       }
     } catch (e: any) {
-      setResult({ type: 'error', message: e.message || 'Request failed' })
+      setResult({ type: 'error', message: e.message || t('common.requestFailed') })
     } finally {
       setLoading(false)
     }
-  }, [onRefresh])
+  }, [onRefresh, t])
 
   return (
     <Box>
@@ -74,13 +76,13 @@ export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefr
 
       <Card variant="outlined" sx={{ maxWidth: 360 }}>
         <CardContent>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Switchover</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('ops.switchoverTitle')}</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Promote a standby to leader
+            {t('ops.switchoverDesc')}
           </Typography>
           <FormControl size="small" fullWidth sx={{ mb: 1 }}>
-            <InputLabel>Target</InputLabel>
-            <Select value={switchoverTarget} onChange={(e) => setSwitchoverTarget(e.target.value)} label="Target">
+            <InputLabel>{t('ops.target')}</InputLabel>
+            <Select value={switchoverTarget} onChange={(e) => setSwitchoverTarget(e.target.value)} label={t('ops.target')}>
               {switchoverCandidates.map(m => (
                 <MenuItem key={m.name} value={m.name}>{m.name} ({m.role})</MenuItem>
               ))}
@@ -92,20 +94,21 @@ export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefr
             disabled={!switchoverTarget || loading}
             onClick={() => setSwitchoverOpen(true)}
           >
-            Switchover
+            {t('node.switchover')}
           </Button>
         </CardContent>
       </Card>
 
       <Dialog open={switchoverOpen} onClose={() => setSwitchoverOpen(false)}>
-        <DialogTitle>Confirm Switchover</DialogTitle>
+        <DialogTitle>{t('node.confirmSwitchoverTitle')}</DialogTitle>
         <DialogContent>
           <Typography>
-            Promote <strong>{switchoverTarget}</strong> to leader? The current leader ({leader?.name}) will become a replica.
+            {t('node.confirmSwitchoverBody', { node: switchoverTarget })}
+            {leader && <> {t('node.confirmSwitchoverLeaderNote', { leader: leader.name })}</>}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSwitchoverOpen(false)}>Cancel</Button>
+          <Button onClick={() => setSwitchoverOpen(false)}>{t('common.cancel')}</Button>
           <Button
             variant="contained"
             onClick={() => {
@@ -113,7 +116,7 @@ export default function HaOpsPanel({ members, syncMode, maintenanceNodes, onRefr
               doAction('/api/v1/ha/switchover', 'POST', { candidate: switchoverTarget })
             }}
           >
-            Switchover
+            {t('node.switchover')}
           </Button>
         </DialogActions>
       </Dialog>

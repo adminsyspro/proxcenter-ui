@@ -26,6 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import type { HaConfig } from './useHaConfig'
 import { resolveCompletionTarget } from './haRedirect'
@@ -65,15 +66,13 @@ interface NodeInput {
   vrrpPriority: number
 }
 
-const WIZARD_STEPS = ['Prerequisites', 'Nodes', 'Network', 'Validation', 'Deployment']
+const WIZARD_STEP_KEYS = ['stepPrerequisites', 'stepNodes', 'stepNetwork', 'stepValidation', 'stepDeployment'] as const
 
-const PREREQUISITES = [
-  '3 VMs with Debian 12+ or Ubuntu 22.04+',
-  'Docker Engine 24+ and Docker Compose v2 installed on all 3 VMs',
-  '3 distinct Proxmox hosts (for anti-affinity)',
-  'A free IP address for the VIP on the same subnet',
-  'Root SSH access to all 3 VMs',
-]
+const PREREQ_KEYS = ['prereq1', 'prereq2', 'prereq3', 'prereq4', 'prereq5'] as const
+
+const RUNBOOK_URL = 'https://github.com/adminsyspro/proxcenter-ui/blob/main/docs/ha/conversion-runbook.md'
+
+const BACKUP_PATH = '/opt/proxcenter/backup-pre-patroni.sql'
 
 const IPV4_REGEX = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
 
@@ -84,6 +83,8 @@ export default function HaDeployWizard({
   config: HaConfig | undefined
   onDeployed: () => void
 }) {
+  const t = useTranslations('ha')
+
   const resumeStep = config?.deploymentState === 'deploying' || config?.deploymentState === 'failed'
     ? 4
     : 0
@@ -162,17 +163,17 @@ export default function HaDeployWizard({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        setValidationError(err.error || `Validation failed (${res.status})`)
+        setValidationError(err.error || t('wizard.validationFailedStatus', { status: res.status }))
         return
       }
       const data: ValidationResponse = await res.json()
       setValidationResult(data)
     } catch (e: any) {
-      setValidationError(e.message || 'Validation request failed')
+      setValidationError(e.message || t('wizard.validationRequestFailed'))
     } finally {
       setValidating(false)
     }
-  }, [nodes, vip, vipInterface])
+  }, [nodes, vip, vipInterface, t])
 
   const validationPassed = validationResult
     ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose
@@ -227,7 +228,7 @@ export default function HaDeployWizard({
                 return [...prev, {
                   step: totalSteps,
                   totalSteps,
-                  label: 'HA cluster online',
+                  label: t('wizard.clusterOnline'),
                   status: 'done' as const,
                   timestamp: new Date().toISOString(),
                 }]
@@ -241,7 +242,7 @@ export default function HaDeployWizard({
         } catch {}
       }, 6000)
     }
-  }, [completion.url, stopConversionTimers])
+  }, [completion.url, stopConversionTimers, t])
 
   const connectSSE = useCallback(() => {
     if (eventSourceRef.current) {
@@ -263,7 +264,7 @@ export default function HaDeployWizard({
           return [...prev, data]
         })
         if (data.status === 'failed') {
-          setDeployError(data.error || `Step ${data.step} failed: ${data.label}`)
+          setDeployError(data.error || t('wizard.stepFailed', { step: data.step, label: data.label }))
           setDeploying(false)
           deployingRef.current = false
           eventSourceRef.current?.close()
@@ -290,7 +291,7 @@ export default function HaDeployWizard({
         setTimeout(connectSSE, 8000)
       }
     }
-  }, [stopConversionTimers, enterConversionPhase])
+  }, [stopConversionTimers, enterConversionPhase, t])
 
   useEffect(() => {
     return () => {
@@ -330,7 +331,7 @@ export default function HaDeployWizard({
 
       if (!configRes.ok) {
         const err = await configRes.json().catch(() => ({}))
-        setDeployError(err.error || 'Failed to save configuration')
+        setDeployError(err.error || t('wizard.saveConfigFailed'))
         setDeploying(false)
         return
       }
@@ -344,17 +345,17 @@ export default function HaDeployWizard({
       })
       if (!deployRes.ok) {
         const err = await deployRes.json().catch(() => ({}))
-        setDeployError(err.error || 'Failed to start deployment')
+        setDeployError(err.error || t('wizard.startDeployFailed'))
         setDeploying(false)
         return
       }
 
       connectSSE()
     } catch (e: any) {
-      setDeployError(e.message || 'Deployment failed')
+      setDeployError(e.message || t('wizard.deployFailed'))
       setDeploying(false)
     }
-  }, [nodes, vip, vipInterface, connectSSE])
+  }, [nodes, vip, vipInterface, connectSSE, t])
 
   const handleRetryDeploy = useCallback(async () => {
     setDeploying(true)
@@ -371,16 +372,16 @@ export default function HaDeployWizard({
       })
       if (!deployRes.ok) {
         const err = await deployRes.json().catch(() => ({}))
-        setDeployError(err.error || 'Failed to resume deployment')
+        setDeployError(err.error || t('wizard.resumeDeployFailed'))
         setDeploying(false)
         return
       }
       connectSSE()
     } catch (e: any) {
-      setDeployError(e.message || 'Deployment failed')
+      setDeployError(e.message || t('wizard.deployFailed'))
       setDeploying(false)
     }
-  }, [nodes, connectSSE])
+  }, [nodes, connectSSE, t])
 
   const currentDeployStep = deploySteps.length > 0
     ? deploySteps[deploySteps.length - 1]
@@ -390,50 +391,50 @@ export default function HaDeployWizard({
 
   const renderPrerequisites = () => (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Prerequisites</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.stepPrerequisites')}</Typography>
       <Typography variant="body2" sx={{ mb: 2 }}>
-        Verify the following prerequisites before proceeding:
+        {t('wizard.prereqIntro')}
       </Typography>
-      {PREREQUISITES.map((prereq, i) => (
-        <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+      {PREREQ_KEYS.map((key, i) => (
+        <Box key={key} sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
           <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: 'action.selected', display: 'flex', alignItems: 'center', justifyContent: 'center', mr: 1, mt: 0.25, flexShrink: 0 }}>
             <Typography variant="caption">{i + 1}</Typography>
           </Box>
-          <Typography variant="body2">{prereq}</Typography>
+          <Typography variant="body2">{t(`wizard.${key}`)}</Typography>
         </Box>
       ))}
       <FormControlLabel
         sx={{ mt: 2 }}
         control={<Checkbox checked={prereqChecked} onChange={(e) => setPrereqChecked(e.target.checked)} />}
-        label="I confirm all prerequisites are met"
+        label={t('wizard.prereqConfirm')}
       />
     </Box>
   )
 
   const renderNodes = () => (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Cluster Nodes</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.nodesTitle')}</Typography>
       <Typography variant="body2" sx={{ mb: 2 }}>
-        Enter the IP address and root SSH password for each node. Node 1 is the current node.
+        {t('wizard.nodesIntro')}
       </Typography>
       {nodes.map((node, i) => (
         <Card key={i} variant="outlined" sx={{ mb: 2 }}>
           <CardContent>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              {node.name} {i === 0 && <Chip label="Current node" size="small" color="primary" sx={{ ml: 1 }} />}
+              {node.name} {i === 0 && <Chip label={t('wizard.currentNode')} size="small" color="primary" sx={{ ml: 1 }} />}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
-                label="IP Address"
+                label={t('wizard.ipAddress')}
                 value={node.ip}
                 onChange={(e) => updateNode(i, 'ip', e.target.value)}
                 error={node.ip.length > 0 && !IPV4_REGEX.test(node.ip)}
-                helperText={node.ip.length > 0 && !IPV4_REGEX.test(node.ip) ? 'Invalid IPv4 address' : ''}
+                helperText={node.ip.length > 0 && !IPV4_REGEX.test(node.ip) ? t('wizard.invalidIpv4') : ''}
                 size="small"
                 sx={{ flex: 1 }}
               />
               <TextField
-                label="Root SSH Password"
+                label={t('wizard.rootPassword')}
                 type="password"
                 value={node.password}
                 onChange={(e) => updateNode(i, 'password', e.target.value)}
@@ -442,70 +443,68 @@ export default function HaDeployWizard({
               />
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              VRRP Priority: {node.vrrpPriority}
+              {t('wizard.vrrpPriority', { priority: node.vrrpPriority })}
             </Typography>
           </CardContent>
         </Card>
       ))}
       <Alert severity="info" sx={{ mt: 1 }}>
-        SSH passwords are used once for key injection and are never stored.
+        {t('wizard.passwordsNotice')}
       </Alert>
     </Box>
   )
 
   const renderNetwork = () => (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Network Configuration</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.networkTitle')}</Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <TextField
-          label="Virtual IP (VIP)"
+          label={t('wizard.vipLabel')}
           value={vip}
           onChange={(e) => setVip(e.target.value)}
           error={vip.length > 0 && !IPV4_REGEX.test(vip)}
-          helperText="A free IP on the same subnet as the nodes"
+          helperText={t('wizard.vipHelper')}
           size="small"
           fullWidth
         />
         <TextField
-          label="Network Interface"
+          label={t('wizard.interfaceLabel')}
           value={vipInterface}
           onChange={(e) => setVipInterface(e.target.value)}
-          helperText="Interface for VIP assignment (e.g., eth0, ens18)"
+          helperText={t('wizard.interfaceHelper')}
           size="small"
           fullWidth
         />
       </Box>
       <Alert severity="info" sx={{ mt: 2 }}>
-        After deployment, the application is reachable at http://VIP:3000.
-        An existing external URL (reverse proxy, OIDC) is preserved during
-        conversion; you will only repoint your reverse proxy at the VIP.
+        {t('wizard.networkNotice')}
       </Alert>
     </Box>
   )
 
   const renderValidation = () => (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Validation</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.stepValidation')}</Typography>
       {!validationResult && !validating && !validationError && (
         <Box>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Run preflight checks on all nodes before deployment.
+            {t('wizard.validationIntro')}
           </Typography>
           <Button variant="contained" onClick={handleValidate}>
-            Run Validation
+            {t('wizard.runValidation')}
           </Button>
         </Box>
       )}
       {validating && (
         <Box>
-          <Typography variant="body2" sx={{ mb: 1 }}>Validating nodes...</Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>{t('wizard.validating')}</Typography>
           <LinearProgress />
         </Box>
       )}
       {validationError && (
         <Box>
           <Alert severity="error" sx={{ mb: 2 }}>{validationError}</Alert>
-          <Button variant="outlined" onClick={handleValidate}>Retry</Button>
+          <Button variant="outlined" onClick={handleValidate}>{t('wizard.retry')}</Button>
         </Box>
       )}
       {validationResult && (() => {
@@ -516,16 +515,17 @@ export default function HaDeployWizard({
             style={{ color: ok ? 'var(--mui-palette-success-main)' : warn ? 'var(--mui-palette-warning-main)' : 'var(--mui-palette-error-main)', fontSize: 18 }}
           />
         )
+        const pgCompatibleLabel = t('wizard.checkPgCompatible')
         const nodeChecks: { label: string; values: (boolean | undefined)[] }[] = [
-          { label: 'SSH', values: results.map(r => r.ssh) },
-          { label: 'Docker', values: results.map(r => r.docker) },
-          { label: 'Compose', values: results.map(r => r.dockerCompose) },
-          { label: 'PG compatible', values: results.map(r => r.pgCompatible) },
+          { label: t('wizard.checkSsh'), values: results.map(r => r.ssh) },
+          { label: t('wizard.checkDocker'), values: results.map(r => r.docker) },
+          { label: t('wizard.checkCompose'), values: results.map(r => r.dockerCompose) },
+          { label: pgCompatibleLabel, values: results.map(r => r.pgCompatible) },
         ]
         const allPingTargets = [...new Set(results.flatMap(r => Object.keys(r.ping)))]
         for (const target of allPingTargets) {
           nodeChecks.push({
-            label: `Ping ${target}`,
+            label: t('wizard.checkPing', { target }),
             values: results.map(r => r.ping[target] ?? undefined),
           })
         }
@@ -535,7 +535,7 @@ export default function HaDeployWizard({
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 600, borderBottom: 2, borderColor: 'divider' }}>Check</TableCell>
+                    <TableCell sx={{ fontWeight: 600, borderBottom: 2, borderColor: 'divider' }}>{t('wizard.checkColumn')}</TableCell>
                     {results.map((r, i) => (
                       <TableCell key={r.ip} align="center" sx={{ fontWeight: 600, borderBottom: 2, borderColor: 'divider' }}>
                         {nodes[i]?.name || r.ip}
@@ -549,7 +549,7 @@ export default function HaDeployWizard({
                     <TableRow key={check.label}>
                       <TableCell sx={{ py: 0.75 }}>
                         {check.label}
-                        {check.label === 'Docker' && results.some(r => r.dockerVersion) && (
+                        {check.label === t('wizard.checkDocker') && results.some(r => r.dockerVersion) && (
                           <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
                             ({results.find(r => r.dockerVersion)?.dockerVersion})
                           </Typography>
@@ -557,13 +557,13 @@ export default function HaDeployWizard({
                       </TableCell>
                       {check.values.map((ok, i) => (
                         <TableCell key={i} align="center" sx={{ py: 0.75 }}>
-                          {ok === undefined ? <Typography variant="caption" color="text.secondary">n/a</Typography> : checkIcon(ok, check.label === 'PG compatible')}
+                          {ok === undefined ? <Typography variant="caption" color="text.secondary">{t('wizard.notAvailable')}</Typography> : checkIcon(ok, check.label === pgCompatibleLabel)}
                         </TableCell>
                       ))}
                     </TableRow>
                   ))}
                   <TableRow>
-                    <TableCell sx={{ py: 0.75, fontWeight: 600, borderTop: 2, borderColor: 'divider' }}>VIP available ({vip})</TableCell>
+                    <TableCell sx={{ py: 0.75, fontWeight: 600, borderTop: 2, borderColor: 'divider' }}>{t('wizard.vipAvailable', { vip })}</TableCell>
                     {results.map((_, i) => (
                       <TableCell key={i} align="center" sx={{ py: 0.75, borderTop: 2, borderColor: 'divider' }}>
                         {i === 0 ? checkIcon(validationResult.global.vipAvailable) : null}
@@ -574,7 +574,7 @@ export default function HaDeployWizard({
                     <TableRow>
                       <TableCell colSpan={results.length + 1} sx={{ py: 0.75 }}>
                         <Typography variant="caption">
-                          External URL kept: {validationResult.global.externalUrl}
+                          {t('wizard.externalUrlDetected', { url: validationResult.global.externalUrl })}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -583,12 +583,12 @@ export default function HaDeployWizard({
               </Table>
             </TableContainer>
             {validationPassed && (
-              <Alert severity="success" sx={{ mt: 2 }}>All checks passed.</Alert>
+              <Alert severity="success" sx={{ mt: 2 }}>{t('wizard.allChecksPassed')}</Alert>
             )}
             {!validationPassed && (
               <Box sx={{ mt: 2 }}>
-                <Alert severity="error" sx={{ mb: 1 }}>Some checks failed. Fix the issues and retry.</Alert>
-                <Button variant="outlined" onClick={handleValidate}>Retry Validation</Button>
+                <Alert severity="error" sx={{ mb: 1 }}>{t('wizard.checksFailed')}</Alert>
+                <Button variant="outlined" onClick={handleValidate}>{t('wizard.retryValidation')}</Button>
               </Box>
             )}
           </Box>
@@ -599,40 +599,36 @@ export default function HaDeployWizard({
 
   const renderDeployment = () => (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Deployment</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('wizard.stepDeployment')}</Typography>
       {!deploying && !deployDone && !deployError && config?.deploymentState === 'failed' && (
         <Box>
-          <Alert severity="error" sx={{ mb: 2 }}>Previous deployment failed. You can retry from where it left off.</Alert>
-          <Button variant="contained" color="warning" onClick={handleRetryDeploy}>Retry Deployment</Button>
+          <Alert severity="error" sx={{ mb: 2 }}>{t('wizard.previousFailed')}</Alert>
+          <Button variant="contained" color="warning" onClick={handleRetryDeploy}>{t('wizard.retryDeployment')}</Button>
         </Box>
       )}
       {!deploying && !deployDone && !deployError && config?.deploymentState !== 'failed' && (
         <Box>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            This will deploy the HA cluster across all 3 nodes. The process takes several minutes
-            and includes a brief service interruption during database conversion.
+            {t('wizard.deployIntro')}
           </Typography>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            The page may briefly disconnect during application cutover and will auto-reconnect.
+            {t('wizard.disconnectWarning')}
           </Alert>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Before the old stack is stopped, a full database backup is written to
-            {' '}/opt/proxcenter/backup-pre-patroni.sql on this server. If the conversion fails
-            before the new cluster is viable, the previous stack is restarted automatically
-            and the failed step is shown here.
+            {t('wizard.backupInfo', { path: BACKUP_PATH })}
           </Alert>
           <FormControlLabel
             sx={{ display: 'block', mb: 2 }}
             control={<Checkbox checked={snapshotConfirmed} onChange={(e) => setSnapshotConfirmed(e.target.checked)} />}
             label={(
               <span>
-                I have taken a VM snapshot of this server
-                {' '}(<Link href="https://github.com/adminsyspro/proxcenter-ui/blob/main/docs/ha/conversion-runbook.md" target="_blank" rel="noopener noreferrer">conversion runbook</Link>)
+                {t('wizard.snapshotConfirm')}
+                {' '}(<Link href={RUNBOOK_URL} target="_blank" rel="noopener noreferrer">{t('wizard.snapshotRunbookLink')}</Link>)
               </span>
             )}
           />
           <Button variant="contained" color="primary" onClick={handleDeploy} disabled={!snapshotConfirmed}>
-            Deploy HA Cluster
+            {t('wizard.deployButton')}
           </Button>
         </Box>
       )}
@@ -645,7 +641,7 @@ export default function HaDeployWizard({
               sx={{ height: 8, borderRadius: 4 }}
             />
             <Typography variant="caption" sx={{ mt: 0.5, display: 'block' }}>
-              Step {completedSteps} of {totalSteps}
+              {t('wizard.stepProgress', { completed: completedSteps, total: totalSteps })}
             </Typography>
           </Box>
           {currentDeployStep && !conversionPhase && (
@@ -663,16 +659,16 @@ export default function HaDeployWizard({
           {conversionPhase && deploying && !deployDone && (
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                Autonomous conversion in progress ({Math.floor(conversionElapsed / 60)}:{String(conversionElapsed % 60).padStart(2, '0')})
+                {t('wizard.conversionInProgress', { elapsed: `${Math.floor(conversionElapsed / 60)}:${String(conversionElapsed % 60).padStart(2, '0')}` })}
               </Typography>
               <Typography variant="caption" component="div" sx={{ mb: 1 }}>
                 {conversionElapsed < 15
-                  ? 'Stopping the standalone stack and backing up database...'
+                  ? t('wizard.conversionPhase1')
                   : conversionElapsed < 45
-                    ? 'Bootstrapping Patroni leader and replicating to nodes 2 and 3...'
+                    ? t('wizard.conversionPhase2')
                     : conversionElapsed < 90
-                      ? 'Starting application services on all 3 nodes...'
-                      : 'Still working, this can take a few minutes. Waiting for services to come back online...'
+                      ? t('wizard.conversionPhase3')
+                      : t('wizard.conversionPhaseLong')
                 }
               </Typography>
               <LinearProgress sx={{ mt: 0.5 }} />
@@ -684,7 +680,7 @@ export default function HaDeployWizard({
             onClick={() => setLogExpanded(!logExpanded)}
             sx={{ mb: 1 }}
           >
-            {logExpanded ? 'Hide log' : 'Show log'}
+            {logExpanded ? t('wizard.hideLog') : t('wizard.showLog')}
           </Button>
           <Collapse in={logExpanded}>
             <Box sx={{ maxHeight: 300, overflow: 'auto', bgcolor: 'action.hover', borderRadius: 1, p: 1 }}>
@@ -692,16 +688,16 @@ export default function HaDeployWizard({
                 <Box key={step.step} sx={{ mb: 0.5 }}>
                   <Typography variant="caption" sx={{ fontFamily: 'inherit' }}>
                     [{step.status === 'done' ? 'OK' : step.status === 'failed' ? 'FAIL' : step.status === 'running' ? '...' : '--'}]
-                    {' '}Step {step.step}: {step.label}
+                    {' '}{t('wizard.logStep', { step: step.step, label: step.label })}
                     {step.detail ? ` - ${step.detail}` : ''}
-                    {step.error ? ` - ERROR: ${step.error}` : ''}
+                    {step.error ? ` - ${step.error}` : ''}
                   </Typography>
                 </Box>
               ))}
               {conversionPhase && deploying && (
                 <Box sx={{ mb: 0.5 }}>
                   <Typography variant="caption" sx={{ fontFamily: 'inherit', color: 'info.main' }}>
-                    [...] Autonomous conversion running, waiting for local node to come back online...
+                    [...] {t('wizard.logConversionRunning')}
                   </Typography>
                 </Box>
               )}
@@ -710,7 +706,7 @@ export default function HaDeployWizard({
           {deployError && (
             <Box sx={{ mt: 2 }}>
               <Alert severity="error" sx={{ mb: 1 }}>{deployError}</Alert>
-              <Button variant="outlined" onClick={handleRetryDeploy}>Retry (resume from failed step)</Button>
+              <Button variant="outlined" onClick={handleRetryDeploy}>{t('wizard.retryResume')}</Button>
             </Box>
           )}
           {deployDone && (
@@ -718,25 +714,23 @@ export default function HaDeployWizard({
               {completion.external ? (
                 <>
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    HA cluster deployed successfully. Redirecting to {completion.url}...
+                    {t('wizard.successExternal', { url: completion.url })}
                   </Alert>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    Your external URL was kept. Repoint your reverse proxy at the VIP ({vip});
-                    no identity provider changes are needed.
+                    {t('wizard.successExternalNote', { vip })}
                   </Alert>
                 </>
               ) : (
                 <>
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    HA cluster deployed successfully. Redirecting to VIP ({vip})...
+                    {t('wizard.successVip', { vip })}
                   </Alert>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    NEXTAUTH_URL has been set to http://{vip}:3000.
-                    Update your OIDC/SSO callback URLs at your identity provider if applicable.
+                    {t('wizard.successVipNote', { vip })}
                   </Alert>
                 </>
               )}
-              <Button variant="contained" onClick={onDeployed}>View Dashboard</Button>
+              <Button variant="contained" onClick={onDeployed}>{t('wizard.viewDashboard')}</Button>
             </Box>
           )}
         </Box>
@@ -758,11 +752,11 @@ export default function HaDeployWizard({
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h5" sx={{ mb: 3 }}>HA Cluster Deployment</Typography>
+      <Typography variant="h5" sx={{ mb: 3 }}>{t('wizard.title')}</Typography>
       <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
-        {WIZARD_STEPS.map((label) => (
-          <Step key={label}>
-            <StepLabel>{label}</StepLabel>
+        {WIZARD_STEP_KEYS.map((key) => (
+          <Step key={key}>
+            <StepLabel>{t(`wizard.${key}`)}</StepLabel>
           </Step>
         ))}
       </Stepper>
@@ -775,14 +769,14 @@ export default function HaDeployWizard({
                 disabled={activeStep === 0}
                 onClick={() => setActiveStep(s => s - 1)}
               >
-                Back
+                {t('wizard.back')}
               </Button>
               <Button
                 variant="contained"
                 disabled={!canNext()}
                 onClick={() => setActiveStep(s => s + 1)}
               >
-                Next
+                {t('wizard.next')}
               </Button>
             </Box>
           )}

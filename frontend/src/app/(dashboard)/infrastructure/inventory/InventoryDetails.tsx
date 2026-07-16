@@ -300,6 +300,16 @@ export default function InventoryDetails({
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
+  const [cutoverBusy, setCutoverBusy] = useState(false)
+  const [cutoverConfirm, setCutoverConfirm] = useState<string | null>(null)
+  const triggerCutover = async (jobId: string) => {
+    setCutoverBusy(true)
+    try {
+      await fetch(`/api/v1/migrations/${jobId}/cutover`, { method: 'POST' })
+    } finally {
+      setCutoverBusy(false)
+    }
+  }
   const migLogsRef = useRef<HTMLDivElement>(null)
   // Bulk migration state
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
@@ -3996,12 +4006,27 @@ return vm?.isCluster ?? false
                         {t('inventoryPage.esxiMigration.transferMetrics')}
                       </Typography>
                       {vmMigJob && (
-                        <Chip
-                          size="small"
-                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
-                          color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : 'primary'}
-                          sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status) && (
+                            <Button
+                              size="small"
+                              variant={vmMigJob.status === 'awaiting_cutover' ? 'contained' : 'outlined'}
+                              color="warning"
+                              disabled={cutoverBusy}
+                              startIcon={<i className="ri-flashlight-line" style={{ fontSize: 14 }} />}
+                              onClick={() => setCutoverConfirm(vmMigJob.id)}
+                              sx={{ height: 24, fontSize: 11, py: 0 }}
+                            >
+                              {t('inventoryPage.esxiMigration.cutoverNow')}
+                            </Button>
+                          )}
+                          <Chip
+                            size="small"
+                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                            color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'awaiting_cutover' ? 'warning' : 'primary'}
+                            sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
+                          />
+                        </Box>
                       )}
                     </Box>
                     <Box sx={{ p: 2, flex: 1 }}>
@@ -4044,6 +4069,16 @@ return vm?.isCluster ?? false
                               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{t('inventoryPage.esxiMigration.targetVmid')}</Typography>
                               <Typography variant="body2" fontWeight={700}>{vmMigJob.targetVmid || '—'}</Typography>
                             </Box>
+                            <MuiTooltip title={t('inventoryPage.esxiMigration.estimatedDowntimeHint')}>
+                              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{t('inventoryPage.esxiMigration.estimatedDowntime')}</Typography>
+                                <Typography variant="body2" fontWeight={700}>
+                                  {vmMigJob.projectedDowntimeSec != null && ['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status)
+                                    ? `~${Math.round(vmMigJob.projectedDowntimeSec / 60)} min`
+                                    : '—'}
+                                </Typography>
+                              </Box>
+                            </MuiTooltip>
                           </Box>
 
                           {/* Progress graph — Recharts area chart with tooltip */}
@@ -4148,6 +4183,52 @@ return vm?.isCluster ?? false
                     </Box>
                   </CardContent>
                 </Card>
+
+                <Dialog
+                  open={!!cutoverConfirm}
+                  onClose={() => setCutoverConfirm(null)}
+                  maxWidth="xs"
+                  fullWidth
+                >
+                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{
+                      width: 40, height: 40, borderRadius: 2,
+                      bgcolor: alpha(theme.palette.warning.main, 0.12),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <i className="ri-flashlight-line" style={{ fontSize: 22, color: theme.palette.warning.main }} />
+                    </Box>
+                    {t('inventoryPage.esxiMigration.cutoverConfirmTitle')}
+                  </DialogTitle>
+                  <DialogContent>
+                    <DialogContentText>
+                      {t('inventoryPage.esxiMigration.cutoverConfirmBody', { mins: Math.round((vmMigJob?.projectedDowntimeSec ?? 0) / 60) })}
+                    </DialogContentText>
+                    {vmMigJob?.status === 'awaiting_cutover' && (
+                      <Alert severity="warning" sx={{ mt: 2 }}>
+                        {t('inventoryPage.esxiMigration.cutoverNotConverging')}
+                      </Alert>
+                    )}
+                  </DialogContent>
+                  <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setCutoverConfirm(null)} color="inherit">
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      disabled={cutoverBusy}
+                      startIcon={cutoverBusy ? <CircularProgress size={16} /> : undefined}
+                      onClick={async () => {
+                        if (!cutoverConfirm) return
+                        await triggerCutover(cutoverConfirm)
+                        setCutoverConfirm(null)
+                      }}
+                    >
+                      {t('inventoryPage.esxiMigration.cutoverNow')}
+                    </Button>
+                  </DialogActions>
+                </Dialog>
               </Stack>
             )
           })()}

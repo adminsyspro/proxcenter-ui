@@ -29,7 +29,7 @@ const schema = extractSchema(dsn)
 function createClient() {
   const pool = new pg.Pool({
     connectionString: dsn,
-    max: 5,
+    max: Number(process.env.PG_POOL_MAX) || 10,
     connectionTimeoutMillis: 10_000,
   })
   return new PrismaClient({

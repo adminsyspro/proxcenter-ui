@@ -30,7 +30,7 @@ import { startSoapKeepAlive } from "./session-keepalive"
 
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "full_copy" | "delta_sync"
-  | "cutover" | "verify" | "completed" | "failed" | "cancelled"
+  | "awaiting_cutover" | "cutover" | "verify" | "completed" | "failed" | "cancelled"
 
 export interface WarmMigrationConfig {
   sourceConnectionId: string
@@ -53,6 +53,7 @@ export interface WarmMigrationConfig {
 // ── Job tracking (per-orchestrator, mirrors the other migration pipelines) ──
 interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }
 const cancelledJobs = new Set<string>()
+const cutoverRequests = new Set<string>()
 const jobPrisma = new Map<string, any>()
 // At most one warm job per source VM in-flight. Concurrent warm runs against the
 // same VM would interleave snapshots and dd-seek writes (target corruption), so a
@@ -62,6 +63,12 @@ const activeWarmVms = new Set<string>()
 /** Cooperative cancel signal for a warm job (called by the cancel route). */
 export function cancelWarmMigrationJob(jobId: string) { cancelledJobs.add(jobId) }
 function isCancelled(jobId: string): boolean { return cancelledJobs.has(jobId) }
+
+/** Cooperative "cutover now" signal for a warm job (called by the cutover route). */
+export function requestWarmCutover(jobId: string) { cutoverRequests.add(jobId) }
+function isCutoverRequested(jobId: string): boolean { return cutoverRequests.has(jobId) }
+/** @internal test hook */
+export function __isCutoverRequestedForTest(jobId: string): boolean { return isCutoverRequested(jobId) }
 
 async function updateJob(id: string, status: WarmStatus, extra: Record<string, any> = {}) {
   const prisma = jobPrisma.get(id)
@@ -134,6 +141,41 @@ export function buildThickZeroScript(dev: string): string {
   return `sz=$(blockdev --getsize64 ${d}); blkdiscard -z ${d} 2>&1 || head -c "$sz" /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=direct status=none 2>&1`
 }
 
+const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
+
+/**
+ * Pause a warm job at the operator gate: persist the estimate, log an actionable
+ * message, then wait until the operator requests cutover (resolve), cancels
+ * (throw "Migration cancelled"), or the safety timeout elapses (throw). No delta
+ * passes run while waiting; only the SOAP session stays alive (keepalive).
+ */
+async function awaitOperatorCutover(
+  jobId: string, projectedDowntimeSec: number, budgetSec: number, maxPasses: number,
+  opts: { pollMs?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  const pollMs = opts.pollMs ?? 3000
+  const timeoutMs = opts.timeoutMs ?? OPERATOR_GATE_TIMEOUT_MS
+  await updateJob(jobId, "awaiting_cutover", { currentStep: "awaiting_cutover", projectedDowntimeSec })
+  const mins = Math.round(projectedDowntimeSec / 60)
+  await appendLog(jobId, `Reached ${maxPasses} delta passes; projected cutover downtime ~${projectedDowntimeSec}s (~${mins} min) exceeds the ${budgetSec}s budget. The source is changing faster than it converges. Click "Cutover now" to proceed (VM offline ~${mins} min), or cancel and use a cold migration.`, "warn")
+  const start = Date.now()
+  while (true) {
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); return }
+    if (Date.now() - start > timeoutMs) throw new Error(`Operator gate timed out after ${Math.round(timeoutMs / 3600000)}h with no cutover decision; the job was left paused too long`)
+    await new Promise(r => setTimeout(r, pollMs))
+  }
+}
+
+/** @internal test hook */
+export function __awaitOperatorCutoverForTest(
+  jobId: string, projectedDowntimeSec: number, budgetSec: number, maxPasses: number,
+  opts: { pollMs?: number; timeoutMs?: number },
+): Promise<void> {
+  jobPrisma.set(jobId, getTenantPrisma("default"))
+  return awaitOperatorCutover(jobId, projectedDowntimeSec, budgetSec, maxPasses, opts)
+}
+
 /**
  * Warm migration orchestrator (ESXi-direct source, Proxmox block target).
  * Keeps the source online through a full copy + N delta passes, then a short
@@ -145,6 +187,7 @@ export function buildThickZeroScript(dev: string): string {
 export async function runWarmMigration(jobId: string, config: WarmMigrationConfig, tenantId = "default"): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
+  cutoverRequests.delete(jobId)
 
   const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
   const budget = config.downtimeBudgetSec ?? 300
@@ -390,6 +433,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       let pass = 0
       while (true) {
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
+        if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); break }
         const tk = Date.now()
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}` })
         const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*")
@@ -397,11 +441,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(deltaBytes / 1048576).toFixed(1)} MB`)
         const decision = decideNextPass(pass, { deltaBytes, throughputBytesPerSec: throughput }, cfg)
+        await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") {
-          await updateJob(jobId, "delta_sync", { currentStep: "operator_gate", operatorGateDowntimeSec: decision.projectedDowntimeSec })
-          await appendLog(jobId, `Reached ${maxPasses} passes; projected cutover downtime ${decision.projectedDowntimeSec}s exceeds the ${budget}s budget. Operator decision required (accept longer cutover or abort).`, "warn")
-          throw new Error(`Warm migration paused at operator gate: projected downtime ${decision.projectedDowntimeSec}s > budget ${budget}s`)
+          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses)
+          break
         }
         pass++
       }
@@ -513,6 +557,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     jobPrisma.delete(jobId)
     cancelledJobs.delete(jobId)
+    cutoverRequests.delete(jobId)
     if (acquiredVmLock) activeWarmVms.delete(vmKey)
   }
 }

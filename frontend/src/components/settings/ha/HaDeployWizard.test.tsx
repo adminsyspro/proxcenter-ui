@@ -49,7 +49,7 @@ function seedValidateOk(capture: { body?: unknown }, externalUrl?: string) {
 }
 
 // Walks steps 0-3 and stops right after "All checks passed." is visible.
-async function walkToValidationPassed(externalUrl?: string) {
+async function walkToValidationPassed(externalUrl?: string, externalUrlInput?: string) {
   const capture: { body?: unknown } = {}
   seedValidateOk(capture, externalUrl)
   renderWithProviders(<HaDeployWizard config={undefined} onDeployed={vi.fn()} />)
@@ -71,6 +71,9 @@ async function walkToValidationPassed(externalUrl?: string) {
   // Step 2: network
   fireEvent.change(screen.getByLabelText('Virtual IP (VIP)'), { target: { value: '10.0.0.10' } })
   fireEvent.change(screen.getByLabelText('Network Interface'), { target: { value: 'ens18' } })
+  if (externalUrlInput !== undefined) {
+    fireEvent.change(screen.getByLabelText('External URL (optional)'), { target: { value: externalUrlInput } })
+  }
   fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
   // Step 3: validation
@@ -98,7 +101,13 @@ describe('HaDeployWizard', () => {
       ],
       vip: '10.0.0.10',
       vipInterface: 'ens18',
+      externalUrl: '',
     })
+  })
+
+  it('sends the External URL in the validate body when set', async () => {
+    const capture = await walkToValidationPassed(undefined, 'https://pxc.example.com')
+    expect((capture.body as { externalUrl?: string }).externalUrl).toBe('https://pxc.example.com')
   })
 
   it('shows the preserved external URL in the validation summary', async () => {

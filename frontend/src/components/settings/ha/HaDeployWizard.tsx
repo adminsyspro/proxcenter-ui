@@ -104,6 +104,7 @@ export default function HaDeployWizard({
   })
   const [vip, setVip] = useState(config?.vip || '')
   const [vipInterface, setVipInterface] = useState(config?.vipInterface || 'eth0')
+  const [externalUrl, setExternalUrl] = useState(config?.externalUrl || '')
 
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null)
@@ -159,6 +160,7 @@ export default function HaDeployWizard({
           nodes: nodes.map(n => ({ ip: n.ip, password: n.password })),
           vip,
           vipInterface,
+          externalUrl: externalUrl.trim(),
         }),
       })
       if (!res.ok) {
@@ -173,7 +175,7 @@ export default function HaDeployWizard({
     } finally {
       setValidating(false)
     }
-  }, [nodes, vip, vipInterface, t])
+  }, [nodes, vip, vipInterface, externalUrl, t])
 
   const validationPassed = validationResult
     ? validationResult.results.every(r => r.ssh && r.docker && r.dockerCompose
@@ -212,8 +214,14 @@ export default function HaDeployWizard({
       setVipPolling(true)
       vipPollRef.current = setInterval(async () => {
         try {
-          const r = await fetch('/api/health', { signal: AbortSignal.timeout(5000) })
-          if (r.ok) {
+          // Poll the backend's authoritative deploy state, not a bare frontend
+          // health ping: a single frontend answering 200 does not mean the whole
+          // conversion converged (the backend only reports 'deployed' once the
+          // VIP + Patroni + conversion script have all succeeded).
+          const r = await fetch('/api/v1/ha/config', { signal: AbortSignal.timeout(5000) })
+          if (!r.ok) return
+          const data = await r.json()
+          if (data.deploymentState === 'deployed') {
             stopConversionTimers()
             setConversionPhase(false)
             setSseReconnecting(false)
@@ -238,6 +246,14 @@ export default function HaDeployWizard({
             setTimeout(() => {
               window.location.href = completion.url
             }, 3000)
+          } else if (data.deploymentState === 'failed') {
+            stopConversionTimers()
+            setConversionPhase(false)
+            setSseReconnecting(false)
+            setDeploying(false)
+            deployingRef.current = false
+            setDeployError(data.deployError || t('wizard.deployFailed'))
+            eventSourceRef.current?.close()
           }
         } catch {}
       }, 6000)
@@ -325,6 +341,7 @@ export default function HaDeployWizard({
           nodes: nodes.map(n => ({ name: n.name, ip: n.ip, vrrpPriority: n.vrrpPriority })),
           vip,
           vipInterface,
+          externalUrl: externalUrl.trim(),
           sshPasswords: Object.fromEntries(nodes.map(n => [n.ip, n.password])),
         }),
       })
@@ -355,7 +372,7 @@ export default function HaDeployWizard({
       setDeployError(e.message || t('wizard.deployFailed'))
       setDeploying(false)
     }
-  }, [nodes, vip, vipInterface, connectSSE, t])
+  }, [nodes, vip, vipInterface, externalUrl, connectSSE, t])
 
   const handleRetryDeploy = useCallback(async () => {
     setDeploying(true)
@@ -472,6 +489,14 @@ export default function HaDeployWizard({
           value={vipInterface}
           onChange={(e) => setVipInterface(e.target.value)}
           helperText={t('wizard.interfaceHelper')}
+          size="small"
+          fullWidth
+        />
+        <TextField
+          label={t('wizard.externalUrlLabel')}
+          value={externalUrl}
+          onChange={(e) => setExternalUrl(e.target.value)}
+          helperText={t('wizard.externalUrlHelper')}
           size="small"
           fullWidth
         />

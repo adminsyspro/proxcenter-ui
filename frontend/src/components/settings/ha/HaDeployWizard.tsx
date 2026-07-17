@@ -12,6 +12,8 @@ import {
   Chip,
   Collapse,
   FormControlLabel,
+  IconButton,
+  InputAdornment,
   LinearProgress,
   Link,
   Step,
@@ -105,6 +107,7 @@ export default function HaDeployWizard({
   const [vip, setVip] = useState(config?.vip || '')
   const [vipInterface, setVipInterface] = useState(config?.vipInterface || 'eth0')
   const [externalUrl, setExternalUrl] = useState(config?.externalUrl || '')
+  const [showPw, setShowPw] = useState<Record<number, boolean>>({})
 
   const [validating, setValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResponse | null>(null)
@@ -186,8 +189,11 @@ export default function HaDeployWizard({
   // Post-deploy destination (decision 3): the preserved external URL comes
   // from the validation summary on a fresh run, or from the saved config
   // when resuming after a reload.
+  // The post-deploy destination is the admin's external URL (or the VIP when
+  // empty) — never node 1's detected NEXTAUTH_URL, which would send the browser
+  // to a node IP that just bounces to the VIP.
   const completion = resolveCompletionTarget(
-    validationResult?.global.externalUrl || config?.externalUrl,
+    externalUrl.trim() || config?.externalUrl,
     vip,
   )
 
@@ -452,11 +458,27 @@ export default function HaDeployWizard({
               />
               <TextField
                 label={t('wizard.rootPassword')}
-                type="password"
+                type={showPw[i] ? 'text' : 'password'}
                 value={node.password}
                 onChange={(e) => updateNode(i, 'password', e.target.value)}
                 size="small"
                 sx={{ flex: 1 }}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowPw((s) => ({ ...s, [i]: !s[i] }))}
+                          edge="end"
+                          size="small"
+                          aria-label={showPw[i] ? t('wizard.hidePassword') : t('wizard.showPassword')}
+                        >
+                          <i className={showPw[i] ? 'ri-eye-off-line' : 'ri-eye-line'} />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  },
+                }}
               />
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>

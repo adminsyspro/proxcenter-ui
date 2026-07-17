@@ -272,6 +272,8 @@
       "currentNode": "현재 노드",
       "ipAddress": "IP 주소",
       "rootPassword": "root SSH 비밀번호",
+      "showPassword": "비밀번호 표시",
+      "hidePassword": "비밀번호 숨기기",
       "invalidIpv4": "잘못된 IPv4 주소",
       "vrrpPriority": "VRRP 우선순위: {priority}",
       "passwordsNotice": "SSH 비밀번호는 키 주입에 한 번만 사용되며 저장되지 않습니다.",

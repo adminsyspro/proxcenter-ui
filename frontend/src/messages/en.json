@@ -272,6 +272,8 @@
       "currentNode": "Current node",
       "ipAddress": "IP Address",
       "rootPassword": "Root SSH Password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
       "invalidIpv4": "Invalid IPv4 address",
       "vrrpPriority": "VRRP Priority: {priority}",
       "passwordsNotice": "SSH passwords are used once for key injection and are never stored.",

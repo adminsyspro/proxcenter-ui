@@ -271,6 +271,8 @@
       "currentNode": "当前节点",
       "ipAddress": "IP 地址",
       "rootPassword": "root SSH 密码",
+      "showPassword": "显示密码",
+      "hidePassword": "隐藏密码",
       "invalidIpv4": "无效的 IPv4 地址",
       "vrrpPriority": "VRRP 优先级：{priority}",
       "passwordsNotice": "SSH 密码仅用于一次性注入密钥，绝不会被存储。",

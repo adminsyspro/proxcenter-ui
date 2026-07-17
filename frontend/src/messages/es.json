@@ -272,6 +272,8 @@
       "currentNode": "Nodo actual",
       "ipAddress": "Dirección IP",
       "rootPassword": "Contraseña SSH de root",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
       "invalidIpv4": "Dirección IPv4 no válida",
       "vrrpPriority": "Prioridad VRRP: {priority}",
       "passwordsNotice": "Las contraseñas SSH se usan una sola vez para inyectar claves y nunca se almacenan.",

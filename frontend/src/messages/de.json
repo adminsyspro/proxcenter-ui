@@ -267,6 +267,8 @@
       "currentNode": "Aktueller Knoten",
       "ipAddress": "IP-Adresse",
       "rootPassword": "Root-SSH-Passwort",
+      "showPassword": "Passwort anzeigen",
+      "hidePassword": "Passwort verbergen",
       "invalidIpv4": "Ungültige IPv4-Adresse",
       "vrrpPriority": "VRRP-Priorität: {priority}",
       "passwordsNotice": "SSH-Passwörter werden einmalig zur Schlüsselinjektion verwendet und nie gespeichert.",

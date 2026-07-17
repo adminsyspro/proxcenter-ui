@@ -272,6 +272,8 @@
       "currentNode": "Noeud actuel",
       "ipAddress": "Adresse IP",
       "rootPassword": "Mot de passe SSH root",
+      "showPassword": "Afficher le mot de passe",
+      "hidePassword": "Masquer le mot de passe",
       "invalidIpv4": "Adresse IPv4 invalide",
       "vrrpPriority": "Priorité VRRP : {priority}",
       "passwordsNotice": "Les mots de passe SSH servent une seule fois à injecter les clés et ne sont jamais stockés.",

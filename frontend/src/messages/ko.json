@@ -295,7 +295,7 @@
       "checkPing": "Ping {target}",
       "notAvailable": "n/a",
       "vipAvailable": "VIP 사용 가능 ({vip})",
-      "externalUrlDetected": "유지되는 외부 URL: {url}",
+      "externalUrlDetected": "노드 1에서 감지된 외부 URL: {url}",
       "allChecksPassed": "모든 점검을 통과했습니다.",
       "checksFailed": "일부 점검이 실패했습니다. 문제를 해결한 후 다시 시도하세요.",
       "retryValidation": "검증 재시도",

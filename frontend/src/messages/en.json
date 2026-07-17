@@ -295,7 +295,7 @@
       "checkPing": "Ping {target}",
       "notAvailable": "n/a",
       "vipAvailable": "VIP available ({vip})",
-      "externalUrlDetected": "External URL kept: {url}",
+      "externalUrlDetected": "External URL detected on node 1: {url}",
       "allChecksPassed": "All checks passed.",
       "checksFailed": "Some checks failed. Fix the issues and retry.",
       "retryValidation": "Retry Validation",

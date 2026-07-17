@@ -294,7 +294,7 @@
       "checkPing": "Ping {target}",
       "notAvailable": "n/a",
       "vipAvailable": "VIP 可用 ({vip})",
-      "externalUrlDetected": "保留的外部 URL：{url}",
+      "externalUrlDetected": "在节点 1 上检测到的外部 URL：{url}",
       "allChecksPassed": "所有检查均已通过。",
       "checksFailed": "部分检查失败。请修复后重试。",
       "retryValidation": "重新验证",

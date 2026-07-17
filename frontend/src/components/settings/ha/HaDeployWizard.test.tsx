@@ -110,9 +110,9 @@ describe('HaDeployWizard', () => {
     expect((capture.body as { externalUrl?: string }).externalUrl).toBe('https://pxc.example.com')
   })
 
-  it('shows the preserved external URL in the validation summary', async () => {
+  it('shows the detected external URL in the validation summary', async () => {
     await walkToValidationPassed('https://proxcenter.example.com')
-    expect(screen.getByText(/External URL kept:/)).toBeInTheDocument()
+    expect(screen.getByText(/External URL detected on node 1:/)).toBeInTheDocument()
     expect(screen.getByText(/proxcenter\.example\.com/)).toBeInTheDocument()
   })
 

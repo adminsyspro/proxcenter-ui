@@ -295,7 +295,7 @@
       "checkPing": "Ping {target}",
       "notAvailable": "n/a",
       "vipAvailable": "VIP disponible ({vip})",
-      "externalUrlDetected": "URL externe conservée : {url}",
+      "externalUrlDetected": "URL externe détectée sur le nœud 1 : {url}",
       "allChecksPassed": "Toutes les vérifications sont passées.",
       "checksFailed": "Certaines vérifications ont échoué. Corrigez puis réessayez.",
       "retryValidation": "Relancer la validation",

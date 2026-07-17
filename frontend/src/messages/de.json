@@ -290,7 +290,7 @@
       "checkPing": "Ping {target}",
       "notAvailable": "n/a",
       "vipAvailable": "VIP verfügbar ({vip})",
-      "externalUrlDetected": "Externe URL bleibt erhalten: {url}",
+      "externalUrlDetected": "Externe URL auf Knoten 1 erkannt: {url}",
       "allChecksPassed": "Alle Prüfungen bestanden.",
       "checksFailed": "Einige Prüfungen sind fehlgeschlagen. Beheben Sie die Probleme und versuchen Sie es erneut.",
       "retryValidation": "Validierung wiederholen",

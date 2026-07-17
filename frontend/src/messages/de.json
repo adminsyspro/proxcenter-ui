@@ -89,7 +89,8 @@
     "empty": "Leer",
     "overview": "Übersicht",
     "configuration": "Konfiguration",
-    "created": "Erstellt"
+    "created": "Erstellt",
+    "errorWithMessage": "Fehler: {error}"
   },
   "whatsNew": {
     "title": "Neuigkeiten"
@@ -4401,7 +4402,10 @@
     "resumeSuccess": "VM wird fortgesetzt",
     "rebootSuccess": "VM wird neugestartet",
     "migrateSuccess": "Migration gestartet",
-    "cloneSuccess": "Klonen gestartet"
+    "cloneSuccess": "Klonen gestartet",
+    "bulkSuccess": "{description} - {count} VMs",
+    "bulkPartial": "{description} - {success} OK, {errors} Fehler",
+    "bulkFailed": "{description} - {errors} Fehler"
   },
   "vmConfig": {
     "title": "VM Konfiguration",
@@ -4468,7 +4472,9 @@
     "rawConfig": "Raw Konfiguration",
     "advancedArgs": "hinzufügenitional QEMU arguments",
     "advancedArgsWarning": "Manuell modification for Erweitert Benutzer only.",
-    "qemuArgsHelper": "Argumente, die direkt an QEMU übergeben werden (gefährlich)"
+    "qemuArgsHelper": "Argumente, die direkt an QEMU übergeben werden (gefährlich)",
+    "totalVcpus": "Gesamt: {count} vCPUs",
+    "coresSocketsSummary": "{cores} Kerne × {sockets} Socket(s)"
   },
   "hardware": {
     "detach": "Trennen",
@@ -4631,7 +4637,8 @@
       "useIso": "CD/DVD-Abbilddatei (ISO) verwenden",
       "usePhysical": "Physisches CD/DVD-Laufwerk verwenden",
       "noMedia": "Kein Medium verwenden"
-    }
+    },
+    "loadNodesError": "Node-Liste konnte nicht geladen werden"
   },
   "ldap": {
     "description": "Konfigurieren Sie LDAP/Active Directory-Authentifizierung, damit Benutzer sich mit ihren Unternehmensanmeldedaten anmelden können.",
@@ -6591,7 +6598,13 @@
     "portFilter": "Port",
     "noTimelineData": "Keine Zeitreihendaten für dieses Paar verfügbar (erfordert InfluxDB)",
     "compare": "Vergleichen",
-    "yesterday": "Gestern"
+    "yesterday": "Gestern",
+    "samplingRateInfo": "1 von <strong>{rate}</strong> Paketen wird erfasst",
+    "samplingVeryHigh": "⚠️ Sehr präzise, aber hohe CPU-/Netzwerklast — nur zum Debuggen empfohlen",
+    "samplingHigh": "⚡ Hohe Präzision — geeignet für Netzwerke unter 1 Gbit/s",
+    "samplingBalanced": "✓ Gutes Verhältnis von Präzision und Leistung — für die meisten Fälle empfohlen",
+    "samplingLight": "✓ Ressourcenschonend — geeignet für Netzwerke ab 10 Gbit/s",
+    "samplingVeryLight": "📉 Sehr ressourcenschonend — kann Datenströme mit geringem Volumen übersehen"
   },
   "myVdc": {
     "title": "Mein Datacenter",
@@ -6950,5 +6963,12 @@
     "policyToggleLabel": "2FA für super_admin-Konten verlangen",
     "policyToggleHelp": "Sobald aktiviert, müssen sich super_admin-Nutzer ohne 2FA bei der nächsten Anmeldung registrieren. Sie müssen 2FA auf Ihrem eigenen Konto bereits aktiviert haben, um diese Richtlinie zu aktivieren.",
     "policyNeedOwn2fa": "Aktivieren Sie zuerst 2FA auf Ihrem eigenen Konto, bevor Sie diese Richtlinie durchsetzen."
+  },
+  "taskTracker": {
+    "completed": "{description} - Abgeschlossen",
+    "failed": "{description} - Fehlgeschlagen: {error}",
+    "timeout": "{description} - Zeitüberschreitung (Aufgabe läuft möglicherweise noch)",
+    "error": "{description} - Fehler: {error}",
+    "unknownError": "Unbekannter Fehler"
   }
 }

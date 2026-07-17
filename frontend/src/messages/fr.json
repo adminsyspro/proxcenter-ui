@@ -93,7 +93,8 @@
     "node": "Nœud",
     "done": "Terminé",
     "tags": "Tags",
-    "created": "Créé"
+    "created": "Créé",
+    "errorWithMessage": "Erreur : {error}"
   },
   "whatsNew": {
     "title": "Nouveautés"
@@ -4443,7 +4444,10 @@
     "resumeSuccess": "Reprise en cours",
     "rebootSuccess": "Redémarrage en cours",
     "migrateSuccess": "Migration en cours",
-    "cloneSuccess": "Clonage en cours"
+    "cloneSuccess": "Clonage en cours",
+    "bulkSuccess": "{description} - {count} VMs",
+    "bulkPartial": "{description} - {success} OK, {errors} erreurs",
+    "bulkFailed": "{description} - {errors} erreurs"
   },
   "vmConfig": {
     "title": "Configuration VM",
@@ -4510,7 +4514,9 @@
     "rawConfig": "Configuration brute",
     "advancedArgs": "Arguments QEMU additionnels",
     "advancedArgsWarning": "Modification manuelle pour utilisateurs avancés uniquement.",
-    "qemuArgsHelper": "Arguments passés directement à QEMU (dangereux)"
+    "qemuArgsHelper": "Arguments passés directement à QEMU (dangereux)",
+    "totalVcpus": "Total : {count} vCPUs",
+    "coresSocketsSummary": "{cores} cœurs × {sockets} socket(s)"
   },
   "hardware": {
     "detach": "Détacher",
@@ -4673,7 +4679,8 @@
       "useIso": "Utiliser une image CD/DVD (ISO)",
       "usePhysical": "Utiliser le lecteur CD/DVD physique",
       "noMedia": "Ne pas utiliser de média"
-    }
+    },
+    "loadNodesError": "Impossible de charger la liste des nodes"
   },
   "ldap": {
     "description": "Configurez l'authentification LDAP/Active Directory pour permettre aux utilisateurs de se connecter avec leurs identifiants d'entreprise.",
@@ -6670,7 +6677,13 @@
     "portFilter": "Port",
     "noTimelineData": "Pas de données temporelles pour cette paire (nécessite InfluxDB)",
     "compare": "Comparer",
-    "yesterday": "Hier"
+    "yesterday": "Hier",
+    "samplingRateInfo": "1 paquet sur <strong>{rate}</strong> sera échantillonné",
+    "samplingVeryHigh": "⚠️ Très précis mais forte charge CPU/réseau — recommandé uniquement pour le debug",
+    "samplingHigh": "⚡ Haute précision — adapté aux réseaux de moins de 1 Gbps",
+    "samplingBalanced": "✓ Bon compromis précision/performance — recommandé pour la plupart des cas",
+    "samplingLight": "✓ Léger — adapté aux réseaux 10 Gbps+",
+    "samplingVeryLight": "📉 Très léger — peut manquer des flux de faible volume"
   },
   "vdc": {
     "title": "Datacenters Virtuels",
@@ -7098,5 +7111,12 @@
     "policyToggleLabel": "Exiger la 2FA pour les comptes super_admin",
     "policyToggleHelp": "Une fois activé, les comptes super_admin sans 2FA seront forcés de l'activer à leur prochaine connexion. Vous devez avoir la 2FA active sur votre propre compte pour activer cette policy.",
     "policyNeedOwn2fa": "Activez la 2FA sur votre propre compte avant d'imposer cette policy."
+  },
+  "taskTracker": {
+    "completed": "{description} - Terminé",
+    "failed": "{description} - Échec : {error}",
+    "timeout": "{description} - Timeout (tâche peut-être encore en cours)",
+    "error": "{description} - Erreur : {error}",
+    "unknownError": "Erreur inconnue"
   }
 }

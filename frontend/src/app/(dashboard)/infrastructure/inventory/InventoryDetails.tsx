@@ -2486,7 +2486,7 @@ return vm?.isCluster ?? false
 
       {error ? (
         <Alert severity="error" sx={{ mb: 2, mx: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 0 : 2 }}>
-          Erreur: {error}
+          {t('common.errorWithMessage', { error })}
         </Alert>
       ) : null}
 

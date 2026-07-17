@@ -93,7 +93,8 @@
     "node": "节点",
     "done": "完成",
     "tags": "标签",
-    "created": "已创建"
+    "created": "已创建",
+    "errorWithMessage": "错误：{error}"
   },
   "whatsNew": {
     "title": "最新动态"
@@ -4404,7 +4405,10 @@
     "resumeSuccess": "正在恢复 VM",
     "rebootSuccess": "正在重启 VM",
     "migrateSuccess": "迁移已开始",
-    "cloneSuccess": "克隆已开始"
+    "cloneSuccess": "克隆已开始",
+    "bulkSuccess": "{description} - {count} 个虚拟机",
+    "bulkPartial": "{description} - {success} 个成功，{errors} 个错误",
+    "bulkFailed": "{description} - {errors} 个错误"
   },
   "vmConfig": {
     "title": "VM 配置",
@@ -4471,7 +4475,9 @@
     "rawConfig": "原始配置",
     "advancedArgs": "附加 QEMU 参数",
     "advancedArgsWarning": "仅限高级用户手动修改。",
-    "qemuArgsHelper": "直接传递给 QEMU 的参数（危险）"
+    "qemuArgsHelper": "直接传递给 QEMU 的参数（危险）",
+    "totalVcpus": "共 {count} 个 vCPU",
+    "coresSocketsSummary": "{cores} 核心 × {sockets} 插槽"
   },
   "hardware": {
     "detach": "分离",
@@ -4631,7 +4637,8 @@
       "useIso": "使用 CD/DVD 光盘镜像文件（ISO）",
       "usePhysical": "使用物理 CD/DVD 驱动器",
       "noMedia": "不使用任何介质"
-    }
+    },
+    "loadNodesError": "无法加载节点列表"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",
@@ -6597,7 +6604,13 @@
     "portFilter": "端口",
     "noTimelineData": "此对端没有可用的时间线数据（需要 InfluxDB）",
     "compare": "对比",
-    "yesterday": "昨天"
+    "yesterday": "昨天",
+    "samplingRateInfo": "每 <strong>{rate}</strong> 个数据包采样 1 个",
+    "samplingVeryHigh": "⚠️ 非常精确但 CPU/网络负载高 — 仅建议用于调试",
+    "samplingHigh": "⚡ 高精度 — 适用于低于 1 Gbps 的网络",
+    "samplingBalanced": "✓ 精度/性能兼顾 — 适用于大多数场景",
+    "samplingLight": "✓ 轻量 — 适用于 10 Gbps 及以上网络",
+    "samplingVeryLight": "📉 非常轻量 — 可能会遗漏低流量的流"
   },
   "myVdc": {
     "title": "我的数据中心",
@@ -6957,5 +6970,12 @@
     "policyToggleLabel": "强制 super_admin 账户启用 2FA",
     "policyToggleHelp": "启用后,未启用 2FA 的 super_admin 用户在下次登录时将被强制完成绑定。您必须先在自己的账户上启用 2FA,才能开启此策略。",
     "policyNeedOwn2fa": "在强制此策略之前,请先在您自己的账户上启用 2FA。"
+  },
+  "taskTracker": {
+    "completed": "{description} - 已完成",
+    "failed": "{description} - 失败：{error}",
+    "timeout": "{description} - 超时（任务可能仍在运行）",
+    "error": "{description} - 错误：{error}",
+    "unknownError": "未知错误"
   }
 }

@@ -1152,14 +1152,14 @@ export default function FlowsTab() {
           <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
               <i className="ri-information-line" style={{ fontSize: 12, marginRight: 4 }} />{' '}
-              1 paquet sur <strong>{samplingRate}</strong> sera échantillonné
+              {t.rich('networkFlows.samplingRateInfo', { rate: samplingRate, strong: (chunks) => <strong>{chunks}</strong> })}
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              {samplingRate <= 128 && '⚠️ Très précis mais forte charge CPU/réseau — recommandé uniquement pour le debug'}
-              {samplingRate > 128 && samplingRate <= 256 && '⚡ Haute précision — adapté aux réseaux < 1 Gbps'}
-              {samplingRate > 256 && samplingRate <= 512 && '✓ Bon compromis précision/performance — recommandé pour la plupart des cas'}
-              {samplingRate > 512 && samplingRate <= 1024 && '✓ Léger — adapté aux réseaux 10 Gbps+'}
-              {samplingRate > 1024 && '📉 Très léger — peut manquer des flux de faible volume'}
+              {samplingRate <= 128 && t('networkFlows.samplingVeryHigh')}
+              {samplingRate > 128 && samplingRate <= 256 && t('networkFlows.samplingHigh')}
+              {samplingRate > 256 && samplingRate <= 512 && t('networkFlows.samplingBalanced')}
+              {samplingRate > 512 && samplingRate <= 1024 && t('networkFlows.samplingLight')}
+              {samplingRate > 1024 && t('networkFlows.samplingVeryLight')}
             </Typography>
           </Box>
           <Box sx={{ mt: 2 }}>

@@ -1121,7 +1121,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                       <Chip
                         size='small'
-                        label={notif.severity === 'crit' ? 'CRITIQUE' : 'WARNING'}
+                        label={(notif.severity === 'crit' ? t('alerts.critical') : t('alerts.warning')).toUpperCase()}
                         color={color}
                         sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
                       />

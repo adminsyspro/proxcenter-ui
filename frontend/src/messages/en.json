@@ -93,7 +93,8 @@
     "node": "Node",
     "done": "Done",
     "tags": "Tags",
-    "created": "Created"
+    "created": "Created",
+    "errorWithMessage": "Error: {error}"
   },
   "whatsNew": {
     "title": "What's New"
@@ -4443,7 +4444,10 @@
     "resumeSuccess": "Resuming VM",
     "rebootSuccess": "Rebooting VM",
     "migrateSuccess": "Migration started",
-    "cloneSuccess": "Cloning started"
+    "cloneSuccess": "Cloning started",
+    "bulkSuccess": "{description} - {count} VMs",
+    "bulkPartial": "{description} - {success} OK, {errors} errors",
+    "bulkFailed": "{description} - {errors} errors"
   },
   "vmConfig": {
     "title": "VM Configuration",
@@ -4510,7 +4514,9 @@
     "rawConfig": "Raw configuration",
     "advancedArgs": "Additional QEMU arguments",
     "advancedArgsWarning": "Manual modification for advanced users only.",
-    "qemuArgsHelper": "Arguments passed directly to QEMU (dangerous)"
+    "qemuArgsHelper": "Arguments passed directly to QEMU (dangerous)",
+    "totalVcpus": "Total: {count} vCPUs",
+    "coresSocketsSummary": "{cores} cores × {sockets} socket(s)"
   },
   "hardware": {
     "detach": "Detach",
@@ -4673,7 +4679,8 @@
       "useIso": "Use CD/DVD disc image file (ISO)",
       "usePhysical": "Use physical CD/DVD Drive",
       "noMedia": "Do not use any media"
-    }
+    },
+    "loadNodesError": "Unable to load the node list"
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",
@@ -6669,7 +6676,13 @@
     "portFilter": "Port",
     "noTimelineData": "No timeline data available for this pair (requires InfluxDB)",
     "compare": "Compare",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "samplingRateInfo": "1 packet out of <strong>{rate}</strong> will be sampled",
+    "samplingVeryHigh": "⚠️ Very precise but heavy CPU/network load — recommended for debugging only",
+    "samplingHigh": "⚡ High precision — suitable for networks under 1 Gbps",
+    "samplingBalanced": "✓ Good precision/performance trade-off — recommended for most cases",
+    "samplingLight": "✓ Lightweight — suitable for 10 Gbps+ networks",
+    "samplingVeryLight": "📉 Very lightweight — may miss low-volume flows"
   },
   "vdc": {
     "title": "Virtual Datacenters",
@@ -7097,5 +7110,12 @@
     "policyToggleLabel": "Require 2FA for super_admin accounts",
     "policyToggleHelp": "Once enabled, super_admin users without 2FA will be forced to enroll on their next login. You must already have 2FA enabled on your own account to turn this on.",
     "policyNeedOwn2fa": "Enable 2FA on your own account before enforcing this policy."
+  },
+  "taskTracker": {
+    "completed": "{description} - Completed",
+    "failed": "{description} - Failed: {error}",
+    "timeout": "{description} - Timeout (task may still be running)",
+    "error": "{description} - Error: {error}",
+    "unknownError": "Unknown error"
   }
 }

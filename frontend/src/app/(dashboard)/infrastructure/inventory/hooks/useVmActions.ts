@@ -73,7 +73,7 @@ interface UseVmActionsParams {
   onSelect?: (sel: InventorySelection) => void
   onRefresh?: () => Promise<void>
   toast: Toast
-  t: (key: string) => string
+  t: (key: string, values?: Record<string, string | number>) => string
   trackTask: TrackTaskFn
   data: DetailsPayload | null
   setData: (d: DetailsPayload | null) => void
@@ -570,11 +570,11 @@ export function useVmActions({
     }
 
     if (errorCount === 0) {
-      toast.success(`${description} - ${successCount} VMs`)
+      toast.success(t('vmActions.bulkSuccess', { description, count: successCount }))
     } else if (successCount > 0) {
-      toast.warning(`${description} - ${successCount} OK, ${errorCount} erreurs`)
+      toast.warning(t('vmActions.bulkPartial', { description, success: successCount, errors: errorCount }))
     } else {
-      toast.error(`${description} - ${errorCount} erreurs`)
+      toast.error(t('vmActions.bulkFailed', { description, errors: errorCount }))
     }
 
     if (onRefresh) {

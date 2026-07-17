@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { useToast } from '@/contexts/ToastContext'
 
 interface TaskInfo {
@@ -37,6 +38,7 @@ interface TaskStatus {
  */
 export function useTaskTracker() {
   const toast = useToast()
+  const t = useTranslations()
   const activeTasksRef = useRef<Set<string>>(new Set())
 
   const pollTaskStatus = useCallback(async (
@@ -87,11 +89,11 @@ export function useTaskTracker() {
           activeTasksRef.current.delete(upid)
 
           if (status.exitstatus === 'OK') {
-            toast.success(`${description} - Terminé`)
+            toast.success(t('taskTracker.completed', { description }))
             onSuccess?.()
           } else {
-            const errorMsg = status.exitstatus || 'Erreur inconnue'
-            toast.error(`${description} - Échec: ${errorMsg}`)
+            const errorMsg = status.exitstatus || t('taskTracker.unknownError')
+            toast.error(t('taskTracker.failed', { description, error: errorMsg }))
             onError?.(errorMsg)
           }
 
@@ -104,18 +106,18 @@ export function useTaskTracker() {
         } else {
           // Timeout
           activeTasksRef.current.delete(upid)
-          toast.warning(`${description} - Timeout (tâche peut-être encore en cours)`)
+          toast.warning(t('taskTracker.timeout', { description }))
         }
       } catch (e: any) {
         activeTasksRef.current.delete(upid)
-        toast.error(`${description} - Erreur: ${e.message}`)
+        toast.error(t('taskTracker.error', { description, error: e.message }))
         onError?.(e.message)
       }
     }
 
     // Démarrer le polling après un court délai
     setTimeout(poll, pollInterval)
-  }, [toast, pollTaskStatus])
+  }, [toast, t, pollTaskStatus])
 
   return { trackTask }
 }

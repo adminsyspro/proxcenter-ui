@@ -33,6 +33,11 @@ services:
     network_mode: host
     restart: unless-stopped
     privileged: true
+    # Fresh /tmp on every (re)start so the entrypoint can always re-render
+    # /tmp/patroni.yml. A persisted postgres-owned copy otherwise blocks the
+    # root entrypoint's rewrite on a warm restart and crash-loops the node.
+    tmpfs:
+      - /tmp
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./config/ha/patroni.yml:/etc/patroni/patroni.yml:ro

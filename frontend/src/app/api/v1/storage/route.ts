@@ -141,8 +141,10 @@ export async function GET(req: Request) {
           }
         }
       } else {
-        // Tous les autres stockages : dédupliquer par nom
-        const key = s.storage
+        // Autres stockages : dédupliquer par connexion + nom.
+        // Ne jamais fusionner des stockages homonymes de clusters
+        // différents, sinon les capacités se mélangent entre clusters (issue #569).
+        const key = `${s.connId}:${s.storage}`
 
         if (!deduplicatedMap.has(key)) {
           deduplicatedMap.set(key, {

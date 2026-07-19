@@ -132,6 +132,34 @@ describe('GET /api/v1/storage', () => {
     expect(nfs[0].shared).toBe(true)
     expect(nfs[0].allNodes.sort()).toEqual(['pve1-n1', 'pve1-n2'])
     expect(nfs[0].total).toBe(20 * TiB)
+    expect(nfs[0].nodeBreakdown).toHaveLength(1)
+  })
+
+  it('sums a local storage across nodes and exposes nodeBreakdown', async () => {
+    // Override conn-1 to expose local-lvm on two nodes
+    pveFetchMock.mockImplementation((connData: any, path: string) => {
+      if (connData.id === 'conn-1' && path === '/cluster/resources') {
+        return Promise.resolve([
+          { type: 'storage', storage: 'local-lvm', node: 'pve1-n1', status: 'available', disk: 45 * TiB, maxdisk: 90 * TiB },
+          { type: 'storage', storage: 'local-lvm', node: 'pve1-n2', status: 'available', disk: 15 * TiB, maxdisk: 30 * TiB },
+        ])
+      }
+      if (connData.id === 'conn-1' && path === '/storage') {
+        return Promise.resolve([{ storage: 'local-lvm', type: 'lvmthin', content: 'images', disable: 0 }])
+      }
+      return Promise.resolve([])
+    })
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+    const row = body.data.find((s: any) => s.id === 'conn-1:local-lvm')
+
+    expect(row.total).toBe(120 * TiB)
+    expect(row.used).toBe(60 * TiB)
+    expect(row.allNodes.sort()).toEqual(['pve1-n1', 'pve1-n2'])
+    expect(row.nodeBreakdown).toHaveLength(2)
+    expect(row.connectionName).toBe('PVE-1')
+    expect(row.connections).toEqual([{ id: 'conn-1', name: 'PVE-1' }])
   })
 
   it('returns the demo payload when demoResponse short-circuits', async () => {

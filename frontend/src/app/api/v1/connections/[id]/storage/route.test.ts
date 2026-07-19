@@ -68,4 +68,21 @@ describe('GET /api/v1/connections/[id]/storage', () => {
 
     expect(zpool.shared).toBe(true)
   })
+
+  it('hides the now-shared zfs storage from vDC-tenant-scoped views', async () => {
+    // Activate tenant (vDC) scope: allowedStorages/allowedNodes would otherwise
+    // let 'zpool' through, but the shared-storage filter must drop it anyway
+    // since it is not a 'pbs' storage.
+    getCurrentTenantIdMock.mockResolvedValue('tenant-abc')
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
+    maskingScopeMock.mockReturnValue({
+      storagesByConnection: new Map([['c1', new Set(['zpool'])]]),
+      nodesByConnection: new Map([['c1', new Set(['n1'])]]),
+    })
+
+    const res = await callRoute(GET as any, { method: 'GET', params: { id: 'c1' } })
+    const body = await readJson<any>(res)
+
+    expect(body.data.find((s: any) => s.storage === 'zpool')).toBeUndefined()
+  })
 })

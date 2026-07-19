@@ -1465,7 +1465,6 @@ export const EXTRA_MOCKS: MockDataMap = {
     ],
   },
   'GET:/api/v1/connections/demo-pve-dr-001/resources': { data: [] },
-  'GET:/api/v1/connections/demo-pve-dr-001/storage': { data: [] },
   'GET:/api/v1/connections/demo-pve-dr-001/ceph/status': {
     data: { health: { status: 'HEALTH_OK' }, osdmap: { num_osds: 12, num_up_osds: 12, num_in_osds: 12 } },
   },

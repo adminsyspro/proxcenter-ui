@@ -68,6 +68,16 @@ describe('aggregateStorage', () => {
     expect(out[0].allNodes).toEqual([])
   })
 
+  it('yields (0,0) for a shared storage where every node reports total 0', () => {
+    const out = aggregateStorage([
+      raw({ storage: 'nfs0', type: 'nfs', shared: true, node: 'n1', used: 2 * TiB, total: 0 }),
+      raw({ storage: 'nfs0', type: 'nfs', shared: true, node: 'n2', used: 3 * TiB, total: 0 }),
+    ])
+    expect(out[0].used).toBe(0)
+    expect(out[0].total).toBe(0)
+    expect(out[0].usedPct).toBe(0)
+  })
+
   it('returns an empty array for empty input', () => {
     expect(aggregateStorage([])).toEqual([])
   })

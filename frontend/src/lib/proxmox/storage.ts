@@ -91,6 +91,17 @@ function storagePct(used: number, total: number): number {
   return total > 0 ? Math.round((used / total) * 100 * 10) / 10 : 0
 }
 
+function toNodeUsage(node: string, used: number, total: number): StorageNodeUsage {
+  return {
+    node,
+    used,
+    total,
+    usedPct: storagePct(used, total),
+    usedFormatted: formatBytes(used),
+    totalFormatted: formatBytes(total),
+  }
+}
+
 export function normalizeStorageEntry(raw: any): RawStorageEntry {
   const used = Number(raw.used ?? raw.disk ?? 0)
   const total = Number(raw.total ?? raw.maxdisk ?? 0)
@@ -150,18 +161,11 @@ export function aggregateStorage(entries: RawStorageEntry[]): AggregatedStorage[
     const nodeBreakdown: StorageNodeUsage[] = []
 
     if (shared) {
-      const withCap = group.find(e => Number(e.total) > 0) || rep
+      const withCap = group.find(e => Number(e.total) > 0)
 
-      used = Number(withCap.used) || 0
-      total = Number(withCap.total) || 0
-      nodeBreakdown.push({
-        node: withCap.node || allNodes[0] || '',
-        used,
-        total,
-        usedPct: storagePct(used, total),
-        usedFormatted: formatBytes(used),
-        totalFormatted: formatBytes(total),
-      })
+      used = withCap ? Number(withCap.used) || 0 : 0
+      total = withCap ? Number(withCap.total) || 0 : 0
+      nodeBreakdown.push(toNodeUsage(withCap?.node || allNodes[0] || '', used, total))
     } else {
       const byNode = new Map<string, RawStorageEntry>()
 
@@ -174,14 +178,7 @@ export function aggregateStorage(entries: RawStorageEntry[]): AggregatedStorage[
 
         used += u
         total += t
-        nodeBreakdown.push({
-          node: e.node,
-          used: u,
-          total: t,
-          usedPct: storagePct(u, t),
-          usedFormatted: formatBytes(u),
-          totalFormatted: formatBytes(t),
-        })
+        nodeBreakdown.push(toNodeUsage(e.node, u, t))
       }
     }
 

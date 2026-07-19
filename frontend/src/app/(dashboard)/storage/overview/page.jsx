@@ -488,18 +488,6 @@ return (
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* Header - Actions only */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-        <Tooltip title={t('common.refresh')}>
-          <IconButton onClick={loadStorages} disabled={loading}>
-            <i className='ri-refresh-line' />
-          </IconButton>
-        </Tooltip>
-        <Button variant='outlined' size='small' component={Link} href='/storage/ceph'>
-          {t('storage.ceph')}
-        </Button>
-      </Box>
-
       {/* KPIs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
         <KpiCard

@@ -63,6 +63,7 @@ import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
+import { formatNodeLocalTime } from '@/lib/inventory/nodeTime'
 import ComplianceTab from '@/components/ComplianceTab'
 import DatacenterSettingsTab from '@/components/datacenter-settings'
 import MetricServerTab from '@/components/MetricServerTab'
@@ -1972,7 +1973,7 @@ export default function NodeTabs(props: any) {
                                       <TableRow>
                                         <TableCell sx={{ fontWeight: 600 }}>Local Time</TableCell>
                                         <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-                                          {nodeSystemData.time?.localtime ? new Date(nodeSystemData.time.localtime * 1000).toLocaleString() : '-'}
+                                          {formatNodeLocalTime(nodeSystemData.time?.time, nodeSystemData.time?.timezone)}
                                         </TableCell>
                                       </TableRow>
                                       <TableRow>

@@ -127,6 +127,23 @@ describe('guardTenantStorageWrite', () => {
       expect(res!.status).toBe(403)
     })
 
+    it('returns 403 for a flag-less zfs storage (shared undefined/0, type "zfs") — same bug class as #569', async () => {
+      // The PVE config carries no `shared` flag at all here (as happens for
+      // some zfs/rbd/nfs backends), but the storage is inherently shared by
+      // type. Before this fix, the flag-only check let this slip through as
+      // writable, creating a read/write asymmetry with the canonical
+      // isSharedStorage() classification used on the read paths.
+      getTenantInfrastructureScopeMock.mockResolvedValue(
+        makeIaasScope('conn-1', ['tank-zfs'])
+      )
+      getConnectionByIdMock.mockResolvedValue({ id: 'conn-1' })
+      pveFetchMock.mockResolvedValue({ type: 'zfs' })
+
+      const res = await guardTenantStorageWrite('conn-1', 'tank-zfs')
+      expect(res).not.toBeNull()
+      expect(res!.status).toBe(403)
+    })
+
     it('returns 403 when storage is NOT in scope for this connection', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(
         makeIaasScope('conn-1', ['local-zfs'])

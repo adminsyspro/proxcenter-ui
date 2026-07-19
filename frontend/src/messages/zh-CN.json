@@ -412,6 +412,7 @@
     },
     "resolveConfirm": "解决 {count} 条告警？",
     "deleteConfirm": "删除 {count} 条告警？将被解决并移除。",
+    "acknowledgeSelected": "确认选中",
     "resolveSelected": "解决选中",
     "deleteSelected": "删除选中",
     "clearResolved": "清除已解决",

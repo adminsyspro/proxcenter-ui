@@ -440,6 +440,7 @@
     },
     "resolveConfirm": "Resolve {count} alerta(s)?",
     "deleteConfirm": "¿Eliminar {count} alerta(s)? Esto las resolverá y eliminará.",
+    "acknowledgeSelected": "Reconocer seleccionadas",
     "resolveSelected": "Resolver seleccionadas",
     "deleteSelected": "Eliminar seleccionadas",
     "clearResolved": "Limpiar resueltas",

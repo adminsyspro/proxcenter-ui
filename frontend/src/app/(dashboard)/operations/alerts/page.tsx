@@ -542,6 +542,44 @@ return true
     }
   }
 
+  const handleAcknowledgeSelected = async (ids: string[]) => {
+    if (!isEnterprise || ids.length === 0) return
+
+    try {
+      const userId = session?.user?.name || 'unknown'
+      await Promise.all(
+        ids.map(id =>
+          fetch(`/api/v1/orchestrator/alerts/${id}/acknowledge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acknowledged_by: userId })
+          })
+        )
+      )
+      setSelectionModel({ type: 'include', ids: new Set() })
+      showToast(t('common.success'), 'success')
+      revalidateAll()
+    } catch (e) {
+      console.error('Batch acknowledge failed:', e)
+      showToast(t('common.error'), 'error')
+    }
+  }
+
+  // Batch delete goes through the confirmation dialog (unlike single-row delete)
+  const requestDeleteSelected = (ids: string[]) => {
+    if (!isEnterprise || ids.length === 0) return
+
+    setConfirmDialog({
+      open: true,
+      title: t('common.delete'),
+      message: t('alerts.deleteConfirm', { count: ids.length }),
+      onConfirm: () => {
+        setConfirmDialog(d => ({ ...d, open: false }))
+        handleDeleteAlerts(ids)
+      }
+    })
+  }
+
   const MUTE_DURATIONS = [
     { key: '1h', labelKey: 'alerts.mute1h' },
     { key: '6h', labelKey: 'alerts.mute6h' },
@@ -813,9 +851,14 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
               </FormControl>
               <Box sx={{ flex: 1 }} />
               {selectedAlertIds.length > 0 && (
-                <Button size="small" variant="outlined" color="error" onClick={() => handleDeleteAlerts(selectedAlertIds)}>
-                  <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.deleteSelected')} ({selectedAlertIds.length})
-                </Button>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" variant="outlined" color="warning" onClick={() => handleAcknowledgeSelected(selectedAlertIds)}>
+                    <i className="ri-check-line" style={{ marginRight: 4 }} /> {t('alerts.acknowledgeSelected')} ({selectedAlertIds.length})
+                  </Button>
+                  <Button size="small" variant="outlined" color="error" onClick={() => requestDeleteSelected(selectedAlertIds)}>
+                    <i className="ri-delete-bin-line" style={{ marginRight: 4 }} /> {t('alerts.deleteSelected')} ({selectedAlertIds.length})
+                  </Button>
+                </Stack>
               )}
             </Stack>
             <Box sx={{ flex: 1, minHeight: 0 }}>

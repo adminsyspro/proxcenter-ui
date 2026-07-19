@@ -440,6 +440,7 @@
     },
     "resolveConfirm": "Resolve {count} alert(s)?",
     "deleteConfirm": "Delete {count} alert(s)? This will resolve and remove them.",
+    "acknowledgeSelected": "Acknowledge selected",
     "resolveSelected": "Resolve selected",
     "deleteSelected": "Delete selected",
     "clearResolved": "Clear resolved",

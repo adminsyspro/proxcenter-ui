@@ -1315,8 +1315,8 @@ export default function InventoryDetails({
     snapshotActionBusy, showCreateSnapshot, setShowCreateSnapshot,
     newSnapshotName, setNewSnapshotName, newSnapshotDesc, setNewSnapshotDesc,
     newSnapshotRam, setNewSnapshotRam, snapshotFeatureAvailable,
-    loadSnapshots, createSnapshot, deleteSnapshot, rollbackSnapshot,
-    resetSnapshots,
+    loadSnapshots, createSnapshot, deleteSnapshot, deleteAllSnapshots, rollbackSnapshot,
+    resetSnapshots, deleteAllBusy, deleteAllProgress,
   } = useSnapshots({ selection, detailTab, t, toast, data, setConfirmAction, setConfirmActionLoading })
 
   // ==================== TASKS (Historique des tâches) ====================
@@ -3382,7 +3382,7 @@ return vm?.isCluster ?? false
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuFlags, cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,
-                data, deleteReplicationId, deleteSnapshot, detailTab, downloadFile,
+                data, deleteReplicationId, deleteSnapshot, deleteAllSnapshots, deleteAllBusy, deleteAllProgress, detailTab, downloadFile,
                 error, exploreWithPveStorage, explorerArchive, explorerArchives, explorerError,
                 explorerFiles, explorerLoading, explorerMode, explorerPath, explorerSearch,
                 filteredExplorerFiles, haComment, haConfig, haEditing, haError,

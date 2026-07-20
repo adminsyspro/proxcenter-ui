@@ -1553,6 +1553,7 @@ return
           {confirmAction?.action === 'reboot' && <i className="ri-restart-line" style={{ fontSize: 24, color: '#ff9800' }} />}
           {confirmAction?.action === 'info' && <i className="ri-information-line" style={{ fontSize: 24, color: '#ff9800' }} />}
           {confirmAction?.action === 'delete-snapshot' && <i className="ri-delete-bin-line" style={{ fontSize: 24, color: '#f44336' }} />}
+          {confirmAction?.action === 'delete-all-snapshots' && <i className="ri-delete-bin-line" style={{ fontSize: 24, color: '#f44336' }} />}
           {confirmAction?.action === 'restore-snapshot' && <i className="ri-history-line" style={{ fontSize: 24, color: '#ff9800' }} />}
           {confirmAction?.action === 'disable-ha' && <i className="ri-shield-cross-line" style={{ fontSize: 24, color: '#ff9800' }} />}
           {confirmAction?.title}
@@ -1574,8 +1575,8 @@ return
           <Button 
             variant="contained" 
             color={
-              confirmAction?.action === 'stop' || confirmAction?.action === 'delete-snapshot' 
-                ? 'error' 
+              confirmAction?.action === 'stop' || confirmAction?.action === 'delete-snapshot' || confirmAction?.action === 'delete-all-snapshots'
+                ? 'error'
                 : confirmAction?.action === 'info' 
                   ? 'primary' 
                   : 'warning'

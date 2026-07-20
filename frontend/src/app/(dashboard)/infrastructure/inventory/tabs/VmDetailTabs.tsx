@@ -249,6 +249,9 @@ export default function VmDetailTabs(props: any) {
     data,
     deleteReplicationId,
     deleteSnapshot,
+    deleteAllSnapshots,
+    deleteAllBusy,
+    deleteAllProgress,
     detailTab,
     downloadFile,
     error,
@@ -3371,17 +3374,33 @@ return (
                           />
                         )}
                       </Box>
-                      {!showCreateSnapshot && snapshotFeatureAvailable !== false && (
-                        <Button
-                          variant="contained"
-                          size="small"
-                          startIcon={<i className="ri-add-line" />}
-                          onClick={() => setShowCreateSnapshot(true)}
-                          disabled={snapshotActionBusy}
-                        >
-                          {t('common.create')}
-                        </Button>
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {snapshotFeatureAvailable !== false && snapshots.filter(s => s.name !== 'current').length > 0 && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            color="error"
+                            startIcon={deleteAllBusy ? <CircularProgress size={14} /> : <i className="ri-delete-bin-line" />}
+                            onClick={deleteAllSnapshots}
+                            disabled={snapshotActionBusy || deleteAllBusy}
+                          >
+                            {deleteAllBusy
+                              ? `${t('inventory.deletingSnapshots')} ${deleteAllProgress.done}/${deleteAllProgress.total}`
+                              : t('inventory.deleteAllSnapshots')}
+                          </Button>
+                        )}
+                        {!showCreateSnapshot && snapshotFeatureAvailable !== false && (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            startIcon={<i className="ri-add-line" />}
+                            onClick={() => setShowCreateSnapshot(true)}
+                            disabled={snapshotActionBusy}
+                          >
+                            {t('common.create')}
+                          </Button>
+                        )}
+                      </Box>
                     </Box>
                   )}
 

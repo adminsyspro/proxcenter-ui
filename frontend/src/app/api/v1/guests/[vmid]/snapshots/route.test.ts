@@ -44,6 +44,10 @@ vi.mock('@/lib/audit', () => ({
   audit: vi.fn<(...args: any[]) => Promise<void>>(),
 }))
 
+vi.mock('@/lib/proxmox/tasks', () => ({
+  waitForTask: vi.fn<(...args: any[]) => Promise<void>>(),
+}))
+
 import { GET, POST, DELETE } from './route'
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -51,6 +55,7 @@ import { checkPermission } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
 import { audit } from '@/lib/audit'
+import { waitForTask } from '@/lib/proxmox/tasks'
 
 const getConnectionByIdOrNullMock = getConnectionByIdOrNull as any
 const pveFetchMock = pveFetch as any
@@ -59,6 +64,7 @@ const getCurrentTenantIdMock = getCurrentTenantId as any
 const resolveVdcForTenantMock = resolveVdcForTenant as any
 const checkVdcQuotaMock = checkVdcQuota as any
 const auditMock = audit as any
+const waitForTaskMock = waitForTask as any
 
 const VM_KEY = 'conn-1:qemu:pve-node-01:101'
 const CONN_ID = 'conn-1'
@@ -74,6 +80,7 @@ beforeEach(() => {
   resolveVdcForTenantMock.mockResolvedValue(null)
   checkVdcQuotaMock.mockResolvedValue({ allowed: true })
   auditMock.mockResolvedValue(undefined)
+  waitForTaskMock.mockResolvedValue(undefined)
 })
 
 // ---------------------------------------------------------------------------
@@ -348,5 +355,44 @@ describe('DELETE /api/v1/guests/[vmid]/snapshots', () => {
     expect(res.status).toBe(500)
     const body = await readJson<any>(res)
     expect(body.error).toBe('PVE 500')
+  })
+
+  it('does NOT wait when ?wait is absent (fire-and-forget)', async () => {
+    pveFetchMock.mockResolvedValue('UPID:pve1:xxx')
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { vmid: VM_KEY },
+      searchParams: { name: 'snap1' },
+    })
+    expect(res.status).toBe(200)
+    expect(waitForTaskMock).not.toHaveBeenCalled()
+    const body = await readJson<any>(res)
+    expect(body.data.success).toBe(true)
+  })
+
+  it('waits for the task when ?wait=1 and returns success on completion', async () => {
+    pveFetchMock.mockResolvedValue('UPID:pve1:xxx')
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { vmid: VM_KEY },
+      searchParams: { name: 'snap1', wait: '1' },
+    })
+    expect(res.status).toBe(200)
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: CONN_ID }, NODE, 'UPID:pve1:xxx')
+    const body = await readJson<any>(res)
+    expect(body.data.success).toBe(true)
+  })
+
+  it('returns 500 with the PVE message when ?wait=1 and the task fails', async () => {
+    pveFetchMock.mockResolvedValue('UPID:pve1:xxx')
+    waitForTaskMock.mockRejectedValue(new Error('PVE task failed: got timeout'))
+    const res = await callRoute(DELETE as any, {
+      method: 'DELETE',
+      params: { vmid: VM_KEY },
+      searchParams: { name: 'snap1', wait: '1' },
+    })
+    expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toMatch(/task failed/i)
   })
 })

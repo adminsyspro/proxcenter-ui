@@ -20,6 +20,7 @@ import {
 } from '@mui/material'
 
 import { useTaskDetail } from '@/hooks/useTaskDetail'
+import { copyToClipboard } from '@/lib/clipboard'
 
 /* --------------------------------
    Helpers
@@ -149,12 +150,8 @@ export default function TaskDetailDialog({ open, task, onClose }) {
       .map(l => `${l.n.toString().padStart(4, ' ')} ${l.t}`)
       .join('\n')
 
-    try {
-      await navigator.clipboard.writeText(logsText)
-      setSnackbar({ open: true, message: t('common.copied') })
-    } catch (e) {
-      setSnackbar({ open: true, message: t('common.error') })
-    }
+    const ok = await copyToClipboard(logsText)
+    setSnackbar({ open: true, message: ok ? t('common.copied') : t('common.error') })
   }
 
   // Stop task

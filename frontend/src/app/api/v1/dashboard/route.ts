@@ -9,6 +9,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { listSnapshotsInNamespace } from "@/lib/proxmox/pbsNamespace"
 import { getConnectionById, getPbsConnectionById } from "@/lib/connections/getConnection"
+import { isSharedStorage } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
 import { generateFingerprint } from "@/lib/alerts/fingerprint"
 import { loadActiveSilenceFingerprints } from "@/lib/alerts/silenceFilter"
@@ -217,7 +218,6 @@ export async function GET(req: Request) {
 
           // Aggregate real storage from /cluster/resources (not rootfs)
           const storageResources = resources.filter((r: any) => r.type === 'storage')
-          const sharedTypes = new Set(['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'])
           const storageConfigMap = new Map<string, any>()
           for (const cfg of storageConfigs) { if (cfg?.storage) storageConfigMap.set(cfg.storage, cfg) }
 
@@ -226,7 +226,7 @@ export async function GET(req: Request) {
           for (const s of storageResources) {
             const cfg = storageConfigMap.get(s.storage)
             const sType = cfg?.type || ''
-            const isShared = cfg?.shared === 1 || sharedTypes.has(sType)
+            const isShared = isSharedStorage({ shared: cfg?.shared, type: sType })
             if (isShared) {
               if (seenShared.has(s.storage)) continue
               seenShared.add(s.storage)

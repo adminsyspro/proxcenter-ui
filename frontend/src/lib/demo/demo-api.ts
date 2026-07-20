@@ -11,6 +11,8 @@
 
 import { NextResponse } from 'next/server'
 
+import { aggregateStorage, normalizeStorageEntry } from '@/lib/proxmox/storage'
+
 import mockDataJson from './mock-data.json'
 
 // ---------------------------------------------------------------------------
@@ -203,7 +205,7 @@ function demoLocked(): Response {
 // Hardcoded mock responses for endpoints not in mock-data.json
 // ---------------------------------------------------------------------------
 
-const EXTRA_MOCKS: MockDataMap = {
+export const EXTRA_MOCKS: MockDataMap = {
   // --- Auth ---
   'GET:/api/v1/auth/session': {
     user: {
@@ -959,23 +961,38 @@ const EXTRA_MOCKS: MockDataMap = {
   },
 
   // --- Storage overview ---
+  // Flattens every PVE connection's demo storage into the real aggregated
+  // contract ({ data: AggregatedStorage[], stats, connections }) so the
+  // Storage Overview page (which reads a flat data array) works in demo mode
+  // the same way it does against a live cluster (see #569).
   get 'GET:/api/v1/storage'() {
-    const storageData = (MOCK_DATA['/api/v1/connections/demo-pve-cluster-001/storage'] as any)?.data || []
-    const seen = new Set<string>()
-    const deduplicated = storageData.filter((s: any) => {
-      if (seen.has(s.storage)) return false
-      seen.add(s.storage)
-      return true
-    })
-    return {
-      data: {
-        connections: [{
-          id: 'demo-pve-cluster-001',
-          name: 'Production Cluster',
-          storages: deduplicated,
-        }],
-      },
+    const connections = (MOCK_DATA['/api/v1/connections'] as any)?.data || []
+    const pveConns = connections.filter((c: any) => c.type === 'pve')
+
+    const rawEntries: any[] = []
+
+    for (const conn of pveConns) {
+      const storages = (MOCK_DATA[`/api/v1/connections/${conn.id}/storage`] as any)?.data || []
+
+      for (const s of storages) {
+        const nodeList = Array.isArray(s.nodes) && s.nodes.length ? s.nodes : [s.node].filter(Boolean)
+
+        for (const node of nodeList) {
+          rawEntries.push(normalizeStorageEntry({ ...s, node, connId: conn.id, connName: conn.name }))
+        }
+      }
     }
+
+    const data = aggregateStorage(rawEntries)
+    const stats = {
+      total: data.length,
+      shared: data.filter(s => s.shared).length,
+      local: data.filter(s => !s.shared).length,
+      totalCapacity: data.reduce((a, s) => a + (s.total || 0), 0),
+      usedCapacity: data.reduce((a, s) => a + (s.used || 0), 0),
+    }
+
+    return { data, stats, connections: pveConns.map((c: any) => ({ id: c.id, name: c.name })) }
   },
 
   // --- Resources overview ---
@@ -1448,7 +1465,6 @@ const EXTRA_MOCKS: MockDataMap = {
     ],
   },
   'GET:/api/v1/connections/demo-pve-dr-001/resources': { data: [] },
-  'GET:/api/v1/connections/demo-pve-dr-001/storage': { data: [] },
   'GET:/api/v1/connections/demo-pve-dr-001/ceph/status': {
     data: { health: { status: 'HEALTH_OK' }, osdmap: { num_osds: 12, num_up_osds: 12, num_in_osds: 12 } },
   },

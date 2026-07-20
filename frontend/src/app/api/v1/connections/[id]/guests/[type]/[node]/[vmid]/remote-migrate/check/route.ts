@@ -103,7 +103,7 @@ export async function POST(
           type: 'error',
           code: 'SNAPSHOTS_PRESENT',
           message: `VM has ${realSnaps.length} snapshot(s) that must be removed before cross-cluster migration`,
-          details: 'Cross-cluster migration does not support VMs with snapshots. Delete them below, then migration will unblock.',
+          details: "Cross-cluster migration does not support VMs with snapshots. Delete them from the VM's Snapshots tab (there is a Delete all snapshots button), then retry the migration.",
         })
       }
     } catch (e: any) {

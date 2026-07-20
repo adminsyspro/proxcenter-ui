@@ -231,8 +231,8 @@ export async function DELETE(
       method: 'DELETE',
     })
 
-    // Opt-in: block until the PVE task actually finishes (used by the
-    // cross-cluster migration snapshot cleanup, which deletes sequentially).
+    // Opt-in: block until the PVE task actually finishes. Used by the VM
+    // Snapshots-tab "Delete all" action, which deletes snapshots sequentially.
     const shouldWait = url.searchParams.get('wait') === '1'
     if (shouldWait) {
       await waitForTask(conn, node, result)

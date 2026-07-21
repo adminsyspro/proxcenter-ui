@@ -38,4 +38,35 @@ describe("deleteSnapshotsSequential", () => {
     expect(events).toContain("b:failed(merge failed)")
     expect(events.some(e => e.startsWith("c:"))).toBe(false)
   })
+
+  it("reports the catch path when the request throws (network error)", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"))
+    const events: string[] = []
+    const res = await deleteSnapshotsSequential("c:qemu:pve1:100", ["a"], (n, s, e) =>
+      events.push(`${n}:${s}${e ? `(${e})` : ""}`))
+    expect(res).toEqual({ ok: false, failed: "a", error: "network down" })
+    expect(events).toEqual(["a:running", "a:failed(network down)"])
+  })
+
+  it("falls back to the HTTP status when the error body carries no message", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      { ok: false, status: 500, json: async () => ({}) } as unknown as Response,
+    )
+    const res = await deleteSnapshotsSequential("c:qemu:pve1:100", ["a"], () => {})
+    expect(res).toEqual({ ok: false, failed: "a", error: "HTTP 500" })
+  })
+
+  it("falls back to the HTTP status when the error body itself fails to parse", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      { ok: false, status: 503, json: async () => { throw new Error("bad json") } } as unknown as Response,
+    )
+    const res = await deleteSnapshotsSequential("c:qemu:pve1:100", ["a"], () => {})
+    expect(res).toEqual({ ok: false, failed: "a", error: "HTTP 503" })
+  })
+
+  it("stringifies a non-Error rejection", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue("kaboom")
+    const res = await deleteSnapshotsSequential("c:qemu:pve1:100", ["a"], () => {})
+    expect(res).toEqual({ ok: false, failed: "a", error: "kaboom" })
+  })
 })

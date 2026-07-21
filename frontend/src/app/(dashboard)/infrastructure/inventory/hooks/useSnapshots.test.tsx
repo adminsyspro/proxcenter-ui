@@ -65,4 +65,90 @@ describe('useSnapshots.deleteAllSnapshots', () => {
     await act(async () => { await confirm.onConfirm() })
     expect(params.toast.error).toHaveBeenCalledWith('merge failed')
   })
+
+  it('advances delete-all progress as each snapshot completes', async () => {
+    seqMock.mockImplementation(async (_vmKey: string, names: string[], cb: any) => {
+      names.forEach((n) => cb(n, 'done'))
+      return { ok: true }
+    })
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    await waitFor(() => expect(result.current.snapshots.length).toBe(3))
+
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    await act(async () => { await confirm.onConfirm() })
+
+    expect(result.current.deleteAllProgress).toEqual({ done: 2, total: 2 })
+    expect(params.toast.success).toHaveBeenCalled()
+  })
+
+  it('surfaces an error toast when the sequential delete throws', async () => {
+    seqMock.mockRejectedValue(new Error('boom'))
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    await waitFor(() => expect(result.current.snapshots.length).toBe(3))
+
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    await act(async () => { await confirm.onConfirm() })
+    expect(params.toast.error).toHaveBeenCalledWith('boom')
+  })
+
+  it('falls back to a generic error message when the failure carries no detail', async () => {
+    seqMock.mockResolvedValue({ ok: false, failed: 'snap1' })
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    await waitFor(() => expect(result.current.snapshots.length).toBe(3))
+
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    await act(async () => { await confirm.onConfirm() })
+    expect(params.toast.error).toHaveBeenCalledWith('errors.deleteError')
+  })
+
+  it('falls back to a generic error message when the thrown error has no message', async () => {
+    seqMock.mockRejectedValue({})
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    await waitFor(() => expect(result.current.snapshots.length).toBe(3))
+
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    await act(async () => { await confirm.onConfirm() })
+    expect(params.toast.error).toHaveBeenCalledWith('errors.deleteError')
+  })
+
+  it('does nothing when the selection is not a VM', () => {
+    const params = makeParams({ selection: { type: 'node', id: 'conn-1:pve1' } })
+    const { result } = renderHook(() => useSnapshots(params))
+    act(() => { result.current.deleteAllSnapshots() })
+    expect(params.setConfirmAction).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when there are no non-current snapshots', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { snapshots: [{ name: 'current' }], count: 1 } }),
+    } as any)
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    act(() => { result.current.deleteAllSnapshots() })
+    expect(params.setConfirmAction).not.toHaveBeenCalled()
+  })
+
+  it('labels the confirm with a fallback name when the VM has no title', async () => {
+    const params = makeParams({ data: {} })
+    const { result } = renderHook(() => useSnapshots(params))
+    await act(async () => { await result.current.loadSnapshots() })
+    await waitFor(() => expect(result.current.snapshots.length).toBe(3))
+
+    act(() => { result.current.deleteAllSnapshots() })
+    expect(params.setConfirmAction).toHaveBeenCalled()
+  })
 })

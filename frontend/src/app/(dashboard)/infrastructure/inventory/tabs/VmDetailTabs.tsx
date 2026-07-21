@@ -3345,7 +3345,7 @@ return (
 
               {/* ==================== ONGLET 5 - SNAPSHOTS ==================== */}
               {detailTab === 5 && (
-                <Box>
+                <Box sx={{ pt: 2 }}>
                   {/* Loading */}
                   {snapshotsLoading && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -3374,31 +3374,48 @@ return (
                           />
                         )}
                       </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         {snapshotFeatureAvailable !== false && snapshots.filter(s => s.name !== 'current').length > 0 && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            color="error"
-                            startIcon={deleteAllBusy ? <CircularProgress size={14} /> : <i className="ri-delete-bin-line" />}
-                            onClick={deleteAllSnapshots}
-                            disabled={snapshotActionBusy || deleteAllBusy}
-                          >
-                            {deleteAllBusy
+                          <MuiTooltip
+                            title={deleteAllBusy
                               ? `${t('inventory.deletingSnapshots')} ${deleteAllProgress.done}/${deleteAllProgress.total}`
                               : t('inventory.deleteAllSnapshots')}
-                          </Button>
+                          >
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={deleteAllSnapshots}
+                                disabled={snapshotActionBusy || deleteAllBusy}
+                                aria-label={t('inventory.deleteAllSnapshots')}
+                              >
+                                {deleteAllBusy
+                                  ? (
+                                    <CircularProgress
+                                      size={18}
+                                      variant="determinate"
+                                      value={deleteAllProgress.total > 0 ? Math.round((deleteAllProgress.done / deleteAllProgress.total) * 100) : 0}
+                                    />
+                                  )
+                                  : <i className="ri-delete-bin-line" style={{ fontSize: 18 }} />}
+                              </IconButton>
+                            </span>
+                          </MuiTooltip>
                         )}
                         {!showCreateSnapshot && snapshotFeatureAvailable !== false && (
-                          <Button
-                            variant="contained"
-                            size="small"
-                            startIcon={<i className="ri-add-line" />}
-                            onClick={() => setShowCreateSnapshot(true)}
-                            disabled={snapshotActionBusy}
-                          >
-                            {t('common.create')}
-                          </Button>
+                          <MuiTooltip title={t('inventory.takeSnapshot')}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() => setShowCreateSnapshot(true)}
+                                disabled={snapshotActionBusy}
+                                aria-label={t('inventory.takeSnapshot')}
+                              >
+                                <i className="ri-add-line" style={{ fontSize: 18 }} />
+                              </IconButton>
+                            </span>
+                          </MuiTooltip>
                         )}
                       </Box>
                     </Box>

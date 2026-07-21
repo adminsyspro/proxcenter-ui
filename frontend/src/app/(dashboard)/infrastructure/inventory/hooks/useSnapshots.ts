@@ -26,7 +26,7 @@ type ConfirmAction = {
 interface UseSnapshotsParams {
   selection: InventorySelection | null
   detailTab?: number
-  t: (key: string) => string
+  t: (key: string, values?: Record<string, string | number>) => string
   toast: Toast
   data: any
   setConfirmAction: (action: ConfirmAction) => void
@@ -203,8 +203,7 @@ export function useSnapshots({
     setConfirmAction({
       action: 'delete-all-snapshots',
       title: `${t('inventory.deleteAllSnapshots')} (${names.length})`,
-      message: t('inventory.deleteAllSnapshotsConfirm'),
-      vmName: data?.title || `VM ${vmid}`,
+      message: t('inventory.deleteAllSnapshotsConfirm', { name: data?.title || `VM ${vmid}` }),
       onConfirm: async () => {
         setConfirmActionLoading(true)
         setSnapshotActionBusy(true)

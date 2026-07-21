@@ -726,7 +726,7 @@
     "snapshotDeleted": "스냅샷이 성공적으로 삭제되었습니다",
     "snapshotRestored": "스냅샷이 성공적으로 복원되었습니다",
     "deleteAllSnapshots": "Delete all snapshots",
-    "deleteAllSnapshotsConfirm": "This permanently deletes every snapshot of this VM. This action cannot be undone.",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
     "deletingSnapshots": "Deleting",
     "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "유지 관리 모드 시작",

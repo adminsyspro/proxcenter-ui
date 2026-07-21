@@ -696,7 +696,7 @@
     "snapshotDeleted": "快照删除成功",
     "snapshotRestored": "快照恢复成功",
     "deleteAllSnapshots": "Delete all snapshots",
-    "deleteAllSnapshotsConfirm": "This permanently deletes every snapshot of this VM. This action cannot be undone.",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
     "deletingSnapshots": "Deleting",
     "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "进入维护模式",

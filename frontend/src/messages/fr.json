@@ -726,7 +726,7 @@
     "snapshotDeleted": "Snapshot supprimé avec succès",
     "snapshotRestored": "Snapshot restauré avec succès",
     "deleteAllSnapshots": "Supprimer tous les snapshots",
-    "deleteAllSnapshotsConfirm": "Cette action supprime définitivement tous les snapshots de cette VM. Elle est irréversible.",
+    "deleteAllSnapshotsConfirm": "Cette action supprimera définitivement tous les snapshots de {name} !",
     "deletingSnapshots": "Suppression",
     "snapshotsAllDeleted": "Tous les snapshots ont été supprimés",
     "enterMaintenance": "Entrer en maintenance",

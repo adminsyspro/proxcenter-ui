@@ -1559,10 +1559,12 @@ return
           {confirmAction?.title}
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ mb: 1 }}>
-            <strong>{confirmAction?.vmName}</strong>
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8, whiteSpace: 'pre-line' }}>
+          {confirmAction?.vmName && (
+            <Typography sx={{ mb: 1 }}>
+              <strong>{confirmAction.vmName}</strong>
+            </Typography>
+          )}
+          <Typography variant="body2" sx={{ opacity: 0.8, whiteSpace: 'pre-line', mt: confirmAction?.vmName ? 0 : 2 }}>
             {confirmAction?.message}
           </Typography>
         </DialogContent>

@@ -2754,6 +2754,7 @@
     "licenseUnmappedFloating": "유동 (풀)",
     "licenseRemoveImport": "제거",
     "licenseRemoveConfirm": "가져온 이 라이선스를 제거하시겠습니까? 해당 라이선스가 적용되던 노드는 기본 할당량으로 복귀합니다.",
+    "licenseRemoveOptionConfirm": "이 애드온 라이선스를 제거하시겠습니까? 제거하면 {feature} 기능이 비활성화됩니다.",
     "licenseImportDialogTitle": "추가 라이선스 가져오기",
     "licenseImportBlobLabel": "라이선스 키",
     "licenseImportBlobPlaceholder": "여기에 추가 라이선스 키를 붙여넣으세요...",

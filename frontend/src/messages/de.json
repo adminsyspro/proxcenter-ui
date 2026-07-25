@@ -2721,6 +2721,7 @@
     "licenseUnmappedFloating": "Schwebend (Pool)",
     "licenseRemoveImport": "Entfernen",
     "licenseRemoveConfirm": "Diese importierte Lizenz entfernen? Die damit abgedeckten Nodes fallen auf das Kontingent der primären Lizenz zurück.",
+    "licenseRemoveOptionConfirm": "Diese Add-on-Lizenz entfernen? Die Funktion {feature} wird nach dem Entfernen deaktiviert.",
     "licenseImportDialogTitle": "Zusätzliche Lizenz importieren",
     "licenseImportBlobLabel": "Lizenzschlüssel",
     "licenseImportBlobPlaceholder": "Zusätzlichen Lizenzschlüssel hier einfügen...",

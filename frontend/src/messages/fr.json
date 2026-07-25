@@ -2754,6 +2754,7 @@
     "licenseUnmappedFloating": "Flottante (pool)",
     "licenseRemoveImport": "Retirer",
     "licenseRemoveConfirm": "Retirer cette licence importée ? Les nœuds qu'elle couvre repasseront sous le quota de la licence principale.",
+    "licenseRemoveOptionConfirm": "Retirer cette licence d'option ? La capacité {feature} sera désactivée après son retrait.",
     "licenseImportDialogTitle": "Importer une licence additionnelle",
     "licenseImportBlobLabel": "Clé de licence",
     "licenseImportBlobPlaceholder": "Collez la clé de licence additionnelle ici...",

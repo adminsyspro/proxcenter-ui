@@ -2754,6 +2754,7 @@
     "licenseUnmappedFloating": "Flotante (pool)",
     "licenseRemoveImport": "Eliminar",
     "licenseRemoveConfirm": "¿Eliminar esta licencia importada? Los nodos que cubre volverán a descontar de la cuota principal.",
+    "licenseRemoveOptionConfirm": "¿Quitar esta licencia de complemento? La capacidad {feature} se desactivará tras su eliminación.",
     "licenseImportDialogTitle": "Importar an additional licencia",
     "licenseImportBlobLabel": "Clave de licencia",
     "licenseImportBlobPlaceholder": "Paste el additional licencia clave here...",

@@ -2754,6 +2754,7 @@
     "licenseUnmappedFloating": "Floating (pool)",
     "licenseRemoveImport": "Remove",
     "licenseRemoveConfirm": "Remove this imported license? The nodes it covers will fall back under the primary quota.",
+    "licenseRemoveOptionConfirm": "Remove this add-on license? The {feature} capability will be disabled once it is removed.",
     "licenseImportDialogTitle": "Import an additional license",
     "licenseImportBlobLabel": "License key",
     "licenseImportBlobPlaceholder": "Paste the additional license key here...",

@@ -2333,7 +2333,16 @@ function LicenseTab() {
           <i className='ri-error-warning-line' style={{ color: 'var(--mui-palette-error-main)', fontSize: 22 }} />
           {t('settings.licenseRemoveImport')}
         </DialogTitle>
-        <DialogContent><Typography>{t('settings.licenseRemoveConfirm')}</Typography></DialogContent>
+        <DialogContent>
+          <Typography>
+            {(() => {
+              const targetRow = licenseRows.find(r => r.rowId === removeTarget?.rowId)
+              return targetRow?.role === 'option'
+                ? t('settings.licenseRemoveOptionConfirm', { feature: targetRow.capabilities.map(optionDisplayName).join(', ') })
+                : t('settings.licenseRemoveConfirm')
+            })()}
+          </Typography>
+        </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRemoveTarget(null)} variant='outlined'>{t('common.cancel')}</Button>
           <Button onClick={confirmRemove} variant='contained' color='error' startIcon={<i className='ri-delete-bin-line' />}>

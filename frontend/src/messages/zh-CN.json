@@ -2723,6 +2723,7 @@
     "licenseUnmappedFloating": "浮动（池）",
     "licenseRemoveImport": "移除",
     "licenseRemoveConfirm": "移除此导入的许可证？其覆盖的节点将回退至主许可证配额。",
+    "licenseRemoveOptionConfirm": "移除此附加组件许可证？移除后 {feature} 功能将被禁用。",
     "licenseImportDialogTitle": "导入附加许可证",
     "licenseImportBlobLabel": "许可证密钥",
     "licenseImportBlobPlaceholder": "在此粘贴附加许可证密钥...",

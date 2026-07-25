@@ -127,7 +127,7 @@
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
     "fast-uri": ">=3.1.2",
-    "shell-quote": ">=1.8.4"
+    "shell-quote": ">=1.10.0"
   },
   "overrides": {
     "rimraf": "5.0.7",
@@ -145,7 +145,7 @@
     "fast-uri": ">=3.1.2",
     "postcss": "$postcss",
     "js-cookie": "^3.0.7",
-    "shell-quote": ">=1.8.4",
+    "shell-quote": ">=1.10.0",
     "tmp": "^0.2.6",
     "uuid": "^11.1.1"
   }

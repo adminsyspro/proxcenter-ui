@@ -68,6 +68,50 @@ describe('buildLicenseTableRows', () => {
   })
 })
 
+describe('option license rows', () => {
+  const status = {
+    license_id: 'PRIM',
+    customer: { name: 'ACME' },
+    node_status: {
+      per_license: [{ license_id: 'PRIM', max_nodes: 10, used_nodes: 3, is_primary: true }],
+    },
+  }
+  const optionImport = {
+    id: 'row-opt',
+    license_id: 'lic-opt',
+    edition: 'community',
+    max_nodes: 0,
+    cluster_uuid: null,
+    expires_at: '2027-01-01T00:00:00Z',
+    state: 'active',
+    connection_ids: [],
+    type: 'option' as const,
+    capabilities: ['auto_ha'],
+  }
+
+  it('maps an option import to role=option, never unlimited, with capabilities', () => {
+    const rows = buildLicenseTableRows(status, [optionImport])
+    const opt = rows.find(r => r.rowId === 'row-opt')!
+    expect(opt.role).toBe('option')
+    expect(opt.unlimited).toBe(false)
+    expect(opt.maxNodes).toBe(0)
+    expect(opt.capabilities).toEqual(['auto_ha'])
+  })
+
+  it('keeps a plain edition import (max_nodes > 0) as role=import', () => {
+    const rows = buildLicenseTableRows(status, [
+      { ...optionImport, id: 'row-ed', type: 'edition', capabilities: [], max_nodes: 5 },
+    ])
+    expect(rows.find(r => r.rowId === 'row-ed')!.role).toBe('import')
+  })
+
+  it('keeps a legacy import without type as role=import', () => {
+    const { type: _t, capabilities: _c, ...legacy } = optionImport
+    const rows = buildLicenseTableRows(status, [{ ...legacy, max_nodes: 5 } as any])
+    expect(rows.find(r => r.rowId === 'row-opt')!.role).toBe('import')
+  })
+})
+
 describe('computePerTenantRollup', () => {
   it('groups non-primary licenses under their connections owning tenant', () => {
     const connToTenant = { 'c-a': 'tenant-a', 'c-b': 'tenant-b', 'c-pool': 'default' }

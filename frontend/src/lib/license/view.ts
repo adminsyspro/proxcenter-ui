@@ -17,11 +17,13 @@ export interface ImportedLicenseDTO {
   state: string
   connection_ids: string[]
   customer?: string
+  type?: 'edition' | 'option' | string
+  capabilities?: string[]
 }
 export interface LicenseTableRow {
   rowId: string
   licenseId: string
-  role: 'primary' | 'import'
+  role: 'primary' | 'import' | 'option'
   licensedTo: string
   usedNodes: number
   maxNodes: number
@@ -30,6 +32,7 @@ export interface LicenseTableRow {
   clusterUuid: string | null
   connectionIds: string[]
   state: string
+  capabilities: string[]
 }
 export interface TenantRollupRow {
   tenantId: string
@@ -80,23 +83,26 @@ export function buildLicenseTableRows(
       clusterUuid: null,
       connectionIds: primaryUsage.connections || [],
       state: 'active',
+      capabilities: [],
     })
   }
 
   for (const imp of imports || []) {
+    const isOption = imp.type === 'option'
     const usage = usageByLicenseId.get(imp.license_id)
     rows.push({
       rowId: imp.id,
       licenseId: imp.license_id,
-      role: 'import',
+      role: isOption ? 'option' : 'import',
       licensedTo: imp.customer || '',
       usedNodes: usage ? usage.used_nodes : 0,
-      maxNodes: imp.max_nodes,
-      unlimited: imp.max_nodes <= 0,
+      maxNodes: isOption ? 0 : imp.max_nodes,
+      unlimited: isOption ? false : imp.max_nodes <= 0,
       expiresAt: imp.expires_at || null,
       clusterUuid: imp.cluster_uuid || null,
       connectionIds: imp.connection_ids || [],
       state: imp.state,
+      capabilities: imp.capabilities || [],
     })
   }
 

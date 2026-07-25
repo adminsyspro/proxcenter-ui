@@ -115,7 +115,11 @@
     "contactSales": "需要帮助？",
     "nodeLimitExceeded": "节点限制已超出：{current}/{max} 个节点 — 只读模式已激活",
     "nodeLimitWarning": "节点限制",
-    "nodeLimitUpgrade": "升级您的许可证"
+    "nodeLimitUpgrade": "升级您的许可证",
+    "addonChip": "附加组件",
+    "optionRestricted": "需要附加组件",
+    "featureRequiresOption": "此功能需要\"{feature}\"附加组件许可证。",
+    "optionUpgradeDescription": "附加组件许可证叠加在您的 Enterprise 许可证之上。购买附加组件后，请在\"设置 > 许可证\"中上传新的许可证文件。"
   },
   "vms": {
     "disk": "磁盘",

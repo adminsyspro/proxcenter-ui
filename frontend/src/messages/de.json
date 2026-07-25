@@ -30,6 +30,7 @@
     "confirm": "Bestätigen",
     "close": "Schließen",
     "back": "Zurück",
+    "goBack": "Zurück",
     "next": "Weiter",
     "apply": "Anwenden",
     "reset": "Zurücksetzen",
@@ -111,7 +112,11 @@
     "contactSales": "Brauchen Sie Hilfe?",
     "nodeLimitExceeded": "Node-Limit überschritten: {current}/{max} Nodes — Nur-Lese-Modus aktiv",
     "nodeLimitWarning": "NODE-LIMIT",
-    "nodeLimitUpgrade": "Upgrade your Lizenz"
+    "nodeLimitUpgrade": "Upgrade your Lizenz",
+    "addonChip": "Add-on",
+    "optionRestricted": "Add-on erforderlich",
+    "featureRequiresOption": "Diese Funktion erfordert die Add-on-Lizenz „{feature}\".",
+    "optionUpgradeDescription": "Add-on-Lizenzen ergänzen Ihre Enterprise-Lizenz. Erwerben Sie das Add-on und laden Sie anschließend die neue Lizenzdatei unter Einstellungen > Lizenz hoch."
   },
   "vms": {
     "disk": "Festplatte",

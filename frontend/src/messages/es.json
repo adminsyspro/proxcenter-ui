@@ -115,7 +115,11 @@
     "contactSales": "¿Necesitas ayuda?",
     "nodeLimitExceeded": "Nodo límite exceeded: {current}/{max} nodos — read-only modo activo",
     "nodeLimitWarning": "LÍMITE DE NODOS",
-    "nodeLimitUpgrade": "Actualiza tu licencia"
+    "nodeLimitUpgrade": "Actualiza tu licencia",
+    "addonChip": "Complemento",
+    "optionRestricted": "Se requiere un complemento",
+    "featureRequiresOption": "Esta función requiere la licencia del complemento «{feature}».",
+    "optionUpgradeDescription": "Las licencias de complemento se suman a su licencia Enterprise. Compre el complemento y luego cargue el nuevo archivo de licencia en Configuración > Licencia."
   },
   "vms": {
     "disk": "Disco",

@@ -115,7 +115,11 @@
     "contactSales": "Need help?",
     "nodeLimitExceeded": "Node limit exceeded: {current}/{max} nodes — read-only mode active",
     "nodeLimitWarning": "NODE LIMIT",
-    "nodeLimitUpgrade": "Upgrade your license"
+    "nodeLimitUpgrade": "Upgrade your license",
+    "addonChip": "Add-on",
+    "optionRestricted": "Add-on required",
+    "featureRequiresOption": "This feature requires the \"{feature}\" add-on license.",
+    "optionUpgradeDescription": "Add-on licenses stack on top of your Enterprise license. Purchase the add-on, then upload the new license file under Settings > License."
   },
   "vms": {
     "disk": "Disk",

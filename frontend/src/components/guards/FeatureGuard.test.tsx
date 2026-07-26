@@ -5,7 +5,7 @@ import FeatureGuard from './FeatureGuard'
 const useLicenseMock = vi.fn()
 vi.mock('@/contexts/LicenseContext', () => ({
   useLicense: () => useLicenseMock(),
-  Features: { CONTROL_PLANE_HA: 'control_plane_ha' },
+  Features: { HA: 'control_plane_ha' },
 }))
 vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ back: vi.fn(), push: vi.fn() }) }))

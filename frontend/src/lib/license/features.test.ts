@@ -14,17 +14,17 @@ describe('effectiveHasFeature', () => {
   it('grants an edition feature to a licensed enterprise', () => {
     expect(effectiveHasFeature(enterprise, Features.DRS)).toBe(true)
   })
-  it('denies CONTROL_PLANE_HA without the option, even on enterprise', () => {
-    expect(effectiveHasFeature(enterprise, Features.CONTROL_PLANE_HA)).toBe(false)
+  it('denies HA without the option, even on enterprise', () => {
+    expect(effectiveHasFeature(enterprise, Features.HA)).toBe(false)
   })
-  it('grants CONTROL_PLANE_HA via options on enterprise', () => {
-    expect(effectiveHasFeature({ ...enterprise, options: ['control_plane_ha'] }, Features.CONTROL_PLANE_HA)).toBe(true)
+  it('grants HA via options on enterprise', () => {
+    expect(effectiveHasFeature({ ...enterprise, options: ['control_plane_ha'] }, Features.HA)).toBe(true)
   })
-  it('grants CONTROL_PLANE_HA via options on enterprise_plus', () => {
+  it('grants HA via options on enterprise_plus', () => {
     expect(
       effectiveHasFeature(
         { licensed: true, expired: false, edition: 'enterprise_plus', options: ['control_plane_ha'] },
-        Features.CONTROL_PLANE_HA,
+        Features.HA,
       ),
     ).toBe(true)
   })
@@ -32,26 +32,29 @@ describe('effectiveHasFeature', () => {
     expect(
       effectiveHasFeature(
         { licensed: true, expired: false, edition: 'community', options: ['control_plane_ha'] },
-        Features.CONTROL_PLANE_HA,
+        Features.HA,
       ),
     ).toBe(false)
   })
   it('denies everything when expired', () => {
-    expect(effectiveHasFeature({ ...enterprise, expired: true, options: ['control_plane_ha'] }, Features.CONTROL_PLANE_HA)).toBe(false)
+    expect(effectiveHasFeature({ ...enterprise, expired: true, options: ['control_plane_ha'] }, Features.HA)).toBe(false)
     expect(effectiveHasFeature({ ...enterprise, expired: true }, Features.DRS)).toBe(false)
   })
   it('denies everything when unlicensed, null or empty', () => {
     expect(effectiveHasFeature(null, Features.DRS)).toBe(false)
-    expect(effectiveHasFeature(undefined, Features.CONTROL_PLANE_HA)).toBe(false)
+    expect(effectiveHasFeature(undefined, Features.HA)).toBe(false)
     expect(effectiveHasFeature({}, Features.DRS)).toBe(false)
-    expect(effectiveHasFeature({ licensed: false, edition: 'enterprise', options: ['control_plane_ha'] }, Features.CONTROL_PLANE_HA)).toBe(false)
+    expect(effectiveHasFeature({ licensed: false, edition: 'enterprise', options: ['control_plane_ha'] }, Features.HA)).toBe(false)
   })
 })
 
 describe('registry and edition mapping invariants', () => {
-  it('CONTROL_PLANE_HA belongs to NO edition feature list', () => {
+  it('HA is the control_plane_ha option capability', () => {
+    expect(Features.HA).toBe('control_plane_ha')
+  })
+  it('HA belongs to NO edition feature list', () => {
     for (const [edition, list] of Object.entries(EDITION_FEATURES)) {
-      expect(list.includes(Features.CONTROL_PLANE_HA), `CONTROL_PLANE_HA leaked into ${edition}`).toBe(false)
+      expect(list.includes(Features.HA), `HA leaked into ${edition}`).toBe(false)
     }
   })
   it('isEnterpriseEdition matches both enterprise tiers only', () => {

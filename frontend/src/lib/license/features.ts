@@ -29,12 +29,18 @@ export const Features = {
   SFLOW_MONITORING: 'sflow_monitoring',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
-  CONTROL_PLANE_HA: 'control_plane_ha',
+  // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
+  // the ProxCenter application/database stack itself, VIP failover and
+  // cluster health of ProxCenter's own control plane. Distinct from the free
+  // Proxmox guest HA (VM/CT high availability on the managed Proxmox
+  // cluster), which lives under the `connections/[id]/ha/**` routes and is
+  // not gated by this capability.
+  HA: 'control_plane_ha',
 } as const
 
 export type FeatureId = (typeof Features)[keyof typeof Features]
 
-// Moved verbatim from LicenseContext.tsx (lines 34-85). CONTROL_PLANE_HA is in neither.
+// Moved verbatim from LicenseContext.tsx (lines 34-85). Features.HA is in neither.
 export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
   enterprise: [
     'drs',

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { waitForTask } from "@/lib/proxmox/tasks"
 import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getDateLocale } from "@/lib/i18n/date"
@@ -225,10 +226,17 @@ export async function DELETE(
     }
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}`
-    
+
     const result = await pveFetch<string>(conn, apiPath, {
       method: 'DELETE',
     })
+
+    // Opt-in: block until the PVE task actually finishes. Used by the VM
+    // Snapshots-tab "Delete all" action, which deletes snapshots sequentially.
+    const shouldWait = url.searchParams.get('wait') === '1'
+    if (shouldWait) {
+      await waitForTask(conn, node, result)
+    }
 
     // Audit
     const { audit } = await import("@/lib/audit")
@@ -245,7 +253,9 @@ export async function DELETE(
       data: {
         success: true,
         upid: result,
-        message: `Snapshot '${snapname}' deletion started`,
+        message: shouldWait
+          ? `Snapshot '${snapname}' deleted`
+          : `Snapshot '${snapname}' deletion started`,
       }
     })
   } catch (e: any) {

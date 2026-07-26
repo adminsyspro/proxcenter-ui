@@ -956,6 +956,80 @@
       }
     ]
   },
+  "/api/v1/connections/demo-pve-dr-001/storage": {
+    "data": [
+      {
+        "id": "demo-pve-dr-001:CephStoragePool",
+        "storage": "CephStoragePool",
+        "node": "pve-dr-01",
+        "type": "rbd",
+        "status": "available",
+        "enabled": true,
+        "shared": true,
+        "content": [
+          "rootdir",
+          "images"
+        ],
+        "used": 6597069766656,
+        "total": 10995116277760,
+        "usedFormatted": "6 TiB",
+        "totalFormatted": "10 TiB",
+        "usedPct": 60,
+        "free": 4398046511104,
+        "freeFormatted": "4 TiB",
+        "path": null,
+        "server": null,
+        "export": null,
+        "pool": "CephStoragePool",
+        "monhost": null,
+        "fsName": null,
+        "datastore": null,
+        "fingerprint": null,
+        "nodes": [
+          "pve-dr-01",
+          "pve-dr-02",
+          "pve-dr-03",
+          "pve-dr-04"
+        ]
+      },
+      {
+        "id": "demo-pve-dr-001:local",
+        "storage": "local",
+        "node": "pve-dr-01",
+        "type": "dir",
+        "status": "available",
+        "enabled": true,
+        "shared": false,
+        "content": [
+          "rootdir",
+          "vztmpl",
+          "images",
+          "backup",
+          "iso",
+          "snippets"
+        ],
+        "used": 214748364800,
+        "total": 536870912000,
+        "usedFormatted": "200 GiB",
+        "totalFormatted": "500 GiB",
+        "usedPct": 40,
+        "free": 322122547200,
+        "freeFormatted": "300 GiB",
+        "path": "/var/lib/vz",
+        "server": null,
+        "export": null,
+        "pool": null,
+        "monhost": null,
+        "fsName": null,
+        "datastore": null,
+        "fingerprint": null,
+        "nodes": [
+          "pve-dr-01",
+          "pve-dr-02"
+        ]
+      }
+    ]
+  },
   "/api/v1/connections/demo-pve-cluster-001/ceph/status": {
     "data": {
       "monmap": {

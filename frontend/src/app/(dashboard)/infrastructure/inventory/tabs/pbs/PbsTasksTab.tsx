@@ -29,6 +29,7 @@ import {
   Typography,
 } from '@mui/material'
 import PbsStatusChip from './PbsStatusChip'
+import { copyToClipboard } from '@/lib/clipboard'
 
 interface PbsTasksTabProps {
   pbsId: string
@@ -315,11 +316,11 @@ export default function PbsTasksTab({ pbsId }: PbsTasksTabProps) {
 
   const copyLogs = async () => {
     const text = logLines.map(l => l.t).join('\n')
-    try {
-      await navigator.clipboard.writeText(text)
+    const ok = await copyToClipboard(text)
+    if (ok) {
       setLogCopied(true)
       setTimeout(() => setLogCopied(false), 2000)
-    } catch {
+    } else {
       setLogCopied(false)
     }
   }

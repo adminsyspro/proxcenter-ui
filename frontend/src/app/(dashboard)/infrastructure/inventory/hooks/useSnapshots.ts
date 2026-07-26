@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { InventorySelection } from '../types'
 import { parseVmId } from '../helpers'
+import { deleteSnapshotsSequential } from '@/lib/migration/deleteSnapshotsSequential'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -25,7 +26,7 @@ type ConfirmAction = {
 interface UseSnapshotsParams {
   selection: InventorySelection | null
   detailTab?: number
-  t: (key: string) => string
+  t: (key: string, values?: Record<string, string | number>) => string
   toast: Toast
   data: any
   setConfirmAction: (action: ConfirmAction) => void
@@ -55,6 +56,8 @@ export function useSnapshots({
   const [newSnapshotDesc, setNewSnapshotDesc] = useState('')
   const [newSnapshotRam, setNewSnapshotRam] = useState(false)
   const [snapshotFeatureAvailable, setSnapshotFeatureAvailable] = useState<boolean | null>(null)
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false)
+  const [deleteAllProgress, setDeleteAllProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
 
   const loadSnapshots = useCallback(async () => {
     if (selection?.type !== 'vm') return
@@ -188,6 +191,52 @@ export function useSnapshots({
     })
   }, [selection, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
 
+  const deleteAllSnapshots = useCallback(() => {
+    if (selection?.type !== 'vm') return
+
+    const { connId, type, node, vmid } = parseVmId(selection.id)
+    const vmKey = `${connId}:${type}:${node}:${vmid}`
+    // Current (newest-first) order deletes leaf snapshots before their parents.
+    const names = snapshots.filter((s: any) => s?.name !== 'current').map((s: any) => s.name as string)
+    if (names.length === 0) return
+
+    setConfirmAction({
+      action: 'delete-all-snapshots',
+      title: `${t('inventory.deleteAllSnapshots')} (${names.length})`,
+      message: t('inventory.deleteAllSnapshotsConfirm', { name: data?.title || `VM ${vmid}` }),
+      onConfirm: async () => {
+        setConfirmActionLoading(true)
+        setSnapshotActionBusy(true)
+        setDeleteAllBusy(true)
+        setDeleteAllProgress({ done: 0, total: names.length })
+
+        try {
+          const result = await deleteSnapshotsSequential(vmKey, names, (_name, status) => {
+            if (status === 'done') setDeleteAllProgress(p => ({ ...p, done: p.done + 1 }))
+          })
+
+          if (result.ok) {
+            toast.success(t('inventory.snapshotsAllDeleted'))
+          } else {
+            const msg = result.error || t('errors.deleteError')
+            setSnapshotsError(msg)
+            toast.error(msg)
+          }
+          setConfirmAction(null)
+          setTimeout(loadSnapshots, 2000)
+        } catch (e: any) {
+          const errorMsg = e.message || t('errors.deleteError')
+          setSnapshotsError(errorMsg)
+          toast.error(errorMsg)
+        } finally {
+          setDeleteAllBusy(false)
+          setSnapshotActionBusy(false)
+          setConfirmActionLoading(false)
+        }
+      }
+    })
+  }, [selection, snapshots, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
+
   const rollbackSnapshot = useCallback(async (snapname: string, hasVmstate?: boolean) => {
     if (selection?.type !== 'vm') return
 
@@ -265,6 +314,9 @@ export function useSnapshots({
     loadSnapshots,
     createSnapshot,
     deleteSnapshot,
+    deleteAllSnapshots,
+    deleteAllBusy,
+    deleteAllProgress,
     rollbackSnapshot,
     resetSnapshots,
   }

@@ -17,6 +17,7 @@ import {
 } from '@mui/material'
 
 import { buildSudoersTemplate, buildInstallCommand } from './sudoersTemplate'
+import { copyToClipboard } from '@/lib/clipboard'
 
 const fetcher = url => fetch(url).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -81,14 +82,9 @@ export default function SecurityRecommendationsCard() {
   )
 
   const copy = async (label, text) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(label)
-      setTimeout(() => setCopied(''), 2000)
-    } catch {
-      setCopied('error')
-      setTimeout(() => setCopied(''), 2000)
-    }
+    const ok = await copyToClipboard(text)
+    setCopied(ok ? label : 'error')
+    setTimeout(() => setCopied(''), 2000)
   }
 
   return (

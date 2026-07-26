@@ -13,6 +13,7 @@ const DEFAULT_COMMUNITY_STATUS = {
   expired: false,
   edition: 'community',
   features: ['dashboard', 'inventory', 'backups', 'storage'],
+  options: [],
 }
 
 export async function GET() {

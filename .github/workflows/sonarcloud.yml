@@ -44,7 +44,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Sonar needs full history for blame / SCM info / new-code detection.
           fetch-depth: 0

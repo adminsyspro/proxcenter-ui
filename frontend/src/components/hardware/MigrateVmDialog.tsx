@@ -157,14 +157,14 @@ return names.sort((a, b) => a.localeCompare(b))
         }
       } catch (e: any) {
         console.error('Error loading nodes:', e)
-        setError('Impossible de charger la liste des nodes')
+        setError(t('hardware.loadNodesError'))
       } finally {
         setNodesLoading(false)
       }
     }
 
     loadNodes()
-  }, [open, connId, currentNode])
+  }, [open, connId, currentNode, t])
 
   // Charger la config VM pour détecter les disques
   useEffect(() => {

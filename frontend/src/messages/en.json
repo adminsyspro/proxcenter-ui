@@ -93,7 +93,8 @@
     "node": "Node",
     "done": "Done",
     "tags": "Tags",
-    "created": "Created"
+    "created": "Created",
+    "errorWithMessage": "Error: {error}"
   },
   "whatsNew": {
     "title": "What's New"
@@ -114,7 +115,11 @@
     "contactSales": "Need help?",
     "nodeLimitExceeded": "Node limit exceeded: {current}/{max} nodes — read-only mode active",
     "nodeLimitWarning": "NODE LIMIT",
-    "nodeLimitUpgrade": "Upgrade your license"
+    "nodeLimitUpgrade": "Upgrade your license",
+    "addonChip": "Add-on",
+    "optionRestricted": "Add-on required",
+    "featureRequiresOption": "This feature requires the \"{feature}\" add-on license.",
+    "optionUpgradeDescription": "Add-on licenses stack on top of your Enterprise license. Purchase the add-on, then upload the new license file under Settings > License."
   },
   "vms": {
     "disk": "Disk",
@@ -587,6 +592,7 @@
     },
     "resolveConfirm": "Resolve {count} alert(s)?",
     "deleteConfirm": "Delete {count} alert(s)? This will resolve and remove them.",
+    "acknowledgeSelected": "Acknowledge selected",
     "resolveSelected": "Resolve selected",
     "deleteSelected": "Delete selected",
     "clearResolved": "Clear resolved",
@@ -871,6 +877,10 @@
     "snapshotCreated": "Snapshot created successfully",
     "snapshotDeleted": "Snapshot deleted successfully",
     "snapshotRestored": "Snapshot restored successfully",
+    "deleteAllSnapshots": "Delete all snapshots",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
+    "deletingSnapshots": "Deleting",
+    "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "Enter maintenance",
     "exitMaintenance": "Exit maintenance",
     "confirmEnterMaintenance": "Do you want to put this node in maintenance mode? VMs will no longer be automatically migrated to this node.",
@@ -2051,6 +2061,13 @@
       "migrationToProxmox": "Migration to Proxmox VE",
       "transferMetrics": "Transfer Metrics",
       "migrationLogs": "Migration Logs",
+      "estimatedDowntime": "Estimated cutover downtime",
+      "estimatedDowntimeHint": "Time the VM will be offline during the final switchover, based on the last delta pass.",
+      "awaitingCutover": "Waiting for cutover",
+      "cutoverNow": "Cutover now",
+      "cutoverConfirmTitle": "Cut over now?",
+      "cutoverConfirmBody": "The source VM will be shut down and the final changes copied. Expect roughly {mins} min of downtime. Continue?",
+      "cutoverNotConverging": "This migration is not converging on its own. You can cut over now (accepting the downtime above) or cancel and use a cold migration.",
       "overallProgress": "Overall Progress",
       "transferSpeed": "Transfer Speed",
       "disk": "Disk",
@@ -2866,6 +2883,7 @@
     "licenseColRole": "Role",
     "licenseColId": "License ID",
     "licenseColLicensedTo": "Licensed to",
+    "licenseColCapabilities": "Capabilities",
     "licenseEditMapping": "Edit mapping",
     "licenseEditMappingTitle": "Edit license mapping",
     "licenseEditMappingHint": "Select the clusters this license covers. A cluster already covered by another license is disabled.",
@@ -2874,14 +2892,17 @@
     "licenseMappingFailed": "Mapping update failed",
     "licenseConnCoveredByOther": "already covered",
     "licenseColNodes": "Nodes (used / max)",
+    "licenseNodesNotApplicable": "n/a",
     "licenseColMapped": "Mapped to",
     "licenseColExpires": "Expires",
     "licenseColStatus": "Status",
     "licenseRolePrimary": "Primary",
     "licenseRoleImport": "Import",
+    "licenseRoleOption": "Add-on",
     "licenseUnmappedFloating": "Floating (pool)",
     "licenseRemoveImport": "Remove",
     "licenseRemoveConfirm": "Remove this imported license? The nodes it covers will fall back under the primary quota.",
+    "licenseRemoveOptionConfirm": "Remove this add-on license? The {feature} capability will be disabled once it is removed.",
     "licenseImportDialogTitle": "Import an additional license",
     "licenseImportBlobLabel": "License key",
     "licenseImportBlobPlaceholder": "Paste the additional license key here...",
@@ -4584,7 +4605,10 @@
     "resumeSuccess": "Resuming VM",
     "rebootSuccess": "Rebooting VM",
     "migrateSuccess": "Migration started",
-    "cloneSuccess": "Cloning started"
+    "cloneSuccess": "Cloning started",
+    "bulkSuccess": "{description} - {count} VMs",
+    "bulkPartial": "{description} - {success} OK, {errors} errors",
+    "bulkFailed": "{description} - {errors} errors"
   },
   "vmConfig": {
     "title": "VM Configuration",
@@ -4651,7 +4675,9 @@
     "rawConfig": "Raw configuration",
     "advancedArgs": "Additional QEMU arguments",
     "advancedArgsWarning": "Manual modification for advanced users only.",
-    "qemuArgsHelper": "Arguments passed directly to QEMU (dangerous)"
+    "qemuArgsHelper": "Arguments passed directly to QEMU (dangerous)",
+    "totalVcpus": "Total: {count} vCPUs",
+    "coresSocketsSummary": "{cores} cores × {sockets} socket(s)"
   },
   "hardware": {
     "detach": "Detach",
@@ -4814,7 +4840,8 @@
       "useIso": "Use CD/DVD disc image file (ISO)",
       "usePhysical": "Use physical CD/DVD Drive",
       "noMedia": "Do not use any media"
-    }
+    },
+    "loadNodesError": "Unable to load the node list"
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",
@@ -6810,7 +6837,13 @@
     "portFilter": "Port",
     "noTimelineData": "No timeline data available for this pair (requires InfluxDB)",
     "compare": "Compare",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "samplingRateInfo": "1 packet out of <strong>{rate}</strong> will be sampled",
+    "samplingVeryHigh": "⚠️ Very precise but heavy CPU/network load — recommended for debugging only",
+    "samplingHigh": "⚡ High precision — suitable for networks under 1 Gbps",
+    "samplingBalanced": "✓ Good precision/performance trade-off — recommended for most cases",
+    "samplingLight": "✓ Lightweight — suitable for 10 Gbps+ networks",
+    "samplingVeryLight": "📉 Very lightweight — may miss low-volume flows"
   },
   "vdc": {
     "title": "Virtual Datacenters",
@@ -7238,5 +7271,12 @@
     "policyToggleLabel": "Require 2FA for super_admin accounts",
     "policyToggleHelp": "Once enabled, super_admin users without 2FA will be forced to enroll on their next login. You must already have 2FA enabled on your own account to turn this on.",
     "policyNeedOwn2fa": "Enable 2FA on your own account before enforcing this policy."
+  },
+  "taskTracker": {
+    "completed": "{description} - Completed",
+    "failed": "{description} - Failed: {error}",
+    "timeout": "{description} - Timeout (task may still be running)",
+    "error": "{description} - Error: {error}",
+    "unknownError": "Unknown error"
   }
 }

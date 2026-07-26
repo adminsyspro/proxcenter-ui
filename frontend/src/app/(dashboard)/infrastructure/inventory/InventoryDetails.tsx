@@ -14,6 +14,7 @@ import { useNotes } from './hooks/useNotes'
 import { useHA } from './hooks/useHA'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
+import { useCopyToClipboard } from '@/lib/clipboard'
 
 import {
   Accordion,
@@ -205,6 +206,7 @@ export default function InventoryDetails({
   }, [allVms, loadConnection])
   const { hasFeature, isEnterprise, loading: licenseLoading } = useLicense()
   const toast = useToast()
+  const logCopy = useCopyToClipboard()
   // LXC sharing the host kernel doesn't give strong-enough multi-tenant
   // isolation. Tenants on a shared cluster see only "Create VM" — the
   // provider keeps the LXC option for lightweight workloads on dedicated
@@ -300,6 +302,16 @@ export default function InventoryDetails({
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
+  const [cutoverBusy, setCutoverBusy] = useState(false)
+  const [cutoverConfirm, setCutoverConfirm] = useState<string | null>(null)
+  const triggerCutover = async (jobId: string) => {
+    setCutoverBusy(true)
+    try {
+      await fetch(`/api/v1/migrations/${jobId}/cutover`, { method: 'POST' })
+    } finally {
+      setCutoverBusy(false)
+    }
+  }
   const migLogsRef = useRef<HTMLDivElement>(null)
   // Bulk migration state
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
@@ -410,7 +422,7 @@ export default function InventoryDetails({
   const emptySet = useMemo(() => new Set<string>(), [])
 
   const sortedExtVms = useMemo(() => {
-    const vms = data.esxiHostInfo?.vms
+    const vms = data?.esxiHostInfo?.vms
     if (!vms || vms.length === 0) return []
     const sorted = [...vms].sort((a: any, b: any) => {
       let cmp = 0
@@ -425,7 +437,7 @@ export default function InventoryDetails({
       return extVmSortDir === 'asc' ? cmp : -cmp
     })
     return sorted
-  }, [data.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
+  }, [data?.esxiHostInfo?.vms, extVmSortCol, extVmSortDir])
 
   useEffect(() => {
     if (!nodeActionDialog) return
@@ -1303,8 +1315,8 @@ export default function InventoryDetails({
     snapshotActionBusy, showCreateSnapshot, setShowCreateSnapshot,
     newSnapshotName, setNewSnapshotName, newSnapshotDesc, setNewSnapshotDesc,
     newSnapshotRam, setNewSnapshotRam, snapshotFeatureAvailable,
-    loadSnapshots, createSnapshot, deleteSnapshot, rollbackSnapshot,
-    resetSnapshots,
+    loadSnapshots, createSnapshot, deleteSnapshot, deleteAllSnapshots, rollbackSnapshot,
+    resetSnapshots, deleteAllBusy, deleteAllProgress,
   } = useSnapshots({ selection, detailTab, t, toast, data, setConfirmAction, setConfirmActionLoading })
 
   // ==================== TASKS (Historique des tâches) ====================
@@ -2474,7 +2486,7 @@ return vm?.isCluster ?? false
 
       {error ? (
         <Alert severity="error" sx={{ mb: 2, mx: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 0 : 2 }}>
-          Erreur: {error}
+          {t('common.errorWithMessage', { error })}
         </Alert>
       ) : null}
 
@@ -3370,7 +3382,7 @@ return vm?.isCluster ?? false
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuFlags, cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,
-                data, deleteReplicationId, deleteSnapshot, detailTab, downloadFile,
+                data, deleteReplicationId, deleteSnapshot, deleteAllSnapshots, deleteAllBusy, deleteAllProgress, detailTab, downloadFile,
                 error, exploreWithPveStorage, explorerArchive, explorerArchives, explorerError,
                 explorerFiles, explorerLoading, explorerMode, explorerPath, explorerSearch,
                 filteredExplorerFiles, haComment, haConfig, haEditing, haError,
@@ -3527,7 +3539,7 @@ return vm?.isCluster ?? false
           )}
 
           {/* External Host — Dashboard */}
-          {selection?.type === 'ext' && data.esxiHostInfo && (() => {
+          {selection?.type === 'ext' && data?.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
             const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
             const isHyperv = data.esxiHostInfo.hostType === 'hyperv'
@@ -3644,7 +3656,7 @@ return vm?.isCluster ?? false
           })()}
 
           {/* External Host — VM List with Migrate buttons */}
-          {selection?.type === 'ext' && data.esxiHostInfo && (() => {
+          {selection?.type === 'ext' && data?.esxiHostInfo && (() => {
             const isXcpng = data.esxiHostInfo.hostType === 'xcpng'
             const isVcenter = data.esxiHostInfo.hostType === 'vcenter'
             const isHypervHost = data.esxiHostInfo.hostType === 'hyperv'
@@ -3996,12 +4008,27 @@ return vm?.isCluster ?? false
                         {t('inventoryPage.esxiMigration.transferMetrics')}
                       </Typography>
                       {vmMigJob && (
-                        <Chip
-                          size="small"
-                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
-                          color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : 'primary'}
-                          sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status) && vmMigJob.projectedDowntimeSec != null && (
+                            <Button
+                              size="small"
+                              variant={vmMigJob.status === 'awaiting_cutover' ? 'contained' : 'outlined'}
+                              color="warning"
+                              disabled={cutoverBusy}
+                              startIcon={<i className="ri-flashlight-line" style={{ fontSize: 14 }} />}
+                              onClick={() => setCutoverConfirm(vmMigJob.id)}
+                              sx={{ height: 24, fontSize: 11, py: 0 }}
+                            >
+                              {t('inventoryPage.esxiMigration.cutoverNow')}
+                            </Button>
+                          )}
+                          <Chip
+                            size="small"
+                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                            color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'awaiting_cutover' ? 'warning' : 'primary'}
+                            sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
+                          />
+                        </Box>
                       )}
                     </Box>
                     <Box sx={{ p: 2, flex: 1 }}>
@@ -4044,6 +4071,16 @@ return vm?.isCluster ?? false
                               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{t('inventoryPage.esxiMigration.targetVmid')}</Typography>
                               <Typography variant="body2" fontWeight={700}>{vmMigJob.targetVmid || '—'}</Typography>
                             </Box>
+                            <MuiTooltip title={t('inventoryPage.esxiMigration.estimatedDowntimeHint')}>
+                              <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)', border: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{t('inventoryPage.esxiMigration.estimatedDowntime')}</Typography>
+                                <Typography variant="body2" fontWeight={700}>
+                                  {vmMigJob.projectedDowntimeSec != null && ['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status)
+                                    ? `~${Math.round(vmMigJob.projectedDowntimeSec / 60)} min`
+                                    : '—'}
+                                </Typography>
+                              </Box>
+                            </MuiTooltip>
                           </Box>
 
                           {/* Progress graph — Recharts area chart with tooltip */}
@@ -4119,12 +4156,12 @@ return vm?.isCluster ?? false
                         )}
                       </Typography>
                       {vmMigJob?.logs?.length > 0 && (
-                        <MuiTooltip title={t('common.copy')}>
+                        <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
                           <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
                             const text = vmMigJob.logs.map((l: any) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level === 'success' ? '✓' : l.level === 'error' ? '✗' : l.level === 'warn' ? '⚠' : '·'} ${l.msg}`).join('\n')
-                            navigator.clipboard.writeText(text)
+                            void logCopy.copy(text)
                           }}>
-                            <i className="ri-file-copy-line" style={{ fontSize: 14 }} />
+                            <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
                           </IconButton>
                         </MuiTooltip>
                       )}
@@ -4148,6 +4185,52 @@ return vm?.isCluster ?? false
                     </Box>
                   </CardContent>
                 </Card>
+
+                <Dialog
+                  open={!!cutoverConfirm}
+                  onClose={() => setCutoverConfirm(null)}
+                  maxWidth="xs"
+                  fullWidth
+                >
+                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{
+                      width: 40, height: 40, borderRadius: 2,
+                      bgcolor: alpha(theme.palette.warning.main, 0.12),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <i className="ri-flashlight-line" style={{ fontSize: 22, color: theme.palette.warning.main }} />
+                    </Box>
+                    {t('inventoryPage.esxiMigration.cutoverConfirmTitle')}
+                  </DialogTitle>
+                  <DialogContent>
+                    <DialogContentText>
+                      {t('inventoryPage.esxiMigration.cutoverConfirmBody', { mins: Math.round((vmMigJob?.projectedDowntimeSec ?? 0) / 60) })}
+                    </DialogContentText>
+                    {vmMigJob?.status === 'awaiting_cutover' && (
+                      <Alert severity="warning" sx={{ mt: 2 }}>
+                        {t('inventoryPage.esxiMigration.cutoverNotConverging')}
+                      </Alert>
+                    )}
+                  </DialogContent>
+                  <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button onClick={() => setCutoverConfirm(null)} color="inherit">
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      disabled={cutoverBusy}
+                      startIcon={cutoverBusy ? <CircularProgress size={16} /> : undefined}
+                      onClick={async () => {
+                        if (!cutoverConfirm) return
+                        await triggerCutover(cutoverConfirm)
+                        setCutoverConfirm(null)
+                      }}
+                    >
+                      {t('inventoryPage.esxiMigration.cutoverNow')}
+                    </Button>
+                  </DialogActions>
+                </Dialog>
               </Stack>
             )
           })()}

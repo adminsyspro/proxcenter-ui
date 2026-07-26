@@ -1,0 +1,54 @@
+name: Lint
+
+# ESLint gate for the frontend. Added after the linter was found to have been
+# silently broken for a while (eslint-config-next 16 dropped eslintrc support
+# and there was no CI job running `npm run lint`). Keep this a required check
+# in branch protection ("Settings -> Branches -> main -> Require status checks
+# -> ESLint") so a lint failure blocks the merge.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Generate Prisma client
+        # Not connecting — `prisma generate` only reads the schema, but it needs
+        # DATABASE_URL to be defined and produces @prisma/client so ESLint's
+        # import/no-unresolved can resolve it.
+        working-directory: frontend
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+        run: npx prisma generate
+
+      - name: Build icon CSS
+        # Normally a postinstall step; skipped above by --ignore-scripts. ESLint's
+        # import/no-unresolved needs this generated file, which layout.jsx imports.
+        working-directory: frontend
+        run: npm run build:icons
+
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint

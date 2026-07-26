@@ -73,7 +73,7 @@ interface UseVmActionsParams {
   onSelect?: (sel: InventorySelection) => void
   onRefresh?: () => Promise<void>
   toast: Toast
-  t: (key: string) => string
+  t: (key: string, values?: Record<string, string | number>) => string
   trackTask: TrackTaskFn
   data: DetailsPayload | null
   setData: (d: DetailsPayload | null) => void
@@ -250,7 +250,10 @@ export function useVmActions({
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { onRefresh?.() },
         onError: () => { onRefresh?.() },
-        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+        // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
+        // by the server-side watcher (crossClusterMigrate -> remote-migrate
+        // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
+        // as well raced it into two destroy tasks (issue #556).
       })
     }
 
@@ -382,7 +385,10 @@ export function useVmActions({
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { onRefresh?.(); setTableMigrateVm(null) },
         onError: () => { onRefresh?.(); setTableMigrateVm(null) },
-        ...(params.deleteSource ? { queryParams: { deleteSource: 'true' } } : {}),
+        // NB: do NOT pass deleteSource here. Source-VM deletion is owned solely
+        // by the server-side watcher (crossClusterMigrate -> remote-migrate
+        // route -> watchMigrationAndCleanup). Triggering the task-route cleanup
+        // as well raced it into two destroy tasks (issue #556).
       })
     }
 
@@ -564,11 +570,11 @@ export function useVmActions({
     }
 
     if (errorCount === 0) {
-      toast.success(`${description} - ${successCount} VMs`)
+      toast.success(t('vmActions.bulkSuccess', { description, count: successCount }))
     } else if (successCount > 0) {
-      toast.warning(`${description} - ${successCount} OK, ${errorCount} erreurs`)
+      toast.warning(t('vmActions.bulkPartial', { description, success: successCount, errors: errorCount }))
     } else {
-      toast.error(`${description} - ${errorCount} erreurs`)
+      toast.error(t('vmActions.bulkFailed', { description, errors: errorCount }))
     }
 
     if (onRefresh) {

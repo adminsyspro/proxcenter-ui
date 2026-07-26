@@ -488,18 +488,6 @@ return (
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* Header - Actions only */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-        <Tooltip title={t('common.refresh')}>
-          <IconButton onClick={loadStorages} disabled={loading}>
-            <i className='ri-refresh-line' />
-          </IconButton>
-        </Tooltip>
-        <Button variant='outlined' size='small' component={Link} href='/storage/ceph'>
-          {t('storage.ceph')}
-        </Button>
-      </Box>
-
       {/* KPIs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
         <KpiCard
@@ -797,50 +785,34 @@ return (
                 </Box>
               </Box>
 
-              {/* Détails par connexion - affiché si plusieurs connexions */}
-              {(selected.connectionDetails || []).length > 1 && (
+              {/* Détails par nœud - affiché si plusieurs nœuds */}
+              {(selected.nodeBreakdown || []).length > 1 && (
                 <>
                   <Divider />
                   <Box>
                     <Typography variant='overline' sx={{ opacity: 0.6 }}>
-                      {t('storage.detailsByConnection')} ({selected.connectionDetails.length})
+                      {t('storageOverview.nodes')} ({selected.nodeBreakdown.length})
                     </Typography>
                     <Stack spacing={1.5} sx={{ mt: 1.5 }}>
-                      {selected.connectionDetails
+                      {selected.nodeBreakdown
+                        .slice()
                         .sort((a, b) => (b.usedPct || 0) - (a.usedPct || 0))
-                        .map((conn, idx) => (
-                        <Box 
-                          key={conn.id || idx} 
-                          sx={{ 
-                            p: 1.5, 
-                            borderRadius: 1.5, 
-                            bgcolor: 'action.hover',
-                            border: '1px solid',
-                            borderColor: 'divider'
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                            <Box>
-                              <Typography variant='body2' sx={{ fontWeight: 700 }}>{conn.name}</Typography>
-                              <Typography variant='caption' sx={{ opacity: 0.6 }}>
-                                {conn.nodes?.length || 1} node{(conn.nodes?.length || 1) > 1 ? 's' : ''}
-                              </Typography>
+                        .map((n, idx) => (
+                          <Box
+                            key={n.node || idx}
+                            sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'action.hover', border: '1px solid', borderColor: 'divider' }}
+                          >
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                              <Typography variant='body2' sx={{ fontWeight: 700 }}>{n.node}</Typography>
+                              <Typography variant='body2' sx={{ fontWeight: 700 }}>{n.usedPct || 0}%</Typography>
                             </Box>
-                            <Typography variant='body2' sx={{ fontWeight: 700 }}>
-                              {conn.usedPct || 0}%
-                            </Typography>
+                            <CapacityBar usedPct={n.usedPct} size='small' />
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                              <Typography variant='caption' sx={{ opacity: 0.6 }}>{n.usedFormatted}</Typography>
+                              <Typography variant='caption' sx={{ opacity: 0.6 }}>{n.totalFormatted}</Typography>
+                            </Box>
                           </Box>
-                          <CapacityBar usedPct={conn.usedPct} size='small' />
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                            <Typography variant='caption' sx={{ opacity: 0.6 }}>
-                              {conn.usedFormatted}
-                            </Typography>
-                            <Typography variant='caption' sx={{ opacity: 0.6 }}>
-                              {conn.totalFormatted}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      ))}
+                        ))}
                     </Stack>
                   </Box>
                 </>
@@ -865,8 +837,7 @@ return (
                             onChange={e => {
                               const newConnId = e.target.value
                               setContentConnId(newConnId)
-                              const detail = selected.connectionDetails?.find(cd => cd.id === newConnId)
-                              setContentNode(detail?.nodes?.[0] || (selected.allNodes || [])[0] || null)
+                              setContentNode(selected.allNodes?.[0] || null)
                             }}
                             sx={{ fontSize: 12, height: 32, '& .MuiSelect-select': { py: 0.5 } }}
                           >

@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest"
-import { planPasses, buildThickZeroScript } from "./warm-pipeline"
+import { describe, it, expect, beforeEach } from "vitest"
+import { planPasses, buildThickZeroScript, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
+import { prismaTest, truncate } from "../../../__tests__/setup/prisma-test"
 
 const GiB = 1024 ** 3
 const MiB = 1024 * 1024
@@ -11,12 +12,12 @@ describe("planPasses", () => {
       [{ deltaBytes: 50 * GiB, throughputBytesPerSec: 100 * MiB },
        { deltaBytes: 30 * MiB, throughputBytesPerSec: 100 * MiB }],
       cfg)
-    expect(actions[actions.length - 1]).toEqual({ action: "cutover" })
+    expect(actions[actions.length - 1]).toEqual({ action: "cutover", projectedDowntimeSec: 50 })
   })
 
   it("cuts over immediately when the very first delta already fits the budget", () => {
     const actions = planPasses([{ deltaBytes: 10 * MiB, throughputBytesPerSec: 100 * MiB }], cfg)
-    expect(actions).toEqual([{ action: "cutover" }])
+    expect(actions).toEqual([{ action: "cutover", projectedDowntimeSec: 50 }])
   })
 
   it("escalates to an operator gate when max passes is reached without meeting the budget", () => {
@@ -74,5 +75,46 @@ describe("buildThickZeroScript", () => {
   it("escapes an embedded single quote in the device path", () => {
     const cmd = buildThickZeroScript("/dev/x'y")
     expect(cmd).toContain(`'/dev/x'\\''y'`)
+  })
+})
+
+describe("warm cutover signal", () => {
+  it("records and reads a cutover request per job", () => {
+    expect(__isCutoverRequestedForTest("job-x")).toBe(false)
+    requestWarmCutover("job-x")
+    expect(__isCutoverRequestedForTest("job-x")).toBe(true)
+    expect(__isCutoverRequestedForTest("job-y")).toBe(false)
+  })
+})
+
+describe("awaitOperatorCutover", () => {
+  // updateJob() runs through the tenant-scoped Prisma client, which verifies
+  // the row exists (and belongs to the tenant) before updating it — so the
+  // job row must be seeded first, same as runWarmMigration does in production.
+  beforeEach(() => truncate(["migration_jobs"]))
+
+  async function seedJob(id: string): Promise<void> {
+    await prismaTest.migrationJob.create({
+      data: {
+        id, tenantId: "default",
+        sourceConnectionId: "src", sourceVmId: "vm-1",
+        targetConnectionId: "tgt", targetNode: "pve1", targetStorage: "local-lvm",
+      },
+    })
+  }
+
+  it("resolves promptly once cutover is requested", async () => {
+    const jobId = "gate-1"
+    await seedJob(jobId)
+    const p = __awaitOperatorCutoverForTest(jobId, 2505, 300, 5, { pollMs: 5, timeoutMs: 10_000 })
+    requestWarmCutover(jobId)
+    await expect(p).resolves.toBeUndefined()
+  })
+
+  it("throws on the safety timeout", async () => {
+    await seedJob("gate-2")
+    await expect(
+      __awaitOperatorCutoverForTest("gate-2", 2505, 300, 5, { pollMs: 5, timeoutMs: 20 })
+    ).rejects.toThrow(/timed out/i)
   })
 })

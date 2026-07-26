@@ -5,6 +5,7 @@
 // their vDC assignments, and provides a filter function for cluster data.
 
 import { prisma } from '@/lib/db/prisma'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 // ---------------------------------------------------------------------------
@@ -293,7 +294,7 @@ export async function guardTenantStorageWrite(
   const conn = await getConnectionById(connId)
   try {
     const config = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storage)}`)
-    if (config?.shared === 1 || config?.shared === true) {
+    if (isSharedStorage({ shared: config?.shared, type: config?.type })) {
       return NextResponse.json(
         { error: 'Shared storages are not writable from a tenant' },
         { status: 403 }

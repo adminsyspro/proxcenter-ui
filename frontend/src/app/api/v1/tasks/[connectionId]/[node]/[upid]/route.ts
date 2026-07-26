@@ -10,33 +10,32 @@ import { assertVmid } from '@/lib/ssh/validate'
 export const runtime = 'nodejs'
 
 /**
- * Handle source-VM cleanup after a successful migration. Used after both
- * "exit OK" and "completed with warnings" task outcomes — the logic is
- * the same so it lives in one place to prevent the drift that bit us in
- * the KRAEMER cross-migration regression (2026-04-25).
+ * Release the source VM's migration lock after a successful migration. Used
+ * after both "exit OK" and "completed with warnings" task outcomes — the logic
+ * is the same so it lives in one place to prevent the drift that bit us in the
+ * KRAEMER cross-migration regression (2026-04-25).
  *
- * Three intentional behaviours:
+ * IMPORTANT: this handler must NEVER delete the source VM. Deletion (when the
+ * user requested it) is owned SOLELY by the server-side watcher
+ * (watchMigrationAndCleanup in cross-cluster-watcher.ts, fired by the
+ * remote-migrate route). Having this task-route path also issue the DELETE
+ * raced the watcher into two PVE destroy tasks, one of which failed with
+ * "Configuration file '.../qemu-server/<vmid>.conf' does not exist" (issue #556).
+ *
+ * Behaviours:
  *  - Intra-cluster qmigrate: PVE removes the source .conf automatically.
- *    Reading it returns 500 "Configuration file does not exist". We
- *    detect that and return silently — no spurious warnings, no delete
- *    attempt against a non-existent VM.
- *  - Cross-cluster migration with deleteSource=true: try to unlock via
- *    SSH, then DELETE the source through the PVE API.
- *  - Cross-cluster migration without deleteSource: only release the lock
- *    (the user wants to keep the source VM around).
- *
- * Returns `{ message }` where a non-null message overrides the caller's
- * default success message (used to surface "deleted" / "could not
- * delete" / "locked" outcomes to the UI).
+ *    Reading it returns 500 "Configuration file does not exist". We detect
+ *    that and return silently — no spurious warnings.
+ *  - Cross-cluster migration: best-effort release of the migrate lock via SSH,
+ *    idempotent with the watcher's own unlock.
  */
 async function handleSourceVmCleanupAfterMigration(args: {
   connection: PveConn
   connectionId: string
   node: string
   vmid: string
-  deleteSource: boolean
-}): Promise<{ message: string | null }> {
-  const { connection, connectionId, node, vmid, deleteSource } = args
+}): Promise<void> {
+  const { connection, connectionId, node, vmid } = args
   // vmid comes from the PVE task status `id`; re-derive it before it can reach
   // the `qm unlock ${vmid}` shell command below (defence-in-depth against a
   // crafted upstream task id).
@@ -45,7 +44,7 @@ async function handleSourceVmCleanupAfterMigration(args: {
     safeVmid = assertVmid(vmid)
   } catch {
     console.warn(`[task-api] skipping cleanup: invalid vmid ${JSON.stringify(vmid)}`)
-    return { message: null }
+    return
   }
   let vmConfig: any
   try {
@@ -56,13 +55,12 @@ async function handleSourceVmCleanupAfterMigration(args: {
   } catch (err: any) {
     if (isVmConfigNotFoundError(err)) {
       // Intra-cluster qmigrate already cleaned the source up.
-      return { message: null }
+      return
     }
     console.warn(`[task-api] Could not read source VM ${vmid} config:`, err?.message)
-    return { message: null }
+    return
   }
 
-  let unlocked = !vmConfig?.lock
   if (vmConfig?.lock) {
     try {
       const { executeSSH } = await import('@/lib/ssh/exec')
@@ -71,30 +69,12 @@ async function handleSourceVmCleanupAfterMigration(args: {
       const result = await executeSSH(connectionId, nodeIp, `qm unlock ${safeVmid}`)
       if (result.success) {
         console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after cross-cluster migration`)
-        unlocked = true
       } else {
         console.warn(`[task-api] SSH unlock failed for VM ${vmid}:`, result.error)
       }
     } catch (unlockErr: any) {
       console.warn(`[task-api] Could not auto-unlock VM ${vmid}:`, unlockErr?.message)
     }
-  }
-
-  if (!deleteSource) return { message: null }
-  if (!unlocked) {
-    return { message: 'Migration completed (source VM locked, cannot delete — configure SSH to enable auto-cleanup)' }
-  }
-  try {
-    await pveFetch(
-      connection,
-      `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}?purge=1&destroy-unreferenced-disks=1`,
-      { method: 'DELETE' }
-    )
-    console.log(`[task-api] Deleted source VM ${vmid} on ${node} after cross-cluster migration`)
-    return { message: 'Migration completed, source VM deleted' }
-  } catch (deleteErr: any) {
-    console.warn(`[task-api] Could not delete source VM ${vmid}:`, deleteErr?.message)
-    return { message: 'Migration completed (source VM could not be deleted, please remove manually)' }
   }
 }
 
@@ -559,9 +539,6 @@ export async function GET(
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied
 
-    const { searchParams } = new URL(req.url)
-    const deleteSource = searchParams.get('deleteSource') === 'true'
-
     const decodedUpid = decodeURIComponent(upid)
 
     const connection = await getConnectionById(connectionId)
@@ -625,10 +602,9 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
         const taskType = status?.type || ''
         const vmid = status?.id || ''
         if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
-          const cleanup = await handleSourceVmCleanupAfterMigration({
-            connection, connectionId, node, vmid, deleteSource,
+          await handleSourceVmCleanupAfterMigration({
+            connection, connectionId, node, vmid,
           })
-          if (cleanup.message) message = cleanup.message
         }
       } else if (exit.includes('received interrupt') || exit.includes('interrupted by user')) {
         message = 'Task stopped by user'
@@ -642,10 +618,9 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
           const taskType = status?.type || ''
           const vmid = status?.id || ''
           if (vmid && (taskType === 'qmigrate' || taskType.includes('migrate'))) {
-            const cleanup = await handleSourceVmCleanupAfterMigration({
-              connection, connectionId, node, vmid, deleteSource,
+            await handleSourceVmCleanupAfterMigration({
+              connection, connectionId, node, vmid,
             })
-            if (cleanup.message) message = cleanup.message
           }
         } else {
           message = `Failed: ${exit}`

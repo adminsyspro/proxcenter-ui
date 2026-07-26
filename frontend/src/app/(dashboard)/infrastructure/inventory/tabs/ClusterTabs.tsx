@@ -48,6 +48,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
 import { formatBytes } from '@/utils/format'
+import { useCopyToClipboard } from '@/lib/clipboard'
 import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
@@ -209,6 +210,7 @@ export default function ClusterTabs(props: any) {
   const { data: metricsData } = useDRSMetrics(drsEnabled)
   const { data: drsSettings } = useDRSSettings(drsEnabled)
   const { data: drsRecommendations, mutate: mutateRecs } = useDRSRecommendations(drsEnabled)
+  const joinInfoCopy = useCopyToClipboard()
   const [evaluating, setEvaluating] = useState(false)
   const [recsExpanded, setRecsExpanded] = useState(false)
   const [executingRecId, setExecutingRecId] = useState<string | null>(null)
@@ -4224,12 +4226,12 @@ export default function ClusterTabs(props: any) {
             <DialogActions>
               <Button
                 variant="contained"
-                startIcon={<i className="ri-file-copy-line" />}
+                startIcon={<i className={joinInfoCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} />}
                 onClick={() => {
-                  navigator.clipboard.writeText(clusterConfig?.joinInfo?.encoded || '')
+                  void joinInfoCopy.copy(clusterConfig?.joinInfo?.encoded || '')
                 }}
               >
-                {t('cluster.copyInformation')}
+                {joinInfoCopy.copied ? t('common.copied') : t('cluster.copyInformation')}
               </Button>
               <Button onClick={() => setJoinInfoDialogOpen(false)}>
                 {t('common.close')}

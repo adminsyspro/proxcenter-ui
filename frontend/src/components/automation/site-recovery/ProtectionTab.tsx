@@ -17,6 +17,7 @@ import EmptyState from '@/components/EmptyState'
 
 import type { ReplicationJob, ReplicationJobStatus, ReplicationJobLog } from '@/lib/orchestrator/site-recovery.types'
 import { scheduleToLabel } from './schedule/scheduleToLabel'
+import { copyToClipboard } from '@/lib/clipboard'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -521,12 +522,14 @@ export default function ProtectionTab({
     onSelectJob(null)
   }
 
-  const copyLogs = useCallback(() => {
+  const copyLogs = useCallback(async () => {
     if (!logs || logs.length === 0) return
     const text = logs.map(l => `[${new Date(l.created_at).toLocaleTimeString()}] [${l.level}] ${l.message}`).join('\n')
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    const ok = await copyToClipboard(text)
+    if (ok) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }, [logs])
 
   const formatRPO = (seconds: number) => {

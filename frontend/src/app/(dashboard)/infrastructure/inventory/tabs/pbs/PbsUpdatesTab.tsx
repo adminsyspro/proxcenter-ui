@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { copyToClipboard } from '@/lib/clipboard'
 import {
   Alert,
   Box,
@@ -494,13 +495,15 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
             <Tooltip title={t('inventory.pbsUpdatesUpgradeCopy')}>
               <IconButton
                 size="small"
-                onClick={() => {
-                  navigator.clipboard.writeText('apt update && apt dist-upgrade -y')
-                  setSnackbar({
-                    open: true,
-                    severity: 'success',
-                    message: t('inventory.pbsUpdatesUpgradeCopied'),
-                  })
+                onClick={async () => {
+                  const ok = await copyToClipboard('apt update && apt dist-upgrade -y')
+                  if (ok) {
+                    setSnackbar({
+                      open: true,
+                      severity: 'success',
+                      message: t('inventory.pbsUpdatesUpgradeCopied'),
+                    })
+                  }
                 }}
               >
                 <i className="ri-file-copy-line" style={{ fontSize: 16 }} />

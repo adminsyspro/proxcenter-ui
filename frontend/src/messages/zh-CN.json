@@ -93,7 +93,8 @@
     "node": "节点",
     "done": "完成",
     "tags": "标签",
-    "created": "已创建"
+    "created": "已创建",
+    "errorWithMessage": "错误：{error}"
   },
   "whatsNew": {
     "title": "最新动态"
@@ -114,7 +115,11 @@
     "contactSales": "需要帮助？",
     "nodeLimitExceeded": "节点限制已超出：{current}/{max} 个节点 — 只读模式已激活",
     "nodeLimitWarning": "节点限制",
-    "nodeLimitUpgrade": "升级您的许可证"
+    "nodeLimitUpgrade": "升级您的许可证",
+    "addonChip": "附加组件",
+    "optionRestricted": "需要附加组件",
+    "featureRequiresOption": "此功能需要\"{feature}\"附加组件许可证。",
+    "optionUpgradeDescription": "附加组件许可证叠加在您的 Enterprise 许可证之上。购买附加组件后，请在\"设置 > 许可证\"中上传新的许可证文件。"
   },
   "vms": {
     "disk": "磁盘",
@@ -559,6 +564,7 @@
     },
     "resolveConfirm": "解决 {count} 条告警？",
     "deleteConfirm": "删除 {count} 条告警？将被解决并移除。",
+    "acknowledgeSelected": "确认选中",
     "resolveSelected": "解决选中",
     "deleteSelected": "删除选中",
     "clearResolved": "清除已解决",
@@ -841,6 +847,10 @@
     "snapshotCreated": "快照创建成功",
     "snapshotDeleted": "快照删除成功",
     "snapshotRestored": "快照恢复成功",
+    "deleteAllSnapshots": "Delete all snapshots",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
+    "deletingSnapshots": "Deleting",
+    "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "进入维护模式",
     "exitMaintenance": "退出维护模式",
     "confirmEnterMaintenance": "您要将此节点设为维护模式吗？虚拟机将不再自动迁移到此节点。",
@@ -2020,6 +2030,13 @@
       "migrationToProxmox": "迁移到 Proxmox VE",
       "transferMetrics": "传输指标",
       "migrationLogs": "迁移日志",
+      "estimatedDowntime": "预计切换停机时间",
+      "estimatedDowntimeHint": "根据最近一次增量同步估算的最终切换期间 VM 离线时长。",
+      "awaitingCutover": "等待切换",
+      "cutoverNow": "立即切换",
+      "cutoverConfirmTitle": "立即切换？",
+      "cutoverConfirmBody": "源虚拟机将被关闭，并复制最后的变更。预计停机约 {mins} 分钟。是否继续？",
+      "cutoverNotConverging": "此次迁移未能自行收敛。您可以立即切换（接受上述停机时间），或取消并改用冷迁移。",
       "overallProgress": "总体进度",
       "transferSpeed": "传输速度",
       "disk": "磁盘",
@@ -2835,6 +2852,7 @@
     "licenseColRole": "角色",
     "licenseColId": "许可证 ID",
     "licenseColLicensedTo": "授权给",
+    "licenseColCapabilities": "功能",
     "licenseEditMapping": "编辑映射",
     "licenseEditMappingTitle": "编辑许可证映射",
     "licenseEditMappingHint": "选择此许可证覆盖的集群。已被其他许可证覆盖的集群将被禁用。",
@@ -2843,14 +2861,17 @@
     "licenseMappingFailed": "映射更新失败",
     "licenseConnCoveredByOther": "已被覆盖",
     "licenseColNodes": "节点（已用 / 最大）",
+    "licenseNodesNotApplicable": "不适用",
     "licenseColMapped": "映射到",
     "licenseColExpires": "到期时间",
     "licenseColStatus": "状态",
     "licenseRolePrimary": "主许可证",
     "licenseRoleImport": "导入",
+    "licenseRoleOption": "附加组件",
     "licenseUnmappedFloating": "浮动（池）",
     "licenseRemoveImport": "移除",
     "licenseRemoveConfirm": "移除此导入的许可证？其覆盖的节点将回退至主许可证配额。",
+    "licenseRemoveOptionConfirm": "移除此附加组件许可证？移除后 {feature} 功能将被禁用。",
     "licenseImportDialogTitle": "导入附加许可证",
     "licenseImportBlobLabel": "许可证密钥",
     "licenseImportBlobPlaceholder": "在此粘贴附加许可证密钥...",
@@ -4545,7 +4566,10 @@
     "resumeSuccess": "正在恢复 VM",
     "rebootSuccess": "正在重启 VM",
     "migrateSuccess": "迁移已开始",
-    "cloneSuccess": "克隆已开始"
+    "cloneSuccess": "克隆已开始",
+    "bulkSuccess": "{description} - {count} 个虚拟机",
+    "bulkPartial": "{description} - {success} 个成功，{errors} 个错误",
+    "bulkFailed": "{description} - {errors} 个错误"
   },
   "vmConfig": {
     "title": "VM 配置",
@@ -4612,7 +4636,9 @@
     "rawConfig": "原始配置",
     "advancedArgs": "附加 QEMU 参数",
     "advancedArgsWarning": "仅限高级用户手动修改。",
-    "qemuArgsHelper": "直接传递给 QEMU 的参数（危险）"
+    "qemuArgsHelper": "直接传递给 QEMU 的参数（危险）",
+    "totalVcpus": "共 {count} 个 vCPU",
+    "coresSocketsSummary": "{cores} 核心 × {sockets} 插槽"
   },
   "hardware": {
     "detach": "分离",
@@ -4772,7 +4798,8 @@
       "useIso": "使用 CD/DVD 光盘镜像文件（ISO）",
       "usePhysical": "使用物理 CD/DVD 驱动器",
       "noMedia": "不使用任何介质"
-    }
+    },
+    "loadNodesError": "无法加载节点列表"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",
@@ -6738,7 +6765,13 @@
     "portFilter": "端口",
     "noTimelineData": "此对端没有可用的时间线数据（需要 InfluxDB）",
     "compare": "对比",
-    "yesterday": "昨天"
+    "yesterday": "昨天",
+    "samplingRateInfo": "每 <strong>{rate}</strong> 个数据包采样 1 个",
+    "samplingVeryHigh": "⚠️ 非常精确但 CPU/网络负载高 — 仅建议用于调试",
+    "samplingHigh": "⚡ 高精度 — 适用于低于 1 Gbps 的网络",
+    "samplingBalanced": "✓ 精度/性能兼顾 — 适用于大多数场景",
+    "samplingLight": "✓ 轻量 — 适用于 10 Gbps 及以上网络",
+    "samplingVeryLight": "📉 非常轻量 — 可能会遗漏低流量的流"
   },
   "myVdc": {
     "title": "我的数据中心",
@@ -7098,5 +7131,12 @@
     "policyToggleLabel": "强制 super_admin 账户启用 2FA",
     "policyToggleHelp": "启用后,未启用 2FA 的 super_admin 用户在下次登录时将被强制完成绑定。您必须先在自己的账户上启用 2FA,才能开启此策略。",
     "policyNeedOwn2fa": "在强制此策略之前,请先在您自己的账户上启用 2FA。"
+  },
+  "taskTracker": {
+    "completed": "{description} - 已完成",
+    "failed": "{description} - 失败：{error}",
+    "timeout": "{description} - 超时（任务可能仍在运行）",
+    "error": "{description} - 错误：{error}",
+    "unknownError": "未知错误"
   }
 }

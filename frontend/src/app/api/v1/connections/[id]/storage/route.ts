@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { isSharedStorage } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -59,8 +60,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       let storageType = config.type || 'unknown'
       
       // Déterminer si c'est un stockage partagé ou local
-      const isShared = config.shared === 1 || 
-                       ['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'].includes(storageType)
+      const isShared = isSharedStorage({ shared: config.shared, type: storageType })
 
       // Déterminer les contenus supportés
       const content = config.content ? String(config.content).split(',') : []

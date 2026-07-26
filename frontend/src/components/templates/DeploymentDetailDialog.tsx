@@ -23,6 +23,7 @@ import {
 } from '@mui/material'
 
 import { useTaskDetail } from '@/hooks/useTaskDetail'
+import { copyToClipboard } from '@/lib/clipboard'
 
 interface Deployment {
   id: string
@@ -133,10 +134,10 @@ export default function DeploymentDetailDialog({ open, deployment, onClose }: De
     const logsText = taskData.logs
       .map((l: any) => `${String(l.n).padStart(4, ' ')} ${l.t}`)
       .join('\n')
-    try {
-      await navigator.clipboard.writeText(logsText)
+    const ok = await copyToClipboard(logsText)
+    if (ok) {
       setSnackbar({ open: true, message: t('common.copied') })
-    } catch {
+    } else {
       setSnackbar({ open: true, message: t('common.error') })
     }
   }

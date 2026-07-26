@@ -93,7 +93,8 @@
     "node": "Nodo",
     "done": "Hecho",
     "tags": "Etiquetas",
-    "created": "Creado"
+    "created": "Creado",
+    "errorWithMessage": "Error: {error}"
   },
   "whatsNew": {
     "title": "Novedades"
@@ -114,7 +115,11 @@
     "contactSales": "¿Necesitas ayuda?",
     "nodeLimitExceeded": "Nodo límite exceeded: {current}/{max} nodos — read-only modo activo",
     "nodeLimitWarning": "LÍMITE DE NODOS",
-    "nodeLimitUpgrade": "Actualiza tu licencia"
+    "nodeLimitUpgrade": "Actualiza tu licencia",
+    "addonChip": "Complemento",
+    "optionRestricted": "Se requiere un complemento",
+    "featureRequiresOption": "Esta función requiere la licencia del complemento «{feature}».",
+    "optionUpgradeDescription": "Las licencias de complemento se suman a su licencia Enterprise. Compre el complemento y luego cargue el nuevo archivo de licencia en Configuración > Licencia."
   },
   "vms": {
     "disk": "Disco",
@@ -587,6 +592,7 @@
     },
     "resolveConfirm": "Resolve {count} alerta(s)?",
     "deleteConfirm": "¿Eliminar {count} alerta(s)? Esto las resolverá y eliminará.",
+    "acknowledgeSelected": "Reconocer seleccionadas",
     "resolveSelected": "Resolver seleccionadas",
     "deleteSelected": "Eliminar seleccionadas",
     "clearResolved": "Limpiar resueltas",
@@ -871,6 +877,10 @@
     "snapshotCreated": "Snapshot creado correctamente",
     "snapshotDeleted": "Snapshot eliminado correctamente",
     "snapshotRestored": "Snapshot restaurado correctamente",
+    "deleteAllSnapshots": "Delete all snapshots",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
+    "deletingSnapshots": "Deleting",
+    "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "Entrar en mantenimiento",
     "exitMaintenance": "Salir de mantenimiento",
     "confirmEnterMaintenance": "¿Quieres poner este nodo en modo mantenimiento? Las VMs dejarán de migrarse automáticamente a este nodo.",
@@ -2051,6 +2061,13 @@
       "migrationToProxmox": "Migración a Proxmox VE",
       "transferMetrics": "Métricas de transferencia",
       "migrationLogs": "Logs de migración",
+      "estimatedDowntime": "Downtime de conmutación estimado",
+      "estimatedDowntimeHint": "Tiempo que la VM estará fuera de línea durante la conmutación final, según la última pasada delta.",
+      "awaitingCutover": "Esperando conmutación",
+      "cutoverNow": "Conmutar ahora",
+      "cutoverConfirmTitle": "¿Conmutar ahora?",
+      "cutoverConfirmBody": "La VM de origen se apagará y se copiarán los últimos cambios. Prevea unos {mins} min de inactividad. ¿Continuar?",
+      "cutoverNotConverging": "Esta migración no converge por sí sola. Puede conmutar ahora (aceptando el downtime indicado arriba) o cancelar y usar una migración en frío.",
       "overallProgress": "Progreso general",
       "transferSpeed": "Velocidad de transferencia",
       "disk": "Disco",
@@ -2866,6 +2883,7 @@
     "licenseColRole": "Rol",
     "licenseColId": "ID de licencia",
     "licenseColLicensedTo": "Licenciado a",
+    "licenseColCapabilities": "Capacidades",
     "licenseEditMapping": "Editar asignación",
     "licenseEditMappingTitle": "Editar licencia mapping",
     "licenseEditMappingHint": "Selecciona los clusters que cubre esta licencia. Un cluster ya cubierto por otra licencia aparece deshabilitado.",
@@ -2874,14 +2892,17 @@
     "licenseMappingFailed": "Error al actualizar la asignación",
     "licenseConnCoveredByOther": "ya cubierto",
     "licenseColNodes": "Nodos (usados / máx.)",
+    "licenseNodesNotApplicable": "n/d",
     "licenseColMapped": "Asignado a",
     "licenseColExpires": "Caduca",
     "licenseColStatus": "Estado",
     "licenseRolePrimary": "Principal",
     "licenseRoleImport": "Importar",
+    "licenseRoleOption": "Complemento",
     "licenseUnmappedFloating": "Flotante (pool)",
     "licenseRemoveImport": "Eliminar",
     "licenseRemoveConfirm": "¿Eliminar esta licencia importada? Los nodos que cubre volverán a descontar de la cuota principal.",
+    "licenseRemoveOptionConfirm": "¿Quitar esta licencia de complemento? La capacidad {feature} se desactivará tras su eliminación.",
     "licenseImportDialogTitle": "Importar an additional licencia",
     "licenseImportBlobLabel": "Clave de licencia",
     "licenseImportBlobPlaceholder": "Paste el additional licencia clave here...",
@@ -4584,7 +4605,10 @@
     "resumeSuccess": "Reanudando VM",
     "rebootSuccess": "Reiniciando VM",
     "migrateSuccess": "Migración iniciada",
-    "cloneSuccess": "Clonación iniciada"
+    "cloneSuccess": "Clonación iniciada",
+    "bulkSuccess": "{description} - {count} VMs",
+    "bulkPartial": "{description} - {success} OK, {errors} errores",
+    "bulkFailed": "{description} - {errors} errores"
   },
   "vmConfig": {
     "title": "Configuración de VM",
@@ -4651,7 +4675,9 @@
     "rawConfig": "Configuración sin procesar",
     "advancedArgs": "Argumentos QEMU adicionales",
     "advancedArgsWarning": "Modificación manual solo para usuarios avanzados.",
-    "qemuArgsHelper": "Argumentos pasados directamente a QEMU (peligroso)"
+    "qemuArgsHelper": "Argumentos pasados directamente a QEMU (peligroso)",
+    "totalVcpus": "Total: {count} vCPUs",
+    "coresSocketsSummary": "{cores} núcleos × {sockets} socket(s)"
   },
   "hardware": {
     "detach": "Desconectar",
@@ -4814,7 +4840,8 @@
       "useIso": "Usar archivo de imagen de disco CD/DVD (ISO)",
       "usePhysical": "Usar unidad física de CD/DVD",
       "noMedia": "No usar ningún medio"
-    }
+    },
+    "loadNodesError": "No se pudo cargar la lista de nodos"
   },
   "ldap": {
     "description": "Configure la autenticación LDAP/Active Directory para permitir que los usuarios inicien sesión con sus credenciales corporativas.",
@@ -6810,7 +6837,13 @@
     "portFilter": "Puerto",
     "noTimelineData": "No hay datos de línea temporal disponibles para este par (requiere InfluxDB)",
     "compare": "Comparar",
-    "yesterday": "Ayer"
+    "yesterday": "Ayer",
+    "samplingRateInfo": "1 de cada <strong>{rate}</strong> paquetes será muestreado",
+    "samplingVeryHigh": "⚠️ Muy preciso pero con gran carga de CPU/red — recomendado solo para depuración",
+    "samplingHigh": "⚡ Alta precisión — adecuado para redes de menos de 1 Gbps",
+    "samplingBalanced": "✓ Buen equilibrio precisión/rendimiento — recomendado para la mayoría de los casos",
+    "samplingLight": "✓ Ligero — adecuado para redes de 10 Gbps o más",
+    "samplingVeryLight": "📉 Muy ligero — puede pasar por alto flujos de bajo volumen"
   },
   "vdc": {
     "title": "Datacenters virtuales",
@@ -7238,5 +7271,12 @@
     "policyToggleLabel": "Requerir 2FA para cuentas super_admin",
     "policyToggleHelp": "Una vez habilitado, los usuarios super_admin sin 2FA estarán obligados a registrarse en su próximo login. Debes tener ya 2FA habilitado en tu propia cuenta para activarlo.",
     "policyNeedOwn2fa": "Habilita 2FA en tu propia cuenta antes de aplicar esta política."
+  },
+  "taskTracker": {
+    "completed": "{description} - Completado",
+    "failed": "{description} - Error: {error}",
+    "timeout": "{description} - Tiempo de espera agotado (la tarea puede seguir en curso)",
+    "error": "{description} - Error: {error}",
+    "unknownError": "Error desconocido"
   }
 }

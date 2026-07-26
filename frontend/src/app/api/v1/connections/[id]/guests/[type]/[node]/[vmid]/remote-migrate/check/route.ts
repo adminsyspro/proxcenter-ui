@@ -93,6 +93,28 @@ export async function POST(
       // HA check failed, continue anyway
     }
 
+    // 2b. Vérifier les snapshots — bloquant pour remote-migrate (qm remote-migrate
+    // ne supporte pas les VMs avec snapshots).
+    try {
+      const snaps = await pveFetch<any[]>(sourceConn, `/nodes/${node}/qemu/${vmid}/snapshot`)
+      const realSnaps = (snaps || []).filter((s: any) => s?.name !== 'current')
+      if (realSnaps.length > 0) {
+        issues.push({
+          type: 'error',
+          code: 'SNAPSHOTS_PRESENT',
+          message: `VM has ${realSnaps.length} snapshot(s) that must be removed before cross-cluster migration`,
+          details: "Cross-cluster migration does not support VMs with snapshots. Delete them from the VM's Snapshots tab then retry the migration.",
+        })
+      }
+    } catch (e: any) {
+      issues.push({
+        type: 'warning',
+        code: 'SNAPSHOTS_CHECK_FAILED',
+        message: 'Could not verify snapshots on the source VM',
+        details: e?.message || String(e),
+      })
+    }
+
     // 3. Extraire les infos réseau de la VM source
     const vmNetworks: { id: string; bridge: string; mtu?: number }[] = []
     for (const [key, value] of Object.entries(vmConfig)) {

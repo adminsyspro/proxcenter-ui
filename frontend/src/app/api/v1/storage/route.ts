@@ -5,7 +5,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { formatBytes } from "@/utils/format"
+import { aggregateStorage } from "@/lib/proxmox/storage"
 
 export const runtime = "nodejs"
 
@@ -65,32 +65,19 @@ export async function GET(req: Request) {
           // Mapper les storages
           for (const r of storageResources) {
             const config = configMap.get(r.storage) || {}
-            const used = Number(r.disk || 0)
-            const total = Number(r.maxdisk || 0)
-            const usedPct = total > 0 ? Math.round((used / total) * 100 * 10) / 10 : 0
-
-            let storageType = config.type || 'unknown'
-
-            const isShared = config.shared === 1 || 
-                           ['cephfs', 'rbd', 'nfs', 'cifs', 'glusterfs', 'iscsi', 'iscsidirect', 'pbs'].includes(storageType)
-
-            const content = config.content ? String(config.content).split(',') : []
 
             allStorages.push({
-              storage: r.storage,
+              connId: conn.id,
+              connName: conn.name,
               node: r.node,
-              type: storageType,
-              status: r.status || (r.disk !== undefined ? 'available' : 'unknown'),
+              storage: r.storage,
+              type: config.type || 'unknown',
+              shared: config.shared === 1 || config.shared === true,
+              used: Number(r.disk || 0),
+              total: Number(r.maxdisk || 0),
+              content: config.content ? String(config.content).split(',') : [],
               enabled: config.disable !== 1,
-              shared: isShared,
-              content: content,
-              used,
-              total,
-              usedFormatted: formatBytes(used),
-              totalFormatted: formatBytes(total),
-              usedPct,
-              free: total - used,
-              freeFormatted: formatBytes(total - used),
+              status: r.status || (r.disk !== undefined ? 'available' : 'unknown'),
               path: config.path || null,
               server: config.server || null,
               export: config.export || null,
@@ -98,8 +85,6 @@ export async function GET(req: Request) {
               monhost: config.monhost || null,
               fsName: config['fs-name'] || null,
               datastore: config.datastore || null,
-              connId: conn.id,
-              connectionName: conn.name,
             })
           }
         } catch (e) {
@@ -108,111 +93,16 @@ export async function GET(req: Request) {
       })
     )
 
-    // Dédupliquer et agréger les storages
-    const deduplicatedMap = new Map<string, any>()
-
-    for (const s of allStorages) {
-      // Ceph RBD : ne pas dédupliquer entre connexions (pools différents)
-      if (s.type === 'rbd') {
-        const key = `${s.connId}:${s.storage}`
-
-        if (!deduplicatedMap.has(key)) {
-          deduplicatedMap.set(key, {
-            ...s,
-            id: key,
-            connections: [{ id: s.connId, name: s.connectionName }],
-            allNodes: [s.node],
-            connectionDetails: [{
-              id: s.connId,
-              name: s.connectionName,
-              nodes: [s.node],
-              used: s.used,
-              total: s.total,
-              usedPct: s.usedPct,
-              usedFormatted: s.usedFormatted,
-              totalFormatted: s.totalFormatted,
-            }]
-          })
-        } else {
-          const existing = deduplicatedMap.get(key)
-
-          if (!existing.allNodes.includes(s.node)) {
-            existing.allNodes.push(s.node)
-          }
-        }
-      } else {
-        // Tous les autres stockages : dédupliquer par nom
-        const key = s.storage
-
-        if (!deduplicatedMap.has(key)) {
-          deduplicatedMap.set(key, {
-            ...s,
-            id: key,
-            connections: [{ id: s.connId, name: s.connectionName }],
-            allNodes: [s.node],
-            connectionDetails: [{
-              id: s.connId,
-              name: s.connectionName,
-              nodes: [s.node],
-              used: s.used,
-              total: s.total,
-              usedPct: s.usedPct,
-              usedFormatted: s.usedFormatted,
-              totalFormatted: s.totalFormatted,
-            }]
-          })
-        } else {
-          const existing = deduplicatedMap.get(key)
-          
-          // Ajouter les nodes
-          if (!existing.allNodes.includes(s.node)) {
-            existing.allNodes.push(s.node)
-          }
-          
-          // Ajouter la connexion si nouvelle
-          if (!existing.connections.find((c: any) => c.id === s.connId)) {
-            existing.connections.push({ id: s.connId, name: s.connectionName })
-            existing.connectionDetails.push({
-              id: s.connId,
-              name: s.connectionName,
-              nodes: [s.node],
-              used: s.used,
-              total: s.total,
-              usedPct: s.usedPct,
-              usedFormatted: s.usedFormatted,
-              totalFormatted: s.totalFormatted,
-            })
-          } else {
-            // Même connexion, ajouter le node aux détails
-            const connDetail = existing.connectionDetails.find((c: any) => c.id === s.connId)
-
-            if (connDetail && !connDetail.nodes.includes(s.node)) {
-              connDetail.nodes.push(s.node)
-            }
-          }
-
-          // Mettre à jour les totaux (prendre le max pour les stockages partagés)
-          if (s.total > existing.total) {
-            existing.total = s.total
-            existing.totalFormatted = s.totalFormatted
-          }
-
-          if (s.used > existing.used) {
-            existing.used = s.used
-            existing.usedFormatted = s.usedFormatted
-            existing.usedPct = s.usedPct
-          }
-        }
-      }
-    }
-
-    const result = Array.from(deduplicatedMap.values())
+    // Agréger les storages: jamais fusionner entre clusters (issue #569);
+    // au sein d'un cluster, sommer par node pour les storages locaux et
+    // collapser au pool pour les storages partagés (aggregateStorage).
+    const result = aggregateStorage(allStorages)
 
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {
       if (a.shared !== b.shared) return a.shared ? -1 : 1
-      
-return b.usedPct - a.usedPct
+
+      return b.usedPct - a.usedPct
     })
 
     // Calculer les stats globales

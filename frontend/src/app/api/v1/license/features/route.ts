@@ -9,6 +9,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // Default community features when orchestrator is unavailable
 const DEFAULT_COMMUNITY_FEATURES = {
+  edition: 'community',
   features: [
     { id: 'dashboard', name: 'Dashboard', enabled: true },
     { id: 'inventory', name: 'Inventory', enabled: true },
@@ -30,7 +31,8 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'notifications', name: 'Notifications', enabled: false },
     { id: 'cve_scanner', name: 'CVE Scanner', enabled: false },
     { id: 'white_label', name: 'White Label', enabled: false },
-  ]
+  ],
+  options: [],
 }
 
 export async function GET() {

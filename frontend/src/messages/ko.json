@@ -93,7 +93,8 @@
     "node": "노드",
     "done": "완료",
     "tags": "태그",
-    "created": "생성됨"
+    "created": "생성됨",
+    "errorWithMessage": "오류: {error}"
   },
   "whatsNew": {
     "title": "새로운 기능"
@@ -114,7 +115,11 @@
     "contactSales": "도움이 필요하신가요?",
     "nodeLimitExceeded": "노드 제한 초과: {current}/{max} 노드 — 읽기 전용 모드 활성화됨",
     "nodeLimitWarning": "노드 제한",
-    "nodeLimitUpgrade": "라이선스 업그레이드"
+    "nodeLimitUpgrade": "라이선스 업그레이드",
+    "addonChip": "애드온",
+    "optionRestricted": "애드온 필요",
+    "featureRequiresOption": "이 기능을 사용하려면 \"{feature}\" 애드온 라이선스가 필요합니다.",
+    "optionUpgradeDescription": "애드온 라이선스는 Enterprise 라이선스에 추가됩니다. 애드온을 구매한 후 설정 > 라이선스에서 새 라이선스 파일을 업로드하세요."
   },
   "vms": {
     "disk": "디스크",
@@ -587,6 +592,7 @@
     },
     "resolveConfirm": "알림 {count}건을 해결 처리하시겠습니까?",
     "deleteConfirm": "알림 {count}건을 삭제하시겠습니까? 해결 처리 후 제거됩니다.",
+    "acknowledgeSelected": "선택 항목 확인 처리",
     "resolveSelected": "선택 항목 해결",
     "deleteSelected": "선택 항목 삭제",
     "clearResolved": "해결된 알림 지우기",
@@ -871,6 +877,10 @@
     "snapshotCreated": "스냅샷이 성공적으로 생성되었습니다",
     "snapshotDeleted": "스냅샷이 성공적으로 삭제되었습니다",
     "snapshotRestored": "스냅샷이 성공적으로 복원되었습니다",
+    "deleteAllSnapshots": "Delete all snapshots",
+    "deleteAllSnapshotsConfirm": "This will permanently delete all snapshots of {name}!",
+    "deletingSnapshots": "Deleting",
+    "snapshotsAllDeleted": "All snapshots deleted",
     "enterMaintenance": "유지 관리 모드 시작",
     "exitMaintenance": "유지 관리 모드 종료",
     "confirmEnterMaintenance": "이 노드를 유지 관리 모드로 전환하시겠습니까? VM이 더 이상 이 노드로 자동 마이그레이션되지 않습니다.",
@@ -2051,6 +2061,13 @@
       "migrationToProxmox": "Proxmox VE로 마이그레이션",
       "transferMetrics": "전송 지표",
       "migrationLogs": "마이그레이션 로그",
+      "estimatedDowntime": "예상 전환 다운타임",
+      "estimatedDowntimeHint": "마지막 델타 패스를 기준으로, 최종 전환 중 VM이 오프라인 상태가 되는 시간입니다.",
+      "awaitingCutover": "전환 대기 중",
+      "cutoverNow": "지금 전환",
+      "cutoverConfirmTitle": "지금 전환하시겠습니까?",
+      "cutoverConfirmBody": "소스 VM이 종료되고 마지막 변경 사항이 복사됩니다. 약 {mins}분의 다운타임이 예상됩니다. 계속하시겠습니까?",
+      "cutoverNotConverging": "이 마이그레이션은 자체적으로 수렴하지 않습니다. 위의 다운타임을 감수하고 지금 전환하거나, 취소하고 콜드 마이그레이션을 사용할 수 있습니다.",
       "overallProgress": "전체 진행률",
       "transferSpeed": "전송 속도",
       "disk": "디스크",
@@ -2866,6 +2883,7 @@
     "licenseColRole": "역할",
     "licenseColId": "라이선스 ID",
     "licenseColLicensedTo": "라이선스 대상",
+    "licenseColCapabilities": "기능",
     "licenseEditMapping": "매핑 편집",
     "licenseEditMappingTitle": "라이선스 매핑 편집",
     "licenseEditMappingHint": "이 라이선스가 적용될 클러스터를 선택하세요. 다른 라이선스가 이미 적용 중인 클러스터는 비활성화되어 있습니다.",
@@ -2874,14 +2892,17 @@
     "licenseMappingFailed": "매핑 업데이트 실패",
     "licenseConnCoveredByOther": "이미 적용됨",
     "licenseColNodes": "노드 (사용 / 최대)",
+    "licenseNodesNotApplicable": "해당 없음",
     "licenseColMapped": "매핑 대상",
     "licenseColExpires": "만료",
     "licenseColStatus": "상태",
     "licenseRolePrimary": "기본",
     "licenseRoleImport": "가져옴",
+    "licenseRoleOption": "애드온",
     "licenseUnmappedFloating": "유동 (풀)",
     "licenseRemoveImport": "제거",
     "licenseRemoveConfirm": "가져온 이 라이선스를 제거하시겠습니까? 해당 라이선스가 적용되던 노드는 기본 할당량으로 복귀합니다.",
+    "licenseRemoveOptionConfirm": "이 애드온 라이선스를 제거하시겠습니까? 제거하면 {feature} 기능이 비활성화됩니다.",
     "licenseImportDialogTitle": "추가 라이선스 가져오기",
     "licenseImportBlobLabel": "라이선스 키",
     "licenseImportBlobPlaceholder": "여기에 추가 라이선스 키를 붙여넣으세요...",
@@ -4584,7 +4605,10 @@
     "resumeSuccess": "VM 재개 중",
     "rebootSuccess": "VM 재부팅 중",
     "migrateSuccess": "마이그레이션이 시작되었습니다",
-    "cloneSuccess": "복제가 시작되었습니다"
+    "cloneSuccess": "복제가 시작되었습니다",
+    "bulkSuccess": "{description} - VM {count}개",
+    "bulkPartial": "{description} - {success}개 성공, {errors}개 오류",
+    "bulkFailed": "{description} - {errors}개 오류"
   },
   "vmConfig": {
     "title": "VM 구성",
@@ -4651,7 +4675,9 @@
     "rawConfig": "원시 구성",
     "advancedArgs": "추가 QEMU 인수",
     "advancedArgsWarning": "고급 사용자 전용 수동 수정입니다.",
-    "qemuArgsHelper": "QEMU에 직접 전달되는 인수 (위험)"
+    "qemuArgsHelper": "QEMU에 직접 전달되는 인수 (위험)",
+    "totalVcpus": "총 {count} vCPU",
+    "coresSocketsSummary": "{cores} 코어 × {sockets} 소켓"
   },
   "hardware": {
     "detach": "분리",
@@ -4814,7 +4840,8 @@
       "useIso": "CD/DVD 디스크 이미지 파일(ISO) 사용",
       "usePhysical": "물리 CD/DVD 드라이브 사용",
       "noMedia": "미디어 사용 안 함"
-    }
+    },
+    "loadNodesError": "노드 목록을 불러올 수 없습니다"
   },
   "ldap": {
     "description": "사용자가 회사 자격 증명으로 로그인할 수 있도록 LDAP/Active Directory 인증을 구성합니다.",
@@ -6810,7 +6837,13 @@
     "portFilter": "포트",
     "noTimelineData": "이 통신 쌍에 대한 타임라인 데이터가 없습니다 (InfluxDB 필요)",
     "compare": "비교",
-    "yesterday": "어제"
+    "yesterday": "어제",
+    "samplingRateInfo": "<strong>{rate}</strong>개 패킷 중 1개가 샘플링됩니다",
+    "samplingVeryHigh": "⚠️ 매우 정밀하지만 CPU/네트워크 부하가 큼 — 디버깅 전용 권장",
+    "samplingHigh": "⚡ 높은 정밀도 — 1 Gbps 미만 네트워크에 적합",
+    "samplingBalanced": "✓ 정밀도와 성능의 균형 — 대부분의 경우 권장",
+    "samplingLight": "✓ 가벼움 — 10 Gbps 이상 네트워크에 적합",
+    "samplingVeryLight": "📉 매우 가벼움 — 소량 플로우를 놓칠 수 있음"
   },
   "vdc": {
     "title": "가상 데이터센터",
@@ -7238,5 +7271,12 @@
     "policyToggleLabel": "super_admin 계정에 2FA 필수 적용",
     "policyToggleHelp": "활성화하면 2FA가 없는 super_admin 사용자는 다음 로그인 시 강제로 등록해야 합니다. 이 옵션을 켜려면 먼저 본인 계정에 2FA가 활성화되어 있어야 합니다.",
     "policyNeedOwn2fa": "이 정책을 적용하기 전에 본인 계정에서 2FA를 활성화하세요."
+  },
+  "taskTracker": {
+    "completed": "{description} - 완료됨",
+    "failed": "{description} - 실패: {error}",
+    "timeout": "{description} - 시간 초과 (작업이 아직 실행 중일 수 있음)",
+    "error": "{description} - 오류: {error}",
+    "unknownError": "알 수 없는 오류"
   }
 }

@@ -643,10 +643,10 @@ return
                   <i className="ri-cpu-line" style={{ fontSize: 24, opacity: 0.7 }} />
                   <Box>
                     <Typography variant="body2" fontWeight={600}>
-                      Total: {(config.cores || 1) * (config.sockets || 1)} vCPUs
+                      {t('vmConfig.totalVcpus', { count: (config.cores || 1) * (config.sockets || 1) })}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {config.cores || 1} cœurs × {config.sockets || 1} socket(s)
+                      {t('vmConfig.coresSocketsSummary', { cores: config.cores || 1, sockets: config.sockets || 1 })}
                     </Typography>
                   </Box>
                 </Box>

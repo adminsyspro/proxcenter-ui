@@ -4,6 +4,9 @@ import { Box, LinearProgress } from '@mui/material'
 
 import { useHaConfig } from './useHaConfig'
 
+import FeatureGuard from '@/components/guards/FeatureGuard'
+import { Features } from '@/lib/license/features'
+
 import dynamic from 'next/dynamic'
 
 const HaDeployWizard = dynamic(() => import('./HaDeployWizard'), {
@@ -19,13 +22,13 @@ const HaClusterDashboard = dynamic(() => import('./HaClusterDashboard'), {
 export default function HaTab() {
   const { data: config, isLoading, mutate } = useHaConfig()
 
-  if (isLoading) {
-    return <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
-  }
-
-  if (config?.enabled || config?.deploymentState === 'deployed') {
-    return <HaClusterDashboard />
-  }
-
-  return <HaDeployWizard config={config} onDeployed={() => mutate()} />
+  return (
+    <FeatureGuard feature={Features.HA} featureName='ProxCenter HA'>
+      {isLoading
+        ? <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+        : config?.enabled || config?.deploymentState === 'deployed'
+          ? <HaClusterDashboard />
+          : <HaDeployWizard config={config} onDeployed={() => mutate()} />}
+    </FeatureGuard>
+  )
 }

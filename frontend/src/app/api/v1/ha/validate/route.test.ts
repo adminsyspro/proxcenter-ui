@@ -8,7 +8,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
-  requireEnterprise: vi.fn().mockResolvedValue(null),
+  requireFeature: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('@/lib/orchestrator/headers', () => ({

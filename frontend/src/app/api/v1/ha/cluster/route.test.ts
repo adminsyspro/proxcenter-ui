@@ -2,13 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
+const checkPermissionMock = vi.fn().mockResolvedValue(null)
+const requireFeatureMock = vi.fn().mockResolvedValue(null)
+
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: vi.fn().mockResolvedValue(null),
+  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
 
+// cluster/route.ts intentionally does not import the license guard (spec v5
+// D2: status stays readable when the option expired). Kept mocked here so
+// the "not called" assertion below still fails loudly if a guard is ever
+// re-added.
 vi.mock('@/lib/auth/requireEnterprise', () => ({
-  requireEnterprise: vi.fn().mockResolvedValue(null),
+  requireFeature: requireFeatureMock,
 }))
 
 vi.mock('@/lib/orchestrator/headers', () => ({
@@ -18,7 +25,11 @@ vi.mock('@/lib/orchestrator/headers', () => ({
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  checkPermissionMock.mockResolvedValue(null)
+  requireFeatureMock.mockResolvedValue(null)
+})
 
 describe('GET /api/v1/ha/cluster', () => {
   it('returns cluster status', async () => {
@@ -59,5 +70,19 @@ describe('GET /api/v1/ha/cluster', () => {
     const res = await callRoute(GET as any)
 
     expect(res.status).toBe(503)
+  })
+
+  it('does not require the control_plane_ha license (status stays readable when expired)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    })
+
+    const { GET } = await import('./route')
+    await callRoute(GET as any)
+
+    expect(requireFeatureMock).not.toHaveBeenCalled()
+    expect(checkPermissionMock).toHaveBeenCalled()
   })
 })

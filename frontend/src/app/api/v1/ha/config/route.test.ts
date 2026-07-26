@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+const requireFeatureMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -10,7 +11,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
-  requireEnterprise: vi.fn().mockResolvedValue(null),
+  requireFeature: requireFeatureMock,
 }))
 
 vi.mock('@/lib/orchestrator/headers', () => ({
@@ -23,6 +24,7 @@ vi.stubGlobal('fetch', fetchMock)
 beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
+  requireFeatureMock.mockResolvedValue(null)
 })
 
 describe('GET /api/v1/ha/config', () => {
@@ -69,6 +71,20 @@ describe('GET /api/v1/ha/config', () => {
     const res = await callRoute(GET as any)
 
     expect(res.status).toBe(503)
+  })
+
+  it('does not require the control_plane_ha license (status stays readable when expired)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    })
+
+    const { GET } = await import('./route')
+    await callRoute(GET as any)
+
+    expect(requireFeatureMock).not.toHaveBeenCalled()
+    expect(checkPermissionMock).toHaveBeenCalled()
   })
 })
 

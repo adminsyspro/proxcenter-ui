@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
+const checkPermissionMock = vi.fn().mockResolvedValue(null)
+const requireFeatureMock = vi.fn().mockResolvedValue(null)
+
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: vi.fn().mockResolvedValue(null),
+  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
-  requireEnterprise: vi.fn().mockResolvedValue(null),
+  requireFeature: requireFeatureMock,
 }))
 
 vi.mock('@/lib/orchestrator/headers', () => ({
@@ -18,7 +21,11 @@ vi.mock('@/lib/orchestrator/headers', () => ({
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  checkPermissionMock.mockResolvedValue(null)
+  requireFeatureMock.mockResolvedValue(null)
+})
 
 describe('POST /api/v1/ha/deploy', () => {
   it('starts deployment', async () => {
@@ -56,6 +63,21 @@ describe('POST /api/v1/ha/deploy', () => {
     const res = await callRoute(POST as any, { method: 'POST' })
 
     expect(res.status).toBe(503)
+  })
+
+  it('returns 403 when control_plane_ha is not licensed, before RBAC is checked', async () => {
+    const { NextResponse } = await import('next/server')
+    requireFeatureMock.mockResolvedValue(
+      NextResponse.json({ error: 'Feature not licensed', feature: 'control_plane_ha' }, { status: 403 })
+    )
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as any, { method: 'POST' })
+    const data = await readJson(res)
+
+    expect(res.status).toBe(403)
+    expect(data).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
+    expect(checkPermissionMock).not.toHaveBeenCalled()
   })
 })
 

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 
 import { orchestratorHeaders } from '@/lib/orchestrator/headers'
-import { requireEnterprise } from '@/lib/auth/requireEnterprise'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
@@ -10,8 +9,8 @@ export const dynamic = 'force-dynamic'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 
 export async function GET() {
-  const guard = await requireEnterprise()
-  if (guard) return guard
+  // No license guard: cluster status stays readable when the option expired
+  // (spec v5 D2); the backend GET is equally ungated.
   const perm = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (perm) return perm
 

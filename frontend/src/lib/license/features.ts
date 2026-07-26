@@ -29,12 +29,12 @@ export const Features = {
   SFLOW_MONITORING: 'sflow_monitoring',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
-  AUTO_HA: 'auto_ha',
+  CONTROL_PLANE_HA: 'control_plane_ha',
 } as const
 
 export type FeatureId = (typeof Features)[keyof typeof Features]
 
-// Moved verbatim from LicenseContext.tsx (lines 34-85). AUTO_HA is in neither.
+// Moved verbatim from LicenseContext.tsx (lines 34-85). CONTROL_PLANE_HA is in neither.
 export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
   enterprise: [
     'drs',
@@ -125,9 +125,9 @@ export interface OptionInfo {
 // = one entry here + gating its UI (FeatureGuard), routes (requireFeature)
 // and engine. Unknown ids coming from the backend are displayed raw.
 export const OPTION_REGISTRY: Record<string, OptionInfo> = {
-  auto_ha: {
-    name: 'Auto-HA',
-    description: 'Automated HA orchestration: policies, auto-enrollment of new guests and synchronization across the cluster.',
+  control_plane_ha: {
+    name: 'ProxCenter HA',
+    description: 'High availability for the ProxCenter control plane itself: multi-node conversion, virtual IP failover and cluster health.',
     docsUrl: 'https://proxcenter.io/pricing',
   },
 }

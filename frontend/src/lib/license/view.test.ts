@@ -86,7 +86,7 @@ describe('option license rows', () => {
     state: 'active',
     connection_ids: [],
     type: 'option' as const,
-    capabilities: ['auto_ha'],
+    capabilities: ['control_plane_ha'],
   }
 
   it('maps an option import to role=option, never unlimited, with capabilities', () => {
@@ -95,7 +95,7 @@ describe('option license rows', () => {
     expect(opt.role).toBe('option')
     expect(opt.unlimited).toBe(false)
     expect(opt.maxNodes).toBe(0)
-    expect(opt.capabilities).toEqual(['auto_ha'])
+    expect(opt.capabilities).toEqual(['control_plane_ha'])
   })
 
   it('keeps a plain edition import (max_nodes > 0) as role=import', () => {

@@ -285,7 +285,7 @@ export const EXTRA_MOCKS: MockDataMap = {
         'cve_scanning',
         'change_tracking',
       ],
-      options: ['auto_ha'],
+      options: ['control_plane_ha'],
     },
   },
 
@@ -296,7 +296,7 @@ export const EXTRA_MOCKS: MockDataMap = {
     edition: 'enterprise',
     plan: 'enterprise',
     expiresAt: '2027-12-31T23:59:59.000Z',
-    options: ['auto_ha'],
+    options: ['control_plane_ha'],
   },
 
   // --- User / RBAC ---

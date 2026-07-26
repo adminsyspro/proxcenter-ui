@@ -10,7 +10,7 @@ const ENTERPRISE_WITH_OPTION = {
   expired: false,
   edition: 'enterprise',
   features: ['drs'],
-  options: ['auto_ha'],
+  options: ['control_plane_ha'],
 }
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -27,7 +27,7 @@ describe('LicenseContext', () => {
   it('grants an option capability through hasFeature', async () => {
     const { result } = renderHook(() => useLicense(), { wrapper })
     await waitFor(() => expect(result.current.isLicensed).toBe(true))
-    expect(result.current.hasFeature(Features.AUTO_HA)).toBe(true)
+    expect(result.current.hasFeature(Features.CONTROL_PLANE_HA)).toBe(true)
     expect(result.current.hasFeature(Features.DRS)).toBe(true)
   })
 
@@ -41,7 +41,7 @@ describe('LicenseContext', () => {
     })
 
     await waitFor(() => expect(result.current.isLicensed).toBe(false))
-    expect(result.current.hasFeature(Features.AUTO_HA)).toBe(false)
+    expect(result.current.hasFeature(Features.CONTROL_PLANE_HA)).toBe(false)
     expect(result.current.status?.edition).toBe('community')
   })
 

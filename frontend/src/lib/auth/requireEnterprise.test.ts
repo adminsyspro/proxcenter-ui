@@ -151,10 +151,10 @@ describe('P1: expired handling', () => {
 
   it('getServerLicense carries options through', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      licensed: true, expired: false, edition: 'enterprise', options: ['auto_ha'],
+      licensed: true, expired: false, edition: 'enterprise', options: ['control_plane_ha'],
     }))))
     const mod = await import('./requireEnterprise')
-    expect((await mod.getServerLicense()).options).toEqual(['auto_ha'])
+    expect((await mod.getServerLicense()).options).toEqual(['control_plane_ha'])
   })
 })
 
@@ -173,59 +173,59 @@ describe('requireFeature', () => {
     expect(res).toBeNull()
   })
 
-  it('grants auto_ha via options', async () => {
+  it('grants control_plane_ha via options', async () => {
     const mod = await import('./requireEnterprise')
     vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
-      enterprise: true, licensed: true, expired: false, edition: 'enterprise', features: [], options: ['auto_ha'],
+      enterprise: true, licensed: true, expired: false, edition: 'enterprise', features: [], options: ['control_plane_ha'],
     })
-    const res = await mod.requireFeature('auto_ha')
+    const res = await mod.requireFeature('control_plane_ha')
     expect(res).toBeNull()
   })
 
-  it('denies auto_ha without the option', async () => {
+  it('denies control_plane_ha without the option', async () => {
     const mod = await import('./requireEnterprise')
     vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
       enterprise: true, licensed: true, expired: false, edition: 'enterprise', features: [], options: [],
     })
-    const res = await mod.requireFeature('auto_ha')
+    const res = await mod.requireFeature('control_plane_ha')
     expect(res?.status).toBe(403)
-    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'auto_ha' })
+    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
   })
 
   it('denies options on community', async () => {
     const mod = await import('./requireEnterprise')
     vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
-      enterprise: false, licensed: true, expired: false, edition: 'community', features: [], options: ['auto_ha'],
+      enterprise: false, licensed: true, expired: false, edition: 'community', features: [], options: ['control_plane_ha'],
     })
-    const res = await mod.requireFeature('auto_ha')
+    const res = await mod.requireFeature('control_plane_ha')
     expect(res?.status).toBe(403)
-    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'auto_ha' })
+    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
   })
 
   it('denies when expired', async () => {
     const mod = await import('./requireEnterprise')
     vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
-      enterprise: false, licensed: true, expired: true, edition: 'enterprise', features: [], options: ['auto_ha'],
+      enterprise: false, licensed: true, expired: true, edition: 'enterprise', features: [], options: ['control_plane_ha'],
     })
-    const res = await mod.requireFeature('auto_ha')
+    const res = await mod.requireFeature('control_plane_ha')
     expect(res?.status).toBe(403)
-    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'auto_ha' })
+    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
   })
 
   it('fails closed when the orchestrator is unreachable (requireFeature and hasServerFeature)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
     const mod = await import('./requireEnterprise')
-    const res = await mod.requireFeature('auto_ha')
+    const res = await mod.requireFeature('control_plane_ha')
     expect(res?.status).toBe(403)
-    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'auto_ha' })
-    expect(await mod.hasServerFeature('auto_ha')).toBe(false)
+    expect(await res!.json()).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
+    expect(await mod.hasServerFeature('control_plane_ha')).toBe(false)
   })
 
   it('hasServerFeature mirrors requireFeature for a granted feature', async () => {
     const mod = await import('./requireEnterprise')
     vi.spyOn(mod._impl, 'getServerLicense').mockResolvedValue({
-      enterprise: true, licensed: true, expired: false, edition: 'enterprise', features: [], options: ['auto_ha'],
+      enterprise: true, licensed: true, expired: false, edition: 'enterprise', features: [], options: ['control_plane_ha'],
     })
-    expect(await mod.hasServerFeature('auto_ha')).toBe(true)
+    expect(await mod.hasServerFeature('control_plane_ha')).toBe(true)
   })
 })

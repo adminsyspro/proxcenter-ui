@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 
 export async function GET() {
-  // No license guard: cluster status stays readable when the option expired
+  // No license guard: HA config stays readable when the option expired
   // (spec v5 D2); the backend GET is equally ungated.
   const perm = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
   if (perm) return perm

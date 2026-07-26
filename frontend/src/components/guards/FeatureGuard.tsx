@@ -135,7 +135,7 @@ export default function FeatureGuard({
               onClick={() => router.push('/settings?tab=license')}
               startIcon={<i className='ri-vip-crown-line' />}
             >
-              {t('license.upgradeToPro')}
+              {t('license.viewLicenseOptions')}
             </Button>
           </Box>
 

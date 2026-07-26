@@ -119,7 +119,8 @@
     "addonChip": "애드온",
     "optionRestricted": "애드온 필요",
     "featureRequiresOption": "이 기능을 사용하려면 \"{feature}\" 애드온 라이선스가 필요합니다.",
-    "optionUpgradeDescription": "애드온 라이선스는 Enterprise 라이선스에 추가됩니다. 애드온을 구매한 후 설정 > 라이선스에서 새 라이선스 파일을 업로드하세요."
+    "optionUpgradeDescription": "애드온 라이선스는 Enterprise 라이선스에 추가됩니다. 애드온을 구매한 후 설정 > 라이선스에서 새 라이선스 파일을 업로드하세요.",
+    "viewLicenseOptions": "라이선스 옵션 보기"
   },
   "vms": {
     "disk": "디스크",

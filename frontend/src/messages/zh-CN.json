@@ -119,7 +119,8 @@
     "addonChip": "附加组件",
     "optionRestricted": "需要附加组件",
     "featureRequiresOption": "此功能需要\"{feature}\"附加组件许可证。",
-    "optionUpgradeDescription": "附加组件许可证叠加在您的 Enterprise 许可证之上。购买附加组件后，请在\"设置 > 许可证\"中上传新的许可证文件。"
+    "optionUpgradeDescription": "附加组件许可证叠加在您的 Enterprise 许可证之上。购买附加组件后，请在\"设置 > 许可证\"中上传新的许可证文件。",
+    "viewLicenseOptions": "查看许可证选项"
   },
   "vms": {
     "disk": "磁盘",

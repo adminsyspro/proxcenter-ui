@@ -119,8 +119,7 @@
     "addonChip": "Complemento",
     "optionRestricted": "Se requiere un complemento",
     "featureRequiresOption": "Esta función requiere la licencia del complemento «{feature}».",
-    "optionUpgradeDescription": "Las licencias de complemento se suman a su licencia Enterprise. Compre el complemento y luego cargue el nuevo archivo de licencia en Configuración > Licencia.",
-    "viewLicenseOptions": "Ver opciones de licencia"
+    "optionUpgradeDescription": "Las licencias de complemento se suman a su licencia Enterprise. Compre el complemento y luego cargue el nuevo archivo de licencia en Configuración > Licencia."
   },
   "vms": {
     "disk": "Disco",

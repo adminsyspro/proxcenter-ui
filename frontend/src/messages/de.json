@@ -116,8 +116,7 @@
     "addonChip": "Add-on",
     "optionRestricted": "Add-on erforderlich",
     "featureRequiresOption": "Diese Funktion erfordert die Add-on-Lizenz „{feature}\".",
-    "optionUpgradeDescription": "Add-on-Lizenzen ergänzen Ihre Enterprise-Lizenz. Erwerben Sie das Add-on und laden Sie anschließend die neue Lizenzdatei unter Einstellungen > Lizenz hoch.",
-    "viewLicenseOptions": "Lizenzoptionen anzeigen"
+    "optionUpgradeDescription": "Add-on-Lizenzen ergänzen Ihre Enterprise-Lizenz. Erwerben Sie das Add-on und laden Sie anschließend die neue Lizenzdatei unter Einstellungen > Lizenz hoch."
   },
   "vms": {
     "disk": "Festplatte",

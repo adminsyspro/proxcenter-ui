@@ -119,8 +119,7 @@
     "addonChip": "Option",
     "optionRestricted": "Option requise",
     "featureRequiresOption": "Cette fonctionnalité nécessite la licence d'option « {feature} ».",
-    "optionUpgradeDescription": "Les licences d'option s'ajoutent à votre licence Enterprise. Achetez l'option, puis importez le nouveau fichier de licence dans Paramètres > Licence.",
-    "viewLicenseOptions": "Voir les options de licence"
+    "optionUpgradeDescription": "Les licences d'option s'ajoutent à votre licence Enterprise. Achetez l'option, puis importez le nouveau fichier de licence dans Paramètres > Licence."
   },
   "vms": {
     "disk": "Disque",

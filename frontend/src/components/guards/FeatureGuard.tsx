@@ -1,8 +1,7 @@
 'use client'
 
 import { ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
-import { Box, Button, Card, CardContent, Typography, Chip } from '@mui/material'
+import { Box, Card, CardContent, Typography, Chip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { useLicense } from '@/contexts/LicenseContext'
@@ -27,7 +26,6 @@ export default function FeatureGuard({
   featureName
 }: FeatureGuardProps) {
   const { hasFeature, loading } = useLicense()
-  const router = useRouter()
   const t = useTranslations()
 
   // Show loading state while checking license
@@ -113,43 +111,12 @@ export default function FeatureGuard({
           <Box sx={{
             bgcolor: 'action.hover',
             borderRadius: 2,
-            p: 2,
-            mb: 3
+            p: 2
           }}>
             <Typography variant='body2' sx={{ opacity: 0.8 }}>
               {t('license.optionUpgradeDescription')}
             </Typography>
           </Box>
-
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-            <Button
-              variant='outlined'
-              onClick={() => router.back()}
-              startIcon={<i className='ri-arrow-left-line' />}
-            >
-              {t('common.goBack')}
-            </Button>
-            <Button
-              variant='contained'
-              color='warning'
-              onClick={() => router.push('/settings?tab=license')}
-              startIcon={<i className='ri-vip-crown-line' />}
-            >
-              {t('license.viewLicenseOptions')}
-            </Button>
-          </Box>
-
-          <Typography variant='caption' sx={{ display: 'block', mt: 3, opacity: 0.5 }}>
-            {t('license.contactSales')}:{' '}
-            <a
-              href='https://proxcenter.io/pricing'
-              target='_blank'
-              rel='noopener noreferrer'
-              style={{ color: 'inherit' }}
-            >
-              proxcenter.io/pricing
-            </a>
-          </Typography>
         </CardContent>
       </Card>
     </Box>

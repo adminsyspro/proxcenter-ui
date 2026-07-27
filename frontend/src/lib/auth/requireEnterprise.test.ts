@@ -15,7 +15,9 @@ describe('requireEnterprise', () => {
       enterprise: false,
       edition: 'community',
       licensed: false,
+      expired: false,
       features: [],
+      options: [],
     })
     const res = await mod.requireEnterprise()
     expect(res?.status).toBe(403)
@@ -29,7 +31,9 @@ describe('requireEnterprise', () => {
       enterprise: true,
       edition: 'enterprise',
       licensed: true,
+      expired: false,
       features: [],
+      options: [],
     })
     const result = await mod.requireEnterprise()
     expect(result).toBeNull()
@@ -41,7 +45,9 @@ describe('requireEnterprise', () => {
       enterprise: true,
       edition: 'enterprise_plus',
       licensed: true,
+      expired: false,
       features: [],
+      options: [],
     })
     const result = await mod.requireEnterprise()
     expect(result).toBeNull()

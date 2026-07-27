@@ -4145,8 +4145,8 @@ return vm?.isCluster ?? false
                 </Card>
 
                 {/* Migration Logs — real data from migration job */}
-                <Card variant="outlined" sx={{ borderRadius: 2 }}>
-                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
                         <i className="ri-terminal-box-line" style={{ fontSize: 16, opacity: 0.7 }} />
@@ -4166,7 +4166,7 @@ return vm?.isCluster ?? false
                         </MuiTooltip>
                       )}
                     </Box>
-                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, maxHeight: 'calc(100vh - 650px)', minHeight: 80 }}>
+                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 80 }}>
                       {vmMigJob?.logs?.length > 0 ? (
                         vmMigJob.logs.map((log: any, i: number) => (
                           <Box key={i}>

@@ -99,16 +99,16 @@ describe('PUT /api/v1/ha/config', () => {
     const { PUT } = await import('./route')
     const body = {
       nodes: [
-        { name: 'proxcenter-1', ip: '10.24.24.101', vrrpPriority: 150 },
-        { name: 'proxcenter-2', ip: '10.24.24.102', vrrpPriority: 100 },
-        { name: 'proxcenter-3', ip: '10.24.24.103', vrrpPriority: 50 },
+        { name: 'proxcenter-1', ip: '192.0.2.101', vrrpPriority: 150 },
+        { name: 'proxcenter-2', ip: '192.0.2.102', vrrpPriority: 100 },
+        { name: 'proxcenter-3', ip: '192.0.2.103', vrrpPriority: 50 },
       ],
-      vip: '10.24.24.100',
+      vip: '192.0.2.100',
       vipInterface: 'ens18',
       sshPasswords: {
-        '10.24.24.101': 'pass1',
-        '10.24.24.102': 'pass2',
-        '10.24.24.103': 'pass3',
+        '192.0.2.101': 'pass1',
+        '192.0.2.102': 'pass2',
+        '192.0.2.103': 'pass3',
       },
     }
     const res = await callRoute(PUT as any, { body, method: 'PUT' })
@@ -126,7 +126,7 @@ describe('PUT /api/v1/ha/config', () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 400,
-      json: async () => ({ ok: false, errors: { '10.24.24.103': 'SSH connection refused' } }),
+      json: async () => ({ ok: false, errors: { '192.0.2.103': 'SSH connection refused' } }),
     })
 
     const { PUT } = await import('./route')

@@ -25,14 +25,14 @@ describe('POST /api/v1/ha/validate', () => {
     const mockResult = {
       results: [
         {
-          ip: '10.24.24.101',
+          ip: '192.0.2.101',
           ssh: true,
           docker: true,
           dockerVersion: '27.1.1',
           dockerCompose: true,
           watchdog: true,
           pgCompatible: true,
-          ping: { '10.24.24.102': true, '10.24.24.103': true },
+          ping: { '192.0.2.102': true, '192.0.2.103': true },
         },
       ],
       global: { vipAvailable: true },
@@ -46,8 +46,8 @@ describe('POST /api/v1/ha/validate', () => {
     const { POST } = await import('./route')
     const res = await callRoute(POST as any, {
       body: {
-        nodes: [{ ip: '10.24.24.101', password: 'pass1' }],
-        vip: '10.24.24.100',
+        nodes: [{ ip: '192.0.2.101', password: 'pass1' }],
+        vip: '192.0.2.100',
       },
     })
     const data = await readJson(res)

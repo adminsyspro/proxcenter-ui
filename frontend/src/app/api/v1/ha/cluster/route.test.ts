@@ -37,15 +37,15 @@ describe('GET /api/v1/ha/cluster', () => {
       patroni: {
         scope: 'proxcenter',
         members: [
-          { name: 'proxcenter-1', host: '10.24.24.101', role: 'leader', state: 'running', timeline: 4, lagBytes: 0 },
-          { name: 'proxcenter-2', host: '10.24.24.102', role: 'sync_standby', state: 'streaming', timeline: 4, lagBytes: 0 },
-          { name: 'proxcenter-3', host: '10.24.24.103', role: 'replica', state: 'streaming', timeline: 4, lagBytes: 0 },
+          { name: 'proxcenter-1', host: '192.0.2.101', role: 'leader', state: 'running', timeline: 4, lagBytes: 0 },
+          { name: 'proxcenter-2', host: '192.0.2.102', role: 'sync_standby', state: 'streaming', timeline: 4, lagBytes: 0 },
+          { name: 'proxcenter-3', host: '192.0.2.103', role: 'replica', state: 'streaming', timeline: 4, lagBytes: 0 },
         ],
         syncMode: 'synchronous_mode_strict',
         paused: false,
       },
       etcd: { healthy: true, members: [] },
-      vip: { address: '10.24.24.100', holder: 'proxcenter-1' },
+      vip: { address: '192.0.2.100', holder: 'proxcenter-1' },
       services: {},
       history: [],
     }

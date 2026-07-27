@@ -21,24 +21,24 @@ describe('VIP redirect', () => {
 
   it('redirects non-VIP host to http://VIP:3000', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/home', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('http://10.24.24.100:3000/home')
+    expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/home')
   })
 
   it('does not redirect when host matches VIP', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.100/home', '10.24.24.100')
+    const req = makeRequest('http://192.0.2.100/home', '192.0.2.100')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -46,11 +46,11 @@ describe('VIP redirect', () => {
 
   it('strips port from Host header before comparing', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.100:3000/home', '10.24.24.100:3000')
+    const req = makeRequest('http://192.0.2.100:3000/home', '192.0.2.100:3000')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -58,11 +58,11 @@ describe('VIP redirect', () => {
 
   it('exempts /api/health from redirect', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/api/health', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/api/health', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -70,11 +70,11 @@ describe('VIP redirect', () => {
 
   it('exempts /api/v1/ha/* from redirect', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/api/v1/ha/cluster', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/api/v1/ha/cluster', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -82,7 +82,7 @@ describe('VIP redirect', () => {
 
   it('exempts localhost from redirect', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
@@ -94,12 +94,12 @@ describe('VIP redirect', () => {
 
   it('respects HA_REDIRECT_DISABLED break-glass', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('HA_REDIRECT_DISABLED', 'true')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/home', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -109,7 +109,7 @@ describe('VIP redirect', () => {
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/home', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -117,15 +117,15 @@ describe('VIP redirect', () => {
 
   it('preserves query string in redirect', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/settings?tab=ha', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/settings?tab=ha', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('http://10.24.24.100:3000/settings?tab=ha')
+    expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/settings?tab=ha')
   })
 })
 
@@ -137,7 +137,7 @@ describe('VIP redirect host exemptions', () => {
 
   function stubHaEnv() {
     vi.stubEnv('HA_ENABLED', 'true')
-    vi.stubEnv('VIP', '10.24.24.100')
+    vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
   }
 
@@ -168,11 +168,11 @@ describe('VIP redirect host exemptions', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/home', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).toBe(302)
-    expect(res.headers.get('location')).toBe('http://10.24.24.100:3000/home')
+    expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/home')
   })
 
   it('never redirects the VIP host itself (loop guard)', async () => {
@@ -180,7 +180,7 @@ describe('VIP redirect host exemptions', () => {
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.100:3000/home', '10.24.24.100:3000')
+    const req = makeRequest('http://192.0.2.100:3000/home', '192.0.2.100:3000')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -202,7 +202,7 @@ describe('VIP redirect host exemptions', () => {
     vi.stubEnv('NEXTAUTH_URL', 'not a url at all')
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/home', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).toBe(302)
@@ -212,7 +212,7 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/api/health/live', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/api/health/live', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
@@ -222,7 +222,7 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
 
     const { middleware } = await import('./middleware')
-    const req = makeRequest('http://10.24.24.101/api/health?live=1', '10.24.24.101')
+    const req = makeRequest('http://192.0.2.101/api/health?live=1', '192.0.2.101')
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)

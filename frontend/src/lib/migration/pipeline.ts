@@ -24,7 +24,10 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
-import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+import {
+  allocateBlockVolumeAndResolvePath, reserveVolumeSlot, volumesToFree,
+  PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
+} from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
@@ -147,7 +150,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   // `attached` is set by attachBlockDisk() after a successful PVE config
   // update so the cleanup only frees true orphans, never volumes the VM
   // already references (the VM-level DELETE handles those).
-  const allocatedVolumes: { volumeId: string, devicePath: string, rbdMapped?: boolean, attached?: boolean }[] = []
+  const allocatedVolumes: AllocatedVolume[] = []
   // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
   // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
   // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
@@ -426,11 +429,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const sizeKB = Math.ceil(sizeBytes / 1024)
       const volName = `vm-${targetVmid}-disk-${diskNum}`
 
+      // Reserve this disk's cleanup slot BEFORE allocating: `pvesm alloc` can create
+      // the volume and still report a failure, and a volume nobody registered is
+      // never freed — it then collides with every retry on the same VMID (#587).
+      const volSlot = reserveVolumeSlot(allocatedVolumes)
+
       // Allocate the block volume and resolve its device path. Handles every
       // pvesm output format including LVM on iSCSI multipath.
       const alloc = await allocateBlockVolumeAndResolvePath(
         config.targetConnectionId, nodeIp,
         config.targetStorage, targetVmid, volName, sizeKB,
+        { slot: volSlot },
       )
       const volumeId = alloc.volumeId
       let devicePath = alloc.devicePath
@@ -464,10 +473,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
       }
 
-      const result = { volumeId, devicePath, rbdMapped }
-      allocatedVolumes.push(result)
+      // Fill the slot reserved before the allocation — the volume ID from pvesm's own
+      // output is authoritative (a name collision may have bumped the disk number).
+      volSlot.volumeId = volumeId
+      volSlot.devicePath = devicePath
+      volSlot.rbdMapped = rbdMapped
       await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
-      return result
+      return volSlot
     }
 
     // Attach a pre-allocated block volume to a SCSI slot
@@ -2883,17 +2895,21 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // already in qm config, so freeing them out from under PVE would
     // either fail (volume in use) or, worse, leave the VM pointing at a
     // missing disk. They get cleaned up by the VM DELETE just below.
-    const orphans = allocatedVolumes.filter(v => !v.attached)
+    // volumesToFree also covers a volume created by an allocation that reported a
+    // failure, and skips the slots whose allocation never started (#587).
+    const orphans = volumesToFree(allocatedVolumes)
     if (orphans.length > 0 && config.targetConnectionId) {
       try {
         const nodeIp = await getNodeIpForMigration(prisma, config.targetConnectionId, config.targetNode,
           (await getConnectionById(config.targetConnectionId)).baseUrl)
         for (const vol of orphans) {
-          if (vol.rbdMapped) {
+          if (vol.rbdMapped && vol.devicePath) {
             await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${vol.devicePath}" 2>/dev/null`).catch(() => {})
           }
+          // A `saferemove` LVM storage zeroes the volume before removing it, which
+          // takes far longer than the 30 s executeSSH default.
           const freed = await executeSSH(config.targetConnectionId, nodeIp,
-            `pvesm free ${shellEscape(vol.volumeId)} 2>&1`).catch((e: any) => ({ success: false, output: "", error: e?.message }))
+            `pvesm free ${shellEscape(vol.volumeId)} 2>&1`, PVESM_FREE_TIMEOUT_MS).catch((e: any) => ({ success: false, output: "", error: e?.message }))
           if (freed.success) {
             await appendLog(jobId, `Freed orphan volume ${vol.volumeId}`, "warn")
           } else {

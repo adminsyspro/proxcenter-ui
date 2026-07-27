@@ -32,7 +32,7 @@ import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapsh
 import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
-import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+import { allocateBlockVolumeAndResolvePath, reserveVolumeSlot, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
@@ -392,7 +392,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await appendLog(jobId, `Temp directory: ${storageTempDir}`)
 
     // Track allocated block volumes (for cleanup on error)
-    const allocatedVolumes: { volumeId: string, devicePath: string, rbdMapped?: boolean }[] = []
+    const allocatedVolumes: AllocatedVolume[] = []
 
     // Allocate a raw volume on block storage and return the device path
     async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string, rbdMapped?: boolean }> {
@@ -412,11 +412,17 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const sizeKB = Math.ceil(sizeBytes / 1024)
       const volName = `vm-${targetVmid}-disk-${diskNum}`
 
+      // Reserve this disk's cleanup slot BEFORE allocating: `pvesm alloc` can create
+      // the volume and still report a failure, and a volume nobody registered is
+      // never freed — it then collides with every retry on the same VMID (#587).
+      const volSlot = reserveVolumeSlot(allocatedVolumes)
+
       // Allocate the block volume and resolve its device path. Handles every
       // pvesm output format including LVM on iSCSI multipath.
       const alloc = await allocateBlockVolumeAndResolvePath(
         config.targetConnectionId, nodeIp,
         config.targetStorage, targetVmid, volName, sizeKB,
+        { slot: volSlot },
       )
       const volumeId = alloc.volumeId
       let devicePath = alloc.devicePath
@@ -450,10 +456,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
       }
 
-      const result = { volumeId, devicePath, rbdMapped }
-      allocatedVolumes.push(result)
+      // Fill the slot reserved before the allocation — the volume ID from pvesm's own
+      // output is authoritative (a name collision may have bumped the disk number).
+      volSlot.volumeId = volumeId
+      volSlot.devicePath = devicePath
+      volSlot.rbdMapped = rbdMapped
       await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
-      return result
+      return volSlot
     }
 
     // Attach a pre-allocated block volume to a SCSI slot

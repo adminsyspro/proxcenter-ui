@@ -13,7 +13,10 @@ import {
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
-import { allocateBlockVolumeAndResolvePath } from "../pvesm-alloc"
+import {
+  allocateBlockVolumeAndResolvePath, reserveVolumeSlot, volumesToFree,
+  PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
+} from "../pvesm-alloc"
 import { pveSetVmConfig } from "../pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
@@ -200,7 +203,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   const vmKey = `${config.sourceConnectionId}:${config.sourceVmId}`
   let acquiredVmLock = false
   const ourSnapshots: string[] = []                 // MORs WE created — cleaned up by specific MOR
-  const allocatedVolumes: { volumeId: string; devicePath: string; rbdMapped?: boolean; attached?: boolean }[] = []
+  const allocatedVolumes: AllocatedVolume[] = []
   const activeReaders: VddkReaderHandle[] = []      // readers to tear down on failure
   // Per-disk: target device path + CBT state. NOTE: state is in-memory only; a
   // retry re-runs from a fresh full pass (safe, full re-copy) rather than resuming
@@ -311,8 +314,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const disk = vmConfig.disks[i]
       const sizeKB = Math.ceil(disk.capacityBytes / 1024)
       const volName = `vm-${targetVmid}-disk-${nextDiskNum + i}`
-      const alloc = await allocateBlockVolumeAndResolvePath(config.targetConnectionId, nodeIp, config.targetStorage, targetVmid, volName, sizeKB)
-      const dev = await mapRbdIfNeeded(config.targetConnectionId, nodeIp, alloc.devicePath, allocatedVolumes, alloc.volumeId)
+      // Reserve this disk's cleanup slot BEFORE allocating: `pvesm alloc` can create
+      // the volume and still report a failure, and a volume nobody registered is
+      // never freed — it then collides with every retry on the same VMID (#587).
+      const volSlot = reserveVolumeSlot(allocatedVolumes)
+      const alloc = await allocateBlockVolumeAndResolvePath(
+        config.targetConnectionId, nodeIp, config.targetStorage, targetVmid, volName, sizeKB,
+        { slot: volSlot },
+      )
+      const dev = await mapRbdIfNeeded(config.targetConnectionId, nodeIp, alloc.devicePath, volSlot, alloc.volumeId)
       targetDev.set(disk.deviceKey, dev)
       diskState.set(disk.deviceKey, initDiskState(disk.deviceKey))
       // Unwritten regions MUST read as zero: the CBT pass writes only the
@@ -565,7 +575,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 /** Map an RBD/Ceph volume to a kernel device if pvesm returned an rbd: spec or KRBD symlink. */
 async function mapRbdIfNeeded(
   connId: string, nodeIp: string, devicePath: string,
-  allocatedVolumes: { volumeId: string; devicePath: string; rbdMapped?: boolean; attached?: boolean }[], volumeId: string,
+  volSlot: AllocatedVolume, volumeId: string,
 ): Promise<string> {
   let dev = devicePath
   let rbdMapped = false
@@ -582,7 +592,11 @@ async function mapRbdIfNeeded(
     if (!r.success) throw new Error(`Failed to rbd device map ${spec}: ${r.error || r.output}`)
     rbdMapped = true
   }
-  allocatedVolumes.push({ volumeId, devicePath: dev, rbdMapped })
+  // Fill the slot reserved before the allocation — the volume ID from pvesm's own
+  // output is authoritative (a name collision may have bumped the disk number).
+  volSlot.volumeId = volumeId
+  volSlot.devicePath = dev
+  volSlot.rbdMapped = rbdMapped
   return dev
 }
 
@@ -605,7 +619,7 @@ async function cleanupOnFailure(
   config: WarmMigrationConfig,
   session: SoapSession | null,
   ourSnapshots: string[],
-  allocatedVolumes: { volumeId: string; devicePath: string; rbdMapped?: boolean; attached?: boolean }[],
+  allocatedVolumes: AllocatedVolume[],
   activeReaders: VddkReaderHandle[],
   nodeIp: string,
 ): Promise<void> {
@@ -617,9 +631,13 @@ async function cleanupOnFailure(
   if (session) {
     for (const mor of [...ourSnapshots]) await soapRemoveSnapshot(session, mor, false).catch(() => {})
   }
-  // Unmap RBD + free volumes the VM never referenced (orphans).
-  for (const v of allocatedVolumes.filter(v => !v.attached)) {
-    if (nodeIp && v.rbdMapped) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
-    if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`).catch(() => {})
+  // Unmap RBD + free volumes the VM never referenced (orphans). volumesToFree also
+  // covers a volume created by an allocation that reported a failure, and skips the
+  // slots whose allocation never started.
+  for (const v of volumesToFree(allocatedVolumes)) {
+    if (nodeIp && v.rbdMapped && v.devicePath) await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${v.devicePath}" 2>/dev/null`).catch(() => {})
+    // A `saferemove` LVM storage zeroes the volume before removing it, which takes
+    // far longer than the 30 s executeSSH default.
+    if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})
   }
 }

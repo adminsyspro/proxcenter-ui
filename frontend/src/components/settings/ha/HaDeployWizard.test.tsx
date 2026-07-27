@@ -113,7 +113,7 @@ describe('HaDeployWizard', () => {
   it('shows the detected external URL in the validation summary', async () => {
     await walkToValidationPassed('https://proxcenter.example.com')
     expect(screen.getByText(/External URL detected on node 1:/)).toBeInTheDocument()
-    expect(screen.getByText(/proxcenter\.example\.com/)).toBeInTheDocument()
+    expect(screen.getByText('proxcenter.example.com', { exact: false })).toBeInTheDocument()
   })
 
   it('shows the backup path and rollback behavior on the deployment step', async () => {

@@ -24,7 +24,7 @@ import { getNodeIp } from "@/lib/ssh/node-ip"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
-import { allocateBlockVolumeAndResolvePath } from "./pvesm-alloc"
+import { allocateAndMapBlockVolume, nextFreeDiskName } from "./pvesm-alloc"
 // SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
 // has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
 // vSAN because vSAN VMDK descriptors reference vsan:// URIs that only ESXi's
@@ -2479,71 +2479,24 @@ export async function runV2vMigrationPipeline(
         }
         const sizeKB = Math.ceil(sizeBytes / 1024)
 
-        // Find next available disk number
+        // Next free disk number. efidisk/tpmstate also consume vm-<vmid>-disk-N
+        // slots — miss them and we collide on "dataset already exists" when PVE
+        // auto-allocates the efidisk as disk-0 on OVMF VMs.
         const vmConf = await pveFetch<Record<string, any>>(
           pveConn,
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
         )
-        const existingNums = Object.keys(vmConf)
-          // efidisk/tpmstate also consume vm-<vmid>-disk-N slots — miss them and we
-          // collide on "dataset already exists" when PVE auto-allocates the efidisk
-          // as disk-0 on OVMF VMs.
-          .filter(k => k.match(/^(?:scsi|sata|virtio|ide|unused|efidisk|tpmstate)\d+$/))
-          .map(k => {
-            const val = String(vmConf[k])
-            const m = val.match(/vm-\d+-disk-(\d+)/)
-            return m ? Number.parseInt(m[1], 10) : -1
-          })
-          .filter(n => n >= 0)
-        const maxDiskNum = existingNums.length > 0 ? Math.max(...existingNums) : -1
-        const diskNum = maxDiskNum + 1
-        const volName = `vm-${targetVmid}-disk-${diskNum}`
+        const volName = nextFreeDiskName(vmConf, [], targetVmid)
 
-        // Allocate the block volume and resolve its device path. Handles every
-        // pvesm output format including LVM on iSCSI multipath where alloc
-        // prints '/dev/<vg>/<lv>' directly instead of the volume ID.
-        const alloc = await allocateBlockVolumeAndResolvePath(
-          config.targetConnectionId, nodeIp,
-          config.targetStorage, targetVmid, volName, sizeKB,
-        )
-        const volumeId = alloc.volumeId
-        let devicePath = alloc.devicePath
-
-        // RBD/Ceph — two path formats depending on the storage's `krbd` option:
-        //  - krbd 0 (librbd): pvesm path returns "rbd:pool/image:conf=..." — not a block device; map via `rbd map <pool>/<image>` → /dev/rbdN.
-        //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
-        let rbdMapped = false
-        const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
-        if (devicePath.startsWith("rbd:")) {
-          const rbdSpec = devicePath.split(":")[1]
-          if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
-          const mapResult = await executeSSH(
-            config.targetConnectionId, nodeIp,
-            `rbd map ${shellEscape(rbdSpec)} 2>&1`
-          )
-          if (!mapResult.success || !mapResult.output?.trim()) {
-            throw new Error(`Failed to map RBD device: ${mapResult.error}`)
-          }
-          devicePath = mapResult.output.trim()
-          rbdMapped = true
-        } else if (krbdMatch) {
-          const [, pool, image] = krbdMatch
-          const rbdSpec = `${pool}/${image}`
-          const mapResult = await executeSSH(
-            config.targetConnectionId, nodeIp,
-            `rbd device map ${shellEscape(rbdSpec)} 2>&1`
-          )
-          if (!mapResult.success) {
-            throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
-          }
-          // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
-          rbdMapped = true
-        }
-
-        // Validate device path starts with /
-        if (!devicePath.startsWith("/")) {
-          throw new Error(`Invalid device path for ${volumeId}: "${devicePath}" (expected path starting with /)`)
-        }
+        // See allocateAndMapBlockVolume: raw allocation (so PVE never formats the
+        // target as qcow2), Ceph mapping, and device-path validation (#587).
+        const vol = await allocateAndMapBlockVolume({
+          connectionId: config.targetConnectionId, nodeIp,
+          targetStorage: config.targetStorage, targetVmid, volName, sizeKB,
+        })
+        const volumeId = vol.volumeId
+        const devicePath = vol.devicePath
+        const rbdMapped = vol.rbdMapped
 
         // Stream data to block device. We use `qemu-img convert` instead of
         // `pv | dd` for two reasons:

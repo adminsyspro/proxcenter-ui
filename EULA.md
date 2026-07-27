@@ -36,6 +36,8 @@ You shall NOT:
 - **Circumvent or disable** any license verification, feature gating, or technical protection measures in the Software;
 - **Exceed the Node count** specified in your subscription without purchasing additional licenses.
 
+The restriction on redistributing, sublicensing, selling, leasing, or lending the Software (first item above) does not apply to ProxCenter's authorized partners acting under their separate Partner Agreement, solely to resell and provision licenses to end customers, including delivering the corresponding customer-specific License Keys and install tokens to that end customer. All other restrictions in this section continue to apply to partners, including the prohibitions on modifying, reverse-engineering, or creating derivative works of the Software, removing proprietary notices, disclosing License Keys beyond the end customer they were provisioned for, circumventing license controls, and exceeding the licensed Node count.
+
 ## 4. INTELLECTUAL PROPERTY
 
 The Software is and remains the exclusive property of Licensor. This Agreement does not transfer any ownership rights to You. All rights not expressly granted herein are reserved by Licensor.
@@ -53,7 +55,8 @@ The Software may include open-source components licensed under their respective 
 - Access to Enterprise features requires an active Subscription with a valid License Key.
 - Subscriptions are billed annually, per Node, at the rate agreed upon at the time of purchase.
 - Prices may be updated for renewal periods with at least 30 days prior notice.
-- Non-payment or late payment may result in suspension or termination of your License Key.
+- The Licensor operates under the French VAT franchise regime (*franchise en base de TVA*): no VAT is charged and invoices state **"TVA non applicable, article 293 B du CGI"**; if the Licensor becomes liable for VAT, applicable VAT will be added as required by law.
+- Non-payment or late payment may result in suspension or termination of your License Key. Overdue amounts accrue late-payment penalties from the day after the due date at three times the French legal interest rate, together with the fixed recovery indemnity of **EUR 40 per invoice** (French Commercial Code, arts. L441-10 and D441-5).
 
 ## 7. UPDATES AND SUPPORT
 
@@ -87,7 +90,7 @@ LICENSOR'S TOTAL AGGREGATE LIABILITY SHALL NOT EXCEED THE AMOUNTS PAID BY LICENS
 
 ## 11. GOVERNING LAW AND JURISDICTION
 
-This Agreement shall be governed by and construed in accordance with the laws of **France**. Any dispute arising out of or in connection with this Agreement shall be submitted to the exclusive jurisdiction of the courts of **France**.
+This Agreement shall be governed by and construed in accordance with the laws of **France**, excluding its conflict-of-law rules. Subject to any mandatory rule of law, any dispute arising out of or in connection with this Agreement shall be submitted to the exclusive jurisdiction of the courts of **France**.
 
 ## 12. GENERAL PROVISIONS
 
@@ -96,6 +99,7 @@ This Agreement shall be governed by and construed in accordance with the laws of
 - **Waiver:** Failure to enforce any right under this Agreement shall not constitute a waiver of such right.
 - **Assignment:** You may not assign or transfer this Agreement without Licensor's prior written consent.
 - **Amendments:** Licensor reserves the right to modify this Agreement. Changes will be communicated at least 30 days before taking effect and will apply to subsequent Subscription renewals.
+- **Professional use:** The Licensee enters into this Agreement solely for professional or business purposes and not as a consumer or non-professional.
 
 ## 13. CONTACT
 

@@ -70,6 +70,7 @@ export function useLicenseManagement() {
       await loadLicenseStatus()
       await loadFeatures()
 
+      window.location.reload()
       return { success: true } as const
     } catch (e: any) {
       return { success: false, error: e?.message || 'Activation failed' } as const

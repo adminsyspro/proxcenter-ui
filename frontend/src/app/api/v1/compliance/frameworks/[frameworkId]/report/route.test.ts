@@ -14,6 +14,7 @@ const collectHardeningDataMock = vi.fn<(opts: any) => Promise<any>>()
 const requireEnterpriseMock = vi.fn<() => Promise<Response | null>>()
 const renderPdfMock = vi.fn<(html: string) => Promise<any>>()
 const getSettingMock = vi.fn<(key: string, tenantId: string) => Promise<any>>()
+const getAssetMock = vi.fn<(tenantId: string, kind: string, slot: string) => Promise<any>>()
 
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
@@ -25,6 +26,15 @@ vi.mock('@/lib/tenant', () => ({
 
 vi.mock('@/lib/db/settings', () => ({
   getSetting: getSettingMock,
+}))
+
+vi.mock('@/lib/branding/assetStore', () => ({
+  getAsset: getAssetMock,
+  slotFromFilename: (filename: string) => {
+    const base = filename.split('/').pop() ?? filename
+    const dot = base.lastIndexOf('.')
+    return dot > 0 ? base.slice(0, dot) : base
+  },
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -76,6 +86,8 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     renderPdfMock.mockResolvedValue({ ok: true, pdf: Buffer.from([1, 2, 3]) })
     // Default: no branding settings
     getSettingMock.mockResolvedValue(null)
+    // Default: no stored branding asset in Postgres
+    getAssetMock.mockResolvedValue(null)
     // Default: no logo files on disk (clearAllMocks does not reset implementations)
     vi.mocked(fs.existsSync).mockReturnValue(false)
     vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from(''))
@@ -220,6 +232,63 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     })
     expect(res.status).toBe(200)
     expect(capturedHtml).toContain('<img class="cover-framework-logo" src="data:image/png;base64,')
+  })
+
+  it('reads the branding logo from Postgres via assetStore when a logoUrl is set', async () => {
+    getSettingMock.mockResolvedValue({
+      enabled: true,
+      logoUrl: '/api/v1/settings/branding/uploads/logo.png',
+      primaryColor: '#123456',
+    })
+    getAssetMock.mockResolvedValue({
+      ext: 'png',
+      contentType: 'image/png',
+      data: Buffer.from([9, 9, 9]),
+    })
+    let capturedHtml = ''
+    renderPdfMock.mockImplementation(async (html: string) => {
+      capturedHtml = html
+      return { ok: true, pdf: Buffer.from([1, 2, 3]) }
+    })
+
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, {
+      params: { frameworkId: 'nist-800-171-r2' },
+      searchParams: { connectionId: 'c1' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(getAssetMock).toHaveBeenCalledWith('tenant-1', 'branding', 'logo')
+    // The disk-based branding lookup must not be consulted anymore
+    expect(fs.existsSync).not.toHaveBeenCalledWith(
+      expect.stringContaining('data/uploads/branding'),
+    )
+    expect(capturedHtml).toContain('data:image/png;base64,')
+  })
+
+  it('falls back to the packaged default logo when no branding asset is stored', async () => {
+    getSettingMock.mockResolvedValue({
+      enabled: true,
+      logoUrl: '/api/v1/settings/branding/uploads/logo.png',
+    })
+    getAssetMock.mockResolvedValue(null)
+    vi.mocked(fs.existsSync).mockImplementation((p: any) => String(p).includes('proxcenter.png'))
+    vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from([7, 7, 7]))
+    let capturedHtml = ''
+    renderPdfMock.mockImplementation(async (html: string) => {
+      capturedHtml = html
+      return { ok: true, pdf: Buffer.from([1, 2, 3]) }
+    })
+
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, {
+      params: { frameworkId: 'nist-800-171-r2' },
+      searchParams: { connectionId: 'c1' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(getAssetMock).toHaveBeenCalledWith('tenant-1', 'branding', 'logo')
+    expect(capturedHtml).toContain('data:image/png;base64,')
   })
 
   it('still returns 200 when getSetting throws (branding hiccup)', async () => {

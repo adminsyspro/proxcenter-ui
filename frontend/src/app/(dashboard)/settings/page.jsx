@@ -50,6 +50,7 @@ import { findCountry } from '@/lib/utils/countries'
 
 import { isMultiLicenseEnabled } from '@/lib/features'
 import { buildLicenseTableRows, computePerTenantRollup } from '@/lib/license/view'
+import { optionDisplayName } from '@/lib/license/features'
 
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useLicenseManagement } from '@/hooks/useLicenseManagement'
@@ -79,6 +80,11 @@ const OidcConfigTab = dynamic(() => import('@/components/settings/OidcConfigTab'
 
 const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionDialog'), {
   ssr: false
+})
+
+const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
+  ssr: false,
+  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
 })
 
 const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
@@ -2137,15 +2143,27 @@ function LicenseTab() {
               initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
               columns={[
                 { field: 'role', headerName: t('settings.licenseColRole'), width: 110,
-                  renderCell: p => <Chip size='small' variant='outlined' color={p.row.role === 'primary' ? 'primary' : 'default'}
-                    label={p.row.role === 'primary' ? t('settings.licenseRolePrimary') : t('settings.licenseRoleImport')} /> },
+                  renderCell: p => <Chip size='small' variant='outlined'
+                    color={p.row.role === 'primary' ? 'primary' : p.row.role === 'option' ? 'warning' : 'default'}
+                    label={p.row.role === 'primary' ? t('settings.licenseRolePrimary')
+                      : p.row.role === 'option' ? t('settings.licenseRoleOption')
+                      : t('settings.licenseRoleImport')} /> },
                 { field: 'licenseId', headerName: t('settings.licenseColId'), flex: 1, minWidth: 160 },
                 { field: 'licensedTo', headerName: t('settings.licenseColLicensedTo'), flex: 1, minWidth: 140, sortable: false,
                   renderCell: p => p.row.licensedTo || '—' },
+                { field: 'capabilities', headerName: t('settings.licenseColCapabilities'), flex: 1, minWidth: 140, sortable: false,
+                  renderCell: p => p.row.capabilities?.length
+                    ? p.row.capabilities.map(optionDisplayName).join(', ')
+                    : '' },
                 { field: 'nodes', headerName: t('settings.licenseColNodes'), width: 150, sortable: false,
-                  renderCell: p => p.row.unlimited ? <span><i className='ri-infinity-line' /></span> : <span>{p.row.usedNodes} / {p.row.maxNodes}</span> },
+                  renderCell: p => p.row.role === 'option'
+                    ? <span>{t('settings.licenseNodesNotApplicable')}</span>
+                    : p.row.unlimited
+                      ? <span><i className='ri-infinity-line' /></span>
+                      : <span>{p.row.usedNodes} / {p.row.maxNodes}</span> },
                 { field: 'mapped', headerName: t('settings.licenseColMapped'), flex: 1, minWidth: 160, sortable: false,
                   renderCell: p => {
+                    if (p.row.role === 'option') return ''
                     const ids = p.row.connectionIds || []
                     if (ids.length === 0) return <Typography variant='caption' sx={{ opacity: 0.5 }}>{t('settings.licenseUnmappedFloating')}</Typography>
                     return <Typography variant='caption'>{ids.map(id => connName[id] || id).join(', ')}</Typography>
@@ -2164,6 +2182,10 @@ function LicenseTab() {
                         <IconButton size='small' color='error' onClick={() => setRemoveTarget({ rowId: p.row.rowId, licenseId: p.row.licenseId })}><i className='ri-delete-bin-line' /></IconButton>
                       </Tooltip>
                     </Box>
+                  ) : p.row.role === 'option' ? (
+                    <Tooltip title={t('settings.licenseRemoveImport')}>
+                      <IconButton size='small' color='error' onClick={() => setRemoveTarget({ rowId: p.row.rowId, licenseId: p.row.licenseId })}><i className='ri-delete-bin-line' /></IconButton>
+                    </Tooltip>
                   ) : (
                     <Tooltip title={t('settings.deactivateLicense')}>
                       <IconButton size='small' color='error' onClick={() => setDeactivateDialogOpen(true)}><i className='ri-delete-bin-line' /></IconButton>
@@ -2316,7 +2338,16 @@ function LicenseTab() {
           <i className='ri-error-warning-line' style={{ color: 'var(--mui-palette-error-main)', fontSize: 22 }} />
           {t('settings.licenseRemoveImport')}
         </DialogTitle>
-        <DialogContent><Typography>{t('settings.licenseRemoveConfirm')}</Typography></DialogContent>
+        <DialogContent>
+          <Typography>
+            {(() => {
+              const targetRow = licenseRows.find(r => r.rowId === removeTarget?.rowId)
+              return targetRow?.role === 'option'
+                ? t('settings.licenseRemoveOptionConfirm', { feature: targetRow.capabilities.map(optionDisplayName).join(', ') })
+                : t('settings.licenseRemoveConfirm')
+            })()}
+          </Typography>
+        </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRemoveTarget(null)} variant='outlined'>{t('common.cancel')}</Button>
           <Button onClick={confirmRemove} variant='contained' color='error' startIcon={<i className='ri-delete-bin-line' />}>
@@ -2997,7 +3028,7 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
@@ -3013,6 +3044,7 @@ export default function SettingsPage() {
     { label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
+    { label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, providerOnly: true },
   ]
 
   // Hide provider-only tabs (Tenants, vDC) unless super admin AND currently
@@ -3040,13 +3072,13 @@ export default function SettingsPage() {
 
   const [mainTab, setMainTab] = useState(resolveTabIndex)
 
-  // Sync tab from URL changes
+  // Sync tab from URL changes or when visible tabs change (license loaded)
   useEffect(() => {
     if (tabParam) {
       const idx = tabNames.indexOf(tabParam)
       if (idx >= 0 && idx !== mainTab) setMainTab(idx)
     }
-  }, [tabParam])
+  }, [tabParam, tabNames.join(',')])
 
   // Update URL when tab changes
   const handleTabChange = (newIndex) => {
@@ -3117,7 +3149,7 @@ export default function SettingsPage() {
               if (mainTab !== idx) return null
               const TabComponent = tab.component
               return (
-                <Box key={idx}>
+                <Box key={tabNames[idx]}>
                   <TabComponent />
                 </Box>
               )

@@ -10,6 +10,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireEnterprise } from '@/lib/auth/requireEnterprise'
 import { verifyConnectionOwnership, getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
 import { getSetting } from '@/lib/db/settings'
+import { getAsset, slotFromFilename } from '@/lib/branding/assetStore'
 import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk, getFramework } from '@/lib/compliance/frameworks'
@@ -77,24 +78,21 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         brandColor = String(branding.primaryColor)
       }
 
-      let logoPath = ''
-      if (branding?.enabled && branding?.logoUrl) {
-        // path.basename prevents any directory traversal in a stored URL
-        const filename = path.basename(String(branding.logoUrl).split('?')[0])
-        const candidate = path.join(process.cwd(), 'data', 'uploads', 'branding', tenantId, filename)
-        if (fs.existsSync(candidate)) logoPath = candidate
+      const brandingLogoUrl = branding?.enabled ? branding?.logoUrl : ''
+      if (brandingLogoUrl) {
+        // path.basename strips any traversal in the stored URL, then we map
+        // the served filename back to its storage slot (logo/favicon/...).
+        const filename = path.basename(String(brandingLogoUrl).split('?')[0])
+        const asset = await getAsset(tenantId, 'branding', slotFromFilename(filename))
+        if (asset) {
+          logoDataUri = `data:${asset.contentType};base64,${Buffer.from(asset.data).toString('base64')}`
+        }
       }
-      if (!logoPath) {
+      if (!logoDataUri) {
         const def = path.join(process.cwd(), 'public', 'images', 'proxcenter.png')
-        if (fs.existsSync(def)) logoPath = def
-      }
-      if (logoPath) {
-        const mime = logoPath.endsWith('.svg')
-          ? 'image/svg+xml'
-          : (logoPath.endsWith('.jpg') || logoPath.endsWith('.jpeg'))
-            ? 'image/jpeg'
-            : 'image/png'
-        logoDataUri = `data:${mime};base64,${fs.readFileSync(logoPath).toString('base64')}`
+        if (fs.existsSync(def)) {
+          logoDataUri = `data:image/png;base64,${fs.readFileSync(def).toString('base64')}`
+        }
       }
     } catch {
       // Branding/logo failures are non-fatal; report renders with defaults.

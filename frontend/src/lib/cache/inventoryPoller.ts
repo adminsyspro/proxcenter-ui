@@ -293,7 +293,7 @@ async function pollAll() {
       }
 
       // Auto-HA: enable HA on newly added VMs if Auto-HA is enabled
-      handleAutoHaEvents(allEvents)
+      handleAutoHaEvents(allEvents).catch(() => {}) // fire-and-forget: errors are logged inside
     }
 
     // Periodic node IP refresh for failover (every 5 minutes)

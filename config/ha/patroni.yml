@@ -1,0 +1,57 @@
+scope: proxcenter
+name: ${PATRONI_NAME}
+
+restapi:
+  listen: ${NODE_IP}:8008
+  connect_address: ${NODE_IP}:8008
+
+etcd3:
+  hosts: ${PEER1_IP}:2379,${PEER2_IP}:2379,${PEER3_IP}:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 0
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_node_count: 1
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_log_hints: "on"
+        max_connections: 200
+        max_replication_slots: 10
+        max_wal_senders: 10
+        hot_standby: "on"
+        wal_level: replica
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+
+# Superuser and replication credentials come EXCLUSIVELY from the
+# documented PATRONI_SUPERUSER_* / PATRONI_REPLICATION_* environment
+# variables set in docker-compose.ha.yml. No password scalar lives in this
+# file and none goes through envsubst (quoting an envsubst placeholder
+# cannot make arbitrary YAML values safe). Patroni creates the replication
+# role itself when it bootstraps a fresh cluster; the standalone-adoption
+# path is covered by ensure_replicator in entrypoint-patroni.sh.
+
+postgresql:
+  listen: ${NODE_IP}:5432
+  connect_address: ${NODE_IP}:5432
+  data_dir: /var/lib/postgresql/data
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 md5
+    - host all all 0.0.0.0/0 md5
+    - local all all trust
+
+watchdog:
+  mode: off

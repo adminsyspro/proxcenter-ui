@@ -1,0 +1,88 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import { callRoute, readJson } from '@/__tests__/setup/route-test'
+
+const checkPermissionMock = vi.fn().mockResolvedValue(null)
+const requireFeatureMock = vi.fn().mockResolvedValue(null)
+
+vi.mock('@/lib/rbac', () => ({
+  checkPermission: checkPermissionMock,
+  PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
+}))
+
+// cluster/route.ts intentionally does not import the license guard (spec v5
+// D2: status stays readable when the option expired). Kept mocked here so
+// the "not called" assertion below still fails loudly if a guard is ever
+// re-added.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: requireFeatureMock,
+}))
+
+vi.mock('@/lib/orchestrator/headers', () => ({
+  orchestratorHeaders: (extra: Record<string, string> = {}) => ({ 'X-API-Key': 'test', ...extra }),
+}))
+
+const fetchMock = vi.fn()
+vi.stubGlobal('fetch', fetchMock)
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  checkPermissionMock.mockResolvedValue(null)
+  requireFeatureMock.mockResolvedValue(null)
+})
+
+describe('GET /api/v1/ha/cluster', () => {
+  it('returns cluster status', async () => {
+    const mockCluster = {
+      patroni: {
+        scope: 'proxcenter',
+        members: [
+          { name: 'proxcenter-1', host: '192.0.2.101', role: 'leader', state: 'running', timeline: 4, lagBytes: 0 },
+          { name: 'proxcenter-2', host: '192.0.2.102', role: 'sync_standby', state: 'streaming', timeline: 4, lagBytes: 0 },
+          { name: 'proxcenter-3', host: '192.0.2.103', role: 'replica', state: 'streaming', timeline: 4, lagBytes: 0 },
+        ],
+        syncMode: 'synchronous_mode_strict',
+        paused: false,
+      },
+      etcd: { healthy: true, members: [] },
+      vip: { address: '192.0.2.100', holder: 'proxcenter-1' },
+      services: {},
+      history: [],
+    }
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockCluster,
+    })
+
+    const { GET } = await import('./route')
+    const res = await callRoute(GET as any)
+    const data = await readJson(res)
+
+    expect(res.status).toBe(200)
+    expect((data as any).patroni.members).toHaveLength(3)
+  })
+
+  it('returns 503 when orchestrator unreachable', async () => {
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'))
+
+    const { GET } = await import('./route')
+    const res = await callRoute(GET as any)
+
+    expect(res.status).toBe(503)
+  })
+
+  it('does not require the control_plane_ha license (status stays readable when expired)', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    })
+
+    const { GET } = await import('./route')
+    await callRoute(GET as any)
+
+    expect(requireFeatureMock).not.toHaveBeenCalled()
+    expect(checkPermissionMock).toHaveBeenCalled()
+  })
+})

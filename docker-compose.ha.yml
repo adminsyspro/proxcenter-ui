@@ -1,0 +1,185 @@
+# docker-compose.ha.yml
+#
+# Per-node HA compose for the ProxCenter 3-node cluster.
+# Each VM runs this same file with node-specific .env values.
+# Every image is prebuilt and pulled from ghcr.io (see the docker-publish
+# workflow): the conversion never runs `docker build` on a customer node,
+# and nodes only need ghcr.io egress.
+# See docs/ha/prerequisites.md and docs/ha/conversion-runbook.md.
+
+services:
+  # ── Layer 0: distributed consensus ──────────────────────────────
+  etcd:
+    image: ghcr.io/adminsyspro/etcd:v3.5.17
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - etcd_data:/var/lib/etcd
+    environment:
+      ETCD_NAME: ${NODE_NAME}
+      ETCD_DATA_DIR: /var/lib/etcd
+      ETCD_LISTEN_PEER_URLS: http://${NODE_IP}:2380
+      ETCD_LISTEN_CLIENT_URLS: http://${NODE_IP}:2379
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://${NODE_IP}:2380
+      ETCD_ADVERTISE_CLIENT_URLS: http://${NODE_IP}:2379
+      ETCD_INITIAL_CLUSTER: proxcenter-1=http://${PEER1_IP}:2380,proxcenter-2=http://${PEER2_IP}:2380,proxcenter-3=http://${PEER3_IP}:2380
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ETCD_AUTO_COMPACTION_MODE: periodic
+      ETCD_AUTO_COMPACTION_RETENTION: "1h"
+
+  # ── Layer 1: Postgres managed by Patroni ────────────────────────
+  patroni:
+    image: ghcr.io/adminsyspro/proxcenter-patroni:${VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    privileged: true
+    # Fresh /tmp on every (re)start so the entrypoint can always re-render
+    # /tmp/patroni.yml. A persisted postgres-owned copy otherwise blocks the
+    # root entrypoint's rewrite on a warm restart and crash-loops the node.
+    tmpfs:
+      - /tmp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/ha/patroni.yml:/etc/patroni/patroni.yml:ro
+    environment:
+      PATRONI_NAME: ${NODE_NAME}
+      PATRONI_SCOPE: proxcenter
+      # Credentials flow through Patroni's documented environment variables,
+      # never through envsubst into patroni.yml: envsubst cannot quote
+      # arbitrary YAML values, so any printable password must stay an env var.
+      PATRONI_SUPERUSER_USERNAME: ${POSTGRES_USER:-proxcenter}
+      PATRONI_SUPERUSER_PASSWORD: ${POSTGRES_PASSWORD}
+      PATRONI_REPLICATION_USERNAME: replicator
+      PATRONI_REPLICATION_PASSWORD: ${POSTGRES_PASSWORD}
+      NODE_IP: ${NODE_IP}
+      PEER1_IP: ${PEER1_IP}
+      PEER2_IP: ${PEER2_IP}
+      PEER3_IP: ${PEER3_IP}
+      PGDATA: /var/lib/postgresql/data
+      # psql client credentials for the entrypoint's replicator-role check.
+      PGUSER: ${POSTGRES_USER:-proxcenter}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      etcd:
+        condition: service_started
+
+  # ── Layer 2: local PG proxy ─────────────────────────────────────
+  haproxy:
+    image: ghcr.io/adminsyspro/haproxy:2.9-alpine
+    network_mode: host
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "sed 's/PEER1_IP/${PEER1_IP}/g; s/PEER2_IP/${PEER2_IP}/g; s/PEER3_IP/${PEER3_IP}/g' /usr/local/etc/haproxy/haproxy.cfg.template > /tmp/haproxy.cfg && exec haproxy -f /tmp/haproxy.cfg"]
+    environment:
+      PEER1_IP: ${PEER1_IP}
+      PEER2_IP: ${PEER2_IP}
+      PEER3_IP: ${PEER3_IP}
+    volumes:
+      - ./config/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg.template:ro
+    depends_on:
+      patroni:
+        condition: service_started
+
+  # ── Layer 3: application ────────────────────────────────────────
+  frontend:
+    image: ghcr.io/adminsyspro/proxcenter-frontend:${VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      # Branding / white-label / login-background uploads. Legacy on-disk
+      # assets are imported into Postgres at boot (instrumentation hook);
+      # the volume stays mounted so a converted node 1 keeps serving them.
+      - proxcenter_data:/app/data
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-proxcenter}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB:-proxcenter}?schema=public
+      # Preserved external URL for FQDN / reverse-proxy / OIDC installs;
+      # fresh IP-only installs fall back to the VIP.
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://${VIP}:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      APP_SECRET: ${APP_SECRET}
+      ORCHESTRATOR_URL: http://127.0.0.1:8080
+      ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
+      PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
+      PG_POOL_MAX: ${PG_POOL_MAX:-}
+      HA_ENABLED: "true"
+      VIP: ${VIP}
+      HA_REDIRECT_DISABLED: ${HA_REDIRECT_DISABLED:-}
+      HA_REDIRECT_EXEMPT_HOSTS: ${HA_REDIRECT_EXEMPT_HOSTS:-}
+    healthcheck:
+      # Liveness on purpose: /api/health (readiness) returns 503 while the
+      # DB is unreachable, which would flap the container during failover.
+      # Keepalived's track_script owns readiness (config/ha/track_script.sh).
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      haproxy:
+        condition: service_started
+
+  orchestrator:
+    image: ghcr.io/adminsyspro/proxcenter-orchestrator:${VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - orchestrator_data:/app/data
+      - proxcenter_data:/app/shared_data:ro
+    environment:
+      PROXCENTER_DATABASE_DSN: postgresql://${POSTGRES_USER:-proxcenter}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB:-proxcenter}?sslmode=disable
+      PROXCENTER_API_API_KEY: ${ORCHESTRATOR_API_KEY}
+      PROXCENTER_API_LISTEN: 0.0.0.0:8080
+      PROXCENTER_PROXMOX_APP_SECRET: ${APP_SECRET}
+      PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
+      LICENSE_KEY: ${LICENSE_KEY:-}
+      TZ: ${TZ:-Europe/Paris}
+      # sFlow collector: with host networking, UDP 6343 is reachable
+      # directly on the node (no ports: mapping needed).
+      PROXCENTER_SFLOW_ENABLED: "true"
+      PROXCENTER_SFLOW_LISTEN_ADDRESS: 0.0.0.0:6343
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+  weasyprint:
+    image: ghcr.io/adminsyspro/proxcenter-weasyprint:${VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+
+  # ── Layer 4: VIP management ──────────────────────────────────────
+  keepalived:
+    image: ghcr.io/adminsyspro/proxcenter-keepalived:${VERSION:-latest}
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./config/ha/keepalived.conf:/etc/keepalived/keepalived.conf.template:ro
+      - ./config/ha/track_script.sh:/etc/keepalived/track_script.sh:ro
+    environment:
+      NODE_IP: ${NODE_IP}
+      PEER1_IP: ${PEER1_IP}
+      PEER2_IP: ${PEER2_IP}
+      PEER3_IP: ${PEER3_IP}
+      VIP: ${VIP}
+      VIP_INTERFACE: ${VIP_INTERFACE:-eth0}
+      VIP_PREFIX: ${VIP_PREFIX:-24}
+      VRRP_PRIORITY: ${VRRP_PRIORITY:-100}
+    depends_on:
+      frontend:
+        condition: service_healthy
+
+volumes:
+  etcd_data:
+  postgres_data:
+    name: postgres_data
+  orchestrator_data:
+    name: orchestrator_data
+  proxcenter_data:
+    name: proxcenter_data

@@ -64,8 +64,9 @@ import { useRBAC } from '@/contexts/RBACContext'
 // Tenant Context
 import { useTenant } from '@/contexts/TenantContext'
 
-import { useActiveAlerts, useVersionCheck, useOrchestratorHealth } from '@/hooks/useNavbarNotifications'
+import { useActiveAlerts, useVersionCheck, useOrchestratorHealth, useHaClusterHealth } from '@/hooks/useNavbarNotifications'
 import { useDRSRecommendations, useDRSSettings } from '@/hooks/useDRS'
+import { useHaConfig } from '@/components/settings/ha/useHaConfig'
 
 // Version config
 import { APP_VERSION } from '@/config/version'
@@ -233,6 +234,9 @@ const NavbarContent = ({ targetLayout } = {}) => {
   // hourly round-trip for tenants instead of fetching and then hiding.
   const { data: updateInfoData } = useVersionCheck(3600000, isProviderTenant)
   const { data: healthData } = useOrchestratorHealth(isEnterprise)
+  const { data: haConfigData } = useHaConfig(isEnterprise)
+  const haDeployed = haConfigData?.deploymentState === 'deployed'
+  const { data: haClusterData } = useHaClusterHealth(isEnterprise && haDeployed)
 
   // Derive notifications from SWR data
   const notifications = useMemo(() => {
@@ -524,6 +528,17 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
   const pxcoreInfo = getPXCoreInfo(pxcoreStatus.status, pxcoreStatus.components)
 
+  const haStatus = useMemo(() => {
+    if (!haDeployed || !haClusterData) return null
+    const members = haClusterData.patroni?.members || []
+    const maintenanceNodes = (haConfigData?.nodes || []).filter(n => n.maintenance).map(n => n.name)
+    const available = members.filter(m => m.state === 'running' && !maintenanceNodes.includes(m.name)).length
+    const total = members.length || 3
+    if (available >= total) return { color: '#4caf50', label: t('ha.healthy', { running: available, total }), level: 'healthy' }
+    if (available >= 2) return { color: '#ff9800', label: t('ha.degraded', { running: available, total }), level: 'degraded' }
+    return { color: '#f44336', label: t('ha.critical', { running: available, total }), level: 'critical' }
+  }, [haDeployed, haClusterData, haConfigData, t])
+
   return (
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 2, px: 2, position: 'relative' }}>
@@ -660,6 +675,18 @@ return () => window.removeEventListener('keydown', onKeyDown)
               <i className='ri-translate-2' />
             </IconButton>
           </Tooltip>
+
+          {/* HA Cluster Status */}
+          {haStatus && (
+            <Tooltip title={haStatus.label}>
+              <IconButton
+                size='small'
+                onClick={() => router.push('/settings')}
+              >
+                <i className='ri-shield-check-line' style={{ color: haStatus.color, fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {/* Theme Dropdown */}
           <ThemeDropdown />

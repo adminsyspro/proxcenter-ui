@@ -6,6 +6,38 @@ import { getToken } from "next-auth/jwt"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
+// HA VIP redirect configuration
+const HA_ENABLED = process.env.HA_ENABLED === 'true'
+const VIP = process.env.VIP || ''
+const HA_REDIRECT_DISABLED = process.env.HA_REDIRECT_DISABLED === 'true'
+
+// Hosts that must never be VIP-redirected: loopback, the preserved external
+// URL's host (FQDN / reverse-proxy / OIDC installs keep their URL after
+// conversion), plus any explicit override. Parsed ONCE at boot, like the
+// flags above: the values only change with the container env.
+const REDIRECT_EXEMPT_HOSTS = buildRedirectExemptHosts()
+
+function buildRedirectExemptHosts(): Set<string> {
+  const hosts = new Set(['localhost', '127.0.0.1'])
+
+  const nextAuthUrl = process.env.NEXTAUTH_URL || ''
+  if (nextAuthUrl) {
+    try {
+      hosts.add(new URL(nextAuthUrl).hostname.toLowerCase())
+    } catch {
+      // Unparseable NEXTAUTH_URL: nothing extra to exempt; the VIP
+      // redirect still behaves like a fresh IP-only install.
+    }
+  }
+
+  for (const entry of (process.env.HA_REDIRECT_EXEMPT_HOSTS || '').split(',')) {
+    const host = entry.trim().toLowerCase()
+    if (host) hosts.add(host)
+  }
+
+  return hosts
+}
+
 // i18n configuration
 const locales = ['fr', 'en', 'de', 'zh-CN', 'ko', 'es']
 const defaultLocale = 'en'
@@ -144,6 +176,24 @@ export async function middleware(request: NextRequest) {
 
     // Static assets etc. — pass through
     return NextResponse.next()
+  }
+
+  // === HA VIP REDIRECT ===
+  // Loop guard: the VIP host itself and every exempt host pass through, so
+  // a redirected request can never be redirected again (Ch2 regression I1).
+  if (HA_ENABLED && !HA_REDIRECT_DISABLED && VIP) {
+    const rawHost = request.headers.get('host') || ''
+    const host = rawHost.replace(/:\d+$/, '').toLowerCase()
+
+    if (host !== VIP && !REDIRECT_EXEMPT_HOSTS.has(host)) {
+      const isExemptPath = pathname === '/api/health'
+        || pathname.startsWith('/api/health/')
+        || pathname.startsWith('/api/v1/ha/')
+      if (!isExemptPath) {
+        const search = request.nextUrl.search || ''
+        return NextResponse.redirect(`http://${VIP}:3000${pathname}${search}`, 302)
+      }
+    }
   }
 
   // === NORMAL MODE (existing behavior) ===

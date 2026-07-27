@@ -1,94 +1,17 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from 'react'
+import { Features, EDITION_FEATURES, effectiveHasFeature, type FeatureId } from '@/lib/license/features'
 
-// Features disponibles
-export const Features = {
-  DRS: 'drs',
-  FIREWALL: 'firewall',
-  MICROSEGMENTATION: 'microsegmentation',
-  ROLLING_UPDATES: 'rolling_updates',
-  AI_INSIGHTS: 'ai_insights',
-  PREDICTIVE_ALERTS: 'predictive_alerts',
-  ALERTS: 'alerts',
-  GREEN_METRICS: 'green_metrics',
-  CROSS_CLUSTER_MIGRATION: 'cross_cluster_migration',
-  VMWARE_MIGRATION: 'vmware_migration',
-  CEPH_REPLICATION: 'ceph_replication',
-  LDAP: 'ldap',
-  REPORTS: 'reports',
-  RBAC: 'rbac',
-  TASK_CENTER: 'task_center',
-  NOTIFICATIONS: 'notifications',
-  CVE_SCANNER: 'cve_scanner',
-  COMPLIANCE: 'compliance',
-  OIDC: 'oidc',
-  CHANGE_TRACKING: 'change_tracking',
-  WHITE_LABEL: 'white_label',
-  MULTI_TENANCY: 'multi_tenancy',
-  SFLOW_MONITORING: 'sflow_monitoring',
-} as const
-
-type FeatureId = typeof Features[keyof typeof Features]
-
-// Edition → features mapping (single source of truth, mirrors backend EditionFeatures)
-const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
-  enterprise: [
-    Features.DRS,
-    Features.FIREWALL,
-    Features.MICROSEGMENTATION,
-    Features.ROLLING_UPDATES,
-    Features.AI_INSIGHTS,
-    Features.PREDICTIVE_ALERTS,
-    Features.ALERTS,
-    Features.GREEN_METRICS,
-    Features.CROSS_CLUSTER_MIGRATION,
-    Features.VMWARE_MIGRATION,
-    Features.CEPH_REPLICATION,
-    Features.LDAP,
-    Features.REPORTS,
-    Features.RBAC,
-    Features.TASK_CENTER,
-    Features.NOTIFICATIONS,
-    Features.CVE_SCANNER,
-    Features.COMPLIANCE,
-    Features.OIDC,
-    Features.CHANGE_TRACKING,
-    Features.WHITE_LABEL,
-    Features.MULTI_TENANCY,
-    Features.SFLOW_MONITORING,
-  ],
-  enterprise_plus: [
-    Features.DRS,
-    Features.FIREWALL,
-    Features.MICROSEGMENTATION,
-    Features.ROLLING_UPDATES,
-    Features.AI_INSIGHTS,
-    Features.PREDICTIVE_ALERTS,
-    Features.ALERTS,
-    Features.GREEN_METRICS,
-    Features.CROSS_CLUSTER_MIGRATION,
-    Features.VMWARE_MIGRATION,
-    Features.CEPH_REPLICATION,
-    Features.LDAP,
-    Features.REPORTS,
-    Features.RBAC,
-    Features.TASK_CENTER,
-    Features.NOTIFICATIONS,
-    Features.CVE_SCANNER,
-    Features.COMPLIANCE,
-    Features.OIDC,
-    Features.CHANGE_TRACKING,
-    Features.MULTI_TENANCY,
-    Features.SFLOW_MONITORING,
-  ],
-}
+export { Features }
+export type { FeatureId }
 
 interface LicenseStatus {
   licensed: boolean
   expired: boolean
   edition?: string
   features?: string[]
+  options?: string[]
   is_nfr?: boolean
   [key: string]: any
 }
@@ -123,6 +46,14 @@ const LicenseContext = createContext<LicenseContextValue>({
   refresh: async () => {},
 })
 
+const COMMUNITY_FALLBACK: LicenseStatus = {
+  licensed: false,
+  expired: false,
+  edition: 'community',
+  features: [],
+  options: [],
+}
+
 export function LicenseProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<LicenseStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -137,10 +68,12 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         setError(null)
       } else {
         setError('Failed to load license status')
+        setStatus({ ...COMMUNITY_FALLBACK })
       }
     } catch (e: any) {
       console.error('Failed to load license status:', e)
       setError(e?.message || 'Failed to load license status')
+      setStatus({ ...COMMUNITY_FALLBACK })
     }
   }, [])
 
@@ -164,13 +97,10 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     return editionFeatures.map(id => ({ id, enabled: isLicensed }))
   }, [status?.edition, isLicensed])
 
-  const hasFeature = useCallback((featureId: FeatureId | string): boolean => {
-    if (!isLicensed) return false
-    const edition = status?.edition || ''
-    const editionFeatures = EDITION_FEATURES[edition]
-    if (!editionFeatures) return false
-    return editionFeatures.includes(featureId as FeatureId)
-  }, [isLicensed, status?.edition])
+  const hasFeature = useCallback(
+    (featureId: FeatureId | string): boolean => effectiveHasFeature(status, featureId),
+    [status],
+  )
 
   return (
     <LicenseContext.Provider value={{

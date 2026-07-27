@@ -1,5 +1,43 @@
 [
   {
+    "version": "1.4.6",
+    "title": "Control-plane HA, warm migration reliability & license add-ons",
+    "items": [
+      { "type": "new", "text": "ProxCenter HA (required license): turn a standalone installation into a three-node control plane with replicated PostgreSQL, etcd quorum and a virtual IP that fails over" },
+      { "type": "new", "text": "HA deployment wizard and cluster dashboard: guided conversion with prerequisite checks and live progress, then per-node status, service grid and operations panel" },
+      { "type": "new", "text": "Branding and login assets are stored in PostgreSQL, so logos and login backgrounds are identical on every node of an HA cluster" },
+      { "type": "new", "text": "License add-ons: option licenses stack on top of your edition license, appear in the license table with their capabilities, and are available from the customer portal" },
+      { "type": "new", "text": "Interactive warm cutover: choose the cutover moment with a live downtime estimate instead of letting the migration switch over on its own" },
+      { "type": "new", "text": "Delete all snapshots of a VM in one action, with a guard that blocks a cross-cluster migration while snapshots still exist" },
+      { "type": "new", "text": "Batch acknowledge and delete on alerts: select several alerts and act on them in one go" },
+      { "type": "new", "text": "Blueprints gain custom images, cloud-init configuration, hardware sliders and IP and bridge selectors" },
+      { "type": "new", "text": "Inventory and topology trees and the connections list are scoped to RBAC infrastructure grants, so a user only sees the connections they were granted" },
+      { "type": "new", "text": "Korean and Spanish interface languages, and KRW currency support" },
+      { "type": "new", "text": "VMs attached to SDN VNets are grouped by VNet, with VXLAN and zone information" },
+      { "type": "improved", "text": "Cloning suggests the next available VMID instead of a random one" },
+      { "type": "improved", "text": "The external hypervisor VM table can be sorted by column, which makes picking guests out of a large vCenter inventory practical" },
+      { "type": "improved", "text": "Users created on a Community installation are granted full super-admin rights" },
+      { "type": "improved", "text": "Remaining hardcoded French strings in the alerting UI moved to translation keys, so the interface is consistent in every language" },
+      { "type": "fix", "text": "Warm migration allocates block volumes as raw instead of qcow2, which removes a large allocation delay on LVM and Fibre Channel targets, and a failed allocation no longer leaves an orphan volume that poisons every retry" },
+      { "type": "fix", "text": "Warm migration allocates a free NBD device instead of assuming one, so a second concurrent migration no longer collides" },
+      { "type": "fix", "text": "Warm copy over SSH keeps the connection alive and applies an inactivity timeout, so a long copy can no longer hang indefinitely" },
+      { "type": "fix", "text": "A cross-cluster migration no longer fires two destroy tasks on the source VM, which could report a spurious failure after a successful move" },
+      { "type": "fix", "text": "Node Local Time no longer applies the UTC offset twice in the inventory" },
+      { "type": "fix", "text": "Storage capacity in the Overview is aggregated per cluster, so shared storage is no longer counted once per node" },
+      { "type": "fix", "text": "The SSH-command and task-log copy buttons fall back gracefully when the browser blocks the clipboard API outside a secure context" },
+      { "type": "fix", "text": "The migration log console keeps its last line visible above the tasks footer" },
+      { "type": "fix", "text": "A scheduled backup job runs on the guest's real node instead of the first node of the cluster" },
+      { "type": "fix", "text": "Cloud-init IP settings are applied on bridges that have no IPAM configured" },
+      { "type": "fix", "text": "VM names starting with a digit are accepted" },
+      { "type": "fix", "text": "Host VLANs with no attached VM are shown in the inventory Network view" },
+      { "type": "fix", "text": "The generated PVE token setup script includes Sys.PowerMgmt, so node reboot and shutdown work without editing permissions by hand" },
+      { "type": "fix", "text": "Panel width is remembered and theme status chips are readable in both light and dark themes" },
+      { "type": "fix", "text": "Sorting external hypervisor VMs no longer crashes on incomplete inventory data" },
+      { "type": "fix", "text": "Security: node, VMID and storage identifiers are validated before being interpolated into SSH commands" },
+      { "type": "fix", "text": "Security: the license client no longer keeps the previous entitlement state when a license check fails, and falls back to Community instead" }
+    ]
+  },
+  {
     "version": "1.4.5",
     "title": "Compliance frameworks, DRS load balancing & OIDC role fix",
     "items": [

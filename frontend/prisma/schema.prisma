@@ -494,6 +494,21 @@ model Setting {
   @@map("settings")
 }
 
+// HA Chantier 0: binary assets (branding logos, login background) live in
+// Postgres so any control-plane node can serve them without a shared FS.
+model UploadedAsset {
+  tenantId    String   @map("tenant_id")
+  kind        String   // 'branding' | 'login-bg'
+  slot        String   // branding: 'logo'|'favicon'|'loginLogo'; login-bg: 'background'
+  ext         String   // 'png','jpg','svg','webp','ico','gif'
+  contentType String   @map("content_type")
+  data        Bytes
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@id([tenantId, kind, slot])
+  @@map("uploaded_assets")
+}
+
 // ─────────────── §1.3 RBAC ───────────────
 
 model RbacRole {

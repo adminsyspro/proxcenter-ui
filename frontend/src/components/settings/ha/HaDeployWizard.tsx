@@ -250,7 +250,13 @@ export default function HaDeployWizard({
               return prev
             })
             setTimeout(() => {
-              window.location.href = completion.url
+              // resolveCompletionTarget already rejects anything that is not
+              // http(s), but the scheme is re-checked against a literal here so
+              // the guard sits at the assignment itself.
+              const target = completion.url
+              if (target.startsWith('http://') || target.startsWith('https://')) {
+                window.location.href = target
+              }
             }, 3000)
           } else if (data.deploymentState === 'failed') {
             stopConversionTimers()

@@ -72,7 +72,7 @@ const WIZARD_STEP_KEYS = ['stepPrerequisites', 'stepNodes', 'stepNetwork', 'step
 
 const PREREQ_KEYS = ['prereq1', 'prereq2', 'prereq3', 'prereq4', 'prereq5'] as const
 
-const RUNBOOK_URL = 'https://github.com/adminsyspro/proxcenter-ui/blob/main/docs/ha/conversion-runbook.md'
+const RUNBOOK_URL = 'https://docs.proxcenter.io/operations/ha-conversion'
 
 const BACKUP_PATH = '/opt/proxcenter/backup-pre-patroni.sql'
 

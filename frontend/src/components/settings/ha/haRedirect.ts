@@ -17,6 +17,12 @@ export function resolveCompletionTarget(
 
   try {
     const parsed = new URL(trimmed)
+    // The resolved URL is assigned to window.location once the conversion
+    // completes, so only http(s) may pass: new URL() happily accepts
+    // `javascript:` and `data:`, which would execute in the admin's browser.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { url: vipUrl, external: false }
+    }
     // An "external" URL that already points at the VIP is the fresh-install
     // fallback the backend writes; keep the VIP copy and target.
     if (parsed.hostname === vip) return { url: vipUrl, external: false }

@@ -32,7 +32,7 @@ import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapsh
 import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
-import { allocateBlockVolumeAndResolvePath, reserveVolumeSlot, type AllocatedVolume } from "./pvesm-alloc"
+import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
@@ -397,72 +397,14 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Allocate a raw volume on block storage and return the device path
     async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string, rbdMapped?: boolean }> {
       const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
-      let maxDiskNum = -1
-      for (const val of Object.values(vmConf || {})) {
-        if (typeof val === 'string') {
-          const m = (val as string).match(/vm-\d+-disk-(\d+)/)
-          if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
-        }
-      }
-      for (const av of allocatedVolumes) {
-        const m = av.volumeId.match(/disk-(\d+)/)
-        if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1]))
-      }
-      const diskNum = maxDiskNum + 1
-      const sizeKB = Math.ceil(sizeBytes / 1024)
-      const volName = `vm-${targetVmid}-disk-${diskNum}`
-
-      // Reserve this disk's cleanup slot BEFORE allocating: `pvesm alloc` can create
-      // the volume and still report a failure, and a volume nobody registered is
-      // never freed — it then collides with every retry on the same VMID (#587).
-      const volSlot = reserveVolumeSlot(allocatedVolumes)
-
-      // Allocate the block volume and resolve its device path. Handles every
-      // pvesm output format including LVM on iSCSI multipath.
-      const alloc = await allocateBlockVolumeAndResolvePath(
-        config.targetConnectionId, nodeIp,
-        config.targetStorage, targetVmid, volName, sizeKB,
-        { slot: volSlot },
-      )
-      const volumeId = alloc.volumeId
-      let devicePath = alloc.devicePath
-
-      // RBD/Ceph — two path formats depending on the storage's `krbd` option:
-      //  - krbd 0 (librbd): pvesm path returns "rbd:pool/image:conf=..." — not a block device; map via `rbd map <pool>/<image>` → /dev/rbdN.
-      //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
-      let rbdMapped = false
-      const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
-      if (devicePath.startsWith('rbd:')) {
-        const rbdSpec = devicePath.split(':')[1]
-        if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
-        const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `rbd map "${rbdSpec}" 2>&1`)
-        if (!mapResult.success || !mapResult.output?.trim()) {
-          throw new Error(`Failed to rbd map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
-        }
-        devicePath = mapResult.output.trim()
-        rbdMapped = true
-        await appendLog(jobId, `RBD mapped ${rbdSpec} → ${devicePath}`)
-      } else if (krbdMatch) {
-        const [, pool, image] = krbdMatch
-        const rbdSpec = `${pool}/${image}`
-        const mapResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `rbd device map "${rbdSpec}" 2>&1`)
-        if (!mapResult.success) {
-          throw new Error(`Failed to rbd device map ${rbdSpec}: ${mapResult.error || mapResult.output}`)
-        }
-        // devicePath stays as /dev/rbd-pve/<fsid>/<pool>/<image> — the symlink now resolves.
-        rbdMapped = true
-        await appendLog(jobId, `RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
-      }
-
-      // Fill the slot reserved before the allocation — the volume ID from pvesm's own
-      // output is authoritative (a name collision may have bumped the disk number).
-      volSlot.volumeId = volumeId
-      volSlot.devicePath = devicePath
-      volSlot.rbdMapped = rbdMapped
-      await appendLog(jobId, `Allocated volume ${volumeId} → ${devicePath}`)
-      return volSlot
+      const volName = nextFreeDiskName(vmConf, allocatedVolumes, targetVmid)
+      // See allocateAndMapBlockVolume for the raw format, the Ceph mapping and why
+      // the volume is registered for cleanup before the allocation runs (#587).
+      return allocateAndMapBlockVolume({
+        allocatedVolumes, nodeIp, targetVmid, volName,
+        connectionId: config.targetConnectionId, targetStorage: config.targetStorage,
+        sizeKB: Math.ceil(sizeBytes / 1024), onLog: (m) => appendLog(jobId, m),
+      })
     }
 
     // Attach a pre-allocated block volume to a SCSI slot

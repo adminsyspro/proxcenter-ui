@@ -7,6 +7,8 @@ vi.mock("@/lib/ssh/exec", async (importActual) => {
 import { executeSSH } from "@/lib/ssh/exec"
 import {
   allocateBlockVolumeAndResolvePath,
+  allocateAndMapBlockVolume,
+  nextFreeDiskName,
   reserveVolumeSlot,
   volumesToFree,
   type AllocatedVolume,
@@ -204,6 +206,138 @@ describe("allocateBlockVolumeAndResolvePath", () => {
 
     expect(message).toContain("no such volume")
     expect(message).not.toContain("Exit code 17")
+  })
+})
+
+describe("nextFreeDiskName", () => {
+  it("starts at disk 0 when the VM shell owns no disk yet", () => {
+    expect(nextFreeDiskName({ name: "hdc-rsyslog02", cores: 2 }, [], 250)).toBe("vm-250-disk-0")
+  })
+
+  it("starts after the efidisk an OVMF shell already owns", () => {
+    // `qm create` with bios=ovmf allocates vm-<vmid>-disk-0 for the EFI vars, and on
+    // PVE 9 LVM with snapshot-as-volume-chain it carries a .qcow2 suffix.
+    const conf = { efidisk0: "FC-HDC-01:vm-250-disk-0.qcow2,efitype=4m,size=528K" }
+
+    expect(nextFreeDiskName(conf, [], 250)).toBe("vm-250-disk-1")
+  })
+
+  it("accounts for the volumes already allocated in this run", () => {
+    const conf = { efidisk0: "FC-HDC-01:vm-250-disk-0.qcow2" }
+    const allocated: AllocatedVolume[] = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x" }]
+
+    expect(nextFreeDiskName(conf, allocated, 250)).toBe("vm-250-disk-2")
+  })
+
+  it("takes the highest number, not the disk count, so a gap never causes a collision", () => {
+    const conf = { scsi0: "FC-HDC-01:vm-250-disk-4", scsi1: "FC-HDC-01:vm-250-disk-2" }
+
+    expect(nextFreeDiskName(conf, [], 250)).toBe("vm-250-disk-5")
+  })
+
+  it("ignores a reserved slot whose allocation has not started", () => {
+    expect(nextFreeDiskName({}, [{ volumeId: "", devicePath: "" }], 250)).toBe("vm-250-disk-0")
+  })
+})
+
+describe("allocateAndMapBlockVolume", () => {
+  const args = {
+    connectionId: "conn-1",
+    nodeIp: "10.0.0.1",
+    targetStorage: "FC-HDC-01",
+    targetVmid: 250,
+    volName: "vm-250-disk-1",
+    sizeKB: 20971520,
+  }
+
+  it("returns the device path as-is for a plain block volume, with nothing to map", async () => {
+    mockSSH
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-1"))
+
+    const vol = await allocateAndMapBlockVolume(args)
+
+    expect(vol).toMatchObject({
+      volumeId: "FC-HDC-01:vm-250-disk-1",
+      devicePath: "/dev/FC-HDC-01/vm-250-disk-1",
+      rbdMapped: false,
+    })
+    expect(mockSSH).toHaveBeenCalledTimes(2)
+  })
+
+  it("maps a librbd volume to a kernel device (krbd 0)", async () => {
+    mockSSH
+      .mockResolvedValueOnce(created("rbd-pool:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("rbd:CephPool/vm-250-disk-1:conf=/etc/pve/ceph.conf"))
+      .mockResolvedValueOnce(path("/dev/rbd0"))
+
+    const vol = await allocateAndMapBlockVolume({ ...args, targetStorage: "rbd-pool" })
+
+    expect(mockSSH.mock.calls[2][2]).toContain("rbd map 'CephPool/vm-250-disk-1'")
+    expect(vol.devicePath).toBe("/dev/rbd0")
+    expect(vol.rbdMapped).toBe(true)
+  })
+
+  it("maps a KRBD symlink and keeps the device path Proxmox reported (krbd 1)", async () => {
+    const krbd = "/dev/rbd-pve/2a4f/CephPool/vm-250-disk-1"
+    mockSSH
+      .mockResolvedValueOnce(created("rbd-pool:vm-250-disk-1"))
+      .mockResolvedValueOnce(path(krbd))
+      .mockResolvedValueOnce({ success: true, output: "" })
+
+    const vol = await allocateAndMapBlockVolume({ ...args, targetStorage: "rbd-pool" })
+
+    expect(mockSSH.mock.calls[2][2]).toContain("rbd device map 'CephPool/vm-250-disk-1'")
+    // The symlink only resolves after the map; the path itself does not change.
+    expect(vol.devicePath).toBe(krbd)
+    expect(vol.rbdMapped).toBe(true)
+  })
+
+  it("registers the volume in the caller's cleanup registry before allocating (#587)", async () => {
+    const allocatedVolumes: AllocatedVolume[] = []
+    mockSSH.mockResolvedValueOnce(failed("unable to create image"))
+
+    await expect(allocateAndMapBlockVolume({ ...args, allocatedVolumes })).rejects.toThrow(/unable to create image/)
+
+    expect(volumesToFree(allocatedVolumes)).toEqual([
+      { volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "" },
+    ])
+  })
+
+  it("keeps one registry slot per disk so the attach step stays aligned", async () => {
+    const allocatedVolumes: AllocatedVolume[] = []
+    mockSSH
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-1"))
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-2"))
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-2"))
+
+    await allocateAndMapBlockVolume({ ...args, allocatedVolumes })
+    await allocateAndMapBlockVolume({ ...args, volName: "vm-250-disk-2", allocatedVolumes })
+
+    expect(allocatedVolumes.map(v => v.volumeId)).toEqual([
+      "FC-HDC-01:vm-250-disk-1",
+      "FC-HDC-01:vm-250-disk-2",
+    ])
+  })
+
+  it("refuses a device path that is not absolute rather than writing to a bogus target", async () => {
+    mockSSH
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("FC-HDC-01:vm-250-disk-1"))
+
+    await expect(allocateAndMapBlockVolume(args)).rejects.toThrow(/absolute path/)
+  })
+
+  it("reports the mapping and the allocation through the caller's logger", async () => {
+    const logs: string[] = []
+    mockSSH
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-1"))
+
+    await allocateAndMapBlockVolume({ ...args, onLog: async (m) => { logs.push(m) } })
+
+    expect(logs).toEqual(["Allocated volume FC-HDC-01:vm-250-disk-1 → /dev/FC-HDC-01/vm-250-disk-1"])
   })
 })
 

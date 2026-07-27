@@ -14,7 +14,7 @@ import {
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
 import {
-  allocateBlockVolumeAndResolvePath, reserveVolumeSlot, volumesToFree,
+  allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
 } from "../pvesm-alloc"
 import { pveSetVmConfig } from "../pve-vm-config"
@@ -297,32 +297,24 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
     // The VM shell may already own a disk: an OVMF/UEFI guest gets an efidisk0
-    // (vm-<vmid>-disk-0) created with `qm create`. Data disks must therefore
-    // start after the highest existing disk number, or `pvesm alloc` collides on
-    // the name (mirrors the cold pipeline's allocateBlockVolume).
+    // (vm-<vmid>-disk-0) created with `qm create`. Data disks must therefore start
+    // after the highest existing disk number, or `pvesm alloc` collides on the name.
     const shellConf = await pveFetch<Record<string, any>>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
-    let nextDiskNum = 0
-    for (const v of Object.values(shellConf || {})) {
-      if (typeof v === "string") {
-        const m = v.match(/vm-\d+-disk-(\d+)/)
-        if (m) nextDiskNum = Math.max(nextDiskNum, Number(m[1]) + 1)
-      }
-    }
 
     // Allocate a raw block volume per disk and resolve (+ map) its device path.
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const sizeKB = Math.ceil(disk.capacityBytes / 1024)
-      const volName = `vm-${targetVmid}-disk-${nextDiskNum + i}`
-      // Reserve this disk's cleanup slot BEFORE allocating: `pvesm alloc` can create
-      // the volume and still report a failure, and a volume nobody registered is
-      // never freed — it then collides with every retry on the same VMID (#587).
-      const volSlot = reserveVolumeSlot(allocatedVolumes)
-      const alloc = await allocateBlockVolumeAndResolvePath(
-        config.targetConnectionId, nodeIp, config.targetStorage, targetVmid, volName, sizeKB,
-        { slot: volSlot },
-      )
-      const dev = await mapRbdIfNeeded(config.targetConnectionId, nodeIp, alloc.devicePath, volSlot, alloc.volumeId)
+      // Numbering walks forward as each disk registers itself in allocatedVolumes.
+      const volName = nextFreeDiskName(shellConf, allocatedVolumes, targetVmid)
+      // See allocateAndMapBlockVolume for the raw format and why the volume is
+      // registered for cleanup before the allocation runs (#587).
+      const vol = await allocateAndMapBlockVolume({
+        connectionId: config.targetConnectionId, nodeIp,
+        targetStorage: config.targetStorage, targetVmid, volName, sizeKB,
+        allocatedVolumes,
+      })
+      const dev = vol.devicePath
       targetDev.set(disk.deviceKey, dev)
       diskState.set(disk.deviceKey, initDiskState(disk.deviceKey))
       // Unwritten regions MUST read as zero: the CBT pass writes only the
@@ -344,7 +336,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.output || z.error}`)
         await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
       }
-      await appendLog(jobId, `Disk ${i}: target ${alloc.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
+      await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
     }
 
     // Apply a disk's changed extents to its target. buildApplyScripts splits the
@@ -570,34 +562,6 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     cutoverRequests.delete(jobId)
     if (acquiredVmLock) activeWarmVms.delete(vmKey)
   }
-}
-
-/** Map an RBD/Ceph volume to a kernel device if pvesm returned an rbd: spec or KRBD symlink. */
-async function mapRbdIfNeeded(
-  connId: string, nodeIp: string, devicePath: string,
-  volSlot: AllocatedVolume, volumeId: string,
-): Promise<string> {
-  let dev = devicePath
-  let rbdMapped = false
-  const krbd = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
-  if (devicePath.startsWith("rbd:")) {
-    const spec = devicePath.split(":")[1]
-    if (!spec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
-    const r = await executeSSH(connId, nodeIp, `rbd map "${spec}" 2>&1`)
-    if (!r.success || !r.output?.trim()) throw new Error(`Failed to rbd map ${spec}: ${r.error || r.output}`)
-    dev = r.output.trim(); rbdMapped = true
-  } else if (krbd) {
-    const spec = `${krbd[1]}/${krbd[2]}`
-    const r = await executeSSH(connId, nodeIp, `rbd device map "${spec}" 2>&1`)
-    if (!r.success) throw new Error(`Failed to rbd device map ${spec}: ${r.error || r.output}`)
-    rbdMapped = true
-  }
-  // Fill the slot reserved before the allocation — the volume ID from pvesm's own
-  // output is authoritative (a name collision may have bumped the disk number).
-  volSlot.volumeId = volumeId
-  volSlot.devicePath = dev
-  volSlot.rbdMapped = rbdMapped
-  return dev
 }
 
 /**

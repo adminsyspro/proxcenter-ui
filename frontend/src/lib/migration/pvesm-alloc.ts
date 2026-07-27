@@ -97,6 +97,108 @@ export function volumesToFree(allocatedVolumes: AllocatedVolume[]): AllocatedVol
 }
 
 /**
+ * Name for the next data disk of `targetVmid` on the target storage.
+ *
+ * Numbering starts after the highest `vm-<vmid>-disk-<n>` already referenced by the
+ * VM config — an OVMF shell owns `disk-0` for its EFI vars before any data disk
+ * exists — and after everything allocated so far in this run. It takes the highest
+ * number rather than a count, so a gap in the sequence can never hand back a name
+ * that is already taken.
+ */
+export function nextFreeDiskName(
+  vmConf: Record<string, unknown> | null | undefined,
+  allocatedVolumes: AllocatedVolume[],
+  targetVmid: number | string,
+): string {
+  let maxDiskNum = -1
+  const bump = (value: string) => {
+    const m = value.match(/vm-\d+-disk-(\d+)/)
+    if (m) maxDiskNum = Math.max(maxDiskNum, Number.parseInt(m[1], 10))
+  }
+  for (const value of Object.values(vmConf || {})) {
+    if (typeof value === "string") bump(value)
+  }
+  for (const v of allocatedVolumes) {
+    if (v.volumeId) bump(v.volumeId)
+  }
+  return `vm-${targetVmid}-disk-${maxDiskNum + 1}`
+}
+
+export interface AllocateAndMapArgs {
+  connectionId: string
+  nodeIp: string
+  targetStorage: string
+  targetVmid: number | string
+  volName: string
+  sizeKB: number
+  /**
+   * The pipeline's cleanup registry. A slot is reserved in it before the allocation
+   * runs, so exactly one entry exists per disk and failure cleanup can free a volume
+   * created by an allocation that then failed (#587).
+   */
+  allocatedVolumes?: AllocatedVolume[]
+  /** Progress logger for the RBD mapping and the resulting volume. */
+  onLog?: (message: string) => Promise<void> | void
+}
+
+/**
+ * Allocate a raw block volume, map it if the storage is Ceph, and register it for
+ * failure cleanup — the whole "get me a writable block device for this disk" step
+ * that the warm, cold, XCP-ng and v2v pipelines each used to carry a copy of.
+ */
+export async function allocateAndMapBlockVolume(args: AllocateAndMapArgs): Promise<AllocatedVolume> {
+  const { connectionId, nodeIp, targetStorage, targetVmid, volName, sizeKB, onLog } = args
+  const slot = args.allocatedVolumes ? reserveVolumeSlot(args.allocatedVolumes) : { volumeId: "", devicePath: "" }
+
+  const alloc = await allocateBlockVolumeAndResolvePath(
+    connectionId, nodeIp, targetStorage, targetVmid, volName, sizeKB, { slot },
+  )
+
+  // RBD/Ceph — two path formats depending on the storage's `krbd` option:
+  //  - krbd 0 (librbd): pvesm path returns "rbd:pool/image:conf=..." — not a block
+  //    device; map via `rbd map <pool>/<image>` → /dev/rbdN.
+  //  - krbd 1 (KRBD):   pvesm path returns "/dev/rbd-pve/<fsid>/<pool>/<image>" — the
+  //    symlink only exists after `rbd device map <pool>/<image>`; devicePath stays put.
+  let devicePath = alloc.devicePath
+  let rbdMapped = false
+  const krbdMatch = devicePath.match(/^\/dev\/rbd-pve\/[^/]+\/([^/]+)\/([^/]+)$/)
+
+  if (devicePath.startsWith("rbd:")) {
+    const rbdSpec = devicePath.split(":")[1]
+    if (!rbdSpec) throw new Error(`Cannot parse RBD path: ${devicePath}`)
+    const mapped = await executeSSH(connectionId, nodeIp, `rbd map ${shellEscape(rbdSpec)} 2>&1`)
+    if (!mapped.success || !mapped.output?.trim()) {
+      throw new Error(`Failed to rbd map ${rbdSpec}: ${(mapped.output || mapped.error || "").trim()}`)
+    }
+    devicePath = mapped.output.trim()
+    rbdMapped = true
+    await onLog?.(`RBD mapped ${rbdSpec} → ${devicePath}`)
+  } else if (krbdMatch) {
+    const rbdSpec = `${krbdMatch[1]}/${krbdMatch[2]}`
+    const mapped = await executeSSH(connectionId, nodeIp, `rbd device map ${shellEscape(rbdSpec)} 2>&1`)
+    if (!mapped.success) {
+      throw new Error(`Failed to rbd device map ${rbdSpec}: ${(mapped.output || mapped.error || "").trim()}`)
+    }
+    rbdMapped = true
+    await onLog?.(`RBD (KRBD) mapped ${rbdSpec} → ${devicePath}`)
+  }
+
+  // Every plugin must land on an absolute device path. Anything else means the
+  // pipeline would stream guest data into something that is not the target volume.
+  if (!devicePath.startsWith("/")) {
+    throw new Error(`Invalid device path for ${alloc.volumeId}: "${devicePath}" (expected an absolute path)`)
+  }
+
+  // The volume ID from pvesm's own output is authoritative: a name collision may
+  // have bumped the disk number.
+  slot.volumeId = alloc.volumeId
+  slot.devicePath = devicePath
+  slot.rbdMapped = rbdMapped
+  await onLog?.(`Allocated volume ${alloc.volumeId} → ${devicePath}`)
+  return slot
+}
+
+/**
  * Allocate a raw block volume on PVE and return its device path.
  *
  * Wraps `pvesm alloc` + `pvesm path` and handles the output formats every

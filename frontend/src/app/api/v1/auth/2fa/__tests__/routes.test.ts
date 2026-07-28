@@ -11,7 +11,7 @@ import { callRoute, readJson } from "@/__tests__/setup/route-test"
 const getServerSessionMock = vi.fn()
 const getTokenMock = vi.fn()
 const encodeMock = vi.fn()
-const authenticatorCheckMock = vi.fn()
+const checkTotpCodeMock = vi.fn()
 
 const userFindUniqueMock = vi.fn()
 const transactionMock = vi.fn()
@@ -40,10 +40,6 @@ vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("next-auth/jwt", () => ({ getToken: getTokenMock, encode: encodeMock }))
 
-vi.mock("otplib", () => ({
-  authenticator: { check: authenticatorCheckMock },
-}))
-
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     user: { findUnique: userFindUniqueMock },
@@ -61,6 +57,7 @@ vi.mock("@/lib/auth/totp", () => ({
   buildOtpauthUrl: buildOtpauthUrlMock,
   encryptTotpSecret: encryptTotpSecretMock,
   verifyTotp: verifyTotpMock,
+  checkTotpCode: checkTotpCodeMock,
 }))
 
 vi.mock("@/lib/auth/enroll-token", () => ({
@@ -226,11 +223,11 @@ describe("POST /api/v1/auth/2fa/enroll/verify", () => {
     expect(body.error).toBe("user_mismatch")
   })
 
-  it("returns 400 with invalid_code when authenticator.check returns false", async () => {
+  it("returns 400 with invalid_code when the TOTP code check fails", async () => {
     getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
     verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:SECRET" })
     decryptSecretMock.mockReturnValue("SECRET")
-    authenticatorCheckMock.mockReturnValue(false)
+    checkTotpCodeMock.mockReturnValue(false)
 
     const POST = await importPOST()
     const res = await callRoute(POST as any, { body: { enrollToken: "tok", code: "999999" } })
@@ -243,7 +240,7 @@ describe("POST /api/v1/auth/2fa/enroll/verify", () => {
     getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
     verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:SECRET" })
     decryptSecretMock.mockReturnValue("SECRET")
-    authenticatorCheckMock.mockReturnValue(true)
+    checkTotpCodeMock.mockReturnValue(true)
     generateRecoveryCodesMock.mockReturnValue(["CODE1-AAAAA", "CODE2-BBBBB"])
     // $transaction calls its callback with a stub tx
     transactionMock.mockImplementation((cb: (tx: any) => Promise<any>) =>

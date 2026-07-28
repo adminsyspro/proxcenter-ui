@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('next-auth/jwt', () => ({
-  getToken: vi.fn().mockResolvedValue(null),
+const { getTokenMock } = vi.hoisted(() => ({
+  getTokenMock: vi.fn<() => Promise<any>>(),
 }))
+
+vi.mock('next-auth/jwt', () => ({ getToken: getTokenMock }))
+
+import { NextRequest } from 'next/server'
+
+// Static instance: module-scope env constants (HA_ENABLED, VIP, ...) are baked
+// at file load, BEFORE any vi.stubEnv from the VIP describes below runs.
+import { middleware } from './middleware'
 
 function makeRequest(url: string, host: string) {
   return {
@@ -12,6 +20,19 @@ function makeRequest(url: string, host: string) {
     cookies: { get: () => undefined },
   }
 }
+
+function apiRequest(path: string, init: { method?: string; headers?: Record<string, string> } = {}) {
+  return new NextRequest(`http://test.local${path}`, {
+    method: init.method ?? 'GET',
+    headers: init.headers,
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  getTokenMock.mockResolvedValue(null)
+  delete process.env.DEMO_MODE
+})
 
 describe('VIP redirect', () => {
   beforeEach(() => {
@@ -226,5 +247,103 @@ describe('VIP redirect host exemptions', () => {
     const res = await middleware(req as any)
 
     expect(res.status).not.toBe(302)
+  })
+})
+
+describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
+  it('strips forged x-pxc-* headers on the storage upload bypass path', async () => {
+    const res = await middleware(
+      apiRequest('/api/v1/connections/c1/nodes/n1/storage/local/upload', {
+        method: 'POST',
+        headers: { 'x-pxc-entry': 'vms-list', 'x-pxc-path': '/api/v1/vms', 'x-pxc-method': 'GET' },
+      }),
+    )
+    // NextResponse.next({request}) encodes forwarded request headers. The
+    // override list must exist (proof the strip ran on the bypass path, a
+    // bare NextResponse.next() would forward the forged headers untouched)
+    // and must not carry any x-pxc-* name.
+    const overridden = res.headers.get('x-middleware-override-headers')
+    expect(overridden).not.toBeNull()
+    expect(overridden).not.toContain('x-pxc-entry')
+    expect(overridden).not.toContain('x-pxc-path')
+    expect(overridden).not.toContain('x-pxc-method')
+  })
+
+  it('strips forged x-pxc-* on an authenticated API pass-through', async () => {
+    getTokenMock.mockResolvedValue({ sub: 'u1' })
+    const res = await middleware(
+      apiRequest('/api/v1/users', { headers: { cookie: 'x', 'x-pxc-entry': 'evil' } }),
+    )
+    const overridden = res.headers.get('x-middleware-override-headers')
+    expect(overridden).not.toBeNull()
+    expect(overridden).not.toContain('x-pxc-entry')
+  })
+})
+
+describe('gesture 3: bounded derogation', () => {
+  it('answers 405 Allow: GET, HEAD to OPTIONS on an allowlisted path, with or without Bearer', async () => {
+    for (const headers of [{}, { authorization: 'Bearer pxc_x'.padEnd(50, 'a') }]) {
+      const res = await middleware(apiRequest('/api/v1/vms', { method: 'OPTIONS', headers }))
+      expect(res.status).toBe(405)
+      expect(res.headers.get('Allow')).toBe('GET, HEAD')
+      expect(await res.json()).toEqual({ error: 'API tokens are read-only', method: 'OPTIONS' })
+    }
+  })
+
+  it('derogates a Bearer pxc_ on an allowlisted path and stamps the three internal headers', async () => {
+    const res = await middleware(
+      apiRequest('/api/v1/pbs/conn-9/backups', { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
+    )
+    expect(res.status).toBe(200) // NextResponse.next()
+    expect(res.headers.get('x-middleware-request-x-pxc-method')).toBe('GET')
+    expect(res.headers.get('x-middleware-request-x-pxc-path')).toBe('/api/v1/pbs/conn-9/backups')
+    expect(res.headers.get('x-middleware-request-x-pxc-entry')).toBe('pbs-backups')
+    expect(getTokenMock).not.toHaveBeenCalled()
+  })
+
+  it('gives NO derogation to a Bearer on a non-allowlisted path: existing cookie 401', async () => {
+    const res = await middleware(
+      apiRequest('/api/v1/license/status', { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
+    )
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Not authenticated' })
+  })
+
+  it('gives NO derogation without a Bearer on an allowlisted path', async () => {
+    const res = await middleware(apiRequest('/api/v1/vms'))
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Not authenticated' })
+  })
+
+  it('rejected paths (trailing slash, dotdot, %2F) never derogate', async () => {
+    for (const path of ['/api/v1/vms/', '/api/v1/pbs/..%2Fx/backups', '/api/v1/pbs/a%2Fb/backups']) {
+      const res = await middleware(
+        apiRequest(path, { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
+      )
+      expect(res.status).toBe(401)
+    }
+  })
+
+  it('keeps the existing behavior of public API routes', async () => {
+    const res = await middleware(apiRequest('/api/health'))
+    expect(res.status).toBe(200)
+  })
+
+  it('answers the existing cookie 401 to an OPTIONS preflight on a non-allowlisted path', async () => {
+    const res = await middleware(apiRequest('/api/v1/users', { method: 'OPTIONS' }))
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Not authenticated' })
+  })
+})
+
+describe('cookie-authenticated behavior unchanged', () => {
+  it('keeps the 2FA enrollment gate for cookie-authenticated API requests', async () => {
+    getTokenMock.mockResolvedValue({ sub: 'u1', mustEnroll2fa: true })
+    const res = await middleware(apiRequest('/api/v1/users', { headers: { cookie: 'x' } }))
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({
+      error: 'ENROLLMENT_REQUIRED',
+      redirect: '/profile/2fa/enrollment',
+    })
   })
 })

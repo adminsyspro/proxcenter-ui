@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server"
 
 import { getToken } from "next-auth/jwt"
 
+import { matchPublicApiPath } from "@/lib/api-tokens/allowlist"
+
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
 // HA VIP redirect configuration
@@ -198,9 +200,25 @@ export async function middleware(request: NextRequest) {
 
   // === NORMAL MODE (existing behavior) ===
 
-  // Skip middleware for large upload routes (auth handled in route handler via checkPermission)
+  const isApiPath = pathname.startsWith('/api/')
+
+  // API tokens, gesture 1 (spec section 6): strip EVERY inbound x-pxc-*
+  // header, FIRST instruction of the normal-mode API path, before the storage
+  // upload bypass below. Absolute rule: no NextResponse.next() on any /api/*
+  // path is ever emitted with unsanitized client headers. Trusted values are
+  // re-set below only by the bounded derogation.
+  const requestHeaders = new Headers(request.headers)
+  if (isApiPath) {
+    for (const name of Array.from(requestHeaders.keys())) {
+      if (name.toLowerCase().startsWith('x-pxc-')) requestHeaders.delete(name)
+    }
+  }
+
+  // Gesture 2 (existing bypass, unchanged semantics, now AFTER the strip):
+  // skip middleware for large upload routes (auth handled in route handler
+  // via checkPermission)
   if (pathname.includes('/storage/') && pathname.endsWith('/upload')) {
-    return NextResponse.next()
+    return NextResponse.next({ request: { headers: requestHeaders } })
   }
 
   // Vérifier si c'est une route publique
@@ -254,8 +272,44 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  if (isPublicRoute || isPublicApiRoute || isAsset) {
-    return NextResponse.next()
+  // Gesture 3: bounded API-token derogation, placed BEFORE the early return
+  // below on purpose: isAsset includes pathname.includes('.') and an
+  // allowlisted path containing a dot would otherwise skip this gate. The
+  // middleware never validates the token (edge runtime, no DB): it only
+  // matches the path via the shared matcher and stamps the internal headers;
+  // hash, license, tenant, scopes and quota live in getPrincipal().
+  const hasApiTokenBearer =
+    isApiPath && (request.headers.get('authorization') || '').startsWith('Bearer pxc_')
+  if (isApiPath) {
+    const matched = matchPublicApiPath(pathname)
+    if (matched.ok) {
+      // Server-to-server only (spec section 8): explicit 405 to any OPTIONS
+      // on the exposed surface, answered by the middleware itself.
+      if (request.method === 'OPTIONS') {
+        return NextResponse.json(
+          { error: 'API tokens are read-only', method: 'OPTIONS' },
+          { status: 405, headers: { Allow: 'GET, HEAD' } },
+        )
+      }
+      if (hasApiTokenBearer) {
+        // Precedent for request-header injection in this file: demo mode
+        // (lines 153-158). Neither the cookie 401 nor the 2FA enrollment
+        // gate applies to this branch.
+        requestHeaders.set('x-pxc-method', request.method)
+        requestHeaders.set('x-pxc-path', pathname)
+        requestHeaders.set('x-pxc-entry', matched.entryId as string)
+        return NextResponse.next({ request: { headers: requestHeaders } })
+      }
+    }
+  }
+
+  // A Bearer pxc_ outside the allowlist derogates to NOTHING: it must not
+  // even ride the isAsset dot rescue (pathname.includes('.')) below, it falls
+  // through to the existing JWT check and its cookie 401 instead. Cookie
+  // browser requests never carry a Bearer pxc_, so their behavior here is
+  // strictly unchanged.
+  if (isPublicRoute || isPublicApiRoute || (isAsset && !hasApiTokenBearer)) {
+    return NextResponse.next(isApiPath ? { request: { headers: requestHeaders } } : undefined)
   }
 
   // Vérifier le token JWT pour les API
@@ -290,8 +344,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/profile/2fa/enrollment", request.url))
   }
 
-  // Utilisateur authentifié, continuer
-  return NextResponse.next()
+  // Utilisateur authentifié, continuer (sanitized headers on API paths)
+  return NextResponse.next(isApiPath ? { request: { headers: requestHeaders } } : undefined)
 }
 
 export const config = {

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { getToken, encode } from "next-auth/jwt"
 import { getServerSession } from "next-auth"
-import { authenticator } from "otplib"
 
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { verifyEnrollToken } from "@/lib/auth/enroll-token"
 import { generateRecoveryCodes } from "@/lib/auth/recovery"
+import { checkTotpCode } from "@/lib/auth/totp"
 import { replaceRecoveryCodes } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
   const secret = decryptSecret(payload.secretEnc)
 
-  if (!authenticator.check(code, secret)) {
+  if (!checkTotpCode(code, secret)) {
     return NextResponse.json({ error: "invalid_code" }, { status: 400 })
   }
 

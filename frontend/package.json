@@ -30,7 +30,7 @@
     "@mui/lab": "7.0.1-beta.25",
     "@mui/material": "7.3.9",
     "@mui/material-nextjs": "7.3.9",
-    "@mui/x-data-grid": "^8.28.1",
+    "@mui/x-data-grid": "^9.9.0",
     "@mui/x-tree-view": "^8.27.1",
     "@novnc/novnc": "^1.7.0",
     "@prisma/adapter-pg": "^7.9.1",

@@ -102,7 +102,14 @@ describe('POST /api/v1/settings/api-tokens', () => {
     expect(body.data.token.connectionIds).toEqual(['conn-a'])
     const row = await prismaTest.apiToken.findUnique({ where: { id: body.data.token.id } })
     expect(row?.tokenHash).toMatch(/^[0-9a-f]{64}$/)
-    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'apitoken.create', category: 'api_tokens' }))
+    // audit() now also receives the transaction client (fix round 1, finding
+    // 1/2: the token row and its audit row are written atomically), so the
+    // call has a second argument — match it loosely, the transactionality
+    // itself is proven by apiTokensAuditAtomicity.test.ts.
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'apitoken.create', category: 'api_tokens' }),
+      expect.anything(),
+    )
   })
 
   it('rejects unknown scopes, empty scopes and empty names with 400', async () => {
@@ -131,7 +138,10 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     const row = await prismaTest.apiToken.findUnique({ where: { id } })
     expect(row).not.toBeNull()
     expect(row?.revokedAt).not.toBeNull()
-    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'apitoken.revoke' }))
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'apitoken.revoke' }),
+      expect.anything(),
+    )
   })
 
   it('404 on a token invisible to a non-admin of another tenant', async () => {

@@ -61,6 +61,10 @@ const UNLICENSED: ServerLicense = {
   options: [],
 }
 
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
+}
+
 beforeEach(async () => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
@@ -91,8 +95,10 @@ describe('self-review A: secret is revealed once, nowhere else', () => {
     const created = await readJson<any>(createRes)
     const secret: string = created.data.secret
     expect(secret).toMatch(/^pxc_/)
-    // Sanity: the creation body really does carry it.
-    expect(JSON.stringify(created)).toContain(secret)
+    // Sanity: the creation body carries it EXACTLY once — a regression that
+    // duplicated the secret into a second field would still pass a mere
+    // `.toContain()` check, so count occurrences instead.
+    expect(countOccurrences(JSON.stringify(created), secret)).toBe(1)
 
     const listRes = await callRoute(GET)
     const listBody = await readJson<any>(listRes)

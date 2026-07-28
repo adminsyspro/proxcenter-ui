@@ -93,31 +93,48 @@ export async function POST(req: Request) {
       : 600
 
   const generated = generateApiToken()
-  const token = await prisma.apiToken.create({
-    data: {
-      id: nanoid(),
-      tenantId,
-      name,
-      description: typeof body?.description === "string" && body.description ? body.description : null,
-      tokenPrefix: generated.prefix,
-      tokenHash: generated.hash,
-      scopes,
-      connectionIds,
-      expiresAt,
-      rateLimitPerMin,
-      createdByUserId: ctx.userId ?? null,
-    },
-    select: TOKEN_VIEW_SELECT,
-  })
 
-  await audit({
-    action: "apitoken.create",
-    category: "api_tokens",
-    resourceType: "api_token",
-    resourceId: token.id,
-    resourceName: name,
-    details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null },
-  })
+  // Atomic with the audit row (fix round 1, finding 1): if the audit insert
+  // fails, the token creation must roll back too. Otherwise a caller could
+  // get an error response while an active, unlogged credential (with its
+  // one-time secret already lost) sits in the database.
+  let token: any
+  try {
+    token = await prisma.$transaction(async tx => {
+      const created = await tx.apiToken.create({
+        data: {
+          id: nanoid(),
+          tenantId,
+          name,
+          description: typeof body?.description === "string" && body.description ? body.description : null,
+          tokenPrefix: generated.prefix,
+          tokenHash: generated.hash,
+          scopes,
+          connectionIds,
+          expiresAt,
+          rateLimitPerMin,
+          createdByUserId: ctx.userId ?? null,
+        },
+        select: TOKEN_VIEW_SELECT,
+      })
+
+      await audit(
+        {
+          action: "apitoken.create",
+          category: "api_tokens",
+          resourceType: "api_token",
+          resourceId: created.id,
+          resourceName: name,
+          details: { tenantId, scopes, connectionIds, expiresAt: expiresAt?.toISOString() ?? null },
+        },
+        tx,
+      )
+
+      return created
+    })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 })
+  }
 
   // ONE-TIME reveal: the clear secret is returned here and never again —
   // never persisted (only generated.hash is stored) and never included in

@@ -119,8 +119,16 @@ export interface AuditLogEntry {
  * besoin de JSON.stringify côté caller. Si les infos de session / headers ne
  * sont pas fournies par l'appelant, on tente de les récupérer depuis la
  * requête en cours (best-effort, l'absence n'est jamais bloquante).
+ *
+ * `tx` (optional, LAST parameter): pass a Prisma interactive-transaction
+ * client to make this audit row atomic with a state change the caller is
+ * making in the same `prisma.$transaction(...)` — e.g. api-tokens creation
+ * and revocation (Task 11 fix round 1), where a lost audit row would either
+ * strand an active, unlogged credential (create) or silently fail to record
+ * a revocation (revoke). Every existing call site omits it and keeps using
+ * the default `prisma` client — behavior is unchanged when omitted.
  */
-export async function audit(entry: AuditLogEntry): Promise<string> {
+export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient): Promise<string> {
   const id = nanoid()
   const timestamp = new Date()
 
@@ -170,7 +178,8 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
     // Fallback to default (e.g. during login before session exists)
   }
 
-  await prisma.auditLog.create({
+  const client = tx ?? prisma
+  await client.auditLog.create({
     data: {
       id,
       tenantId,

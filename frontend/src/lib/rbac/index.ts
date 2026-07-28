@@ -467,6 +467,7 @@ export const PERMISSIONS = {
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
+  ADMIN_APITOKENS: "admin.apitokens",
 } as const
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS]

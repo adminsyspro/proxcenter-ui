@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 // getTenantConnectionIds, getCurrentTenantId and getSessionPrisma all live in
 // the same module under test, so we mock their EXTERNAL dependencies rather
 // than the module itself.
+//  - headers (next/headers) is read by getPrincipal, which getCurrentTenantId
+//    now resolves through; an empty Headers = no Bearer = session path.
 //  - getServerSession (next-auth) feeds getCurrentTenantId the tenant id.
 //  - prisma (@/lib/db/prisma) provides the GLOBAL connection.findMany used by
 //    the provider branch AND a $extends stub returning the SESSION client used
@@ -11,25 +13,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 //  - getVdcScope (@/lib/vdc/scope) is dynamically imported and unioned in for
 //    non-provider tenants.
 const {
+  headersMock,
   getServerSessionMock,
   findManyGlobalMock,
   findManySessionMock,
   tenantFindUniqueMock,
+  rbacUserRoleFindFirstMock,
+  userTenantFindUniqueMock,
   getVdcScopeMock,
 } = vi.hoisted(() => ({
+  headersMock: vi.fn(),
   getServerSessionMock: vi.fn(),
   findManyGlobalMock: vi.fn(),
   findManySessionMock: vi.fn(),
   tenantFindUniqueMock: vi.fn(),
+  rbacUserRoleFindFirstMock: vi.fn(),
+  userTenantFindUniqueMock: vi.fn(),
   getVdcScopeMock: vi.fn(),
 }))
 
+vi.mock("next/headers", () => ({ headers: headersMock }))
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     connection: { findMany: findManyGlobalMock },
     tenant: { findUnique: tenantFindUniqueMock },
+    rbacUserRole: { findFirst: rbacUserRoleFindFirstMock },
+    userTenant: { findUnique: userTenantFindUniqueMock },
     $extends: () => ({ connection: { findMany: findManySessionMock } }),
   },
 }))
@@ -38,17 +49,21 @@ vi.mock("@/lib/vdc/scope", () => ({ getVdcScope: getVdcScopeMock }))
 import { getTenantConnectionIds } from "./index"
 
 beforeEach(() => {
+  headersMock.mockReset().mockResolvedValue(new Headers())
   getServerSessionMock.mockReset()
   findManyGlobalMock.mockReset().mockResolvedValue([])
   findManySessionMock.mockReset().mockResolvedValue([])
   tenantFindUniqueMock.mockReset()
+  // Membership guard inside getCurrentTenantId: not a super admin, but a
+  // member of the claimed tenant (u1 belongs wherever the test says).
+  rbacUserRoleFindFirstMock.mockReset().mockResolvedValue(null)
+  userTenantFindUniqueMock.mockReset().mockResolvedValue({ userId: "u1" })
   getVdcScopeMock.mockReset().mockResolvedValue(null)
 })
 
 describe("getTenantConnectionIds", () => {
   it("provider (default): returns the WHOLE fleet from the GLOBAL client; session client untouched", async () => {
-    // No user.id in the session, so getCurrentTenantId skips the membership guard.
-    getServerSessionMock.mockResolvedValue({ user: { tenantId: "default" } })
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1", tenantId: "default" } })
     tenantFindUniqueMock.mockResolvedValue({ id: "default", enabled: true })
     findManyGlobalMock.mockResolvedValue([
       { id: "pve-pool" },
@@ -64,7 +79,7 @@ describe("getTenantConnectionIds", () => {
   })
 
   it("msp: returns only session-owned ids; GLOBAL client untouched; empty vDC scope adds nothing", async () => {
-    getServerSessionMock.mockResolvedValue({ user: { tenantId: "msp-1" } })
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1", tenantId: "msp-1" } })
     tenantFindUniqueMock.mockResolvedValue({ id: "msp-1", enabled: true })
     findManySessionMock.mockResolvedValue([{ id: "c1" }, { id: "c2" }])
     getVdcScopeMock.mockResolvedValue(null)
@@ -77,7 +92,7 @@ describe("getTenantConnectionIds", () => {
   })
 
   it("iaas: unions session-owned (empty) with vDC connectionIds + pbsConnectionIds", async () => {
-    getServerSessionMock.mockResolvedValue({ user: { tenantId: "iaas-1" } })
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1", tenantId: "iaas-1" } })
     tenantFindUniqueMock.mockResolvedValue({ id: "iaas-1", enabled: true })
     findManySessionMock.mockResolvedValue([])
     getVdcScopeMock.mockResolvedValue({

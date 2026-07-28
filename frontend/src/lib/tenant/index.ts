@@ -6,10 +6,9 @@
 // (instead of importing from lib/rbac) to avoid a circular import — lib/rbac
 // re-imports DEFAULT_TENANT_ID from this file.
 
-import { getServerSession } from "next-auth"
 import type { Prisma } from "@prisma/client"
 
-import { authOptions } from "@/lib/auth/config"
+import { getPrincipal } from "@/lib/auth/principal"
 import { prisma } from "@/lib/db/prisma"
 
 import { DEFAULT_TENANT_ID } from "./constants"
@@ -58,14 +57,26 @@ function rowToTenant(row: {
 }
 
 /**
- * Get current tenant ID from the session JWT.
- * Falls back to 'default' if not set (backwards-compatible).
+ * Get current tenant ID from the resolved principal (session cookie or API
+ * token). Session path falls back to 'default' if not set (backwards-
+ * compatible); the token path NEVER falls back.
  */
 export async function getCurrentTenantId(): Promise<string> {
-  const session = await getServerSession(authOptions)
-  const tenantId = (session as any)?.user?.tenantId || DEFAULT_TENANT_ID
+  const result = await getPrincipal()
+  if (!result.ok) {
+    // Fail-closed token branch: falling back to DEFAULT_TENANT_ID would
+    // PROMOTE a dead-tenant token to the provider fleet view (spec sec. 10).
+    throw new Error("Invalid or expired API token")
+  }
+  if (result.principal?.kind === "token") {
+    // Existence and enabled state already validated by getPrincipal (step 7).
+    // No user-membership check: a token has no user.
+    return result.principal.tenantId
+  }
 
-  // Verify tenant exists and is enabled
+  const tenantId = result.principal?.tenantId || DEFAULT_TENANT_ID
+
+  // Verify tenant exists and is enabled (session behavior, unchanged)
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true, enabled: true },
@@ -75,7 +86,7 @@ export async function getCurrentTenantId(): Promise<string> {
   if (!tenant.enabled) return DEFAULT_TENANT_ID
 
   // Verify the user actually belongs to this tenant (guards against stale JWTs)
-  const userId = (session as any)?.user?.id
+  const userId = result.principal?.userId
   if (userId && tenantId !== DEFAULT_TENANT_ID) {
     const allowed = await userHasAccessToTenant(userId, tenantId)
     if (!allowed) return DEFAULT_TENANT_ID

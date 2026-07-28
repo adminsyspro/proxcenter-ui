@@ -3,7 +3,9 @@
 // random part (lookup key + only value ever displayed). Hash = HMAC-SHA-256
 // hex peppered by APP_SECRET (already the at-rest secret key, see
 // frontend/src/lib/crypto/secret.ts and frontend/src/lib/internal-auth.ts:37).
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
+import { createHmac, randomBytes } from "node:crypto"
+
+import { constantTimeStringEqual } from "@/lib/crypto/constantTime"
 
 const PREFIX_RANDOM_CHARS = 8
 
@@ -21,16 +23,10 @@ export function hashApiToken(secret: string): string {
   return createHmac("sha256", pepper).update(secret, "utf8").digest("hex")
 }
 
-// Same shape as constantTimeStringEqual (frontend/src/lib/internal-auth.ts:20-30):
+// Shared constant-time compare (frontend/src/lib/crypto/constantTime.ts):
 // equal-length dummy compare on mismatch so no length oracle leaks.
 export function verifyTokenHash(secret: string, storedHash: string): boolean {
-  const computed = Buffer.from(hashApiToken(secret), "utf8")
-  const stored = Buffer.from(storedHash, "utf8")
-  if (computed.length !== stored.length) {
-    timingSafeEqual(computed, Buffer.alloc(computed.length))
-    return false
-  }
-  return timingSafeEqual(computed, stored)
+  return constantTimeStringEqual(hashApiToken(secret), storedHash)
 }
 
 export function generateApiToken(): GeneratedToken {

@@ -195,6 +195,21 @@ describe('checkPermission, token branch (layer 2)', () => {
     expect(await checkPermission(PERMISSIONS.VM_VIEW, 'vm', 'anyconn:node:qemu:1')).toBeNull()
   })
 
+  it('fails CLOSED on a resource-bearing id whose connection segment is unresolvable', async () => {
+    await withToken({ scopes: ['vms:read', 'nodes:read'], connectionIds: ['conn-1'] })
+    const deniedVm = await checkPermission(PERMISSIONS.VM_VIEW, 'vm', ':node1:qemu:100')
+    expect(deniedVm?.status).toBe(403)
+    expect(await deniedVm?.json()).toEqual({ error: 'Permission denied: vm.view' })
+    const deniedNode = await checkPermission(PERMISSIONS.NODE_VIEW, 'node', ':node1')
+    expect(deniedNode?.status).toBe(403)
+  })
+
+  it('still allows global and resource-less checks for a connection-scoped token', async () => {
+    await withToken({ scopes: ['vms:read'], connectionIds: ['conn-1'] })
+    expect(await checkPermission(PERMISSIONS.VM_VIEW)).toBeNull()
+    expect(await checkPermission(PERMISSIONS.VM_VIEW, 'global')).toBeNull()
+  })
+
   it('maps an invalid Bearer to the fail-closed 401 response', async () => {
     headersMock.mockResolvedValue(new Headers({ authorization: 'Bearer pxc_invalid-token' }))
     const res = await checkPermission(PERMISSIONS.VM_VIEW)

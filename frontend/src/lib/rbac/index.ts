@@ -572,13 +572,20 @@ function checkTokenPermission(
   resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
   resourceId?: string,
 ): NextResponse | null {
+  const deny = () =>
+    NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
   if (!principal.permissions?.has(permission)) {
-    return NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
+    return deny()
   }
-  if (principal.connectionIds) {
+  // Connection perimeter: only RESOURCE-BEARING checks are constrained.
+  // Global and resource-less checks pass — aggregated routes rely on them
+  // and filter downstream through the enumeration helpers instead.
+  if (principal.connectionIds && resourceType && resourceType !== "global" && resourceId) {
     const connId = resolveTokenConnectionId(resourceType, resourceId)
-    if (connId && !principal.connectionIds.includes(connId)) {
-      return NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
+    // Fail CLOSED: a resource-bearing id whose connection cannot be resolved
+    // (e.g. ":node1:qemu:100") is refused, never waved past the perimeter.
+    if (!connId || !principal.connectionIds.includes(connId)) {
+      return deny()
     }
   }
   return null

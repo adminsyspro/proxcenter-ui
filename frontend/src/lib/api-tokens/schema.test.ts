@@ -31,6 +31,16 @@ describe('api_tokens schema', () => {
     const found = await prismaTest.apiToken.findUnique({ where: { tokenPrefix: 'pxc_abcd1234' } })
     expect(found?.id).toBe('tok_1')
     expect(found?.scopes).toEqual(['vms:read'])
+
+    // Guards against schema-vs-database drift: schema.prisma declares these
+    // columns as plain DateTime (-> TIMESTAMP(3)), so the migration must not
+    // create them as TIMESTAMPTZ, or `prisma migrate dev` would generate an
+    // unwanted corrective ALTER COLUMN.
+    const testSchema = new URL(process.env.DATABASE_URL as string).searchParams.get('schema')
+    const columns = await prismaTest.$queryRawUnsafe<{ data_type: string }[]>(
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = '${testSchema}' AND table_name = 'api_tokens' AND column_name IN ('expires_at', 'revoked_at', 'last_used_at', 'created_at', 'updated_at')`,
+    )
+    expect(columns.length === 5 && columns.every((c) => c.data_type === 'timestamp without time zone')).toBe(true)
   })
 
   it('rejects a duplicate token_prefix', async () => {

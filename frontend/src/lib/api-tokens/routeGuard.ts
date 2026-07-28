@@ -33,11 +33,19 @@ export function withPublicApiGuard(entryId: string, handler: GuardedHandler): Gu
     const entry = getAllowlistEntryById(entryId)
     if (!entry) return rejectionToResponse()
 
+    // Entry pin (defence in depth): getPrincipal's scope verdict is only
+    // valid for the entry named by x-pxc-entry, and this handler serves
+    // exactly `entryId`. Any disagreement — a forged internal header if the
+    // Edge stripping ever regresses, or a future overlapping pattern — fails
+    // closed with the same 401 as every other disagreement, so the guard
+    // never proceeds on a scope verdict borrowed from another entry.
+    const hdrs = await headers()
+    if (hdrs.get("x-pxc-entry") !== entryId) return rejectionToResponse()
+
     // Layer 1 (spec section 6): the entry declares its raw-connection-id
     // segment; validate it against the token perimeter BEFORE the handler
     // runs, independently of what the handler passes to checkPermission.
     if (entry.connectionSegment) {
-      const hdrs = await headers()
       const params = matchEntryParams(entry, hdrs.get("x-pxc-path") || "")
       const connId = params ? params[entry.connectionSegment] : undefined
       if (!connId) return rejectionToResponse()

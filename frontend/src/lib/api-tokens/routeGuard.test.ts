@@ -75,14 +75,28 @@ describe('withPublicApiGuard', () => {
     expect(okHandler).not.toHaveBeenCalled()
   })
 
-  it('fails closed (401, no handler) when the forwarded path does not carry the declared connection segment', async () => {
+  it('fails closed (401, no handler) when the forwarded entry disagrees with a segment-bearing guard', async () => {
     // Edge matched 'vms-list' but the handler is guarded as 'pbs-backups':
-    // the connection segment cannot be extracted, so nothing is served.
+    // the entry pin refuses before any connection-segment extraction.
     const { secret } = await seedApiToken({ scopes: ['vms:read'] })
     headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
     const guarded = withPublicApiGuard('pbs-backups', okHandler)
     const res = await guarded(new Request('http://t/_'), {})
     expect(res.status).toBe(401)
+    expect(okHandler).not.toHaveBeenCalled()
+  })
+
+  it('pins the guard to its own entry: a token validated against another segment-less entry is refused', async () => {
+    // The resolver admitted this token against 'public-health' (empty
+    // requiredScopes). The handler is guarded under 'vms-list', also
+    // segment-less: without the entry pin the guard would serve the route
+    // on a scope verdict borrowed from another entry.
+    const { secret } = await seedApiToken({ scopes: ['storage:read'] })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'public-health', '/api/v1/public/health'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Invalid or expired API token' })
     expect(okHandler).not.toHaveBeenCalled()
   })
 
@@ -112,6 +126,11 @@ describe('withPublicApiGuard', () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'Connection not in token scope', connection: 'conn-B' })
     expect(okHandler).not.toHaveBeenCalled()
+    // The perimeter verdict must be computed from THIS token's principal:
+    // this call argument is the contract Task 9's tenant fix consumes.
+    expect(resolveVisibleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'default', connectionIds: ['conn-a'] }),
+    )
   })
 
   it('layer 1: admits an in-perimeter connection segment', async () => {
@@ -120,6 +139,9 @@ describe('withPublicApiGuard', () => {
     const guarded = withPublicApiGuard('pbs-backups', okHandler)
     const res = await guarded(new Request('http://t/_'), { params: Promise.resolve({ id: 'conn-a' }) })
     expect(res.status).toBe(200)
+    expect(resolveVisibleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: 'default', connectionIds: ['conn-a'] }),
+    )
   })
 
   it('session callers pass through unchanged, no RateLimit headers', async () => {

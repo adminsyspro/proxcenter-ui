@@ -13,7 +13,7 @@ vi.mock('./scope', () => ({ resolveVisibleConnectionIds: resolveVisibleMock }))
 
 import { NextResponse } from 'next/server'
 
-import { truncate } from '@/__tests__/setup/prisma-test'
+import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 import {
   ENTERPRISE_WITH_API_ACCESS,
   seedApiToken,
@@ -33,7 +33,7 @@ beforeEach(async () => {
   vi.spyOn(_impl, 'getServerLicense').mockResolvedValue(ENTERPRISE_WITH_API_ACCESS)
   getServerSessionMock.mockResolvedValue(null)
   resolveVisibleMock.mockResolvedValue(new Set(['conn-a']))
-  await truncate(['api_tokens', 'tenants'])
+  await truncate(['audit_logs', 'api_tokens', 'tenants'])
   await seedDefaultTenant()
 })
 
@@ -116,6 +116,12 @@ describe('withPublicApiGuard', () => {
     const reset = Number(res.headers.get('RateLimit-Reset'))
     expect(reset).toBeGreaterThan(0)
     expect(reset).toBeLessThanOrEqual(60)
+    // D13 volume discipline: a successful ordinary call must NOT be journaled
+    // (last_used_at/last_used_ip already carry that signal). Scoped to this
+    // token's own id so it can't be satisfied by another test's rows sharing
+    // the un-truncated-between-files audit_logs table.
+    const auditRows = await prismaTest.auditLog.findMany({ where: { apiTokenId: id } })
+    expect(auditRows).toHaveLength(0)
   })
 
   it('layer 1: rejects 403 when the declared connection segment is out of perimeter, BEFORE the handler', async () => {

@@ -125,6 +125,11 @@ const SshCommandsTab = dynamic(() => import('@/components/settings/SshCommandsTa
   loading: tabLoading
 })
 
+const BroadcastTab = dynamic(() => import('@/components/settings/BroadcastTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {
   ssr: false,
   loading: () => <Box sx={{ p: 2, textAlign: 'center' }}><LinearProgress /></Box>
@@ -3037,13 +3042,14 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
+    { label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },

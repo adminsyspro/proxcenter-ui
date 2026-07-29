@@ -2564,7 +2564,7 @@
       "colActions": "작업",
       "state": {
         "active": "활성",
-        "scheduled": "예약됨",
+        "scheduled": "예정됨",
         "expired": "만료됨",
         "disabled": "비활성화됨"
       },

@@ -43,6 +43,11 @@ describe('ColorPicker', () => {
     expect(screen.queryByRole('button', { name: /reset/i })).toBeNull()
   })
 
+  it('hides the reset button when a value is present but no reset handler is given', () => {
+    renderWithProviders(<ColorPicker value="#f59e0b" onChange={() => {}} label="Background" fallback="#000000" />)
+    expect(screen.queryByRole('button', { name: /reset/i })).toBeNull()
+  })
+
   it('renders two independent pickers without id collision', () => {
     renderWithProviders(
       <>
@@ -50,7 +55,12 @@ describe('ColorPicker', () => {
         <ColorPicker value="#222222" onChange={() => {}} label="Text" fallback="#ffffff" />
       </>,
     )
-    expect(screen.getAllByTestId('color-picker-native')).toHaveLength(2)
+    const nativeInputs = screen.getAllByTestId('color-picker-native')
+    expect(nativeInputs).toHaveLength(2)
+    // The whole point of the ref-based extraction is that neither instance
+    // relies on (or reintroduces) a shared hard-coded DOM id — assert that
+    // directly so a regression back to a shared id fails this test.
+    nativeInputs.forEach(input => expect(input).not.toHaveAttribute('id'))
     expect(screen.getByLabelText('Background')).toHaveValue('#111111')
     expect(screen.getByLabelText('Text')).toHaveValue('#222222')
   })

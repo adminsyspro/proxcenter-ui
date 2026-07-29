@@ -2538,7 +2538,6 @@
       "deleteConfirm": "El banner desaparece inmediatamente para todos los usuarios.",
       "empty": "Aún no hay mensajes de difusión.",
       "message": "Mensaje",
-      "messageHelp": "Texto sin formato. Se permiten emojis: pégalos directamente. Un emoji conserva sus propios colores y depende de la fuente del sistema del lector.",
       "previewPlaceholder": "Tu mensaje aparece aquí",
       "bgColor": "Color de fondo",
       "fgColor": "Color del texto",

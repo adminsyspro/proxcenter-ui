@@ -2507,7 +2507,6 @@
       "deleteConfirm": "所有用户将立即不再看到该横幅。",
       "empty": "暂无公告消息。",
       "message": "消息",
-      "messageHelp": "纯文本。允许使用表情符号：直接粘贴即可。表情符号保留自身颜色，显示效果取决于读者系统的字体。",
       "previewPlaceholder": "您的消息将显示在此处",
       "bgColor": "背景色",
       "fgColor": "文字颜色",

@@ -2538,7 +2538,6 @@
       "deleteConfirm": "The banner disappears immediately for every user.",
       "empty": "No broadcast message yet.",
       "message": "Message",
-      "messageHelp": "Plain text. Emoji are allowed: paste them straight in. An emoji keeps its own colours and depends on the reader's system font.",
       "previewPlaceholder": "Your message appears here",
       "bgColor": "Background colour",
       "fgColor": "Text colour",

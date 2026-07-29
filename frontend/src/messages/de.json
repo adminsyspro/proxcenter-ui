@@ -2505,7 +2505,6 @@
       "deleteConfirm": "Das Banner verschwindet sofort für alle Benutzer.",
       "empty": "Noch keine Broadcast-Nachricht.",
       "message": "Nachricht",
-      "messageHelp": "Reiner Text. Emojis sind erlaubt: einfach direkt einfügen. Ein Emoji behält seine eigenen Farben und hängt von der System-Schriftart des Lesers ab.",
       "previewPlaceholder": "Ihre Nachricht erscheint hier",
       "bgColor": "Hintergrundfarbe",
       "fgColor": "Textfarbe",

@@ -346,10 +346,7 @@ export default function BroadcastTab() {
                 onChange={e => setField('message', e.target.value)}
                 slotProps={{ htmlInput: { 'data-testid': 'broadcast-message-input' } }}
               />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                <Typography variant='caption' color='text.secondary'>
-                  {t('settings.broadcast.messageHelp')}
-                </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
                 <Typography variant='caption' color='text.secondary' data-testid='broadcast-message-count'>
                   {messageLength} / 500
                 </Typography>

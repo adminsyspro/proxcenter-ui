@@ -20,7 +20,7 @@ import Navbar from '@components/layout/vertical/Navbar'
 import ScrollToTop from '@core/components/scroll-to-top'
 import TasksFooter from '@components/TasksFooter'
 import OnboardingGuard from '@components/OnboardingGuard'
-import DemoBanner from '@components/DemoBanner'
+import TopBannerStack from '@components/broadcast/TopBannerStack'
 import DemoInterceptor from '@components/DemoInterceptor'
 import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
 import { RollingUpdateProvider } from '@/contexts/RollingUpdateContext'
@@ -53,7 +53,7 @@ const Layout = async props => {
 
   return (
     <Providers direction={direction}>
-      <DemoBanner />
+      <TopBannerStack />
       <DemoInterceptor />
       <TagColorProvider>
       <ProxCenterTasksProvider>

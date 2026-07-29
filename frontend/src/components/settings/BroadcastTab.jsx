@@ -356,14 +356,29 @@ export default function BroadcastTab() {
               </Box>
             </Box>
 
-            <Stack direction='row' spacing={1}>
+            {/* Each preset wears the pair it applies, so the readable
+                combination is visible before it is chosen. The three share the
+                dialog width equally. */}
+            <Stack
+              direction='row'
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, '& > *': { flex: '1 1 0', minWidth: 96 } }}
+            >
               {PRESETS.map(preset => (
                 <Button
                   key={preset.key}
                   data-testid={`broadcast-preset-${preset.key}`}
                   size='small'
-                  variant='outlined'
+                  variant='contained'
                   onClick={() => setForm(prev => ({ ...prev, bgColor: preset.bgColor, fgColor: preset.fgColor }))}
+                  sx={{
+                    bgcolor: preset.bgColor,
+                    color: preset.fgColor,
+                    boxShadow: 'none',
+                    // brightness() rather than a computed shade: the presets are
+                    // plain hex values, so this works without parsing them.
+                    '&:hover': { bgcolor: preset.bgColor, filter: 'brightness(0.92)', boxShadow: 'none' },
+                  }}
                 >
                   {t(`settings.broadcast.preset.${preset.key}`)}
                 </Button>

@@ -21,16 +21,23 @@ export async function createBroadcast(input: BroadcastInput, createdBy: string):
 }
 
 export async function updateBroadcast(id: string, input: BroadcastInput): Promise<BroadcastMessage | null> {
-  const existing = await prisma.broadcastMessage.findUnique({ where: { id }, select: { id: true } })
-  if (!existing) return null
-  return prisma.broadcastMessage.update({ where: { id }, data: input })
+  // No pre-read: a findUnique-then-update leaves a window where a concurrent
+  // delete (two provider super-admins editing the same banner is ordinary)
+  // makes the update throw P2025 instead of returning the contract's null.
+  // One call, and only the missing-record error is swallowed.
+  try {
+    return await prisma.broadcastMessage.update({ where: { id }, data: input })
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2025') return null
+    throw error
+  }
 }
 
 export async function deleteBroadcast(id: string): Promise<boolean> {
-  const existing = await prisma.broadcastMessage.findUnique({ where: { id }, select: { id: true } })
-  if (!existing) return false
-  await prisma.broadcastMessage.delete({ where: { id } })
-  return true
+  // No pre-read for the same reason as updateBroadcast: deleteMany never
+  // throws on a missing row, so there is no existence-check race at all.
+  const { count } = await prisma.broadcastMessage.deleteMany({ where: { id } })
+  return count > 0
 }
 
 /**

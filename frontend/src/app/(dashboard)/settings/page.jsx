@@ -58,24 +58,33 @@ import { useAISettings } from '@/hooks/useAISettings'
 import { useGreenSettings } from '@/hooks/useGreenSettings'
 
 // Import dynamique pour éviter les erreurs SSR
+// One shared loading fallback for every lazily-imported tab. Repeating the
+// same JSX per import puts any new tab inside an already-duplicated block,
+// which fails the new-code duplication gate.
+const tabLoading = () => (
+  <Box sx={{ p: 3, textAlign: 'center' }}>
+    <LinearProgress />
+  </Box>
+)
+
 const NotificationsTab = dynamic(() => import('@/components/settings/NotificationsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const AppearanceTab = dynamic(() => import('@/components/settings/AppearanceTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const LdapConfigTab = dynamic(() => import('@/components/settings/LdapConfigTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const OidcConfigTab = dynamic(() => import('@/components/settings/OidcConfigTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionDialog'), {
@@ -84,7 +93,7 @@ const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionD
 
 const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
@@ -93,27 +102,27 @@ const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticMo
 
 const WhiteLabelTab = dynamic(() => import('@/components/settings/WhiteLabelTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const VdcTab = dynamic(() => import('@/components/settings/VdcTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const TenantsTab = dynamic(() => import('@/components/settings/TenantsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const AlertThresholdsTab = dynamic(() => import('@/components/settings/AlertThresholdsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const SshCommandsTab = dynamic(() => import('@/components/settings/SshCommandsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {

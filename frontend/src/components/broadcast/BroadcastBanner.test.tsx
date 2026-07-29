@@ -41,18 +41,29 @@ describe('BroadcastBanner', () => {
     const onDismiss = vi.fn()
     const b = banner()
     renderWithProviders(<BroadcastBanner banner={b} onDismiss={onDismiss} />)
-    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onDismiss).toHaveBeenCalledWith(b)
   })
 
   it('hides the close button when the banner is not dismissible', () => {
     renderWithProviders(<BroadcastBanner banner={banner({ dismissible: false })} onDismiss={() => {}} />)
-    expect(screen.queryByRole('button', { name: /dismiss/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
   })
 
   it('does not interpret markup in the message', () => {
     renderWithProviders(<BroadcastBanner banner={banner({ message: '<b>bold</b>' })} onDismiss={() => {}} />)
     expect(screen.getByText('<b>bold</b>')).toBeInTheDocument()
     expect(document.querySelector('b')).toBeNull()
+  })
+
+  it('renders no link when the linkUrl scheme is unsafe', () => {
+    renderWithProviders(
+      <BroadcastBanner
+        banner={banner({ linkUrl: 'javascript:alert(1)', linkLabel: 'Click me' })}
+        onDismiss={() => {}}
+      />,
+    )
+    expect(screen.getByText('Maintenance Saturday 22:00 UTC 🛠️')).toBeInTheDocument()
+    expect(screen.queryByRole('link')).toBeNull()
   })
 })

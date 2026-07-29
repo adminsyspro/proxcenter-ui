@@ -67,11 +67,18 @@ describe('TopBannerStack', () => {
     expect(screen.getByText('message a')).toBeInTheDocument()
   })
 
-  it('clears the layout variable on unmount', async () => {
+  it('publishes a positive height while mounted, and clears it on unmount', async () => {
     broadcastsMock.mockReturnValue({ banners: [banner('a')], isLoading: false })
+    // jsdom's real layout always reports 0 (no-op ResizeObserver, no layout
+    // engine), so the mount-time assertion below would be vacuously true
+    // without this stub — it is what makes the test falsifiable rather than
+    // one that would still pass had the height never been published at all.
+    const offsetHeightSpy = vi.spyOn(HTMLDivElement.prototype, 'offsetHeight', 'get').mockReturnValue(40)
     const TopBannerStack = (await import('./TopBannerStack')).default
     const { unmount } = renderWithProviders(<TopBannerStack />)
+    expect(document.documentElement.style.getPropertyValue(TOP_BANNER_HEIGHT_VAR)).toBe('40px')
     unmount()
     expect(document.documentElement.style.getPropertyValue(TOP_BANNER_HEIGHT_VAR)).toBe('')
+    offsetHeightSpy.mockRestore()
   })
 })

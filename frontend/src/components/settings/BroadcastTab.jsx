@@ -370,20 +370,24 @@ export default function BroadcastTab() {
               ))}
             </Stack>
 
-            <ColorPicker
-              value={form.bgColor}
-              onChange={hex => setField('bgColor', hex)}
-              label={t('settings.broadcast.bgColor')}
-              placeholder='#f59e0b'
-              fallback='#f59e0b'
-            />
-            <ColorPicker
-              value={form.fgColor}
-              onChange={hex => setField('fgColor', hex)}
-              label={t('settings.broadcast.fgColor')}
-              placeholder='#000000'
-              fallback='#000000'
-            />
+            {/* One row: each picker is a fixed 44px swatch plus a 160px field,
+                so they sit side by side and wrap on a narrow dialog. */}
+            <Stack direction='row' spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
+              <ColorPicker
+                value={form.bgColor}
+                onChange={hex => setField('bgColor', hex)}
+                label={t('settings.broadcast.bgColor')}
+                placeholder='#f59e0b'
+                fallback='#f59e0b'
+              />
+              <ColorPicker
+                value={form.fgColor}
+                onChange={hex => setField('fgColor', hex)}
+                label={t('settings.broadcast.fgColor')}
+                placeholder='#000000'
+                fallback='#000000'
+              />
+            </Stack>
             {lowContrast ? (
               <Alert severity='warning' data-testid='broadcast-contrast-warning'>
                 {t('settings.broadcast.contrastWarning')}

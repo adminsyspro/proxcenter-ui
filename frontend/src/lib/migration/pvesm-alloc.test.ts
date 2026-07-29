@@ -11,6 +11,7 @@ import {
   nextFreeDiskName,
   reserveVolumeSlot,
   volumesToFree,
+  volumesToKeep,
   type AllocatedVolume,
 } from "./pvesm-alloc"
 
@@ -376,5 +377,52 @@ describe("volumesToFree", () => {
     const volumes = [{ volumeId: "", devicePath: "" }]
 
     expect(volumesToFree(volumes)).toEqual([])
+  })
+
+  it("never frees a volume that holds a completed copy of the source disk (#612)", () => {
+    // Disks attach only at the very end of the cutover, so a fully copied target
+    // is still unattached; freeing it would delete hours of finished transfer.
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x", copied: true }]
+
+    expect(volumesToFree(volumes)).toEqual([])
+  })
+
+  it("never frees a volume that is both copied and attached", () => {
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x", copied: true, attached: true }]
+
+    expect(volumesToFree(volumes)).toEqual([])
+  })
+
+  it("still frees a registered volume that is neither copied nor attached", () => {
+    // A volume that failed mid first copy holds no usable image; it stays freeable.
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x" }]
+
+    expect(volumesToFree(volumes)).toEqual(volumes)
+  })
+})
+
+describe("volumesToKeep", () => {
+  it("reports a copied volume awaiting attach, so cleanup can log what it left behind", () => {
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x", copied: true }]
+
+    expect(volumesToKeep(volumes)).toEqual(volumes)
+  })
+
+  it("does not report an attached volume: it lives on with the VM, nothing was abandoned", () => {
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x", copied: true, attached: true }]
+
+    expect(volumesToKeep(volumes)).toEqual([])
+  })
+
+  it("does not report a volume with no completed copy: volumesToFree owns that one", () => {
+    const volumes = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x" }]
+
+    expect(volumesToKeep(volumes)).toEqual([])
+  })
+
+  it("skips a reserved slot whose allocation never started", () => {
+    const volumes = [{ volumeId: "", devicePath: "", copied: true }]
+
+    expect(volumesToKeep(volumes)).toEqual([])
   })
 })

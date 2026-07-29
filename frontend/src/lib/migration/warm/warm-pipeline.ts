@@ -14,7 +14,7 @@ import {
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
 import {
-  allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
+  allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree, volumesToKeep,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
 } from "../pvesm-alloc"
 import { pveSetVmConfig } from "../pve-vm-config"
@@ -426,6 +426,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, "Full copy (CBT allocated map)…")
       const t0 = Date.now()
       const fullBytes = await runCbtPass("full", () => "*")
+      // The full pass applied a VMware-snapshot-consistent image of every disk:
+      // from this point the target holds a bootable point-in-time copy worth hours
+      // of transfer, so failure cleanup must keep these volumes, not free them (#612).
+      markVolumesCopied(allocatedVolumes)
       const fullSec = Math.max(1, (Date.now() - t0) / 1000)
       let throughput = fullBytes / fullSec
       await appendLog(jobId, `Full copy done: ${(fullBytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
@@ -483,6 +487,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             if (idx >= 0) activeReaders.splice(idx, 1)
           }
         }
+        // Every disk has been fully applied against the checksum snapshot: the
+        // target now holds a consistent bootable image, so failure cleanup must
+        // keep these volumes, not free them (#612). Only reached when ALL disks
+        // completed; a failure mid loop leaves the volumes unmarked and freeable.
+        markVolumesCopied(allocatedVolumes)
       } finally {
         await soapRemoveSnapshot(soapSession!, snapMor, false).catch(() => {})
         const k = ourSnapshots.indexOf(snapMor)
@@ -552,7 +561,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
-    await cleanupOnFailure(config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
+    await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
     throw err
   } finally {
     stopKeepAlive?.()
@@ -575,11 +584,32 @@ async function cleanShutdownAndConfirm(jobId: string, session: SoapSession, vmid
     await appendLog(jobId, `Guest shutdown could not be initiated (${e?.message || e}); waiting for manual/hard power-off`, "warn")
   })
   const off = await soapWaitPoweredOff(session, vmid, 300000)
-  if (!off) throw new Error("Cutover aborted: source VM did not reach a confirmed powered-off state (no final delta taken; target left untouched)")
+  // Careful with the wording: the CBT path reaches this AFTER the full copy, so a
+  // completed copy is kept, but the checksum fallback shuts the source down BEFORE
+  // copying anything, and those unmarked volumes are still freed. State the rule,
+  // never promise a copy that may not exist (#612).
+  if (!off) throw new Error("Cutover aborted: source VM did not reach a confirmed powered-off state (no final delta taken; any target volume holding a completed copy is kept, not deleted)")
 }
 
-/** Failure cleanup: stop readers, remove our snapshots by specific MOR, free orphan target volumes. */
+/**
+ * Mark every allocated volume as holding a completed, snapshot-consistent copy of
+ * its source disk. Called only once a copy pass has finished for ALL disks (the
+ * CBT full pass, or the checksum fallback after its last disk): each pass applies
+ * a VMware-snapshot-consistent image, so a completed pass leaves the target
+ * bootable, and `volumesToFree` then keeps it out of failure cleanup (#612). A run
+ * that fails mid pass never reaches this, so a half-written target is still freed.
+ */
+export function markVolumesCopied(allocatedVolumes: AllocatedVolume[]): void {
+  for (const v of allocatedVolumes) v.copied = true
+}
+
+/**
+ * Failure cleanup: stop readers, remove our snapshots by specific MOR, free orphan
+ * target volumes, and log (under `jobId`) each copied volume deliberately kept so
+ * the operator knows what survived and where.
+ */
 async function cleanupOnFailure(
+  jobId: string,
   config: WarmMigrationConfig,
   session: SoapSession | null,
   ourSnapshots: string[],
@@ -603,5 +633,12 @@ async function cleanupOnFailure(
     // A `saferemove` LVM storage zeroes the volume before removing it, which takes
     // far longer than the 30 s executeSSH default.
     if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})
+  }
+  // Volumes holding a completed copy are deliberately NOT freed: the copy is
+  // bootable and worth hours of transfer, and deleting it on a post-copy failure
+  // is what destroyed 3.4 TB on a customer cluster (#612). Say so in the job log,
+  // one line per volume, so nothing silently lingers on the storage.
+  for (const v of volumesToKeep(allocatedVolumes)) {
+    await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
   }
 }

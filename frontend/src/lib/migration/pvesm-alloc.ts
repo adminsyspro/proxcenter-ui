@@ -17,6 +17,13 @@ export interface AllocatedVolume {
   devicePath: string
   rbdMapped?: boolean
   attached?: boolean
+  /**
+   * Set once the volume holds a snapshot-consistent image from a COMPLETED copy
+   * pass. From that point the target is bootable and represents hours of transfer,
+   * so failure cleanup must never free it (see `volumesToFree` / #612). A volume
+   * that failed mid copy never gets this flag and is still freed as before.
+   */
+  copied?: boolean
 }
 
 export interface AllocateBlockVolumeOpts {
@@ -86,14 +93,34 @@ export function reserveVolumeSlot(allocatedVolumes: AllocatedVolume[]): Allocate
 }
 
 /**
- * The volumes failure cleanup must free: registered, and not attached to the VM.
+ * The volumes failure cleanup must free: registered, not attached to the VM, and
+ * not holding a completed copy.
  *
  * Skips slots whose allocation never started (no volume ID yet) so cleanup never
- * frees a name we did not create, and skips attached volumes — those are in
- * `qm config` already and get removed together with the VM.
+ * frees a name we did not create, and skips attached volumes, which are in
+ * `qm config` already and get removed together with the VM. It also skips volumes
+ * marked `copied`: disks are attached only at the very end of a cutover, so
+ * between the end of the first full copy pass and that attach the target holds a
+ * bootable, snapshot-consistent image that is NOT attached yet. Freeing it on a
+ * late failure or cancellation deletes hours of finished transfer (3.4 TB on a
+ * customer cluster, #612). Cleanup reports those through `volumesToKeep` instead.
+ *
+ * Both filters live in this module on purpose: the pipelines must never
+ * re-implement the keep/free rule (and CI fails on duplicated pipeline code).
  */
 export function volumesToFree(allocatedVolumes: AllocatedVolume[]): AllocatedVolume[] {
-  return allocatedVolumes.filter(v => v.volumeId && !v.attached)
+  return allocatedVolumes.filter(v => v.volumeId && !v.attached && !v.copied)
+}
+
+/**
+ * The volumes failure cleanup deliberately leaves behind: registered, holding a
+ * completed copy, and not attached to the VM (an attached volume lives on with
+ * the VM, nothing was abandoned). Companion of `volumesToFree`, so cleanup can
+ * log exactly which volumes it kept and the operator knows what to remove
+ * manually if the copy is not wanted (#612).
+ */
+export function volumesToKeep(allocatedVolumes: AllocatedVolume[]): AllocatedVolume[] {
+  return allocatedVolumes.filter(v => v.volumeId && v.copied && !v.attached)
 }
 
 /**

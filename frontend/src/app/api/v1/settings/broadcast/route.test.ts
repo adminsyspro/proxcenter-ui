@@ -44,6 +44,7 @@ describe('GET /api/v1/settings/broadcast', () => {
     const { GET } = await import('./route')
     expect((await callRoute(GET)).status).toBe(403)
     expect(listMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 })
 
@@ -76,5 +77,14 @@ describe('POST /api/v1/settings/broadcast', () => {
     const res = await callRoute(POST, { body: payload })
     expect(res.status).toBe(400)
     expect(createMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed JSON with 400 and writes nothing', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: '{' })
+    expect(res.status).toBe(400)
+    expect(createMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 })

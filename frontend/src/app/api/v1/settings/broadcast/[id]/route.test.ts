@@ -50,6 +50,7 @@ describe('PUT /api/v1/settings/broadcast/[id]', () => {
     updateMock.mockResolvedValue(null)
     const { PUT } = await import('./route')
     expect((await callRoute(withParams(PUT), { method: 'PUT', params: { id: 'nope' }, body })).status).toBe(404)
+    expect(auditMock).not.toHaveBeenCalled()
   })
 
   it('refuses an unauthorised caller and writes nothing', async () => {
@@ -57,6 +58,7 @@ describe('PUT /api/v1/settings/broadcast/[id]', () => {
     const { PUT } = await import('./route')
     expect((await callRoute(withParams(PUT), { method: 'PUT', params: { id: 'b1' }, body })).status).toBe(403)
     expect(updateMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 
   it('rejects invalid input with 400', async () => {
@@ -64,6 +66,15 @@ describe('PUT /api/v1/settings/broadcast/[id]', () => {
     const res = await callRoute(withParams(PUT), { method: 'PUT', params: { id: 'b1' }, body: { ...body, fgColor: 'black' } })
     expect(res.status).toBe(400)
     expect(updateMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed JSON with 400 and writes nothing', async () => {
+    const { PUT } = await import('./route')
+    const res = await callRoute(withParams(PUT), { method: 'PUT', params: { id: 'b1' }, body: '{' })
+    expect(res.status).toBe(400)
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 })
 
@@ -79,6 +90,7 @@ describe('DELETE /api/v1/settings/broadcast/[id]', () => {
     deleteMock.mockResolvedValue(false)
     const { DELETE } = await import('./route')
     expect((await callRoute(withParams(DELETE), { method: 'DELETE', params: { id: 'nope' } })).status).toBe(404)
+    expect(auditMock).not.toHaveBeenCalled()
   })
 
   it('refuses an unauthorised caller and deletes nothing', async () => {
@@ -86,5 +98,6 @@ describe('DELETE /api/v1/settings/broadcast/[id]', () => {
     const { DELETE } = await import('./route')
     expect((await callRoute(withParams(DELETE), { method: 'DELETE', params: { id: 'b1' } })).status).toBe(403)
     expect(deleteMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 })

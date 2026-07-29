@@ -3,6 +3,8 @@
 
 import { z } from 'zod'
 
+import type { BroadcastInput } from '@/lib/broadcast/types'
+
 // ─── Connections ───────────────────────────────────────────────────────────────
 
 /** POST /api/v1/connections — create a Proxmox connection */
@@ -432,4 +434,22 @@ export const broadcastMessageSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'endsAt must be after startsAt', path: ['endsAt'] })
     }
   })
-  .transform(data => ({ ...data, targetIds: data.targetKind === 'all' ? [] : data.targetIds }))
+  .transform((data): BroadcastInput => ({
+    // zod v4 infers the transform-bearing fields as optional and drops `null`
+    // from their output types, although each is always present after a
+    // successful parse (verified for minimal input, explicit nulls, empty
+    // strings and a fully populated payload). Pinning the contract here, once,
+    // keeps every consumer cast-free — and listing the fields explicitly means
+    // a new column added to the model cannot silently widen this payload.
+    message: data.message as string,
+    linkUrl: data.linkUrl ?? null,
+    linkLabel: data.linkLabel ?? null,
+    bgColor: data.bgColor,
+    fgColor: data.fgColor,
+    dismissible: data.dismissible,
+    enabled: data.enabled,
+    startsAt: data.startsAt ?? null,
+    endsAt: data.endsAt ?? null,
+    targetKind: data.targetKind,
+    targetIds: data.targetKind === 'all' ? [] : data.targetIds,
+  }))

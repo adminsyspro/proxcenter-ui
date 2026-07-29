@@ -1,0 +1,61 @@
+'use client'
+
+import { useRef } from 'react'
+import { Box, IconButton, TextField, Tooltip, alpha } from '@mui/material'
+
+/**
+ * Swatch + hidden native colour input + hex field. Extracted from
+ * WhiteLabelTab so the broadcast banner can reuse it instead of a third
+ * copy of the same 45 lines. Uses a ref rather than a DOM id: the original
+ * relied on document.getElementById with a hard-coded, hyphenated element id,
+ * which cannot survive two instances on one screen.
+ */
+export default function ColorPicker({ value, onChange, label, placeholder = '', fallback, onReset = undefined }) {
+  const inputRef = useRef(null)
+  const shown = value || fallback
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ position: 'relative' }}>
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: 1.5,
+            border: '2px solid',
+            borderColor: 'divider',
+            bgcolor: shown,
+            cursor: 'pointer',
+            transition: 'box-shadow 0.2s',
+            '&:hover': { boxShadow: `0 0 0 3px ${alpha(shown, 0.3)}` },
+          }}
+          onClick={() => inputRef.current?.click()}
+        />
+        <input
+          ref={inputRef}
+          data-testid='color-picker-native'
+          type='color'
+          value={shown}
+          onChange={e => onChange(e.target.value)}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+        />
+      </Box>
+      <TextField
+        size='small'
+        label={label}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        sx={{ width: 160 }}
+        slotProps={{ htmlInput: { maxLength: 7 } }}
+      />
+      {onReset && value ? (
+        <Tooltip title='Reset to default'>
+          <IconButton size='small' aria-label='reset colour' onClick={onReset}>
+            <i className='ri-refresh-line' />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+    </Box>
+  )
+}

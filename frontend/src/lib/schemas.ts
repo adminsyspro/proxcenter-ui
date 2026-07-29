@@ -363,3 +363,73 @@ export const deploySchema = z.object({
   saveAsBlueprint: z.boolean().default(false),
   blueprintName: z.string().max(100).optional(),
 })
+
+// ─── Broadcast banner ────────────────────────────────────────────────────────
+
+/** Anchored, no nested quantifiers: keeps Sonar S5852 quiet. */
+const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/
+
+/**
+ * Banner links are rendered as an anchor in every user's browser, so the
+ * scheme must be pinned. `new URL()` happily accepts `javascript:` and
+ * `data:`, and a leading `//` is protocol-relative — it looks like a path
+ * but navigates off-site. Same reasoning as haRedirect.ts:18-24.
+ */
+export function isSafeBannerLink(value: string): boolean {
+  if (!value) return false
+  // Control characters (including newlines) can smuggle a second value past
+  // naive consumers; reject them before any parsing.
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return false
+  }
+  if (value.includes('\\')) return false
+  if (value.startsWith('//')) return false
+  if (value.startsWith('/')) return true
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const optionalDate = z
+  .union([z.string(), z.date()])
+  .nullish()
+  .transform(v => (v === null || v === undefined || v === '' ? null : new Date(v)))
+  .refine(v => v === null || !Number.isNaN(v.getTime()), 'Invalid date')
+
+/** POST/PUT /api/v1/settings/broadcast — create or update a broadcast banner */
+export const broadcastMessageSchema = z
+  .object({
+    message: z.string().transform(s => s.trim()).refine(s => s.length >= 1, 'message is required').refine(s => s.length <= 500, 'message is too long'),
+    linkUrl: z.string().nullish().transform(v => (v ? v.trim() : null)),
+    linkLabel: z.string().max(60).nullish().transform(v => (v ? v.trim() : null)),
+    bgColor: z.string().regex(HEX_COLOUR, 'bgColor must be #rrggbb'),
+    fgColor: z.string().regex(HEX_COLOUR, 'fgColor must be #rrggbb'),
+    dismissible: z.boolean().default(true),
+    enabled: z.boolean().default(true),
+    startsAt: optionalDate,
+    endsAt: optionalDate,
+    targetKind: z.enum(['all', 'tenants', 'roles']),
+    targetIds: z.array(z.string().min(1)).default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.linkUrl && data.linkUrl.length > 2048) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkUrl is too long', path: ['linkUrl'] })
+    }
+    if (data.linkUrl && !isSafeBannerLink(data.linkUrl)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkUrl must be http(s) or a relative path', path: ['linkUrl'] })
+    }
+    if (data.linkUrl && !data.linkLabel) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkLabel is required when linkUrl is set', path: ['linkLabel'] })
+    }
+    if (data.targetKind !== 'all' && data.targetIds.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'targetIds is required for this target', path: ['targetIds'] })
+    }
+    if (data.startsAt && data.endsAt && data.endsAt.getTime() <= data.startsAt.getTime()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'endsAt must be after startsAt', path: ['endsAt'] })
+    }
+  })
+  .transform(data => ({ ...data, targetIds: data.targetKind === 'all' ? [] : data.targetIds }))

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { broadcastMessageSchema, isSafeBannerLink } from './schemas'
+import { broadcastMessageSchema } from './schemas'
+import { isSafeBannerLink } from './broadcast/links'
 
 const valid = {
   message: 'Maintenance window Saturday 22:00 UTC 🛠️',

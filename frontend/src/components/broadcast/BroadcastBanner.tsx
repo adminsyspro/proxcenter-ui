@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { Box, IconButton, Link, Typography } from '@mui/material'
 
-import { isSafeBannerLink } from '@/lib/schemas'
+import { isSafeBannerLink } from '@/lib/broadcast/links'
 import type { PublicBroadcast } from '@/lib/broadcast/types'
 import { BANNER_ROW_MIN_HEIGHT } from './bannerHeight'
 

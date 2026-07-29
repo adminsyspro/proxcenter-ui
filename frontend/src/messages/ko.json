@@ -2543,8 +2543,6 @@
       "bgColor": "배경색",
       "fgColor": "텍스트 색상",
       "contrastWarning": "대비가 접근성 기준값 4.5:1보다 낮습니다. 메시지가 읽기 어려울 수 있습니다.",
-      "linkUrl": "링크 (선택 사항)",
-      "linkLabel": "링크 라벨",
       "startsAt": "시작일",
       "endsAt": "종료일",
       "target": "대상",

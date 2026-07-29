@@ -7,8 +7,6 @@ import BroadcastBanner from './BroadcastBanner'
 const banner = (over: Record<string, unknown> = {}) => ({
   id: 'b1',
   message: 'Maintenance Saturday 22:00 UTC 🛠️',
-  linkUrl: null,
-  linkLabel: null,
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,
@@ -27,14 +25,6 @@ describe('BroadcastBanner', () => {
   it('renders no link when the banner has none', () => {
     renderWithProviders(<BroadcastBanner banner={banner()} onDismiss={() => {}} />)
     expect(screen.queryByRole('link')).toBeNull()
-  })
-
-  it('renders the link with its label when present', () => {
-    renderWithProviders(
-      <BroadcastBanner banner={banner({ linkUrl: '/status', linkLabel: 'Status page' })} onDismiss={() => {}} />,
-    )
-    const link = screen.getByRole('link', { name: 'Status page' })
-    expect(link).toHaveAttribute('href', '/status')
   })
 
   it('calls onDismiss with the banner when the close button is used', () => {
@@ -67,24 +57,4 @@ describe('BroadcastBanner', () => {
     })
   })
 
-  it('lets the link label wrap anywhere instead of overflowing the row', () => {
-    renderWithProviders(
-      <BroadcastBanner banner={banner({ linkUrl: '/status', linkLabel: 'Status page' })} onDismiss={() => {}} />,
-    )
-    expect(screen.getByRole('link', { name: 'Status page' })).toHaveStyle({
-      overflowWrap: 'anywhere',
-      minWidth: 0,
-    })
-  })
-
-  it('renders no link when the linkUrl scheme is unsafe', () => {
-    renderWithProviders(
-      <BroadcastBanner
-        banner={banner({ linkUrl: 'javascript:alert(1)', linkLabel: 'Click me' })}
-        onDismiss={() => {}}
-      />,
-    )
-    expect(screen.getByText('Maintenance Saturday 22:00 UTC 🛠️')).toBeInTheDocument()
-    expect(screen.queryByRole('link')).toBeNull()
-  })
 })

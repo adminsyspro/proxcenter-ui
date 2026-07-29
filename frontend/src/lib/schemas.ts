@@ -3,7 +3,6 @@
 
 import { z } from 'zod'
 
-import { isSafeBannerLink } from '@/lib/broadcast/links'
 import type { BroadcastInput } from '@/lib/broadcast/types'
 
 // ─── Connections ───────────────────────────────────────────────────────────────
@@ -407,8 +406,6 @@ const optionalDate = z
 export const broadcastMessageSchema = z
   .object({
     message: z.string().transform(s => s.trim()).refine(s => s.length >= 1, 'message is required').refine(s => s.length <= 500, 'message is too long'),
-    linkUrl: z.string().nullish().transform(v => (v ? v.trim() : null)),
-    linkLabel: z.string().max(60).nullish().transform(v => (v ? v.trim() : null)),
     bgColor: z.string().regex(HEX_COLOUR, 'bgColor must be #rrggbb'),
     fgColor: z.string().regex(HEX_COLOUR, 'fgColor must be #rrggbb'),
     dismissible: z.boolean().default(true),
@@ -419,15 +416,6 @@ export const broadcastMessageSchema = z
     targetIds: z.array(z.string().min(1)).default([]),
   })
   .superRefine((data, ctx) => {
-    if (data.linkUrl && data.linkUrl.length > 2048) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkUrl is too long', path: ['linkUrl'] })
-    }
-    if (data.linkUrl && !isSafeBannerLink(data.linkUrl)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkUrl must be http(s) or a relative path', path: ['linkUrl'] })
-    }
-    if (data.linkUrl && !data.linkLabel) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'linkLabel is required when linkUrl is set', path: ['linkLabel'] })
-    }
     if (data.targetKind !== 'all' && data.targetIds.length === 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'targetIds is required for this target', path: ['targetIds'] })
     }
@@ -443,8 +431,6 @@ export const broadcastMessageSchema = z
     // keeps every consumer cast-free — and listing the fields explicitly means
     // a new column added to the model cannot silently widen this payload.
     message: data.message as string,
-    linkUrl: data.linkUrl ?? null,
-    linkLabel: data.linkLabel ?? null,
     bgColor: data.bgColor,
     fgColor: data.fgColor,
     dismissible: data.dismissible,

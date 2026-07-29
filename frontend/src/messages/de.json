@@ -2510,8 +2510,6 @@
       "bgColor": "Hintergrundfarbe",
       "fgColor": "Textfarbe",
       "contrastWarning": "Der Kontrast liegt unter dem Barrierefreiheits-Schwellenwert von 4.5:1. Die Nachricht könnte schwer lesbar sein.",
-      "linkUrl": "Link (optional)",
-      "linkLabel": "Link-Bezeichnung",
       "startsAt": "Startdatum",
       "endsAt": "Enddatum",
       "target": "Zielgruppe",

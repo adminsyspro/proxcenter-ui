@@ -7,8 +7,6 @@
 /** Everything an admin may write. Matches the parsed broadcastMessageSchema. */
 export interface BroadcastInput {
   message: string
-  linkUrl: string | null
-  linkLabel: string | null
   bgColor: string
   fgColor: string
   dismissible: boolean
@@ -23,8 +21,6 @@ export interface BroadcastInput {
 export interface PublicBroadcast {
   id: string
   message: string
-  linkUrl: string | null
-  linkLabel: string | null
   bgColor: string
   fgColor: string
   dismissible: boolean

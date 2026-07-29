@@ -2543,8 +2543,6 @@
       "bgColor": "Background colour",
       "fgColor": "Text colour",
       "contrastWarning": "Contrast is below the 4.5:1 accessibility threshold. The message may be hard to read.",
-      "linkUrl": "Link (optional)",
-      "linkLabel": "Link label",
       "startsAt": "Starts at",
       "endsAt": "Ends at",
       "target": "Audience",

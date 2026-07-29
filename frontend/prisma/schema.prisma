@@ -501,8 +501,6 @@ model Setting {
 model BroadcastMessage {
   id          String    @id @default(cuid())
   message     String
-  linkUrl     String?   @map("link_url")
-  linkLabel   String?   @map("link_label")
   bgColor     String    @map("bg_color")
   fgColor     String    @map("fg_color")
   dismissible Boolean   @default(true)

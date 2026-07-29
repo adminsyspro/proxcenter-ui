@@ -68,8 +68,6 @@ describe('POST /api/v1/settings/broadcast', () => {
   it.each([
     ['a blank message', { ...body, message: '  ' }],
     ['an invalid colour', { ...body, bgColor: 'orange' }],
-    ['a javascript link', { ...body, linkUrl: 'javascript:alert(1)', linkLabel: 'x' }],
-    ['a protocol-relative link', { ...body, linkUrl: '//evil.example', linkLabel: 'x' }],
     ['a tenant target with no ids', { ...body, targetKind: 'tenants' }],
     ['an end before the start', { ...body, startsAt: '2026-08-02T00:00:00.000Z', endsAt: '2026-08-01T00:00:00.000Z' }],
   ])('rejects %s with 400', async (_label, payload) => {

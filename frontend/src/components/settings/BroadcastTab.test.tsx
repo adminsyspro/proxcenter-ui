@@ -12,8 +12,6 @@ const rows = [
   {
     id: 'b1',
     message: 'Maintenance Saturday 22:00 UTC',
-    linkUrl: null,
-    linkLabel: null,
     bgColor: '#f59e0b',
     fgColor: '#000000',
     dismissible: true,

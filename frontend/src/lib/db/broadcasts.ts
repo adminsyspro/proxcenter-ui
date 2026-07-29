@@ -68,8 +68,6 @@ function toPublic(row: BroadcastMessage): PublicBroadcast {
   return {
     id: row.id,
     message: row.message,
-    linkUrl: row.linkUrl,
-    linkLabel: row.linkLabel,
     bgColor: row.bgColor,
     fgColor: row.fgColor,
     dismissible: row.dismissible,

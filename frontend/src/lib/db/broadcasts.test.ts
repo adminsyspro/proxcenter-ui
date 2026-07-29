@@ -15,8 +15,6 @@ const NOW = new Date('2026-08-01T12:00:00.000Z')
 
 const input = (over: Record<string, unknown> = {}) => ({
   message: 'Maintenance 22:00 UTC',
-  linkUrl: null,
-  linkLabel: null,
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,
@@ -98,7 +96,7 @@ describe('broadcast repository', () => {
 
     expect(active.map(b => b.message)).toEqual(['everyone'])
     expect(Object.keys(active[0]).sort()).toEqual(
-      ['bgColor', 'dismissible', 'fgColor', 'id', 'linkLabel', 'linkUrl', 'message', 'updatedAt'].sort(),
+      ['bgColor', 'dismissible', 'fgColor', 'id', 'message', 'updatedAt'].sort(),
     )
   })
 

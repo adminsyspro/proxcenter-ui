@@ -18,8 +18,6 @@ vi.mock('@/lib/db/broadcasts', () => ({
 const publicBanner = {
   id: 'b1',
   message: 'Maintenance 22:00 UTC',
-  linkUrl: null,
-  linkLabel: null,
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,

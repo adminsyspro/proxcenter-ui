@@ -2512,8 +2512,6 @@
       "bgColor": "背景色",
       "fgColor": "文字颜色",
       "contrastWarning": "对比度低于 4.5:1 的无障碍标准。该消息可能难以阅读。",
-      "linkUrl": "链接（可选）",
-      "linkLabel": "链接标签",
       "startsAt": "开始日期",
       "endsAt": "结束日期",
       "target": "受众",

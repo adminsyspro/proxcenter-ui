@@ -2543,8 +2543,6 @@
       "bgColor": "Couleur de fond",
       "fgColor": "Couleur du texte",
       "contrastWarning": "Le contraste est inférieur au seuil d'accessibilité de 4.5:1. Le message peut être difficile à lire.",
-      "linkUrl": "Lien (optionnel)",
-      "linkLabel": "Libellé du lien",
       "startsAt": "Date de début",
       "endsAt": "Date de fin",
       "target": "Audience",

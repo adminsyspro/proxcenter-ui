@@ -48,8 +48,6 @@ const PRESETS = [
 
 const EMPTY = {
   message: '',
-  linkUrl: '',
-  linkLabel: '',
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,
@@ -136,8 +134,6 @@ export default function BroadcastTab() {
     setEditingId(row.id)
     setForm({
       message: row.message,
-      linkUrl: row.linkUrl ?? '',
-      linkLabel: row.linkLabel ?? '',
       bgColor: row.bgColor,
       fgColor: row.fgColor,
       dismissible: row.dismissible,
@@ -155,8 +151,6 @@ export default function BroadcastTab() {
     try {
       const body = {
         message: form.message,
-        linkUrl: form.linkUrl || null,
-        linkLabel: form.linkLabel || null,
         bgColor: form.bgColor,
         fgColor: form.fgColor,
         dismissible: form.dismissible,
@@ -323,8 +317,6 @@ export default function BroadcastTab() {
                 banner={{
                   id: 'preview',
                   message: form.message || t('settings.broadcast.previewPlaceholder'),
-                  linkUrl: form.linkUrl || null,
-                  linkLabel: form.linkLabel || null,
                   bgColor: form.bgColor,
                   fgColor: form.fgColor,
                   dismissible: false,
@@ -387,21 +379,6 @@ export default function BroadcastTab() {
                 {t('settings.broadcast.contrastWarning')}
               </Alert>
             ) : null}
-
-            <Stack direction='row' spacing={2}>
-              <TextField
-                fullWidth
-                label={t('settings.broadcast.linkUrl')}
-                value={form.linkUrl}
-                onChange={e => setField('linkUrl', e.target.value)}
-              />
-              <TextField
-                fullWidth
-                label={t('settings.broadcast.linkLabel')}
-                value={form.linkLabel}
-                onChange={e => setField('linkLabel', e.target.value)}
-              />
-            </Stack>
 
             <Stack direction='row' spacing={2}>
               <TextField

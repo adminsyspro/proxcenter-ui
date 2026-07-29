@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
 import { broadcastMessageSchema } from './schemas'
-import { isSafeBannerLink } from './broadcast/links'
 
 const valid = {
   message: 'Maintenance window Saturday 22:00 UTC 🛠️',
@@ -18,7 +17,6 @@ describe('broadcastMessageSchema', () => {
     expect(parsed.targetIds).toEqual([])
     expect(parsed.startsAt).toBeNull()
     expect(parsed.endsAt).toBeNull()
-    expect(parsed.linkUrl).toBeNull()
   })
 
   it('keeps emoji in the message untouched', () => {
@@ -67,29 +65,4 @@ describe('broadcastMessageSchema', () => {
       broadcastMessageSchema.safeParse({ ...valid, endsAt: '2026-02-30T10:00:00.000Z' }).success,
     ).toBe(false)
   })
-
-  it('requires a label when a link is provided', () => {
-    expect(broadcastMessageSchema.safeParse({ ...valid, linkUrl: '/status' }).success).toBe(false)
-    expect(
-      broadcastMessageSchema.safeParse({ ...valid, linkUrl: '/status', linkLabel: 'Status page' }).success,
-    ).toBe(true)
-  })
-})
-
-describe('isSafeBannerLink', () => {
-  it.each(['https://status.example.com', 'http://status.example.com/x?y=1', '/status', '/a/b'])(
-    'accepts %s',
-    value => expect(isSafeBannerLink(value)).toBe(true),
-  )
-
-  it.each([
-    'javascript:alert(1)',
-    'data:text/html,<script>alert(1)</script>',
-    '//evil.example',
-    '///evil.example',
-    '/\\evil.example',
-    'ftp://example.com',
-    'status.example.com',
-    '/status\nx',
-  ])('rejects %s', value => expect(isSafeBannerLink(value)).toBe(false))
 })

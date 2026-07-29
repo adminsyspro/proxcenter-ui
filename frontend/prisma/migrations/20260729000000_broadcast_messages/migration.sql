@@ -2,8 +2,6 @@
 CREATE TABLE "broadcast_messages" (
     "id" TEXT NOT NULL,
     "message" TEXT NOT NULL,
-    "link_url" TEXT,
-    "link_label" TEXT,
     "bg_color" TEXT NOT NULL,
     "fg_color" TEXT NOT NULL,
     "dismissible" BOOLEAN NOT NULL DEFAULT true,

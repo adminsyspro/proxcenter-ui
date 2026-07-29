@@ -6,8 +6,6 @@ import { DISMISSED_STORAGE_KEY, useDismissedBroadcasts } from './useDismissedBro
 const banner = (id: string, updatedAt: string) => ({
   id,
   message: id,
-  linkUrl: null,
-  linkLabel: null,
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,

@@ -11,8 +11,6 @@ vi.mock('@/hooks/useBroadcasts', () => ({ useBroadcasts: () => broadcastsMock() 
 const banner = (id: string) => ({
   id,
   message: `message ${id}`,
-  linkUrl: null,
-  linkLabel: null,
   bgColor: '#f59e0b',
   fgColor: '#000000',
   dismissible: true,

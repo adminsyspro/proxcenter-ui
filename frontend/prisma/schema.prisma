@@ -494,6 +494,29 @@ model Setting {
   @@map("settings")
 }
 
+/// Admin-authored banner shown at the top of the dashboard (#607).
+/// `targetIds` is a JSON array of strings: tenant ids when targetKind is
+/// "tenants", RBAC role ids when it is "roles", ignored when it is "all".
+/// Json (not String[]) because this schema stores every array as JSON.
+model BroadcastMessage {
+  id          String    @id @default(cuid())
+  message     String
+  bgColor     String    @map("bg_color")
+  fgColor     String    @map("fg_color")
+  dismissible Boolean   @default(true)
+  enabled     Boolean   @default(true)
+  startsAt    DateTime? @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  targetKind  String    @default("all") @map("target_kind")
+  targetIds   Json      @default("[]") @map("target_ids")
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([enabled, startsAt, endsAt])
+  @@map("broadcast_messages")
+}
+
 // HA Chantier 0: binary assets (branding logos, login background) live in
 // Postgres so any control-plane node can serve them without a shared FS.
 model UploadedAsset {

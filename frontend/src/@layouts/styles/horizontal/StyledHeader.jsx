@@ -26,7 +26,9 @@ const StyledHeader = styled.header`
 
   &.${horizontalLayoutClasses.headerFixed} {
     position: sticky;
-    inset-block-start: 0;
+    /* Without this the sticky header pins to the viewport edge and slides
+       UNDER the fixed top banner as soon as the page scrolls. */
+    inset-block-start: var(--top-banner-height, 0px);
     z-index: var(--header-z-index);
   }
 

@@ -92,7 +92,7 @@ return next
   })
   
   return (
-    <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontSize: 13 }}>
+    <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px) - var(--top-banner-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontSize: 13 }}>
       <Card variant="outlined" sx={{ width: '100%', flex: 1, minHeight: 0, borderRadius: 0, border: 'none', display: 'flex', flexDirection: 'column' }}>
         <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Header */}

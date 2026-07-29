@@ -13,7 +13,17 @@ const HEX_SIX = /^#[0-9a-fA-F]{6}$/
  * relied on document.getElementById with a hard-coded, hyphenated element id,
  * which cannot survive two instances on one screen.
  */
-export default function ColorPicker({ value, onChange, label, placeholder = '', fallback, onReset = undefined }) {
+export default function ColorPicker({
+  value,
+  onChange,
+  label,
+  placeholder = '',
+  fallback,
+  onReset = undefined,
+  // Opt-in: lets the hex field stretch instead of sitting at a fixed 160px.
+  // Defaults to false so WhiteLabelTab, the original caller, is untouched.
+  fullWidth = false,
+}) {
   const inputRef = useRef(null)
   // `value` is free-typed and can be a transient, invalid string (e.g. "#" or
   // "red") while the administrator is still editing, before validation runs.
@@ -24,8 +34,8 @@ export default function ColorPicker({ value, onChange, label, placeholder = '', 
   const shown = HEX_SIX.test(value) ? value : fallback
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <Box sx={{ position: 'relative' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ...(fullWidth && { width: '100%' }) }}>
+      <Box sx={{ position: 'relative', flexShrink: 0 }}>
         <Box
           sx={{
             width: 44,
@@ -55,7 +65,7 @@ export default function ColorPicker({ value, onChange, label, placeholder = '', 
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        sx={{ width: 160 }}
+        sx={fullWidth ? { flex: 1, minWidth: 0 } : { width: 160 }}
         slotProps={{ htmlInput: { maxLength: 7 } }}
       />
       {onReset && value ? (

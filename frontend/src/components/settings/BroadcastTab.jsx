@@ -370,10 +370,15 @@ export default function BroadcastTab() {
               ))}
             </Stack>
 
-            {/* One row: each picker is a fixed 44px swatch plus a 160px field,
-                so they sit side by side and wrap on a narrow dialog. */}
-            <Stack direction='row' spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
+            {/* One row, each picker taking half the dialog width and wrapping
+                to its own line only when there is no room left. */}
+            <Stack
+              direction='row'
+              spacing={3}
+              sx={{ flexWrap: 'wrap', rowGap: 2, '& > *': { flex: '1 1 220px', minWidth: 0 } }}
+            >
               <ColorPicker
+                fullWidth
                 value={form.bgColor}
                 onChange={hex => setField('bgColor', hex)}
                 label={t('settings.broadcast.bgColor')}
@@ -381,6 +386,7 @@ export default function BroadcastTab() {
                 fallback='#f59e0b'
               />
               <ColorPicker
+                fullWidth
                 value={form.fgColor}
                 onChange={hex => setField('fgColor', hex)}
                 label={t('settings.broadcast.fgColor')}

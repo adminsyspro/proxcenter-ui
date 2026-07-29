@@ -205,12 +205,16 @@ export default function BroadcastTab() {
   const ratio = contrastRatio(form.bgColor, form.fgColor)
   const lowContrast = ratio !== null && ratio < MIN_CONTRAST_RATIO
 
+  // Every targeted id must stay visible: an id that no longer resolves (or
+  // has not loaded yet) falls back to the raw id instead of being silently
+  // dropped, otherwise the table understates who receives the announcement.
+  // An empty target list shows a placeholder rather than a blank cell.
   const targetLabel = row => {
     if (row.targetKind === 'all') return t('settings.broadcast.targetAll')
-    const names = (row.targetKind === 'tenants' ? tenants : roles)
-      .filter(item => (row.targetIds ?? []).includes(item.id))
-      .map(item => item.name)
-    return names.length > 0 ? names.join(', ') : (row.targetIds ?? []).join(', ')
+    const pool = row.targetKind === 'tenants' ? tenants : roles
+    const ids = Array.isArray(row.targetIds) ? row.targetIds : []
+    if (ids.length === 0) return '-'
+    return ids.map(id => pool.find(item => item.id === id)?.name ?? id).join(', ')
   }
 
   if (loading) {
@@ -266,7 +270,13 @@ export default function BroadcastTab() {
                   <TableRow key={row.id} hover>
                     <TableCell sx={{ maxWidth: 380 }}>{row.message}</TableCell>
                     <TableCell>
-                      <Chip size='small' color={STATE_COLOUR[state]} label={t(`settings.broadcast.state.${state}`)} />
+                      <Chip
+                        size='small'
+                        color={STATE_COLOUR[state]}
+                        data-testid={`broadcast-state-${row.id}`}
+                        data-state={state}
+                        label={t(`settings.broadcast.state.${state}`)}
+                      />
                     </TableCell>
                     <TableCell>{targetLabel(row)}</TableCell>
                     <TableCell>

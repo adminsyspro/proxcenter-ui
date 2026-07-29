@@ -94,10 +94,20 @@ describe('BroadcastTab', () => {
   it('asks for confirmation before deleting', async () => {
     const BroadcastTab = (await import('./BroadcastTab')).default
     renderWithProviders(<BroadcastTab />)
+    const deleteCalls = () => (globalThis.fetch as any).mock.calls.filter((c: any[]) => c[1]?.method === 'DELETE')
+    expect(deleteCalls()).toHaveLength(0)
     fireEvent.click(await screen.findByTestId('broadcast-delete-b1'))
     expect(await screen.findByTestId('broadcast-delete-dialog')).toBeInTheDocument()
-    const before = (globalThis.fetch as any).mock.calls.length
-    expect((globalThis.fetch as any).mock.calls.length).toBe(before)
+    // Opening the confirmation must not have fired the request.
+    expect(deleteCalls()).toHaveLength(0)
+    fireEvent.click(screen.getByTestId('broadcast-delete-confirm'))
+    await waitFor(() => {
+      expect(deleteCalls()).toHaveLength(1)
+    })
+    expect(deleteCalls()[0][0]).toBe('/api/v1/settings/broadcast/b1')
+    await waitFor(() => {
+      expect(screen.queryByTestId('broadcast-delete-dialog')).not.toBeInTheDocument()
+    })
   })
 })
 
@@ -269,16 +279,32 @@ describe('BroadcastTab branches', () => {
           targetIds: ['tenant-a'],
         },
         { ...rows[0], id: 's5', message: 'm-ghost', targetKind: 'roles', targetIds: ['ghost'] },
+        { ...rows[0], id: 's6', message: 'm-mixed', targetKind: 'tenants', targetIds: ['tenant-a', 'ghost-2'] },
+        { ...rows[0], id: 's7', message: 'm-none', targetKind: 'roles', targetIds: [] },
       ],
     })
     const BroadcastTab = (await import('./BroadcastTab')).default
     renderWithProviders(<BroadcastTab />)
-    for (const message of ['m-active', 'm-disabled', 'm-scheduled', 'm-expired', 'm-ghost']) {
+    for (const message of ['m-active', 'm-disabled', 'm-scheduled', 'm-expired', 'm-ghost', 'm-mixed', 'm-none']) {
       expect(await screen.findByText(message)).toBeInTheDocument()
     }
-    // Tenant targeting resolves the id to its name; an id with no match
-    // falls back to the raw id rather than an empty cell.
+    // The four-way derivation, asserted on the machine-readable state
+    // attribute: the chip label is a translated string that only lands
+    // with task 15, so it is never queried here.
+    for (const [id, state] of [
+      ['s1', 'active'],
+      ['s2', 'disabled'],
+      ['s3', 'scheduled'],
+      ['s4', 'expired'],
+    ] as const) {
+      expect(screen.getByTestId(`broadcast-state-${id}`)).toHaveAttribute('data-state', state)
+    }
+    // Tenant targeting resolves the id to its name; unresolvable ids stay
+    // visible as raw ids, even mixed with resolvable ones, instead of being
+    // silently dropped; an empty target list shows a placeholder.
     expect(screen.getByText('Tenant A')).toBeInTheDocument()
     expect(screen.getByText('ghost')).toBeInTheDocument()
+    expect(screen.getByText('Tenant A, ghost-2')).toBeInTheDocument()
+    expect(screen.getByText('-')).toBeInTheDocument()
   })
 })

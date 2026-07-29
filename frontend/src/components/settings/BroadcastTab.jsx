@@ -440,14 +440,17 @@ export default function BroadcastTab() {
               />
             ) : null}
 
-            <FormControlLabel
-              control={<Switch checked={form.dismissible} onChange={(_e, v) => setField('dismissible', v)} />}
-              label={t('settings.broadcast.dismissible')}
-            />
-            <FormControlLabel
-              control={<Switch checked={form.enabled} onChange={(_e, v) => setField('enabled', v)} />}
-              label={t('settings.broadcast.enabled')}
-            />
+            {/* One row: wraps instead of overflowing on a narrow dialog. */}
+            <Stack direction='row' spacing={3} sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <FormControlLabel
+                control={<Switch checked={form.dismissible} onChange={(_e, v) => setField('dismissible', v)} />}
+                label={t('settings.broadcast.dismissible')}
+              />
+              <FormControlLabel
+                control={<Switch checked={form.enabled} onChange={(_e, v) => setField('enabled', v)} />}
+                label={t('settings.broadcast.enabled')}
+              />
+            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions>

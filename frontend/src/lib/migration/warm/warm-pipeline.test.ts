@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { planPasses, buildThickZeroScript, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
+import { planPasses, buildThickZeroScript, markVolumesCopied, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
+import { volumesToFree, volumesToKeep, type AllocatedVolume } from "../pvesm-alloc"
 import { prismaTest, truncate } from "../../../__tests__/setup/prisma-test"
 
 const GiB = 1024 ** 3
@@ -75,6 +76,34 @@ describe("buildThickZeroScript", () => {
   it("escapes an embedded single quote in the device path", () => {
     const cmd = buildThickZeroScript("/dev/x'y")
     expect(cmd).toContain(`'/dev/x'\\''y'`)
+  })
+})
+
+describe("markVolumesCopied", () => {
+  it("moves every allocated volume from the free list to the keep list (#612)", () => {
+    // Called after a copy pass completed for ALL disks: the target now holds a
+    // bootable snapshot-consistent image, so a later failure must not delete it.
+    const volumes: AllocatedVolume[] = [
+      { volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/a" },
+      { volumeId: "FC-HDC-01:vm-250-disk-2", devicePath: "/dev/b", rbdMapped: false },
+    ]
+    expect(volumesToFree(volumes)).toEqual(volumes)
+
+    markVolumesCopied(volumes)
+
+    expect(volumesToFree(volumes)).toEqual([])
+    expect(volumesToKeep(volumes)).toEqual(volumes)
+  })
+
+  it("keeps a kept volume out of the keep report once the cutover attach lands", () => {
+    // After the attach the volume belongs to the VM config: it is neither freed
+    // nor reported as left behind.
+    const volumes: AllocatedVolume[] = [{ volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/a" }]
+    markVolumesCopied(volumes)
+    for (const v of volumes) v.attached = true
+
+    expect(volumesToFree(volumes)).toEqual([])
+    expect(volumesToKeep(volumes)).toEqual([])
   })
 })
 

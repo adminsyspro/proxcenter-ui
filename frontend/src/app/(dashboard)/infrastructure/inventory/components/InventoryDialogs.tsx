@@ -710,6 +710,19 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     setSnackbar({ open: true, message, severity })
   }
 
+  // Confirmation gate for the Cancel Migration button. Once the job has copied
+  // data (full_copy/delta_sync/awaiting_cutover/cutover/verify), cancelling now
+  // keeps the target volumes on storage instead of deleting them, so the operator
+  // must be warned before we fire the cancel request. Earlier stages haven't
+  // copied anything yet, so those volumes are freed automatically and no
+  // confirmation is needed.
+  const [cancelMigConfirmOpen, setCancelMigConfirmOpen] = useState(false)
+  const cancelMigrationJob = async () => {
+    const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
+    const d = await res.json().catch(() => ({}))
+    if (d.data) setMigJob(d.data)
+  }
+
   return (
     <>
       {/* Node Reboot/Shutdown confirmation dialog */}
@@ -3013,10 +3026,13 @@ return
                 <>
                   <Button
                     color="error"
-                    onClick={async () => {
-                      const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
-                      const d = await res.json().catch(() => ({}))
-                      if (d.data) setMigJob(d.data)
+                    onClick={() => {
+                      const hasCopiedData = ['full_copy', 'delta_sync', 'awaiting_cutover', 'cutover', 'verify'].includes(migJob.status)
+                      if (hasCopiedData) {
+                        setCancelMigConfirmOpen(true)
+                      } else {
+                        cancelMigrationJob()
+                      }
                     }}
                   >
                     {t('inventoryPage.esxiMigration.cancelMigration')}
@@ -3048,6 +3064,45 @@ return
               )}
             </>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirm Cancel Migration (data already copied) */}
+      <Dialog
+        open={cancelMigConfirmOpen}
+        onClose={() => setCancelMigConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+          <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+          {t('inventoryPage.esxiMigration.cancelMigrationConfirmTitle')}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1.5 }}>
+            {t('inventoryPage.esxiMigration.cancelMigrationConfirmStop')}
+          </Typography>
+          <Alert severity="warning" sx={{ mb: 1.5 }}>
+            {t('inventoryPage.esxiMigration.cancelMigrationConfirmVolumesKept')}
+          </Alert>
+          <Typography variant="body2" color="text.secondary">
+            {t('inventoryPage.esxiMigration.cancelMigrationConfirmSourceUntouched')}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCancelMigConfirmOpen(false)}>
+            {t('inventoryPage.esxiMigration.keepMigrating')}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={async () => {
+              setCancelMigConfirmOpen(false)
+              await cancelMigrationJob()
+            }}
+          >
+            {t('inventoryPage.esxiMigration.cancelMigration')}
+          </Button>
         </DialogActions>
       </Dialog>
 

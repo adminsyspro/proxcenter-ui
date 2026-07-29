@@ -7,6 +7,18 @@
 // src/lib/tenant/index.ts:64-85). Since role_tenant_admin carries
 // admin.settings, that fallback would promote a tenant admin into the
 // provider tenant. We read the raw session claim instead.
+//
+// Check order is deliberately cheapest-first:
+//   1. session presence (userId)
+//   2. the raw tenant claim
+//   3. checkPermission()
+//   4. isUserSuperAdmin()
+// checkPermission() itself performs a full RBAC grant load that transitively
+// reaches isUserSuperAdmin() via hasPermission() -> loadUserGrants() (see
+// src/lib/rbac/index.ts:102,264,551). Putting the tenant gate ahead of
+// checkPermission() means a caller on the wrong tenant is rejected before
+// that RBAC work ever runs, not just before our own explicit super-admin
+// check.
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
@@ -21,9 +33,6 @@ export type BroadcastAdminResult =
   | { denied: null; userId: string }
 
 export async function requireBroadcastAdmin(): Promise<BroadcastAdminResult> {
-  const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
-  if (denied) return { denied }
-
   const session = await getServerSession(authOptions)
   const userId = (session as any)?.user?.id as string | undefined
   if (!userId) {
@@ -34,6 +43,9 @@ export async function requireBroadcastAdmin(): Promise<BroadcastAdminResult> {
   if (rawTenantId !== PROVIDER_TENANT_ID) {
     return { denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
   }
+
+  const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+  if (denied) return { denied }
 
   if (!(await isUserSuperAdmin(userId))) {
     return { denied: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }

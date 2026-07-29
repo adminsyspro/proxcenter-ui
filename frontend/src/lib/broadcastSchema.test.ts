@@ -57,6 +57,17 @@ describe('broadcastMessageSchema', () => {
     ).toBe(true)
   })
 
+  it('rejects an impossible calendar date instead of letting Date roll it forward', () => {
+    // new Date('2026-02-30...') silently becomes 2026-03-02; a direct API
+    // caller could schedule a window on a different day than requested.
+    expect(
+      broadcastMessageSchema.safeParse({ ...valid, startsAt: '2026-02-30T10:00:00.000Z' }).success,
+    ).toBe(false)
+    expect(
+      broadcastMessageSchema.safeParse({ ...valid, endsAt: '2026-02-30T10:00:00.000Z' }).success,
+    ).toBe(false)
+  })
+
   it('requires a label when a link is provided', () => {
     expect(broadcastMessageSchema.safeParse({ ...valid, linkUrl: '/status' }).success).toBe(false)
     expect(

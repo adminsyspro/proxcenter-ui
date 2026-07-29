@@ -31,5 +31,6 @@ describe('contrastRatio', () => {
     expect(contrastRatio('red', '#000000')).toBeNull()
     expect(contrastRatio('#fff', '#000000')).toBeNull()
     expect(contrastRatio('', '#000000')).toBeNull()
+    expect(contrastRatio('#000000', 'red')).toBeNull()
   })
 })

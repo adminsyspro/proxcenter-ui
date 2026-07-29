@@ -46,13 +46,23 @@ export default function BroadcastBanner({ banner, onDismiss }: Props) {
         textAlign: 'center',
       }}
     >
-      <Typography variant='caption' sx={{ fontWeight: 600, fontSize: '0.8rem', color: 'inherit' }}>
+      <Typography
+        variant='caption'
+        sx={{ fontWeight: 600, fontSize: '0.8rem', color: 'inherit', minWidth: 0, overflowWrap: 'anywhere' }}
+      >
         {banner.message}
       </Typography>
       {hasSafeLink ? (
         <Link
           href={banner.linkUrl as string}
-          sx={{ color: 'inherit', fontSize: '0.8rem', fontWeight: 700, textDecorationColor: 'currentColor' }}
+          sx={{
+            color: 'inherit',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            textDecorationColor: 'currentColor',
+            minWidth: 0,
+            overflowWrap: 'anywhere',
+          }}
         >
           {banner.linkLabel}
         </Link>

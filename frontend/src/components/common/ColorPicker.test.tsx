@@ -48,6 +48,26 @@ describe('ColorPicker', () => {
     expect(screen.queryByRole('button', { name: /reset/i })).toBeNull()
   })
 
+  it('falls back to the fallback colour for the swatch/native input when the value is a partial hex string', () => {
+    // A partial value such as "#" is exactly what an administrator sees mid-edit,
+    // before any validation runs. alpha(shown, 0.3) must not throw on it.
+    renderWithProviders(<ColorPicker value="#" onChange={() => {}} label="Background" fallback="#000000" />)
+    expect(screen.getByTestId('color-picker-native')).toHaveValue('#000000')
+    expect(screen.getByLabelText('Background')).toHaveValue('#')
+  })
+
+  it('falls back to the fallback colour for the swatch/native input when the value is not hex at all', () => {
+    renderWithProviders(<ColorPicker value="red" onChange={() => {}} label="Background" fallback="#000000" />)
+    expect(screen.getByTestId('color-picker-native')).toHaveValue('#000000')
+    expect(screen.getByLabelText('Background')).toHaveValue('red')
+  })
+
+  it('still uses a valid #rrggbb value for the swatch/native input rather than the fallback', () => {
+    renderWithProviders(<ColorPicker value="#abcdef" onChange={() => {}} label="Background" fallback="#000000" />)
+    expect(screen.getByTestId('color-picker-native')).toHaveValue('#abcdef')
+    expect(screen.getByLabelText('Background')).toHaveValue('#abcdef')
+  })
+
   it('renders two independent pickers without id collision', () => {
     renderWithProviders(
       <>

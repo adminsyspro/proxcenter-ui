@@ -56,6 +56,27 @@ describe('BroadcastBanner', () => {
     expect(document.querySelector('b')).toBeNull()
   })
 
+  it('lets the message wrap anywhere instead of overflowing the row', () => {
+    // jsdom does no layout, so this cannot prove there is no visual overflow —
+    // it only asserts the declared style that prevents it (computed via the
+    // emotion stylesheet jsdom's CSSOM does apply, not an inline style).
+    renderWithProviders(<BroadcastBanner banner={banner()} onDismiss={() => {}} />)
+    expect(screen.getByText('Maintenance Saturday 22:00 UTC 🛠️')).toHaveStyle({
+      overflowWrap: 'anywhere',
+      minWidth: 0,
+    })
+  })
+
+  it('lets the link label wrap anywhere instead of overflowing the row', () => {
+    renderWithProviders(
+      <BroadcastBanner banner={banner({ linkUrl: '/status', linkLabel: 'Status page' })} onDismiss={() => {}} />,
+    )
+    expect(screen.getByRole('link', { name: 'Status page' })).toHaveStyle({
+      overflowWrap: 'anywhere',
+      minWidth: 0,
+    })
+  })
+
   it('renders no link when the linkUrl scheme is unsafe', () => {
     renderWithProviders(
       <BroadcastBanner

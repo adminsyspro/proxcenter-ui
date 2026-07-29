@@ -3,6 +3,9 @@
 import { useRef } from 'react'
 import { Box, IconButton, TextField, Tooltip, alpha } from '@mui/material'
 
+/** Anchored, fixed length, no nested quantifier: S5852-safe. Mirrors src/lib/broadcast/contrast.ts. */
+const HEX_SIX = /^#[0-9a-fA-F]{6}$/
+
 /**
  * Swatch + hidden native colour input + hex field. Extracted from
  * WhiteLabelTab so the broadcast banner can reuse it instead of a third
@@ -12,7 +15,13 @@ import { Box, IconButton, TextField, Tooltip, alpha } from '@mui/material'
  */
 export default function ColorPicker({ value, onChange, label, placeholder = '', fallback, onReset = undefined }) {
   const inputRef = useRef(null)
-  const shown = value || fallback
+  // `value` is free-typed and can be a transient, invalid string (e.g. "#" or
+  // "red") while the administrator is still editing, before validation runs.
+  // The swatch, native colour input and alpha() below must only ever see a
+  // strict six-digit hex — alpha() throws on anything else. The text field
+  // keeps showing the raw `value` further down so the admin can still see
+  // and correct what they typed.
+  const shown = HEX_SIX.test(value) ? value : fallback
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

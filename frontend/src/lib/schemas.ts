@@ -372,9 +372,34 @@ export const deploySchema = z.object({
 /** Anchored, no nested quantifiers: keeps Sonar S5852 quiet. */
 const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/
 
+/** Anchored, fixed reps, no nested quantifier: S5852-safe. */
+const ISO_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/
+
+/**
+ * `new Date()` silently rolls an impossible calendar date forward instead of
+ * rejecting it (2026-02-30 becomes 2026-03-02), so a direct API caller could
+ * silently schedule a window on a different day than requested. A browser
+ * datetime-local field cannot produce such a string, but this closes the
+ * hole for any string that looks like an ISO date. Anything else (a Date
+ * instance, a non-ISO-looking string) is left to the existing NaN check.
+ */
+function isRoundTrippableDate(raw: string): boolean {
+  const match = ISO_DATE_PREFIX.exec(raw)
+  if (!match) return true
+  const [, year, month, day] = match
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return true
+  return (
+    parsed.getUTCFullYear() === Number(year) &&
+    parsed.getUTCMonth() + 1 === Number(month) &&
+    parsed.getUTCDate() === Number(day)
+  )
+}
+
 const optionalDate = z
   .union([z.string(), z.date()])
   .nullish()
+  .refine(v => typeof v !== 'string' || v === '' || isRoundTrippableDate(v), 'Invalid date')
   .transform(v => (v === null || v === undefined || v === '' ? null : new Date(v)))
   .refine(v => v === null || !Number.isNaN(v.getTime()), 'Invalid date')
 

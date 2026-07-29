@@ -70,6 +70,7 @@ describe('GET /api/v1/broadcasts/active', () => {
     const { GET } = await import('./route')
     expect((await callRoute(GET)).status).toBe(401)
     expect(activeMock).not.toHaveBeenCalled()
+    expect(rolesMock).not.toHaveBeenCalled()
   })
 
   it('returns an empty list rather than an error when the query blows up', async () => {

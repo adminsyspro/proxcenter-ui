@@ -8,6 +8,18 @@ vi.mock('@/hooks/useUsers', () => ({
   useRbacRoles: () => ({ data: { data: [{ id: 'role_viewer', name: 'Viewer' }] } }),
 }))
 
+// The tab has to invalidate the live banner stack's cache key after every
+// write. Only `mutate` is overridden: renderWithProviders relies on the real
+// SWRConfig component, and SWR's own revalidation is not what is under test
+// here — the tab's duty to signal the invalidation is.
+const { mutateSpy } = vi.hoisted(() => ({ mutateSpy: vi.fn() }))
+
+vi.mock('swr', async importOriginal => {
+  const actual = await importOriginal<typeof import('swr')>()
+
+  return { ...actual, useSWRConfig: () => ({ mutate: mutateSpy }) }
+})
+
 const rows = [
   {
     id: 'b1',
@@ -25,6 +37,7 @@ const rows = [
 ]
 
 beforeEach(() => {
+  mutateSpy.mockClear()
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -87,6 +100,45 @@ describe('BroadcastTab', () => {
       const calls = (globalThis.fetch as any).mock.calls
       expect(calls.some((c: any[]) => c[1]?.method === 'POST')).toBe(true)
     })
+  })
+
+  it('refreshes the live banner stack after a save, without waiting for the poll', async () => {
+    const BroadcastTab = (await import('./BroadcastTab')).default
+    renderWithProviders(<BroadcastTab />)
+    fireEvent.click(await screen.findByTestId('broadcast-create'))
+    fireEvent.change(await screen.findByTestId('broadcast-message-input'), { target: { value: 'Hello' } })
+    expect(mutateSpy).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('broadcast-save'))
+    await waitFor(() => expect(mutateSpy).toHaveBeenCalledWith('/api/v1/broadcasts/active'))
+  })
+
+  it('refreshes the live banner stack after a delete', async () => {
+    const BroadcastTab = (await import('./BroadcastTab')).default
+    renderWithProviders(<BroadcastTab />)
+    fireEvent.click(await screen.findByTestId('broadcast-delete-b1'))
+    expect(mutateSpy).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByTestId('broadcast-delete-confirm'))
+    await waitFor(() => expect(mutateSpy).toHaveBeenCalledWith('/api/v1/broadcasts/active'))
+  })
+
+  it('does not refresh the banner stack when the save fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (!init || init.method === undefined || init.method === 'GET') {
+          return new Response(JSON.stringify({ data: rows }), { status: 200 })
+        }
+
+        return new Response(JSON.stringify({ error: 'nope' }), { status: 400 })
+      }),
+    )
+    const BroadcastTab = (await import('./BroadcastTab')).default
+    renderWithProviders(<BroadcastTab />)
+    fireEvent.click(await screen.findByTestId('broadcast-create'))
+    fireEvent.change(await screen.findByTestId('broadcast-message-input'), { target: { value: 'Hello' } })
+    fireEvent.click(screen.getByTestId('broadcast-save'))
+    await waitFor(() => expect(screen.getByText('nope')).toBeInTheDocument())
+    expect(mutateSpy).not.toHaveBeenCalled()
   })
 
   it('asks for confirmation before deleting', async () => {

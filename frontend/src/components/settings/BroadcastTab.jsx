@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useSWRConfig } from 'swr'
 import {
   Alert,
   Autocomplete,
@@ -36,6 +37,7 @@ import {
 import ColorPicker from '@/components/common/ColorPicker'
 import BroadcastBanner from '@/components/broadcast/BroadcastBanner'
 import { MIN_CONTRAST_RATIO, contrastRatio } from '@/lib/broadcast/contrast'
+import { ACTIVE_BROADCASTS_KEY } from '@/hooks/useBroadcasts'
 import { useRbacRoles, useTenants } from '@/hooks/useUsers'
 
 const API = '/api/v1/settings/broadcast'
@@ -93,6 +95,12 @@ export default function BroadcastTab() {
   const [form, setForm] = useState(EMPTY)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Bound to the surrounding SWR cache, so writing here refreshes the live
+  // banner stack immediately instead of leaving it on its one-minute poll.
+  // Taken from useSWRConfig() rather than swr's module-level mutate: the
+  // latter only ever addresses the default cache.
+  const { mutate } = useSWRConfig()
 
   const { data: tenantsData } = useTenants(true)
   const { data: rolesData } = useRbacRoles(true)
@@ -172,6 +180,7 @@ export default function BroadcastTab() {
       setDialogOpen(false)
       setSnackbar({ open: true, severity: 'success', message: t('settings.broadcast.saved') })
       await load()
+      await mutate(ACTIVE_BROADCASTS_KEY)
     } catch (e) {
       setSnackbar({ open: true, severity: 'error', message: e.message || t('settings.broadcast.saveError') })
     } finally {
@@ -187,6 +196,7 @@ export default function BroadcastTab() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setDeleteTarget(null)
       await load()
+      await mutate(ACTIVE_BROADCASTS_KEY)
     } catch (e) {
       setSnackbar({ open: true, severity: 'error', message: e.message || t('settings.broadcast.saveError') })
     } finally {

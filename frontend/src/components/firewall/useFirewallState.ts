@@ -47,24 +47,43 @@ export function useFirewallState(api: FirewallAPIAdapter) {
   const [newRule, setNewRule] = useState<Partial<FirewallRule>>({ ...DEFAULT_NEW_RULE })
   const [selectedGroup, setSelectedGroup] = useState('')
 
-  // Load firewall data
+  // Load firewall data. Each fetch settles independently so a failing
+  // options/groups catalogue does not blank out rules that loaded fine,
+  // but failures are never silent: a failed rules fetch is the critical
+  // one (the empty state would otherwise lie), the others degrade the
+  // view and are reported through the snackbar.
   const loadFirewallData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    try {
-      const [optData, rulesData, groupsData] = await Promise.all([
-        api.getOptions().catch(() => ({})),
-        api.getRules().catch(() => []),
-        api.getGroups().catch(() => []),
-      ])
+    const [optResult, rulesResult, groupsResult] = await Promise.allSettled([
+      api.getOptions(),
+      api.getRules(),
+      api.getGroups(),
+    ])
 
-      setOptions(optData || {})
-      setRules(normalizeRules(rulesData))
-      setAvailableGroups(Array.isArray(groupsData) ? groupsData : [])
-    } catch (err: any) {
-      setError(err.message || t('errors.loadingError'))
+    try {
+      if (optResult.status === 'fulfilled') {
+        setOptions(optResult.value || {})
+      }
+
+      if (groupsResult.status === 'fulfilled') {
+        setAvailableGroups(Array.isArray(groupsResult.value) ? groupsResult.value : [])
+      }
+
+      if (rulesResult.status === 'rejected') {
+        setError(rulesResult.reason?.message || t('errors.loadingError'))
+      } else {
+        setRules(normalizeRules(rulesResult.value))
+
+        const degraded = [optResult, groupsResult].find(r => r.status === 'rejected') as PromiseRejectedResult | undefined
+
+        if (degraded) {
+          setSnackbar({ open: true, message: degraded.reason?.message || t('errors.loadingError'), severity: 'error' })
+        }
+      }
     } finally {
+      // Never leave the tab stuck on its spinner if normalizing throws
       setLoading(false)
     }
   }, [api, t])
@@ -74,10 +93,11 @@ export function useFirewallState(api: FirewallAPIAdapter) {
     try {
       const rulesData = await api.getRules()
       setRules(normalizeRules(rulesData))
-    } catch (err) {
-      // Silently fail, user can refresh manually
+    } catch (err: any) {
+      // Keep the rules already on screen, but tell the user the refresh failed
+      setSnackbar({ open: true, message: err.message || t('errors.loadingError'), severity: 'error' })
     }
-  }, [api])
+  }, [api, t])
 
   // Toggle firewall enable
   const handleToggleFirewall = async () => {

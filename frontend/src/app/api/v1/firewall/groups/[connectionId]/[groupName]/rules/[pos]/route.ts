@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -23,7 +26,12 @@ export async function PUT(
 
     const orchestrator = getOrchestratorClient()
 
-    await orchestrator.put(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`, body)
+    // Community has no orchestrator: update the rule straight on PVE (#616).
+    await orchestratorOrPve(
+      'firewall/groups/rules',
+      () => orchestrator.put(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`, body),
+      async () => pveDirect.updateSecurityGroupRule(await getConnectionById(connectionId), groupName, pos, body),
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
@@ -51,7 +59,11 @@ export async function DELETE(
 
     const orchestrator = getOrchestratorClient()
 
-    await orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`)
+    await orchestratorOrPve(
+      'firewall/groups/rules',
+      () => orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`),
+      async () => pveDirect.deleteSecurityGroupRule(await getConnectionById(connectionId), groupName, pos),
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

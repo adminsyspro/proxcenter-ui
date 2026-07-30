@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { getConnectionById } from '@/lib/connections/getConnection'
 
 // GET /api/v1/firewall/cluster/[connectionId] - Get cluster options or rules
 export async function GET(
@@ -23,9 +26,19 @@ export async function GET(
     const type = searchParams.get('type') || 'options'
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/cluster/${connectionId}/${type}`)
+    const result = await orchestratorOrPve(
+      'firewall/cluster',
+      () => orchestrator.get(`/firewall/cluster/${connectionId}/${type}`),
+      async () => {
+        const conn = await getConnectionById(connectionId)
 
-    return NextResponse.json(response.data)
+        // Cluster level exposes exactly these two sub-resources; anything else
+        // reads the options, like the orchestrator's own default.
+        return type === 'rules' ? await pveDirect.getClusterRules(conn) : await pveDirect.getClusterOptions(conn)
+      },
+    )
+
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error fetching cluster firewall:', error)
     
@@ -52,9 +65,13 @@ export async function PUT(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.put(`/firewall/cluster/${connectionId}/options`, body)
+    const result = await orchestratorOrPve(
+      'firewall/cluster',
+      () => orchestrator.put(`/firewall/cluster/${connectionId}/options`, body),
+      async () => pveDirect.updateClusterOptions(await getConnectionById(connectionId), body),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error updating cluster options:', error)
     
@@ -81,9 +98,13 @@ export async function POST(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/cluster/${connectionId}/rules`, body)
+    const result = await orchestratorOrPve(
+      'firewall/cluster',
+      () => orchestrator.post(`/firewall/cluster/${connectionId}/rules`, body),
+      async () => pveDirect.addClusterRule(await getConnectionById(connectionId), body),
+    )
 
-    return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (error: any) {
     console.error('Error adding cluster rule:', error)
     

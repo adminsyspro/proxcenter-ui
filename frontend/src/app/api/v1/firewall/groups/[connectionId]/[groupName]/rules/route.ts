@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -22,9 +25,14 @@ export async function POST(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/groups/${connectionId}/${groupName}/rules`, body)
+    // Community has no orchestrator: add the rule straight on PVE (#616).
+    const created = await orchestratorOrPve(
+      'firewall/groups/rules',
+      () => orchestrator.post(`/firewall/groups/${connectionId}/${groupName}/rules`, body),
+      async () => pveDirect.addSecurityGroupRule(await getConnectionById(connectionId), groupName, body),
+    )
 
-    return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(created, { status: 201 })
   } catch (error: any) {
     console.error('Error adding rule:', error)
     

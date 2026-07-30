@@ -2038,6 +2038,7 @@
       "estimatedDowntime": "预计切换停机时间",
       "estimatedDowntimeHint": "根据最近一次增量同步估算的最终切换期间 VM 离线时长。",
       "awaitingCutover": "等待切换",
+      "preparingDisks": "正在准备目标磁盘",
       "cutoverNow": "立即切换",
       "cutoverConfirmTitle": "立即切换？",
       "cutoverConfirmBody": "源虚拟机将被关闭，并复制最后的变更。预计停机约 {mins} 分钟。是否继续？",

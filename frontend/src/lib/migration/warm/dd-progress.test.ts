@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseDdProgress } from "./dd-progress"
+import { parseDdProgress, createDdProgressAccumulator } from "./dd-progress"
 
 describe("parseDdProgress", () => {
   it("parses a single dd progress line into bytes, seconds and derived rate", () => {
@@ -43,5 +43,45 @@ describe("parseDdProgress", () => {
     const r = parseDdProgress("4194304 bytes (4.2 MB, 4.0 MiB) copied, 0 s, 0 B/s")
     expect(r!.bytes).toBe(4194304)
     expect(r!.bytesPerSec).toBe(0)
+  })
+})
+
+describe("createDdProgressAccumulator", () => {
+  it("passes a single dd's monotonic counter through unchanged", () => {
+    const acc = createDdProgressAccumulator()
+    expect(acc("104857600 bytes (105 MB, 100 MiB) copied, 1 s, 105 MB/s")!.bytes).toBe(104857600)
+    expect(acc("524288000 bytes (524 MB, 500 MiB) copied, 5 s, 105 MB/s")!.bytes).toBe(524288000)
+  })
+
+  it("folds the previous dd's total when the counter restarts (#502)", () => {
+    // The apply path runs one dd per extent, so the status=progress counter
+    // restarts at 0 for every extent — the customer log showed "copying 0.0 GB"
+    // at the start of each batch. A drop in the counter means a new dd started.
+    const acc = createDdProgressAccumulator()
+    acc("1073741824 bytes (1.1 GB, 1.0 GiB) copied, 10 s, 107 MB/s")
+    const r = acc("4194304 bytes (4.2 MB, 4.0 MiB) copied, 0.1 s, 42 MB/s")
+    expect(r!.bytes).toBe(1073741824 + 4194304)
+  })
+
+  it("folds every restart when one chunk carries several dd completions", () => {
+    const acc = createDdProgressAccumulator()
+    const r = acc("100 bytes copied, 1 s\n50 bytes copied, 1 s\n30 bytes copied, 1 s")
+    expect(r!.bytes).toBe(180)
+  })
+
+  it("returns null on a chunk without progress lines and keeps its running total", () => {
+    const acc = createDdProgressAccumulator()
+    acc("100 bytes copied, 1 s")
+    expect(acc("1024+0 records in\n1024+0 records out")).toBeNull()
+    expect(acc("50 bytes copied, 1 s")!.bytes).toBe(150)
+  })
+
+  it("reports the latest dd's own rate, not a cumulative one", () => {
+    const acc = createDdProgressAccumulator()
+    acc("1000 bytes copied, 1 s")
+    const r = acc("500 bytes copied, 5 s")
+    expect(r!.bytes).toBe(1500)
+    expect(r!.bytesPerSec).toBe(100)
+    expect(r!.seconds).toBe(5)
   })
 })

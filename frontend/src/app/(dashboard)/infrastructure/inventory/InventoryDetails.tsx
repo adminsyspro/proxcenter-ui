@@ -4024,7 +4024,7 @@ return vm?.isCluster ?? false
                           )}
                           <Chip
                             size="small"
-                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
                             color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'awaiting_cutover' ? 'warning' : 'primary'}
                             sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
                           />

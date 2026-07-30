@@ -2038,6 +2038,7 @@
       "estimatedDowntime": "Geschätzte Umschalt-Ausfallzeit",
       "estimatedDowntimeHint": "Zeit, in der die VM während der finalen Umschaltung offline ist, basierend auf dem letzten Delta-Durchlauf.",
       "awaitingCutover": "Wartet auf Umschaltung",
+      "preparingDisks": "Ziel-Festplatten werden vorbereitet",
       "cutoverNow": "Jetzt umschalten",
       "cutoverConfirmTitle": "Jetzt umschalten?",
       "cutoverConfirmBody": "Die Quell-VM wird heruntergefahren und die letzten Änderungen kopiert. Rechnen Sie mit etwa {mins} Min. Ausfallzeit. Fortfahren?",

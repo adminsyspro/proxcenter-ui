@@ -2069,6 +2069,7 @@
       "estimatedDowntime": "Downtime de conmutación estimado",
       "estimatedDowntimeHint": "Tiempo que la VM estará fuera de línea durante la conmutación final, según la última pasada delta.",
       "awaitingCutover": "Esperando conmutación",
+      "preparingDisks": "Preparando los discos de destino",
       "cutoverNow": "Conmutar ahora",
       "cutoverConfirmTitle": "¿Conmutar ahora?",
       "cutoverConfirmBody": "La VM de origen se apagará y se copiarán los últimos cambios. Prevea unos {mins} min de inactividad. ¿Continuar?",

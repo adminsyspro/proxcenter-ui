@@ -24,16 +24,17 @@ import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { buildApplyScripts } from "./block-applier"
-import { parseDdProgress } from "./dd-progress"
+import { parseDdProgress, createDdProgressAccumulator } from "./dd-progress"
 import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
+import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 
 export type WarmStatus =
-  | "pending" | "planning" | "enabling_cbt" | "full_copy" | "delta_sync"
+  | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
   | "awaiting_cutover" | "cutover" | "verify" | "completed" | "failed" | "cancelled"
 
 export interface WarmMigrationConfig {
@@ -82,6 +83,20 @@ async function updateJob(id: string, status: WarmStatus, extra: Record<string, a
   })
 }
 
+/**
+ * Throttled live-progress write, fired from an SSH onData callback that is not
+ * awaited by the pipeline. updateMany scoped to a non-terminal status: a
+ * straggler flush racing the terminal write in the catch must never resurrect a
+ * completed/failed/cancelled row (#608 — same guard as the job heartbeat).
+ */
+async function updateJobLive(id: string, status: WarmStatus, extra: Record<string, any> = {}) {
+  const prisma = jobPrisma.get(id)
+  await prisma.migrationJob.updateMany({
+    where: { id, status: { notIn: [...TERMINAL_STATUSES] } },
+    data: { status, currentStep: status, ...extra },
+  })
+}
+
 async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info") {
   const prisma = jobPrisma.get(id)
   const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
@@ -122,6 +137,12 @@ const SNAPSHOT_PREFIX = "proxcenter-warm"
 // Ping the SOAP session every 60 s to prevent idle-expiry during long dd copies (issue #394).
 const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
 
+// Parallel ranges for the streamed zero fallback. One dd is queue depth 1: the
+// #606 field run sustained only 359 MiB/s on an FC array that reaches 1.9 GB/s
+// with concurrency, i.e. 2 h 30 min to zero 3.1 TiB. FC/iSCSI arrays scale with
+// outstanding I/O, so a handful of concurrent streams recovers most of it.
+export const ZERO_PARALLEL_CHUNKS = 4
+
 /**
  * Build the node-side command that zeroes a freshly-allocated *thick* block
  * device before the CBT copy. Unwritten regions on a thick LV are not
@@ -129,20 +150,87 @@ const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
  * map, so any gap left un-zeroed would surface a previous tenant's bytes (a
  * correctness AND information-leak bug). We prefer `blkdiscard -z` (offloaded
  * write-zeroes where the array supports it) and fall back to streaming zeros.
+ * When the array refuses the offload, the script says so with a parseable
+ * `blkdiscard-refused: <reason>` line — previously that reason was only visible
+ * if the whole script failed, so the slow path ran with no explanation (#606).
  *
- * The fallback streams `head -c <size> /dev/zero | dd …` rather than the earlier
+ * The fallback streams `head -c <bytes> /dev/zero | dd …` rather than the earlier
  * `dd if=/dev/zero of=DEV` (no count): a bare unbounded dd fills the device and
  * then issues one write *past* end-of-device, which returns ENOSPC and makes dd
  * exit 1 — even though every block was already zeroed — so the thick-zero step
  * could never succeed (this is what broke #445's disk 1 after a full 45-min
- * zero). Bounding the stream to `blockdev --getsize64` writes exactly the device
- * and exits 0. `iflag=fullblock` reassembles 4 MiB blocks across the pipe so
- * O_DIRECT accepts every write, including a sub-4 MiB final block (still
- * logical-block aligned because a device size is always a sector multiple).
+ * zero). The device is split into `chunks` equal 4 MiB-aligned ranges (the last
+ * takes the remainder) and each range gets its own bounded stream, run in
+ * parallel and reaped with `wait` (#606). Every stream is still bounded to its
+ * exact range, so the #445 ENOSPC-past-EOF failure cannot come back.
+ * `iflag=fullblock` reassembles 4 MiB blocks across the pipe so O_DIRECT
+ * accepts every write, including a sub-4 MiB final block (still logical-block
+ * aligned because a device size is always a sector multiple).
+ *
+ * The step used to run `status=none` — hours of total silence on a multi-TB LV,
+ * indistinguishable from a hang (#606). Now each range dd writes
+ * `status=progress` to its own temp file and a background poller sums the last
+ * counter of every range every 10 s into ONE line in dd's own summary format
+ * (`<bytes> bytes copied, <s> s`), so parseDdProgress consumes it unchanged,
+ * the caller can drive the progress bar, and the SSH stream stays alive for the
+ * same inactivity guard as the copy. On a range failure the dd error text (kept
+ * in the temp files) is replayed to stdout so the caller surfaces the real cause.
  */
-export function buildThickZeroScript(dev: string): string {
+export function buildThickZeroScript(dev: string, chunks: number = ZERO_PARALLEL_CHUNKS): string {
   const d = shellEscape(dev)
-  return `sz=$(blockdev --getsize64 ${d}); blkdiscard -z ${d} 2>&1 || head -c "$sz" /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=direct status=none 2>&1`
+  const n = Math.max(1, Math.floor(chunks))
+  const lines = [
+    `sz=$(blockdev --getsize64 ${d})`,
+    `t=$(mktemp -d)`,
+    `start=$(date +%s)`,
+    `( while :; do sleep 10; b=0; for f in "$t"/z*; do [ -s "$f" ] || continue; v=$(tr '\\r' '\\n' < "$f" | awk '/ bytes /{n=$1} END{print n+0}'); b=$((b+v)); done; echo "$b bytes copied, $(($(date +%s)-start)) s"; done ) & poller=$!`,
+    `trap 'kill $poller 2>/dev/null; rm -rf "$t"' EXIT`,
+    `if out=$(blkdiscard -z ${d} 2>&1); then echo "$sz bytes copied, $(($(date +%s)-start)) s"; exit 0; fi`,
+    `echo "blkdiscard-refused: $out"`,
+    `per=$((sz / ${n} / 4194304 * 4194304))`,
+  ]
+  for (let i = 0; i < n; i++) {
+    const bound = i === n - 1 ? `"$((sz - ${i} * per))"` : `"$per"`
+    lines.push(`head -c ${bound} /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=seek_bytes,direct conv=notrunc status=progress seek=$((${i} * per)) 2>"$t/z${i}" & p${i}=$!`)
+  }
+  lines.push(`fail=0`)
+  for (let i = 0; i < n; i++) lines.push(`wait $p${i} || fail=1`)
+  lines.push(`if [ "$fail" -ne 0 ]; then for f in "$t"/z*; do tr '\\r' '\\n' < "$f" | grep -v ' bytes \\|records '; done; exit 1; fi`)
+  lines.push(`echo "$sz bytes copied, $(($(date +%s)-start)) s"`)
+  return lines.join("\n")
+}
+
+/**
+ * Map a phase's byte counter onto its window of the warm run's locked progress
+ * scale (#502/#606): preparing_disks 0→10, full_copy 10→80, delta passes 80→95,
+ * cutover/verify/attach 95→100. Monotonic across the run as long as callers hand
+ * it non-decreasing byte counts and contiguous windows. A total of zero means
+ * the phase has nothing to do, i.e. it is already complete.
+ */
+export function scaleWarmProgress(rangeStart: number, rangeEnd: number, doneBytes: number, totalBytes: number): number {
+  if (totalBytes <= 0) return Math.round(rangeEnd)
+  const fraction = Math.min(1, Math.max(0, doneBytes / totalBytes))
+  return Math.round(rangeStart + (rangeEnd - rangeStart) * fraction)
+}
+
+/** One copy pass's slot on the locked progress scale (see scaleWarmProgress). */
+interface PassWindow {
+  status: WarmStatus
+  /** Persisted with each live update so a throttled flush never clobbers a
+   *  finer-grained step label (e.g. `delta_2`). */
+  currentStep: string
+  rangeStart: number
+  rangeEnd: number
+}
+
+/** Live byte bookkeeping for one pass, shared across its disks. */
+interface PassProgress extends PassWindow {
+  /** Denominator: changed-extent bytes across ALL disks of the pass. */
+  totalBytes: number
+  /** Exact bytes from disks already fully applied (corrected per disk). */
+  doneBytes: number
+  /** Monotonic floor so a conservative estimate never moves the bar backwards. */
+  lastPct: number
 }
 
 const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
@@ -307,7 +395,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // after the highest existing disk number, or `pvesm alloc` collides on the name.
     const shellConf = await pveFetch<Record<string, any>>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
 
-    // Allocate a raw block volume per disk and resolve (+ map) its device path.
+    // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
+    // A dedicated phase, not enabling_cbt: on thick LVM the mandatory pre-zero
+    // below can run for hours, and the badge must say what the job is doing (#606).
+    // Progress covers 0→10 of the locked scale, weighted by bytes zeroed across
+    // all disks (they share the target storage, so it is all-thick or none).
+    await updateJob(jobId, "preparing_disks")
+    const zeroTotalBytes = vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0)
+    let zeroedBytes = 0
+    let lastZeroPct = 0
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const sizeKB = Math.ceil(disk.capacityBytes / 1024)
@@ -335,13 +431,49 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       if (preZeroed) {
         await executeSSH(config.targetConnectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
       } else {
-        const z = await executeSSH(config.targetConnectionId, nodeIp, buildThickZeroScript(dev), APPLY_TIMEOUT_MS)
-        // Surface z.output first: the script merges stderr into stdout (2>&1), so
-        // the real cause (e.g. "No space left on device", an array I/O error)
-        // lands in output while error is just "Exit code N" on the ssh2 path.
+        // #606: this step used to be hours of total silence (no start line, no
+        // output, status stuck on enabling_cbt) — operators cancelled healthy
+        // runs. Announce it, stream the script's aggregated dd progress through
+        // the same inactivity guard as the copy, and surface why the blkdiscard
+        // offload was refused when the streamed slow path runs.
+        const capGB = (disk.capacityBytes / 1073741824).toFixed(1)
+        await appendLog(jobId, `Disk ${i}: zeroing thick target ${dev} (${capGB} GB) — mandatory on thick storage and can take a long time; live throughput follows`)
+        let headBuf = ""              // first KBs of output; carries the refusal marker
+        let refusalLogged = false
+        let lastFlush = 0
+        const onData = (chunk: string): void => {
+          if (!refusalLogged && headBuf.length < 8192) {
+            headBuf += chunk
+            const m = /blkdiscard-refused: ([^\r\n]*)/.exec(headBuf)
+            if (m) {
+              refusalLogged = true
+              void appendLog(jobId, `Disk ${i}: array refused the blkdiscard write-zeroes offload (${m[1].trim() || "no reason given"}) — streaming zeros in ${ZERO_PARALLEL_CHUNKS} parallel ranges instead`, "warn").catch(() => {})
+            }
+          }
+          const p = parseDdProgress(chunk)
+          if (!p) return
+          const now = Date.now()
+          if (now - lastFlush < PROGRESS_LOG_INTERVAL_MS) return
+          lastFlush = now
+          const diskBytes = Math.min(p.bytes, disk.capacityBytes)
+          const pct = Math.max(lastZeroPct, scaleWarmProgress(0, 10, zeroedBytes + diskBytes, zeroTotalBytes))
+          lastZeroPct = pct
+          // Progress first, then the log line — appendLog stamps each entry with
+          // the job's current progress, which is why the lines used to read 0 (#502).
+          void (async () => {
+            await updateJobLive(jobId, "preparing_disks", { progress: pct, transferSpeed: `Zeroing: ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
+            await appendLog(jobId, `Disk ${i}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB`)
+          })().catch(() => {})
+        }
+        const z = await executeSSH(config.targetConnectionId, nodeIp, buildThickZeroScript(dev), APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
+        // Surface z.output first: the script replays the range dd errors to
+        // stdout, so the real cause (e.g. "No space left on device", an array
+        // I/O error) lands in output while error is just "Exit code N" on the
+        // ssh2 path.
         if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.output || z.error}`)
         await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
       }
+      zeroedBytes += disk.capacityBytes
       await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
     }
 
@@ -352,19 +484,32 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // "EOF" (#445). We run the commands in order and stop on the first failure,
     // so the original abort-on-first-error (`set -e`) semantics hold across the
     // split. `label` distinguishes the delta/full path from the checksum path.
-    async function applyExtents(nbdDev: string, dev: string, extents: Extent[], capacityBytes: number, label: string, diskIndex: number): Promise<void> {
-      // Live progress: parse dd's status=progress lines off the stream and log the
-      // current throughput (throttled). Also feeds executeSSH's inactivity guard,
-      // which resets on every byte — so a moving copy is never cut off and a stalled
-      // one fails within APPLY_INACTIVITY_MS instead of hanging to the 12h cap.
-      let lastLog = 0
+    async function applyExtents(nbdDev: string, dev: string, extents: Extent[], capacityBytes: number, label: string, diskIndex: number, pass: PassProgress): Promise<void> {
+      // Live progress: accumulate dd's status=progress counters off the stream —
+      // the pass runs one dd per extent, so the raw counter restarts at 0 with
+      // every batch and the log read "copying 0.0 GB" for the whole run (#502).
+      // The cumulative figure drives the job's progress/bytesTransferred within
+      // the pass's window (throttled to one DB write per interval). Also feeds
+      // executeSSH's inactivity guard, which resets on every byte — so a moving
+      // copy is never cut off and a stalled one fails within APPLY_INACTIVITY_MS
+      // instead of hanging to the 12h cap.
+      const accumulate = createDdProgressAccumulator()
+      let lastFlush = 0
       const onData = (chunk: string): void => {
-        const p = parseDdProgress(chunk)
+        const p = accumulate(chunk)
         if (!p) return
         const now = Date.now()
-        if (now - lastLog < PROGRESS_LOG_INTERVAL_MS) return
-        lastLog = now
-        void appendLog(jobId, `Disk ${diskIndex}: copying ${(p.bytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`).catch(() => {})
+        if (now - lastFlush < PROGRESS_LOG_INTERVAL_MS) return
+        lastFlush = now
+        const passBytes = Math.min(pass.doneBytes + p.bytes, pass.totalBytes)
+        const pct = Math.max(pass.lastPct, scaleWarmProgress(pass.rangeStart, pass.rangeEnd, passBytes, pass.totalBytes))
+        pass.lastPct = pct
+        // Progress first, then the log line — appendLog stamps each entry with
+        // the job's current progress, which is why the lines used to read 0 (#502).
+        void (async () => {
+          await updateJobLive(jobId, pass.status, { currentStep: pass.currentStep, progress: pct, bytesTransferred: BigInt(passBytes), transferSpeed: `${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
+          await appendLog(jobId, `Disk ${diskIndex}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
+        })().catch(() => {})
       }
       for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
         const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
@@ -373,7 +518,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     // Read one disk of a snapshot through VDDK and apply its extents to the target.
-    async function readAndApply(disk: EsxiDiskInfo, diskIndex: number, snapMor: string, extents: Extent[]): Promise<number> {
+    async function readAndApply(disk: EsxiDiskInfo, diskIndex: number, snapMor: string, extents: Extent[], pass: PassProgress): Promise<number> {
       const bytes = extents.reduce((s, e) => s + e.length, 0)
       if (extents.length === 0) return 0
       const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
@@ -382,7 +527,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
       activeReaders.push(reader)
       try {
-        await applyExtents(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes, "block apply failed", diskIndex)
+        await applyExtents(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes, "block apply failed", diskIndex, pass)
         return bytes
       } finally {
         await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -392,17 +537,33 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     // Run one CBT pass: snapshot, per-disk query+read+apply, record changeIds, remove the snapshot.
-    async function runCbtPass(label: string, baseline: (deviceKey: number) => string): Promise<number> {
+    async function runCbtPass(label: string, baseline: (deviceKey: number) => string, window: PassWindow): Promise<number> {
       const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-${label}`, "warm migration", false)
       if (!snapMor) throw new Error(`CreateSnapshot (${label}) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually`)
       ourSnapshots.push(snapMor)
       let bytes = 0
       try {
+        // Query every disk's changed areas up front so the pass has its byte
+        // denominator before the first dd runs (#502): the sum weights the
+        // progress window and is persisted as totalBytes for the transfer
+        // readout. bytesTransferred restarts at 0 with each pass, matching it.
+        const extentsByDisk = new Map<number, Extent[]>()
+        let passTotalBytes = 0
+        for (const disk of vmConfig.disks) {
+          if (isCancelled(jobId)) throw new Error("Migration cancelled")
+          const extents = await queryAllChangedAreas(soapSession!, config.sourceVmId, snapMor, disk.deviceKey, baseline(disk.deviceKey), disk.capacityBytes)
+          extentsByDisk.set(disk.deviceKey, extents)
+          passTotalBytes += extents.reduce((s, e) => s + e.length, 0)
+        }
+        const pass: PassProgress = { ...window, totalBytes: passTotalBytes, doneBytes: 0, lastPct: Math.round(window.rangeStart) }
+        await updateJob(jobId, window.status, { currentStep: window.currentStep, progress: pass.lastPct, totalBytes: BigInt(passTotalBytes), bytesTransferred: BigInt(0) })
         for (let i = 0; i < vmConfig.disks.length; i++) {
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           const disk = vmConfig.disks[i]
-          const extents = await queryAllChangedAreas(soapSession!, config.sourceVmId, snapMor, disk.deviceKey, baseline(disk.deviceKey), disk.capacityBytes)
-          bytes += await readAndApply(disk, i, snapMor, extents)
+          bytes += await readAndApply(disk, i, snapMor, extentsByDisk.get(disk.deviceKey)!, pass)
+          // Correct the estimate with the disk's exact extent total: the dd
+          // accumulator is conservative (see createDdProgressAccumulator).
+          pass.doneBytes = bytes
         }
         // Record this snapshot's per-disk changeId as the next pass's baseline.
         const cids = await soapGetSnapshotChangeIds(soapSession!, snapMor)
@@ -427,17 +588,18 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     if (useCbt) {
-      // ── full_copy: pass 0 with the "*" baseline ──
-      await updateJob(jobId, "full_copy", { progress: 0 })
+      // ── full_copy: pass 0 with the "*" baseline (10→80 on the locked scale) ──
+      await updateJob(jobId, "full_copy", { progress: 10 })
       await appendLog(jobId, "Full copy (CBT allocated map)…")
       const t0 = Date.now()
-      const fullBytes = await runCbtPass("full", () => "*")
+      const fullBytes = await runCbtPass("full", () => "*", { status: "full_copy", currentStep: "full_copy", rangeStart: 10, rangeEnd: 80 })
       // The full pass applied a VMware-snapshot-consistent image of every disk:
       // from this point the target holds a bootable point-in-time copy worth hours
       // of transfer, so failure cleanup must keep these volumes, not free them (#612).
       markVolumesCopied(allocatedVolumes)
       const fullSec = Math.max(1, (Date.now() - t0) / 1000)
       let throughput = fullBytes / fullSec
+      await updateJob(jobId, "full_copy", { progress: 80, bytesTransferred: BigInt(fullBytes), transferSpeed: `${(throughput / 1048576).toFixed(0)} MB/s` })
       await appendLog(jobId, `Full copy done: ${(fullBytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
 
       // ── delta_sync: converge by downtime budget ──
@@ -448,12 +610,18 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); break }
         const tk = Date.now()
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}` })
-        const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*")
+        // Each delta pass advances through an equal slice of the 80→95 delta
+        // window; a run that converges before maxPasses jumps to 95 at cutover.
+        const deltaWindow: PassWindow = {
+          status: "delta_sync", currentStep: `delta_${pass + 1}`,
+          rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses,
+        }
+        const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow)
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(deltaBytes / 1048576).toFixed(1)} MB`)
         const decision = decideNextPass(pass, { deltaBytes, throughputBytesPerSec: throughput }, cfg)
-        await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec })
+        await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") {
           await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses)
@@ -463,15 +631,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       }
 
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
-      await updateJob(jobId, "cutover")
+      await updateJob(jobId, "cutover", { progress: 95 })
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId)
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
-      await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*")
+      await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*", { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
     } else {
       // ── checksum fallback: stop source, full block-diff vs the (zeroed) target ──
       await updateJob(jobId, "cutover")
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId)
-      await updateJob(jobId, "full_copy")
+      await updateJob(jobId, "full_copy", { progress: 10 })
       const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, "warm migration", false)
       if (!snapMor) throw new Error("CreateSnapshot (checksum) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually")
       ourSnapshots.push(snapMor)
@@ -486,7 +654,16 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           try {
             const dev = targetDev.get(disk.deviceKey)!
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes)
-            await applyExtents(reader.nbdDev, dev, extents, disk.capacityBytes, "checksum apply failed", i)
+            // Per-disk progress window: unlike runCbtPass there is no upfront
+            // all-disk denominator here (the checksum scan needs each disk's
+            // reader), so each disk gets an equal slice of the 10→80 window.
+            const span = 70 / vmConfig.disks.length
+            await applyExtents(reader.nbdDev, dev, extents, disk.capacityBytes, "checksum apply failed", i, {
+              status: "full_copy", currentStep: "full_copy",
+              rangeStart: 10 + span * i, rangeEnd: 10 + span * (i + 1),
+              totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0,
+              lastPct: Math.round(10 + span * i),
+            })
           } finally {
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
             const idx = activeReaders.indexOf(reader)
@@ -511,7 +688,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // now powered off, so its current disk == the cutover state (no snapshot param).
     // A mismatch is a loud warning, never a hard failure; the authoritative full
     // cmp is the lab runbook.
-    await updateJob(jobId, "verify")
+    await updateJob(jobId, "verify", { progress: 98 })
     for (let i = 0; i < vmConfig.disks.length; i++) {
       const disk = vmConfig.disks[i]
       const dev = targetDev.get(disk.deviceKey)!

@@ -35,3 +35,34 @@ export function parseDdProgress(text: string): DdProgress | null {
   const bytesPerSec = seconds > 0 ? bytes / seconds : 0
   return { bytes, seconds, bytesPerSec }
 }
+
+/**
+ * Cumulative byte counter over a stream that interleaves MANY dd invocations.
+ * The block-apply path runs one dd per extent, so the status=progress counter
+ * restarts at 0 for every extent — which is why the job log used to read
+ * "copying 0.0 GB" at the start of each batch (#502). Within one dd the counter
+ * only grows, so a drop means the previous dd finished: fold its last figure
+ * into the running total. A dd whose final figure never exceeds its successor's
+ * first printed one goes undetected and is under-counted; callers correct at
+ * exact per-disk/per-pass boundaries, so the estimate is conservative, never
+ * inflated. `seconds`/`bytesPerSec` are the latest dd's own (current
+ * throughput), only `bytes` is cumulative.
+ */
+export function createDdProgressAccumulator(): (chunk: string) => DdProgress | null {
+  let folded = 0   // totals of dd invocations known to have finished
+  let current = 0  // last counter of the dd currently printing
+  return (chunk: string): DdProgress | null => {
+    let last: RegExpExecArray | null = null
+    for (let m = PROGRESS_RE.exec(chunk); m !== null; m = PROGRESS_RE.exec(chunk)) {
+      const bytes = Number(m[1])
+      if (bytes < current) folded += current
+      current = bytes
+      last = m
+    }
+    PROGRESS_RE.lastIndex = 0
+    if (!last) return null
+    const seconds = Number(last[2])
+    const bytesPerSec = seconds > 0 ? current / seconds : 0
+    return { bytes: folded + current, seconds, bytesPerSec }
+  }
+}

@@ -25,18 +25,33 @@ vi.mock('@/lib/proxmox/client', () => ({
   pveFetch: vi.fn<(...args: any[]) => Promise<any>>(),
 }))
 
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: {
+    connection: { findMany: vi.fn<() => Promise<any[]>>() },
+    tenant: { findMany: vi.fn<() => Promise<any[]>>() },
+  },
+}))
+
+vi.mock('@/lib/storage/fleetScope', () => ({
+  canReadFleetStorage: vi.fn<() => Promise<boolean>>(),
+}))
+
 import { GET } from './route'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getSessionPrisma } from '@/lib/tenant'
 import { checkPermission } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
+import { prisma as globalPrisma } from '@/lib/db/prisma'
+import { canReadFleetStorage } from '@/lib/storage/fleetScope'
 
 const demoResponseMock = demoResponse as any
 const getSessionPrismaMock = getSessionPrisma as any
 const checkPermissionMock = checkPermission as any
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
+const globalPrismaMock = globalPrisma as any
+const canReadFleetStorageMock = canReadFleetStorage as any
 
 const TiB = 1024 ** 4
 
@@ -71,8 +86,8 @@ beforeEach(() => {
   getSessionPrismaMock.mockResolvedValue({
     connection: {
       findMany: vi.fn().mockResolvedValue([
-        { id: 'conn-1', name: 'PVE-1' },
-        { id: 'conn-2', name: 'PVE-2' },
+        { id: 'conn-1', name: 'PVE-1', tenantId: 'tenant-a' },
+        { id: 'conn-2', name: 'PVE-2', tenantId: 'tenant-a' },
       ]),
     },
   })
@@ -81,6 +96,17 @@ beforeEach(() => {
     if (path === '/storage') return Promise.resolve(CONFIGS[connData.id] || [])
     return Promise.resolve([])
   })
+  canReadFleetStorageMock.mockResolvedValue(false)
+  globalPrismaMock.connection.findMany.mockResolvedValue([
+    { id: 'conn-1', name: 'PVE-1', tenantId: 'tenant-a' },
+    { id: 'conn-2', name: 'PVE-2', tenantId: 'tenant-b' },
+  ])
+  globalPrismaMock.tenant.findMany.mockResolvedValue([
+    { id: 'default', name: 'Provider' },
+    { id: 'tenant-a', name: 'Alpha' },
+    { id: 'tenant-b', name: 'Bravo' },
+    { id: 'tenant-vdc', name: 'Vdc only' },
+  ])
 })
 
 describe('GET /api/v1/storage', () => {
@@ -193,5 +219,137 @@ describe('GET /api/v1/storage', () => {
     const body = await readJson<any>(res)
     expect(body.data).toEqual([])
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/storage — fleet scope (issue #609)', () => {
+  it('keeps the tenant-scoped client and exposes no tenants facet when not fleet-scoped', async () => {
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(getSessionPrismaMock).toHaveBeenCalled()
+    expect(globalPrismaMock.connection.findMany).not.toHaveBeenCalled()
+    expect(body.tenants).toBeUndefined()
+    expect(body.unavailable).toEqual([])
+  })
+
+  it('lists every tenant connection through the global client when fleet-scoped', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(globalPrismaMock.connection.findMany).toHaveBeenCalled()
+    expect(getSessionPrismaMock).not.toHaveBeenCalled()
+
+    const rowA = body.data.find((s: any) => s.connId === 'conn-1')
+    const rowB = body.data.find((s: any) => s.connId === 'conn-2')
+
+    expect(rowA.tenantId).toBe('tenant-a')
+    expect(rowA.tenantName).toBe('Alpha')
+    expect(rowB.tenantId).toBe('tenant-b')
+    expect(rowB.tenantName).toBe('Bravo')
+  })
+
+  it('returns every enabled tenant in the facet, provider first, zeros included', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-vdc'])
+
+    const vdcOnly = body.tenants.find((t: any) => t.id === 'tenant-vdc')
+
+    expect(vdcOnly).toEqual({ id: 'tenant-vdc', name: 'Vdc only', connectionCount: 0, storageCount: 0 })
+  })
+
+  it('exposes the owning tenant on each returned connection', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.connections).toEqual([
+      { id: 'conn-1', name: 'PVE-1', tenantId: 'tenant-a' },
+      { id: 'conn-2', name: 'PVE-2', tenantId: 'tenant-b' },
+    ])
+  })
+
+  it('reports a connection whose /cluster/resources call fails, instead of dropping it silently', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    pveFetchMock.mockImplementation((connData: any, path: string) => {
+      if (connData.id === 'conn-2' && path === '/cluster/resources') {
+        return Promise.reject(new Error('ETIMEDOUT'))
+      }
+      if (path === '/cluster/resources') return Promise.resolve(RESOURCES[connData.id] || [])
+      if (path === '/storage') return Promise.resolve(CONFIGS[connData.id] || [])
+
+      return Promise.resolve([])
+    })
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.unavailable).toEqual([
+      { connId: 'conn-2', connName: 'PVE-2', tenantId: 'tenant-b', tenantName: 'Bravo' },
+    ])
+    expect(body.data.some((s: any) => s.connId === 'conn-2')).toBe(false)
+    // The healthy cluster still renders.
+    expect(body.data.some((s: any) => s.connId === 'conn-1')).toBe(true)
+  })
+
+  it('does not treat a failing /storage config call as an unavailable connection', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    pveFetchMock.mockImplementation((connData: any, path: string) => {
+      if (path === '/cluster/resources') return Promise.resolve(RESOURCES[connData.id] || [])
+
+      return Promise.reject(new Error('500'))
+    })
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.unavailable).toEqual([])
+    expect(body.data.length).toBeGreaterThan(0)
+    expect(body.data.every((s: any) => s.type === 'unknown')).toBe(true)
+  })
+
+  it('reports a connection whose credentials cannot be resolved', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    getConnectionByIdMock.mockImplementation((id: string) =>
+      id === 'conn-2' ? Promise.reject(new Error('Connection not found: conn-2')) : Promise.resolve({ id })
+    )
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.unavailable).toEqual([
+      { connId: 'conn-2', connName: 'PVE-2', tenantId: 'tenant-b', tenantName: 'Bravo' },
+    ])
+  })
+
+  it('still carries the new keys when the fleet owns no PVE connection at all', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    globalPrismaMock.connection.findMany.mockResolvedValue([])
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.data).toEqual([])
+    expect(body.unavailable).toEqual([])
+    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-vdc'])
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('never widens the read when the RBAC check denies storage.view', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }))
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+
+    expect(res.status).toBe(403)
+    expect(globalPrismaMock.connection.findMany).not.toHaveBeenCalled()
+    expect(canReadFleetStorageMock).not.toHaveBeenCalled()
   })
 })

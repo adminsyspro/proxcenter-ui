@@ -3558,6 +3558,7 @@
     "title": "任务",
     "showTasks": "显示任务",
     "hideTasks": "隐藏",
+    "resizePanel": "拖动以调整任务面板大小",
     "refresh": "刷新",
     "expand": "展开",
     "collapse": "折叠",

@@ -3597,6 +3597,7 @@
     "title": "Tareas",
     "showTasks": "Mostrar tareas",
     "hideTasks": "Ocultar",
+    "resizePanel": "Arrastrar para cambiar el tamaño del panel de tareas",
     "refresh": "Actualizar",
     "expand": "Expandir",
     "collapse": "Contraer",

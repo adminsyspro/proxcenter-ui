@@ -3558,6 +3558,7 @@
     "title": "Aufgaben",
     "showTasks": "Aufgaben anzeigen",
     "hideTasks": "Ausblenden",
+    "resizePanel": "Ziehen, um die Größe des Aufgabenbereichs zu ändern",
     "refresh": "Aktualisieren",
     "expand": "Erweitern",
     "collapse": "Einklappen",

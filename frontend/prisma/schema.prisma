@@ -273,6 +273,11 @@ model MigrationJob {
 
   createdBy String? @map("created_by")
 
+  // Server instance (see resolveInstanceId) whose after() continuation runs the
+  // pipeline; the startup sweep fails non-terminal jobs whose owner restarted
+  // (#608). Null on rows created before this column existed.
+  ownerInstanceId String? @map("owner_instance_id")
+
   @@index([status])
   @@index([sourceConnectionId])
   @@index([targetConnectionId])

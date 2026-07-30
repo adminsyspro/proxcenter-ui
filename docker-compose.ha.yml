@@ -100,6 +100,11 @@ services:
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
       PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
       PG_POOL_MAX: ${PG_POOL_MAX:-}
+      # PROXCENTER_INSTANCE_ID is deliberately unset: with host networking the
+      # container inherits the node hostname, which is exactly what the
+      # orphaned-migration sweep needs (unique per node, stable across container
+      # recreation). Never give two nodes the same value: a boot would fail its
+      # live peers' migration jobs (#608).
       HA_ENABLED: "true"
       VIP: ${VIP}
       HA_REDIRECT_DISABLED: ${HA_REDIRECT_DISABLED:-}

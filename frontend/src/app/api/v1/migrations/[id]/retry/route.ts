@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 
 export const runtime = "nodejs"
 
@@ -58,6 +59,9 @@ export async function POST(
         currentStep: "pending",
         startedAt: new Date(),
         createdBy: session?.user?.id || null,
+        // The retried pipeline runs in this process's after() continuation;
+        // the owner tag lets the startup sweep fail it after a restart (#608).
+        ownerInstanceId: resolveInstanceId(),
       },
     })
 

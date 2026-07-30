@@ -27,6 +27,7 @@ vi.mock("@/lib/migration/v2v-pipeline", () => ({ runV2vMigrationPipeline: vi.fn(
 vi.mock("@/lib/migration/xcpng-pipeline", () => ({ runXcpngMigrationPipeline: vi.fn() }))
 vi.mock("@/lib/vmware/soap", () => ({ soapLogin: vi.fn(), soapLogout: vi.fn(), soapGetVmConfig: vi.fn(), parseVmConfig: vi.fn() }))
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pass") }))
+vi.mock("@/lib/migration/orphan-sweep", () => ({ resolveInstanceId: vi.fn(() => "inst-1") }))
 
 import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
@@ -95,6 +96,21 @@ describe("POST /api/v1/migrations — warm routing", () => {
     await runAfters()
     expect(warm).not.toHaveBeenCalled()
     expect(cold).not.toHaveBeenCalled()
+  })
+
+  // #608 orphan detection: the pipeline runs in this process's after()
+  // continuation, so the created row must carry this server's instance id.
+  it("persists the owner instance id on the created job", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+    expect(h.prisma.migrationJob.create).toHaveBeenCalledTimes(1)
+    expect(h.prisma.migrationJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ownerInstanceId: "inst-1" }) }),
+    )
   })
 
   it("dispatches a vCenter warm request to runWarmMigration, never the cold pipeline", async () => {

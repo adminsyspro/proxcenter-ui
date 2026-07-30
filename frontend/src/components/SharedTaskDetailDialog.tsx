@@ -1,7 +1,10 @@
 'use client'
 
-import { Dialog, DialogTitle, DialogContent, IconButton, Box, Typography, LinearProgress, Chip } from '@mui/material'
+import { useState } from 'react'
+
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
+import { useSWRConfig } from 'swr'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import type { SharedTask } from '@/lib/tasks/sharedTask'
 
@@ -9,14 +12,54 @@ type DetailResponse = { data: SharedTask & { logs?: unknown[] } }
 
 export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: string | null; onClose: () => void }) {
   const t = useTranslations()
-  const { data } = useSWRFetch<DetailResponse>(jobId ? `/api/v1/tasks/shared/${jobId}` : null, { refreshInterval: 5000 })
+  const { mutate } = useSWRConfig()
+  const { data, mutate: mutateDetail } = useSWRFetch<DetailResponse>(jobId ? `/api/v1/tasks/shared/${jobId}` : null, { refreshInterval: 5000 })
   const task = data?.data
 
+  // Cancel is the escape hatch for a job whose server process died (#608):
+  // the initiator's dialog is gone after a reload, so any viewer must be able
+  // to reach the cancel route from here. No client-side permission gate, to
+  // match the other migration actions; the server enforces vm.migrate (403).
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+  const canCancel = !!task && task.kind === 'migration' && !['completed', 'failed', 'cancelled'].includes(task.status)
+
+  const handleClose = () => {
+    setConfirmOpen(false)
+    setCancelError(null)
+    onClose()
+  }
+
+  const cancelJob = async () => {
+    setCancelling(true)
+    setCancelError(null)
+    try {
+      const res = await fetch(`/api/v1/migrations/${jobId}/cancel`, { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        // Includes the 403 from the server-side vm.migrate check. Shown in
+        // the detail dialog, so the confirm dialog must not stay on top.
+        setCancelError(d.error || t('tasks.shared.cancelFailed'))
+        return
+      }
+      // Refresh both the detail view and the footer list so the row flips to
+      // cancelled (or drops out) without a page reload.
+      await Promise.all([mutateDetail(), mutate('/api/v1/tasks/shared')])
+    } catch (e: any) {
+      setCancelError(e?.message || t('tasks.shared.cancelFailed'))
+    } finally {
+      setCancelling(false)
+      setConfirmOpen(false)
+    }
+  }
+
   return (
-    <Dialog open={!!jobId} onClose={onClose} maxWidth="md" fullWidth>
+    <>
+    <Dialog open={!!jobId} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>{task?.label ?? t('tasks.shared.detailTitle')}</span>
-        <IconButton onClick={onClose} size="small"><i className="ri-close-line" /></IconButton>
+        <IconButton onClick={handleClose} size="small"><i className="ri-close-line" /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
         {!task ? (
@@ -36,6 +79,7 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
             <LinearProgress variant={task.progress > 0 ? 'determinate' : 'indeterminate'} value={task.progress} />
             {task.currentStep && <Typography variant="body2">{task.currentStep}</Typography>}
             {task.error && <Typography variant="body2" color="error">{task.error}</Typography>}
+            {cancelError && <Alert severity="error">{cancelError}</Alert>}
             {Array.isArray(task.logs) && task.logs.length > 0 && (
               <Box component="pre" sx={{ fontSize: '0.75rem', maxHeight: 320, overflow: 'auto', bgcolor: 'action.hover', p: 1, borderRadius: 1, whiteSpace: 'pre-wrap' }}>
                 {task.logs.map((l: unknown) => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n')}
@@ -44,6 +88,38 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
           </Box>
         )}
       </DialogContent>
+      {canCancel && (
+        <DialogActions sx={{ px: 3, py: 1.5 }}>
+          <Button color="error" onClick={() => setConfirmOpen(true)}>
+            {t('tasks.shared.cancelMigration')}
+          </Button>
+        </DialogActions>
+      )}
     </Dialog>
+
+    {/* Confirm Cancel: destructive on a possibly shared job, always ask. */}
+    <Dialog open={confirmOpen} onClose={() => { if (!cancelling) setConfirmOpen(false) }} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+        <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+        {t('tasks.shared.cancelConfirmTitle')}
+      </DialogTitle>
+      <DialogContent>
+        <Typography sx={{ mb: 1.5 }}>
+          {t('tasks.shared.cancelConfirmStop')}
+        </Typography>
+        <Alert severity="warning">
+          {t('tasks.shared.cancelConfirmLeftovers')}
+        </Alert>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={() => setConfirmOpen(false)} disabled={cancelling}>
+          {t('tasks.shared.cancelConfirmKeep')}
+        </Button>
+        <Button variant="contained" color="error" onClick={cancelJob} disabled={cancelling}>
+          {cancelling ? t('tasks.shared.cancelling') : t('tasks.shared.cancelMigration')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    </>
   )
 }

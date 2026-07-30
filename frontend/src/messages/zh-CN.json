@@ -3579,7 +3579,14 @@
     },
     "shared": {
       "detailTitle": "迁移任务",
-      "startedBy": "由 {name} 发起"
+      "startedBy": "由 {name} 发起",
+      "cancelMigration": "取消迁移",
+      "cancelConfirmTitle": "确定要取消此次迁移吗？",
+      "cancelConfirmStop": "迁移将立即停止，即使它是由其他用户发起的。",
+      "cancelConfirmLeftovers": "已复制的卷和部分创建的 VMID 可能会留在目标节点上。如果不需要，请手动清理。",
+      "cancelConfirmKeep": "继续迁移",
+      "cancelling": "正在取消...",
+      "cancelFailed": "取消迁移失败"
     },
     "types": {
       "qmstart": "VM 启动",

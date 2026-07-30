@@ -3618,7 +3618,14 @@
     },
     "shared": {
       "detailTitle": "Tâche de migration",
-      "startedBy": "Lancé par {name}"
+      "startedBy": "Lancé par {name}",
+      "cancelMigration": "Annuler la migration",
+      "cancelConfirmTitle": "Annuler cette migration ?",
+      "cancelConfirmStop": "La migration s'arrête immédiatement, même si elle a été lancée par un autre utilisateur.",
+      "cancelConfirmLeftovers": "Des volumes déjà copiés et un VMID partiellement créé peuvent rester sur le nœud cible. Nettoyez-les manuellement si vous n'en avez pas besoin.",
+      "cancelConfirmKeep": "Continuer la migration",
+      "cancelling": "Annulation...",
+      "cancelFailed": "Échec de l'annulation de la migration"
     },
     "types": {
       "qmstart": "Démarrage VM",

@@ -3618,7 +3618,14 @@
     },
     "shared": {
       "detailTitle": "Migration task",
-      "startedBy": "Started by {name}"
+      "startedBy": "Started by {name}",
+      "cancelMigration": "Cancel migration",
+      "cancelConfirmTitle": "Cancel this migration?",
+      "cancelConfirmStop": "The migration stops immediately, even if it was started by another user.",
+      "cancelConfirmLeftovers": "Volumes already copied and a partially created VMID may remain on the target node. Clean them up manually if you do not need them.",
+      "cancelConfirmKeep": "Keep migrating",
+      "cancelling": "Cancelling...",
+      "cancelFailed": "Failed to cancel the migration"
     },
     "types": {
       "qmstart": "VM Start",

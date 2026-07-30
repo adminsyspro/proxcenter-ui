@@ -8,6 +8,7 @@ import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
 import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
 import { useFavorites } from './hooks/useFavorites'
+import { useMigrationOptions } from './hooks/useMigrationOptions'
 import { useSnapshots } from './hooks/useSnapshots'
 import { useTasks } from './hooks/useTasks'
 import { useNotes } from './hooks/useNotes'
@@ -274,25 +275,13 @@ export default function InventoryDetails({
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
-  const [migNetworkBridge, setMigNetworkBridge] = useState('')
   // Optional user-picked target VMID. Empty string = let PVE pick the next
   // free id (default behavior). The dialog runs a debounced availability
   // check and surfaces the result inline; the migration POST forwards the
   // value as `targetVmid` when set.
   const [migTargetVmid, setMigTargetVmid] = useState('')
   const [migTargetVmidStatus, setMigTargetVmidStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
-  // Optional 802.1Q VLAN tag applied to the created VM's NIC. Empty string means
-  // "no tag" (access port on the bridge's native VLAN). Stored as string so the
-  // input renders cleanly when blank; coerced + validated server-side.
-  const [migVlanTag, setMigVlanTag] = useState<string>('')
   const [migBridges, setMigBridges] = useState<any[]>([])
-  const [migStartAfter, setMigStartAfter] = useState(false)
-  const [migDiskPaths, setMigDiskPaths] = useState('')
-  const [migTempStorage, setMigTempStorage] = useState('/tmp')
-  const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot' | 'warm'>('cold')
-  // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
-  // Kept in state for the payload contract; no longer user-selectable in the UI.
-  const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs' | 'auto'>('auto')
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
@@ -319,6 +308,19 @@ export default function InventoryDetails({
   const [extVmSortDir, setExtVmSortDir] = useState<'asc' | 'desc'>('asc')
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
+  // Per-migration options (start-after, VLAN, qcow2 conversion, ...) live in a
+  // dedicated hook that resets the whole family whenever the single-VM or the
+  // bulk dialog opens — see useMigrationOptions for the #443 background.
+  const {
+    migNetworkBridge, setMigNetworkBridge,
+    migVlanTag, setMigVlanTag,
+    migStartAfter, setMigStartAfter,
+    migDiskPaths, setMigDiskPaths,
+    migTempStorage, setMigTempStorage,
+    migType, setMigType,
+    migTransferMode, setMigTransferMode,
+    migConvertToQcow2, setMigConvertToQcow2,
+  } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
   // match the dispatcher in InventoryDialogs.tsx or the two will fight each
@@ -329,7 +331,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -944,6 +946,7 @@ export default function InventoryDetails({
                   migrationType: cfg.migrationType,
                   transferMode: cfg.transferMode,
                   startAfterMigration: cfg.startAfterMigration,
+                  convertDisksToQcow2: cfg.convertDisksToQcow2,
                   // vCenter inventory path was captured per-VM when the bulk job was
                   // enqueued (see InventoryDialogs.tsx bulk-launch handler). Forward it
                   // here too, otherwise queued vCenter migrations would lose the path
@@ -3931,15 +3934,9 @@ return vm?.isCluster ?? false
                           if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
                           const ht = vm.hostType || data.esxiVmInfo?.hostType
                           if (ht === 'vcenter' || ht === 'hyperv' || ht === 'nutanix') setMigType('cold')
-                          // Pre-fill disk paths for Hyper-V (convert Windows paths to /mnt/hyperv/ linux paths)
-                          if (ht === 'hyperv' && (vm as any).diskPaths?.length > 0) {
-                            const linuxPaths = ((vm as any).diskPaths as string[]).map((p: string) => {
-                              // "C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"
-                              const fileName = p.split('\\').pop() || p.split('/').pop() || p
-                              return `/mnt/hyperv/${fileName}`
-                            })
-                            setMigDiskPaths(linuxPaths.join('\n'))
-                          }
+                          // Hyper-V disk paths are pre-filled by useMigrationOptions'
+                          // reset-on-open (from the diskPaths passed below); doing it
+                          // here would be wiped by that reset.
                           setEsxiMigrateVm({
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
@@ -4386,6 +4383,8 @@ return vm?.isCluster ?? false
         migBridges={migBridges}
         migStartAfter={migStartAfter}
         setMigStartAfter={setMigStartAfter}
+        migConvertToQcow2={migConvertToQcow2}
+        setMigConvertToQcow2={setMigConvertToQcow2}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}

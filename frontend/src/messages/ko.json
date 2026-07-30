@@ -2053,6 +2053,8 @@
       "vlanTagPlaceholder": "없음",
       "vlanTagInvalid": "1-4094",
       "startAfterMigration": "마이그레이션 후 VM 시작",
+      "convertDisksToQcow2": "마이그레이션 후 디스크를 qcow2로 변환 (Proxmox 스냅샷 사용 가능)",
+      "convertDisksToQcow2Tooltip": "마이그레이션이 완료되면 각 디스크가 백그라운드에서 qcow2로 완전히 다시 기록됩니다. 수 TB 디스크는 몇 시간이 걸릴 수 있으며 변환 중에는 대상 스토리지 공간을 일시적으로 두 배로 사용합니다. VM이 실행 중이어도 중단 시간은 없습니다.",
       "coldMigrationInfo": "콜드 마이그레이션: VM 전원이 꺼집니다. VMDK 디스크는 QCOW2/RAW로 변환되고 하드웨어 구성은 자동으로 매핑됩니다.",
       "coldMigrationRunningVms": "다음 VM은 현재 실행 중이며 콜드 마이그레이션을 시작하기 전에 전원을 꺼야 합니다:",
       "startMigration": "Proxmox로 마이그레이션",

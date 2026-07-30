@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 
 import { NodeRow, BulkAction } from '@/components/NodesTable'
+import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 
 // Dynamic imports for HardwareModals (code-split, loaded on demand)
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
@@ -245,6 +246,8 @@ export interface InventoryDialogsProps {
   migBridges: any[]
   migStartAfter: boolean
   setMigStartAfter: (v: boolean) => void
+  migConvertToQcow2: boolean
+  setMigConvertToQcow2: (v: boolean) => void
   migDiskPaths: string
   setMigDiskPaths: (v: string) => void
   migTempStorage: string
@@ -282,7 +285,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -391,7 +394,8 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migTargetStorage, setMigTargetStorage,
     migTargetVmid, setMigTargetVmid, migTargetVmidStatus, setMigTargetVmidStatus,
     migNetworkBridge, setMigNetworkBridge, migVlanTag, setMigVlanTag, migBridges,
-    migStartAfter, setMigStartAfter, migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage,
+    migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
+    migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
     migJobId, setMigJobId, migJob, setMigJob, migNodeOptions,
@@ -643,6 +647,33 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // from re-enabling the launch against a node that has not passed the current check.
   const warmPreflightCurrent =
     warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}` ? warmPreflight : null
+
+  // Post-migration qcow2 conversion (#595) only applies to thick `lvm` target
+  // storages: since #587 their volumes are allocated raw, which forfeits
+  // Proxmox snapshots unless converted afterwards. lvmthin cannot hold qcow2,
+  // and ZFS/Ceph RBD snapshot natively, so the switch stays hidden there. The
+  // storage listing the wizard already fetched carries `type`; the precise
+  // snapshot-as-volume-chain check stays server-side. Both the switch below
+  // and the request payloads gate on this, so a toggle left on for an earlier
+  // LVM pick can never leak into a run against a storage it doesn't apply to.
+  const migTargetIsThickLvm = migStorages.find((s: any) => s.storage === migTargetStorage)?.type === 'lvm'
+
+  // Rendered identically by the single-VM and the bulk dialog. Kept as one
+  // helper rather than two copies of the same JSX: an identical block repeated
+  // in both dialogs is what trips the new-code duplication gate.
+  const renderQcow2ConvertSwitch = () => migTargetIsThickLvm && (
+    <FormControlLabel
+      control={<Switch size="small" checked={migConvertToQcow2} onChange={(_, v) => setMigConvertToQcow2(v)} />}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2">{t('inventoryPage.esxiMigration.convertDisksToQcow2')}</Typography>
+          <MuiTooltip title={t('inventoryPage.esxiMigration.convertDisksToQcow2Tooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+            <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+          </MuiTooltip>
+        </Box>
+      }
+    />
+  )
 
   const startVirtioWinDownload = async () => {
     const installNodes = migTargetNode === '__auto__'
@@ -2641,6 +2672,9 @@ return
                     control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                     label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
                   />
+
+                  {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
+                  {renderQcow2ConvertSwitch()}
                 </Stack>
               </Box>
 
@@ -2955,6 +2989,10 @@ return
                           : (esxiMigrateVm.hostType === 'vcenter' ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                         transferMode: (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') ? 'v2v' : migTransferMode,
                         startAfterMigration: migStartAfter,
+                        // Gated on the storage type so a toggle left on while an
+                        // LVM storage was selected never leaks into a run against
+                        // a storage the option is hidden for.
+                        convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
                         // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
                         // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
                         ...(migTempStorage !== '/tmp' && {
@@ -3060,8 +3098,11 @@ return
                   {t('inventoryPage.esxiMigration.retry')}
                 </Button>
               )}
+              {/* Option state (migType, transfer mode, ...) is reset by
+                  useMigrationOptions on the next dialog open, so closing
+                  only clears the job view. */}
               {migJob && ['completed', 'failed', 'cancelled'].includes(migJob.status) && (
-                <Button onClick={() => { setEsxiMigrateVm(null); setMigJobId(null); setMigJob(null); setMigType('cold'); setMigTransferMode('sshfs') }}>
+                <Button onClick={() => { setEsxiMigrateVm(null); setMigJobId(null); setMigJob(null) }}>
                   {t('common.close')}
                 </Button>
               )}
@@ -3684,6 +3725,9 @@ return
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
                 />
 
+                {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
+                {renderQcow2ConvertSwitch()}
+
                 {/* SSH warning — not needed for vCenter */}
                 {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
                   <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>{t('inventoryPage.esxiMigration.sshRequired')}</Alert>
@@ -4066,6 +4110,8 @@ return
                             : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                           transferMode: (isVcenterBulk || isHypervBulk || isNutanixBulk) ? 'v2v' : migTransferMode,
                           startAfterMigration: migStartAfter,
+                          // Same storage-type gate as the single-VM payload.
+                          convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
                           // vCenter inventory path required by libvirt vpx URI (auto-discovered
                           // server-side via SOAP). Bulk jobs may target different ESXi hosts
                           // inside the same vCenter, so the path is per-VM. Same rationale
@@ -4126,6 +4172,7 @@ return
                       : (isVcenterBulk ? (migType === 'sshfs_boot' ? 'cold' : migType) : migType),
                     transferMode: isVcenterBulk ? 'v2v' : migTransferMode,
                     startAfterMigration: migStartAfter,
+                    convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
                     sourceType,
                     // Persisted across the queued-job poller so retries use the
                     // same temp storage the user selected when starting the batch.

@@ -44,6 +44,7 @@ import {
 } from '@/__tests__/fixtures/pveProvisioning'
 
 import InventoryDialogs, { type InventoryDialogsProps } from './InventoryDialogs'
+import { useMigrationOptions } from '../hooks/useMigrationOptions'
 
 // ------------------------------------------------------------------ //
 // Context mocks
@@ -294,6 +295,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     migBridges: [],
     migStartAfter: false,
     setMigStartAfter: vi.fn(),
+    migConvertToQcow2: false,
+    setMigConvertToQcow2: vi.fn(),
     migDiskPaths: '',
     setMigDiskPaths: vi.fn(),
     migTempStorage: '',
@@ -658,5 +661,264 @@ describe('InventoryDialogs', () => {
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
+  })
+})
+
+// ------------------------------------------------------------------ //
+// Migration dialog options: sticky-state reset (#443) and post-migration
+// qcow2 conversion (#595)
+// ------------------------------------------------------------------ //
+
+describe('migration dialog options', () => {
+  const ESXI_VM = {
+    vmid: '42',
+    name: 'web01',
+    connId: CONN_ID,
+    connName: 'esxi-lab',
+    hostType: 'esxi',
+    status: 'poweredOff',
+    guestOS: 'Ubuntu Linux (64-bit)',
+  }
+  const THICK_LVM = { storage: 'san-lvm', type: 'lvm', content: 'images', total: 1099511627776, avail: 879609302220 }
+  const ZFS = { storage: 'tank', type: 'zfspool', content: 'images', total: 1099511627776, avail: 879609302220 }
+  const START_AFTER_LABEL = 'Start VM after migration'
+  const QCOW2_LABEL = 'Convert disks to qcow2 after migration (enables Proxmox snapshots)'
+
+  function getSwitch(label: string): HTMLInputElement {
+    const labelEl = screen.getByText(label)
+    const fcl = labelEl.closest('.MuiFormControlLabel-root') as HTMLElement
+    expect(fcl).not.toBeNull()
+    return fcl.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  beforeEach(() => {
+    seedAllHandlers()
+    server.use(
+      // Source-datastore probe fired when the single-VM dialog opens for a
+      // direct-ESXi source (vSAN gate). No disks = no vSAN = nothing blocked.
+      http.get(`*/api/v1/vmware/${CONN_ID}/vms/42`, () =>
+        HttpResponse.json({ data: { disks: [] } }),
+      ),
+    )
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  // Harness owning the dialog-open state the same way InventoryDetails does:
+  // the option family comes from the real useMigrationOptions hook, so this
+  // exercises the production reset path rather than a test-local copy.
+  function OptionsHarness({ dialogOverrides = {} }: { dialogOverrides?: Partial<InventoryDialogsProps> }) {
+    const [esxiMigrateVm, setEsxiMigrateVm] = React.useState<any>(null)
+    const [bulkMigOpen, setBulkMigOpen] = React.useState(false)
+    const options = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
+    return (
+      <>
+        <button onClick={() => setEsxiMigrateVm(ESXI_VM)}>harness-open-single</button>
+        <button onClick={() => setEsxiMigrateVm(null)}>harness-close-single</button>
+        <InventoryDialogs
+          {...makeProps({
+            esxiMigrateVm,
+            setEsxiMigrateVm,
+            bulkMigOpen,
+            setBulkMigOpen,
+            ...options,
+            ...dialogOverrides,
+          })}
+        />
+      </>
+    )
+  }
+
+  // Regression proof for the customer report inside #443: an option toggled
+  // for an earlier migration must not silently apply to the next one started
+  // in the same page session.
+  it('resets toggled options to their defaults when the dialog is closed and reopened', async () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect(getSwitch(START_AFTER_LABEL).checked).toBe(false)
+    expect(getSwitch(QCOW2_LABEL).checked).toBe(false)
+
+    fireEvent.click(getSwitch(START_AFTER_LABEL))
+    fireEvent.click(getSwitch(QCOW2_LABEL))
+    expect(getSwitch(START_AFTER_LABEL).checked).toBe(true)
+    expect(getSwitch(QCOW2_LABEL).checked).toBe(true)
+
+    fireEvent.click(screen.getByText('harness-close-single'))
+    await waitFor(() => expect(screen.queryByText(START_AFTER_LABEL)).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect(getSwitch(START_AFTER_LABEL).checked).toBe(false)
+    expect(getSwitch(QCOW2_LABEL).checked).toBe(false)
+  })
+
+  it('shows the qcow2 switch only when the selected target storage is thick LVM', () => {
+    const { unmount } = renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: ESXI_VM,
+          migTargetConn: CONN_ID,
+          migTargetNode: NODE_NAME,
+          migTargetStorage: 'san-lvm',
+          migStorages: [THICK_LVM, ZFS],
+        })}
+      />,
+    )
+    expect(screen.getByText(QCOW2_LABEL)).toBeInTheDocument()
+    unmount()
+
+    renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: ESXI_VM,
+          migTargetConn: CONN_ID,
+          migTargetNode: NODE_NAME,
+          migTargetStorage: 'tank',
+          migStorages: [THICK_LVM, ZFS],
+        })}
+      />,
+    )
+    expect(screen.queryByText(QCOW2_LABEL)).not.toBeInTheDocument()
+  })
+
+  it('forwards convertDisksToQcow2=true in the single-VM migration request', async () => {
+    const bodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations', async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ data: { jobId: 'job-1' } })
+      }),
+    )
+    renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: ESXI_VM,
+          migTargetConn: CONN_ID,
+          migTargetNode: NODE_NAME,
+          migTargetStorage: 'san-lvm',
+          migStorages: [THICK_LVM, ZFS],
+          migConvertToQcow2: true,
+          migNetworkBridge: 'vmbr0',
+          migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].convertDisksToQcow2).toBe(true)
+    // The neighbouring option keeps its wiring: default off means false.
+    expect(bodies[0].startAfterMigration).toBe(false)
+  })
+
+  // A toggle left on for a previously selected LVM storage must not leak when
+  // the user switches to a storage the option does not apply to.
+  it('sends convertDisksToQcow2=false when the toggle is stale for a non-LVM storage', async () => {
+    const bodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations', async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ data: { jobId: 'job-2' } })
+      }),
+    )
+    renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: ESXI_VM,
+          migTargetConn: CONN_ID,
+          migTargetNode: NODE_NAME,
+          migTargetStorage: 'tank',
+          migStorages: [THICK_LVM, ZFS],
+          migConvertToQcow2: true,
+          migNetworkBridge: 'vmbr0',
+          migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].convertDisksToQcow2).toBe(false)
+  })
+
+  it('bulk dialog forwards convertDisksToQcow2 and records it for queued jobs', async () => {
+    const bodies: any[] = []
+    server.use(
+      http.post('*/api/v1/migrations', async ({ request }) => {
+        bodies.push(await request.json())
+        return HttpResponse.json({ data: { jobId: 'job-bulk-1' } })
+      }),
+    )
+    const bulkMigConfigRef = { current: null } as React.MutableRefObject<any>
+    renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          bulkMigOpen: true,
+          bulkMigHostInfo: {
+            hostType: 'esxi',
+            connectionId: 'esxi-1',
+            connectionName: 'esxi-lab',
+            vms: [{ vmid: '42', name: 'web01', status: 'poweredOff' }],
+          },
+          bulkMigSelected: new Set(['42']),
+          migTargetConn: CONN_ID,
+          migTargetNode: NODE_NAME,
+          migTargetStorage: 'san-lvm',
+          migStorages: [THICK_LVM, ZFS],
+          migConvertToQcow2: true,
+          migNetworkBridge: 'vmbr0',
+          migPveConnections: [{ id: CONN_ID, name: 'pve-lab', sshEnabled: true }],
+          bulkMigConfigRef,
+        })}
+      />,
+    )
+    expect(screen.getByText(QCOW2_LABEL)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].convertDisksToQcow2).toBe(true)
+    // The queued-job poller in InventoryDetails restarts jobs from this ref,
+    // so the option must survive there too.
+    expect(bulkMigConfigRef.current?.convertDisksToQcow2).toBe(true)
+  })
+
+  // The Hyper-V VHDX pre-fill moved into the reset-on-open hook (a blind reset
+  // would have wiped what the open handler pre-filled): opening for a Hyper-V
+  // VM with known disk paths must derive the /mnt/hyperv/ paths.
+  it('pre-fills migDiskPaths for Hyper-V sources with known disk paths on open', async () => {
+    function HypervHarness() {
+      const [esxiMigrateVm, setEsxiMigrateVm] = React.useState<any>(null)
+      const [bulkMigOpen, setBulkMigOpen] = React.useState(false)
+      const options = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
+      return (
+        <>
+          <button
+            onClick={() =>
+              setEsxiMigrateVm({
+                vmid: 'hv-1',
+                name: 'win01',
+                connId: CONN_ID,
+                connName: 'hyperv-lab',
+                hostType: 'hyperv',
+                status: 'poweredOff',
+                diskPaths: ['C:\\VMs\\win01.vhdx'],
+              })
+            }
+          >
+            harness-open-hyperv
+          </button>
+          <span data-testid="mig-disk-paths">{options.migDiskPaths}</span>
+          <InventoryDialogs
+            {...makeProps({ esxiMigrateVm, setEsxiMigrateVm, bulkMigOpen, setBulkMigOpen, ...options })}
+          />
+        </>
+      )
+    }
+    renderWithProviders(<HypervHarness />)
+    fireEvent.click(screen.getByText('harness-open-hyperv'))
+    await waitFor(() =>
+      expect(screen.getByTestId('mig-disk-paths')).toHaveTextContent('/mnt/hyperv/win01.vhdx'),
+    )
   })
 })

@@ -2053,6 +2053,8 @@
       "vlanTagPlaceholder": "ninguna",
       "vlanTagInvalid": "1-4094",
       "startAfterMigration": "Iniciar VM después de la migración",
+      "convertDisksToQcow2": "Convertir los discos a qcow2 después de la migración (habilita snapshots de Proxmox)",
+      "convertDisksToQcow2Tooltip": "Al completarse la migración, cada disco se reescribe por completo a qcow2 en segundo plano. Esto puede tardar horas en un disco de varios TB y usa temporalmente el doble de espacio en el almacenamiento de destino. Sin tiempo de inactividad: la conversión se realiza en caliente mientras la VM está en ejecución.",
       "coldMigrationInfo": "Migración en frío: la VM se apagará. Los discos VMDK se convierten a QCOW2/RAW y la configuración de hardware se asigna automáticamente.",
       "coldMigrationRunningVms": "Las siguientes VMs están en ejecución y deben apagarse antes de iniciar una migración en frío:",
       "startMigration": "Migrar a Proxmox",

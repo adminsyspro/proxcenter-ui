@@ -198,6 +198,14 @@ return (a.name || '').localeCompare(b.name || '')
     return filtered
   }, [data?.vmList, data?.lxcList, selectedConnections, mode, minThreshold])
 
+  // Guest count before any filter (connection, mode or threshold). Tells an
+  // empty grid caused by the user's own filters apart from one caused by
+  // there being nothing to show at all.
+  const totalGuests = useMemo(
+    () => [...(data?.vmList || []), ...(data?.lxcList || [])].filter(g => !g.template).length,
+    [data?.vmList, data?.lxcList],
+  )
+
   // Group by node
   const nodeGroups = useMemo(() => {
     const groups = {}
@@ -228,6 +236,14 @@ return { total: guests.length, avg: Math.round(vals.reduce((s, v) => s + v, 0) /
   const handleClick = useCallback((vm) => { router.push(`/infrastructure/inventory?vmid=${vm.vmid}&connId=${vm.connId}&node=${vm.node}&type=${vm.type}`) }, [router])
   const cycleThreshold = () => setMinThreshold(prev => prev === 0 ? 20 : prev === 20 ? 50 : 0)
 
+  // 'status' with no threshold and no connection filter shows every guest, so
+  // it is the one combination guaranteed to bring the grid back.
+  const resetFilters = () => {
+    setMode('status')
+    setMinThreshold(0)
+    if (selectedConnections.length > 0) handleFilterChange([])
+  }
+
   // Tile color based on mode
   const getTileColor = (vm) => {
     if (mode === 'status') return getStatusColor(vm.status)
@@ -254,9 +270,13 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
     return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: '0.7857rem' }}>Loading...</Typography></Box>
   }
 
-  if (guests.length === 0) {
+  // Nothing to show and no filter to blame: the widget has no controls worth
+  // keeping on screen, so the bare empty card is still the right answer.
+  if (totalGuests === 0) {
     return <Box sx={{ height: '100%', ...darkCard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Typography sx={{ opacity: 0.4, fontSize: '0.7857rem' }}>{t('common.noData')}</Typography></Box>
   }
+
+  const isEmpty = guests.length === 0
 
   return (
     <Box sx={{ height: '100%', ...darkCard, display: 'flex', flexDirection: 'column' }}>
@@ -308,9 +328,24 @@ return mode === 'cpu' ? vm.cpuPct : vm.ramPct
         </Box>
       </Box>
 
-      {/* Grid by node */}
-      <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {nodeGroups.map((group) => (
+      {/* Grid by node — the empty state lives here, never in place of the
+          header, so the filters that emptied it stay reachable. */}
+      <Box sx={{
+        flex: 1, overflow: 'auto', minHeight: 0,
+        ...(isEmpty && { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75 }),
+      }}>
+        {isEmpty && (
+          <>
+            <Typography sx={{ opacity: 0.4, fontSize: '0.7857rem' }}>{t('common.noResults')}</Typography>
+            {/* Guests exist but a filter hid them all, so a reset always applies. */}
+            <Box onClick={resetFilters} sx={{
+              px: 0.75, py: 0.2, borderRadius: 1, cursor: 'pointer', fontSize: '0.7143rem', fontWeight: 600,
+              color: c.textMuted, bgcolor: c.borderLight,
+              '&:hover': { bgcolor: c.surfaceSubtle, color: '#fff' },
+            }}>{t('common.reset')}</Box>
+          </>
+        )}
+        {!isEmpty && nodeGroups.map((group) => (
           <Box key={group.node} sx={{ mb: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.4 }}>
               <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>

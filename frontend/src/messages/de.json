@@ -87,6 +87,8 @@
     "with": "mit",
     "by": "von",
     "no_data": "Keine Daten",
+    "noData": "Keine Daten",
+    "noResults": "Keine Ergebnisse",
     "empty": "Leer",
     "overview": "Übersicht",
     "configuration": "Konfiguration",

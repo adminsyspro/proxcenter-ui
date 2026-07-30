@@ -3577,7 +3577,14 @@
     },
     "shared": {
       "detailTitle": "Migrationsaufgabe",
-      "startedBy": "Gestartet von {name}"
+      "startedBy": "Gestartet von {name}",
+      "cancelMigration": "Migration abbrechen",
+      "cancelConfirmTitle": "Diese Migration abbrechen?",
+      "cancelConfirmStop": "Die Migration wird sofort gestoppt, auch wenn sie von einem anderen Benutzer gestartet wurde.",
+      "cancelConfirmLeftovers": "Bereits kopierte Volumes und eine teilweise erstellte VMID können auf dem Zielknoten verbleiben. Bereinigen Sie sie manuell, wenn Sie sie nicht benötigen.",
+      "cancelConfirmKeep": "Migration fortsetzen",
+      "cancelling": "Wird abgebrochen...",
+      "cancelFailed": "Migration konnte nicht abgebrochen werden"
     },
     "types": {
       "qmstart": "VM-Start",

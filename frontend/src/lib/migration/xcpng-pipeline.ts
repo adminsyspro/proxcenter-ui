@@ -34,6 +34,7 @@ import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
+import { startJobHeartbeat } from "./job-heartbeat"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
 
@@ -231,6 +232,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
   let targetVmid: number | null = null
   let storageTempDir = ''
+
+  // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
+  // runs so a long silent step (#606) is never mistaken for a dead process.
+  const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
 
   try {
     // ── STEP 0: Pre-flight ──
@@ -808,7 +813,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       bytesTransferred: BigInt(totalDiskBytes),
       totalBytes: BigInt(totalDiskBytes),
     })
-    await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success")
+    // Non-fatal: a failing log append after the terminal write must not throw
+    // us into the catch, which would flip a completed job to "failed" (#608).
+    await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success").catch(() => {})
 
     const { audit } = await import("@/lib/audit")
     await audit({
@@ -825,8 +832,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     })
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
-    await updateJob(jobId, "failed", { error: errorMsg })
-    await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
+    // Terminal status first, and nothing may prevent it — a throwing appendLog
+    // or DB hiccup here would leave the row non-terminal forever (#608). The
+    // cleanup below must also run even if these writes fail.
+    await updateJob(jobId, "failed", { error: errorMsg }).catch(() => {})
+    await appendLog(jobId, `Migration failed: ${errorMsg}`, "error").catch(() => {})
 
     // Cleanup: remove temp files
     try {
@@ -851,6 +861,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    stopHeartbeat()
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }

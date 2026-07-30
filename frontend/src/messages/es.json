@@ -3618,7 +3618,14 @@
     },
     "shared": {
       "detailTitle": "Tarea de migración",
-      "startedBy": "Iniciada por {name}"
+      "startedBy": "Iniciada por {name}",
+      "cancelMigration": "Cancelar migración",
+      "cancelConfirmTitle": "¿Cancelar esta migración?",
+      "cancelConfirmStop": "La migración se detiene de inmediato, incluso si la inició otro usuario.",
+      "cancelConfirmLeftovers": "Los volúmenes ya copiados y un VMID creado parcialmente pueden permanecer en el nodo de destino. Límpielos manualmente si no los necesita.",
+      "cancelConfirmKeep": "Seguir migrando",
+      "cancelling": "Cancelando...",
+      "cancelFailed": "No se pudo cancelar la migración"
     },
     "types": {
       "qmstart": "Inicio de VM",

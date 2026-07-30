@@ -3618,7 +3618,14 @@
     },
     "shared": {
       "detailTitle": "마이그레이션 작업",
-      "startedBy": "{name}이(가) 시작함"
+      "startedBy": "{name}이(가) 시작함",
+      "cancelMigration": "마이그레이션 취소",
+      "cancelConfirmTitle": "이 마이그레이션을 취소하시겠습니까?",
+      "cancelConfirmStop": "다른 사용자가 시작한 마이그레이션이라도 즉시 중지됩니다.",
+      "cancelConfirmLeftovers": "이미 복사된 볼륨과 부분적으로 생성된 VMID가 대상 노드에 남을 수 있습니다. 필요하지 않으면 수동으로 정리하십시오.",
+      "cancelConfirmKeep": "마이그레이션 계속하기",
+      "cancelling": "취소 중...",
+      "cancelFailed": "마이그레이션을 취소하지 못했습니다"
     },
     "types": {
       "qmstart": "VM 시작",

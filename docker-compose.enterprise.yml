@@ -22,6 +22,14 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=${APP_URL:-http://localhost:3000}
+      # Identity this instance stamps on the migration jobs it runs, so a boot
+      # can fail the ones its previous incarnation left behind (#608). Fixed on
+      # purpose: the container id changes on every image upgrade, which would
+      # delay the cleanup of a job interrupted by that very upgrade. Only ever
+      # one frontend per stack here; give each instance its own value if you
+      # point several at one database (the HA stack leaves it unset and falls
+      # back to the node hostname).
+      - PROXCENTER_INSTANCE_ID=${PROXCENTER_INSTANCE_ID:-proxcenter-frontend}
       - ORCHESTRATOR_URL=http://orchestrator:8080
       - ORCHESTRATOR_API_KEY=${ORCHESTRATOR_API_KEY:-}
       # PDF report renderer (WeasyPrint sidecar), used by Compliance > Frameworks PDF export.

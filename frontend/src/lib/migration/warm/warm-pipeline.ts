@@ -30,6 +30,7 @@ import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
+import { startJobHeartbeat } from "../job-heartbeat"
 
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "full_copy" | "delta_sync"
@@ -210,6 +211,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   // mid-stream. Persisted/resumable per-disk state (design §5.3/§12) is deferred.
   const targetDev = new Map<number, string>()
   const diskState = new Map<number, DiskWarmState>()
+
+  // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
+  // runs. Warm is the pipeline that motivated it — a thick pre-zero can be
+  // silent for hours (#606) and must not look like a dead process.
+  const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
 
   try {
     // ── planning ──
@@ -556,14 +562,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     }
 
     await updateJob(jobId, "completed", { progress: 100 })
-    await appendLog(jobId, "Warm migration complete", "success")
+    // Non-fatal: a failing log append after the terminal write must not throw
+    // us into the catch, which would flip a completed job to "failed" (#608).
+    await appendLog(jobId, "Warm migration complete", "success").catch(() => {})
   } catch (err: any) {
-    await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
+    // Terminal status first, and nothing may prevent it — a row left
+    // non-terminal here would show as "in progress" forever (#608).
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
+    await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
     await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
     throw err
   } finally {
+    stopHeartbeat()
     stopKeepAlive?.()
     if (soapSession) await soapLogout(soapSession).catch(() => {})
     jobPrisma.delete(jobId)

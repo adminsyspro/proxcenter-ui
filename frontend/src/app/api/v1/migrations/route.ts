@@ -8,6 +8,7 @@ import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
 import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { assertStorageName } from "@/lib/ssh/validate"
@@ -142,6 +143,9 @@ export async function POST(req: Request) {
         currentStep: "pending",
         startedAt: new Date(),
         createdBy: session?.user?.id || null,
+        // The pipeline runs in this process's after() continuation; the owner
+        // tag lets the startup sweep fail the job if this server restarts (#608).
+        ownerInstanceId: resolveInstanceId(),
       },
     })
 

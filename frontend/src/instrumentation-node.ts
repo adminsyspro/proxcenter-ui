@@ -8,6 +8,8 @@
 import path from 'node:path'
 
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
+import { prisma } from '@/lib/db/prisma'
+import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 
 export async function registerNode(): Promise<void> {
   if (process.env.DEMO_MODE === 'true') return
@@ -22,5 +24,16 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this import: the assets are also served
     // from disk on node 1, and the next boot retries.
     console.error('[startup] disk-asset import failed (non-fatal):', err)
+  }
+
+  try {
+    const swept = await sweepOrphanedMigrationJobs({ prisma, instanceId: resolveInstanceId() })
+    if (swept.total > 0) {
+      console.log(`[startup] orphaned migration jobs failed: owned=${swept.owned} foreign=${swept.foreign}`)
+    }
+  } catch (err) {
+    // Boot must never depend on the sweep: the rows stay non-terminal and the
+    // next boot retries.
+    console.error('[startup] orphaned migration sweep failed (non-fatal):', err)
   }
 }

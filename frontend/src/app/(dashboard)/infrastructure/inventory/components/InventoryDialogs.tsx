@@ -3027,6 +3027,9 @@ return
                   <Button
                     color="error"
                     onClick={() => {
+                      // preparing_disks is deliberately absent: nothing has been
+                      // copied while the targets are still being allocated/zeroed,
+                      // so cancelling frees the volumes without a confirm (#612).
                       const hasCopiedData = ['full_copy', 'delta_sync', 'awaiting_cutover', 'cutover', 'verify'].includes(migJob.status)
                       if (hasCopiedData) {
                         setCancelMigConfirmOpen(true)

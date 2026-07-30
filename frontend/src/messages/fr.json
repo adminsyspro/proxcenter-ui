@@ -2069,6 +2069,7 @@
       "estimatedDowntime": "Downtime de bascule estimé",
       "estimatedDowntimeHint": "Durée d'indisponibilité de la VM pendant la bascule finale, d'après la dernière passe delta.",
       "awaitingCutover": "En attente de bascule",
+      "preparingDisks": "Préparation des disques cibles",
       "cutoverNow": "Basculer maintenant",
       "cutoverConfirmTitle": "Basculer maintenant ?",
       "cutoverConfirmBody": "La VM source va être arrêtée et les derniers changements copiés. Prévoyez environ {mins} min d'indisponibilité. Continuer ?",

@@ -2069,6 +2069,7 @@
       "estimatedDowntime": "Estimated cutover downtime",
       "estimatedDowntimeHint": "Time the VM will be offline during the final switchover, based on the last delta pass.",
       "awaitingCutover": "Waiting for cutover",
+      "preparingDisks": "Preparing target disks",
       "cutoverNow": "Cutover now",
       "cutoverConfirmTitle": "Cut over now?",
       "cutoverConfirmBody": "The source VM will be shut down and the final changes copied. Expect roughly {mins} min of downtime. Continue?",

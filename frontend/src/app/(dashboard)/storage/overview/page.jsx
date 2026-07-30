@@ -12,6 +12,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   Divider,
   Drawer,
@@ -19,6 +20,7 @@ import {
   IconButton,
   InputAdornment,
   LinearProgress,
+  ListItemText,
   MenuItem,
   Select,
   Stack,
@@ -35,6 +37,15 @@ import { formatBytes } from '@/utils/format'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import StorageContentBrowser from '@/components/storage/StorageContentBrowser'
+import { filterStorages } from '@/lib/storage/filterStorages'
+
+// Sentinel MenuItem value for the "select all / clear selection" toggle in the
+// tenant selector (issue #609). MUI's Select clones every child with its own
+// onClick and unconditionally fires onChange afterwards regardless of whether
+// the clicked item has a value, so a foreign onClick on that MenuItem gets
+// clobbered by MUI's own onChange call in the same click. Routing the toggle
+// through a real value handled inside onChange avoids that race.
+const TENANT_SELECT_ALL = '__all__'
 
 // Icône pour les types de storage
 const StorageIcon = ({ type, size = 20 }) => {
@@ -245,6 +256,12 @@ return () => setPageInfo('', '', '')
   const [contentNode, setContentNode] = useState(null)
   const [contentConnId, setContentConnId] = useState(null)
 
+  // Facette de tenants renvoyée par l'API pour un appelant élargi (issue #609).
+  // tenantIds à null = pas de filtre tenant, donc pas de sélecteur.
+  const [tenants, setTenants] = useState([])
+  const [tenantIds, setTenantIds] = useState(null)
+  const [unavailable, setUnavailable] = useState([])
+
   // Charger tous les storages en une seule requête
   const loadStorages = async () => {
     setLoading(true)
@@ -255,12 +272,23 @@ return () => setPageInfo('', '', '')
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
-      
+
+      const tenantFacets = Array.isArray(json?.tenants) ? json.tenants : []
+
       setStorages(Array.isArray(json?.data) ? json.data : [])
       setConnections(Array.isArray(json?.connections) ? json.connections : [])
+      setTenants(tenantFacets)
+      setUnavailable(Array.isArray(json?.unavailable) ? json.unavailable : [])
+
+      // Ouvrir sur tous les tenants cochés: la page ne doit jamais s'afficher
+      // vide pour un appelant élargi (issue #609).
+      setTenantIds(tenantFacets.length > 0 ? tenantFacets.map(t => t.id) : null)
     } catch (e) {
       setError(e?.message || String(e))
       setStorages([])
+      setTenants([])
+      setTenantIds(null)
+      setUnavailable([])
     } finally {
       setLoading(false)
     }
@@ -271,34 +299,15 @@ return () => setPageInfo('', '', '')
   }, [])
 
   // Filtrage
-  const filtered = useMemo(() => {
-    let result = storages
-    
-    // Filtre par connexion
-    if (connId !== '*') {
-      result = result.filter(s => s.connections?.some(c => c.id === connId) || s.connId === connId)
-    }
-    
-    const qq = q.trim().toLowerCase()
+  const filtered = useMemo(
+    () => filterStorages(storages, { connId, query: q, type: typeFilter, scope: scopeFilter, tenantIds }),
+    [storages, q, typeFilter, scopeFilter, connId, tenantIds]
+  )
 
-    
-return result.filter(s => {
-      const matchQ = !qq || 
-        s.storage?.toLowerCase().includes(qq) || 
-        s.node?.toLowerCase().includes(qq) ||
-        s.type?.toLowerCase().includes(qq) ||
-        s.connectionName?.toLowerCase().includes(qq)
-
-      const matchType = typeFilter === 'all' || s.type === typeFilter
-
-      const matchScope = scopeFilter === 'all' || 
-        (scopeFilter === 'shared' && s.shared) || 
-        (scopeFilter === 'local' && !s.shared)
-
-      
-return matchQ && matchType && matchScope
-    })
-  }, [storages, q, typeFilter, scopeFilter, connId])
+  // Même seuil que TenantSwitcher.jsx:53: en dessous de 2 tenants, pas de sélecteur.
+  const showTenantSelector = tenants.length > 1
+  const noTenantSelected = Array.isArray(tenantIds) && tenantIds.length === 0
+  const allTenantsSelected = showTenantSelector && tenantIds?.length === tenants.length
 
   // Types uniques pour le filtre
   const uniqueTypes = useMemo(() => {
@@ -357,7 +366,8 @@ return Array.from(types).sort((a, b) => a.localeCompare(b))
   }
 
   // Colonnes DataGrid
-  const columns = useMemo(() => [
+  const columns = useMemo(() => {
+    const cols = [
     {
       field: 'storage',
       headerName: t('storage.title'),
@@ -484,11 +494,32 @@ return (
         </Tooltip>
       )
     }
-  ], [t])
+    ]
+
+    if (showTenantSelector) {
+      const afterConnection = cols.findIndex(c => c.field === 'connectionName') + 1
+
+      cols.splice(afterConnection, 0, {
+        field: 'tenantName',
+        headerName: t('storage.tenant'),
+        width: 150,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Typography variant='body2' sx={{ opacity: 0.8 }}>{params.row.tenantName || '-'}</Typography>
+          </Box>
+        )
+      })
+    }
+
+    return cols
+  }, [t, showTenantSelector])
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* KPIs */}
+      {/* KPIs. Pendant le scan de flotte, les KPI calculés sur un tableau vide
+          afficheraient 0 stockage / 0 B / 0 %, ce qui rejoue l'impression de
+          page cassée de l'issue #609. */}
+      {loading ? <CardsSkeleton count={4} columns={4} /> : (
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
         <KpiCard
           title={t('storage.storages')}
@@ -519,6 +550,7 @@ return (
           color={stats.critical > 0 ? '#f44336' : stats.warning > 0 ? '#ff9800' : '#4caf50'}
         />
       </Box>
+      )}
 
       {/* Filtres */}
       <Card variant='outlined'>
@@ -573,6 +605,51 @@ return (
               </Select>
             </FormControl>
 
+            {/* Tenants (issue #609): filtre local à la page, aucune bascule de
+                contexte tenant, aucun appel réseau au changement. */}
+            {showTenantSelector && (
+              <FormControl size='small' sx={{ minWidth: 200 }}>
+                <Select
+                  multiple
+                  value={tenantIds || []}
+                  onChange={e => {
+                    const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+
+                    if (raw.includes(TENANT_SELECT_ALL)) {
+                      setTenantIds(allTenantsSelected ? [] : tenants.map(x => x.id))
+
+                      return
+                    }
+
+                    setTenantIds(raw)
+                  }}
+                  renderValue={selected => {
+                    if (selected.length === tenants.length) return t('storage.allTenants')
+                    if (selected.length === 1) return tenants.find(x => x.id === selected[0])?.name || selected[0]
+
+                    return t('storage.tenantsSelected', { count: selected.length })
+                  }}
+                  displayEmpty
+                >
+                  <MenuItem dense value={TENANT_SELECT_ALL}>
+                    <Typography variant='body2' sx={{ fontWeight: 600 }}>
+                      {allTenantsSelected ? t('storage.selectNone') : t('storage.selectAll')}
+                    </Typography>
+                  </MenuItem>
+                  <Divider />
+                  {tenants.map(tn => (
+                    <MenuItem key={tn.id} value={tn.id}>
+                      <Checkbox size='small' checked={(tenantIds || []).includes(tn.id)} />
+                      <ListItemText
+                        primary={`${tn.name} (${tn.storageCount})`}
+                        secondary={tn.connectionCount === 0 ? t('storage.tenantWithoutConnection') : null}
+                      />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
             <Box sx={{ flex: 1 }} />
 
             <Typography variant='body2' sx={{ opacity: 0.6 }}>
@@ -582,12 +659,22 @@ return (
         </CardContent>
       </Card>
 
+      {/* Sans ça, une connexion injoignable ou refusée rétrécit la vue en
+          silence, ce qui ferait mentir la vue agrégée (issue #609). */}
+      {!loading && unavailable.length > 0 && (
+        <Alert severity='warning'>
+          <Tooltip title={unavailable.map(u => u.connName).join(', ')}>
+            <span>{t('storage.unreachableConnections', { count: unavailable.length })}</span>
+          </Tooltip>
+        </Alert>
+      )}
+
       {/* DataGrid */}
       <Card variant='outlined'>
         <Box sx={{ height: 600 }}>
           {loading ? (
             <Box sx={{ p: 2 }}>
-              <TableSkeleton rows={6} columns={7} />
+              <TableSkeleton rows={6} columns={showTenantSelector ? 8 : 7} />
             </Box>
           ) : error ? (
             <Box sx={{ p: 3 }}>
@@ -596,8 +683,8 @@ return (
           ) : filtered.length === 0 ? (
             <EmptyState
               icon="ri-hard-drive-2-line"
-              title={t('emptyState.noStorage')}
-              description={t('emptyState.noStorageDesc')}
+              title={noTenantSelected ? t('storage.noTenantSelected') : t('emptyState.noStorage')}
+              description={noTenantSelected ? t('storage.noTenantSelectedDesc') : t('emptyState.noStorageDesc')}
               size="large"
             />
           ) : (

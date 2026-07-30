@@ -90,4 +90,33 @@ describe('aggregateStorage', () => {
     expect(e.type).toBe('nfs')
     expect(e.content).toEqual(['images', 'iso'])
   })
+
+  it('carries tenantId and tenantName from the raw entries onto the aggregated row', () => {
+    const rows = aggregateStorage([
+      {
+        connId: 'conn-1',
+        connName: 'PVE-1',
+        tenantId: 'tenant-a',
+        tenantName: 'Tenant A',
+        node: 'pve1-n1',
+        storage: 'local-lvm',
+        type: 'lvmthin',
+        used: 10,
+        total: 100,
+      },
+    ])
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0].tenantId).toBe('tenant-a')
+    expect(rows[0].tenantName).toBe('Tenant A')
+  })
+
+  it('leaves tenantId and tenantName undefined when the raw entries carry none', () => {
+    const rows = aggregateStorage([
+      { connId: 'conn-1', connName: 'PVE-1', node: 'pve1-n1', storage: 'local-lvm', type: 'lvmthin', used: 10, total: 100 },
+    ])
+
+    expect(rows[0].tenantId).toBeUndefined()
+    expect(rows[0].tenantName).toBeUndefined()
+  })
 })

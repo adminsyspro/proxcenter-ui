@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // POST /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries - Add entry
 export async function POST(
@@ -22,9 +25,13 @@ export async function POST(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/ipsets/${connectionId}/${ipsetName}/entries`, body)
+    const created = await orchestratorOrPve(
+      'firewall/ipsets/entries',
+      () => orchestrator.post(`/firewall/ipsets/${connectionId}/${ipsetName}/entries`, body),
+      async () => pveDirect.addIPSetEntry(await getConnectionById(connectionId), ipsetName, body),
+    )
 
-    return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(created, { status: 201 })
   } catch (error: any) {
     console.error('Error adding IP set entry:', error)
     

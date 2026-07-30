@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { getConnectionById } from '@/lib/connections/getConnection'
 
 // PUT /api/v1/firewall/cluster/[connectionId]/rules/[pos] - Update/move cluster rule
 export async function PUT(
@@ -22,9 +25,13 @@ export async function PUT(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.put(`/firewall/cluster/${connectionId}/rules/${pos}`, body)
+    const result = await orchestratorOrPve(
+      'firewall/cluster/rules',
+      () => orchestrator.put(`/firewall/cluster/${connectionId}/rules/${pos}`, body),
+      async () => pveDirect.updateClusterRule(await getConnectionById(connectionId), pos, body),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error updating cluster rule:', error)
     
@@ -50,7 +57,11 @@ export async function DELETE(
 
     const orchestrator = getOrchestratorClient()
 
-    await orchestrator.delete(`/firewall/cluster/${connectionId}/rules/${pos}`)
+    await orchestratorOrPve(
+      'firewall/cluster/rules',
+      () => orchestrator.delete(`/firewall/cluster/${connectionId}/rules/${pos}`),
+      async () => pveDirect.deleteClusterRule(await getConnectionById(connectionId), pos),
+    )
 
     return NextResponse.json({ status: 'deleted' })
   } catch (error: any) {

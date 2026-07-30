@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -20,9 +23,15 @@ export async function GET(
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/groups/${connectionId}`)
+    // Community has no orchestrator: read the groups straight from PVE (#616).
+    // The connection is only loaded on that fallback path.
+    const groups = await orchestratorOrPve(
+      'firewall/groups',
+      () => orchestrator.get(`/firewall/groups/${connectionId}`),
+      async () => pveDirect.getSecurityGroups(await getConnectionById(connectionId)),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(groups)
   } catch (error: any) {
     console.error('Error fetching security groups:', error)
     
@@ -49,9 +58,13 @@ export async function POST(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/groups/${connectionId}`, body)
+    const created = await orchestratorOrPve(
+      'firewall/groups',
+      () => orchestrator.post(`/firewall/groups/${connectionId}`, body),
+      async () => pveDirect.createSecurityGroup(await getConnectionById(connectionId), body),
+    )
 
-    return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(created, { status: 201 })
   } catch (error: any) {
     console.error('Error creating security group:', error)
     

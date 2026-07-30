@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { getConnectionById } from '@/lib/connections/getConnection'
 
 // GET /api/v1/firewall?connectionId=xxx - Get firewall status
 export async function GET(request: NextRequest) {
@@ -29,9 +32,13 @@ export async function GET(request: NextRequest) {
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/status/${connectionId}`)
+    const result = await orchestratorOrPve(
+      'firewall/status',
+      () => orchestrator.get(`/firewall/status/${connectionId}`),
+      async () => pveDirect.getFirewallStatus(await getConnectionById(connectionId)),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error fetching firewall status:', String(error?.message || error).replace(/[\r\n]/g, ''))
     

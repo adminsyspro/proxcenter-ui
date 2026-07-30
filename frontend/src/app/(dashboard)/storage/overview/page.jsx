@@ -39,6 +39,14 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import StorageContentBrowser from '@/components/storage/StorageContentBrowser'
 import { filterStorages } from '@/lib/storage/filterStorages'
 
+// Sentinel MenuItem value for the "select all / clear selection" toggle in the
+// tenant selector (issue #609). MUI's Select clones every child with its own
+// onClick and unconditionally fires onChange afterwards regardless of whether
+// the clicked item has a value, so a foreign onClick on that MenuItem gets
+// clobbered by MUI's own onChange call in the same click. Routing the toggle
+// through a real value handled inside onChange avoids that race.
+const TENANT_SELECT_ALL = '__all__'
+
 // Icône pour les types de storage
 const StorageIcon = ({ type, size = 20 }) => {
   const iconMap = {
@@ -604,7 +612,17 @@ return (
                 <Select
                   multiple
                   value={tenantIds || []}
-                  onChange={e => setTenantIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                  onChange={e => {
+                    const raw = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
+
+                    if (raw.includes(TENANT_SELECT_ALL)) {
+                      setTenantIds(allTenantsSelected ? [] : tenants.map(x => x.id))
+
+                      return
+                    }
+
+                    setTenantIds(raw)
+                  }}
                   renderValue={selected => {
                     if (selected.length === tenants.length) return t('storage.allTenants')
                     if (selected.length === 1) return tenants.find(x => x.id === selected[0])?.name || selected[0]
@@ -613,13 +631,7 @@ return (
                   }}
                   displayEmpty
                 >
-                  <MenuItem
-                    dense
-                    onClick={e => {
-                      e.preventDefault()
-                      setTenantIds(allTenantsSelected ? [] : tenants.map(x => x.id))
-                    }}
-                  >
+                  <MenuItem dense value={TENANT_SELECT_ALL}>
                     <Typography variant='body2' sx={{ fontWeight: 600 }}>
                       {allTenantsSelected ? t('storage.selectNone') : t('storage.selectAll')}
                     </Typography>

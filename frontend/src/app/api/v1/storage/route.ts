@@ -8,7 +8,7 @@ import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { aggregateStorage } from "@/lib/proxmox/storage"
 import { canReadFleetStorage } from "@/lib/storage/fleetScope"
-import { buildTenantFacets } from "@/lib/storage/tenantFacets"
+import { buildTenantFacets, selectableTenants } from "@/lib/storage/tenantFacets"
 
 export const runtime = "nodejs"
 
@@ -43,7 +43,9 @@ const PVE_CONNECTION_QUERY = {
  * Les stockages de vDC ne sont jamais remontés séparément: un stockage de vDC
  * appartient déjà à une connexion, donc il apparaît sous le tenant propriétaire
  * de cette connexion. Le compter une seconde fois fausserait les KPI, qui
- * somment capacité et utilisé sur les lignes affichées (voir #569).
+ * somment capacité et utilisé sur les lignes affichées (voir #569). Corollaire:
+ * un tenant dont la seule portée est un vDC ne figure pas dans la facette
+ * `tenants`, sinon le sélecteur porterait une entrée vide en permanence.
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
@@ -63,10 +65,29 @@ export async function GET(req: Request) {
       : await (await getSessionPrisma()).connection.findMany(PVE_CONNECTION_QUERY)
 
     // Tous les tenants activés, pas seulement ceux qui possèdent une connexion:
-    // le sélecteur les liste tous, et ceux sans connexion propre restent à 0.
-    const tenants = fleet
+    // un tenant MSP sans connexion encore déclarée reste listé et affiche 0.
+    const enabledTenants = fleet
       ? await globalPrisma.tenant.findMany({ where: { enabled: true }, select: { id: true, name: true } })
       : []
+
+    // Un tenant dont la seule portée est un vDC est en revanche écarté: le vDC
+    // est adossé à une connexion entière appartenant au tenant provider, donc
+    // ses stockages figurent déjà sous ce tenant. L'ajouter au sélecteur ne
+    // produirait qu'une entrée vide en permanence, soit l'impression de page
+    // cassée de l'issue #609. Comme l'exclusion épargne les tenants qui
+    // possèdent une connexion, aucune ligne ni entrée `unavailable` ne peut
+    // référencer un tenant absent de tenantNameById ci-dessous.
+    const vdcTenantIds = fleet
+      ? (
+          await globalPrisma.vdc.findMany({
+            where: { enabled: true },
+            select: { tenantId: true },
+            distinct: ['tenantId'],
+          })
+        ).map(v => v.tenantId)
+      : []
+
+    const tenants = selectableTenants(enabledTenants, vdcTenantIds, connections)
 
     const tenantNameById = new Map(tenants.map(t => [t.id, t.name]))
 

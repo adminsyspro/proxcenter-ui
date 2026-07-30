@@ -29,6 +29,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     connection: { findMany: vi.fn<() => Promise<any[]>>() },
     tenant: { findMany: vi.fn<() => Promise<any[]>>() },
+    vdc: { findMany: vi.fn<() => Promise<any[]>>() },
   },
 }))
 
@@ -105,8 +106,14 @@ beforeEach(() => {
     { id: 'default', name: 'Provider' },
     { id: 'tenant-a', name: 'Alpha' },
     { id: 'tenant-b', name: 'Bravo' },
+    // Owns nothing and holds no vDC: an MSP tenant with no connection declared
+    // yet, which legitimately shows a zero in the selector.
+    { id: 'tenant-empty', name: 'Empty' },
+    // Reaches storage only through a vDC on a provider-owned cluster, so it must
+    // NOT be offered in the selector.
     { id: 'tenant-vdc', name: 'Vdc only' },
   ])
+  globalPrismaMock.vdc.findMany.mockResolvedValue([{ tenantId: 'tenant-vdc' }])
 })
 
 describe('GET /api/v1/storage', () => {
@@ -257,11 +264,40 @@ describe('GET /api/v1/storage — fleet scope (issue #609)', () => {
     const res = await callRoute(GET as any, { method: 'GET' })
     const body = await readJson<any>(res)
 
-    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-vdc'])
+    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-empty'])
 
-    const vdcOnly = body.tenants.find((t: any) => t.id === 'tenant-vdc')
+    const empty = body.tenants.find((t: any) => t.id === 'tenant-empty')
 
-    expect(vdcOnly).toEqual({ id: 'tenant-vdc', name: 'Vdc only', connectionCount: 0, storageCount: 0 })
+    expect(empty).toEqual({ id: 'tenant-empty', name: 'Empty', connectionCount: 0, storageCount: 0 })
+  })
+
+  it('omits a tenant whose only reach is a vDC, since its storage already shows under the cluster owner', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(body.tenants.map((t: any) => t.id)).not.toContain('tenant-vdc')
+  })
+
+  it('still offers a tenant that holds a vDC but also owns a PVE connection', async () => {
+    canReadFleetStorageMock.mockResolvedValue(true)
+    globalPrismaMock.vdc.findMany.mockResolvedValue([{ tenantId: 'tenant-a' }])
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    const alpha = body.tenants.find((t: any) => t.id === 'tenant-a')
+
+    expect(alpha.connectionCount).toBe(1)
+    expect(alpha.storageCount).toBeGreaterThan(0)
+  })
+
+  it('never reads the vDC table on the tenant-scoped path', async () => {
+    const res = await callRoute(GET as any, { method: 'GET' })
+
+    expect(res.status).toBe(200)
+    expect(globalPrismaMock.vdc.findMany).not.toHaveBeenCalled()
   })
 
   it('exposes the owning tenant on each returned connection', async () => {
@@ -338,7 +374,7 @@ describe('GET /api/v1/storage — fleet scope (issue #609)', () => {
 
     expect(body.data).toEqual([])
     expect(body.unavailable).toEqual([])
-    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-vdc'])
+    expect(body.tenants.map((t: any) => t.id)).toEqual(['default', 'tenant-a', 'tenant-b', 'tenant-empty'])
     expect(pveFetchMock).not.toHaveBeenCalled()
   })
 

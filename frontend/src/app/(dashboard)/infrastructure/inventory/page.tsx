@@ -552,6 +552,9 @@ return () => setPageInfo('', '', '')
         overflow: 'hidden',
         transition: 'height 0.2s ease, max-height 0.2s ease',
 
+        // Pas d'animation pendant le drag-resize de la taskbar (TasksFooter #582)
+        'html[data-taskbar-resizing] &': { transition: 'none' },
+
         // Curseur de resize global pendant le drag
         cursor: isResizing ? 'col-resize' : 'default',
         userSelect: isResizing ? 'none' : 'auto',

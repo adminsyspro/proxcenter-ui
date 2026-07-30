@@ -187,6 +187,10 @@ export async function GET(req: Request) {
               const vmName = task.id ? vmNameMap[task.id] || null : null
 
               allEvents.push({
+                // Dedup key: the UPID embeds node, pid, pstart and start
+                // time, so it uniquely identifies the physical task even
+                // when several connections point at the same cluster.
+                dedupKey: `task:${task.upid}`,
                 id: task.upid,
                 ts: new Date(task.starttime * 1000).toISOString(),
                 endTs: task.endtime ? new Date(task.endtime * 1000).toISOString() : null,
@@ -238,6 +242,12 @@ export async function GET(req: Request) {
 
             for (const log of logs) {
               allEvents.push({
+                // Dedup key must be connection-independent (two connections
+                // to one cluster must collapse) but `uid` alone is only a
+                // per-cluster sequence number, so node + uid + time is
+                // combined to avoid merging log lines from distinct
+                // clusters that happen to share a uid.
+                dedupKey: `log:${log.node}:${log.uid}:${log.time}`,
                 id: `${conn.id}-log-${log.uid}`,
                 ts: new Date(log.time * 1000).toISOString(),
                 level: getLogLevel(log.pri),
@@ -261,16 +271,37 @@ export async function GET(req: Request) {
       })
     )
 
-    // Trier par date décroissante
-    allEvents.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    // Trier par date décroissante. connectionId + id break ties so the
+    // order, and therefore which connection a shared cluster's event is
+    // attributed to after dedup below, is deterministic instead of
+    // depending on Promise.all completion order.
+    allEvents.sort((a, b) =>
+      new Date(b.ts).getTime() - new Date(a.ts).getTime() ||
+      String(a.connectionId).localeCompare(String(b.connectionId)) ||
+      String(a.id).localeCompare(String(b.id))
+    )
 
-    // Limiter le nombre de résultats
-    const limitedEvents = allEvents.slice(0, limit)
+    // Deduplicate: several connections may point at the same physical
+    // cluster (legitimate MSP setup), so /cluster/tasks and /cluster/log
+    // return the same events once per connection. Keep the first
+    // occurrence (deterministic thanks to the sort above); attributing a
+    // shared cluster's event to one connection is unavoidable without
+    // cluster-identity detection, but it is at least stable.
+    const seen = new Set<string>()
+    const dedupedEvents = allEvents.filter(e => {
+      if (seen.has(e.dedupKey)) return false
+      seen.add(e.dedupKey)
 
-    return NextResponse.json({ 
+      return true
+    })
+
+    // Limiter le nombre de résultats (dedupKey is internal, strip it)
+    const limitedEvents = dedupedEvents.slice(0, limit).map(({ dedupKey, ...event }) => event)
+
+    return NextResponse.json({
       data: limitedEvents,
       meta: {
-        total: allEvents.length,
+        total: dedupedEvents.length,
         returned: limitedEvents.length,
         connections: connections.length
       }

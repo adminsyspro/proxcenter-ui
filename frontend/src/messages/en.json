@@ -3597,6 +3597,7 @@
     "title": "Tasks",
     "showTasks": "Show tasks",
     "hideTasks": "Hide",
+    "resizePanel": "Drag to resize the tasks panel",
     "refresh": "Refresh",
     "expand": "Expand",
     "collapse": "Collapse",

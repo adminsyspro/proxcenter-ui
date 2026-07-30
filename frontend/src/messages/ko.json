@@ -3597,6 +3597,7 @@
     "title": "작업",
     "showTasks": "작업 표시",
     "hideTasks": "숨기기",
+    "resizePanel": "드래그하여 작업 패널 크기 조절",
     "refresh": "새로 고침",
     "expand": "펼치기",
     "collapse": "접기",

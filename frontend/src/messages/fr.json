@@ -3597,6 +3597,7 @@
     "title": "Tâches",
     "showTasks": "Afficher les tâches",
     "hideTasks": "Masquer",
+    "resizePanel": "Glisser pour redimensionner le panneau des tâches",
     "refresh": "Actualiser",
     "expand": "Agrandir",
     "collapse": "Réduire",

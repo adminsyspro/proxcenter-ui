@@ -27,6 +27,11 @@ const StyledMain = styled.main`
   &:has(.${commonLayoutClasses.contentHeightFixed}) {
     overflow: hidden;
   }
+
+  /* No animation while the taskbar is being drag-resized (TasksFooter #582) */
+  html[data-taskbar-resizing] & {
+    transition: none;
+  }
 `
 
 export default StyledMain

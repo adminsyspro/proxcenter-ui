@@ -2807,8 +2807,8 @@ return vm?.isCluster ?? false
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              height: '100%',
-              minHeight: 'calc(100vh - 200px)',
+              flex: 1,
+              minHeight: 0,
               opacity: 0.35,
               gap: 2
             }}
@@ -3203,7 +3203,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'node' && data.status === 'crit' && (
             <Box sx={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 2, height: '100%', minHeight: 'calc(100vh - 250px)',
+              gap: 2, flex: 1, minHeight: 0,
             }}>
               <img
                 src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
@@ -3666,10 +3666,10 @@ return vm?.isCluster ?? false
             const isNutanixHost = data.esxiHostInfo.hostType === 'nutanix'
             const extVmIcon = isNutanixHost ? '/images/nutanix-logo.svg' : isXcpng ? '/images/xcpng-logo.svg' : '/images/esxi-vm.svg'
             return (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 {data.esxiHostInfo.vms.length === 0 ? (
-                  <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Box sx={{ p: 4, textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     <img src={extVmIcon} alt="" width={48} height={48} style={{ opacity: 0.3 }} />
                     <Typography variant="body2" sx={{ opacity: 0.5, mt: 1 }}>No virtual machines found on this host</Typography>
                   </Box>
@@ -3677,7 +3677,7 @@ return vm?.isCluster ?? false
                   <>
                   {/* Bulk migration toolbar */}
                   {bulkMigSelected.size > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, flexShrink: 0, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', borderBottom: '1px solid', borderColor: 'divider' }}>
                       <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>
                         {bulkMigSelected.size} VM{bulkMigSelected.size > 1 ? 's' : ''} {t('inventoryPage.esxiMigration.selected')}
                       </Typography>
@@ -3705,7 +3705,7 @@ return vm?.isCluster ?? false
                       </Button>
                     </Box>
                   )}
-                  <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+                  <TableContainer sx={{ flex: 1, minHeight: 120, overflow: 'auto' }}>
                     <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
@@ -3901,7 +3901,9 @@ return vm?.isCluster ?? false
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
             return (
-              <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
+                 pane below the cards' combined min-height, so every card stays reachable. */
+              <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'auto', pr: 0.5 }}>
                 {/* VM Summary Bar + Migrate button */}
                 <Card variant="outlined" sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
@@ -4163,7 +4165,7 @@ return vm?.isCluster ?? false
                         </MuiTooltip>
                       )}
                     </Box>
-                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 80 }}>
+                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 220 }}>
                       {vmMigJob?.logs?.length > 0 ? (
                         vmMigJob.logs.map((log: any, i: number) => (
                           <Box key={i}>

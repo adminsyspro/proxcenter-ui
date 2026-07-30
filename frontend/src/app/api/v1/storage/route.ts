@@ -4,37 +4,113 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getSessionPrisma } from "@/lib/tenant"
+import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { aggregateStorage } from "@/lib/proxmox/storage"
+import { canReadFleetStorage } from "@/lib/storage/fleetScope"
+import { buildTenantFacets, selectableTenants } from "@/lib/storage/tenantFacets"
 
 export const runtime = "nodejs"
 
+type PveConnectionRow = { id: string; name: string; tenantId: string }
+
+type UnavailableConnection = {
+  connId: string
+  connName: string
+  tenantId: string
+  tenantName: string | null
+}
+
+// Shared between the two client branches below: keeping the arguments in one
+// place avoids typing the two Prisma clients as a union, since getSessionPrisma()
+// returns a $extends client that is not structurally the plain PrismaClient.
+const PVE_CONNECTION_QUERY = {
+  where: { type: 'pve' as const },
+  orderBy: { createdAt: 'desc' as const },
+  select: { id: true, name: true, tenantId: true },
+}
+
 /**
  * GET /api/v1/storage
- * Récupère tous les storages de toutes les connexions PVE en une seule requête
+ * Récupère tous les storages de toutes les connexions PVE en une seule requête.
+ *
+ * Portée: par défaut le client Prisma de session, donc les seules connexions du
+ * tenant courant. Pour un super-admin du tenant provider (canReadFleetStorage),
+ * la liste est élargie à toute la flotte et la réponse porte la facette
+ * `tenants`, qui alimente le sélecteur de tenants de /storage/overview
+ * (issue #609).
+ *
+ * Les stockages de vDC ne sont jamais remontés séparément: un stockage de vDC
+ * appartient déjà à une connexion, donc il apparaît sous le tenant propriétaire
+ * de cette connexion. Le compter une seconde fois fausserait les KPI, qui
+ * somment capacité et utilisé sur les lignes affichées (voir #569). Corollaire:
+ * un tenant dont la seule portée est un vDC ne figure pas dans la facette
+ * `tenants`, sinon le sélecteur porterait une entrée vide en permanence.
  */
 export async function GET(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     // RBAC: Check storage.view permission
     const denied = await checkPermission(PERMISSIONS.STORAGE_VIEW)
 
     if (denied) return denied
 
+    const fleet = await canReadFleetStorage()
+
     // Récupérer uniquement les connexions PVE (pas PBS)
-    const connections = await prisma.connection.findMany({
-      where: { type: 'pve' },
-      orderBy: { createdAt: 'desc' }
-    })
+    const connections: PveConnectionRow[] = fleet
+      ? await globalPrisma.connection.findMany(PVE_CONNECTION_QUERY)
+      : await (await getSessionPrisma()).connection.findMany(PVE_CONNECTION_QUERY)
+
+    // Tous les tenants activés, pas seulement ceux qui possèdent une connexion:
+    // un tenant MSP sans connexion encore déclarée reste listé et affiche 0.
+    const enabledTenants = fleet
+      ? await globalPrisma.tenant.findMany({ where: { enabled: true }, select: { id: true, name: true } })
+      : []
+
+    // Un tenant dont la seule portée est un vDC est en revanche écarté: le vDC
+    // est adossé à une connexion entière appartenant au tenant provider, donc
+    // ses stockages figurent déjà sous ce tenant. L'ajouter au sélecteur ne
+    // produirait qu'une entrée vide en permanence, soit l'impression de page
+    // cassée de l'issue #609. Comme l'exclusion épargne les tenants qui
+    // possèdent une connexion, aucune ligne ni entrée `unavailable` ne peut
+    // référencer un tenant absent de tenantNameById ci-dessous.
+    const vdcTenantIds = fleet
+      ? (
+          await globalPrisma.vdc.findMany({
+            where: { enabled: true },
+            select: { tenantId: true },
+            distinct: ['tenantId'],
+          })
+        ).map(v => v.tenantId)
+      : []
+
+    const tenants = selectableTenants(enabledTenants, vdcTenantIds, connections)
+
+    const tenantNameById = new Map(tenants.map(t => [t.id, t.name]))
 
     if (connections.length === 0) {
-      return NextResponse.json({ data: [], connections: [] })
+      return NextResponse.json({
+        data: [],
+        connections: [],
+        unavailable: [],
+        ...(fleet ? { tenants: buildTenantFacets(tenants, [], []) } : {}),
+      })
     }
 
     const allStorages: any[] = []
+    const unavailable: UnavailableConnection[] = []
+
+    const markUnavailable = (conn: PveConnectionRow) => {
+      unavailable.push({
+        connId: conn.id,
+        connName: conn.name,
+        tenantId: conn.tenantId,
+        tenantName: tenantNameById.get(conn.tenantId) ?? null,
+      })
+    }
 
     // Récupérer les storages de toutes les connexions en parallèle
     await Promise.all(
@@ -48,7 +124,20 @@ export async function GET(req: Request) {
             pveFetch<any[]>(connData, "/storage")
           ])
 
-          const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
+          // /cluster/resources porte la liste des storages: sans lui la connexion
+          // ne produit aucune ligne. On le signale au lieu de rétrécir la vue en
+          // silence, ce qui ferait mentir la vue agrégée (issue #609).
+          if (resourcesResult.status === 'rejected') {
+            console.error(`[storage] Error fetching ${conn.name}:`, resourcesResult.reason)
+            markUnavailable(conn)
+
+            return
+          }
+
+          const resources = resourcesResult.value || []
+
+          // Un rejet du seul /storage dégrade les types en 'unknown' mais laisse
+          // les storages visibles: c'est une dégradation, pas une absence.
           const storageConfigs = configResult.status === 'fulfilled' ? configResult.value || [] : []
 
           const storageResources = resources.filter((r: any) => r?.type === "storage")
@@ -69,6 +158,8 @@ export async function GET(req: Request) {
             allStorages.push({
               connId: conn.id,
               connName: conn.name,
+              tenantId: conn.tenantId,
+              tenantName: tenantNameById.get(conn.tenantId) ?? null,
               node: r.node,
               storage: r.storage,
               type: config.type || 'unknown',
@@ -89,6 +180,7 @@ export async function GET(req: Request) {
           }
         } catch (e) {
           console.error(`[storage] Error fetching ${conn.name}:`, e)
+          markUnavailable(conn)
         }
       })
     )
@@ -124,11 +216,13 @@ export async function GET(req: Request) {
     return NextResponse.json({
       data: result,
       stats,
-      connections: connections.map(c => ({ id: c.id, name: c.name }))
+      connections: connections.map(c => ({ id: c.id, name: c.name, tenantId: c.tenantId })),
+      unavailable,
+      ...(fleet ? { tenants: buildTenantFacets(tenants, connections, result) } : {}),
     })
   } catch (e: any) {
     console.error("[storage] Error:", e)
-    
-return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

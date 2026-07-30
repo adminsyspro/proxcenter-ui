@@ -24,7 +24,8 @@ import { getNodeIp } from "@/lib/ssh/node-ip"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
-import { allocateAndMapBlockVolume, nextFreeDiskName } from "./pvesm-alloc"
+import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
+import { convertDisksToQcow2 } from "./qcow2-convert"
 // SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
 // has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
 // vSAN because vSAN VMDK descriptors reference vsan:// URIs that only ESXi's
@@ -50,7 +51,7 @@ import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { startJobHeartbeat } from "./job-heartbeat"
 
-type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
+type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
 export interface V2vMigrationConfig {
   sourceConnectionId: string
@@ -69,6 +70,13 @@ export interface V2vMigrationConfig {
    */
   vlanTag?: number
   startAfterMigration: boolean
+  /**
+   * Convert the migrated data disks to qcow2 after the migration (one `move_disk`
+   * per disk on the same storage), so they can take Proxmox snapshots on a
+   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
+   * conversion can never fail the migration.
+   */
+  convertDisksToQcow2?: boolean
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
   vcenterDatacenter?: string
   /**
@@ -2373,6 +2381,12 @@ export async function runV2vMigrationPipeline(
     // Track the highest disk number used (EFI VMs may have disk-0 for efidisk0)
     let nextDiskNum = isEfi ? 1 : 0
 
+    // Block volumes created by THIS migration, for the optional post-migration
+    // qcow2 conversion (#595). Unlike the other pipelines, v2v has no cleanup
+    // registry, so this list exists only to tell the conversion which attached
+    // disks are ours — it must never convert a disk an operator attached.
+    const blockVolumes: AllocatedVolume[] = []
+
     // When virt-v2v can't inject virtio-scsi (`--block-driver` missing), it falls
     // back to virtio-blk (viostor.sys) as the boot-critical driver on Windows.
     // Attaching on scsi0 in that case yields INACCESSIBLE_BOOT_DEVICE (0x7B) at
@@ -2499,6 +2513,7 @@ export async function runV2vMigrationPipeline(
           connectionId: config.targetConnectionId, nodeIp,
           targetStorage: config.targetStorage, targetVmid, volName, sizeKB,
         })
+        blockVolumes.push(vol)
         const volumeId = vol.volumeId
         const devicePath = vol.devicePath
         const rbdMapped = vol.rbdMapped
@@ -2588,6 +2603,21 @@ export async function runV2vMigrationPipeline(
       )
       await appendLog(jobId, "VM started", "success")
     }
+
+    // Optional qcow2 conversion (#595): after the disks are attached and after
+    // the optional start — on a running VM PVE does move_disk as a live
+    // drive-mirror, no extra downtime. The helper gates itself (opt-in, storage
+    // default format, free space) and NEVER throws: a conversion problem leaves
+    // the disks raw, not the migration failed. File-based imports skip
+    // naturally: their storage does not default to qcow2 the LVM way, and `qm
+    // disk import --format qcow2` already produced qcow2 files.
+    await convertDisksToQcow2({
+      enabled: config.convertDisksToQcow2 === true,
+      conn: pveConn, node: config.targetNode, vmid: targetVmid!,
+      targetStorage: config.targetStorage, volumes: blockVolumes,
+      log: (m, l) => appendLog(jobId, m, l),
+      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    })
 
     await updateJob(jobId, "completed", { progress: 100 })
     // Non-fatal: a failing log append after the terminal write must not throw

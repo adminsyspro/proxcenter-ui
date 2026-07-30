@@ -30,10 +30,11 @@ import {
 } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
+import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
 
-type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
+type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
 interface MigrationConfig {
   sourceConnectionId: string
@@ -49,6 +50,13 @@ interface MigrationConfig {
    */
   vlanTag?: number
   startAfterMigration: boolean
+  /**
+   * Convert the migrated data disks to qcow2 after the migration (one `move_disk`
+   * per disk on the same storage), so they can take Proxmox snapshots on a
+   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
+   * conversion can never fail the migration.
+   */
+  convertDisksToQcow2?: boolean
   migrationType?: "cold" | "live" | "sshfs_boot"
   transferMode?: "https" | "sshfs" | "auto"
   // User-selected temp directory on the PVE node for large intermediate files
@@ -2782,6 +2790,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await appendLog(jobId, "VM started", "success")
       }
     }
+
+    // ── STEP 6: Optional qcow2 conversion (#595) ──
+    // After the disks are attached and after the optional start (SSHFS Boot
+    // always restarts the VM above): on a running VM PVE does move_disk as a
+    // live drive-mirror, no extra downtime. The helper gates itself (opt-in,
+    // storage default format, free space) and NEVER throws: a conversion
+    // problem leaves the disks raw, not the migration failed.
+    await convertDisksToQcow2({
+      enabled: config.convertDisksToQcow2 === true,
+      conn: pveConn, node: config.targetNode, vmid: targetVmid!,
+      targetStorage: config.targetStorage, volumes: allocatedVolumes,
+      log: (m, l) => appendLog(jobId, m, l),
+      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    })
 
     // ── DONE ──
     const totalCapacity = vmConfig.disks.reduce((sum, d) => sum + d.capacityBytes, 0)

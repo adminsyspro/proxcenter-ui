@@ -34,9 +34,10 @@ import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
+import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
 
-type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
+type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
 interface MigrationConfig {
   sourceConnectionId: string
@@ -52,6 +53,13 @@ interface MigrationConfig {
    */
   vlanTag?: number
   startAfterMigration: boolean
+  /**
+   * Convert the migrated data disks to qcow2 after the migration (one `move_disk`
+   * per disk on the same storage), so they can take Proxmox snapshots on a
+   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
+   * conversion can never fail the migration.
+   */
+  convertDisksToQcow2?: boolean
   migrationType?: "cold" | "live"
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
@@ -806,6 +814,20 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       )
       await appendLog(jobId, "VM started", "success")
     }
+
+    // ── STEP 6: Optional qcow2 conversion (#595) ──
+    // After the disks are attached and after the optional start: on a running
+    // VM PVE does move_disk as a live drive-mirror, no extra downtime. The
+    // helper gates itself (opt-in, storage default format, free space) and
+    // NEVER throws: a conversion problem leaves the disks raw, not the
+    // migration failed.
+    await convertDisksToQcow2({
+      enabled: config.convertDisksToQcow2 === true,
+      conn: pveConn, node: config.targetNode, vmid: targetVmid!,
+      targetStorage: config.targetStorage, volumes: allocatedVolumes,
+      log: (m, l) => appendLog(jobId, m, l),
+      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    })
 
     // ── DONE ──
     await updateJob(jobId, "completed", {

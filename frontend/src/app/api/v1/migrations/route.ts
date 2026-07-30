@@ -36,11 +36,17 @@ export async function POST(req: Request) {
       targetNode,
       targetStorage,
       networkBridge = "vmbr0",
-      startAfterMigration = false,
       migrationType = "cold",
       transferMode = "auto",
       targetVmid: targetVmidRaw,
     } = body
+
+    // Boolean options arrive as real booleans from our UI but as strings from
+    // raw API callers. Defaulting only `undefined` let the string "false"
+    // through truthy — a caller that never asked for it got their VM started.
+    // Coerce strictly: anything but true/"true" is false.
+    const startAfterMigration = body.startAfterMigration === true || body.startAfterMigration === "true"
+    const convertDisksToQcow2 = body.convertDisksToQcow2 === true || body.convertDisksToQcow2 === "true"
 
     if (!sourceConnectionId || !sourceVmId || !targetConnectionId || !targetNode || !targetStorage) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -138,7 +144,7 @@ export async function POST(req: Request) {
         // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }) },
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }) },
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -158,6 +164,7 @@ export async function POST(req: Request) {
       networkBridge,
       vlanTag,
       startAfterMigration,
+      convertDisksToQcow2,
       migrationType: migrationType as "cold" | "live" | "sshfs_boot",
       transferMode: transferMode as "https" | "sshfs",
       // Pass through the user-selected Temporary Storage so the direct-ESXi pipeline
@@ -177,7 +184,7 @@ export async function POST(req: Request) {
       if ((effectiveSourceType === "vmware" || effectiveSourceType === "vcenter") && migrationType === "warm") {
         await runWarmMigration(job.id, {
           sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
-          networkBridge, vlanTag, startAfterMigration,
+          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
           ...(targetVmid !== undefined && { targetVmid }),
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
@@ -194,7 +201,7 @@ export async function POST(req: Request) {
         await runV2vMigrationPipeline(job.id, {
           sourceConnectionId, sourceVmId, sourceVmName,
           sourceType: effectiveSourceType as "vcenter" | "hyperv" | "nutanix",
-          targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration,
+          targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
           vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage,
           migrationType: v2vMigrationType,
           ...(targetVmid !== undefined && { targetVmid }),
@@ -261,7 +268,7 @@ export async function POST(req: Request) {
             await runV2vMigrationPipeline(job.id, {
               sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName || "",
               sourceType: "esxi-direct",
-              targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration,
+              targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
               tempStorage: body.tempStorage,
               migrationType: "cold",
               vmxPath: posixVmxPath,

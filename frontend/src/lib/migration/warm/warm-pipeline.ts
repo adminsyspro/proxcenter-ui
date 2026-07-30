@@ -19,6 +19,7 @@ import {
 } from "../pvesm-alloc"
 import { pveSetVmConfig } from "../pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "../pve-tasks"
+import { convertDisksToQcow2 } from "../qcow2-convert"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
@@ -35,7 +36,8 @@ import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
-  | "awaiting_cutover" | "cutover" | "verify" | "completed" | "failed" | "cancelled"
+  | "awaiting_cutover" | "cutover" | "verify" | "converting_disks"
+  | "completed" | "failed" | "cancelled"
 
 export interface WarmMigrationConfig {
   sourceConnectionId: string
@@ -46,6 +48,13 @@ export interface WarmMigrationConfig {
   networkBridge: string
   vlanTag?: number
   startAfterMigration: boolean
+  /**
+   * Convert the migrated data disks to qcow2 after the cutover (one `move_disk`
+   * per disk on the same storage), so they can take Proxmox snapshots on a
+   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
+   * conversion can never fail the migration.
+   */
+  convertDisksToQcow2?: boolean
   targetVmid?: number
   /** Extracted VDDK distribution dir on the PVE node (libdir=). */
   vddkLibdir?: string
@@ -737,6 +746,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await pveFetch<any>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`, { method: "POST" })
       await appendLog(jobId, "Target VM started", "success")
     }
+
+    // Post-cutover qcow2 conversion (#595): runs after the disks are attached
+    // and after the optional start — on a running VM PVE does move_disk as a
+    // live drive-mirror, no extra downtime. The helper gates itself (opt-in,
+    // storage default format, free space) and NEVER throws: a conversion
+    // problem leaves the disks raw, not the migration failed.
+    await convertDisksToQcow2({
+      enabled: config.convertDisksToQcow2 === true,
+      conn: pveConn as any, node: config.targetNode, vmid: targetVmid,
+      targetStorage: config.targetStorage, volumes: allocatedVolumes,
+      log: (m, l) => appendLog(jobId, m, l),
+      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    })
 
     await updateJob(jobId, "completed", { progress: 100 })
     // Non-fatal: a failing log append after the terminal write must not throw

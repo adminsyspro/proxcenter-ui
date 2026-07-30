@@ -2022,6 +2022,8 @@
       "vlanTagPlaceholder": "无",
       "vlanTagInvalid": "1-4094",
       "startAfterMigration": "迁移后启动虚拟机",
+      "convertDisksToQcow2": "迁移后将磁盘转换为 qcow2（启用 Proxmox 快照）",
+      "convertDisksToQcow2Tooltip": "迁移完成后，每个磁盘会在后台完整重写为 qcow2。数 TB 的磁盘可能需要数小时，转换期间目标存储会暂时占用双倍空间。虚拟机运行时转换在线进行，不会产生停机。",
       "coldMigrationInfo": "冷迁移：虚拟机将关机。VMDK 磁盘将转换为 QCOW2/RAW，硬件配置将自动映射。",
       "coldMigrationRunningVms": "以下虚拟机当前正在运行，在开始冷迁移前必须关机：",
       "startMigration": "迁移到 Proxmox",

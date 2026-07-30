@@ -453,6 +453,8 @@ export default function MigrationDashboard({ externalHypervisors, onHostClick }:
               const isActive = job.status === 'transferring' || job.status === 'preflight' || job.status === 'creating_vm' || job.status === 'configuring' || job.status === 'pending'
                 // Warm migration (CBT) phases
                 || job.status === 'planning' || job.status === 'enabling_cbt' || job.status === 'preparing_disks' || job.status === 'full_copy' || job.status === 'delta_sync' || job.status === 'awaiting_cutover' || job.status === 'cutover' || job.status === 'verify'
+                // Post-migration qcow2 conversion, shared by every pipeline (#595)
+                || job.status === 'converting_disks'
               const duration = job.startedAt && job.completedAt
                 ? Math.round((new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 1000)
                 : null

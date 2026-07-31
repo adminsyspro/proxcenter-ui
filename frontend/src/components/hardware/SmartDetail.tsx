@@ -41,7 +41,11 @@ export default function SmartDetail({ smart, loading }: Props) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Typography variant="caption" sx={{ fontWeight: 700 }}>{t('inventory.health.label')}</Typography>
           <Chip size="small" label={view.health}
-            color={view.health.toUpperCase() === 'FAILED' ? 'error' : 'success'}
+            color={
+              ['OK', 'PASSED'].includes(view.health.toUpperCase())
+                ? 'success'
+                : view.health.toUpperCase() === 'FAILED' ? 'error' : 'warning'
+            }
             sx={{ height: 20, fontSize: 10 }} />
         </Box>
       )}

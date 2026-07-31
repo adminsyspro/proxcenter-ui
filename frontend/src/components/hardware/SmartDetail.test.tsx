@@ -60,4 +60,26 @@ describe('SmartDetail', () => {
 
     expect(screen.getByText('OK')).toBeInTheDocument()
   })
+
+  it('does not paint an unrecognized health string as healthy', () => {
+    // smartctl reports "UNKNOWN!" when it cannot determine health, and PVE
+    // passes it through as-is. It must not fall into the success bucket.
+    renderWithProviders(<SmartDetail smart={{ ...TEXT, health: 'UNKNOWN!' }} loading={false} />)
+
+    const chip = screen.getByText('UNKNOWN!').closest('.MuiChip-root')
+
+    expect(chip).toHaveClass('MuiChip-colorWarning')
+  })
+
+  it('still paints FAILED as an error and OK/PASSED as success', () => {
+    renderWithProviders(<SmartDetail smart={{ ...TEXT, health: 'FAILED' }} loading={false} />)
+
+    expect(screen.getByText('FAILED').closest('.MuiChip-root')).toHaveClass('MuiChip-colorError')
+
+    cleanup()
+
+    renderWithProviders(<SmartDetail smart={{ ...ATTRS, health: 'PASSED' }} loading={false} />)
+
+    expect(screen.getByText('PASSED').closest('.MuiChip-root')).toHaveClass('MuiChip-colorSuccess')
+  })
 })

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders, screen, within } from '@/__tests__/setup/renderWithProviders'
 
 afterEach(cleanup)
 
@@ -14,6 +14,26 @@ const ATTRS = {
     { id: 5, name: 'Reallocated_Sector_Ct', value: 100, worst: 100, threshold: 10, raw: '0' },
     { id: 197, name: 'Current_Pending_Sector', value: 90, worst: 80, threshold: 95, raw: '4' },
   ],
+}
+
+// Verbatim from the user's Micron 7450 NVMe screenshot, with one deliberately
+// malformed line appended to exercise the leftover path.
+const NVME_TEXT = {
+  health: 'OK',
+  type: 'text',
+  text: `SMART/Health Information (NVMe Log 0x02, NSID 0xffffffff)
+Critical Warning:                   0x00
+Temperature:                        40 Celsius
+Available Spare:                    100%
+Available Spare Threshold:          10%
+Percentage Used:                    0%
+Data Units Read:                    35,059,597 [17.9 TB]
+Data Units Written:                 34,202,739 [17.5 TB]
+Host Read Commands:                 187,639,187
+Host Write Commands:                1,192,134,236
+Controller Busy Time:               442
+Power Cycles:                       52
+This line has no colon at all`,
 }
 
 describe('SmartDetail', () => {
@@ -81,5 +101,42 @@ describe('SmartDetail', () => {
     renderWithProviders(<SmartDetail smart={{ ...ATTRS, health: 'PASSED' }} loading={false} />)
 
     expect(screen.getByText('PASSED').closest('.MuiChip-root')).toHaveClass('MuiChip-colorSuccess')
+  })
+
+  it('renders the NVMe text as a formatted table with the section header, not a console block', () => {
+    // Real Micron 7450 NVMe drives return this exact shape, measured on PVE 9.1.
+    renderWithProviders(<SmartDetail smart={NVME_TEXT} loading={false} />)
+
+    expect(screen.getByText('SMART/Health Information (NVMe Log 0x02, NSID 0xffffffff)')).toBeInTheDocument()
+    expect(screen.getByText('Available Spare')).toBeInTheDocument()
+    expect(screen.getByText('35,059,597 [17.9 TB]')).toBeInTheDocument()
+    expect(document.querySelector('pre')).not.toBeInTheDocument()
+  })
+
+  it('draws a progress bar for a percentage row with a known direction', () => {
+    renderWithProviders(<SmartDetail smart={NVME_TEXT} loading={false} />)
+
+    const row = screen.getByText('Available Spare').closest('tr')
+    if (!row) throw new Error('row not found')
+
+    const bar = within(row).getByRole('progressbar')
+
+    expect(bar).toHaveAttribute('aria-valuenow', '100')
+  })
+
+  it('does not draw a bar for Available Spare Threshold, a reference value rather than a gauge', () => {
+    renderWithProviders(<SmartDetail smart={NVME_TEXT} loading={false} />)
+
+    const row = screen.getByText('Available Spare Threshold').closest('tr')
+    if (!row) throw new Error('row not found')
+
+    expect(within(row).queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(within(row).getByText('10%')).toBeInTheDocument()
+  })
+
+  it('still shows an unparsed line rather than silently dropping it', () => {
+    renderWithProviders(<SmartDetail smart={NVME_TEXT} loading={false} />)
+
+    expect(screen.getByText('This line has no colon at all')).toBeInTheDocument()
   })
 })

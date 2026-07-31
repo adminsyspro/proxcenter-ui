@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -75,6 +75,8 @@ import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdo
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import EntityTagManager from '../components/EntityTagManager'
+import { flattenVdevs } from '@/lib/disks/zfsTree'
+import { summarizeScan } from '@/lib/disks/normalize'
 
 /**
  * Renders a Ceph config-style text verbatim (indentation preserved) with light
@@ -316,6 +318,9 @@ export default function NodeTabs(props: any) {
   const [nodeCephOsdFlags, setNodeCephOsdFlags] = useState<string[]>([])
   const [nodeCephOsdFlagsLoading, setNodeCephOsdFlagsLoading] = useState(false)
   const [nodeCephFlagToggling, setNodeCephFlagToggling] = useState<string | null>(null)
+
+  // ZFS pool row expansion (Disks tab)
+  const [expandedPool, setExpandedPool] = useState<string | null>(null)
 
   const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : ''
   const nodeNodeName = selection?.type === 'node' ? parseNodeId(selection.id).node : ''
@@ -1519,8 +1524,21 @@ export default function NodeTabs(props: any) {
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography variant="subtitle2" fontWeight={700}>ZFS Pools</Typography>
                                   <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}>Reload</Button>
-                                    <Button size="small" variant="outlined" disabled startIcon={<i className="ri-eye-line" style={{ fontSize: 14 }} />}>Detail</Button>
+                                    <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
+                                      onClick={async () => {
+                                        setNodeDisksLoading(true)
+                                        const { connId, node } = parseNodeId(selection?.id || '')
+                                        try {
+                                          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks?section=zfs`, { cache: 'no-store' })
+                                          if (res.ok) {
+                                            const json = await res.json()
+                                            setNodeDisksData((prev: any) => ({ ...prev, zfs: json.data?.zfs || [] }))
+                                          }
+                                        } finally {
+                                          setNodeDisksLoading(false)
+                                        }
+                                      }}
+                                    >{t('inventory.reload')}</Button>
                                     <Button size="small" variant="outlined" disabled startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />}>Create: ZFS</Button>
                                   </Box>
                                 </Box>
@@ -1536,33 +1554,78 @@ export default function NodeTabs(props: any) {
                                           <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Frag</TableCell>
                                           <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Dedup</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Health</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.zfsState')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.zfsScrub')}</TableCell>
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>
-                                        {nodeDisksData.zfs.map((pool: any, idx: number) => (
-                                          <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{pool.name}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.size ? `${(pool.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.alloc ? `${(pool.alloc / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.free ? `${(pool.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
-                                            <TableCell sx={{ textAlign: 'center' }}>{pool.dedup ?? '-'}</TableCell>
-                                            <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={pool.health || 'UNKNOWN'} 
-                                                color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
-                                                sx={{ height: 20, fontSize: 10 }}
-                                              />
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
+                                        {nodeDisksData.zfs.map((pool: any, idx: number) => {
+                                          const scan = summarizeScan(pool.scan, pool.errors)
+                                          const vdevs = flattenVdevs(pool.children)
+                                          const open = expandedPool === pool.name
+
+                                          return (
+                                            <Fragment key={idx}>
+                                              <TableRow hover sx={{ cursor: vdevs.length > 0 ? 'pointer' : 'default' }}
+                                                onClick={() => setExpandedPool(open ? null : pool.name)}>
+                                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                                  {vdevs.length > 0 && (
+                                                    <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
+                                                  )}
+                                                  {pool.name}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                  {pool.size ? `${(pool.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                  {pool.alloc ? `${(pool.alloc / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                  {pool.free ? `${(pool.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>{pool.dedup ?? '-'}</TableCell>
+                                                <TableCell>
+                                                  <Chip size="small" label={pool.health || 'UNKNOWN'}
+                                                    color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
+                                                    sx={{ height: 20, fontSize: 10 }} />
+                                                </TableCell>
+                                                <TableCell sx={{ fontSize: 12 }}>{pool.state || '-'}</TableCell>
+                                                <TableCell sx={{ fontSize: 11, color: scan.hasErrors ? 'error.main' : undefined, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                  {scan.label || t('inventory.zfsNeverScrubbed')}
+                                                </TableCell>
+                                              </TableRow>
+                                              {open && vdevs.length > 0 && (
+                                                <TableRow>
+                                                  <TableCell colSpan={9} sx={{ bgcolor: 'action.hover', py: 1 }}>
+                                                    <Table size="small">
+                                                      <TableHead>
+                                                        <TableRow>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('inventory.zfsVdev')}</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('inventory.zfsState')}</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Read</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Write</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Cksum</TableCell>
+                                                        </TableRow>
+                                                      </TableHead>
+                                                      <TableBody>
+                                                        {vdevs.map((v, vi) => (
+                                                          <TableRow key={vi}>
+                                                            <TableCell sx={{ fontSize: 11, pl: 1 + v.depth * 2 }}>{v.name}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11 }}>{v.state || '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.read ?? '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.write ?? '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.cksum ?? '-'}</TableCell>
+                                                          </TableRow>
+                                                        ))}
+                                                      </TableBody>
+                                                    </Table>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )}
+                                            </Fragment>
+                                          )
+                                        })}
                                       </TableBody>
                                     </Table>
                                   </TableContainer>

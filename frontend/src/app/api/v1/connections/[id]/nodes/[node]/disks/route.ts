@@ -108,9 +108,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nod
       })) : []
     }
 
-    // ZFS pools
+    // ZFS pools. The LIST response carries only name, size, alloc, free, frag,
+    // dedup and health. The scrub state lives exclusively in the per-pool DETAIL
+    // call, hence one extra call per pool (measured on PVE 9.1).
     if (section === 'all' || section === 'zfs') {
       const zfs = await fetchSafe<any[]>(`/nodes/${encodeURIComponent(node)}/disks/zfs`)
+
       result.zfs = Array.isArray(zfs) ? zfs.map(pool => ({
         name: pool.name,
         size: pool.size,
@@ -119,21 +122,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nod
         frag: pool.frag,
         dedup: pool.dedup,
         health: pool.health,
-        // Détails des vdevs si disponibles
-        children: pool.children || []
+        // Filled in from the detail call below. Null when it failed.
+        state: null as string | null,
+        scan: null as string | null,
+        errors: null as string | null,
+        children: [] as any[],
       })) : []
-      
-      // Pour chaque pool ZFS, récupérer les détails si demandé
-      if (result.zfs && result.zfs.length > 0) {
-        for (const pool of result.zfs) {
-          const details = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/disks/zfs/${encodeURIComponent(pool.name)}`)
-          if (details) {
-            pool.children = details.children || []
-            pool.action = details.action
-            pool.errors = details.errors
-            pool.scan = details.scan
-            pool.status = details.status
-          }
+
+      // PVE 9.1 detail returns children, errors, leaf, name, scan and state.
+      // There is no `status` and no `action`, so neither is read here.
+      for (const pool of result.zfs) {
+        const details = await fetchSafe<any>(`/nodes/${encodeURIComponent(node)}/disks/zfs/${encodeURIComponent(pool.name)}`)
+
+        if (details) {
+          pool.state = details.state ?? null
+          pool.scan = details.scan ?? null
+          pool.errors = details.errors ?? null
+          pool.children = Array.isArray(details.children) ? details.children : []
         }
       }
     }

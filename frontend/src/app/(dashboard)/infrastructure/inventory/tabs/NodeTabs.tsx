@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Fragment, useState, useEffect, useCallback, useMemo } from 'react'
+import React, { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -327,13 +327,37 @@ export default function NodeTabs(props: any) {
   const [smartData, setSmartData] = useState<any>(null)
   const [smartLoading, setSmartLoading] = useState(false)
 
+  // Tags the in-flight SMART request so a stale reply (from a disk expanded
+  // before the current one, or from a node we already navigated away from)
+  // never lands under the wrong row and never clears the loading flag for a
+  // request that is still running.
+  const smartRequestRef = useRef<{ id: number; devpath: string } | null>(null)
+
+  // NodeTabs is mounted once per node TYPE, not per node: InventoryDetails
+  // renders it without a `key`, so it survives a plain node-to-node
+  // selection change. Reset the SMART/ZFS expansion state here or the new
+  // node's list renders with the previous node's row still expanded,
+  // showing its serials and error counters under the new node.
+  useEffect(() => {
+    setSmartDisk(null)
+    setSmartData(null)
+    setSmartLoading(false)
+    setExpandedPool(null)
+    smartRequestRef.current = null
+  }, [selection?.id])
+
   // Lazy on purpose: smartctl spins up a sleeping disk, so only fetch on expand.
   const toggleSmart = async (devpath: string) => {
     if (smartDisk === devpath) {
       setSmartDisk(null)
+      smartRequestRef.current = null
 
       return
     }
+
+    const request = { id: (smartRequestRef.current?.id ?? 0) + 1, devpath }
+
+    smartRequestRef.current = request
 
     setSmartDisk(devpath)
     setSmartData(null)
@@ -347,11 +371,17 @@ export default function NodeTabs(props: any) {
         { cache: 'no-store' },
       )
 
-      setSmartData(res.ok ? (await res.json())?.data?.smart ?? null : null)
+      const smart = res.ok ? (await res.json())?.data?.smart ?? null : null
+
+      // A newer toggle (another disk, or a node change) superseded this
+      // request while it was in flight. Discard the reply.
+      if (smartRequestRef.current !== request) return
+
+      setSmartData(smart)
     } catch {
-      setSmartData(null)
+      if (smartRequestRef.current === request) setSmartData(null)
     } finally {
-      setSmartLoading(false)
+      if (smartRequestRef.current === request) setSmartLoading(false)
     }
   }
 

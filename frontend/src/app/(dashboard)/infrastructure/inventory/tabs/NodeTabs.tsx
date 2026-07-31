@@ -77,6 +77,7 @@ import InventorySummary from '../components/InventorySummary'
 import EntityTagManager from '../components/EntityTagManager'
 import { flattenVdevs } from '@/lib/disks/zfsTree'
 import { summarizeScan } from '@/lib/disks/normalize'
+import SmartDetail from '@/components/hardware/SmartDetail'
 
 /**
  * Renders a Ceph config-style text verbatim (indentation preserved) with light
@@ -321,6 +322,38 @@ export default function NodeTabs(props: any) {
 
   // ZFS pool row expansion (Disks tab)
   const [expandedPool, setExpandedPool] = useState<string | null>(null)
+
+  const [smartDisk, setSmartDisk] = useState<string | null>(null)
+  const [smartData, setSmartData] = useState<any>(null)
+  const [smartLoading, setSmartLoading] = useState(false)
+
+  // Lazy on purpose: smartctl spins up a sleeping disk, so only fetch on expand.
+  const toggleSmart = async (devpath: string) => {
+    if (smartDisk === devpath) {
+      setSmartDisk(null)
+
+      return
+    }
+
+    setSmartDisk(devpath)
+    setSmartData(null)
+    setSmartLoading(true)
+
+    const { connId, node } = parseNodeId(selection?.id || '')
+
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks?section=disks&disk=${encodeURIComponent(devpath)}`,
+        { cache: 'no-store' },
+      )
+
+      setSmartData(res.ok ? (await res.json())?.data?.smart ?? null : null)
+    } catch {
+      setSmartData(null)
+    } finally {
+      setSmartLoading(false)
+    }
+  }
 
   const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : ''
   const nodeNodeName = selection?.type === 'node' ? parseNodeId(selection.id).node : ''
@@ -1284,21 +1317,25 @@ export default function NodeTabs(props: any) {
                                       </TableHead>
                                       <TableBody>
                                         {nodeDisksData.disks.map((disk: any, idx: number) => (
-                                          <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{disk.devpath}</TableCell>
+                                          <Fragment key={idx}>
+                                            <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => toggleSmart(disk.devpath)}>
+                                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                                <i className={smartDisk === disk.devpath ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
+                                                {disk.devpath}
+                                              </TableCell>
                                             <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={disk.type?.toUpperCase() || 'HDD'} 
+                                              <Chip
+                                                size="small"
+                                                label={disk.type?.toUpperCase() || 'HDD'}
                                                 color={disk.type === 'nvme' || disk.type === 'ssd' ? 'info' : 'default'}
                                                 sx={{ height: 20, fontSize: 10 }}
                                               />
                                             </TableCell>
                                             <TableCell>
                                               {disk.used ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.used} 
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.used}
                                                   color={disk.used === 'unused' ? 'default' : 'primary'}
                                                   variant="outlined"
                                                   sx={{ height: 20, fontSize: 10 }}
@@ -1318,10 +1355,14 @@ export default function NodeTabs(props: any) {
                                             </TableCell>
                                             <TableCell>
                                               {disk.health ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.health} 
-                                                  color={disk.health === 'PASSED' ? 'success' : disk.health === 'FAILED' ? 'error' : 'warning'}
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.health}
+                                                  color={
+                                                    ['OK', 'PASSED'].includes(String(disk.health).toUpperCase())
+                                                      ? 'success'
+                                                      : String(disk.health).toUpperCase() === 'FAILED' ? 'error' : 'warning'
+                                                  }
                                                   sx={{ height: 20, fontSize: 10 }}
                                                 />
                                               ) : (
@@ -1329,30 +1370,35 @@ export default function NodeTabs(props: any) {
                                               )}
                                             </TableCell>
                                             <TableCell>
-                                              {disk.wearout !== undefined && disk.wearout !== null ? (
+                                              {Number.isFinite(Number(disk.wearout)) ? (
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                   <LinearProgress
                                                     variant="determinate"
-                                                    value={100 - (disk.wearout || 0)}
+                                                    value={100 - Number(disk.wearout)}
                                                     sx={{
-                                                      width: 50,
-                                                      height: 14,
-                                                      borderRadius: 0,
+                                                      width: 50, height: 14, borderRadius: 0,
                                                       bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
                                                       '& .MuiLinearProgress-bar': {
                                                         borderRadius: 0,
                                                         background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
-                                                        backgroundSize: (100 - (disk.wearout || 0)) > 0 ? `${(100 / (100 - (disk.wearout || 0))) * 100}% 100%` : '100% 100%',
-                                                      }
+                                                      },
                                                     }}
                                                   />
-                                                  <Typography variant="caption">{100 - (disk.wearout || 0)}%</Typography>
+                                                  <Typography variant="caption">{100 - Number(disk.wearout)}%</Typography>
                                                 </Box>
                                               ) : (
                                                 <Typography variant="caption" sx={{ opacity: 0.5 }}>N/A</Typography>
                                               )}
                                             </TableCell>
-                                          </TableRow>
+                                            </TableRow>
+                                            {smartDisk === disk.devpath && (
+                                              <TableRow>
+                                                <TableCell colSpan={8} sx={{ bgcolor: 'action.hover', py: 0 }}>
+                                                  <SmartDetail smart={smartData} loading={smartLoading} />
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
+                                          </Fragment>
                                         ))}
                                       </TableBody>
                                     </Table>

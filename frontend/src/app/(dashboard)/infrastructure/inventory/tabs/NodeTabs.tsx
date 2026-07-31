@@ -1370,25 +1370,36 @@ export default function NodeTabs(props: any) {
                                               )}
                                             </TableCell>
                                             <TableCell>
-                                              {Number.isFinite(Number(disk.wearout)) ? (
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                  <LinearProgress
-                                                    variant="determinate"
-                                                    value={100 - Number(disk.wearout)}
-                                                    sx={{
-                                                      width: 50, height: 14, borderRadius: 0,
-                                                      bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
-                                                      '& .MuiLinearProgress-bar': {
-                                                        borderRadius: 0,
-                                                        background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
-                                                      },
-                                                    }}
-                                                  />
-                                                  <Typography variant="caption">{100 - Number(disk.wearout)}%</Typography>
-                                                </Box>
-                                              ) : (
-                                                <Typography variant="caption" sx={{ opacity: 0.5 }}>N/A</Typography>
-                                              )}
+                                              {(() => {
+                                                const wearoutRaw = disk.wearout
+                                                const wearoutNum = Number(wearoutRaw)
+                                                const isValidWearout = wearoutRaw !== null && wearoutRaw !== '' && Number.isFinite(wearoutNum)
+
+                                                if (!isValidWearout) {
+                                                  return <Typography variant="caption" sx={{ opacity: 0.5 }}>N/A</Typography>
+                                                }
+
+                                                const pct = 100 - wearoutNum
+
+                                                return (
+                                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <LinearProgress
+                                                      variant="determinate"
+                                                      value={pct}
+                                                      sx={{
+                                                        width: 50, height: 14, borderRadius: 0,
+                                                        bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                                                        '& .MuiLinearProgress-bar': {
+                                                          borderRadius: 0,
+                                                          background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                                          backgroundSize: pct > 0 ? `${(100 / pct) * 100}% 100%` : '100% 100%',
+                                                        },
+                                                      }}
+                                                    />
+                                                    <Typography variant="caption">{pct}%</Typography>
+                                                  </Box>
+                                                )
+                                              })()}
                                             </TableCell>
                                             </TableRow>
                                             {smartDisk === disk.devpath && (

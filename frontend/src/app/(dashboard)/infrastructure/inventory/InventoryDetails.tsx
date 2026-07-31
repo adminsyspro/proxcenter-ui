@@ -1319,7 +1319,7 @@ export default function InventoryDetails({
     newSnapshotName, setNewSnapshotName, newSnapshotDesc, setNewSnapshotDesc,
     newSnapshotRam, setNewSnapshotRam, snapshotFeatureAvailable,
     loadSnapshots, createSnapshot, deleteSnapshot, deleteAllSnapshots, rollbackSnapshot,
-    resetSnapshots, deleteAllBusy, deleteAllProgress,
+    resetSnapshots, deleteAllBusy, deleteAllProgress, snapshotRowTasks, snapshotTaskBusy,
   } = useSnapshots({ selection, detailTab, t, toast, data, setConfirmAction, setConfirmActionLoading })
 
   // ==================== TASKS (Historique des tâches) ====================
@@ -3411,8 +3411,8 @@ return vm?.isCluster ?? false
                 setNewSnapshotRam, setNotesEditing, setNumaEnabled, setReplicationComment, setReplicationLoaded, setReplicationRateLimit,
                 setReplicationSchedule, setReplicationTargetNode, setSavingReplication, setSelectedBackup, setSelectedCephCluster,
                 selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
-                setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshots,
-                snapshotsError, snapshotsLoading, sourceCephAvailable, tags,
+                setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
+                snapshotsError, snapshotsLoading, snapshotTaskBusy, sourceCephAvailable, tags,
                 refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
             />
           )}

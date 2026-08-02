@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:scripts": "vitest run --config vitest.scripts.config.ts",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
     "clean": "rm -rf .next",
     "clear": "rm -rf node_modules .next"
   },

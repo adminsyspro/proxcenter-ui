@@ -38,7 +38,7 @@ beforeEach(async () => {
   userHasAccessToTenantMock.mockResolvedValue(true)
   getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: true, tenantId: 'default' })
   auditMock.mockResolvedValue('audit-id')
-  await truncate(['api_tokens', 'tenants', 'users'])
+  await truncate(['api_tokens', 'tenants', 'users', 'provider_connections', 'Connection'])
   await seedDefaultTenant()
   // api_tokens.created_by_user_id has a real FK to users; the default RBAC
   // mock above attributes creations to 'admin-1', so it must exist.
@@ -91,6 +91,14 @@ describe('POST /api/v1/settings/api-tokens', () => {
   })
 
   it('creates a token and reveals the secret exactly once', async () => {
+    // The pool-sync trigger is deferred to commit: Connection + ProviderConnection
+    // must land in the same transaction for a default-tenant PVE connection.
+    await prismaTest.$transaction([
+      prismaTest.connection.create({
+        data: { id: 'conn-a', tenantId: 'default', name: 'conn-a', baseUrl: 'https://pve-a:8006', apiTokenEnc: 'enc' },
+      }),
+      prismaTest.providerConnection.create({ data: { connectionId: 'conn-a' } }),
+    ])
     const { POST } = await import('./route')
     const res = await callRoute(POST, { body: { ...validBody, expiresInDays: 30, connectionIds: ['conn-a'] } })
     expect(res.status).toBe(201)
@@ -126,6 +134,44 @@ describe('POST /api/v1/settings/api-tokens', () => {
     await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
     const { POST } = await import('./route')
     expect((await callRoute(POST, { body: { ...validBody, tenantId: 't2' } })).status).toBe(403)
+  })
+
+  // Fix round 3, finding 1: connectionIds was only shape-checked, never
+  // verified to belong to the target tenant. scope.ts drops a wrong id
+  // silently at read time (fail-closed, no leak), but the token would then
+  // see nothing rather than what its creator intended -- reject it here
+  // instead of minting a blind token.
+  it('rejects a connectionId that does not belong to the target tenant, with the same error shape as other 400s', async () => {
+    const now = new Date()
+    await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    await prismaTest.connection.create({
+      data: { id: 'conn-t2', tenantId: 't2', name: 'conn-t2', baseUrl: 'https://pve-t2:8006', apiTokenEnc: 'enc' },
+    })
+    const { POST } = await import('./route')
+    // Target tenant is 'default' (ambient, no tenantId in the body); conn-t2 belongs to t2.
+    const res = await callRoute(POST, { body: { ...validBody, connectionIds: ['conn-t2'] } })
+    expect(res.status).toBe(400)
+    const body = await readJson<any>(res)
+    expect(body).toEqual({ error: 'connectionIds must belong to the target tenant' })
+    expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
+  })
+
+  it('accepts a connectionId list that legitimately belongs to the target tenant', async () => {
+    await prismaTest.$transaction([
+      prismaTest.connection.create({
+        data: { id: 'conn-a', tenantId: 'default', name: 'conn-a', baseUrl: 'https://pve-a:8006', apiTokenEnc: 'enc' },
+      }),
+      prismaTest.connection.create({
+        data: { id: 'conn-b', tenantId: 'default', name: 'conn-b', baseUrl: 'https://pve-b:8006', apiTokenEnc: 'enc' },
+      }),
+      prismaTest.providerConnection.create({ data: { connectionId: 'conn-a' } }),
+      prismaTest.providerConnection.create({ data: { connectionId: 'conn-b' } }),
+    ])
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, connectionIds: ['conn-a', 'conn-b'] } })
+    expect(res.status).toBe(201)
+    const body = await readJson<any>(res)
+    expect(body.data.token.connectionIds).toEqual(['conn-a', 'conn-b'])
   })
 })
 

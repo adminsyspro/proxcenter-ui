@@ -76,6 +76,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Tenant not accessible" }, { status: 403 })
   }
 
+  // Fix round 3, finding 1 (Task 12 review): connectionIds was only shape-
+  // checked above, never verified to belong to tenantId. A wrong id would
+  // still be persisted; scope.ts's read-time intersection against
+  // getTenantConnectionIds() drops it silently (fail-closed, no cross-tenant
+  // leak), but the token would then see nothing rather than what its
+  // creator intended. Reject it up front instead of minting a blind token.
+  if (connectionIds && connectionIds.length > 0) {
+    const owned = await prisma.connection.findMany({
+      where: { id: { in: connectionIds }, tenantId },
+      select: { id: true },
+    })
+    const ownedIds = new Set(owned.map(c => c.id))
+    if (connectionIds.some(id => !ownedIds.has(id))) {
+      return NextResponse.json({ error: "connectionIds must belong to the target tenant" }, { status: 400 })
+    }
+  }
+
   let expiresAt: Date | null = null
   if (body?.expiresInDays !== undefined && body?.expiresInDays !== null) {
     const days = Number(body.expiresInDays)

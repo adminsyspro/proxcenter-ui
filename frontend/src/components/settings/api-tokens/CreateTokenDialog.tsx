@@ -22,6 +22,21 @@ type Props = {
 type TenantOption = { id: string; name: string }
 type ConnectionOption = { id: string; tenantId: string; name: string }
 
+/**
+ * Fix round 3, finding 1: the tenant-change effect (below) already clears
+ * `connectionIds` synchronously, so no UI sequence has ever been shown to
+ * submit a stale id (React flushes the effect before the next user event
+ * can fire Create). This filter is the structural backstop anyway: the
+ * invariant "only ids visible for the currently selected tenant are ever
+ * submitted" then holds regardless of *how* `connectionIds` state was
+ * populated, rather than depending on effect timing staying correct.
+ * Exported for a focused unit test (CreateTokenDialog.test.tsx).
+ */
+export function filterToVisibleConnectionIds(selectedIds: string[], visible: ConnectionOption[]): string[] {
+  const visibleIds = new Set(visible.map(c => c.id))
+  return selectedIds.filter(id => visibleIds.has(id))
+}
+
 const EXPIRATION_CHOICES = [
   { value: 'none', labelKey: 'expirationNone', days: null as number | null },
   { value: '30', labelKey: 'expiration30', days: 30 },
@@ -152,6 +167,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // handleCreate must read the same boolean the render uses, or the two can
   // disagree about which value (connectionIds vs connectionsText) is live.
   const connectionSelectorAvailable = tenantsAvailable && connectionsAvailable
+  const visibleConnections = connectionOptions.filter(c => c.tenantId === tenantId)
 
   async function handleCreate() {
     setSaving(true)
@@ -161,7 +177,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         .split(',')
         .map(c => c.trim())
         .filter(Boolean)
-      const resolvedConnectionIds = connectionSelectorAvailable ? connectionIds : fallbackConnectionIds
+      const resolvedConnectionIds = connectionSelectorAvailable
+        ? filterToVisibleConnectionIds(connectionIds, visibleConnections)
+        : fallbackConnectionIds
 
       const res = await fetch('/api/v1/settings/api-tokens', {
         method: 'POST',
@@ -191,8 +209,6 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     reset()
     onClose()
   }
-
-  const visibleConnections = connectionOptions.filter(c => c.tenantId === tenantId)
 
   return (
     <Dialog open={open} onClose={secret ? undefined : handleClose} fullWidth maxWidth='sm'>

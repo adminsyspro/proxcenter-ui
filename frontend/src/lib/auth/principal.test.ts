@@ -217,6 +217,23 @@ describe('getPrincipal, quota and scopes (steps 9-10)', () => {
     expect(result.principal?.kind).toBe('token')
   })
 
+  it('anyOf: a token holding NONE of nodes:read/vms:read/backups:read gets 403 on public-metrics', async () => {
+    // The mirror case of the admission test above, on the SAME entry: this
+    // is the security-sensitive path (the most-exposed public endpoint of
+    // this feature) and must not be assumed proven by a test against an
+    // unrelated entry (vms-list) or by the route-level test suite, which
+    // mocks this guard as a pass-through and cannot exercise it.
+    const { secret } = await seedApiToken({ scopes: ['storage:read'] })
+    setHeaders(tokenHeaders(secret, 'public-metrics', '/api/v1/public/metrics'))
+    const result = await getPrincipal()
+    expect(result.ok).toBe(false)
+    expect(result.rejection?.status).toBe(403)
+    expect(result.rejection?.body).toEqual({
+      error: 'Route not available to API tokens',
+      route: '/api/v1/public/metrics',
+    })
+  })
+
   it('empty requiredScopes (health) admits any valid token', async () => {
     const { secret } = await seedApiToken({ scopes: ['storage:read'] })
     setHeaders(tokenHeaders(secret, 'public-health', '/api/v1/public/health'))

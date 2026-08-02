@@ -51,6 +51,9 @@ export async function buildFleetBackupFreshness(opts: {
   visibleConnectionIds: Set<string>
   guests: Array<{ connId: string; connectionName: string; vmid: string; type: string }>
   nowMs?: number
+  /** D12: forwarded to getAllBackups so a public scrape never blocks on a
+   * cold PBS cache. Omitted (default false) by every other caller. */
+  nonBlocking?: boolean
 }): Promise<FleetBackupFreshness> {
   const nowMs = opts.nowMs ?? Date.now()
   const warnings: string[] = []
@@ -66,7 +69,7 @@ export async function buildFleetBackupFreshness(opts: {
   for (const pbs of pbsConnections) {
     try {
       const conn = await getPbsConnectionByIdUnscoped(pbs.id)
-      const result = await getAllBackups(pbs.id, conn, opts.tenantId)
+      const result = await getAllBackups(pbs.id, conn, opts.tenantId, undefined, opts.nonBlocking)
       for (const warning of result.warnings) warnings.push(`[${pbs.name}] ${warning}`)
       for (const [key, snapshot] of latestPerGuest(result.data)) {
         const current = best.get(key)

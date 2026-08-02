@@ -117,14 +117,51 @@ export async function fetchAllPbsBackups(
 }
 
 /**
+ * Ensures a fetch for this PBS connection is in flight (reusing one already
+ * running rather than firing a duplicate), and returns it. Shared by the
+ * blocking miss path and the non-blocking miss path below: both need
+ * exactly the same "start or reuse" registration, only whether they AWAIT
+ * it differs.
+ */
+function ensurePbsFetchInFlight(
+  id: string,
+  conn: any,
+  tenantId: string,
+  dateLocale: string,
+): Promise<{ data: CachedBackup[]; warnings: string[] }> {
+  const existing = getInflightPbsFetch(id, tenantId, dateLocale)
+  if (existing !== null) return existing
+
+  const fetchPromise = fetchAllPbsBackups(conn, dateLocale)
+    .then(result => {
+      setCachedPbsBackups(id, result.data, result.warnings, tenantId, dateLocale)
+      return result
+    })
+    .finally(() => {
+      setInflightPbsFetch(null, id, tenantId, dateLocale)
+    })
+
+  setInflightPbsFetch(fetchPromise, id, tenantId, dateLocale)
+  return fetchPromise
+}
+
+/**
  * Get all backups for a PBS connection, using cache with stale-while-revalidate.
  * Returns cached data when available, triggers background refresh when stale.
+ *
+ * `nonBlocking` (D12, for the public scrape endpoints only): on a cache
+ * miss, do NOT await the PBS fan-out — a Prometheus scrape has a bounded
+ * timeout a cold multi-datastore fan-out can exceed. Kick the fetch off
+ * (deduplicated exactly like the blocking path) and return empty
+ * immediately so the cache is warm for the NEXT scrape. Every existing
+ * caller omits the flag and keeps blocking, unchanged.
  */
 export async function getAllBackups(
   id: string,
   conn: any,
   tenantId = 'default',
   dateLocale = 'en-US',
+  nonBlocking = false,
 ): Promise<{ data: CachedBackup[]; warnings: string[]; fromCache: boolean }> {
   const cached = getPbsBackupsFromCache(id, tenantId, dateLocale)
 
@@ -155,23 +192,12 @@ export async function getAllBackups(
     return { data: cached.data, warnings: cached.warnings, fromCache: true }
   }
 
-  // Cache miss — blocking fetch required (but deduplicate concurrent requests)
-  let inflight = getInflightPbsFetch(id, tenantId, dateLocale)
-  if (inflight !== null) {
-    const result = await inflight
-    return { data: result.data, warnings: result.warnings, fromCache: false }
+  // Cache miss.
+  if (nonBlocking) {
+    ensurePbsFetchInFlight(id, conn, tenantId, dateLocale)
+    return { data: [], warnings: [], fromCache: false }
   }
 
-  const fetchPromise = fetchAllPbsBackups(conn, dateLocale)
-    .then(result => {
-      setCachedPbsBackups(id, result.data, result.warnings, tenantId, dateLocale)
-      return result
-    })
-    .finally(() => {
-      setInflightPbsFetch(null, id, tenantId, dateLocale)
-    })
-
-  setInflightPbsFetch(fetchPromise, id, tenantId, dateLocale)
-  const result = await fetchPromise
+  const result = await ensurePbsFetchInFlight(id, conn, tenantId, dateLocale)
   return { data: result.data, warnings: result.warnings, fromCache: false }
 }

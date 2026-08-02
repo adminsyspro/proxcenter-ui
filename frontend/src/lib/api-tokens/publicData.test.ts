@@ -144,12 +144,14 @@ describe('loadPublicFleetView', () => {
     expect(view.guests[0].agentEnabled).toBe(false)
   })
 
-  it('never calls the hypervisor: it only reads the inventory cache wrapper, without forcing a refresh', async () => {
+  it('never calls the hypervisor: it only reads the inventory cache wrapper, without forcing a refresh, and never blocks a scrape on a cold cache (D12)', async () => {
     await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: null } as any)
-    // Exact-arity match: a third `true` argument (forceRefresh) would defeat
-    // the whole point of the cache wrapper and hammer the hypervisor on
-    // every 15s scrape. toHaveBeenCalledWith fails on an extra argument.
-    expect(getInventorySWRMock).toHaveBeenCalledWith('default', { kind: 'provider' })
+    // Exact-arity match: forceRefresh (3rd arg) MUST be false — `true`
+    // would defeat the whole point of the cache wrapper and hammer the
+    // hypervisor on every 15s scrape. nonBlocking (4th arg) MUST be true —
+    // D12: a scrape must also never wait on a cold-cache fan-out.
+    // toHaveBeenCalledWith fails on any extra, missing, or wrong argument.
+    expect(getInventorySWRMock).toHaveBeenCalledWith('default', { kind: 'provider' }, false, true)
     expect(getInventorySWRMock).toHaveBeenCalledTimes(1)
   })
 

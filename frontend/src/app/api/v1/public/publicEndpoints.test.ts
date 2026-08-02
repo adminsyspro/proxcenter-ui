@@ -45,7 +45,7 @@ const VIEW = {
   ],
   guests: [
     {
-      connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', type: 'qemu',
+      connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web-01', type: 'qemu',
       status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true, template: false,
     },
   ],
@@ -92,10 +92,13 @@ describe('GET /api/v1/public/metrics', () => {
     expect(body).toContain('proxcenter_node_online{connection="PVE One",node="n2"} 0')
     expect(body).toContain('proxcenter_node_cpu_usage_ratio{connection="PVE One",node="n1"} 0.25')
     expect(body).toContain('proxcenter_node_mem_usage_ratio{connection="PVE One",node="n1"} 0.25')
-    expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="100",type="qemu"} 1')
-    expect(body).toContain('proxcenter_vm_cpu_usage_ratio{connection="PVE One",node="n1",vmid="100",type="qemu"} 0.5')
-    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="100"} 1')
+    expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu"} 1')
+    expect(body).toContain('proxcenter_vm_cpu_usage_ratio{connection="PVE One",node="n1",vmid="100",name="web-01",type="qemu"} 0.5')
+    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="100",name="web-01"} 1')
     expect(body).toContain('proxcenter_backup_age_seconds{connection="PVE One",vmid="100",datastore="ds"} 3600')
+    // D12: the backup family, once allowed, must still forward nonBlocking
+    // so a scrape never blocks on a cold PBS cache.
+    expect(buildFleetBackupFreshnessMock).toHaveBeenCalledWith(expect.objectContaining({ nonBlocking: true }))
   })
 
   it('a vms:read-only token gets 200 with the VM series only, and no backup aggregation is computed', async () => {
@@ -128,9 +131,11 @@ describe('GET /api/v1/public/metrics', () => {
     const { GET } = await import('./metrics/route')
     const body = await (await callRoute(GET)).text()
     // The known-true guest is present...
-    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="100"} 1')
-    // ...but the unknown guest has NO agent_enabled line at all (not even a 0).
-    expect(body).not.toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="200"}')
+    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="100",name="web-01"} 1')
+    // ...but the unknown guest has NO agent_enabled line at all (not even a
+    // 0) — checked as a prefix (not the full label set) so the proof holds
+    // regardless of what other labels the line carries.
+    expect(body).not.toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="200"')
     // It still appears in the unaffected VM families (proves it wasn't dropped from the view).
     expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="200"')
   })
@@ -143,7 +148,7 @@ describe('GET /api/v1/public/metrics', () => {
     })
     const { GET } = await import('./metrics/route')
     const body = await (await callRoute(GET)).text()
-    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="300"} 0')
+    expect(body).toContain('proxcenter_vm_agent_enabled{connection="PVE One",node="n1",vmid="300",name="web-01"} 0')
   })
 
   it('reports 0 for a stopped guest in proxcenter_vm_status', async () => {
@@ -154,7 +159,7 @@ describe('GET /api/v1/public/metrics', () => {
     })
     const { GET } = await import('./metrics/route')
     const body = await (await callRoute(GET)).text()
-    expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="400",type="qemu"} 0')
+    expect(body).toContain('proxcenter_vm_status{connection="PVE One",node="n1",vmid="400",name="web-01",type="qemu"} 0')
   })
 
   it('treats a token principal with no scopes array as having no relevant scope (defensive fallback)', async () => {
@@ -189,8 +194,10 @@ describe('GET /api/v1/public/backups', () => {
     const body = await readJson<any>(res)
     expect(body.data.guests).toHaveLength(2)
     expect(body.data.guests[1].ageSeconds).toBeNull()
+    // D12: /backups also scrapes-adjacent (a monitoring dashboard can poll
+    // it), so it must forward nonBlocking too, same as /metrics.
     expect(buildFleetBackupFreshnessMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: 'default', visibleConnectionIds: VIEW.visible }),
+      expect.objectContaining({ tenantId: 'default', visibleConnectionIds: VIEW.visible, nonBlocking: true }),
     )
   })
 

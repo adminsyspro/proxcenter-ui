@@ -558,15 +558,41 @@ export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScop
   setInflightFetch(revalidation as any, tenantId)
 }
 
+/** All-empty shape, same fields as a real RawInventory, served on a cold
+ * cache to a `nonBlocking` caller instead of making it wait. */
+function emptyRawInventory(): RawInventory {
+  return {
+    clusters: [],
+    pbsServers: [],
+    externalHypervisors: [],
+    storages: [],
+    stats: {
+      totalClusters: 0, totalNodes: 0, totalGuests: 0, onlineNodes: 0,
+      runningGuests: 0, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0,
+    },
+  }
+}
+
 /**
  * Stale-while-revalidate read, extracted from route.ts:586-601 so the public
  * endpoints share it. Fresh: serve. Stale: serve and revalidate in the
- * background. Miss or forceRefresh: blocking fetch.
+ * background. Miss or forceRefresh: blocking fetch — UNLESS `nonBlocking`.
+ *
+ * `nonBlocking` exists for the public scrape endpoints ONLY (D12): a UI
+ * caller awaiting a cold cache is normal and bounded by the user's
+ * patience, but a Prometheus scrape has a fixed ~10s default timeout and a
+ * cold fan-out over a large fleet can take longer than that (measured ~5s
+ * for 500 VMs, worse for bigger fleets or PBS) — the scrape would time out
+ * and get marked DOWN, a fault the monitoring system caused itself. On a
+ * miss, a non-blocking caller gets an empty inventory immediately while a
+ * background fetch warms the cache for the NEXT scrape. Every existing
+ * caller omits the flag and keeps blocking, unchanged.
  */
 export async function getInventorySWR(
   tenantId: string,
   infra: InfraScope,
   forceRefresh = false,
+  nonBlocking = false,
 ): Promise<{ raw: RawInventory; cached: boolean }> {
   if (forceRefresh) {
     return { raw: await blockingFetch(tenantId, infra), cached: false }
@@ -579,6 +605,11 @@ export async function getInventorySWR(
     console.log('[inventory] Serving stale data, revalidating in background')
     triggerBackgroundRevalidation(tenantId, infra)
     return { raw: cacheResult.data as RawInventory, cached: true }
+  }
+  if (nonBlocking) {
+    console.log('[inventory] Cold cache, serving empty and warming in background (non-blocking caller)')
+    triggerBackgroundRevalidation(tenantId, infra)
+    return { raw: emptyRawInventory(), cached: false }
   }
   return { raw: await blockingFetch(tenantId, infra), cached: false }
 }

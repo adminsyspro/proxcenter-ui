@@ -109,6 +109,50 @@ describe('getAllBackups', () => {
     expect(pbsFetchMock).not.toHaveBeenCalled()
     expect(setCachedPbsBackupsMock).not.toHaveBeenCalled()
   })
+
+  it('D12: nonBlocking on a miss returns empty immediately, without waiting for PBS, and warms the cache in the background', async () => {
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'miss' })
+    // /admin/datastore hangs until resolveDatastores() is called: if
+    // getAllBackups still awaited the fetch under nonBlocking, this test
+    // would time out instead of resolving quickly.
+    let resolveDatastores: ((v: any[]) => void) | undefined
+    pbsFetchMock.mockImplementation((_c: any, path: string) => {
+      if (path === '/admin/datastore') {
+        return new Promise<any[]>(resolve => { resolveDatastores = resolve })
+      }
+      return Promise.resolve([])
+    })
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US', true)
+
+    expect(result).toEqual({ data: [], warnings: [], fromCache: false })
+    expect(setInflightPbsFetchMock).toHaveBeenCalledWith(expect.any(Promise), 'pbs-1', 'default', 'en-US')
+    expect(setCachedPbsBackupsMock).not.toHaveBeenCalled() // the background fetch has not resolved yet
+
+    // Let the background fetch complete so nothing dangles past the test.
+    resolveDatastores!([])
+    await setInflightPbsFetchMock.mock.calls[0][0]
+    expect(setCachedPbsBackupsMock).toHaveBeenCalledWith('pbs-1', [], [], 'default', 'en-US')
+  })
+
+  it('the existing (non-nonBlocking) miss path still blocks the caller, unchanged', async () => {
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'miss' })
+    let resolved = false
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') {
+        await new Promise(r => setTimeout(r, 5))
+        resolved = true
+        return []
+      }
+      return []
+    })
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US', false)
+
+    expect(resolved).toBe(true) // the caller genuinely waited for it
+    expect(result.fromCache).toBe(false)
+    expect(setCachedPbsBackupsMock).toHaveBeenCalled()
+  })
 })
 
 describe('fetchAllPbsBackups', () => {

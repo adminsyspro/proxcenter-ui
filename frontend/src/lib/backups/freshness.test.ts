@@ -126,6 +126,31 @@ describe('buildFleetBackupFreshness', () => {
     expect(out.guests[0].ageSeconds).toBe(0)
   })
 
+  it('D12: forwards nonBlocking to getAllBackups so a scrape never blocks on a cold PBS cache', async () => {
+    findManyMock.mockResolvedValue([{ id: 'pbs-1', name: 'A' }])
+    getAllBackupsMock.mockResolvedValue({ data: [], warnings: [], fromCache: false })
+    await buildFleetBackupFreshness({
+      tenantId: 'default',
+      visibleConnectionIds: new Set(['pve-1', 'pbs-1']),
+      guests,
+      nowMs: Date.now(),
+      nonBlocking: true,
+    })
+    expect(getAllBackupsMock).toHaveBeenCalledWith('pbs-1', expect.anything(), 'default', undefined, true)
+  })
+
+  it('omits nonBlocking (undefined) for every other caller, unchanged', async () => {
+    findManyMock.mockResolvedValue([{ id: 'pbs-1', name: 'A' }])
+    getAllBackupsMock.mockResolvedValue({ data: [], warnings: [], fromCache: false })
+    await buildFleetBackupFreshness({
+      tenantId: 'default',
+      visibleConnectionIds: new Set(['pve-1', 'pbs-1']),
+      guests,
+      nowMs: Date.now(),
+    })
+    expect(getAllBackupsMock).toHaveBeenCalledWith('pbs-1', expect.anything(), 'default', undefined, undefined)
+  })
+
   it('only queries PBS connections inside the token perimeter', async () => {
     findManyMock.mockResolvedValue([{ id: 'pbs-1', name: 'A' }])
     getAllBackupsMock.mockResolvedValue({ data: [], warnings: [], fromCache: true })

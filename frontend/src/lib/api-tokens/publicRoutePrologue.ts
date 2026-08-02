@@ -60,5 +60,7 @@ export async function loadBackupFreshnessForView(view: PublicFleetView): Promise
       vmid: guest.vmid,
       type: guest.type,
     })),
+    // D12: a scrape must never block on a cold PBS cache.
+    nonBlocking: true,
   })
 }

@@ -74,7 +74,9 @@ function isTemplate(guest: any): boolean {
 export async function loadPublicFleetView(principal?: Principal): Promise<PublicFleetView> {
   const { tenantId, visible } = await resolvePublicRequestScope(principal)
   const infra = await getTenantInfrastructureScope(tenantId)
-  const { raw, cached } = await getInventorySWR(tenantId, infra)
+  // nonBlocking (D12): a Prometheus scrape must never wait on a cold cache
+  // fan-out to the hypervisor. See getInventorySWR's doc comment.
+  const { raw, cached } = await getInventorySWR(tenantId, infra, false, true)
 
   const clusters = raw.clusters.filter(cluster => visible.has(cluster.id))
   const nodes: PublicNode[] = []

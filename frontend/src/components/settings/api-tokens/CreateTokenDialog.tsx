@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 import {
   Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
+  FormControlLabel, FormGroup, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -36,6 +36,23 @@ export function filterToVisibleConnectionIds(selectedIds: string[], visible: Con
   const visibleIds = new Set(visible.map(c => c.id))
   return selectedIds.filter(id => visibleIds.has(id))
 }
+
+// Reuses the app's existing icon vocabulary for each domain (the VM/node/
+// storage inventory tabs, the automation + alert-thresholds settings tabs,
+// the compliance pages) rather than inventing a new one. Keyed by scope id
+// so a future addition to SCOPE_DEFINITIONS without a matching entry here
+// still renders a row -- via DEFAULT_SCOPE_ICON -- instead of a blank one.
+const SCOPE_ICONS: Record<string, string> = {
+  'vms:read': 'ri-computer-line',
+  'nodes:read': 'ri-server-line',
+  'storage:read': 'ri-hard-drive-2-line',
+  'backups:read': 'ri-save-line',
+  'automation:read': 'ri-robot-line',
+  'alerts:read': 'ri-alarm-warning-line',
+  'reports:read': 'ri-file-list-3-line',
+  'compliance:read': 'ri-shield-check-line',
+}
+const DEFAULT_SCOPE_ICON = 'ri-key-line'
 
 const EXPIRATION_CHOICES = [
   { value: 'none', labelKey: 'expirationNone', days: null as number | null },
@@ -244,13 +261,25 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             )}
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1 }}>{t('dialog.scopes')}</Typography>
-              {ALL_SCOPE_IDS.map(scope => (
-                <FormControlLabel
-                  key={scope}
-                  control={<Checkbox checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} />}
-                  label={scope}
-                />
-              ))}
+              {/* FormGroup (block-level) rather than the FormControlLabels'
+                  own inline-flex flow, one scope per row: rendered bare, the
+                  eight labels ran together on a single line with no
+                  separation between them. */}
+              <FormGroup>
+                {ALL_SCOPE_IDS.map(scope => (
+                  <FormControlLabel
+                    key={scope}
+                    sx={{ width: '100%', mr: 0 }}
+                    control={<Checkbox checked={scopes.includes(scope)} onChange={() => toggleScope(scope)} />}
+                    label={
+                      <Stack direction='row' alignItems='center' spacing={1}>
+                        <i className={SCOPE_ICONS[scope] || DEFAULT_SCOPE_ICON} />
+                        <Typography variant='body2'>{scope}</Typography>
+                      </Stack>
+                    }
+                  />
+                ))}
+              </FormGroup>
             </Box>
             {tenantsAvailable && (
               <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>

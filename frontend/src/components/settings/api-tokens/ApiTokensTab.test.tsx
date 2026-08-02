@@ -283,6 +283,43 @@ describe('ApiTokensTab', () => {
     expect(lastPostBody().tenantId).toBeUndefined()
   })
 
+  // Fix round 4 (owner-reported): the eight scope checkboxes used to render
+  // as one run-on line ("vms:readnodes:readstorage:read...") because bare
+  // FormControlLabels are inline-flex and flow together with no
+  // separation. Covers both halves of the fix: a block-level row per scope,
+  // and a domain icon matching the app's existing icon vocabulary for that
+  // domain instead of no icon at all.
+  it('lays out each scope checkbox on its own row with a matching domain icon', async () => {
+    const dialog = await openDialogWithTenantSelector()
+
+    const scopeIcons: Record<string, string> = {
+      'vms:read': 'ri-computer-line',
+      'nodes:read': 'ri-server-line',
+      'storage:read': 'ri-hard-drive-2-line',
+      'backups:read': 'ri-save-line',
+      'automation:read': 'ri-robot-line',
+      'alerts:read': 'ri-alarm-warning-line',
+      'reports:read': 'ri-file-list-3-line',
+      'compliance:read': 'ri-shield-check-line',
+    }
+
+    const rows = Object.entries(scopeIcons).map(([scope, iconClass]) => {
+      const checkbox = within(dialog).getByLabelText(scope)
+      const row = checkbox.closest('label') as HTMLElement
+      expect(row, `expected a label row for ${scope}`).not.toBeNull()
+      expect(row.querySelector(`i.${iconClass}`), `expected ${iconClass} on the ${scope} row`).not.toBeNull()
+      return row
+    })
+
+    // One-per-line: every row is a distinct FormControlLabel, all direct
+    // children of the same FormGroup (a block-level, column-flex container)
+    // rather than sharing the FormControlLabels' own inline-flex flow.
+    rows.forEach(row => expect(row.className).toContain('MuiFormControlLabel-root'))
+    const container = rows[0].parentElement
+    expect(container?.className).toContain('MuiFormGroup-root')
+    rows.forEach(row => expect(row.parentElement).toBe(container))
+  })
+
   it('still offers the free-text connections field when only the connections fetch fails', async () => {
     // Fix round 2, finding 1: tenants load fine (tenantsAvailable=true) but
     // the connections fetch fails independently. Before the fix, the render

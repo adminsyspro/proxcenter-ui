@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, screen, within } from '@testing-library/react'
 
-import { filterToVisibleConnectionIds } from './CreateTokenDialog'
+import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
+import CreateTokenDialog, { filterToVisibleConnectionIds } from './CreateTokenDialog'
+
+// A scope with no entry in the dialog's local icon map, standing in for a
+// future addition to SCOPE_DEFINITIONS that nobody has wired an icon for yet.
+vi.mock('@/lib/api-tokens/scopes', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/api-tokens/scopes')>()
+  return { ...actual, ALL_SCOPE_IDS: [...actual.ALL_SCOPE_IDS, 'future:scope'] }
+})
 
 // Fix round 3, finding 1: no UI sequence has been shown to submit a stale
 // connection id (the tenant-change effect clears the selection before the
@@ -30,5 +39,27 @@ describe('filterToVisibleConnectionIds', () => {
 
   it('returns an empty array when nothing was selected', () => {
     expect(filterToVisibleConnectionIds([], visibleForTenantA)).toEqual([])
+  })
+})
+
+describe('CreateTokenDialog scopes layout', () => {
+  beforeEach(() => {
+    // The tenant/connection plumbing degrades gracefully on a failed fetch
+    // (asserted elsewhere in ApiTokensTab.test.tsx); irrelevant to this
+    // scopes-rendering test beyond needing `fetch` to exist under jsdom.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  it('falls back to a generic icon for a scope with no mapped entry', async () => {
+    renderWithProviders(<CreateTokenDialog open onClose={() => {}} onCreated={() => {}} />)
+    const dialog = await screen.findByRole('dialog')
+    const checkbox = within(dialog).getByLabelText('future:scope')
+    const row = checkbox.closest('label') as HTMLElement
+    expect(row.querySelector('i.ri-key-line')).not.toBeNull()
   })
 })

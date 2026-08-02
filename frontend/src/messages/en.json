@@ -2591,6 +2591,52 @@
         "critical": "Critical"
       }
     },
+    "apiTokens": {
+      "tabLabel": "API",
+      "title": "API tokens",
+      "subtitle": "Read-only service accounts for external monitoring tools (Prometheus, Zabbix, PRTG, CI).",
+      "newToken": "New token",
+      "columns": {
+        "prefix": "Prefix",
+        "name": "Name",
+        "scopes": "Scopes",
+        "expires": "Expires",
+        "lastUsed": "Last used"
+      },
+      "never": "Never",
+      "revoke": "Revoke",
+      "revoked": "Revoked",
+      "revokeConfirm": "Revoke this token? Integrations using it stop working immediately.",
+      "revokeSuccess": "Token revoked",
+      "loadError": "Failed to load API tokens",
+      "createError": "Failed to create the API token",
+      "dialog": {
+        "title": "Create an API token",
+        "name": "Name",
+        "description": "Description",
+        "expiration": "Expiration",
+        "expirationNone": "No expiration",
+        "expiration30": "30 days",
+        "expiration90": "90 days",
+        "expiration365": "1 year",
+        "expirationCustom": "Custom",
+        "customDays": "Days",
+        "scopes": "Scopes",
+        "tenant": "Tenant",
+        "connections": "Connections",
+        "connectionsAll": "All connections of the tenant",
+        "create": "Create",
+        "cancel": "Cancel",
+        "confirm": "Confirm"
+      },
+      "reveal": {
+        "title": "Copy your token now",
+        "warning": "This secret will never be shown again. Store it in your secret manager before closing this dialog.",
+        "copy": "Copy",
+        "copied": "Copied",
+        "done": "Done"
+      }
+    },
     "displayMode": "Display mode",
     "light": "Light",
     "dark": "Dark",

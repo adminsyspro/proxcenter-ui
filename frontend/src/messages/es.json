@@ -2591,6 +2591,52 @@
         "critical": "Crítico"
       }
     },
+    "apiTokens": {
+      "tabLabel": "API",
+      "title": "Tokens de API",
+      "subtitle": "Cuentas de servicio de solo lectura para herramientas de monitorización externas (Prometheus, Zabbix, PRTG, CI).",
+      "newToken": "Nuevo token",
+      "columns": {
+        "prefix": "Prefijo",
+        "name": "Nombre",
+        "scopes": "Ámbitos",
+        "expires": "Caduca",
+        "lastUsed": "Último uso"
+      },
+      "never": "Nunca",
+      "revoke": "Revocar",
+      "revoked": "Revocado",
+      "revokeConfirm": "¿Revocar este token? Las integraciones que lo usan dejan de funcionar de inmediato.",
+      "revokeSuccess": "Token revocado",
+      "loadError": "No se pudieron cargar los tokens de API",
+      "createError": "No se pudo crear el token de API",
+      "dialog": {
+        "title": "Crear un token de API",
+        "name": "Nombre",
+        "description": "Descripción",
+        "expiration": "Caducidad",
+        "expirationNone": "Sin caducidad",
+        "expiration30": "30 días",
+        "expiration90": "90 días",
+        "expiration365": "1 año",
+        "expirationCustom": "Personalizada",
+        "customDays": "Días",
+        "scopes": "Ámbitos",
+        "tenant": "Tenant",
+        "connections": "Conexiones",
+        "connectionsAll": "Todas las conexiones del tenant",
+        "create": "Crear",
+        "cancel": "Cancelar",
+        "confirm": "Confirmar"
+      },
+      "reveal": {
+        "title": "Copia tu token ahora",
+        "warning": "Este secreto no volverá a mostrarse. Guárdalo en tu gestor de secretos antes de cerrar este diálogo.",
+        "copy": "Copiar",
+        "copied": "Copiado",
+        "done": "Listo"
+      }
+    },
     "displayMode": "Modo de visualización",
     "light": "Claro",
     "dark": "Oscuro",

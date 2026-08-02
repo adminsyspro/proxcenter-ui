@@ -2591,6 +2591,52 @@
         "critical": "Critique"
       }
     },
+    "apiTokens": {
+      "tabLabel": "API",
+      "title": "Jetons API",
+      "subtitle": "Comptes de service en lecture seule pour les outils de supervision externes (Prometheus, Zabbix, PRTG, CI).",
+      "newToken": "Nouveau jeton",
+      "columns": {
+        "prefix": "Préfixe",
+        "name": "Nom",
+        "scopes": "Périmètres",
+        "expires": "Expiration",
+        "lastUsed": "Dernière utilisation"
+      },
+      "never": "Jamais",
+      "revoke": "Révoquer",
+      "revoked": "Révoqué",
+      "revokeConfirm": "Révoquer ce jeton ? Les intégrations qui l'utilisent s'arrêtent immédiatement.",
+      "revokeSuccess": "Jeton révoqué",
+      "loadError": "Échec du chargement des jetons API",
+      "createError": "Échec de la création du jeton API",
+      "dialog": {
+        "title": "Créer un jeton API",
+        "name": "Nom",
+        "description": "Description",
+        "expiration": "Expiration",
+        "expirationNone": "Sans expiration",
+        "expiration30": "30 jours",
+        "expiration90": "90 jours",
+        "expiration365": "1 an",
+        "expirationCustom": "Personnalisée",
+        "customDays": "Jours",
+        "scopes": "Périmètres",
+        "tenant": "Tenant",
+        "connections": "Connexions",
+        "connectionsAll": "Toutes les connexions du tenant",
+        "create": "Créer",
+        "cancel": "Annuler",
+        "confirm": "Confirmer"
+      },
+      "reveal": {
+        "title": "Copiez votre jeton maintenant",
+        "warning": "Ce secret ne sera plus jamais affiché. Enregistrez-le dans votre gestionnaire de secrets avant de fermer cette fenêtre.",
+        "copy": "Copier",
+        "copied": "Copié",
+        "done": "Terminé"
+      }
+    },
     "displayMode": "Mode d'affichage",
     "light": "Clair",
     "dark": "Sombre",

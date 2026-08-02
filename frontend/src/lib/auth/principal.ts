@@ -29,7 +29,13 @@ export type Principal = {
   /** Raw scope ids as granted (token principals only): the metrics endpoint
    * filters series families on these, not on the expanded permissions. */
   scopes?: string[]
-  connectionIds?: string[] | null
+  /**
+   * REQUIRED, never optional (Task 18 hard gate 3 follow-up): "unrestricted"
+   * must be STATED as an explicit `null`, never obtained by a caller
+   * forgetting the field. A session principal has no token perimeter to
+   * speak of, so it states `null` too, same as an unrestricted token.
+   */
+  connectionIds: string[] | null
 }
 
 export type PrincipalRejection = {
@@ -76,6 +82,9 @@ async function sessionPrincipal(): Promise<PrincipalResult> {
       userId: session.user.id,
       userEmail: session.user.email || undefined,
       tenantId: (session as any)?.user?.tenantId || DEFAULT_TENANT_ID,
+      // No token perimeter applies to a session caller: stated explicitly
+      // as unrestricted rather than left to be inferred from absence.
+      connectionIds: null,
     },
   }
 }

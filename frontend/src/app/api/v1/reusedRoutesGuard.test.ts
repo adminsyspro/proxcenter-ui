@@ -181,7 +181,13 @@ describe('GET /api/v1/vms under a token principal', () => {
     expect(getConnectionByIdMock).toHaveBeenCalledWith('conn-1', 'default')
   })
 
-  it('a token outside the vm.view permission gets an empty list, not a crash', async () => {
+  it('filterVmsByPermission (real token branch) empties the list when vm.view is missing, no crash', async () => {
+    // NOT a test of checkPermission's own out-of-scope 403 -- that gate is
+    // mocked to pass in this file's beforeEach, on purpose, so this isolates
+    // filterVmsByPermission's OWN token branch. checkPermission's real
+    // denial for a token lacking the scope is proven separately, at the
+    // layer that owns it: principalAware.test.ts's
+    // "denies a permission outside the scopes with the unchanged body".
     const scopedOut = { ...TOKEN_PRINCIPAL, permissions: new Set(['storage.view']) }
     currentPrincipal.value = scopedOut
     getRBACContextMock.mockResolvedValue({ isAdmin: false, tenantId: 'default', principal: scopedOut })

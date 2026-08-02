@@ -51,7 +51,7 @@ describe('getPrincipal, session fallback (step 2)', () => {
     const result = await getPrincipal()
     expect(result.ok).toBe(true)
     expect(result.principal).toEqual({
-      kind: 'session', userId: 'user-1', userEmail: 'a@b.c', tenantId: 'tenant-x',
+      kind: 'session', userId: 'user-1', userEmail: 'a@b.c', tenantId: 'tenant-x', connectionIds: null,
     })
   })
 })

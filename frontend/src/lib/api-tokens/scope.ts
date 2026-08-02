@@ -11,15 +11,26 @@ import { getTenantConnectionIds, getCurrentTenantId } from "@/lib/tenant"
 // read, and a parameter that lies about what the function honours is worse
 // than no parameter: see `publicData.ts`'s doc comment on the bug this
 // chantier already shipped once from exactly that shape.
+//
+// `connectionIds` is REQUIRED, never optional, for the same reason: this is
+// an authorization boundary, and "unrestricted" has to be a value a caller
+// STATES (`null`), never one it gets for free by forgetting the field. A
+// well-typed caller that omits it is now a compile error; the fallback
+// below is defense in depth for a value that reaches here via `as any` or
+// genuinely untyped JS anyway.
 export type ConnectionScopedPrincipal = {
-  connectionIds?: string[] | null
+  connectionIds: string[] | null
 }
 
 export async function resolveVisibleConnectionIds(
   principal: ConnectionScopedPrincipal,
 ): Promise<Set<string>> {
   const tenantConnectionIds = await getTenantConnectionIds()
-  if (!principal.connectionIds) return tenantConnectionIds
+  // Fail CLOSED on a missing field (reachable only by bypassing the type,
+  // e.g. `as any`): restricted to nothing, never treated the same as the
+  // deliberate, explicit `null` below.
+  if (principal.connectionIds === undefined) return new Set()
+  if (principal.connectionIds === null) return tenantConnectionIds
   const allowed = new Set(principal.connectionIds)
   const visible = new Set<string>()
   for (const id of tenantConnectionIds) {
@@ -30,10 +41,16 @@ export async function resolveVisibleConnectionIds(
 
 /** Shared prologue of the three hand-written public endpoints. */
 export async function resolvePublicRequestScope(
-  principal?: { tenantId: string; connectionIds?: string[] | null },
+  principal?: { tenantId: string; connectionIds: string[] | null },
 ): Promise<{ tenantId: string; visible: Set<string> }> {
   const tenantId = principal ? principal.tenantId : await getCurrentTenantId()
-  const visible = await resolveVisibleConnectionIds({ connectionIds: principal?.connectionIds ?? null })
+  // No principal at all (session/ambient caller) is its OWN case, distinct
+  // from a token that forgot to state its perimeter: absence of the whole
+  // principal has always meant unrestricted here, only `principal` itself
+  // being optional, never its `connectionIds` once a principal exists.
+  const visible = await resolveVisibleConnectionIds(
+    principal ? { connectionIds: principal.connectionIds } : { connectionIds: null },
+  )
   return { tenantId, visible }
 }
 
@@ -46,7 +63,7 @@ export async function resolvePublicRequestScope(
  */
 export async function restrictToTokenScope<T extends { id: string }>(
   connections: T[],
-  principal?: { kind: string; connectionIds?: string[] | null } | null,
+  principal?: { kind: string; connectionIds: string[] | null } | null,
 ): Promise<T[]> {
   if (!principal || principal.kind !== "token") return connections
   const visible = await resolveVisibleConnectionIds(principal)

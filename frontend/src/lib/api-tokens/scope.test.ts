@@ -41,6 +41,20 @@ describe('resolveVisibleConnectionIds', () => {
     const visible = await resolveVisibleConnectionIds({ connectionIds: ['conn-1'] })
     expect(visible).toEqual(new Set(['conn-1']))
   })
+
+  it('fails CLOSED (restricted to nothing) when connectionIds is ABSENT, not the same as an explicit null', async () => {
+    // `connectionIds` is a required field on the type; this exercises the
+    // only way to reach a missing one at runtime -- bypassing the type, the
+    // same as an unvalidated `as any` boundary would.
+    const principal = {} as unknown as { connectionIds: string[] | null }
+    const visible = await resolveVisibleConnectionIds(principal)
+    expect(visible).toEqual(new Set())
+  })
+
+  it('an EXPLICIT null stays the deliberate "unrestricted" (unlike the absent case above)', async () => {
+    const visible = await resolveVisibleConnectionIds({ connectionIds: null })
+    expect(visible).toEqual(new Set(['conn-a', 'conn-b', 'conn-c']))
+  })
 })
 
 describe('restrictToTokenScope', () => {
@@ -66,6 +80,12 @@ describe('restrictToTokenScope', () => {
   it('a null token perimeter keeps every tenant connection', async () => {
     const out = await restrictToTokenScope(connections, { kind: 'token', connectionIds: null })
     expect(out).toEqual(connections)
+  })
+
+  it('fails CLOSED for a token whose connectionIds is ABSENT (bypassing the type)', async () => {
+    const principal = { kind: 'token' } as unknown as { kind: string; connectionIds: string[] | null }
+    const out = await restrictToTokenScope(connections, principal)
+    expect(out).toEqual([])
   })
 })
 

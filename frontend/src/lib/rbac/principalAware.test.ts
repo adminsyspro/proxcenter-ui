@@ -319,7 +319,9 @@ describe('hard gate 2: an omitted tenantId falls back to the PRINCIPAL tenant, n
     })
   }
 
-  const sessionPrincipal: Principal = { kind: 'session', userId: 'user-msp-gate2', tenantId: NON_DEFAULT_TENANT }
+  const sessionPrincipal: Principal = {
+    kind: 'session', userId: 'user-msp-gate2', tenantId: NON_DEFAULT_TENANT, connectionIds: null,
+  }
   const vms = [{ id: 'conn-1:qemu:node1:100', connId: 'conn-1', node: 'node1', type: 'qemu', vmid: '100' }]
   const nodes = [{ connId: 'conn-1', node: 'node1' }]
 

@@ -43,6 +43,15 @@ vi.mock("@/lib/rbac", () => ({
   PERMISSIONS: { VM_VIEW: "vm.view" },
 }))
 
+// The guard is unit-tested on its own (routeGuard.test.ts) and exercised
+// end-to-end for a token in reusedRoutesGuard.test.ts; here it stays a
+// pass-through so this file keeps testing the handler in isolation, exactly
+// like every session call the guard already delegates immediately (no
+// Bearer pxc_ header on any request built by callRoute).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 // Stub format utils
 vi.mock("@/utils/format", () => ({
   formatBytes: (n: number) => `${n}B`,

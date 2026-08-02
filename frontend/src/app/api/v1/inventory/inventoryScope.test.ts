@@ -81,6 +81,15 @@ vi.mock("@/lib/demo/demo-api", () => ({
   demoResponse: vi.fn().mockReturnValue(null),
 }))
 
+// The guard is unit-tested on its own (routeGuard.test.ts) and exercised
+// end-to-end for a token in reusedRoutesGuard.test.ts; here it stays a
+// pass-through so this file keeps testing the handler in isolation, exactly
+// like every session call the guard already delegates immediately (no
+// Bearer pxc_ header on any request built by callGet).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     connection: { findMany: vi.fn().mockResolvedValue([]) },

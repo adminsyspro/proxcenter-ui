@@ -10,7 +10,7 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: getCurrentTenantIdMock,
 }))
 
-import { resolveVisibleConnectionIds, resolvePublicRequestScope } from './scope'
+import { resolveVisibleConnectionIds, resolvePublicRequestScope, restrictToTokenScope } from './scope'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -20,18 +20,17 @@ beforeEach(() => {
 
 describe('resolveVisibleConnectionIds', () => {
   it('returns every tenant connection when connectionIds is null', async () => {
-    const visible = await resolveVisibleConnectionIds({ tenantId: 't', connectionIds: null })
+    const visible = await resolveVisibleConnectionIds({ connectionIds: null })
     expect(visible).toEqual(new Set(['conn-a', 'conn-b', 'conn-c']))
   })
 
   it('intersects with the token connection list', async () => {
-    const visible = await resolveVisibleConnectionIds({ tenantId: 't', connectionIds: ['conn-b'] })
+    const visible = await resolveVisibleConnectionIds({ connectionIds: ['conn-b'] })
     expect(visible).toEqual(new Set(['conn-b']))
   })
 
   it('silently drops a deleted connection still referenced by the token', async () => {
     const visible = await resolveVisibleConnectionIds({
-      tenantId: 't',
       connectionIds: ['conn-b', 'conn-deleted'],
     })
     expect(visible).toEqual(new Set(['conn-b']))
@@ -39,8 +38,34 @@ describe('resolveVisibleConnectionIds', () => {
 
   it('compares connection ids by exact equality: conn-1 never matches conn-10', async () => {
     getTenantConnectionIdsMock.mockResolvedValue(new Set(['conn-1', 'conn-10']))
-    const visible = await resolveVisibleConnectionIds({ tenantId: 't', connectionIds: ['conn-1'] })
+    const visible = await resolveVisibleConnectionIds({ connectionIds: ['conn-1'] })
     expect(visible).toEqual(new Set(['conn-1']))
+  })
+})
+
+describe('restrictToTokenScope', () => {
+  const connections = [{ id: 'conn-a' }, { id: 'conn-b' }, { id: 'conn-c' }]
+
+  it('passes every connection through untouched for a session principal', async () => {
+    const out = await restrictToTokenScope(connections, { kind: 'session', connectionIds: null })
+    expect(out).toEqual(connections)
+    expect(getTenantConnectionIdsMock).not.toHaveBeenCalled()
+  })
+
+  it('passes every connection through untouched when no principal is given', async () => {
+    const out = await restrictToTokenScope(connections)
+    expect(out).toEqual(connections)
+    expect(getTenantConnectionIdsMock).not.toHaveBeenCalled()
+  })
+
+  it('restricts to the token perimeter, intersected with the tenant connections', async () => {
+    const out = await restrictToTokenScope(connections, { kind: 'token', connectionIds: ['conn-b'] })
+    expect(out).toEqual([{ id: 'conn-b' }])
+  })
+
+  it('a null token perimeter keeps every tenant connection', async () => {
+    const out = await restrictToTokenScope(connections, { kind: 'token', connectionIds: null })
+    expect(out).toEqual(connections)
   })
 })
 

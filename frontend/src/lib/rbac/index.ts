@@ -284,6 +284,20 @@ function toUserId(principalOrUserId: string | Principal): string {
 }
 
 /**
+ * The tenant to load grants against (hard gate 2, Task 18). An explicit
+ * `tenantId` argument always wins (existing behaviour for every plain-userId
+ * caller, unchanged). When it is omitted, fall back to the tenant CARRIED BY
+ * THE PRINCIPAL ITSELF rather than straight to `DEFAULT_TENANT_ID`: a
+ * Principal already knows its own tenant, and defaulting past it would
+ * silently evaluate every MSP user's grants against the provider tenant the
+ * moment a caller passes a Principal without also repeating its tenantId.
+ */
+function resolveGrantTenantId(principalOrUserId: string | Principal, tenantId?: string): string {
+  const principalTenantId = typeof principalOrUserId === "string" ? undefined : principalOrUserId.tenantId
+  return tenantId || principalTenantId || DEFAULT_TENANT_ID
+}
+
+/**
  * Get all effective permissions for a user (or the flat scope set of a token)
  */
 export async function getEffectivePermissions(
@@ -297,7 +311,7 @@ export async function getEffectivePermissions(
     return Array.from(token.permissions ?? [])
   }
   const userId = toUserId(principalOrUserId)
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   // Super admins implicitly hold every defined permission. Return the full
@@ -675,7 +689,7 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
   const userId = toUserId(principalOrUserId)
   // Load every grant for this user/tenant in one shot, then filter the list
   // with a sync predicate. Was O(N) Prisma calls per filter; now O(1).
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   // Super admin or any global-scope grant for this permission → return as-is.
@@ -735,7 +749,7 @@ export async function filterNodesByPermission<T extends { connId: string; node: 
     return nodes.filter(node => allowed.has(node.connId))
   }
   const userId = toUserId(principalOrUserId)
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   if (grants.superAdmin) return nodes
@@ -767,7 +781,7 @@ export async function getRbacInfraScope(
     return tokenInfraScope(token.connectionIds ?? null)
   }
   const userId = toUserId(principalOrUserId)
-  const tid = tenantId ?? DEFAULT_TENANT_ID
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
   return deriveRbacInfraScope(grants)
 }

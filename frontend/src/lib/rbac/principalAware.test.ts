@@ -278,6 +278,88 @@ describe('token-aware filters (never a synthetic userId)', () => {
   })
 })
 
+describe('hard gate 2: an omitted tenantId falls back to the PRINCIPAL tenant, never DEFAULT_TENANT_ID', () => {
+  // A default-tenant grant would never distinguish the bug (which lands on
+  // 'default' as its wrong fallback) from correct behaviour, so every grant
+  // here lives under a non-default tenant on purpose.
+  const NON_DEFAULT_TENANT = 'tenant-msp-gate2'
+
+  async function seedConnectionScopedGrant() {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'user-msp-gate2', email: 'msp-gate2@test.local', createdAt: now, updatedAt: now },
+    })
+    await prismaTest.rbacPermission.createMany({
+      data: [
+        { id: 'perm_vm_view_gate2', name: PERMISSIONS.VM_VIEW, category: 'vm' },
+        { id: 'perm_node_view_gate2', name: PERMISSIONS.NODE_VIEW, category: 'node' },
+      ],
+    })
+    await prismaTest.rbacUserPermission.createMany({
+      data: [
+        {
+          id: 'grant-gate2-vm',
+          userId: 'user-msp-gate2',
+          permissionId: 'perm_vm_view_gate2',
+          scopeType: 'connection',
+          scopeTarget: 'conn-1',
+          tenantId: NON_DEFAULT_TENANT,
+          grantedAt: now,
+        },
+        {
+          id: 'grant-gate2-node',
+          userId: 'user-msp-gate2',
+          permissionId: 'perm_node_view_gate2',
+          scopeType: 'connection',
+          scopeTarget: 'conn-1',
+          tenantId: NON_DEFAULT_TENANT,
+          grantedAt: now,
+        },
+      ],
+    })
+  }
+
+  const sessionPrincipal: Principal = { kind: 'session', userId: 'user-msp-gate2', tenantId: NON_DEFAULT_TENANT }
+  const vms = [{ id: 'conn-1:qemu:node1:100', connId: 'conn-1', node: 'node1', type: 'qemu', vmid: '100' }]
+  const nodes = [{ connId: 'conn-1', node: 'node1' }]
+
+  it('filterVmsByPermission returns REAL data for a Principal with no explicit tenantId', async () => {
+    await seedConnectionScopedGrant()
+    const out = await filterVmsByPermission(sessionPrincipal, vms, PERMISSIONS.VM_VIEW)
+    expect(out).toEqual(vms)
+  })
+
+  it('filterNodesByPermission returns REAL data for a Principal with no explicit tenantId', async () => {
+    await seedConnectionScopedGrant()
+    const out = await filterNodesByPermission(sessionPrincipal, nodes, PERMISSIONS.NODE_VIEW)
+    expect(out).toEqual(nodes)
+  })
+
+  it('getRbacInfraScope resolves the connection scope for a Principal with no explicit tenantId', async () => {
+    await seedConnectionScopedGrant()
+    const scope = await getRbacInfraScope(sessionPrincipal)
+    expect(scope?.fullConnections.has('conn-1')).toBe(true)
+  })
+
+  it('getEffectivePermissions resolves the real permission set for a Principal with no explicit tenantId', async () => {
+    await seedConnectionScopedGrant()
+    const perms = await getEffectivePermissions(sessionPrincipal, 'connection', 'conn-1')
+    expect(new Set(perms)).toEqual(new Set([PERMISSIONS.VM_VIEW, PERMISSIONS.NODE_VIEW]))
+  })
+
+  it('an explicit tenantId still wins over the principal (existing behaviour preserved)', async () => {
+    await seedConnectionScopedGrant()
+    const out = await filterVmsByPermission(sessionPrincipal, vms, PERMISSIONS.VM_VIEW, 'default')
+    expect(out).toEqual([]) // 'default' has no such grant: the explicit arg was honoured, not the principal's own tenant
+  })
+
+  it('a plain userId string is unaffected: still needs an explicit tenantId (no Principal to fall back on)', async () => {
+    await seedConnectionScopedGrant()
+    const out = await filterVmsByPermission('user-msp-gate2', vms, PERMISSIONS.VM_VIEW)
+    expect(out).toEqual([]) // no tenantId, no Principal -> DEFAULT_TENANT_ID, same as before this fix
+  })
+})
+
 describe('module hygiene (contract assertion (b) precondition)', () => {
   it('rbac/index.ts no longer references getServerSession', async () => {
     const { readFileSync } = await import('node:fs')

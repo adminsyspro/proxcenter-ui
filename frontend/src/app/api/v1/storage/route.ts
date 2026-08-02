@@ -9,6 +9,8 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { aggregateStorage } from "@/lib/proxmox/storage"
 import { canReadFleetStorage } from "@/lib/storage/fleetScope"
 import { buildTenantFacets, selectableTenants } from "@/lib/storage/tenantFacets"
+import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
+import { restrictToTokenScope } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
@@ -47,7 +49,7 @@ const PVE_CONNECTION_QUERY = {
  * un tenant dont la seule portée est un vDC ne figure pas dans la facette
  * `tenants`, sinon le sélecteur porterait une entrée vide en permanence.
  */
-export async function GET(req: Request) {
+async function handler(req: Request, ctx: GuardedRouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -60,9 +62,16 @@ export async function GET(req: Request) {
     const fleet = await canReadFleetStorage()
 
     // Récupérer uniquement les connexions PVE (pas PBS)
-    const connections: PveConnectionRow[] = fleet
+    const rawConnections: PveConnectionRow[] = fleet
       ? await globalPrisma.connection.findMany(PVE_CONNECTION_QUERY)
       : await (await getSessionPrisma()).connection.findMany(PVE_CONNECTION_QUERY)
+
+    // Connection perimeter (spec section 6, hard gate 3, Task 18): tenant
+    // scoping alone is not connection scoping. A token restricted to one
+    // connection inside a tenant that owns three must still see only one.
+    // No-op for a session caller and (verified) for the fleet branch, which
+    // canReadFleetStorage() already fails closed for any Bearer request.
+    const connections = await restrictToTokenScope(rawConnections, ctx?.principal)
 
     // Tous les tenants activés, pas seulement ceux qui possèdent une connexion:
     // un tenant MSP sans connexion encore déclarée reste listé et affiche 0.
@@ -226,3 +235,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("storage-list", handler)

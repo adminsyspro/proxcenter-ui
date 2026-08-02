@@ -8,6 +8,8 @@ import { formatBytes, formatUptime } from "@/utils/format"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
+import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
+import { restrictToTokenScope } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
@@ -23,7 +25,7 @@ function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
 }
 
-export async function GET(req: Request) {
+async function handler(req: Request, ctx: GuardedRouteContext) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
@@ -52,6 +54,12 @@ export async function GET(req: Request) {
       const allowed = new Set(plan.pveConnectionIds)
       connections = connections.filter(c => allowed.has(c.id))
     }
+
+    // Aggregated route: the token connection perimeter is applied where we
+    // ENUMERATE, because no connection id ever reaches checkPermission here
+    // (spec section 6, allowlist review checklist D8). No-op for a session
+    // caller (ctx.principal is only ever set for a token, see routeGuard.ts).
+    connections = await restrictToTokenScope(connections, ctx?.principal)
 
     if (!connections.length) {
       return NextResponse.json({
@@ -145,7 +153,12 @@ return []
     const rbacCtx = await getRBACContext()
 
     if (rbacCtx && !rbacCtx.isAdmin) {
-      allVms = await filterVmsByPermission(rbacCtx.userId, allVms, PERMISSIONS.VM_VIEW, rbacCtx.tenantId)
+      allVms = await filterVmsByPermission(
+        rbacCtx.principal ?? (rbacCtx.userId as string),
+        allVms,
+        PERMISSIONS.VM_VIEW,
+        rbacCtx.tenantId,
+      )
     }
 
     // vDC filtering: restrict VMs to those in the tenant's vDC pools
@@ -188,7 +201,9 @@ return aId - bId
     })
   } catch (e: any) {
     console.error("[vms] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vms-list", handler)

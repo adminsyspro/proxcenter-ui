@@ -6,6 +6,7 @@ import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, ge
 import { applyVdcFilter } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getInventorySWR, type ClusterData } from "@/lib/inventory/fetchRawInventory"
+import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -24,7 +25,7 @@ export const runtime = "nodejs"
 /* GET handler                                                        */
 /* ------------------------------------------------------------------ */
 
-export async function GET(request: NextRequest) {
+async function handler(request: NextRequest, ctx: GuardedRouteContext) {
   const demo = demoResponse(request)
   if (demo) return demo
 
@@ -40,10 +41,15 @@ export async function GET(request: NextRequest) {
     // 1) Tenter le cache (sauf si refresh forcé)
     const { raw, cached } = await getInventorySWR(tenantId, infra, forceRefresh)
 
-    // 2) Resolve RBAC context + infra scope once, before any filtering
+    // 2) Resolve RBAC context + infra scope once, before any filtering.
+    //    A PRINCIPAL, never a synthetic userId (hard gate 1, Task 18): for a
+    //    token, getRbacInfraScope/filterVmsByPermission below intersect
+    //    token.connectionIds with this already tenant-scoped tree — the
+    //    connection perimeter of the aggregated route (spec section 6).
     const rbacCtx = await getRBACContext()
-    const rbacScope = rbacCtx && !rbacCtx.isAdmin
-      ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
+    const rbacPrincipal = rbacCtx?.principal ?? (rbacCtx?.userId as string | undefined)
+    const rbacScope = rbacCtx && !rbacCtx.isAdmin && rbacPrincipal
+      ? await getRbacInfraScope(rbacPrincipal, rbacCtx.tenantId)
       : null
 
     // 3) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache).
@@ -69,7 +75,7 @@ export async function GET(request: NextRequest) {
           cluster.nodes.map(async node => ({
             ...node,
             guests: await filterVmsByPermission(
-              rbacCtx.userId,
+              rbacPrincipal as any,
               node.guests.map(g => ({
                 ...g,
                 connId: cluster.id,
@@ -144,3 +150,5 @@ export async function GET(request: NextRequest) {
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("inventory-tree", handler)

@@ -13,10 +13,17 @@ import { getDateLocale } from "@/lib/i18n/date"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { setCachedPbsBackups } from "@/lib/cache/pbsBackupCache"
 import { fetchAllPbsBackups, getAllBackups, type CachedBackup } from "@/lib/backups/pbsSnapshots"
+import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+// Connection perimeter for THIS route is layered elsewhere on purpose (spec
+// section 6): layer 1 is the guard itself, which validates the {id} segment
+// (declared as the entry's connectionSegment) against
+// resolveVisibleConnectionIds(principal) BEFORE this handler ever runs;
+// layer 2 is the existing checkPermission(BACKUP_VIEW, "pbs", id) call
+// below, already principal-aware since Task 9. Nothing else changes here.
+async function handler(req: Request, ctx: GuardedRouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
@@ -245,3 +252,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("pbs-backups", handler)

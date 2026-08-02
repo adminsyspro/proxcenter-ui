@@ -37,6 +37,15 @@ vi.mock('@/lib/storage/fleetScope', () => ({
   canReadFleetStorage: vi.fn<() => Promise<boolean>>(),
 }))
 
+// The guard is unit-tested on its own (routeGuard.test.ts) and exercised
+// end-to-end for a token in reusedRoutesGuard.test.ts; here it stays a
+// pass-through so this file keeps testing the handler in isolation, exactly
+// like every session call the guard already delegates immediately (no
+// Bearer pxc_ header on any request built by callRoute).
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_entryId: string, handler: any) => handler,
+}))
+
 import { GET } from './route'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getSessionPrisma } from '@/lib/tenant'

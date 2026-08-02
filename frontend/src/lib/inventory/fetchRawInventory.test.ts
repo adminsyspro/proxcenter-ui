@@ -53,6 +53,7 @@ describe('getInventorySWR', () => {
     getInventoryFromCacheMock.mockReturnValue({ status: 'stale', data: RAW })
     const out = await getInventorySWR('default', { kind: 'provider' } as any)
     expect(out.cached).toBe(true)
+    expect(out.raw).toBe(RAW)
     expect(setInflightFetchMock).toHaveBeenCalled()
   })
 
@@ -60,13 +61,15 @@ describe('getInventorySWR', () => {
     getInventoryFromCacheMock.mockReturnValue({ status: 'miss' })
     const out = await getInventorySWR('default', { kind: 'provider' } as any)
     expect(out.cached).toBe(false)
-    expect(out.raw.stats.totalClusters).toBe(0)
+    expect(out.raw).toEqual(RAW)
+    expect(setCachedInventoryMock).toHaveBeenCalled()
   })
 
   it('forceRefresh skips the cache lookup entirely', async () => {
     getInventoryFromCacheMock.mockReturnValue({ status: 'fresh', data: RAW })
     const out = await getInventorySWR('default', { kind: 'provider' } as any, true)
     expect(out.cached).toBe(false)
+    expect(out.raw).toEqual(RAW)
     expect(getInventoryFromCacheMock).not.toHaveBeenCalled()
   })
 })

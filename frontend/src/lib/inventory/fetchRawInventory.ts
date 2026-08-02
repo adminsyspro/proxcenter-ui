@@ -576,6 +576,7 @@ export async function getInventorySWR(
     return { raw: cacheResult.data as RawInventory, cached: true }
   }
   if (cacheResult.status === "stale") {
+    console.log('[inventory] Serving stale data, revalidating in background')
     triggerBackgroundRevalidation(tenantId, infra)
     return { raw: cacheResult.data as RawInventory, cached: true }
   }

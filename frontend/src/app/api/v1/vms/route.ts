@@ -81,12 +81,18 @@ export async function GET(req: Request) {
         ])
 
         const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
+        // A rejected /nodes leaves node status UNKNOWN, not "everyone offline":
+        // `onlineNodes` stays null so enrichVmsWithConfig attempts the /config
+        // call instead of fabricating nulls for a connection that is otherwise
+        // reachable (resources succeeded).
         const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
-        
+
         const isCluster = nodes.length > 1
-        const onlineNodes = new Set(
-          nodes.filter((n: any) => n?.status === 'online' && n?.node).map((n: any) => String(n.node)),
-        )
+        const onlineNodes = nodesResult.status === 'fulfilled'
+          ? new Set(
+              nodes.filter((n: any) => n?.status === 'online' && n?.node).map((n: any) => String(n.node)),
+            )
+          : null
 
         // Transformer les resources en format attendu
         const mapped = resources.map((r: any) => {

@@ -52,6 +52,13 @@ describe('parseVmConfig', () => {
       ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
     })
   })
+
+  it('normalises non-finite numeric fields to null and reads onboot: 0 as false inside a non-null config', () => {
+    expect(parseVmConfig({ cores: 'not-a-number', sockets: Infinity, memory: NaN, onboot: 0 })).toEqual({
+      cpuType: null, scsihw: null, agentEnabled: false, bios: null,
+      ostype: null, onboot: false, cores: null, sockets: null, memoryMb: null,
+    })
+  })
 })
 
 describe('enrichVmsWithConfig', () => {
@@ -68,6 +75,17 @@ describe('enrichVmsWithConfig', () => {
     expect(out[1].cpuType).toBeNull()
     expect(pveFetchMock).toHaveBeenCalledTimes(1)
     expect(pveFetchMock).toHaveBeenCalledWith(CONN, '/nodes/n1/qemu/100/config')
+  })
+
+  it('attempts the /config call when node status is unknown (null), rather than treating it as offline', async () => {
+    pveFetchMock.mockResolvedValue({ cpu: 'host' })
+    // onlineNodes === null: the /nodes call itself failed, so status is
+    // UNKNOWN for every VM. That must not fall back silently to the
+    // offline (zero-call) path.
+    const out = await enrichVmsWithConfig(CONN, [vms[0]], null)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock).toHaveBeenCalledWith(CONN, '/nodes/n1/qemu/100/config')
+    expect(out[0].cpuType).toBe('host')
   })
 
   it('uses the lxc path for containers', async () => {
@@ -114,5 +132,37 @@ describe('enrichVmsWithConfig', () => {
     const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
     expect(out[0].agentResponding).toBe(false)
     expect(out[0].agentOsName).toBeNull()
+  })
+
+  it('does not call the probe when the agent flag is OFF, even with includeAgent on a running qemu VM', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/config')) return { agent: '0' }
+      // If the agentEnabled gate were dropped, this branch would be hit.
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const out = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
+    expect(out[0].agentResponding).toBe(false)
+    expect(out[0].agentOsName).toBeNull()
+    // Load-bearing assertion: only the /config call happened, the probe was
+    // never attempted. Dropping the `!fields.agentEnabled` gate makes this fail.
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call the probe for LXC guests, even with includeAgent and the flag ON', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/config')) return { agent: '1' }
+      // If the qemu-only gate were dropped, this branch would be hit (the
+      // probe URL is hardcoded to /qemu/.../agent/get-osinfo).
+      throw new Error(`unexpected path: ${path}`)
+    })
+    const out = await enrichVmsWithConfig(
+      CONN, [{ vmid: '300', node: 'n1', type: 'lxc', status: 'running' }], new Set(['n1']), { includeAgent: true },
+    )
+    expect(out[0].agentResponding).toBe(false)
+    expect(out[0].agentOsName).toBeNull()
+    // Load-bearing assertion: only the /config call happened. Dropping the
+    // `kind !== "qemu"` gate makes this fail.
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock).toHaveBeenCalledWith(CONN, '/nodes/n1/lxc/300/config')
   })
 })

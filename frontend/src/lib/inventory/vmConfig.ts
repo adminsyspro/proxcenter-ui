@@ -76,13 +76,21 @@ export function parseVmConfig(config: Record<string, any> | null): VmConfigField
 export async function enrichVmsWithConfig<T extends EnrichableVm>(
   connData: any,
   vms: T[],
-  onlineNodes: Set<string>,
+  // Three states, not two: `null` means the `/nodes` call itself failed, so
+  // node status is UNKNOWN for every VM -- that is not a valid "offline"
+  // verdict and must not be treated as one (a failed /nodes with a fulfilled
+  // /cluster/resources is evidence the connection IS reachable). A Set means
+  // node status is known: membership is online, absence is confirmed offline
+  // and skips the call entirely.
+  onlineNodes: Set<string> | null,
   opts: { includeAgent?: boolean } = {},
 ): Promise<Array<T & VmConfigFields & Partial<VmAgentProbe>>> {
   return mapWithConcurrency(vms, PVEPROXY_CONCURRENCY, async (vm) => {
-    // Offline node: no call at all. Every per-guest call to a dead node fails
-    // with HTTP 595 after about 1s (measured, spec section 9).
-    if (!onlineNodes.has(vm.node)) {
+    // Confirmed-offline node: no call at all. Every per-guest call to a dead
+    // node fails with HTTP 595 after about 1s (measured, spec section 9).
+    // Unknown status (onlineNodes === null) falls through to the fetch below
+    // instead of being silently treated as offline.
+    if (onlineNodes !== null && !onlineNodes.has(vm.node)) {
       return { ...vm, ...EMPTY_CONFIG }
     }
 

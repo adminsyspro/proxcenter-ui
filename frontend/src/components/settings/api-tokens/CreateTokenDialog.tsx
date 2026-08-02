@@ -145,6 +145,14 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     return EXPIRATION_CHOICES.find(c => c.value === expiration)?.days ?? null
   }
 
+  // The multi-select is filtered by the selected tenant (visibleConnections
+  // below), so it is only meaningful once BOTH fetches succeeded: showing it
+  // with an unset tenantId (tenants unavailable) would list zero
+  // connections and be as much of a dead end as the bug this fixes.
+  // handleCreate must read the same boolean the render uses, or the two can
+  // disagree about which value (connectionIds vs connectionsText) is live.
+  const connectionSelectorAvailable = tenantsAvailable && connectionsAvailable
+
   async function handleCreate() {
     setSaving(true)
     setError('')
@@ -153,7 +161,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         .split(',')
         .map(c => c.trim())
         .filter(Boolean)
-      const resolvedConnectionIds = connectionsAvailable ? connectionIds : fallbackConnectionIds
+      const resolvedConnectionIds = connectionSelectorAvailable ? connectionIds : fallbackConnectionIds
 
       const res = await fetch('/api/v1/settings/api-tokens', {
         method: 'POST',
@@ -228,42 +236,49 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                 />
               ))}
             </Box>
-            {tenantsAvailable ? (
-              <>
-                <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
-                  {tenants.map(tenant => (
-                    <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  select
-                  label={t('dialog.connections')}
-                  helperText={t('dialog.connectionsAll')}
-                  value={connectionIds}
-                  onChange={e => {
-                    const raw = e.target.value
-                    setConnectionIds(typeof raw === 'string' ? raw.split(',').filter(Boolean) : raw)
-                  }}
-                  fullWidth
-                  slotProps={{
-                    select: {
-                      multiple: true,
-                      renderValue: (selected: unknown) =>
-                        (selected as string[])
-                          .map(id => visibleConnections.find(c => c.id === id)?.name || id)
-                          .join(', '),
-                    },
-                  }}
-                >
-                  {visibleConnections.map(conn => (
-                    <MenuItem key={conn.id} value={conn.id}>
-                      <Checkbox checked={connectionIds.includes(conn.id)} size='small' />
-                      {conn.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </>
+            {tenantsAvailable && (
+              <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
+                {tenants.map(tenant => (
+                  <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
+                ))}
+              </TextField>
+            )}
+            {connectionSelectorAvailable ? (
+              <TextField
+                select
+                label={t('dialog.connections')}
+                helperText={t('dialog.connectionsAll')}
+                value={connectionIds}
+                onChange={e => {
+                  const raw = e.target.value
+                  setConnectionIds(typeof raw === 'string' ? raw.split(',').filter(Boolean) : raw)
+                }}
+                fullWidth
+                slotProps={{
+                  select: {
+                    multiple: true,
+                    renderValue: (selected: unknown) =>
+                      (selected as string[])
+                        .map(id => visibleConnections.find(c => c.id === id)?.name || id)
+                        .join(', '),
+                  },
+                }}
+              >
+                {visibleConnections.map(conn => (
+                  <MenuItem key={conn.id} value={conn.id}>
+                    <Checkbox checked={connectionIds.includes(conn.id)} size='small' />
+                    {conn.name}
+                  </MenuItem>
+                ))}
+              </TextField>
             ) : (
+              // Fix round 2, finding 1: this must render whenever the
+              // connections fetch itself failed, even if tenants loaded
+              // fine (handleCreate reads connectionSelectorAvailable, the
+              // same boolean, to decide which value to send). It also
+              // covers the mirror case -- tenants unavailable but
+              // connections available -- where the multi-select would
+              // otherwise show zero options because no tenant is selected.
               <TextField
                 label={t('dialog.connections')}
                 helperText={t('dialog.connectionsAll')}

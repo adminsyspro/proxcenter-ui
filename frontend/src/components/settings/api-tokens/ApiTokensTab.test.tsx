@@ -63,12 +63,14 @@ const TOKEN_ROW = {
 // individual tests can override before rendering (reset to these defaults
 // in beforeEach).
 let tenantsFetchOk = true
+let connectionsFetchOk = true
 let tenantsFixture: any[] = []
 let vdcsFixture: any[] = []
 let connectionsFixture: any[] = []
 
 function resetFixtures() {
   tenantsFetchOk = true
+  connectionsFetchOk = true
   tenantsFixture = [
     { id: 'default', name: 'Provider', enabled: true },
     { id: 'tenant-a', name: 'Tenant A', enabled: true },
@@ -108,7 +110,9 @@ beforeEach(() => {
       return new Response(JSON.stringify({ data: vdcsFixture }), { status: 200 })
     }
     if (url === '/api/v1/admin/connections?type=pve') {
-      return new Response(JSON.stringify({ data: connectionsFixture }), { status: 200 })
+      return connectionsFetchOk
+        ? new Response(JSON.stringify({ data: connectionsFixture }), { status: 200 })
+        : new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
     }
     return new Response('{}', { status: 404 })
   }))
@@ -277,5 +281,33 @@ describe('ApiTokensTab', () => {
 
     expect(await screen.findByText('pxc_SECRETVALUE')).toBeInTheDocument()
     expect(lastPostBody().tenantId).toBeUndefined()
+  })
+
+  it('still offers the free-text connections field when only the connections fetch fails', async () => {
+    // Fix round 2, finding 1: tenants load fine (tenantsAvailable=true) but
+    // the connections fetch fails independently. Before the fix, the render
+    // branched on tenantsAvailable alone, so the multi-select rendered with
+    // zero options and the free-text fallback never appeared -- a dead end.
+    connectionsFetchOk = false
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    await userEvent.click(screen.getByRole('button', { name: /new token/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    // Tenant selector still present (tenants loaded), but the connections
+    // control degrades to free text: 2 comboboxes (expiration, tenant), no
+    // third combobox for connections.
+    await waitFor(() => {
+      expect(within(dialog).getAllByRole('combobox').length).toBe(2)
+    })
+
+    await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-conn-fallback')
+    await userEvent.click(within(dialog).getByLabelText('vms:read'))
+    await userEvent.type(within(dialog).getByLabelText(/connections/i), 'conn-x, conn-y')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => {
+      expect(lastPostBody().connectionIds).toEqual(['conn-x', 'conn-y'])
+    })
   })
 })

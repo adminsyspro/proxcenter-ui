@@ -7,6 +7,7 @@ import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } f
 import { formatBytes, formatUptime } from "@/utils/format"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
+import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
 
 export const runtime = "nodejs"
 
@@ -30,6 +31,7 @@ export async function GET(req: Request) {
     const prisma = await getSessionPrisma()
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
+    const includeAgent = url.searchParams.get('include') === 'agent'
 
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
@@ -82,9 +84,12 @@ export async function GET(req: Request) {
         const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
         
         const isCluster = nodes.length > 1
+        const onlineNodes = new Set(
+          nodes.filter((n: any) => n?.status === 'online' && n?.node).map((n: any) => String(n.node)),
+        )
 
         // Transformer les resources en format attendu
-        return resources.map((r: any) => {
+        const mapped = resources.map((r: any) => {
           const cpuPct = round1(Number(r.cpu || 0) * 100)
           const ramPct = r.maxmem ? round1((Number(r.mem || 0) / Number(r.maxmem)) * 100) : 0
 
@@ -118,6 +123,8 @@ export async function GET(req: Request) {
             ip: null, // Chargé séparément via /api/v1/vms/ips
           }
         })
+
+        return enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent })
       } catch (e) {
         console.error(`[vms] Error fetching connection ${conn.id}:`, e)
         

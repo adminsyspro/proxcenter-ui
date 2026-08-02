@@ -57,35 +57,39 @@ function walkImportGraph(entryFile: string): Map<string, string> {
 }
 
 /**
- * KNOWN, DISCLOSED gap in the D2 exclusivity rule for `storage-list` — not a
- * clean pass, recorded here on purpose rather than silently absorbed (see
- * the task-19-20 report for the full analysis):
+ * CLOSED finding, still pinned here — not because the runtime bug survives,
+ * but because this walker is deliberately pure syntax (no control-flow or
+ * dataflow analysis: that's what makes it "vérifiable mécaniquement" per
+ * spec D2/section 11 in the first place). It cannot tell "reachable via a
+ * branch a token principal can never take" from "reachable and read for
+ * every caller". Two distinct entries, for two distinct reasons:
  *
  * - `lib/storage/fleetScope.ts` (`canReadFleetStorage`) reads
  *   `getServerSession()` DIRECTLY, independent of `getPrincipal()`/the
- *   principal passed to the route. For a BARE token request (no session
- *   cookie) this fails closed: `getServerSession()` resolves no session,
- *   so the fleet-wide branch never activates and the handler falls back to
- *   the tenant-scoped path (`getSessionPrisma()`, itself transitively
- *   principal-aware via `getCurrentTenantId()`). But `src/middleware.ts`
- *   only strips inbound `x-pxc-*` headers (spec D7); it never touches the
- *   `Cookie` header. So a request carrying BOTH a live provider-tenant
- *   super-admin session cookie AND ANY valid `pxc_` bearer token (any
- *   tenant, any scope) reaches the handler with `ctx.principal.kind ===
- *   "token"` (correctly resolved by `getPrincipal()`) while
- *   `canReadFleetStorage()` independently sees the live session and
- *   returns `true` regardless of that token's own tenant or scopes. That
- *   flips the handler's `fleet` branch on and leaks an installation-wide
- *   tenant list (`tenants` facet) into a token-authenticated response —
- *   exactly the class of bug the exclusivity rule exists to make
- *   structurally impossible. This is a genuine, if narrow (it requires the
- *   caller to already hold a live super-admin session cookie), VIOLATION
- *   of the rule as stated, not a justified fail-closed exception. Fix:
- *   make `canReadFleetStorage()` take the resolved principal (or call
- *   `getTokenPrincipalContext()`) and short-circuit to `false` whenever a
- *   token principal is present, before ever touching `getServerSession()`.
- *   Out of scope for this dispatch (file generation only, no shared
- *   runtime code).
+ *   principal passed to the route. It WAS a genuine, if narrow, violation:
+ *   `src/middleware.ts` only strips inbound `x-pxc-*` headers (spec D7) and
+ *   never touches `Cookie`, so a request carrying BOTH a live
+ *   provider-tenant super-admin session cookie AND ANY valid `pxc_` bearer
+ *   token reached the handler with `ctx.principal.kind === "token"` while
+ *   `canReadFleetStorage()` independently saw the live session and
+ *   returned `true` regardless of that token's own tenant or scopes —
+ *   leaking an installation-wide `tenants` facet into a token-authenticated
+ *   response. FIXED in `storage/route.ts`: the fleet branch is now gated on
+ *   `ctx.principal?.kind !== "token"` BEFORE `canReadFleetStorage()` is
+ *   ever called, so the session read itself never happens for a token,
+ *   regardless of what cookie rides along (proven by mutation and by an
+ *   explicit token-principal regression test in
+ *   `reusedRoutesGuard.test.ts`; `fleetScope.ts` itself is untouched, per
+ *   spec D2's own guidance not to make it principal-aware, which would be
+ *   the larger and worse change). It stays in this list purely because the
+ *   IMPORT EDGE itself is legitimate and permanent: `storage/route.ts`
+ *   still needs `canReadFleetStorage` for genuine session/browser fleet
+ *   callers, so the file is, and will remain, statically reachable from
+ *   this route no matter how safely its result is now gated at the call
+ *   site. Removing this entry would just turn the test red again for a
+ *   closed issue — verified directly, not asserted: doing so DOES fail
+ *   (`expected [ 'lib/storage/fleetScope.ts' ] to deeply equal []`) even
+ *   with the route fix in place.
  * - `lib/auth/config.ts` is a harmless TEXTUAL false positive of this
  *   walker's crude substring match: it never imports or calls
  *   `getServerSession`, it only mentions the name in a prose comment at

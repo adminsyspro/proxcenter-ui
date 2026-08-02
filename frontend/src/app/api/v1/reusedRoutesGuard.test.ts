@@ -239,7 +239,37 @@ describe('GET /api/v1/storage under a token principal', () => {
     expect(body.connections).toEqual([{ id: 'conn-1', name: 'One', tenantId: 'default' }])
     expect(body.data).toHaveLength(1)
     expect(body.data[0]).toMatchObject({ connId: 'conn-1', storage: 'local-lvm', used: 5, total: 20 })
-    expect(canReadFleetStorageMock).toHaveBeenCalled()
+    // Post-fix: a token principal never even consults canReadFleetStorage
+    // (the fleet branch is gated on ctx.principal?.kind !== "token" BEFORE
+    // the call, see the dedicated compound-credential test below). Was
+    // `.toHaveBeenCalled()` before the fix; flipped, not deleted, so a
+    // regression back to always-calling it fails right here too.
+    expect(canReadFleetStorageMock).not.toHaveBeenCalled()
+  })
+
+  it('a token principal never reaches the fleet branch even if a session would grant it (compound-credential regression)', async () => {
+    // Models the scenario the storage-list contract exception documents: a
+    // request carrying a live provider super-admin session cookie ALONGSIDE
+    // a valid token. Before the fix, canReadFleetStorage() read that
+    // session directly, independent of ctx.principal, and would resolve
+    // true here regardless of the token's own tenant/scopes.
+    currentPrincipal.value = TOKEN_PRINCIPAL
+    canReadFleetStorageMock.mockResolvedValue(true)
+    const { GET } = await import('./storage/route')
+    const res = await callRoute(GET)
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    // Fleet branch must NOT activate: no installation-wide tenants facet,
+    // and the connection list stays the token's own tenant-scoped, then
+    // token-perimeter-restricted one (getSessionPrisma + restrictToTokenScope),
+    // never globalPrisma's fleet-wide query.
+    expect(body.tenants).toBeUndefined()
+    expect(body.connections).toEqual([{ id: 'conn-1', name: 'One', tenantId: 'default' }])
+    // The load-bearing assertion: canReadFleetStorage must never even be
+    // CONSULTED for a token principal, so a stray session cookie riding
+    // along cannot influence the branch at all, no matter what it would
+    // have resolved to.
+    expect(canReadFleetStorageMock).not.toHaveBeenCalled()
   })
 
   it('never even queries conn-2 or conn-3 for storage data', async () => {

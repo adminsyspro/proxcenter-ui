@@ -59,7 +59,13 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
 
     if (denied) return denied
 
-    const fleet = await canReadFleetStorage()
+    // Gate BEFORE canReadFleetStorage() is ever consulted (never merely
+    // after): a token principal must not get the fleet branch even when a
+    // live super-admin session cookie also rides along on the same request
+    // (spec D2 exclusivity; src/middleware.ts strips x-pxc-* but never
+    // Cookie). Short-circuit `&&` means the session read itself is never
+    // invoked for a token, not just its result discarded.
+    const fleet = ctx?.principal?.kind !== "token" && (await canReadFleetStorage())
 
     // Récupérer uniquement les connexions PVE (pas PBS)
     const rawConnections: PveConnectionRow[] = fleet

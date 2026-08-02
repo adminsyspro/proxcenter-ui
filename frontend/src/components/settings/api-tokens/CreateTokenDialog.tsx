@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -11,12 +11,16 @@ import { useTranslations } from 'next-intl'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import { ALL_SCOPE_IDS } from '@/lib/api-tokens/scopes'
 import { copyToClipboard } from '@/lib/clipboard'
+import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
 type Props = {
   open: boolean
   onClose: () => void
   onCreated: () => void
 }
+
+type TenantOption = { id: string; name: string }
+type ConnectionOption = { id: string; tenantId: string; name: string }
 
 const EXPIRATION_CHOICES = [
   { value: 'none', labelKey: 'expirationNone', days: null as number | null },
@@ -26,6 +30,20 @@ const EXPIRATION_CHOICES = [
   { value: 'custom', labelKey: 'expirationCustom', days: null as number | null },
 ]
 
+// Best-effort JSON fetch used only for the tenant/connection/vDC plumbing
+// below: never throws, flat { ok, value } shape (tsconfig strict:false has
+// no reliable discriminated-union narrowing).
+async function fetchJsonArray(url: string): Promise<{ ok: boolean; value: any[] }> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return { ok: false, value: [] }
+    const json = await res.json()
+    return Array.isArray(json?.data) ? { ok: true, value: json.data } : { ok: false, value: [] }
+  } catch {
+    return { ok: false, value: [] }
+  }
+}
+
 export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const t = useTranslations('settings.apiTokens')
   const [name, setName] = useState('')
@@ -33,11 +51,73 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const [expiration, setExpiration] = useState('none')
   const [customDays, setCustomDays] = useState('180')
   const [scopes, setScopes] = useState<string[]>([])
-  const [connections, setConnections] = useState('')
+  // Fallback free-text field, used only when the tenant selector could not
+  // load (degrade to the pre-fix behaviour: ambient tenant, hand-typed ids).
+  const [connectionsText, setConnectionsText] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [secret, setSecret] = useState('')
   const [copied, setCopied] = useState(false)
+
+  // Tenant + connection plumbing (fix round 1, finding 1). A missing
+  // tenantId on the request defaults to the ambient tenant server-side,
+  // which for a provider admin is the fleet-wide "default" tenant — the
+  // dropdown makes the scope explicit and lets it be narrowed. Everything
+  // here degrades independently and never blocks token creation.
+  const [tenants, setTenants] = useState<TenantOption[]>([])
+  const [tenantsAvailable, setTenantsAvailable] = useState(false)
+  const [tenantId, setTenantId] = useState('')
+  const [connectionOptions, setConnectionOptions] = useState<ConnectionOption[]>([])
+  const [connectionsAvailable, setConnectionsAvailable] = useState(false)
+  const [connectionIds, setConnectionIds] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    let active = true
+
+    ;(async () => {
+      const [tenantsRes, vdcsRes, connectionsRes] = await Promise.all([
+        fetchJsonArray('/api/v1/tenants'),
+        fetchJsonArray('/api/v1/admin/vdcs'),
+        fetchJsonArray('/api/v1/admin/connections?type=pve'),
+      ])
+      if (!active) return
+
+      setConnectionOptions(connectionsRes.value)
+      setConnectionsAvailable(connectionsRes.ok)
+
+      if (!tenantsRes.ok) {
+        setTenants([])
+        setTenantsAvailable(false)
+        return
+      }
+
+      const enabled = tenantsRes.value.filter((tenant: any) => tenant?.enabled)
+      // vDC-only exclusion needs to know real connection owners; without a
+      // reliable connections fetch we cannot tell a legitimately-empty
+      // tenant from a vDC-only one, so we skip the exclusion rather than
+      // risk hiding a valid tenant (issue #609's rule, best-effort here).
+      const selectable = connectionsRes.ok
+        ? selectableTenants(enabled, vdcsRes.value.map((vdc: any) => vdc.tenantId), connectionsRes.value)
+        : enabled
+      const sorted = sortTenantsProviderFirst(selectable)
+
+      setTenants(sorted)
+      setTenantsAvailable(true)
+      setTenantId(prev => (prev && sorted.some(tn => tn.id === prev) ? prev : sorted[0]?.id || ''))
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [open])
+
+  // Changing the tenant clears the connection selection: a selection carried
+  // over from another tenant would be rejected or, worse, silently scope
+  // the token against the wrong tenant's connections.
+  useEffect(() => {
+    setConnectionIds([])
+  }, [tenantId])
 
   function toggleScope(scope: string) {
     setScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
@@ -49,7 +129,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setExpiration('none')
     setCustomDays('180')
     setScopes([])
-    setConnections('')
+    setConnectionsText('')
+    setConnectionIds([])
+    setTenantId('')
     setError('')
     setSecret('')
     setCopied(false)
@@ -67,10 +149,12 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setSaving(true)
     setError('')
     try {
-      const connectionIds = connections
+      const fallbackConnectionIds = connectionsText
         .split(',')
         .map(c => c.trim())
         .filter(Boolean)
+      const resolvedConnectionIds = connectionsAvailable ? connectionIds : fallbackConnectionIds
+
       const res = await fetch('/api/v1/settings/api-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -78,8 +162,9 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
           name,
           description: description || undefined,
           scopes,
-          connectionIds: connectionIds.length ? connectionIds : null,
+          connectionIds: resolvedConnectionIds.length ? resolvedConnectionIds : null,
           expiresInDays: expiresInDays(),
+          ...(tenantsAvailable && tenantId ? { tenantId } : {}),
         }),
       })
       const json = await res.json()
@@ -98,6 +183,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     reset()
     onClose()
   }
+
+  const visibleConnections = connectionOptions.filter(c => c.tenantId === tenantId)
 
   return (
     <Dialog open={open} onClose={secret ? undefined : handleClose} fullWidth maxWidth='sm'>
@@ -141,13 +228,50 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                 />
               ))}
             </Box>
-            <TextField
-              label={t('dialog.connections')}
-              helperText={t('dialog.connectionsAll')}
-              value={connections}
-              onChange={e => setConnections(e.target.value)}
-              fullWidth
-            />
+            {tenantsAvailable ? (
+              <>
+                <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
+                  {tenants.map(tenant => (
+                    <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  label={t('dialog.connections')}
+                  helperText={t('dialog.connectionsAll')}
+                  value={connectionIds}
+                  onChange={e => {
+                    const raw = e.target.value
+                    setConnectionIds(typeof raw === 'string' ? raw.split(',').filter(Boolean) : raw)
+                  }}
+                  fullWidth
+                  slotProps={{
+                    select: {
+                      multiple: true,
+                      renderValue: (selected: unknown) =>
+                        (selected as string[])
+                          .map(id => visibleConnections.find(c => c.id === id)?.name || id)
+                          .join(', '),
+                    },
+                  }}
+                >
+                  {visibleConnections.map(conn => (
+                    <MenuItem key={conn.id} value={conn.id}>
+                      <Checkbox checked={connectionIds.includes(conn.id)} size='small' />
+                      {conn.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </>
+            ) : (
+              <TextField
+                label={t('dialog.connections')}
+                helperText={t('dialog.connectionsAll')}
+                value={connectionsText}
+                onChange={e => setConnectionsText(e.target.value)}
+                fullWidth
+              />
+            )}
           </Stack>
         )}
       </DialogContent>

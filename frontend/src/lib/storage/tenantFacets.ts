@@ -29,6 +29,20 @@ export function selectableTenants<T extends { id: string }>(
 }
 
 /**
+ * Provider tenant first, then alphabetically by name. Shared by
+ * buildTenantFacets and any other tenant selector (e.g. the API token
+ * creation dialog) that needs the same ordering without recomputing counts.
+ */
+export function sortTenantsProviderFirst<T extends { id: string; name: string }>(tenants: T[]): T[] {
+  return [...tenants].sort((a, b) => {
+    if (a.id === DEFAULT_TENANT_ID) return -1
+    if (b.id === DEFAULT_TENANT_ID) return 1
+
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/**
  * Build the tenant list backing the /storage/overview tenant selector.
  *
  * Every tenant handed in is listed, including those owning no PVE connection:
@@ -57,17 +71,12 @@ export function buildTenantFacets(
     if (r.tenantId) storageCount.set(r.tenantId, (storageCount.get(r.tenantId) || 0) + 1)
   }
 
-  return tenants
-    .map(t => ({
+  return sortTenantsProviderFirst(
+    tenants.map(t => ({
       id: t.id,
       name: t.name,
       connectionCount: connectionCount.get(t.id) || 0,
       storageCount: storageCount.get(t.id) || 0,
     }))
-    .sort((a, b) => {
-      if (a.id === DEFAULT_TENANT_ID) return -1
-      if (b.id === DEFAULT_TENANT_ID) return 1
-
-      return a.name.localeCompare(b.name)
-    })
+  )
 }

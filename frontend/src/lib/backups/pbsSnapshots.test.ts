@@ -27,7 +27,7 @@ import { fetchAllPbsBackups, getAllBackups } from './pbsSnapshots'
 const conn = { baseUrl: 'https://pbs.example', apiToken: 'x' }
 
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
   getInflightPbsFetchMock.mockReturnValue(null)
 })
 
@@ -64,6 +64,50 @@ describe('getAllBackups', () => {
     expect(result.data[0].backupId).toBe('100')
     expect(result.data[0].datastore).toBe('ds1')
     expect(setCachedPbsBackupsMock).toHaveBeenCalledWith('pbs-1', result.data, [], 'default', 'en-US')
+  })
+
+  it('serves stale data immediately and refreshes it in the background', async () => {
+    const staleData = [{ id: 'stale-1' }]
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'stale', data: staleData, warnings: ['old warning'] })
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path.includes('/namespace')) return []
+      if (path.includes('/snapshots')) {
+        return [{ 'backup-type': 'vm', 'backup-id': '2', 'backup-time': 2 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US')
+
+    // The stale entry is served synchronously, before any refresh completes.
+    expect(result).toEqual({ data: staleData, warnings: ['old warning'], fromCache: true })
+    expect(setInflightPbsFetchMock).toHaveBeenCalledWith(expect.any(Promise), 'pbs-1', 'default', 'en-US')
+
+    // Drive the background refresh to completion and verify it lands.
+    const refreshPromise = setInflightPbsFetchMock.mock.calls[0][0]
+    await refreshPromise
+
+    expect(setCachedPbsBackupsMock).toHaveBeenCalledWith(
+      'pbs-1',
+      expect.arrayContaining([expect.objectContaining({ backupId: '2' })]),
+      [],
+      'default',
+      'en-US',
+    )
+    expect(setInflightPbsFetchMock).toHaveBeenLastCalledWith(null, 'pbs-1', 'default', 'en-US')
+  })
+
+  it('reuses an in-flight fetch instead of firing a duplicate request', async () => {
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'miss' })
+    const inflight = Promise.resolve({ data: [{ id: 'inflight-1' }], warnings: ['inflight warning'] })
+    getInflightPbsFetchMock.mockReturnValue(inflight)
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US')
+
+    expect(result).toEqual({ data: [{ id: 'inflight-1' }], warnings: ['inflight warning'], fromCache: false })
+    expect(pbsFetchMock).not.toHaveBeenCalled()
+    expect(setCachedPbsBackupsMock).not.toHaveBeenCalled()
   })
 })
 

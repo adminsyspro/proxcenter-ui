@@ -56,6 +56,18 @@ describe('latestPerGuest', () => {
     expect(map.get('ct/300')?.backupTime).toBe(1_600_000_000)
   })
 
+  it('keeps the most recent point even when it arrives before an older one', () => {
+    // Out-of-order input: newer first, then older. A naive last-write-wins
+    // reduction would keep the older one here — this is what proves the
+    // function actually compares backupTime rather than just taking the
+    // last item seen.
+    const map = latestPerGuest([
+      snapshot({ backupTime: 1_700_009_999 }),
+      snapshot({ backupTime: 1_700_000_000 }),
+    ])
+    expect(map.get('vm/100')?.backupTime).toBe(1_700_009_999)
+  })
+
   it('handles an empty snapshot list', () => {
     expect(latestPerGuest([]).size).toBe(0)
   })

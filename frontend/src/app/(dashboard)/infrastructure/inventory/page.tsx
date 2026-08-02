@@ -547,10 +547,13 @@ return () => setPageInfo('', '', '')
 
         // Hauteur dynamique — remplit l'espace entre le navbar et la taskbar
         // 76px = 44px header + 20px paddings restants (bottom 12px + top absorbé 8px buffer)
-        height: { xs: 'auto', lg: 'calc(100vh - 76px - var(--taskbar-height, 0px))' },
-        maxHeight: { lg: 'calc(100vh - 76px - var(--taskbar-height, 0px))' },
+        height: { xs: 'auto', lg: 'calc(100vh - 76px - var(--taskbar-height, 0px) - var(--top-banner-height, 0px))' },
+        maxHeight: { lg: 'calc(100vh - 76px - var(--taskbar-height, 0px) - var(--top-banner-height, 0px))' },
         overflow: 'hidden',
         transition: 'height 0.2s ease, max-height 0.2s ease',
+
+        // Pas d'animation pendant le drag-resize de la taskbar (TasksFooter #582)
+        'html[data-taskbar-resizing] &': { transition: 'none' },
 
         // Curseur de resize global pendant le drag
         cursor: isResizing ? 'col-resize' : 'default',

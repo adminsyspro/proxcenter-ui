@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -30,10 +33,19 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       ? `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`
       : `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`
     
-    const response = await orchestrator.get(endpoint)
+    const result = await orchestratorOrPve(
+      'firewall/vms',
+      () => orchestrator.get(endpoint),
+      async () => {
+        const conn = await getConnectionById(connectionId)
 
-    
-return NextResponse.json(response.data)
+        return type === 'rules'
+          ? pveDirect.getVMRules(conn, node, vmType, vmid)
+          : pveDirect.getVMOptions(conn, node, vmType, vmid)
+      },
+    )
+
+    return NextResponse.json(result)
   } catch (e: any) {
     console.error("[firewall/vms] GET error:", e)
     
@@ -55,13 +67,13 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 
     const orchestrator = getOrchestratorClient()
 
-    const response = await orchestrator.post(
-      `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`,
-      body
+    const result = await orchestratorOrPve(
+      'firewall/vms',
+      () => orchestrator.post(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`, body),
+      async () => pveDirect.addVMRule(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
 
-    
-return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (e: any) {
     console.error("[firewall/vms] POST error:", e)
     
@@ -83,13 +95,13 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
 
     const orchestrator = getOrchestratorClient()
 
-    const response = await orchestrator.put(
-      `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`,
-      body
+    const result = await orchestratorOrPve(
+      'firewall/vms',
+      () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`, body),
+      async () => pveDirect.updateVMOptions(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
 
-    
-return NextResponse.json(response.data)
+    return NextResponse.json(result)
   } catch (e: any) {
     console.error("[firewall/vms] PUT error:", e)
     

@@ -392,9 +392,11 @@ export default function VmDetailTabs(props: any) {
     showCreateSnapshot,
     snapshotActionBusy,
     snapshotFeatureAvailable,
+    snapshotRowTasks = {} as Record<string, 'delete' | 'create' | 'rollback'>,
     snapshots,
     snapshotsError,
     snapshotsLoading,
+    snapshotTaskBusy,
     sourceCephAvailable,
     refreshData,
     tags,
@@ -3379,14 +3381,16 @@ return (
                           <MuiTooltip
                             title={deleteAllBusy
                               ? `${t('inventory.deletingSnapshots')} ${deleteAllProgress.done}/${deleteAllProgress.total}`
-                              : t('inventory.deleteAllSnapshots')}
+                              : snapshotTaskBusy
+                                ? t('inventory.snapshotTaskRunning')
+                                : t('inventory.deleteAllSnapshots')}
                           >
                             <span>
                               <IconButton
                                 size="small"
                                 color="error"
                                 onClick={deleteAllSnapshots}
-                                disabled={snapshotActionBusy || deleteAllBusy}
+                                disabled={snapshotActionBusy || deleteAllBusy || snapshotTaskBusy}
                                 aria-label={t('inventory.deleteAllSnapshots')}
                               >
                                 {deleteAllBusy
@@ -3403,16 +3407,20 @@ return (
                           </MuiTooltip>
                         )}
                         {!showCreateSnapshot && snapshotFeatureAvailable !== false && (
-                          <MuiTooltip title={t('inventory.takeSnapshot')}>
+                          <MuiTooltip title={snapshotTaskBusy ? t('inventory.snapshotTaskRunning') : t('inventory.takeSnapshot')}>
                             <span>
                               <IconButton
                                 size="small"
                                 color="primary"
                                 onClick={() => setShowCreateSnapshot(true)}
-                                disabled={snapshotActionBusy}
+                                disabled={snapshotActionBusy || snapshotTaskBusy}
                                 aria-label={t('inventory.takeSnapshot')}
                               >
-                                <i className="ri-add-line" style={{ fontSize: 18 }} />
+                                {/* PVE keeps the VM locked for the whole snapshot task: show the
+                                    wait instead of a bare greyed-out button. */}
+                                {snapshotTaskBusy
+                                  ? <CircularProgress size={18} />
+                                  : <i className="ri-add-line" style={{ fontSize: 18 }} />}
                               </IconButton>
                             </span>
                           </MuiTooltip>
@@ -3489,8 +3497,8 @@ return (
                               variant="contained"
                               size="small"
                               onClick={createSnapshot}
-                              disabled={!newSnapshotName.trim() || snapshotActionBusy}
-                              startIcon={snapshotActionBusy ? <CircularProgress size={14} /> : <i className="ri-camera-line" />}
+                              disabled={!newSnapshotName.trim() || snapshotActionBusy || snapshotTaskBusy}
+                              startIcon={snapshotActionBusy || snapshotTaskBusy ? <CircularProgress size={14} /> : <i className="ri-camera-line" />}
                             >
                               {t('common.create')}
                             </Button>
@@ -3569,6 +3577,13 @@ return (
                             .sort((a, b) => (b.snaptime || 0) - (a.snaptime || 0))
                             .map((snap, idx, arr) => {
                               const isOldest = idx === arr.length - 1
+                              // The PVE task behind this row is still running: PVE writes
+                              // the snapshot entry into the VM config before the task ends
+                              // (create/rollback), and a deleted row legitimately stays in
+                              // the list until the merge finishes — show it as in progress
+                              // instead of letting it look frozen or already done.
+                              const rowTask = snapshotRowTasks[snap.name]
+                              const rowTaskLabels = { delete: 'common.deleting', create: 'common.creating', rollback: 'common.restoring' } as const
 
                               
 return (
@@ -3584,29 +3599,32 @@ return (
                                   }}
                                 >
                                   {/* Point de timeline */}
-                                  <Box sx={{ 
-                                    width: 40, 
-                                    height: 40, 
-                                    borderRadius: '50%', 
-                                    bgcolor: snap.vmstate ? 'info.main' : 'background.paper',
+                                  <Box sx={{
+                                    width: 40,
+                                    height: 40,
+                                    borderRadius: '50%',
+                                    bgcolor: snap.vmstate ? 'primary.main' : 'background.paper',
                                     border: '2px solid',
-                                    borderColor: snap.vmstate ? 'info.main' : 'divider',
+                                    borderColor: snap.vmstate ? 'primary.main' : 'divider',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    color: snap.vmstate ? 'info.contrastText' : 'text.secondary',
+                                    color: snap.vmstate ? 'primary.contrastText' : 'text.secondary',
                                     zIndex: 1
                                   }}>
-                                    <i className={snap.vmstate ? "ri-save-3-fill" : "ri-camera-fill"} style={{ fontSize: 18 }} />
+                                    {rowTask
+                                      ? <CircularProgress size={18} color="inherit" />
+                                      : <i className={snap.vmstate ? "ri-save-3-fill" : "ri-camera-fill"} style={{ fontSize: 18 }} />}
                                   </Box>
                                   
                                   {/* Contenu */}
                                   <Card 
                                     variant="outlined" 
                                     sx={{ 
-                                      flex: 1, 
+                                      flex: 1,
                                       bgcolor: 'transparent',
-                                      '&:hover': { bgcolor: 'action.hover' }
+                                      opacity: rowTask ? 0.6 : 1,
+                                      '&:hover': { bgcolor: rowTask ? 'transparent' : 'action.hover' }
                                     }}
                                   >
                                     <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
@@ -3617,12 +3635,12 @@ return (
                                               {snap.name}
                                             </Typography>
                                             {snap.vmstate && (
-                                              <Chip 
-                                                size="small" 
-                                                label="RAM" 
-                                                color="info"
+                                              <Chip
+                                                size="small"
+                                                label="RAM"
+                                                color="primary"
                                                 icon={<i className="ri-ram-line" style={{ fontSize: 12 }} />}
-                                                sx={{ height: 20, fontSize: '0.65rem' }} 
+                                                sx={{ height: 20, fontSize: '0.65rem' }}
                                               />
                                             )}
                                             {isOldest && (
@@ -3631,6 +3649,14 @@ return (
                                                 label={t('inventory.oldest')}
                                                 variant="outlined"
                                                 sx={{ height: 20, fontSize: '0.65rem' }} 
+                                              />
+                                            )}
+                                            {rowTask && (
+                                              <Chip
+                                                size="small"
+                                                label={t(rowTaskLabels[rowTask])}
+                                                variant="outlined"
+                                                sx={{ height: 20, fontSize: '0.65rem' }}
                                               />
                                             )}
                                           </Box>
@@ -3662,7 +3688,7 @@ return (
                                             <IconButton
                                               size="small"
                                               onClick={() => rollbackSnapshot(snap.name, snap.vmstate)}
-                                              disabled={snapshotActionBusy}
+                                              disabled={snapshotActionBusy || snapshotTaskBusy}
                                               sx={{
                                                 color: 'warning.main',
                                                 '&:hover': { bgcolor: 'warning.main', color: 'warning.contrastText' }
@@ -3675,7 +3701,7 @@ return (
                                             <IconButton
                                               size="small"
                                               onClick={() => deleteSnapshot(snap.name)}
-                                              disabled={snapshotActionBusy}
+                                              disabled={snapshotActionBusy || snapshotTaskBusy}
                                               sx={{
                                                 color: 'error.main',
                                                 '&:hover': { bgcolor: 'error.main', color: 'error.contrastText' }

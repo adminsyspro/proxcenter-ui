@@ -244,7 +244,11 @@ return json.data || {}
     )
   }
 
-  if (!trendsData || trendsData.length === 0) {
+  const isEmpty = !trendsData || trendsData.length === 0
+
+  // Nothing to plot and no connection filter to blame: there is no control the
+  // user could act on, so the bare empty state is still the right answer.
+  if (isEmpty && selectedConnections.length === 0) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4, opacity: 0.65 }}>
         <Typography variant="caption">{t('common.noData')}</Typography>
@@ -286,8 +290,19 @@ return json.data || {}
         )}
       </Box>
 
-      {/* Chart */}
+      {/* Chart — an active connection filter can empty it, so the empty state
+          stays here and never replaces the controls above (#611). */}
       <Box sx={{ flex: 1, minHeight: 100, width: '100%' }}>
+        {isEmpty ? (
+          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+            <Typography variant="caption" sx={{ opacity: 0.65 }}>{t('common.noResults')}</Typography>
+            <Box onClick={() => handleFilterChange([])} sx={{
+              px: 1, py: 0.25, borderRadius: 1, cursor: 'pointer', fontSize: '0.7143rem', fontWeight: 600,
+              color: c.textMuted, bgcolor: c.borderLight,
+              '&:hover': { bgcolor: c.surfaceSubtle, color: '#fff' },
+            }}>{t('common.reset')}</Box>
+          </Box>
+        ) : (
         <ChartContainer>
           <AreaChart data={trendsData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
@@ -329,6 +344,7 @@ return (
             })}
           </AreaChart>
         </ChartContainer>
+        )}
       </Box>
 
     </Box>

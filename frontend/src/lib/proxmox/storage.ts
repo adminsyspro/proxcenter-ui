@@ -29,6 +29,9 @@ export function supportsVmDisks(type: string): boolean {
 export type RawStorageEntry = {
   connId: string
   connName: string
+  /** Tenant owning the connection. Stamped by /api/v1/storage (issue #609). */
+  tenantId?: string
+  tenantName?: string | null
   node: string
   storage: string
   type: string
@@ -63,6 +66,8 @@ export type AggregatedStorage = {
   shared: boolean
   connId: string
   connName: string
+  tenantId?: string
+  tenantName?: string | null
   connectionName: string
   connections: { id: string; name: string }[]
   node: string
@@ -192,6 +197,8 @@ export function aggregateStorage(entries: RawStorageEntry[]): AggregatedStorage[
       shared,
       connId: rep.connId,
       connName: rep.connName,
+      tenantId: rep.tenantId,
+      tenantName: rep.tenantName,
       connectionName: rep.connName,
       connections: [{ id: rep.connId, name: rep.connName }],
       node: allNodes[0] || rep.node || '',

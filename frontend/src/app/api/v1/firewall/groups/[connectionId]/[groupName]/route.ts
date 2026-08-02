@@ -3,6 +3,9 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import * as pveDirect from '@/lib/firewall/pveDirect'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -21,7 +24,12 @@ export async function DELETE(
 
     const orchestrator = getOrchestratorClient()
 
-    await orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}`)
+    // Community has no orchestrator: delete straight on PVE (#616).
+    await orchestratorOrPve(
+      'firewall/groups',
+      () => orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}`),
+      async () => pveDirect.deleteSecurityGroup(await getConnectionById(connectionId), groupName),
+    )
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

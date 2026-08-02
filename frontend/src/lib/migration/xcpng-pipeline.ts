@@ -34,8 +34,10 @@ import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
+import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startJobHeartbeat } from "./job-heartbeat"
 
-type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "completed" | "failed" | "cancelled"
+type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
 interface MigrationConfig {
   sourceConnectionId: string
@@ -51,6 +53,13 @@ interface MigrationConfig {
    */
   vlanTag?: number
   startAfterMigration: boolean
+  /**
+   * Convert the migrated data disks to qcow2 after the migration (one `move_disk`
+   * per disk on the same storage), so they can take Proxmox snapshots on a
+   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
+   * conversion can never fail the migration.
+   */
+  convertDisksToQcow2?: boolean
   migrationType?: "cold" | "live"
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
@@ -231,6 +240,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
   let targetVmid: number | null = null
   let storageTempDir = ''
+
+  // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
+  // runs so a long silent step (#606) is never mistaken for a dead process.
+  const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
 
   try {
     // ── STEP 0: Pre-flight ──
@@ -802,13 +815,29 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       await appendLog(jobId, "VM started", "success")
     }
 
+    // ── STEP 6: Optional qcow2 conversion (#595) ──
+    // After the disks are attached and after the optional start: on a running
+    // VM PVE does move_disk as a live drive-mirror, no extra downtime. The
+    // helper gates itself (opt-in, storage default format, free space) and
+    // NEVER throws: a conversion problem leaves the disks raw, not the
+    // migration failed.
+    await convertDisksToQcow2({
+      enabled: config.convertDisksToQcow2 === true,
+      conn: pveConn, node: config.targetNode, vmid: targetVmid!,
+      targetStorage: config.targetStorage, volumes: allocatedVolumes,
+      log: (m, l) => appendLog(jobId, m, l),
+      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    })
+
     // ── DONE ──
     await updateJob(jobId, "completed", {
       progress: 100,
       bytesTransferred: BigInt(totalDiskBytes),
       totalBytes: BigInt(totalDiskBytes),
     })
-    await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success")
+    // Non-fatal: a failing log append after the terminal write must not throw
+    // us into the catch, which would flip a completed job to "failed" (#608).
+    await appendLog(jobId, `Migration completed successfully! VM ${targetVmid} is ready on ${config.targetNode}.`, "success").catch(() => {})
 
     const { audit } = await import("@/lib/audit")
     await audit({
@@ -825,8 +854,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     })
   } catch (err: any) {
     const errorMsg = err?.message || String(err)
-    await updateJob(jobId, "failed", { error: errorMsg })
-    await appendLog(jobId, `Migration failed: ${errorMsg}`, "error")
+    // Terminal status first, and nothing may prevent it — a throwing appendLog
+    // or DB hiccup here would leave the row non-terminal forever (#608). The
+    // cleanup below must also run even if these writes fail.
+    await updateJob(jobId, "failed", { error: errorMsg }).catch(() => {})
+    await appendLog(jobId, `Migration failed: ${errorMsg}`, "error").catch(() => {})
 
     // Cleanup: remove temp files
     try {
@@ -851,6 +883,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    stopHeartbeat()
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }

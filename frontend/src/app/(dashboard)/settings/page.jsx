@@ -58,24 +58,33 @@ import { useAISettings } from '@/hooks/useAISettings'
 import { useGreenSettings } from '@/hooks/useGreenSettings'
 
 // Import dynamique pour éviter les erreurs SSR
+// One shared loading fallback for every lazily-imported tab. Repeating the
+// same JSX per import puts any new tab inside an already-duplicated block,
+// which fails the new-code duplication gate.
+const tabLoading = () => (
+  <Box sx={{ p: 3, textAlign: 'center' }}>
+    <LinearProgress />
+  </Box>
+)
+
 const NotificationsTab = dynamic(() => import('@/components/settings/NotificationsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const AppearanceTab = dynamic(() => import('@/components/settings/AppearanceTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const LdapConfigTab = dynamic(() => import('@/components/settings/LdapConfigTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const OidcConfigTab = dynamic(() => import('@/components/settings/OidcConfigTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionDialog'), {
@@ -84,7 +93,7 @@ const ConnectionDialog = dynamic(() => import('@/components/settings/ConnectionD
 
 const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
@@ -93,27 +102,32 @@ const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticMo
 
 const WhiteLabelTab = dynamic(() => import('@/components/settings/WhiteLabelTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const VdcTab = dynamic(() => import('@/components/settings/VdcTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const TenantsTab = dynamic(() => import('@/components/settings/TenantsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const AlertThresholdsTab = dynamic(() => import('@/components/settings/AlertThresholdsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
 })
 
 const SshCommandsTab = dynamic(() => import('@/components/settings/SshCommandsTab'), {
   ssr: false,
-  loading: () => <Box sx={{ p: 3, textAlign: 'center' }}><LinearProgress /></Box>
+  loading: tabLoading
+})
+
+const BroadcastTab = dynamic(() => import('@/components/settings/BroadcastTab'), {
+  ssr: false,
+  loading: tabLoading
 })
 
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {
@@ -3028,13 +3042,14 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
     { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
+    { label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
     { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },

@@ -3,6 +3,8 @@
 
 import { z } from 'zod'
 
+import type { BroadcastInput } from '@/lib/broadcast/types'
+
 // ─── Connections ───────────────────────────────────────────────────────────────
 
 /** POST /api/v1/connections — create a Proxmox connection */
@@ -363,3 +365,78 @@ export const deploySchema = z.object({
   saveAsBlueprint: z.boolean().default(false),
   blueprintName: z.string().max(100).optional(),
 })
+
+// ─── Broadcast banner ────────────────────────────────────────────────────────
+
+/** Anchored, no nested quantifiers: keeps Sonar S5852 quiet. */
+const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/
+
+/** Anchored, fixed reps, no nested quantifier: S5852-safe. */
+const ISO_DATE_PREFIX = /^(\d{4})-(\d{2})-(\d{2})/
+
+/**
+ * `new Date()` silently rolls an impossible calendar date forward instead of
+ * rejecting it (2026-02-30 becomes 2026-03-02), so a direct API caller could
+ * silently schedule a window on a different day than requested. A browser
+ * datetime-local field cannot produce such a string, but this closes the
+ * hole for any string that looks like an ISO date. Anything else (a Date
+ * instance, a non-ISO-looking string) is left to the existing NaN check.
+ */
+function isRoundTrippableDate(raw: string): boolean {
+  const match = ISO_DATE_PREFIX.exec(raw)
+  if (!match) return true
+  const [, year, month, day] = match
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return true
+  return (
+    parsed.getUTCFullYear() === Number(year) &&
+    parsed.getUTCMonth() + 1 === Number(month) &&
+    parsed.getUTCDate() === Number(day)
+  )
+}
+
+const optionalDate = z
+  .union([z.string(), z.date()])
+  .nullish()
+  .refine(v => typeof v !== 'string' || v === '' || isRoundTrippableDate(v), 'Invalid date')
+  .transform(v => (v === null || v === undefined || v === '' ? null : new Date(v)))
+  .refine(v => v === null || !Number.isNaN(v.getTime()), 'Invalid date')
+
+/** POST/PUT /api/v1/settings/broadcast — create or update a broadcast banner */
+export const broadcastMessageSchema = z
+  .object({
+    message: z.string().transform(s => s.trim()).refine(s => s.length >= 1, 'message is required').refine(s => s.length <= 500, 'message is too long'),
+    bgColor: z.string().regex(HEX_COLOUR, 'bgColor must be #rrggbb'),
+    fgColor: z.string().regex(HEX_COLOUR, 'fgColor must be #rrggbb'),
+    dismissible: z.boolean().default(true),
+    enabled: z.boolean().default(true),
+    startsAt: optionalDate,
+    endsAt: optionalDate,
+    targetKind: z.enum(['all', 'tenants', 'roles']),
+    targetIds: z.array(z.string().min(1)).default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.targetKind !== 'all' && data.targetIds.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'targetIds is required for this target', path: ['targetIds'] })
+    }
+    if (data.startsAt && data.endsAt && data.endsAt.getTime() <= data.startsAt.getTime()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'endsAt must be after startsAt', path: ['endsAt'] })
+    }
+  })
+  .transform((data): BroadcastInput => ({
+    // zod v4 infers the transform-bearing fields as optional and drops `null`
+    // from their output types, although each is always present after a
+    // successful parse (verified for minimal input, explicit nulls, empty
+    // strings and a fully populated payload). Pinning the contract here, once,
+    // keeps every consumer cast-free — and listing the fields explicitly means
+    // a new column added to the model cannot silently widen this payload.
+    message: data.message as string,
+    bgColor: data.bgColor,
+    fgColor: data.fgColor,
+    dismissible: data.dismissible,
+    enabled: data.enabled,
+    startsAt: data.startsAt ?? null,
+    endsAt: data.endsAt ?? null,
+    targetKind: data.targetKind,
+    targetIds: data.targetKind === 'all' ? [] : data.targetIds,
+  }))

@@ -27,6 +27,7 @@ vi.mock("@/lib/migration/v2v-pipeline", () => ({ runV2vMigrationPipeline: vi.fn(
 vi.mock("@/lib/migration/xcpng-pipeline", () => ({ runXcpngMigrationPipeline: vi.fn() }))
 vi.mock("@/lib/vmware/soap", () => ({ soapLogin: vi.fn(), soapLogout: vi.fn(), soapGetVmConfig: vi.fn(), parseVmConfig: vi.fn() }))
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pass") }))
+vi.mock("@/lib/migration/orphan-sweep", () => ({ resolveInstanceId: vi.fn(() => "inst-1") }))
 
 import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
@@ -42,6 +43,11 @@ const body = {
 }
 
 async function runAfters() { for (const cb of h.afterCbs) await cb() }
+
+/** The `data` payload of the first migrationJob.create call of the test. */
+function createdJobData(): any {
+  return (h.prisma.migrationJob.create as any).mock.calls[0][0].data
+}
 
 beforeEach(() => {
   h.afterCbs.length = 0
@@ -95,6 +101,69 @@ describe("POST /api/v1/migrations — warm routing", () => {
     await runAfters()
     expect(warm).not.toHaveBeenCalled()
     expect(cold).not.toHaveBeenCalled()
+  })
+
+  // #608 orphan detection: the pipeline runs in this process's after()
+  // continuation, so the created row must carry this server's instance id.
+  it("persists the owner instance id on the created job", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+    expect(h.prisma.migrationJob.create).toHaveBeenCalledTimes(1)
+    expect(h.prisma.migrationJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ownerInstanceId: "inst-1" }) }),
+    )
+  })
+
+  // Boolean options must be coerced strictly: raw API callers serialise form
+  // state as strings, and `"false"` is truthy. That is how a job whose caller
+  // "did not select the option to start VM" still logged `Target VM started`
+  // (#443) — the same class of bug the new convertDisksToQcow2 flag would have.
+  it('coerces the string "false" to real false for startAfterMigration and convertDisksToQcow2', async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, startAfterMigration: "false", convertDisksToQcow2: "false" } })
+    expect(res.status).toBe(200)
+
+    // persisted config (what a retry replays) holds real booleans
+    expect(createdJobData().config.startAfterMigration).toBe(false)
+    expect(createdJobData().config.convertDisksToQcow2).toBe(false)
+
+    // and the pipeline gate receives the same
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ startAfterMigration: false, convertDisksToQcow2: false })
+  })
+
+  it("defaults both options to false when omitted, and forwards an explicit true", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValue({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    await callRoute(POST, { body })
+    expect(createdJobData().config).toMatchObject({
+      startAfterMigration: false, convertDisksToQcow2: false,
+    })
+
+    h.prisma.migrationJob.create.mockClear()
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    await callRoute(POST, { body: { ...body, startAfterMigration: true, convertDisksToQcow2: true } })
+    expect(createdJobData().config).toMatchObject({
+      startAfterMigration: true, convertDisksToQcow2: true,
+    })
+
+    await runAfters()
+    const last = warm.mock.calls[warm.mock.calls.length - 1][1]
+    expect(last).toMatchObject({ startAfterMigration: true, convertDisksToQcow2: true })
   })
 
   it("dispatches a vCenter warm request to runWarmMigration, never the cold pipeline", async () => {

@@ -46,6 +46,7 @@ import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useOrchestratorAlerts, useAlertsSummary, useAlertRules } from '@/hooks/useAlerts'
 import { useConnections } from '@/hooks/useConnections'
+import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
@@ -312,9 +313,9 @@ export default function AlertsPage() {
   const [severityFilter, setSeverityFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('active')
 
-  // Selection for bulk actions
+  // Selection for bulk actions. The concrete id list is derived below, once
+  // filteredAlerts (the grid's row set) exists.
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>({ type: 'include', ids: new Set() })
-  const selectedAlertIds = Array.from(selectionModel.ids) as string[]
 
   // Mute popover
   const [muteAnchorEl, setMuteAnchorEl] = useState<null | HTMLElement>(null)
@@ -397,6 +398,13 @@ return () => setPageInfo('', '', '')
 return true
     })
   }, [alerts, search, severityFilter, statusFilter])
+
+  // The header "select all" checkbox emits an "exclude" model instead of the
+  // selected rows, so the id list has to be resolved against the grid's rows (#568).
+  const selectedAlertIds = useMemo(
+    () => resolveSelectedRowIds(selectionModel, filteredAlerts),
+    [selectionModel, filteredAlerts]
+  )
 
   const handleClearAll = () => {
     if (!isEnterprise) return

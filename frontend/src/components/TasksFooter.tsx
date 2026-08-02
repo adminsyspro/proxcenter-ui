@@ -27,6 +27,17 @@ import { useSharedTasks } from '@/hooks/useSharedTasks'
 import { mergeSharedTasks, type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
 import TaskDetailDialog from './TaskDetailDialog'
 import SharedTaskDetailDialog from '@/components/SharedTaskDetailDialog'
+import {
+  TASKBAR_HEADER_HEIGHT,
+  TASKBAR_MIN_PANEL_HEIGHT,
+  TASKBAR_MAX_PANEL_HEIGHT,
+  clampTaskbarPanelHeight,
+  panelHeightFromPointer,
+  publishTaskbarHeight,
+  clearTaskbarHeight,
+  readStoredPanelHeight,
+  storePanelHeight
+} from './taskbarHeight'
 
 // ============================================
 // Types
@@ -97,33 +108,28 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   stopped: 'tasks.status.stopped',
 }
 
-function formatTime(dateStr: string | null, dateLocale: string): string {
-  if (!dateStr) return '—'
+// Full date + time: a task list spanning several days is unreadable when only
+// the time is shown, so the day/month/year is always spelled out. Accepts the
+// Date produced by the columns' valueGetter as well as a raw ISO string.
+function formatDateTime(value: Date | string | null, dateLocale: string): string {
+  if (!value) return '—'
 
   try {
-    const date = new Date(dateStr)
-    return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const date = value instanceof Date ? value : new Date(value)
+
+    // toLocaleString would render "Invalid Date" instead of throwing.
+    if (Number.isNaN(date.getTime())) return String(value)
+
+    return date.toLocaleString(dateLocale, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
   } catch {
-    return dateStr
-  }
-}
-
-function formatDateStr(dateStr: string | null, dateLocale: string): string {
-  if (!dateStr) return '—'
-
-  try {
-    const date = new Date(dateStr)
-    const today = new Date()
-    const isToday = date.toDateString() === today.toDateString()
-
-    if (isToday) {
-      return date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    }
-
-    return date.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' }) + ' ' +
-           date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return dateStr
+    return String(value)
   }
 }
 
@@ -170,23 +176,41 @@ export default function TasksFooter({
   // SWR hook for task events
   const { data: tasksRaw, mutate: mutateTasks, isLoading: loading } = useTaskEvents(50)
 
-  // Derive tasks from SWR data
-  const tasks: TaskEvent[] = (tasksRaw?.data || []).map((e: any) => ({
-    id: e.id,
-    upid: e.id,
-    type: e.type,
-    status: e.status,
-    startTime: e.ts,
-    endTime: e.endTs,
-    duration: e.duration,
-    node: e.node,
-    user: e.user,
-    description: e.typeLabel || e.message,
-    entity: e.entity || null,
-    entityName: e.entityName || null,
-    connectionId: e.connectionId,
-    connectionName: e.connectionName
-  }))
+  // Derive tasks from SWR data. Memoised so the DataGrid is not handed brand-new
+  // row objects on every render (it keys its internal state on row identity).
+  const tasks: TaskEvent[] = useMemo(
+    () =>
+      (tasksRaw?.data || []).map((e: any) => ({
+        id: e.id,
+        upid: e.id,
+        type: e.type,
+        status: e.status,
+        startTime: e.ts,
+        endTime: e.endTs,
+        duration: e.duration,
+        node: e.node,
+        user: e.user,
+        description: e.typeLabel || e.message,
+        entity: e.entity || null,
+        entityName: e.entityName || null,
+        connectionId: e.connectionId,
+        connectionName: e.connectionName
+      })),
+    [tasksRaw]
+  )
+
+  // Running tasks first; the grid's own sortModel takes precedence once the user
+  // clicks a header. Memoised for the same row-identity reason as above.
+  const sortedTasks: TaskEvent[] = useMemo(
+    () =>
+      [...tasks].sort((a, b) => {
+        const aRunning = a.status === 'running' ? 0 : 1
+        const bRunning = b.status === 'running' ? 0 : 1
+
+        return aRunning - bRunning
+      }),
+    [tasks]
+  )
 
   // State - initialize with defaults, then hydrate from localStorage
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -194,6 +218,15 @@ export default function TasksFooter({
   const [isHydrated, setIsHydrated] = useState(false)
   const [selectedTask, setSelectedTask] = useState<TaskEvent | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+
+  // Panel height (resizable by dragging, #582). `maxHeight` stays the seed
+  // so the default appearance is unchanged for users who never drag.
+  const [panelHeight, setPanelHeight] = useState(() => {
+    if (typeof window === 'undefined') return clampTaskbarPanelHeight(maxHeight)
+
+    return clampTaskbarPanelHeight(readStoredPanelHeight() ?? maxHeight, window.innerHeight)
+  })
+  const [isResizing, setIsResizing] = useState(false)
 
   // Hydrate from localStorage after mount (client-side only)
   useEffect(() => {
@@ -214,16 +247,67 @@ export default function TasksFooter({
   // Communicate taskbar height to layout via CSS custom property
   useEffect(() => {
     if (!isHydrated) return
-    const headerHeight = 36
     let height = 0
     if (!hidden) {
-      height = expanded ? headerHeight + maxHeight : headerHeight
+      height = expanded ? TASKBAR_HEADER_HEIGHT + panelHeight : TASKBAR_HEADER_HEIGHT
     }
-    document.documentElement.style.setProperty('--taskbar-height', `${height}px`)
+    publishTaskbarHeight(height)
     return () => {
-      document.documentElement.style.setProperty('--taskbar-height', '0px')
+      clearTaskbarHeight()
     }
-  }, [hidden, expanded, maxHeight, isHydrated])
+  }, [hidden, expanded, panelHeight, isHydrated])
+
+  // Drag resize: document-level listeners only while a drag is in flight.
+  // Mirrors the inventory tree resizer (page.tsx), transposed to vertical.
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPanelHeight(panelHeightFromPointer(e.clientY, window.innerHeight))
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    // Lock selection + cursor for the whole drag, restoring previous values.
+    const prevUserSelect = document.body.style.userSelect
+    const prevCursor = document.body.style.cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'ns-resize'
+
+    // Marker consumed by StyledMain and the inventory page to suppress their
+    // 0.2s taskbar-height transitions while dragging (they would lag the bar).
+    document.documentElement.setAttribute('data-taskbar-resizing', '')
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.userSelect = prevUserSelect
+      document.body.style.cursor = prevCursor
+      document.documentElement.removeAttribute('data-taskbar-resizing')
+    }
+  }, [isResizing])
+
+  // Persiste la hauteur du panneau. Écrit une fois par redimensionnement
+  // (au relâchement), pas à chaque mousemove.
+  useEffect(() => {
+    if (!isHydrated || isResizing) return
+    storePanelHeight(panelHeight)
+  }, [isResizing, panelHeight, isHydrated])
+
+  // Re-clamp when the window shrinks so the bar cannot swallow the screen.
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setPanelHeight(prev => clampTaskbarPanelHeight(prev, window.innerHeight))
+    }
+
+    window.addEventListener('resize', handleWindowResize)
+    return () => window.removeEventListener('resize', handleWindowResize)
+  }, [])
 
   // Persist state
   useEffect(() => {
@@ -241,6 +325,22 @@ export default function TasksFooter({
   // Handlers
   const handleToggleExpand = () => {
     setExpanded(prev => !prev)
+  }
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    // stopPropagation: a drag on the handle must not toggle the header's
+    // onClick={handleToggleExpand} underneath.
+    e.preventDefault()
+    e.stopPropagation()
+    setIsResizing(true)
+  }
+
+  const handleResizeKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    e.stopPropagation()
+    const delta = e.key === 'ArrowUp' ? 24 : -24
+    setPanelHeight(prev => clampTaskbarPanelHeight(prev + delta, window.innerHeight))
   }
 
   const handleHide = () => {
@@ -282,27 +382,41 @@ export default function TasksFooter({
     {
       field: 'startTime',
       headerName: t('tasks.columns.start'),
-      width: 110,
+      // Wide enough for the longest locale rendering without truncation: en-US
+      // adds AM/PM ("07/29/2026, 02:10:34 AM") and ko-KR uses double-width CJK
+      // ("2026. 7. 29. 오전 02:10:34").
+      width: 200,
+      // type + Date valueGetter: without them the grid treats the ISO string as
+      // text, so sorting is lexicographic and the filter panel offers "contains"
+      // against the raw ISO value instead of date operators.
+      type: 'dateTime',
+      valueGetter: (value) => (value ? new Date(value) : null),
       renderCell: (params) => (
-        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-          {formatTime(params.value, dateLocale)}
+        <Typography variant="caption" noWrap>
+          {formatDateTime(params.value, dateLocale)}
         </Typography>
       )
     },
     {
       field: 'endTime',
       headerName: t('tasks.columns.end'),
-      width: 110,
+      width: 200,
+      type: 'dateTime',
+      valueGetter: (value) => (value ? new Date(value) : null),
       renderCell: (params) => (
-        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-          {formatTime(params.value, dateLocale)}
+        <Typography variant="caption" noWrap>
+          {formatDateTime(params.value, dateLocale)}
         </Typography>
       )
     },
     {
       field: 'node',
       headerName: t('tasks.columns.node'),
-      width: 180,
+      // Node names are uppercase hostnames, which are wider than the average
+      // glyph: "PROXMOX-STORE-GRA4" alone needs ~182px once the icon, gap and
+      // cell padding are counted. Sized for ~28 characters; anything longer
+      // still falls back to the title tooltip.
+      width: 240,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <img src="/images/proxmox-logo-dark.svg" alt="" style={{ width: 14, height: 14, opacity: 0.7, flexShrink: 0 }} />
@@ -315,8 +429,11 @@ export default function TasksFooter({
     {
       field: 'entity',
       headerName: t('tasks.columns.target'),
+      // Stays flexible: a VM name plus its vmid has no bounded length, so it
+      // absorbs leftover width instead of guessing. The floor is raised so it
+      // does not collapse to an unreadable sliver on a narrow viewport.
       flex: 1,
-      minWidth: 150,
+      minWidth: 220,
       renderCell: (params) => {
         const name = params.row.entityName
         const vmid = params.value
@@ -356,7 +473,10 @@ export default function TasksFooter({
     {
       field: 'status',
       headerName: t('tasks.columns.status'),
-      width: 120,
+      // A failed Proxmox task puts its whole error string here (e.g. "command
+      // 'apt-get update' failed: exit code 100"), which is unbounded, hence
+      // the title below, since no width fits every message.
+      width: 180,
       align: 'right',
       headerAlign: 'right',
       renderCell: (params) => {
@@ -368,6 +488,7 @@ export default function TasksFooter({
           <Chip
             size="small"
             label={getStatusLabel(status)}
+            title={getStatusLabel(status)}
             color={color}
             variant={isRunning ? 'outlined' : 'filled'}
             sx={{
@@ -462,6 +583,44 @@ export default function TasksFooter({
           colorScheme: 'dark',
         }}
       >
+        {/* Drag handle (#582): absolute overlay on the top edge, contributes
+            0px to the bar's height. Only rendered when expanded: a collapsed
+            bar has nothing to resize. */}
+        {expanded && (
+          <Box
+            onMouseDown={handleResizeStart}
+            onKeyDown={handleResizeKeyDown}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t('tasks.resizePanel')}
+            aria-valuenow={panelHeight}
+            aria-valuemin={TASKBAR_MIN_PANEL_HEIGHT}
+            aria-valuemax={TASKBAR_MAX_PANEL_HEIGHT}
+            tabIndex={0}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 6,
+              zIndex: 1, // above the header row
+              cursor: 'ns-resize',
+              bgcolor: 'transparent',
+              transition: 'background-color 0.15s',
+              '&:hover': {
+                bgcolor: alpha(darkTaskbarTheme.palette.primary.main, 0.5)
+              },
+              '&:focus-visible': {
+                outline: 'none',
+                bgcolor: alpha(darkTaskbarTheme.palette.primary.main, 0.5)
+              },
+              ...(isResizing && {
+                bgcolor: alpha(darkTaskbarTheme.palette.primary.main, 0.7),
+                '&:hover': { bgcolor: alpha(darkTaskbarTheme.palette.primary.main, 0.7) }
+              })
+            }}
+          />
+        )}
         {/* Header */}
         <Box
           onClick={handleToggleExpand}
@@ -605,7 +764,7 @@ export default function TasksFooter({
         <Collapse in={expanded}>
           {/* ProxCenter tasks tab */}
           {activeTab === 'proxcenter' && (
-            <Box sx={{ height: maxHeight, overflow: 'auto', bgcolor: '#1e1e2d' }}>
+            <Box sx={{ height: panelHeight, overflow: 'auto', bgcolor: '#1e1e2d' }}>
               {mergedPcTasks.length === 0 ? (
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.4 }}>
                   <Typography variant="body2">No ProxCenter tasks</Typography>
@@ -695,7 +854,7 @@ export default function TasksFooter({
             </Box>
           )}
           {/* Proxmox tasks tab */}
-          <Box sx={{ height: maxHeight, display: activeTab === 'proxmox' ? 'block' : 'none', bgcolor: '#1e1e2d' }}>
+          <Box sx={{ height: panelHeight, display: activeTab === 'proxmox' ? 'block' : 'none', bgcolor: '#1e1e2d' }}>
             {loading ? (
               <Box sx={{ p: 2 }}>
                 {[...new Array(5)].map((_, i) => (
@@ -704,11 +863,7 @@ export default function TasksFooter({
               </Box>
             ) : (
               <DataGrid
-                rows={[...tasks].sort((a, b) => {
-                  const aRunning = a.status === 'running' ? 0 : 1
-                  const bRunning = b.status === 'running' ? 0 : 1
-                  return aRunning - bRunning
-                })}
+                rows={sortedTasks}
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick

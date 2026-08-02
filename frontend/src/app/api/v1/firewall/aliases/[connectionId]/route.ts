@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // GET /api/v1/firewall/aliases/[connectionId] - Get all aliases
 export async function GET(
@@ -20,9 +23,13 @@ export async function GET(
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/aliases/${connectionId}`)
+    const aliases = await orchestratorOrPve(
+      'firewall/aliases',
+      () => orchestrator.get(`/firewall/aliases/${connectionId}`),
+      async () => pveDirect.getAliases(await getConnectionById(connectionId)),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(aliases)
   } catch (error: any) {
     console.error('Error fetching aliases:', error)
     
@@ -49,9 +56,13 @@ export async function POST(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/aliases/${connectionId}`, body)
+    const created = await orchestratorOrPve(
+      'firewall/aliases',
+      () => orchestrator.post(`/firewall/aliases/${connectionId}`, body),
+      async () => pveDirect.createAlias(await getConnectionById(connectionId), body),
+    )
 
-    return NextResponse.json(response.data, { status: 201 })
+    return NextResponse.json(created, { status: 201 })
   } catch (error: any) {
     console.error('Error creating alias:', error)
     

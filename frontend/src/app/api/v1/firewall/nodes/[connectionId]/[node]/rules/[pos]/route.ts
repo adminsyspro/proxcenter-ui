@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 
 // PUT /api/v1/firewall/nodes/[connectionId]/[node]/rules/[pos] - Update/move node rule
 export async function PUT(
@@ -22,9 +25,13 @@ export async function PUT(
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.put(`/firewall/nodes/${connectionId}/${node}/rules/${pos}`, body)
+    const result = await orchestratorOrPve(
+      'firewall/nodes',
+      () => orchestrator.put(`/firewall/nodes/${connectionId}/${node}/rules/${pos}`, body),
+      async () => pveDirect.updateNodeRule(await getConnectionById(connectionId), node, pos, body),
+    )
 
-    return NextResponse.json(response.data)
+    return NextResponse.json(result)
   } catch (error: any) {
     console.error('Error updating node rule:', error)
     
@@ -50,7 +57,13 @@ export async function DELETE(
 
     const orchestrator = getOrchestratorClient()
 
-    await orchestrator.delete(`/firewall/nodes/${connectionId}/${node}/rules/${pos}`)
+    // Result discarded on purpose: this handler has always answered with its
+    // own literal body, on both paths.
+    await orchestratorOrPve(
+      'firewall/nodes',
+      () => orchestrator.delete(`/firewall/nodes/${connectionId}/${node}/rules/${pos}`),
+      async () => pveDirect.deleteNodeRule(await getConnectionById(connectionId), node, pos),
+    )
 
     return NextResponse.json({ status: 'deleted' })
   } catch (error: any) {

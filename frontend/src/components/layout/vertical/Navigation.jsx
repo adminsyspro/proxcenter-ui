@@ -39,9 +39,10 @@ const StyledBoxForShadow = styled('div')(({ theme }) => ({
 const HoverTriggerZone = styled('div')({
   position: 'fixed',
   left: 0,
-  top: 0,
+  // Keeps the strip below a fixed top banner and above the fixed tasks bar; each var is 0px when hidden.
+  top: 'var(--top-banner-height, 0px)',
   width: 12,
-  height: '100vh',
+  height: 'calc(100vh - var(--top-banner-height, 0px) - var(--taskbar-height, 0px))',
   zIndex: 1300,
   cursor: 'pointer',
 })
@@ -171,14 +172,21 @@ const Navigation = props => {
         sx={{
           position: 'fixed',
           left: 0,
-          top: 0,
-          height: '100vh',
+          // Keeps the overlay below a fixed top banner and above the fixed tasks bar; each var is 0px when hidden.
+          top: 'var(--top-banner-height, 0px)',
+          height: 'calc(100vh - var(--top-banner-height, 0px) - var(--taskbar-height, 0px))',
           zIndex: 1300,
           boxShadow: '4px 0 24px rgba(0,0,0,0.25)',
         }}
       >
         <VerticalNav
-          customStyles={navigationCustomStyles(verticalNavOptions, theme)}
+          customStyles={{
+            ...navigationCustomStyles(verticalNavOptions, theme),
+            // The nav is a sibling of the padded content wrapper, so it must make
+            // room for a fixed top banner and the fixed tasks bar on its own. Zero when neither is shown.
+            insetBlockStart: 'var(--top-banner-height, 0px)',
+            blockSize: 'calc(100dvh - var(--top-banner-height, 0px) - var(--taskbar-height, 0px))',
+          }}
           collapsedWidth={68}
           backgroundColor='var(--mui-palette-background-default)'
           {...(isSemiDark && !isDark && { 'data-dark': '' })}
@@ -205,7 +213,13 @@ const Navigation = props => {
   // Mode normal (vertical ou collapsed)
   return (
     <VerticalNav
-      customStyles={navigationCustomStyles(verticalNavOptions, theme)}
+      customStyles={{
+        ...navigationCustomStyles(verticalNavOptions, theme),
+        // The nav is a sibling of the padded content wrapper, so it must make
+        // room for a fixed top banner and the fixed tasks bar on its own. Zero when neither is shown.
+        insetBlockStart: 'var(--top-banner-height, 0px)',
+        blockSize: 'calc(100dvh - var(--top-banner-height, 0px) - var(--taskbar-height, 0px))',
+      }}
       collapsedWidth={68}
       backgroundColor='var(--mui-palette-background-default)'
       {...(isSemiDark &&

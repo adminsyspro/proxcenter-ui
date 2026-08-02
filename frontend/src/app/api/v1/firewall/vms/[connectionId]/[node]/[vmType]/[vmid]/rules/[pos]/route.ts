@@ -5,6 +5,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string; pos: string }>
@@ -24,12 +27,13 @@ export async function PUT(req: NextRequest, ctx: RouteContext) {
     
     const orchestrator = getOrchestratorClient()
 
-    const response = await orchestrator.put(
-      `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`,
-      body
+    const result = await orchestratorOrPve(
+      'firewall/vms/rules',
+      () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`, body),
+      async () => pveDirect.updateVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos, body),
     )
-    
-    return NextResponse.json(response.data)
+
+    return NextResponse.json(result)
   } catch (e: any) {
     console.error("[firewall/vms/rules] PUT error:", e)
     
@@ -49,11 +53,13 @@ export async function DELETE(req: NextRequest, ctx: RouteContext) {
 
     const orchestrator = getOrchestratorClient()
 
-    const response = await orchestrator.delete(
-      `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`
+    const result = await orchestratorOrPve(
+      'firewall/vms/rules',
+      () => orchestrator.delete(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`),
+      async () => pveDirect.deleteVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos),
     )
-    
-    return NextResponse.json(response.data)
+
+    return NextResponse.json(result)
   } catch (e: any) {
     console.error("[firewall/vms/rules] DELETE error:", e)
     

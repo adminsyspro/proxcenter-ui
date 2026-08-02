@@ -8,6 +8,7 @@ import {
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useBranding } from '@/contexts/BrandingContext'
+import ColorPicker from '@/components/common/ColorPicker'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 
@@ -345,43 +346,14 @@ export default function WhiteLabelTab() {
             <i className="ri-palette-line" style={{ marginRight: 8, opacity: 0.7 }} />{' '}
             Primary Color
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ position: 'relative' }}>
-              <Box
-                sx={{
-                  width: 44, height: 44, borderRadius: 1.5,
-                  border: '2px solid', borderColor: 'divider',
-                  bgcolor: config.primaryColor || theme.palette.primary.main,
-                  cursor: 'pointer', transition: 'box-shadow 0.2s',
-                  '&:hover': { boxShadow: `0 0 0 3px ${alpha(config.primaryColor || theme.palette.primary.main, 0.3)}` },
-                }}
-                onClick={() => document.getElementById('branding-color-input')?.click()}
-              />
-              <input
-                id="branding-color-input"
-                type="color"
-                value={config.primaryColor || theme.palette.primary.main}
-                onChange={e => setConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-              />
-            </Box>
-            <TextField
-              size="small"
-              label="Hex Color"
-              placeholder="#7C4DFF"
-              value={config.primaryColor}
-              onChange={e => setConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
-              sx={{ width: 160 }}
-              inputProps={{ maxLength: 7 }}
-            />
-            {config.primaryColor && (
-              <Tooltip title="Reset to default">
-                <IconButton size="small" onClick={() => setConfig(prev => ({ ...prev, primaryColor: '' }))}>
-                  <i className="ri-refresh-line" />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Box>
+          <ColorPicker
+            value={config.primaryColor}
+            onChange={hex => setConfig(prev => ({ ...prev, primaryColor: hex }))}
+            label="Hex Color"
+            placeholder="#7C4DFF"
+            fallback={theme.palette.primary.main}
+            onReset={() => setConfig(prev => ({ ...prev, primaryColor: '' }))}
+          />
           <Typography variant="caption" sx={{ opacity: 0.5, mt: 1, display: 'block' }}>
             Overrides the primary color across the entire application (buttons, links, active states, etc.)
           </Typography>

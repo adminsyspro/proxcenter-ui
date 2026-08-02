@@ -8,6 +8,7 @@ import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
 import { BULK_MIG_CONCURRENCY } from './bulkMigrationConfig'
 import { useFavorites } from './hooks/useFavorites'
+import { useMigrationOptions } from './hooks/useMigrationOptions'
 import { useSnapshots } from './hooks/useSnapshots'
 import { useTasks } from './hooks/useTasks'
 import { useNotes } from './hooks/useNotes'
@@ -274,25 +275,13 @@ export default function InventoryDetails({
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
-  const [migNetworkBridge, setMigNetworkBridge] = useState('')
   // Optional user-picked target VMID. Empty string = let PVE pick the next
   // free id (default behavior). The dialog runs a debounced availability
   // check and surfaces the result inline; the migration POST forwards the
   // value as `targetVmid` when set.
   const [migTargetVmid, setMigTargetVmid] = useState('')
   const [migTargetVmidStatus, setMigTargetVmidStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
-  // Optional 802.1Q VLAN tag applied to the created VM's NIC. Empty string means
-  // "no tag" (access port on the bridge's native VLAN). Stored as string so the
-  // input renders cleanly when blank; coerced + validated server-side.
-  const [migVlanTag, setMigVlanTag] = useState<string>('')
   const [migBridges, setMigBridges] = useState<any[]>([])
-  const [migStartAfter, setMigStartAfter] = useState(false)
-  const [migDiskPaths, setMigDiskPaths] = useState('')
-  const [migTempStorage, setMigTempStorage] = useState('/tmp')
-  const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot' | 'warm'>('cold')
-  // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
-  // Kept in state for the payload contract; no longer user-selectable in the UI.
-  const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs' | 'auto'>('auto')
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
@@ -319,6 +308,19 @@ export default function InventoryDetails({
   const [extVmSortDir, setExtVmSortDir] = useState<'asc' | 'desc'>('asc')
   const [bulkMigOpen, setBulkMigOpen] = useState(false)
   const [bulkMigStarting, setBulkMigStarting] = useState(false)
+  // Per-migration options (start-after, VLAN, qcow2 conversion, ...) live in a
+  // dedicated hook that resets the whole family whenever the single-VM or the
+  // bulk dialog opens — see useMigrationOptions for the #443 background.
+  const {
+    migNetworkBridge, setMigNetworkBridge,
+    migVlanTag, setMigVlanTag,
+    migStartAfter, setMigStartAfter,
+    migDiskPaths, setMigDiskPaths,
+    migTempStorage, setMigTempStorage,
+    migType, setMigType,
+    migTransferMode, setMigTransferMode,
+    migConvertToQcow2, setMigConvertToQcow2,
+  } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
   // match the dispatcher in InventoryDialogs.tsx or the two will fight each
@@ -329,7 +331,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; sourceType: string; tempStorage?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -944,6 +946,7 @@ export default function InventoryDetails({
                   migrationType: cfg.migrationType,
                   transferMode: cfg.transferMode,
                   startAfterMigration: cfg.startAfterMigration,
+                  convertDisksToQcow2: cfg.convertDisksToQcow2,
                   // vCenter inventory path was captured per-VM when the bulk job was
                   // enqueued (see InventoryDialogs.tsx bulk-launch handler). Forward it
                   // here too, otherwise queued vCenter migrations would lose the path
@@ -1316,7 +1319,7 @@ export default function InventoryDetails({
     newSnapshotName, setNewSnapshotName, newSnapshotDesc, setNewSnapshotDesc,
     newSnapshotRam, setNewSnapshotRam, snapshotFeatureAvailable,
     loadSnapshots, createSnapshot, deleteSnapshot, deleteAllSnapshots, rollbackSnapshot,
-    resetSnapshots, deleteAllBusy, deleteAllProgress,
+    resetSnapshots, deleteAllBusy, deleteAllProgress, snapshotRowTasks, snapshotTaskBusy,
   } = useSnapshots({ selection, detailTab, t, toast, data, setConfirmAction, setConfirmActionLoading })
 
   // ==================== TASKS (Historique des tâches) ====================
@@ -2561,7 +2564,7 @@ return vm?.isCluster ?? false
         />
       ) : !selection || selection?.type === 'root' ? (
         viewMode === 'vms' && displayVms.length > 0 ? (
-          <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px) - var(--top-banner-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 0, flex: 1, minHeight: 0, border: 'none', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{
@@ -2804,8 +2807,8 @@ return vm?.isCluster ?? false
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              height: '100%',
-              minHeight: 'calc(100vh - 200px)',
+              flex: 1,
+              minHeight: 0,
               opacity: 0.35,
               gap: 2
             }}
@@ -3200,7 +3203,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'node' && data.status === 'crit' && (
             <Box sx={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              gap: 2, height: '100%', minHeight: 'calc(100vh - 250px)',
+              gap: 2, flex: 1, minHeight: 0,
             }}>
               <img
                 src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
@@ -3408,8 +3411,8 @@ return vm?.isCluster ?? false
                 setNewSnapshotRam, setNotesEditing, setNumaEnabled, setReplicationComment, setReplicationLoaded, setReplicationRateLimit,
                 setReplicationSchedule, setReplicationTargetNode, setSavingReplication, setSelectedBackup, setSelectedCephCluster,
                 selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
-                setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshots,
-                snapshotsError, snapshotsLoading, sourceCephAvailable, tags,
+                setTf, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
+                snapshotsError, snapshotsLoading, snapshotTaskBusy, sourceCephAvailable, tags,
                 refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
             />
           )}
@@ -3663,10 +3666,10 @@ return vm?.isCluster ?? false
             const isNutanixHost = data.esxiHostInfo.hostType === 'nutanix'
             const extVmIcon = isNutanixHost ? '/images/nutanix-logo.svg' : isXcpng ? '/images/xcpng-logo.svg' : '/images/esxi-vm.svg'
             return (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2 }}>
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 {data.esxiHostInfo.vms.length === 0 ? (
-                  <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Box sx={{ p: 4, textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     <img src={extVmIcon} alt="" width={48} height={48} style={{ opacity: 0.3 }} />
                     <Typography variant="body2" sx={{ opacity: 0.5, mt: 1 }}>No virtual machines found on this host</Typography>
                   </Box>
@@ -3674,7 +3677,7 @@ return vm?.isCluster ?? false
                   <>
                   {/* Bulk migration toolbar */}
                   {bulkMigSelected.size > 0 && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', borderBottom: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, flexShrink: 0, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', borderBottom: '1px solid', borderColor: 'divider' }}>
                       <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>
                         {bulkMigSelected.size} VM{bulkMigSelected.size > 1 ? 's' : ''} {t('inventoryPage.esxiMigration.selected')}
                       </Typography>
@@ -3702,7 +3705,7 @@ return vm?.isCluster ?? false
                       </Button>
                     </Box>
                   )}
-                  <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+                  <TableContainer sx={{ flex: 1, minHeight: 120, overflow: 'auto' }}>
                     <Table size="small" stickyHeader>
                       <TableHead>
                         <TableRow>
@@ -3898,7 +3901,9 @@ return vm?.isCluster ?? false
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
             return (
-              <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
+                 pane below the cards' combined min-height, so every card stays reachable. */
+              <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'auto', pr: 0.5 }}>
                 {/* VM Summary Bar + Migrate button */}
                 <Card variant="outlined" sx={{ borderRadius: 2 }}>
                   <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
@@ -3931,15 +3936,9 @@ return vm?.isCluster ?? false
                           if (!vmwareMigrationAvailable) { setUpgradeDialogOpen(true); return }
                           const ht = vm.hostType || data.esxiVmInfo?.hostType
                           if (ht === 'vcenter' || ht === 'hyperv' || ht === 'nutanix') setMigType('cold')
-                          // Pre-fill disk paths for Hyper-V (convert Windows paths to /mnt/hyperv/ linux paths)
-                          if (ht === 'hyperv' && (vm as any).diskPaths?.length > 0) {
-                            const linuxPaths = ((vm as any).diskPaths as string[]).map((p: string) => {
-                              // "C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"
-                              const fileName = p.split('\\').pop() || p.split('/').pop() || p
-                              return `/mnt/hyperv/${fileName}`
-                            })
-                            setMigDiskPaths(linuxPaths.join('\n'))
-                          }
+                          // Hyper-V disk paths are pre-filled by useMigrationOptions'
+                          // reset-on-open (from the diskPaths passed below); doing it
+                          // here would be wiped by that reset.
                           setEsxiMigrateVm({
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
@@ -4024,7 +4023,7 @@ return vm?.isCluster ?? false
                           )}
                           <Chip
                             size="small"
-                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
                             color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'awaiting_cutover' ? 'warning' : 'primary'}
                             sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
                           />
@@ -4166,7 +4165,7 @@ return vm?.isCluster ?? false
                         </MuiTooltip>
                       )}
                     </Box>
-                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 80 }}>
+                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 220 }}>
                       {vmMigJob?.logs?.length > 0 ? (
                         vmMigJob.logs.map((log: any, i: number) => (
                           <Box key={i}>
@@ -4386,6 +4385,8 @@ return vm?.isCluster ?? false
         migBridges={migBridges}
         migStartAfter={migStartAfter}
         setMigStartAfter={setMigStartAfter}
+        migConvertToQcow2={migConvertToQcow2}
+        setMigConvertToQcow2={setMigConvertToQcow2}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}

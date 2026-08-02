@@ -71,6 +71,19 @@ function isEnrollBypass(pathname: string): boolean {
   return ENROLL_BYPASS.some((p) => pathname === p || pathname.startsWith(p + "/"))
 }
 
+// Strips every inbound x-pxc-* header from a forwarded-request Headers
+// object. These are internal signals set ONLY by this middleware (gesture 3
+// below), never legitimate client input: forwarding a client-supplied
+// x-pxc-entry/-path/-method would let a request forge the allowlist
+// decision that getPrincipal() trusts blindly. Two call sites: the demo-mode
+// branch (which bypasses the normal-mode strip entirely) and gesture 1 in
+// normal mode.
+function stripPxcHeaders(headers: Headers): void {
+  for (const name of Array.from(headers.keys())) {
+    if (name.toLowerCase().startsWith('x-pxc-')) headers.delete(name)
+  }
+}
+
 // Routes API publiques
 const publicApiRoutes = [
   "/api/auth",
@@ -151,8 +164,13 @@ export async function middleware(request: NextRequest) {
       const mockResponse = demoResponse(request)
       if (mockResponse) return mockResponse
 
-      // For non-v1 API routes, pass through with demo header
+      // For non-v1 API routes, pass through with demo header. This branch
+      // returns before the normal-mode strip below ever runs, and a demo
+      // build has real route handlers behind it (the /api/v1/public/*
+      // routes this task adds) — so the resolver must not be the only
+      // thing standing between a forged x-pxc-* header and a handler.
       const requestHeaders = new Headers(request.headers)
+      stripPxcHeaders(requestHeaders)
       requestHeaders.set('x-demo-mode', 'true')
 
       return NextResponse.next({
@@ -209,9 +227,7 @@ export async function middleware(request: NextRequest) {
   // re-set below only by the bounded derogation.
   const requestHeaders = new Headers(request.headers)
   if (isApiPath) {
-    for (const name of Array.from(requestHeaders.keys())) {
-      if (name.toLowerCase().startsWith('x-pxc-')) requestHeaders.delete(name)
-    }
+    stripPxcHeaders(requestHeaders)
   }
 
   // Gesture 2 (existing bypass, unchanged semantics, now AFTER the strip):

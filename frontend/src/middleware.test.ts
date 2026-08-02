@@ -6,6 +6,12 @@ const { getTokenMock } = vi.hoisted(() => ({
 
 vi.mock('next-auth/jwt', () => ({ getToken: getTokenMock }))
 
+// Simulates the exact scenario the demo-mode strip guards against: a
+// /api/v1/* path for which the demo interceptor has no mock (returns null),
+// so the request falls through to the pass-through branch that used to
+// forward client headers unsanitized.
+vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
+
 import { NextRequest } from 'next/server'
 
 // Static instance: module-scope env constants (HA_ENABLED, VIP, ...) are baked
@@ -333,6 +339,41 @@ describe('gesture 3: bounded derogation', () => {
     const res = await middleware(apiRequest('/api/v1/users', { method: 'OPTIONS' }))
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'Not authenticated' })
+  })
+})
+
+describe('demo mode: x-pxc-* strip on the API pass-through', () => {
+  it('strips forged x-pxc-* headers on a /api/v1/* path the demo interceptor has no mock for', async () => {
+    process.env.DEMO_MODE = 'true'
+    const res = await middleware(
+      apiRequest('/api/v1/public/metrics', {
+        headers: { 'x-pxc-entry': 'public-metrics', 'x-pxc-path': '/api/v1/public/metrics', 'x-pxc-method': 'GET' },
+      }),
+    )
+    // Same proof shape as gesture 1 above: the override list must exist
+    // (proof the strip ran — a bare NextResponse.next() forwards forged
+    // headers untouched) and must not carry any x-pxc-* name.
+    const overridden = res.headers.get('x-middleware-override-headers')
+    expect(overridden).not.toBeNull()
+    expect(overridden).not.toContain('x-pxc-entry')
+    expect(overridden).not.toContain('x-pxc-path')
+    expect(overridden).not.toContain('x-pxc-method')
+    expect(res.headers.get('x-middleware-request-x-pxc-entry')).toBeNull()
+    expect(res.headers.get('x-middleware-request-x-pxc-path')).toBeNull()
+    expect(res.headers.get('x-middleware-request-x-pxc-method')).toBeNull()
+    // The demo header itself still rides through: the strip must not
+    // clobber the rest of the demo-mode pass-through.
+    expect(res.headers.get('x-middleware-request-x-demo-mode')).toBe('true')
+  })
+
+  it('strips forged x-pxc-* headers on a non-v1 API path in demo mode', async () => {
+    process.env.DEMO_MODE = 'true'
+    const res = await middleware(
+      apiRequest('/api/internal/some-route', { headers: { 'x-pxc-entry': 'evil' } }),
+    )
+    const overridden = res.headers.get('x-middleware-override-headers')
+    expect(overridden).not.toBeNull()
+    expect(overridden).not.toContain('x-pxc-entry')
   })
 })
 

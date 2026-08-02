@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  escapeLabelValue, renderExposition, familyScope, isFamilyAllowed, METRIC_FAMILY_SCOPES,
+  escapeLabelValue, escapeHelpText, renderExposition, familyScope, isFamilyAllowed, METRIC_FAMILY_SCOPES,
 } from './prometheus'
 
 describe('escapeLabelValue', () => {
@@ -53,7 +53,51 @@ describe('escapeLabelValue', () => {
   })
 })
 
+describe('escapeHelpText', () => {
+  it('escapes backslash and newline', () => {
+    expect(escapeHelpText('a\\b\nc')).toBe('a\\\\b\\nc')
+  })
+
+  it('does NOT escape a double quote: HELP text is not quote-delimited, unlike a label value', () => {
+    expect(escapeHelpText('says "hello"')).toBe('says "hello"')
+  })
+
+  it('leaves a plain value untouched', () => {
+    expect(escapeHelpText('Node online state')).toBe('Node online state')
+  })
+})
+
 describe('renderExposition', () => {
+  it('escapes a newline in HELP text so it cannot forge an extra output line', () => {
+    const out = renderExposition([
+      {
+        name: 'proxcenter_node_online',
+        help: 'Node online state\nDROP TABLE',
+        type: 'gauge',
+        samples: [{ name: 'proxcenter_node_online', labels: {}, value: 1 }],
+      },
+    ])
+    const lines = out.split('\n')
+    // A raw (unescaped) newline in HELP would split into two physical
+    // lines, so the total line count would be 5 instead of 4 (3 real
+    // lines + trailing empty from the final \n).
+    expect(lines).toHaveLength(4)
+    expect(lines[0]).toBe('# HELP proxcenter_node_online Node online state\\nDROP TABLE')
+  })
+
+  it('leaves an unescaped double quote inside HELP text alone', () => {
+    const out = renderExposition([
+      {
+        name: 'proxcenter_up',
+        help: 'says "hello"',
+        type: 'gauge',
+        samples: [{ name: 'proxcenter_up', labels: {}, value: 1 }],
+      },
+    ])
+    expect(out).toContain('# HELP proxcenter_up says "hello"\n')
+  })
+
+
   it('renders HELP, TYPE and samples, dropping null labels', () => {
     const out = renderExposition([
       {

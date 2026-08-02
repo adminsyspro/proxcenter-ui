@@ -35,6 +35,17 @@ export function escapeLabelValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")
 }
 
+/**
+ * Escapes HELP text per the Prometheus text exposition format: backslash
+ * and line feed only. HELP text is NOT quote-delimited (unlike a label
+ * value), so a literal `"` needs no escaping here — reusing
+ * escapeLabelValue would over-escape and misrepresent the source string.
+ * Order matters for the same reason as escapeLabelValue: backslash first.
+ */
+export function escapeHelpText(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n")
+}
+
 /** The scope (if any) required to see a given metric family, by prefix match. */
 export function familyScope(metricName: string): string | null {
   for (const [prefix, scope] of Object.entries(METRIC_FAMILY_SCOPES)) {
@@ -77,7 +88,7 @@ export function renderExposition(families: MetricFamily[]): string {
   let out = ""
   for (const family of families) {
     if (family.samples.length === 0) continue
-    out += `# HELP ${family.name} ${family.help}\n`
+    out += `# HELP ${family.name} ${escapeHelpText(family.help)}\n`
     out += `# TYPE ${family.name} ${family.type}\n`
     for (const sample of family.samples) {
       out += `${sample.name}${renderLabels(sample.labels)} ${sample.value}\n`

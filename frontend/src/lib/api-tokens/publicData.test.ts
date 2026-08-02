@@ -75,11 +75,73 @@ describe('loadPublicFleetView', () => {
     ])
     expect(view.guests).toHaveLength(1)
     expect(view.guests[0]).toEqual({
-      connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', type: 'qemu',
+      connId: 'pve-1', connectionName: 'PVE One', node: 'n1', vmid: '100', name: 'web', type: 'qemu',
       status: 'running', cpu: 0.5, mem: 500, maxmem: 2000, agentEnabled: true, template: false,
     })
     expect(view.cached).toBe(true)
     expect(view.visible).toEqual(new Set(['pve-1']))
+  })
+
+  it('carries the VM name through: Task 17 must be able to label proxcenter_vm_* series without re-walking clusters', async () => {
+    const view = await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: ['pve-1'] } as any)
+    expect(view.guests[0].name).toBe('web')
+  })
+
+  it('falls back to type/vmid when a guest has no name, same convention as fetchRawInventory', async () => {
+    getInventorySWRMock.mockResolvedValue({
+      raw: {
+        ...RAW,
+        clusters: [
+          {
+            id: 'pve-1',
+            name: 'PVE One',
+            nodes: [{ node: 'n1', status: 'online', guests: [{ vmid: 42, type: 'lxc', status: 'running' }] }],
+          },
+        ],
+      },
+      cached: true,
+    })
+    const view = await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: ['pve-1'] } as any)
+    expect(view.guests[0].name).toBe('lxc/42')
+  })
+
+  it('reports agentEnabled as null (unknown), never a fabricated false, when the source data carries no flag at all', async () => {
+    getInventorySWRMock.mockResolvedValue({
+      raw: {
+        ...RAW,
+        clusters: [
+          {
+            id: 'pve-1',
+            name: 'PVE One',
+            // No `agentEnabled` key at all: the realistic shape from
+            // fetchRawInventory, which reads /cluster/resources and never
+            // sets this field (fetchRawInventory.ts:270-285).
+            nodes: [{ node: 'n1', status: 'online', guests: [{ vmid: 7, type: 'qemu', status: 'running', name: 'noflag' }] }],
+          },
+        ],
+      },
+      cached: true,
+    })
+    const view = await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: ['pve-1'] } as any)
+    expect(view.guests[0].agentEnabled).toBeNull()
+  })
+
+  it('reports agentEnabled as a genuine false when the source data explicitly says so, distinct from unknown', async () => {
+    getInventorySWRMock.mockResolvedValue({
+      raw: {
+        ...RAW,
+        clusters: [
+          {
+            id: 'pve-1',
+            name: 'PVE One',
+            nodes: [{ node: 'n1', status: 'online', guests: [{ vmid: 8, type: 'qemu', status: 'running', name: 'off', agentEnabled: false }] }],
+          },
+        ],
+      },
+      cached: true,
+    })
+    const view = await loadPublicFleetView({ kind: 'token', tenantId: 'default', connectionIds: ['pve-1'] } as any)
+    expect(view.guests[0].agentEnabled).toBe(false)
   })
 
   it('never calls the hypervisor: it only reads the inventory cache wrapper, without forcing a refresh', async () => {

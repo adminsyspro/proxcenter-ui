@@ -26,12 +26,22 @@ export type PublicGuest = {
   connectionName: string
   node: string
   vmid: string
+  name: string
   type: string
   status: string
   cpu: number
   mem: number
   maxmem: number
-  agentEnabled: boolean
+  /**
+   * Tri-state, NEVER a fabricated false: `fetchRawInventory`'s guest data
+   * comes from /cluster/resources, which carries no agent config flag
+   * (fetchRawInventory.ts:270-285) — the only clean source is a capped
+   * /config pass, an open product question (D9-adjacent, not decided
+   * here). true/false only when a producer genuinely supplies the flag;
+   * otherwise null ("unknown"), so a consumer omits the sample rather
+   * than publish a wrong "no agent" for a VM whose agent IS enabled.
+   */
+  agentEnabled: boolean | null
   template: boolean
 }
 
@@ -88,12 +98,13 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
           connectionName: cluster.name,
           node: node.node,
           vmid: String(guest.vmid),
+          name: guest.name || `${guest.type}/${guest.vmid}`,
           type: guest.type,
           status: guest.status,
           cpu: Number(guest.cpu || 0),
           mem: Number(guest.mem || 0),
           maxmem: Number(guest.maxmem || 0),
-          agentEnabled: guest.agentEnabled === true,
+          agentEnabled: typeof guest.agentEnabled === "boolean" ? guest.agentEnabled : null,
           template: false,
         })
       }

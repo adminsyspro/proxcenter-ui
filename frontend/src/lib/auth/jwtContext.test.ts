@@ -42,6 +42,14 @@ describe('loadJwtContext', () => {
     // An enrolled user needs no policy lookup at all.
     expect(policyFindFirstMock).not.toHaveBeenCalled()
     expect(roleFindFirstMock).not.toHaveBeenCalled()
+    // The nested tenant lookup must reproduce getUserDefaultTenantId's predicate exactly.
+    expect(userFindUniqueMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          tenants: { where: { isDefault: true }, select: { tenantId: true }, take: 1 },
+        }),
+      }),
+    )
   })
 
   it('honours the per-user 2FA flag without consulting the policy', async () => {
@@ -65,6 +73,16 @@ describe('loadJwtContext', () => {
     const ctx = await loadJwtContext('u1', 'sid1')
     expect(ctx.mustEnroll2fa).toBe(true)
     expect(roleFindFirstMock).toHaveBeenCalledOnce()
+    // roleId and the "unexpired" OR clause are the whole security boundary here —
+    // a wrong roleId or a dropped expiresAt branch must fail this test.
+    expect(roleFindFirstMock).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        roleId: 'role_super_admin',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+      },
+      select: { id: true },
+    })
   })
 
   it('does not require 2FA when the policy is off', async () => {

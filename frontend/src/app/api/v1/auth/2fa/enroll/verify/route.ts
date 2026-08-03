@@ -3,6 +3,7 @@ import { getToken, encode } from "next-auth/jwt"
 import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
+import { sessionCookieName, resolveCookieSecure } from "@/lib/auth/cookies"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { verifyEnrollToken } from "@/lib/auth/enroll-token"
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
     req: req as any,
     secret: process.env.NEXTAUTH_SECRET || "",
     raw: false,
+    cookieName: sessionCookieName(),
   })
 
   const res = NextResponse.json({ data: { recoveryCodes: plainCodes } })
@@ -82,15 +84,15 @@ export async function POST(req: Request) {
       secret: process.env.NEXTAUTH_SECRET || "",
     })
 
-    const cookieName = (process.env.NEXTAUTH_URL || "").startsWith("https://")
-      ? "__Secure-next-auth.session-token"
-      : "next-auth.session-token"
-
-    res.cookies.set(cookieName, newJwt, {
+    // Name and flag both come from the shared module. Deriving `secure` from
+    // the cookie NAME (the previous behaviour) would write a non-Secure cookie
+    // on an https request whenever the name is unprefixed, silently undoing
+    // the fix on this path.
+    res.cookies.set(sessionCookieName(), newJwt, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
-      secure: cookieName.startsWith("__Secure"),
+      secure: resolveCookieSecure(req.headers),
     })
   }
 

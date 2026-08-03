@@ -43,37 +43,45 @@ declare module "next-auth/jwt" {
   }
 }
 
-// Explicitly control secure cookies based on NEXTAUTH_URL protocol
-// Prevents login failures when NEXTAUTH_URL=https but access is via HTTP
-const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false
+// Cookie names and the `secure` flag both live in lib/auth/cookies.ts. The
+// names are static (readers must agree with the issuer); the flag is resolved
+// per request in getAuthOptions(req) so a TLS reverse proxy gets `Secure`
+// without the operator having to remember to edit NEXTAUTH_URL.
+import {
+  sessionCookieName,
+  callbackUrlCookieName,
+  csrfCookieName,
+  envPrefersSecureCookies,
+  resolveCookieSecure,
+} from './cookies'
 
 export const authOptions: NextAuthOptions = {
   cookies: {
     sessionToken: {
-      name: useSecureCookies ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
+      name: sessionCookieName(),
       options: {
         httpOnly: true,
         sameSite: 'lax' as const,
         path: '/',
-        secure: useSecureCookies,
+        secure: envPrefersSecureCookies(),
       },
     },
     callbackUrl: {
-      name: useSecureCookies ? '__Secure-next-auth.callback-url' : 'next-auth.callback-url',
+      name: callbackUrlCookieName(),
       options: {
         httpOnly: true,
         sameSite: 'lax' as const,
         path: '/',
-        secure: useSecureCookies,
+        secure: envPrefersSecureCookies(),
       },
     },
     csrfToken: {
-      name: useSecureCookies ? '__Host-next-auth.csrf-token' : 'next-auth.csrf-token',
+      name: csrfCookieName(),
       options: {
         httpOnly: true,
         sameSite: 'lax' as const,
         path: '/',
-        secure: useSecureCookies,
+        secure: envPrefersSecureCookies(),
       },
     },
   },
@@ -601,15 +609,38 @@ export const authOptions: NextAuthOptions = {
 }
 
 /**
- * Returns authOptions with OIDC provider dynamically included if configured.
- * Used only in the [...nextauth] route handler.
- * All getServerSession(authOptions) calls remain unchanged (JWT validation doesn't need the provider list).
+ * Returns authOptions with OIDC included when configured, and with the cookie
+ * `secure` flag resolved against THIS request's transport.
+ *
+ * `req` is optional: getServerSession(authOptions) callers only read the JWT
+ * and never issue a cookie, so they do not need it. The NextAuth route handler
+ * does issue cookies, and passes it.
  */
-export async function getAuthOptions(): Promise<NextAuthOptions> {
+export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
+  const secure = resolveCookieSecure(req?.headers)
+
+  const withSecure = (opts: NextAuthOptions): NextAuthOptions => ({
+    ...opts,
+    cookies: {
+      sessionToken: {
+        name: sessionCookieName(),
+        options: { ...opts.cookies!.sessionToken!.options, secure },
+      },
+      callbackUrl: {
+        name: callbackUrlCookieName(),
+        options: { ...opts.cookies!.callbackUrl!.options, secure },
+      },
+      csrfToken: {
+        name: csrfCookieName(),
+        options: { ...opts.cookies!.csrfToken!.options, secure },
+      },
+    },
+  })
+
   const oidcConfig = await getOidcConfig()
 
   if (!oidcConfig || !oidcConfig.enabled || !oidcConfig.issuerUrl || !oidcConfig.clientId) {
-    return authOptions
+    return withSecure(authOptions)
   }
 
   const oidcProvider: OAuthConfig<any> = {
@@ -646,8 +677,8 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
     },
   }
 
-  return {
+  return withSecure({
     ...authOptions,
     providers: [...authOptions.providers, oidcProvider],
-  }
+  })
 }

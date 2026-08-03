@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server"
 
 import { getToken } from "next-auth/jwt"
 
+import { sessionCookieName } from "@/lib/auth/cookies"
+
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
 // HA VIP redirect configuration
@@ -235,7 +237,8 @@ export async function middleware(request: NextRequest) {
     // Vérifier le token JWT
     const token = await getToken({
       req: request,
-      secret: AUTH_SECRET
+      secret: AUTH_SECRET,
+      cookieName: sessionCookieName()
     })
 
     // Si pas de token, rediriger vers login
@@ -261,7 +264,8 @@ export async function middleware(request: NextRequest) {
   // Vérifier le token JWT pour les API
   const token = await getToken({
     req: request,
-    secret: AUTH_SECRET
+    secret: AUTH_SECRET,
+    cookieName: sessionCookieName()
   })
 
   // Si pas de token, retourner 401 pour les API

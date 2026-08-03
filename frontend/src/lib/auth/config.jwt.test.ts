@@ -118,8 +118,22 @@ describe('read path (no user) — refuses by throwing', () => {
 })
 
 describe('session config', () => {
-  it('caps maxAge at the absolute timeout and drops the inert updateAge', () => {
+  afterEach(() => {
+    delete process.env.SESSION_ABSOLUTE_TIMEOUT
+  })
+
+  it('caps maxAge at the absolute-timeout default (env unset) and drops the inert updateAge', () => {
     expect(authOptions.session?.maxAge).toBe(7 * 86400)
     expect((authOptions.session as any)?.updateAge).toBeUndefined()
+  })
+
+  it('derives maxAge from SESSION_ABSOLUTE_TIMEOUT instead of hardcoding it', async () => {
+    // The point of this test: a hardcoded 7*86400 would pass the test above
+    // but NOT this one. Module-load evaluation means we need a fresh import
+    // with the env var already set.
+    process.env.SESSION_ABSOLUTE_TIMEOUT = String(30 * 86400)
+    vi.resetModules()
+    const { authOptions: reloaded } = await import('./config')
+    expect(reloaded.session?.maxAge).toBe(30 * 86400)
   })
 })

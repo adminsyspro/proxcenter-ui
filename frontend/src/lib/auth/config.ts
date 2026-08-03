@@ -12,6 +12,7 @@ import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLd
 import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
 import { loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, touchSession } from "./sessions"
+import { sessionDurations } from "./durations"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -687,14 +688,16 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    // Aligned on SESSION_ABSOLUTE_TIMEOUT so the cookie cannot outlive the
-    // session. This is only the second barrier: the row in `sessions` is what
-    // actually decides, since a JWT's exp is frozen at encoding time.
+    // Derived from SESSION_ABSOLUTE_TIMEOUT (default 7 days) so the cookie
+    // cannot outlive the session. This is only the second barrier: the row in
+    // `sessions` is what actually decides, since a JWT's exp is frozen at
+    // encoding time. Evaluated once at module load, which is correct: the
+    // environment is fixed when the process starts.
     //
     // updateAge is intentionally absent: next-auth only reads it in the
     // database branch (core/routes/session.js:109, inside the else), so with
     // strategy "jwt" it did nothing. lastSeenAt throttling is ours.
-    maxAge: 7 * 24 * 60 * 60,
+    maxAge: Math.ceil(sessionDurations().absoluteMs / 1000),
   },
   secret: process.env.NEXTAUTH_SECRET || "build-time-placeholder",
 }

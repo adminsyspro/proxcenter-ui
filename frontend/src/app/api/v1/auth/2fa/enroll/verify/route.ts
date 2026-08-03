@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { sessionCookieName, resolveCookieSecure } from "@/lib/auth/cookies"
+import { sessionDurations } from "@/lib/auth/durations"
 import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { verifyEnrollToken } from "@/lib/auth/enroll-token"
@@ -82,6 +83,10 @@ export async function POST(req: Request) {
     const newJwt = await encode({
       token: refreshed,
       secret: process.env.NEXTAUTH_SECRET || "",
+      // Without this, next-auth's encode() defaults maxAge to 30 days, so
+      // this re-issued cookie would outlive the absolute cap that every
+      // other session cookie is now held to.
+      maxAge: Math.ceil(sessionDurations().absoluteMs / 1000),
     })
 
     // Name and flag both come from the shared module. Deriving `secure` from

@@ -31,18 +31,6 @@ describe("startSessionSweeper", () => {
     stop()
   })
 
-  it("a throwing onError hook is swallowed too", async () => {
-    const purge = vi.fn().mockRejectedValue(new Error("db down"))
-    const stop = startSessionSweeper({
-      intervalMs: 1000,
-      purge,
-      onError: () => { throw new Error("bad hook") },
-    })
-    await vi.advanceTimersByTimeAsync(2000)
-    expect(purge).toHaveBeenCalledTimes(2)
-    stop()
-  })
-
   it("skips a tick while the previous purge is still in-flight (no overlap)", async () => {
     let resolvePurge: (n: number) => void
     const pending = new Promise<number>(r => { resolvePurge = r })

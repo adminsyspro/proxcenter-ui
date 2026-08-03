@@ -18,8 +18,6 @@ export const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000
 export interface SessionSweeperOptions {
   intervalMs?: number
   purge?: () => Promise<number>
-  /** Observability hook — sweep failures are swallowed, never thrown into the process. */
-  onError?: (err: unknown) => void
 }
 
 /**
@@ -32,7 +30,7 @@ export interface SessionSweeperOptions {
  * @returns A stop() function, safe to call multiple times.
  */
 export function startSessionSweeper(options: SessionSweeperOptions = {}): () => void {
-  const { intervalMs = SESSION_SWEEP_INTERVAL_MS, purge = purgeDeadSessions, onError } = options
+  const { intervalMs = SESSION_SWEEP_INTERVAL_MS, purge = purgeDeadSessions } = options
   let stopped = false
   let inFlight = false
 
@@ -47,7 +45,6 @@ export function startSessionSweeper(options: SessionSweeperOptions = {}): () => 
           if (count > 0) console.log(`[session-sweeper] purged ${count} dead session row(s)`)
         },
         (err) => {
-          try { onError?.(err) } catch { /* observability must never kill the process */ }
           console.error("[session-sweeper] purge failed (non-fatal):", err)
         },
       )

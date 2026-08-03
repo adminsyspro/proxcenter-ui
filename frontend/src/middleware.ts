@@ -6,7 +6,7 @@ import { getToken } from "next-auth/jwt"
 
 import { matchPublicApiPath } from "@/lib/api-tokens/allowlist"
 import { sessionCookieName } from "@/lib/auth/cookies"
-import { sessionDurations } from "@/lib/auth/durations"
+import { isPastAbsoluteCap } from "@/lib/auth/durations"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
@@ -288,13 +288,16 @@ export async function middleware(request: NextRequest) {
     // only decodes the JWT (jwt/index.js:118) — no callbacks, so the read-path
     // validation never runs for the middleware. authAt makes the one deadline
     // that matters against a stolen cookie enforceable with pure arithmetic,
-    // keeping this file Prisma-free and Edge-valid.
+    // keeping this file Prisma-free and Edge-valid. isPastAbsoluteCap is the
+    // same predicate lib/auth/sessions.ts:evaluateSession uses for the DB-backed
+    // row's createdAt, so the two never drift into separately-worded copies of
+    // one rule.
     //
     // A token without authAt is left alone: the read path refuses it anyway,
     // and redirecting here as well risks a loop. This code only runs past the
     // isPublicRoute early-return above, so /login itself can never be
     // redirected by this check.
-    if (token.authAt && Date.now() - Number(token.authAt) > sessionDurations().absoluteMs) {
+    if (token.authAt && isPastAbsoluteCap(Number(token.authAt))) {
       const url = request.nextUrl.clone()
 
       url.pathname = "/login"

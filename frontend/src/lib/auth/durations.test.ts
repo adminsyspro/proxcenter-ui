@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 
-import { sessionDurations } from './durations'
+import { sessionDurations, isPastAbsoluteCap } from './durations'
 
 const ENV = { idle: process.env.SESSION_IDLE_TIMEOUT, abs: process.env.SESSION_ABSOLUTE_TIMEOUT }
 
@@ -28,5 +28,25 @@ describe('sessionDurations', () => {
     process.env.SESSION_IDLE_TIMEOUT = 'nonsense'
     process.env.SESSION_ABSOLUTE_TIMEOUT = '0'
     expect(sessionDurations()).toEqual({ idleMs: 12 * 3600_000, absoluteMs: 7 * 86400_000 })
+  })
+})
+
+describe('isPastAbsoluteCap: the one shared rule for both sides of the Edge boundary', () => {
+  const DURATIONS = { idleMs: 12 * 3600_000, absoluteMs: 7 * 86400_000 }
+  const NOW = Date.parse('2026-08-03T12:00:00.000Z')
+
+  it('is not past the cap while still below it', () => {
+    const startMs = NOW - (DURATIONS.absoluteMs - 1)
+    expect(isPastAbsoluteCap(startMs, NOW, DURATIONS)).toBe(false)
+  })
+
+  it('is not past the cap exactly at it (strictly greater-than, not gte)', () => {
+    const startMs = NOW - DURATIONS.absoluteMs
+    expect(isPastAbsoluteCap(startMs, NOW, DURATIONS)).toBe(false)
+  })
+
+  it('is past the cap one millisecond after it', () => {
+    const startMs = NOW - DURATIONS.absoluteMs - 1
+    expect(isPastAbsoluteCap(startMs, NOW, DURATIONS)).toBe(true)
   })
 })

@@ -54,21 +54,31 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
     expect(res?.headers.get('location')).toBeNull()
   })
 
-  it('never redirects /api/auth/* (NextAuth machinery) even with an expired authAt', async () => {
+  // The two tests below pin ROUTING SEPARATION, not the authAt gate itself.
+  // Both paths have isApiPath === true, so they short-circuit in the
+  // public-route check (isPublicRoute / isPublicApiRoute) before the
+  // page-navigation branch that holds the authAt check above is ever
+  // reached — getToken is never even called for them. They exist to catch a
+  // future refactor that accidentally merges the API and page branches and
+  // lets the authAt redirect leak onto API routes (which expect JSON, not a
+  // redirect).
+  it('routes /api/auth/* through the public-route short-circuit, never reaching the authAt check', async () => {
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
     const res = await middleware(req('/api/auth/session'))
 
     expect(res?.headers.get('location')).toBeNull()
+    expect(getTokenMock).not.toHaveBeenCalled()
   })
 
-  it('never redirects a public API allowlist route even with an expired authAt', async () => {
+  it('routes the public API allowlist through the same short-circuit, never reaching the authAt check', async () => {
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
     const res = await middleware(req('/api/health'))
 
     expect(res?.headers.get('location')).toBeNull()
+    expect(getTokenMock).not.toHaveBeenCalled()
   })
 })

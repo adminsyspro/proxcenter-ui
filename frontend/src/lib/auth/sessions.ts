@@ -11,7 +11,7 @@ import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
 
-import { sessionDurations, type SessionDurations } from "./durations"
+import { isPastAbsoluteCap, sessionDurations, type SessionDurations } from "./durations"
 
 /** A touch is at most one write per session per minute: this callback runs on every guarded request. */
 export const TOUCH_THROTTLE_MS = 60_000
@@ -38,7 +38,7 @@ export function evaluateSession(
 ): SessionVerdict {
   if (!row) return { alive: false, reason: "missing" }
   if (row.revokedAt) return { alive: false, reason: "revoked" }
-  if (now.getTime() - row.createdAt.getTime() > durations.absoluteMs) {
+  if (isPastAbsoluteCap(row.createdAt.getTime(), now.getTime(), durations)) {
     return { alive: false, reason: "absolute" }
   }
   if (now.getTime() - row.lastSeenAt.getTime() > durations.idleMs) {

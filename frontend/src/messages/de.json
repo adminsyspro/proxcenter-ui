@@ -2561,6 +2561,53 @@
         "critical": "Kritisch"
       }
     },
+    "apiTokens": {
+      "tabLabel": "API",
+      "title": "API-Token",
+      "subtitle": "Schreibgeschützte Dienstkonten für externe Monitoring-Tools (Prometheus, Zabbix, PRTG, CI).",
+      "newToken": "Neuer Token",
+      "columns": {
+        "prefix": "Präfix",
+        "name": "Name",
+        "tenant": "Mandant",
+        "scopes": "Berechtigungen",
+        "expires": "Ablauf",
+        "lastUsed": "Zuletzt verwendet"
+      },
+      "never": "Nie",
+      "revoke": "Widerrufen",
+      "revoked": "Widerrufen",
+      "revokeConfirm": "Diesen Token widerrufen? Integrationen, die ihn verwenden, funktionieren sofort nicht mehr.",
+      "revokeSuccess": "Token widerrufen",
+      "loadError": "API-Token konnten nicht geladen werden",
+      "createError": "API-Token konnte nicht erstellt werden",
+      "dialog": {
+        "title": "API-Token erstellen",
+        "name": "Name",
+        "description": "Beschreibung",
+        "expiration": "Ablauf",
+        "expirationNone": "Kein Ablauf",
+        "expiration30": "30 Tage",
+        "expiration90": "90 Tage",
+        "expiration365": "1 Jahr",
+        "expirationCustom": "Benutzerdefiniert",
+        "customDays": "Tage",
+        "scopes": "Berechtigungen",
+        "tenant": "Mandant",
+        "connections": "Verbindungen",
+        "connectionsAll": "Alle Verbindungen des Mandanten",
+        "create": "Erstellen",
+        "cancel": "Abbrechen",
+        "confirm": "Bestätigen"
+      },
+      "reveal": {
+        "title": "Kopieren Sie Ihren Token jetzt",
+        "warning": "Dieses Secret wird nie wieder angezeigt. Speichern Sie es in Ihrem Secret-Manager, bevor Sie dieses Fenster schließen.",
+        "copy": "Kopieren",
+        "copied": "Kopiert",
+        "done": "Fertig"
+      }
+    },
     "displayMode": "Anzeigemodus",
     "light": "Hell",
     "dark": "Dunkel",

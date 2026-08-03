@@ -91,3 +91,13 @@ export function applyRbacInfraFilter<C extends { id: string; nodes: Array<{ node
   if (!allowed) return { ...cluster, nodes: [] }
   return { ...cluster, nodes: cluster.nodes.filter(n => allowed.has(n.node)) }
 }
+
+/**
+ * Tree mask for a token principal (spec section 6). connectionIds null =
+ * unrestricted within the tenant (the tenant mask still applies upstream).
+ * Exact-set semantics: no prefix matching, conn-1 never covers conn-10.
+ */
+export function tokenInfraScope(connectionIds: string[] | null): RbacInfraScope | null {
+  if (connectionIds === null) return null
+  return { fullConnections: new Set(connectionIds), nodesByConnection: new Map() }
+}

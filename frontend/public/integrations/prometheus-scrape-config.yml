@@ -1,0 +1,16 @@
+# ProxCenter public read-only API: Prometheus scrape configuration.
+# Create the token in ProxCenter under Settings > API with at least the
+# nodes:read, vms:read and backups:read scopes, then paste the secret below.
+# The token is shown once at creation and never again.
+scrape_configs:
+  - job_name: proxcenter
+    scheme: https
+    metrics_path: /api/v1/public/metrics
+    scrape_interval: 60s
+    scrape_timeout: 30s
+    authorization:
+      type: Bearer
+      credentials: pxc_REPLACE_WITH_YOUR_TOKEN
+    static_configs:
+      - targets:
+          - proxcenter.example.com

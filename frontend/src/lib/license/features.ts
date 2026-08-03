@@ -36,6 +36,10 @@ export const Features = {
   // cluster), which lives under the `connections/[id]/ha/**` routes and is
   // not gated by this capability.
   HA: 'control_plane_ha',
+  // Read-only public API access via pxc_ service-account tokens (paid add-on,
+  // spec 2026-07-28). Enforcement lives in getPrincipal(), UI gate in the
+  // Settings API tab FeatureGuard.
+  API_ACCESS: 'api_access',
 } as const
 
 export type FeatureId = (typeof Features)[keyof typeof Features]
@@ -134,6 +138,11 @@ export const OPTION_REGISTRY: Record<string, OptionInfo> = {
   control_plane_ha: {
     name: 'ProxCenter HA',
     description: 'High availability for the ProxCenter control plane itself: multi-node conversion, virtual IP failover and cluster health.',
+    docsUrl: 'https://proxcenter.io/pricing',
+  },
+  api_access: {
+    name: 'ProxCenter API Access',
+    description: 'Read-only public API: autonomous service-account tokens for Prometheus, Zabbix, PRTG, CI and custom monitoring integrations.',
     docsUrl: 'https://proxcenter.io/pricing',
   },
 }

@@ -96,6 +96,11 @@ const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
   loading: tabLoading
 })
 
+const ApiTokensTab = dynamic(() => import('@/components/settings/api-tokens/ApiTokensTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const DiagnosticModal = dynamic(() => import('@/components/settings/DiagnosticModal'), {
   ssr: false
 })
@@ -3042,7 +3047,7 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha']
+  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
 
   const allTabs = [
     { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
@@ -3060,6 +3065,7 @@ export default function SettingsPage() {
     { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
     { label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, providerOnly: true },
+    { label: t('settings.apiTokens.tabLabel'), icon: 'ri-key-2-line', component: ApiTokensTab, providerOnly: true },
   ]
 
   // Hide provider-only tabs (Tenants, vDC) unless super admin AND currently

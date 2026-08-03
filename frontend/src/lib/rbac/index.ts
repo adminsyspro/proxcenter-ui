@@ -9,10 +9,8 @@
 
 import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
 import { prisma } from "@/lib/db/prisma"
-import { authOptions } from "@/lib/auth/config"
+import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import {
@@ -20,6 +18,7 @@ import {
   isConnectionVisible,
   applyRbacInfraFilter,
   filterVisibleConnections,
+  tokenInfraScope,
   type RbacInfraScope,
 } from './infraScope'
 
@@ -266,15 +265,53 @@ export async function hasPermission(check: PermissionCheck): Promise<boolean> {
 }
 
 /**
- * Get all effective permissions for a user
+ * Shared prologue of the principal-aware helpers. A token principal short-
+ * circuits into its flat scope permissions + connection perimeter (NEVER a
+ * DB grant load: a token has no user row, loading grants would silently
+ * return an empty set). Anything else resolves to the legacy userId path.
+ */
+function asTokenPrincipal(principalOrUserId: string | Principal): Principal | null {
+  if (typeof principalOrUserId !== "string" && principalOrUserId.kind === "token") {
+    return principalOrUserId
+  }
+  return null
+}
+
+function toUserId(principalOrUserId: string | Principal): string {
+  return typeof principalOrUserId === "string"
+    ? principalOrUserId
+    : (principalOrUserId.userId as string)
+}
+
+/**
+ * The tenant to load grants against (hard gate 2, Task 18). An explicit
+ * `tenantId` argument always wins (existing behaviour for every plain-userId
+ * caller, unchanged). When it is omitted, fall back to the tenant CARRIED BY
+ * THE PRINCIPAL ITSELF rather than straight to `DEFAULT_TENANT_ID`: a
+ * Principal already knows its own tenant, and defaulting past it would
+ * silently evaluate every MSP user's grants against the provider tenant the
+ * moment a caller passes a Principal without also repeating its tenantId.
+ */
+function resolveGrantTenantId(principalOrUserId: string | Principal, tenantId?: string): string {
+  const principalTenantId = typeof principalOrUserId === "string" ? undefined : principalOrUserId.tenantId
+  return tenantId || principalTenantId || DEFAULT_TENANT_ID
+}
+
+/**
+ * Get all effective permissions for a user (or the flat scope set of a token)
  */
 export async function getEffectivePermissions(
-  userId: string,
+  principalOrUserId: string | Principal,
   resourceType?: string,
   resourceId?: string,
   tenantId?: string,
 ): Promise<string[]> {
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const token = asTokenPrincipal(principalOrUserId)
+  if (token) {
+    return Array.from(token.permissions ?? [])
+  }
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   // Super admins implicitly hold every defined permission. Return the full
@@ -467,6 +504,7 @@ export const PERMISSIONS = {
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
+  ADMIN_APITOKENS: "admin.apitokens",
 } as const
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS]
@@ -492,22 +530,27 @@ export function buildNodeResourceId(connId: string, nodeName: string): string {
 }
 
 /**
- * Get the current user's RBAC context from the session
- * Returns null if not authenticated
+ * Get the current caller's RBAC context from the resolved principal
+ * (session cookie or API token). Returns null if not authenticated.
  */
-export async function getRBACContext(): Promise<{ userId: string; isAdmin: boolean; tenantId: string } | null> {
-  const session = await getServerSession(authOptions)
-
-  if (!session?.user?.id) {
-    return null
+export async function getRBACContext(): Promise<{
+  userId?: string
+  isAdmin: boolean
+  tenantId: string
+  principal?: Principal
+} | null> {
+  const result = await getPrincipal()
+  if (!result.ok || !result.principal) return null
+  const principal = result.principal
+  if (principal.kind === "token") {
+    // A token is NEVER super admin and never carries a synthetic userId.
+    return { isAdmin: false, tenantId: principal.tenantId, principal }
   }
-
-  const tenantId = (session as any)?.user?.tenantId || DEFAULT_TENANT_ID
-
   return {
-    userId: session.user.id,
-    isAdmin: await isUserSuperAdmin(session.user.id),
-    tenantId
+    userId: principal.userId,
+    isAdmin: await isUserSuperAdmin(principal.userId as string),
+    tenantId: principal.tenantId,
+    principal,
   }
 }
 
@@ -525,11 +568,48 @@ export async function hasTagOrPoolScopes(userId: string, tenantId?: string): Pro
   return grants.byScope.some(g => g.scopeType === "tag" || g.scopeType === "pool")
 }
 
+function resolveTokenConnectionId(
+  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceId?: string,
+): string | null {
+  if (!resourceType || !resourceId || resourceType === "global") return null
+  // "connection" and "pbs" carry a RAW connection id; "node" and "vm" carry
+  // prefixed ids (buildVmResourceId/buildNodeResourceId) whose first segment
+  // is the connection. NEVER inferred from the string shape (spec section 6).
+  if (resourceType === "connection" || resourceType === "pbs") return resourceId
+  return resourceId.split(":")[0] || null
+}
+
+function checkTokenPermission(
+  principal: Principal,
+  permission: string,
+  resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
+  resourceId?: string,
+): NextResponse | null {
+  const deny = () =>
+    NextResponse.json({ error: `Permission denied: ${permission}` }, { status: 403 })
+  if (!principal.permissions?.has(permission)) {
+    return deny()
+  }
+  // Connection perimeter: only RESOURCE-BEARING checks are constrained.
+  // Global and resource-less checks pass — aggregated routes rely on them
+  // and filter downstream through the enumeration helpers instead.
+  if (principal.connectionIds && resourceType && resourceType !== "global" && resourceId) {
+    const connId = resolveTokenConnectionId(resourceType, resourceId)
+    // Fail CLOSED: a resource-bearing id whose connection cannot be resolved
+    // (e.g. ":node1:qemu:100") is refused, never waved past the perimeter.
+    if (!connId || !principal.connectionIds.includes(connId)) {
+      return deny()
+    }
+  }
+  return null
+}
+
 /**
- * Check if the current user has a specific permission
+ * Check if the current caller has a specific permission
  * Returns a 401/403 NextResponse if denied, or null if allowed
  *
- * Uses a two-pass approach:
+ * The session path uses a two-pass approach:
  *   Pass 1: standard scopes (global, connection, node, vm)
  *   Pass 2: if VM resource + user has tag/pool scopes → resolve meta and retry
  */
@@ -538,14 +618,23 @@ export async function checkPermission(
   resourceType?: "connection" | "node" | "vm" | "global" | "pbs",
   resourceId?: string
 ): Promise<NextResponse | null> {
-  const session = await getServerSession(authOptions)
+  const result = await getPrincipal()
+  if (!result.ok) {
+    return rejectionToResponse(result.rejection)
+  }
+  const principal = result.principal
+  if (principal && principal.kind === "token") {
+    // Layer 2 (defense in depth): flat scope permissions + connection
+    // perimeter, no DB grants loaded for tokens.
+    return checkTokenPermission(principal, permission, resourceType, resourceId)
+  }
 
-  if (!session?.user?.id) {
+  if (!principal?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
-  const userId = session.user.id
-  const tenantId = (session as any)?.user?.tenantId || DEFAULT_TENANT_ID
+  const userId = principal.userId
+  const tenantId = principal.tenantId
 
   // Pass 1: standard scopes (global, connection, node, vm)
   if (await hasPermission({ userId, permission, resourceType, resourceId, tenantId })) {
@@ -582,14 +671,25 @@ export async function requireAdmin(): Promise<NextResponse | null> {
  * Each VM should have: connId, node, type, vmid (or id in format "connId:type:node:vmid")
  */
 export async function filterVmsByPermission<T extends { id?: string; connId?: string; node?: string; type?: string; vmid?: string }>(
-  userId: string,
+  principalOrUserId: string | Principal,
   vms: T[],
   permission: string = PERMISSIONS.VM_VIEW,
   tenantId?: string,
 ): Promise<T[]> {
+  const token = asTokenPrincipal(principalOrUserId)
+  if (token) {
+    if (!token.permissions?.has(permission)) return []
+    if (!token.connectionIds) return vms
+    const allowed = new Set(token.connectionIds)
+    return vms.filter(vm => {
+      const connId = vm.connId ?? (vm.id ? vm.id.split(":")[0] : undefined)
+      return connId !== undefined && allowed.has(connId)
+    })
+  }
+  const userId = toUserId(principalOrUserId)
   // Load every grant for this user/tenant in one shot, then filter the list
   // with a sync predicate. Was O(N) Prisma calls per filter; now O(1).
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   // Super admin or any global-scope grant for this permission → return as-is.
@@ -636,12 +736,20 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
  * Filter a list of nodes based on user permissions
  */
 export async function filterNodesByPermission<T extends { connId: string; node: string }>(
-  userId: string,
+  principalOrUserId: string | Principal,
   nodes: T[],
   permission: string = PERMISSIONS.NODE_VIEW,
   tenantId?: string,
 ): Promise<T[]> {
-  const tid = tenantId || DEFAULT_TENANT_ID
+  const token = asTokenPrincipal(principalOrUserId)
+  if (token) {
+    if (!token.permissions?.has(permission)) return []
+    if (!token.connectionIds) return nodes
+    const allowed = new Set(token.connectionIds)
+    return nodes.filter(node => allowed.has(node.connId))
+  }
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
 
   if (grants.superAdmin) return nodes
@@ -665,10 +773,15 @@ export async function filterNodesByPermission<T extends { connId: string; node: 
  * (super admin / global scope) -- callers skip tree pruning then.
  */
 export async function getRbacInfraScope(
-  userId: string,
+  principalOrUserId: string | Principal,
   tenantId?: string,
 ): Promise<RbacInfraScope | null> {
-  const tid = tenantId ?? DEFAULT_TENANT_ID
+  const token = asTokenPrincipal(principalOrUserId)
+  if (token) {
+    return tokenInfraScope(token.connectionIds ?? null)
+  }
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
   return deriveRbacInfraScope(grants)
 }

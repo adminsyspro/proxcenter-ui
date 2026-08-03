@@ -328,6 +328,7 @@ model User {
   rolesGranted        RbacUserRole[]       @relation("RbacUserRoleGrantedBy")
   permissionsAssigned RbacUserPermission[] @relation("RbacUserPermissionUser")
   permissionsGranted  RbacUserPermission[] @relation("RbacUserPermissionGrantedBy")
+  apiTokens           ApiToken[]
 
   @@index([tenantId])
   @@map("users")
@@ -380,6 +381,10 @@ model AuditLog {
   userAgent    String?  @map("user_agent")
   status       String   @default("success")
   errorMessage String?  @map("error_message")
+  // Attributes an audit row to the API token that produced it, in addition
+  // to (or instead of) userId. Deliberately NO foreign key: audit rows must
+  // survive token deletion (spec 2026-07-28, #264/#254).
+  apiTokenId   String?  @map("api_token_id")
 
   @@index([timestamp])
   @@index([userId])
@@ -387,7 +392,34 @@ model AuditLog {
   @@index([category])
   @@index([resourceType, resourceId])
   @@index([tenantId])
+  @@index([apiTokenId])
   @@map("audit_logs")
+}
+
+// API tokens: autonomous read-only service accounts (spec 2026-07-28, #264/#254).
+model ApiToken {
+  id              String    @id
+  tenantId        String    @map("tenant_id")
+  name            String
+  description     String?
+  tokenPrefix     String    @unique @map("token_prefix")
+  tokenHash       String    @unique @map("token_hash")
+  scopes          Json
+  connectionIds   Json?     @map("connection_ids")
+  expiresAt       DateTime? @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  lastUsedAt      DateTime? @map("last_used_at")
+  lastUsedIp      String?   @map("last_used_ip")
+  rateLimitPerMin Int       @default(600) @map("rate_limit_per_min")
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator User?  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("api_tokens")
 }
 
 model LdapConfig {
@@ -467,8 +499,9 @@ model Tenant {
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")
 
-  members UserTenant[]
-  vdcs    Vdc[]
+  members   UserTenant[]
+  vdcs      Vdc[]
+  apiTokens ApiToken[]
 
   @@index([slug])
   @@map("tenants")

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { timingSafeEqual } from "node:crypto"
+
+import { constantTimeStringEqual } from "@/lib/crypto/constantTime"
 
 // Server-side caller authentication for /api/internal/* routes. These
 // routes are listed in publicApiRoutes in middleware.ts because they
@@ -16,18 +17,6 @@ import { timingSafeEqual } from "node:crypto"
 // without the secret gets 403 with no further information.
 
 const EXPECTED_CALLER = "proxcenter-ws-proxy"
-
-function constantTimeStringEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8")
-  const bb = Buffer.from(b, "utf8")
-  if (ab.length !== bb.length) {
-    // timingSafeEqual rejects mismatched length up front, so we
-    // compare against an equal-length buffer and still return false.
-    timingSafeEqual(ab, Buffer.alloc(ab.length))
-    return false
-  }
-  return timingSafeEqual(ab, bb)
-}
 
 export function requireInternalCaller(req: Request): NextResponse | null {
   const caller = req.headers.get("x-internal-caller") || ""

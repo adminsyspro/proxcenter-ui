@@ -2,12 +2,11 @@
 import { headers } from "next/headers"
 
 import { nanoid } from "nanoid"
-import { getServerSession } from "next-auth"
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/db/prisma"
-import { authOptions } from "@/lib/auth/config"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { getPrincipal, getTokenPrincipalContext } from "@/lib/auth/principal"
 
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
@@ -25,6 +24,7 @@ export type AuditCategory =
   | "migration"      // Migration ESXi → Proxmox
   | "admin"          // Admin actions (tenants, etc.)
   | "sdn"            // SDN (zones, vnets, apply)
+  | "api_tokens"    // Tokens API (creation, revocation, refus)
 
 export type AuditAction =
 
@@ -78,6 +78,11 @@ export type AuditAction =
   // SDN
   | "sdn.apply"
 
+  // API tokens
+  | "apitoken.create"
+  | "apitoken.revoke"
+  | "apitoken.denied"
+
   // 2FA
   | "2fa_enrolled"
   | "2fa_disabled"
@@ -105,6 +110,7 @@ export interface AuditLogEntry {
   userEmail?: string
   ipAddress?: string
   userAgent?: string
+  apiTokenId?: string
 }
 
 /**
@@ -113,8 +119,16 @@ export interface AuditLogEntry {
  * besoin de JSON.stringify côté caller. Si les infos de session / headers ne
  * sont pas fournies par l'appelant, on tente de les récupérer depuis la
  * requête en cours (best-effort, l'absence n'est jamais bloquante).
+ *
+ * `tx` (optional, LAST parameter): pass a Prisma interactive-transaction
+ * client to make this audit row atomic with a state change the caller is
+ * making in the same `prisma.$transaction(...)` — e.g. api-tokens creation
+ * and revocation (Task 11 fix round 1), where a lost audit row would either
+ * strand an active, unlogged credential (create) or silently fail to record
+ * a revocation (revoke). Every existing call site omits it and keeps using
+ * the default `prisma` client — behavior is unchanged when omitted.
  */
-export async function audit(entry: AuditLogEntry): Promise<string> {
+export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient): Promise<string> {
   const id = nanoid()
   const timestamp = new Date()
 
@@ -124,14 +138,22 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
   let ipAddress = entry.ipAddress
   let userAgent = entry.userAgent
 
+  let apiTokenId = entry.apiTokenId
+
   if (!userId || !userEmail) {
     try {
-      const session = await getServerSession(authOptions)
-
-      if (session?.user) {
-        userId = userId || session.user.id
-        userEmail = userEmail || session.user.email
+      const tokenCtx = await getTokenPrincipalContext()
+      if (tokenCtx.principal) {
+        // Token call: attribute to the token, keep user fields null (D13).
+        apiTokenId = apiTokenId || tokenCtx.principal.tokenId
+      } else if (!tokenCtx.rejected) {
+        const result = await getPrincipal()
+        if (result.principal?.userId) {
+          userId = userId || result.principal.userId
+          userEmail = userEmail || result.principal.userEmail
+        }
       }
+      // rejected: best-effort, leave both user and token attribution null.
     } catch {
       // Pas de session (ex: login)
     }
@@ -156,7 +178,8 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
     // Fallback to default (e.g. during login before session exists)
   }
 
-  await prisma.auditLog.create({
+  const client = tx ?? prisma
+  await client.auditLog.create({
     data: {
       id,
       tenantId,
@@ -173,6 +196,7 @@ export async function audit(entry: AuditLogEntry): Promise<string> {
       userAgent: userAgent || null,
       status: entry.status || "success",
       errorMessage: entry.errorMessage || null,
+      apiTokenId: apiTokenId || null,
     },
   })
 

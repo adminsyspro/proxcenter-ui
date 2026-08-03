@@ -210,6 +210,23 @@ describe('checkPermission, token branch (layer 2)', () => {
     expect(await checkPermission(PERMISSIONS.VM_VIEW, 'global')).toBeNull()
   })
 
+  it('interprets "connection" resourceId as a RAW connection id too, never split on ":"', async () => {
+    // resolveTokenConnectionId special-cases "connection" and "pbs" as
+    // already-raw ids: unlike "vm"/"node" they must NEVER be split on ":",
+    // or a connection id that happens to contain a colon would resolve to
+    // the wrong (truncated) segment. Using a colon-bearing id here is the
+    // point: a buggy split-based implementation would truncate it to "conn"
+    // and still (wrongly) match the "conn" perimeter entry below.
+    await withToken(
+      { scopes: ['nodes:read'], connectionIds: ['conn:with:colons'] },
+      'inventory-tree',
+      '/api/v1/inventory',
+    )
+    expect(await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', 'conn:with:colons')).toBeNull()
+    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, 'connection', 'conn')
+    expect(denied?.status).toBe(403)
+  })
+
   it('maps an invalid Bearer to the fail-closed 401 response', async () => {
     headersMock.mockResolvedValue(new Headers({ authorization: 'Bearer pxc_invalid-token' }))
     const res = await checkPermission(PERMISSIONS.VM_VIEW)
@@ -251,6 +268,24 @@ describe('token-aware filters (never a synthetic userId)', () => {
     expect(out).toHaveLength(3)
   })
 
+  it('filterVmsByPermission derives connId from the wire id when the vm has none of its own', async () => {
+    // Some callers pass raw wire objects without a `connId` field; the
+    // token branch must fall back to the first segment of `id` rather than
+    // treating a missing connId as "no connection" and dropping the VM.
+    const idOnly = [
+      { id: 'conn-1:qemu:node1:100' },
+      { id: 'conn-2:qemu:node2:200' },
+    ]
+    const out = await filterVmsByPermission(tokenPrincipal(), idOnly, PERMISSIONS.VM_VIEW)
+    expect(out).toEqual([{ id: 'conn-1:qemu:node1:100' }])
+  })
+
+  it('filterVmsByPermission drops a vm with neither connId nor id, rather than crashing', async () => {
+    const noIdentity = [{ vmid: '999' }]
+    const out = await filterVmsByPermission(tokenPrincipal(), noIdentity, PERMISSIONS.VM_VIEW)
+    expect(out).toEqual([])
+  })
+
   it('filterNodesByPermission filters by exact connId', async () => {
     const nodes = [
       { connId: 'conn-1', node: 'n1' },
@@ -258,6 +293,28 @@ describe('token-aware filters (never a synthetic userId)', () => {
     ]
     const out = await filterNodesByPermission(tokenPrincipal(), nodes, PERMISSIONS.NODE_VIEW)
     expect(out).toEqual([{ connId: 'conn-1', node: 'n1' }])
+  })
+
+  it('filterNodesByPermission returns [] when the permission is not in the scopes', async () => {
+    const nodes = [{ connId: 'conn-1', node: 'n1' }]
+    const out = await filterNodesByPermission(
+      tokenPrincipal({ permissions: new Set(['storage.view']) }), nodes, PERMISSIONS.NODE_VIEW,
+    )
+    expect(out).toEqual([])
+  })
+
+  it('filterNodesByPermission returns every node for a null perimeter', async () => {
+    const nodes = [
+      { connId: 'conn-1', node: 'n1' },
+      { connId: 'conn-99', node: 'n2' },
+    ]
+    const out = await filterNodesByPermission(tokenPrincipal({ connectionIds: null }), nodes, PERMISSIONS.NODE_VIEW)
+    expect(out).toHaveLength(2)
+  })
+
+  it('getEffectivePermissions returns [] for a token whose permissions are unset, rather than throwing', async () => {
+    const perms = await getEffectivePermissions(tokenPrincipal({ permissions: undefined }))
+    expect(perms).toEqual([])
   })
 
   it('getRbacInfraScope maps connectionIds to fullConnections, null to unrestricted', async () => {

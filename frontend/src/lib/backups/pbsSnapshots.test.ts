@@ -98,6 +98,40 @@ describe('getAllBackups', () => {
     expect(setInflightPbsFetchMock).toHaveBeenLastCalledWith(null, 'pbs-1', 'default', 'en-US')
   })
 
+  it('a failed background refresh on a stale hit resolves to the stale snapshot, never an unhandled rejection', async () => {
+    const staleData = [{ id: 'stale-1' }]
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'stale', data: staleData, warnings: ['old warning'] })
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') throw new Error('PBS unreachable')
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US')
+    expect(result).toEqual({ data: staleData, warnings: ['old warning'], fromCache: true })
+
+    const refreshPromise = setInflightPbsFetchMock.mock.calls[0][0]
+    const settled = await refreshPromise
+    // The .catch() fallback, not a thrown/rejected promise: the caller of
+    // getAllBackups never awaits this promise, so a rejection here would be
+    // an unhandled rejection in production.
+    expect(settled).toEqual({ data: staleData, warnings: ['old warning'] })
+    expect(setCachedPbsBackupsMock).not.toHaveBeenCalled()
+    expect(setInflightPbsFetchMock).toHaveBeenLastCalledWith(null, 'pbs-1', 'default', 'en-US')
+  })
+
+  it('a stale hit with a refresh already in flight does not start a second one', async () => {
+    const staleData = [{ id: 'stale-1' }]
+    getPbsBackupsFromCacheMock.mockReturnValue({ status: 'stale', data: staleData, warnings: [] })
+    const alreadyRunning = new Promise(() => {}) // never resolves within this test
+    getInflightPbsFetchMock.mockReturnValue(alreadyRunning)
+
+    const result = await getAllBackups('pbs-1', conn, 'default', 'en-US')
+
+    expect(result).toEqual({ data: staleData, warnings: [], fromCache: true })
+    expect(setInflightPbsFetchMock).not.toHaveBeenCalled()
+    expect(pbsFetchMock).not.toHaveBeenCalled()
+  })
+
   it('reuses an in-flight fetch instead of firing a duplicate request', async () => {
     getPbsBackupsFromCacheMock.mockReturnValue({ status: 'miss' })
     const inflight = Promise.resolve({ data: [{ id: 'inflight-1' }], warnings: ['inflight warning'] })
@@ -173,5 +207,125 @@ describe('fetchAllPbsBackups', () => {
     expect(result.data).toHaveLength(1)
     expect(result.data[0].datastore).toBe('ok')
     expect(result.warnings).toEqual(["Failed to fetch datastore 'broken': boom"])
+  })
+
+  it('falls back to `name` when `store` is absent, and skips a datastore with neither', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ name: 'ds-by-name' }, {}]
+      if (path === '/admin/datastore/ds-by-name/namespace') return []
+      if (path === '/admin/datastore/ds-by-name/snapshots') {
+        return [{ 'backup-type': 'vm', 'backup-id': '1', 'backup-time': 1 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const result = await fetchAllPbsBackups(conn, 'en-US')
+
+    // The nameless datastore never even reaches pbsFetch (no throw above),
+    // and contributes nothing -- the store-by-name one still resolves.
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0].datastore).toBe('ds-by-name')
+  })
+
+  it('falls back to root-only namespaces when the namespace endpoint resolves without an array (older PBS)', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      // Resolves (does not throw) but with a non-array body: Array.isArray
+      // must gate the subNs expansion, not just a try/catch around it.
+      if (path === '/admin/datastore/ds1/namespace') return { error: 'not supported' } as any
+      if (path === '/admin/datastore/ds1/snapshots') {
+        return [{ 'backup-type': 'vm', 'backup-id': '1', 'backup-time': 1 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const result = await fetchAllPbsBackups(conn, 'en-US')
+
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0].namespace).toBe('')
+  })
+
+  it('expands real sub-namespaces (dropping blank/malformed entries) and queries each one', async () => {
+    const queriedPaths: string[] = []
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      queriedPaths.push(path)
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path === '/admin/datastore/ds1/namespace') {
+        return [{ ns: 'team-a' }, { ns: '' }, {}]
+      }
+      if (path === '/admin/datastore/ds1/snapshots') {
+        return [{ 'backup-type': 'vm', 'backup-id': 'root-1', 'backup-time': 1 }]
+      }
+      if (path === '/admin/datastore/ds1/snapshots?ns=team-a') {
+        return [{ 'backup-type': 'vm', 'backup-id': 'ns-1', 'backup-time': 2 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const result = await fetchAllPbsBackups(conn, 'en-US')
+
+    // Only ONE real sub-namespace ('team-a'); the blank and nsless entries
+    // were filtered out, not queried as their own (empty-string) namespace
+    // a second time.
+    expect(queriedPaths.filter(p => p.startsWith('/admin/datastore/ds1/snapshots')).sort()).toEqual([
+      '/admin/datastore/ds1/snapshots',
+      '/admin/datastore/ds1/snapshots?ns=team-a',
+    ])
+    expect(result.data.map(b => `${b.namespace}/${b.backupId}`).sort()).toEqual(['/root-1', 'team-a/ns-1'])
+    // The id embeds the namespace segment only when it is non-empty.
+    const nsBackup = result.data.find(b => b.backupId === 'ns-1')
+    expect(nsBackup?.id).toBe('ds1/team-a/vm/ns-1/2')
+    const rootBackup = result.data.find(b => b.backupId === 'root-1')
+    expect(rootBackup?.id).toBe('ds1/vm/root-1/1')
+  })
+
+  it('derives every field of a fully-populated snapshot (the branches a bare-minimum snapshot never reaches)', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path === '/admin/datastore/ds1/namespace') return []
+      if (path === '/admin/datastore/ds1/snapshots') {
+        return [{
+          'backup-type': 'vm',
+          'backup-id': '100',
+          'backup-time': 1_700_000_000,
+          comment: 'nightly backup',
+          size: 4096,
+          files: ['qemu-server.conf', 'drive-scsi0.img.fidx'],
+          verification: { state: 'ok', upid: 'UPID:node:...', 'last-run': 1_700_000_100 },
+          protected: true,
+          owner: 'root@pam',
+        }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const [backup] = (await fetchAllPbsBackups(conn, 'en-US')).data
+
+    expect(backup.vmName).toBe('nightly backup')
+    expect(backup.fileCount).toBe(2)
+    expect(backup.verified).toBe(true)
+    expect(backup.verifiedAt).toBe(new Date(1_700_000_100 * 1000).toLocaleString('en-US'))
+    expect(backup.protected).toBe(true)
+    expect(backup.owner).toBe('root@pam')
+    expect(backup.comment).toBe('nightly backup')
+    expect(backup.backupTimeFormatted).toBe(new Date(1_700_000_000 * 1000).toLocaleString('en-US'))
+    expect(backup.backupTimeIso).toBe(new Date(1_700_000_000 * 1000).toISOString())
+  })
+
+  it('a snapshot with no backup-time formats as "-"/"" instead of an Invalid Date', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path === '/admin/datastore/ds1/namespace') return []
+      if (path === '/admin/datastore/ds1/snapshots') {
+        return [{ 'backup-type': 'vm', 'backup-id': '100', 'backup-time': 0 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const [backup] = (await fetchAllPbsBackups(conn, 'en-US')).data
+
+    expect(backup.backupTimeFormatted).toBe('-')
+    expect(backup.backupTimeIso).toBe('')
+    expect(backup.verifiedAt).toBeNull()
   })
 })

@@ -158,4 +158,54 @@ describe('withPublicApiGuard', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('RateLimit-Limit')).toBeNull()
   })
+
+  it('session callers: an omitted ctx never reaches the handler as undefined', async () => {
+    // `handler(req, ctx || {})`: a caller (Next's own dispatch, or a test)
+    // that omits ctx entirely must not make the handler crash on `ctx.x`.
+    headersMock.mockResolvedValue(new Headers())
+    getServerSessionMock.mockResolvedValue({ user: { id: 'u1', tenantId: 'default' } })
+    const guarded = withPublicApiGuard('vms-list', async (_req, ctx) => {
+      // Reading a property off ctx would throw a TypeError if the guard ever
+      // forwarded `undefined` verbatim instead of defaulting to `{}`.
+      expect(ctx.principal).toBeUndefined()
+      return NextResponse.json({ ok: true })
+    })
+    const res = await guarded(new Request('http://t/_'), undefined as any)
+    expect(res.status).toBe(200)
+  })
+
+  it('layer 1 re-derives path params independently: a path that vanishes between verification and the guard re-check fails closed, even though the token itself validated', async () => {
+    // getPrincipal (step 10) and the guard's own layer-1 check both derive
+    // connection-id params from the SAME x-pxc-path header, but via two
+    // separate headers() reads -- defence in depth means the guard never
+    // trusts the earlier verification's params, it recomputes its own. This
+    // models that recomputation failing (header vanished) after the token
+    // otherwise validated, and proves the guard fails closed rather than
+    // treating a missing/mismatched path as "no connection segment".
+    const { secret } = await seedApiToken({ scopes: ['backups:read'], connectionIds: ['conn-a'] })
+    headersMock
+      .mockResolvedValueOnce(tokenHeaders(secret, 'pbs-backups', '/api/v1/pbs/conn-a/backups'))
+      .mockResolvedValueOnce(new Headers({ 'x-pxc-entry': 'pbs-backups' }))
+    const guarded = withPublicApiGuard('pbs-backups', okHandler)
+    const res = await guarded(new Request('http://t/_'), { params: Promise.resolve({ id: 'conn-a' }) })
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Invalid or expired API token' })
+    expect(okHandler).not.toHaveBeenCalled()
+    expect(resolveVisibleMock).not.toHaveBeenCalled()
+  })
+
+  it('D13: a denial audit never carries a token prefix it could not itself re-derive', async () => {
+    // The prefix in the audit row comes from auditTokenDenied's OWN,
+    // independent re-parse of the Authorization header (never borrowed from
+    // getPrincipal's internal state) -- so a secret too short to carry a
+    // prefix at all (same "pxc_x" shape principal.test.ts uses) must land
+    // with tokenPrefix ABSENT, not a truncated fragment.
+    headersMock.mockResolvedValue(tokenHeaders('pxc_x', 'vms-list', '/api/v1/vms'))
+    const guarded = withPublicApiGuard('vms-list', okHandler)
+    const res = await guarded(new Request('http://t/_'), {})
+    expect(res.status).toBe(401)
+    const rows = await prismaTest.auditLog.findMany({ where: { action: 'apitoken.denied' } })
+    expect(rows).toHaveLength(1)
+    expect((rows[0].details as any).tokenPrefix).toBeUndefined()
+  })
 })

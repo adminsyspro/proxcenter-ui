@@ -89,6 +89,18 @@ describe('GET /api/v1/settings/api-tokens', () => {
     expect(body.data).toHaveLength(1)
     expect(body.data[0].tenantId).toBe('default')
   })
+
+  // _shared.ts's requireApiTokenAdmin: the permission check can pass while
+  // the principal itself no longer resolves (e.g. a session that expired
+  // between the permission check and the context load) -- this must still
+  // fail closed with 401, never proceed with an undefined ctx.
+  it('401s when the permission check passes but the RBAC context cannot be resolved', async () => {
+    getRBACContextMock.mockResolvedValue(null)
+    const { GET } = await import('./route')
+    const res = await callRoute(GET)
+    expect(res.status).toBe(401)
+    expect(await readJson<any>(res)).toEqual({ error: 'Not authenticated' })
+  })
 })
 
 describe('POST /api/v1/settings/api-tokens', () => {
@@ -100,6 +112,92 @@ describe('POST /api/v1/settings/api-tokens', () => {
     )
     const { POST } = await import('./route')
     expect((await callRoute(POST, { body: validBody })).status).toBe(403)
+  })
+
+  it('denies creation when admin.apitokens is missing, before even consulting the licence gate', async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 403 }))
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: validBody })
+    expect(res.status).toBe(403)
+    expect(requireFeatureMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a body whose name is missing (not a string) with the same 400 as an empty name', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { scopes: ['vms:read'] } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'name is required' })
+  })
+
+  it('rejects a connectionIds value that is not an array at all (shape check, before the ownership check)', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, connectionIds: 'conn-a' } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'connectionIds must be null or an array of connection ids' })
+    expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
+  })
+
+  it('rejects a target tenant that does not exist, with the same body as a disabled one', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, tenantId: 'no-such-tenant' } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'Target tenant is disabled or missing' })
+  })
+
+  it('rejects a non-positive or non-finite expiresInDays', async () => {
+    const { POST } = await import('./route')
+    const negative = await callRoute(POST, { body: { ...validBody, expiresInDays: -5 } })
+    expect(negative.status).toBe(400)
+    expect(await readJson<any>(negative)).toEqual({ error: 'expiresInDays must be a positive number' })
+    const notANumber = await callRoute(POST, { body: { ...validBody, name: 'other', expiresInDays: 'soon' } })
+    expect(notANumber.status).toBe(400)
+    expect(await readJson<any>(notANumber)).toEqual({ error: 'expiresInDays must be a positive number' })
+  })
+
+  it('honours an explicit, valid rateLimitPerMin instead of the 600 default', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, rateLimitPerMin: 120 } })
+    expect(res.status).toBe(201)
+    const body = await readJson<any>(res)
+    expect(body.data.token.rateLimitPerMin).toBe(120)
+  })
+
+  it('falls back to the 600 default when rateLimitPerMin is present but not a positive number', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, rateLimitPerMin: -3 } })
+    expect(res.status).toBe(201)
+    const body = await readJson<any>(res)
+    expect(body.data.token.rateLimitPerMin).toBe(600)
+  })
+
+  it('stores a provided description, and treats an empty string as absent (null)', async () => {
+    const { POST } = await import('./route')
+    const withDescription = await callRoute(POST, { body: { ...validBody, description: 'used by Grafana' } })
+    const withBody = await readJson<any>(withDescription)
+    expect(withBody.data.token.description).toBe('used by Grafana')
+
+    const withEmpty = await callRoute(POST, { body: { ...validBody, name: 'other-token', description: '' } })
+    const emptyBody = await readJson<any>(withEmpty)
+    expect(emptyBody.data.token.description).toBeNull()
+  })
+
+  it('defaults createdByUserId to null when the RBAC context carries no userId', async () => {
+    getRBACContextMock.mockResolvedValue({ isAdmin: true, tenantId: 'default' })
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: validBody })
+    expect(res.status).toBe(201)
+    const body = await readJson<any>(res)
+    const row = await prismaTest.apiToken.findUnique({ where: { id: body.data.token.id } })
+    expect(row?.createdByUserId).toBeNull()
+  })
+
+  it('falls back to a generic 500 message when the transaction failure carries no message', async () => {
+    auditMock.mockRejectedValueOnce({})
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: validBody })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Internal server error' })
+    expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
   })
 
   it('creates a token and reveals the secret exactly once', async () => {
@@ -210,5 +308,45 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     const { id } = await seedApiToken({ tenantId: 't2' })
     const { DELETE } = await import('./[id]/route')
     expect((await callRoute(DELETE, { method: 'DELETE', params: { id } })).status).toBe(404)
+  })
+
+  it('denies revocation when admin.apitokens is missing', async () => {
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 403 }))
+    const { id } = await seedApiToken()
+    const { DELETE } = await import('./[id]/route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
+    expect(res.status).toBe(403)
+    const row = await prismaTest.apiToken.findUnique({ where: { id } })
+    expect(row?.revokedAt).toBeNull()
+  })
+
+  it('400s when params.id is missing entirely', async () => {
+    const { DELETE } = await import('./[id]/route')
+    const res = await callRoute(DELETE, { method: 'DELETE' })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'Missing params.id' })
+  })
+
+  it('is idempotent: revoking an already-revoked token keeps the original revokedAt and never re-enters the transaction', async () => {
+    const { id } = await seedApiToken({ revokedAt: new Date('2026-01-01T00:00:00.000Z') })
+    const { DELETE } = await import('./[id]/route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data.revokedAt).toBe('2026-01-01T00:00:00.000Z')
+    // No second audit row: the transaction (and its audit() call) never runs
+    // again for a token that is already revoked.
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a generic 500 message when the revoke transaction failure carries no message', async () => {
+    auditMock.mockRejectedValueOnce({})
+    const { id } = await seedApiToken()
+    const { DELETE } = await import('./[id]/route')
+    const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Internal server error' })
+    const row = await prismaTest.apiToken.findUnique({ where: { id } })
+    expect(row?.revokedAt).toBeNull()
   })
 })

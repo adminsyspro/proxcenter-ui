@@ -54,6 +54,13 @@ describe('getPrincipal, session fallback (step 2)', () => {
       kind: 'session', userId: 'user-1', userEmail: 'a@b.c', tenantId: 'tenant-x', connectionIds: null,
     })
   })
+
+  it('falls back to the provider (default) tenant when the session carries no tenantId', async () => {
+    setHeaders(new Headers())
+    getServerSessionMock.mockResolvedValue({ user: { id: 'user-1', email: 'a@b.c' } })
+    const result = await getPrincipal()
+    expect(result.principal?.tenantId).toBe('default')
+  })
 })
 
 describe('getPrincipal, fail-closed internal headers (step 3)', () => {
@@ -138,6 +145,22 @@ describe('getPrincipal, token validation (steps 5-7)', () => {
     const expired = await seedApiToken({ expiresAt: new Date(Date.now() - 1000) })
     setHeaders(tokenHeaders(expired.secret, 'vms-list', '/api/v1/vms'))
     expect((await getPrincipal()).rejection?.status).toBe(401)
+  })
+
+  it('treats a malformed (non-array) scopes column as an empty scope set rather than throwing', async () => {
+    // scopes is a Prisma Json column: the type system does not guarantee it
+    // holds an array. A corrupted row (or a future migration bug) must
+    // still resolve to a token principal with zero permissions, not crash.
+    const { secret } = await seedApiToken()
+    await prismaTest.apiToken.update({
+      where: { tokenPrefix: (secret.match(/^pxc_.{8}/) as RegExpMatchArray)[0] },
+      data: { scopes: {} },
+    })
+    setHeaders(tokenHeaders(secret, 'public-health', '/api/v1/public/health'))
+    const result = await getPrincipal()
+    expect(result.ok).toBe(true)
+    expect(result.principal?.scopes).toEqual([])
+    expect(result.principal?.permissions).toEqual(new Set())
   })
 
   it('rejects 403 when the token tenant is disabled, never a fallback to default', async () => {

@@ -212,11 +212,12 @@ describe('ApiTokensTab', () => {
 
   // --- Fix round 1, finding 1: tenant + connection selectors -----------
 
-  // Owner feedback round: the tenant dropdown and the connection multi-select
-  // reuse the app's existing icon vocabulary (ri-building-line for tenants,
-  // ri-link for connections -- the same icons as the Tenants and Connections
-  // settings tabs), matching the icon+label Stack pattern the scope
-  // checkboxes already use in this file.
+  // Owner feedback round: the tenant dropdown reuses the Tenants settings tab
+  // icon, and a PVE connection carries the PROXMOX MARK rather than a generic
+  // glyph -- the convention the rest of the app already follows in
+  // MigrateVmDialog's target-cluster selector. Both match the icon+label Stack
+  // pattern the scope checkboxes use in this file.
+  // (ri-link was tried first and rejected by the owner as the wrong icon.)
   it('shows the app icon vocabulary on the tenant and connection options', async () => {
     const dialog = await openDialogWithTenantSelector()
 
@@ -227,7 +228,9 @@ describe('ApiTokensTab', () => {
 
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
     const connectionOption = await screen.findByRole('option', { name: 'Provider PVE' })
-    expect(connectionOption.querySelector('i.ri-link')).not.toBeNull()
+    const mark = connectionOption.querySelector('img')
+    expect(mark).not.toBeNull()
+    expect(mark?.getAttribute('src')).toMatch(/proxmox-logo(-dark)?\.svg$/)
     // The checkbox this multi-select relies on must survive the icon addition.
     expect(within(connectionOption).getByRole('checkbox')).not.toBeNull()
     await userEvent.keyboard('{Escape}')

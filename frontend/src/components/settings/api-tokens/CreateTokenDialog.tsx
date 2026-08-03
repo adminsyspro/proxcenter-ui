@@ -6,6 +6,7 @@ import {
   Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, FormGroup, IconButton, MenuItem, Stack, TextField, Tooltip, Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
@@ -78,6 +79,10 @@ async function fetchJsonArray(url: string): Promise<{ ok: boolean; value: any[] 
 
 export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const t = useTranslations('settings.apiTokens')
+  // A PVE connection is shown with the Proxmox mark, the same convention the
+  // rest of the app uses (MigrateVmDialog's target-cluster selector). The
+  // logo is a bitmap-less SVG in two variants, so it needs the palette mode.
+  const isDark = useTheme().palette.mode === 'dark'
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [expiration, setExpiration] = useState('none')
@@ -318,7 +323,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                   <MenuItem key={conn.id} value={conn.id}>
                     <Checkbox checked={connectionIds.includes(conn.id)} size='small' />
                     <Stack direction='row' alignItems='center' spacing={1}>
-                      <i className='ri-link' />
+                      <img
+                        src={isDark ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                        alt=''
+                        width={14}
+                        height={14}
+                        style={{ opacity: 0.8, flexShrink: 0 }}
+                      />
                       <Typography variant='body2'>{conn.name}</Typography>
                     </Stack>
                   </MenuItem>

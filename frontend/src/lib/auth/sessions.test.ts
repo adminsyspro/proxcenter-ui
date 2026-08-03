@@ -25,8 +25,11 @@ vi.mock('@/lib/db/prisma', () => ({
 
 import {
   evaluateSession,
+  aliveWhere,
+  isDeadPredicate,
   createSession,
   touchSession,
+  listSessions,
   revokeSession,
   revokeAllSessions,
   purgeDeadSessions,
@@ -85,6 +88,74 @@ describe('evaluateSession is pure and names why a session is dead', () => {
       lastSeenAt: new Date('2026-08-01T00:00:00.000Z'),
     })
     expect(evaluateSession(r, NOW)).toEqual({ alive: false, reason: 'revoked' })
+  })
+})
+
+// aliveWhere and isDeadPredicate are `where` fragments, not booleans, so we
+// can't call them on a row directly. `matchesClause` duck-types whichever
+// Prisma comparison operator (gt/gte/lt/lte) the fragment carries so these
+// assertions read the ACTUAL cutoff, not just that some operator key exists —
+// a shape-only assertion (e.g. `toHaveProperty('gt')`) cannot catch an
+// off-by-one operator error, which is exactly what happened here.
+type ComparisonClause = { gt?: Date; gte?: Date; lt?: Date; lte?: Date }
+const matchesClause = (value: Date, clause: ComparisonClause): boolean => {
+  const t = value.getTime()
+  if (clause.gt !== undefined && !(t > clause.gt.getTime())) return false
+  if (clause.gte !== undefined && !(t >= clause.gte.getTime())) return false
+  if (clause.lt !== undefined && !(t < clause.lt.getTime())) return false
+  if (clause.lte !== undefined && !(t <= clause.lte.getTime())) return false
+  return true
+}
+
+describe('aliveWhere and isDeadPredicate agree with evaluateSession at the exact threshold', () => {
+  const DURATIONS = { idleMs: 12 * 3600_000, absoluteMs: 7 * 86400_000 }
+
+  it('a row exactly at the idle cutoff is alive under all three', () => {
+    const lastSeenAt = new Date(NOW.getTime() - DURATIONS.idleMs)
+    const r = row({ lastSeenAt })
+    expect(evaluateSession(r, NOW, DURATIONS)).toEqual({ alive: true })
+
+    const alive = aliveWhere(NOW, DURATIONS) as { lastSeenAt: ComparisonClause }
+    expect(matchesClause(lastSeenAt, alive.lastSeenAt)).toBe(true)
+
+    const dead = isDeadPredicate(NOW, DURATIONS) as { OR: [unknown, { lastSeenAt: ComparisonClause }, unknown] }
+    expect(matchesClause(lastSeenAt, dead.OR[1].lastSeenAt)).toBe(false)
+  })
+
+  it('a row one millisecond past the idle cutoff is dead under all three', () => {
+    const lastSeenAt = new Date(NOW.getTime() - DURATIONS.idleMs - 1)
+    const r = row({ lastSeenAt })
+    expect(evaluateSession(r, NOW, DURATIONS)).toEqual({ alive: false, reason: 'idle' })
+
+    const alive = aliveWhere(NOW, DURATIONS) as { lastSeenAt: ComparisonClause }
+    expect(matchesClause(lastSeenAt, alive.lastSeenAt)).toBe(false)
+
+    const dead = isDeadPredicate(NOW, DURATIONS) as { OR: [unknown, { lastSeenAt: ComparisonClause }, unknown] }
+    expect(matchesClause(lastSeenAt, dead.OR[1].lastSeenAt)).toBe(true)
+  })
+
+  it('a row exactly at the absolute cutoff is alive under all three', () => {
+    const createdAt = new Date(NOW.getTime() - DURATIONS.absoluteMs)
+    const r = row({ createdAt, lastSeenAt: NOW })
+    expect(evaluateSession(r, NOW, DURATIONS)).toEqual({ alive: true })
+
+    const alive = aliveWhere(NOW, DURATIONS) as { createdAt: ComparisonClause }
+    expect(matchesClause(createdAt, alive.createdAt)).toBe(true)
+
+    const dead = isDeadPredicate(NOW, DURATIONS) as { OR: [unknown, unknown, { createdAt: ComparisonClause }] }
+    expect(matchesClause(createdAt, dead.OR[2].createdAt)).toBe(false)
+  })
+
+  it('a row one millisecond past the absolute cutoff is dead under all three', () => {
+    const createdAt = new Date(NOW.getTime() - DURATIONS.absoluteMs - 1)
+    const r = row({ createdAt, lastSeenAt: NOW })
+    expect(evaluateSession(r, NOW, DURATIONS)).toEqual({ alive: false, reason: 'absolute' })
+
+    const alive = aliveWhere(NOW, DURATIONS) as { createdAt: ComparisonClause }
+    expect(matchesClause(createdAt, alive.createdAt)).toBe(false)
+
+    const dead = isDeadPredicate(NOW, DURATIONS) as { OR: [unknown, unknown, { createdAt: ComparisonClause }] }
+    expect(matchesClause(createdAt, dead.OR[2].createdAt)).toBe(true)
   })
 })
 
@@ -164,6 +235,19 @@ describe('revocation', () => {
   })
 })
 
+describe('listSessions', () => {
+  it('scopes to userId and the alive predicate, ordered by lastSeenAt desc', async () => {
+    findManyMock.mockResolvedValue([])
+    await listSessions('u1')
+    const arg = findManyMock.mock.calls[0][0]
+    expect(arg.where.userId).toBe('u1')
+    expect(arg.where.revokedAt).toBeNull()
+    expect(arg.where.lastSeenAt).toBeTruthy()
+    expect(arg.where.createdAt).toBeTruthy()
+    expect(arg.orderBy).toEqual({ lastSeenAt: 'desc' })
+  })
+})
+
 describe('countActiveSessions counts only live rows', () => {
   it('excludes revoked, idle and over-cap rows', async () => {
     countMock.mockResolvedValue(2)
@@ -171,8 +255,8 @@ describe('countActiveSessions counts only live rows', () => {
     const where = countMock.mock.calls[0][0].where
     expect(where.userId).toBe('u1')
     expect(where.revokedAt).toBeNull()
-    expect(where.lastSeenAt).toHaveProperty('gt')
-    expect(where.createdAt).toHaveProperty('gt')
+    expect(where.lastSeenAt).toHaveProperty('gte')
+    expect(where.createdAt).toHaveProperty('gte')
   })
 })
 

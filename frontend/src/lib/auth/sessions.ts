@@ -54,8 +54,14 @@ export function aliveWhere(
 ) {
   return {
     revokedAt: null,
-    lastSeenAt: { gt: new Date(now.getTime() - durations.idleMs) },
-    createdAt: { gt: new Date(now.getTime() - durations.absoluteMs) },
+    // gte, not gt: evaluateSession treats a row exactly at the cutoff as
+    // still alive (it only kills a row once elapsed time is STRICTLY
+    // greater than the duration), and isDeadPredicate below only kills a
+    // row once elapsed time is strictly less than the cutoff (lt). gte is
+    // the exact complement of that lt, so a row sits in exactly one of
+    // aliveWhere/isDeadPredicate at every instant, never neither.
+    lastSeenAt: { gte: new Date(now.getTime() - durations.idleMs) },
+    createdAt: { gte: new Date(now.getTime() - durations.absoluteMs) },
   }
 }
 

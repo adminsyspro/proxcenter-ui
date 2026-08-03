@@ -6,6 +6,7 @@ import { getToken } from "next-auth/jwt"
 
 import { matchPublicApiPath } from "@/lib/api-tokens/allowlist"
 import { sessionCookieName } from "@/lib/auth/cookies"
+import { sessionDurations } from "@/lib/auth/durations"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
@@ -281,6 +282,25 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set("callbackUrl", pathname)
 
       return NextResponse.redirect(loginUrl)
+    }
+
+    // Absolute cap, checked here so it also holds for page navigation. getToken
+    // only decodes the JWT (jwt/index.js:118) — no callbacks, so the read-path
+    // validation never runs for the middleware. authAt makes the one deadline
+    // that matters against a stolen cookie enforceable with pure arithmetic,
+    // keeping this file Prisma-free and Edge-valid.
+    //
+    // A token without authAt is left alone: the read path refuses it anyway,
+    // and redirecting here as well risks a loop. This code only runs past the
+    // isPublicRoute early-return above, so /login itself can never be
+    // redirected by this check.
+    if (token.authAt && Date.now() - Number(token.authAt) > sessionDurations().absoluteMs) {
+      const url = request.nextUrl.clone()
+
+      url.pathname = "/login"
+      url.search = ""
+
+      return NextResponse.redirect(url)
     }
 
     if (token.mustEnroll2fa && !isEnrollBypass(pathname)) {

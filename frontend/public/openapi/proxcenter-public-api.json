@@ -1,0 +1,1366 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ProxCenter public read-only API",
+    "version": "1",
+    "description": "Read-only API for external monitoring tooling, authenticated by a pxc_ service-account token. GET and HEAD only. Server to server: no CORS header is emitted."
+  },
+  "servers": [
+    {
+      "url": "{proxcenterBaseUrl}",
+      "variables": {
+        "proxcenterBaseUrl": {
+          "default": "https://proxcenter.example.com"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Send the full secret as `Authorization: Bearer pxc_...`."
+      }
+    },
+    "schemas": {
+      "VmsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "vms": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "connId": {
+                      "type": "string"
+                    },
+                    "connectionName": {
+                      "type": "string"
+                    },
+                    "node": {
+                      "type": "string"
+                    },
+                    "vmid": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "qemu",
+                        "lxc"
+                      ]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "cpu": {
+                      "type": "number"
+                    },
+                    "ram": {
+                      "type": "number"
+                    },
+                    "cpuType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scsihw": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "agentEnabled": {
+                      "type": "boolean"
+                    },
+                    "bios": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ostype": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "onboot": {
+                      "type": "boolean"
+                    },
+                    "agentResponding": {
+                      "type": "boolean"
+                    },
+                    "agentOsName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "stats": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InventoryResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "clusters": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "pbsServers": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "externalHypervisors": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "cached": {
+                "type": "boolean"
+              },
+              "stats": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "StorageResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "PbsBackupsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PublicBackupsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "guests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "connId": {
+                      "type": "string"
+                    },
+                    "connectionName": {
+                      "type": "string"
+                    },
+                    "vmid": {
+                      "type": "string"
+                    },
+                    "backupType": {
+                      "type": "string",
+                      "enum": [
+                        "vm",
+                        "ct",
+                        "host"
+                      ]
+                    },
+                    "latestBackupTime": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "latestBackupIso": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ageSeconds": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "datastore": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "namespace": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pbsConnectionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pbsConnectionName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "verified": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "degraded"
+                ]
+              },
+              "tenantId": {
+                "type": "string"
+              },
+              "cached": {
+                "type": "boolean"
+              },
+              "connections": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "connId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "reachable": {
+                      "type": "boolean"
+                    },
+                    "nodesOnline": {
+                      "type": "integer"
+                    },
+                    "nodesTotal": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PrometheusExposition": {
+        "type": "string",
+        "description": "Prometheus text exposition format (version 0.0.4)."
+      }
+    },
+    "x-scopes": {
+      "vms:read": [
+        "vm.view"
+      ],
+      "nodes:read": [
+        "node.view",
+        "connection.view"
+      ],
+      "storage:read": [
+        "storage.view",
+        "storage.content"
+      ],
+      "backups:read": [
+        "backup.view",
+        "backup.job.view"
+      ],
+      "automation:read": [
+        "automation.view"
+      ],
+      "alerts:read": [
+        "alerts.view",
+        "events.view"
+      ],
+      "reports:read": [
+        "reports.view"
+      ],
+      "compliance:read": [
+        "admin.compliance"
+      ]
+    }
+  },
+  "paths": {
+    "/api/v1/vms": {
+      "get": {
+        "operationId": "vms-list",
+        "summary": "List all VMs and containers across visible connections",
+        "description": "Aggregated VM/LXC list with status, usage and config-derived fields (cpuType, scsihw, agentEnabled, bios, ostype, onboot) served by default. Pass include=agent to probe the QEMU guest agent on running VMs (about 7x slower).",
+        "x-required-scopes": [
+          "vms:read"
+        ],
+        "parameters": [
+          {
+            "name": "connId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Restrict to a single connection id"
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to 'agent' to probe the guest agent on running VMs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "vms": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "connId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "node": {
+                                "type": "string"
+                              },
+                              "vmid": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "qemu",
+                                  "lxc"
+                                ]
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "cpu": {
+                                "type": "number"
+                              },
+                              "ram": {
+                                "type": "number"
+                              },
+                              "cpuType": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "scsihw": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "agentEnabled": {
+                                "type": "boolean"
+                              },
+                              "bios": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ostype": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "onboot": {
+                                "type": "boolean"
+                              },
+                              "agentResponding": {
+                                "type": "boolean"
+                              },
+                              "agentOsName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "stats": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vms"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory": {
+      "get": {
+        "operationId": "inventory-tree",
+        "summary": "Multi-cluster inventory tree (clusters, nodes, guests, PBS)",
+        "description": "Full inventory tree served from the shared SWR cache, filtered by tenant, vDC and token connection perimeter.",
+        "x-required-scopes": [
+          "nodes:read"
+        ],
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to 'true' to force a blocking refresh"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "clusters": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "pbsServers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "externalHypervisors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object"
+                          }
+                        },
+                        "cached": {
+                          "type": "boolean"
+                        },
+                        "stats": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/inventory"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "storage-list",
+        "summary": "All storages across visible PVE connections",
+        "description": "Aggregated storage list with capacity and usage per storage.",
+        "x-required-scopes": [
+          "storage:read"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "connections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/storage"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pbs/{id}/backups": {
+      "get": {
+        "operationId": "pbs-backups",
+        "summary": "Snapshots of one PBS server",
+        "description": "All snapshots of the given PBS connection (all datastores and namespaces), paginated and filterable. {id} is a raw connection id, validated against the token perimeter before the handler runs.",
+        "x-required-scopes": [
+          "backups:read"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "datastore",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by datastore name"
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact namespace ('' for root)"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by backup type: vm, ct or host"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Page number (default 1)"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Page size (default 50)"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Case-insensitive text search"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/pbs/{id}/backups"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/backups": {
+      "get": {
+        "operationId": "public-backups",
+        "summary": "Fleet-wide backup freshness per guest",
+        "description": "For every guest in the token perimeter: most recent backup date, age in seconds, datastore, PBS server, size and verification state. Guests without any backup are present with a null age.",
+        "x-required-scopes": [
+          "backups:read"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "guests": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "connId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "vmid": {
+                                "type": "string"
+                              },
+                              "backupType": {
+                                "type": "string",
+                                "enum": [
+                                  "vm",
+                                  "ct",
+                                  "host"
+                                ]
+                              },
+                              "latestBackupTime": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "latestBackupIso": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ageSeconds": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "datastore": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "namespace": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "pbsConnectionId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "pbsConnectionName": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "sizeBytes": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "verified": {
+                                "type": [
+                                  "boolean",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/public/backups"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/metrics": {
+      "get": {
+        "operationId": "public-metrics",
+        "summary": "Prometheus exposition of fleet metrics",
+        "description": "Prometheus text exposition served from the inventory and PBS caches (never amplified to the hypervisor). Series families are filtered by scope: proxcenter_node_* needs nodes:read, proxcenter_vm_* needs vms:read, proxcenter_backup_* needs backups:read.",
+        "x-required-scopes": [
+          "nodes:read",
+          "vms:read",
+          "backups:read"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "description": "Prometheus text exposition format (version 0.0.4)."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/public/metrics"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/health": {
+      "get": {
+        "operationId": "public-health",
+        "summary": "Application status and per-connection reachability",
+        "description": "Authenticated variant of the public liveness probe: application status plus per-connection reachability derived from the inventory cache, filtered by tenant. Any valid token can call it.",
+        "x-required-scopes": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "degraded"
+                          ]
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "cached": {
+                          "type": "boolean"
+                        },
+                        "connections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "connId": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "reachable": {
+                                "type": "boolean"
+                              },
+                              "nodesOnline": {
+                                "type": "integer"
+                              },
+                              "nodesTotal": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/public/health"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "API tokens are read-only",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "API tokens are read-only",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

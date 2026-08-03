@@ -24,9 +24,17 @@ vi.mock('next-auth/react', () => ({
 // custom theme pulls in Settings/Branding context and is not needed to render.
 const testTheme = createTheme()
 
-function Providers({ children, locale = 'en' }: { children: ReactNode; locale?: string }) {
+function Providers({
+  children,
+  locale = 'en',
+  messages = enMessages as Record<string, unknown>,
+}: {
+  children: ReactNode
+  locale?: string
+  messages?: Record<string, unknown>
+}) {
   return (
-    <NextIntlClientProvider locale={locale} messages={enMessages as Record<string, unknown>}>
+    <NextIntlClientProvider locale={locale} messages={messages}>
       <ThemeProvider theme={testTheme}>
         {/* Isolated SWR cache per render so fetches do not leak across tests. */}
         <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0, revalidateOnMount: false }}>
@@ -37,8 +45,14 @@ function Providers({ children, locale = 'en' }: { children: ReactNode; locale?: 
   )
 }
 
-export function renderWithProviders(ui: ReactElement, options?: { locale?: string }) {
-  return render(ui, { wrapper: ({ children }) => <Providers locale={options?.locale}>{children}</Providers> })
+// `messages` defaults to the English bundle (unchanged behaviour for every
+// existing caller). Pass an override to prove a string is genuinely sourced
+// from next-intl rather than a hardcoded literal that happens to match
+// English — see ApiTokensTab.test.tsx's sentinel-message regression test.
+export function renderWithProviders(ui: ReactElement, options?: { locale?: string; messages?: Record<string, unknown> }) {
+  return render(ui, {
+    wrapper: ({ children }) => <Providers locale={options?.locale} messages={options?.messages}>{children}</Providers>,
+  })
 }
 
 // Re-export via live namespace to preserve Vitest's ESM live bindings.

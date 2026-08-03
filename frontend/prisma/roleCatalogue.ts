@@ -83,6 +83,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.audit", name: "admin.audit", category: "admin", description: "View audit logs" },
   { id: "admin.compliance", name: "admin.compliance", category: "admin", description: "Manage compliance and security policies", isDangerous: true },
   { id: "admin.tenants", name: "admin.tenants", category: "admin", description: "Manage tenants (multi-tenancy)", isDangerous: true },
+  { id: "admin.apitokens", name: "admin.apitokens", category: "admin", description: "Manage API tokens (create, revoke)", isDangerous: true },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },

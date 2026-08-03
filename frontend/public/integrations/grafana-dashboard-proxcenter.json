@@ -1,0 +1,94 @@
+{
+  "title": "ProxCenter fleet",
+  "uid": "proxcenter-fleet",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "type": "datasource",
+        "name": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Guests without a backup in the last 48h",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "format": "table",
+          "expr": "proxcenter_backup_age_seconds > 172800"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Guests pinned at 100% CPU",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "format": "table",
+          "expr": "proxcenter_vm_cpu_usage_ratio >= 0.95 and proxcenter_vm_status == 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Guests without the guest agent enabled",
+      "description": "No data yet on a fresh install. The agent config flag is omitted whenever it is unknown, and today it is unknown for every guest: the inventory cache is built from /cluster/resources, which carries no agent flag at all. Sourcing it would need a per-guest /config pass (see VmsResponse's agentEnabled field on GET /api/v1/vms, or the ?include=agent probe); wiring that into this metric family is an open product decision (issue #254), not implemented yet. Kept here rather than dropped so the use case stays visible instead of silently disappearing.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "format": "table",
+          "expr": "proxcenter_vm_agent_enabled == 0"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Node capacity (CPU and memory)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{connection}}/{{node}} CPU", "expr": "proxcenter_node_cpu_usage_ratio" },
+        { "refId": "B", "legendFormat": "{{connection}}/{{node}} RAM", "expr": "proxcenter_node_mem_usage_ratio" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Nodes online",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 18 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "legendFormat": "online", "expr": "sum(proxcenter_node_online)" }
+      ]
+    }
+  ]
+}

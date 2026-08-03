@@ -2560,6 +2560,53 @@
         "critical": "严重"
       }
     },
+    "apiTokens": {
+      "tabLabel": "API",
+      "title": "API 令牌",
+      "subtitle": "供外部监控工具(Prometheus、Zabbix、PRTG、CI)使用的只读服务账户。",
+      "newToken": "新建令牌",
+      "columns": {
+        "prefix": "前缀",
+        "name": "名称",
+        "tenant": "租户",
+        "scopes": "权限范围",
+        "expires": "到期时间",
+        "lastUsed": "最近使用"
+      },
+      "never": "从未",
+      "revoke": "撤销",
+      "revoked": "已撤销",
+      "revokeConfirm": "撤销此令牌?使用它的集成将立即停止工作。",
+      "revokeSuccess": "令牌已撤销",
+      "loadError": "加载 API 令牌失败",
+      "createError": "创建 API 令牌失败",
+      "dialog": {
+        "title": "创建 API 令牌",
+        "name": "名称",
+        "description": "描述",
+        "expiration": "到期时间",
+        "expirationNone": "永不到期",
+        "expiration30": "30 天",
+        "expiration90": "90 天",
+        "expiration365": "1 年",
+        "expirationCustom": "自定义",
+        "customDays": "天数",
+        "scopes": "权限范围",
+        "tenant": "租户",
+        "connections": "连接",
+        "connectionsAll": "该租户的所有连接",
+        "create": "创建",
+        "cancel": "取消",
+        "confirm": "确认"
+      },
+      "reveal": {
+        "title": "请立即复制您的令牌",
+        "warning": "此密钥将不会再次显示。请在关闭此对话框之前将其保存到您的密钥管理器中。",
+        "copy": "复制",
+        "copied": "已复制",
+        "done": "完成"
+      }
+    },
     "displayMode": "显示模式",
     "light": "浅色",
     "dark": "深色",

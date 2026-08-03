@@ -7,6 +7,9 @@ import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } f
 import { formatBytes, formatUptime } from "@/utils/format"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
+import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
+import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
+import { restrictToTokenScope } from "@/lib/api-tokens/scope"
 
 export const runtime = "nodejs"
 
@@ -22,7 +25,7 @@ function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
 }
 
-export async function GET(req: Request) {
+async function handler(req: Request, ctx: GuardedRouteContext) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
@@ -30,6 +33,7 @@ export async function GET(req: Request) {
     const prisma = await getSessionPrisma()
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
+    const includeAgent = url.searchParams.get('include') === 'agent'
 
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
@@ -50,6 +54,12 @@ export async function GET(req: Request) {
       const allowed = new Set(plan.pveConnectionIds)
       connections = connections.filter(c => allowed.has(c.id))
     }
+
+    // Aggregated route: the token connection perimeter is applied where we
+    // ENUMERATE, because no connection id ever reaches checkPermission here
+    // (spec section 6, allowlist review checklist D8). No-op for a session
+    // caller (ctx.principal is only ever set for a token, see routeGuard.ts).
+    connections = await restrictToTokenScope(connections, ctx?.principal)
 
     if (!connections.length) {
       return NextResponse.json({
@@ -79,12 +89,21 @@ export async function GET(req: Request) {
         ])
 
         const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
+        // A rejected /nodes leaves node status UNKNOWN, not "everyone offline":
+        // `onlineNodes` stays null so enrichVmsWithConfig attempts the /config
+        // call instead of fabricating nulls for a connection that is otherwise
+        // reachable (resources succeeded).
         const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
-        
+
         const isCluster = nodes.length > 1
+        const onlineNodes = nodesResult.status === 'fulfilled'
+          ? new Set(
+              nodes.filter((n: any) => n?.status === 'online' && n?.node).map((n: any) => String(n.node)),
+            )
+          : null
 
         // Transformer les resources en format attendu
-        return resources.map((r: any) => {
+        const mapped = resources.map((r: any) => {
           const cpuPct = round1(Number(r.cpu || 0) * 100)
           const ramPct = r.maxmem ? round1((Number(r.mem || 0) / Number(r.maxmem)) * 100) : 0
 
@@ -118,6 +137,8 @@ export async function GET(req: Request) {
             ip: null, // Chargé séparément via /api/v1/vms/ips
           }
         })
+
+        return enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent })
       } catch (e) {
         console.error(`[vms] Error fetching connection ${conn.id}:`, e)
         
@@ -132,7 +153,12 @@ return []
     const rbacCtx = await getRBACContext()
 
     if (rbacCtx && !rbacCtx.isAdmin) {
-      allVms = await filterVmsByPermission(rbacCtx.userId, allVms, PERMISSIONS.VM_VIEW, rbacCtx.tenantId)
+      allVms = await filterVmsByPermission(
+        rbacCtx.principal ?? (rbacCtx.userId as string),
+        allVms,
+        PERMISSIONS.VM_VIEW,
+        rbacCtx.tenantId,
+      )
     }
 
     // vDC filtering: restrict VMs to those in the tenant's vDC pools
@@ -175,7 +201,9 @@ return aId - bId
     })
   } catch (e: any) {
     console.error("[vms] Error:", e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vms-list", handler)

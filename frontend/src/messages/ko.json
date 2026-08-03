@@ -7393,6 +7393,20 @@
     "policyToggleHelp": "활성화하면 2FA가 없는 super_admin 사용자는 다음 로그인 시 강제로 등록해야 합니다. 이 옵션을 켜려면 먼저 본인 계정에 2FA가 활성화되어 있어야 합니다.",
     "policyNeedOwn2fa": "이 정책을 적용하기 전에 본인 계정에서 2FA를 활성화하세요."
   },
+  "sessions": {
+    "cardTitle": "Active sessions",
+    "empty": "No active sessions.",
+    "currentChip": "This device",
+    "ipLabel": "IP address",
+    "lastActiveLabel": "Last active",
+    "signedInLabel": "Signed in",
+    "revokeButton": "Sign out",
+    "revokeConfirmTitle": "Sign out this session?",
+    "revokeConfirmBody": "This device will be signed out immediately.",
+    "revokeAllButton": "Sign out other sessions",
+    "revokeAllConfirmTitle": "Sign out all other sessions?",
+    "revokeAllConfirmBody": "Every other session is signed out immediately. This device stays signed in."
+  },
   "taskTracker": {
     "completed": "{description} - 완료됨",
     "failed": "{description} - 실패: {error}",

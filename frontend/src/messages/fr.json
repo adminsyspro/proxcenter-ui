@@ -7394,6 +7394,20 @@
     "policyToggleHelp": "Une fois activé, les comptes super_admin sans 2FA seront forcés de l'activer à leur prochaine connexion. Vous devez avoir la 2FA active sur votre propre compte pour activer cette policy.",
     "policyNeedOwn2fa": "Activez la 2FA sur votre propre compte avant d'imposer cette policy."
   },
+  "sessions": {
+    "cardTitle": "Sessions actives",
+    "empty": "Aucune session active.",
+    "currentChip": "Cet appareil",
+    "ipLabel": "Adresse IP",
+    "lastActiveLabel": "Dernière activité",
+    "signedInLabel": "Connecté depuis",
+    "revokeButton": "Déconnecter",
+    "revokeConfirmTitle": "Déconnecter cette session ?",
+    "revokeConfirmBody": "Cet appareil sera déconnecté immédiatement.",
+    "revokeAllButton": "Déconnecter les autres sessions",
+    "revokeAllConfirmTitle": "Déconnecter toutes les autres sessions ?",
+    "revokeAllConfirmBody": "Toutes les autres sessions sont déconnectées immédiatement. Cet appareil reste connecté."
+  },
   "taskTracker": {
     "completed": "{description} - Terminé",
     "failed": "{description} - Échec : {error}",

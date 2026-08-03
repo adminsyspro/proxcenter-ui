@@ -23,6 +23,7 @@ import {
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import TwoFactorCard from '@/components/profile/TwoFactorCard'
+import SessionsCard from '@/components/profile/SessionsCard'
 
 
 // Fonction pour obtenir les initiales
@@ -333,6 +334,9 @@ return
 
       {/* Two-factor authentication */}
       <TwoFactorCard />
+
+      {/* Active sessions */}
+      <SessionsCard />
     </Box>
   )
 }

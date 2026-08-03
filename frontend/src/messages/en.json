@@ -7405,7 +7405,11 @@
     "revokeConfirmBody": "This device will be signed out immediately.",
     "revokeAllButton": "Sign out other sessions",
     "revokeAllConfirmTitle": "Sign out all other sessions?",
-    "revokeAllConfirmBody": "Every other session is signed out immediately. This device stays signed in."
+    "revokeAllConfirmBody": "Every other session is signed out immediately. This device stays signed in.",
+    "columnHeader": "Sessions",
+    "adminRevokeMenu": "Revoke sessions",
+    "adminRevokeConfirmTitle": "Revoke sessions for {email}",
+    "adminRevokeConfirmBody": "This immediately signs the user out of every active session. They can sign back in right away."
   },
   "taskTracker": {
     "completed": "{description} - Completed",

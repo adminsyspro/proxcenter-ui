@@ -7406,7 +7406,11 @@
     "revokeConfirmBody": "Cet appareil sera déconnecté immédiatement.",
     "revokeAllButton": "Déconnecter les autres sessions",
     "revokeAllConfirmTitle": "Déconnecter toutes les autres sessions ?",
-    "revokeAllConfirmBody": "Toutes les autres sessions sont déconnectées immédiatement. Cet appareil reste connecté."
+    "revokeAllConfirmBody": "Toutes les autres sessions sont déconnectées immédiatement. Cet appareil reste connecté.",
+    "columnHeader": "Sessions",
+    "adminRevokeMenu": "Révoquer les sessions",
+    "adminRevokeConfirmTitle": "Révoquer les sessions de {email}",
+    "adminRevokeConfirmBody": "Cela déconnecte immédiatement l'utilisateur de toutes ses sessions actives. Il pourra se reconnecter à tout moment."
   },
   "taskTracker": {
     "completed": "{description} - Terminé",

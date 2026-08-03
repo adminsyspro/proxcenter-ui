@@ -764,6 +764,67 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
 }
 
 /* --------------------------------
+   Revoke Sessions Confirm Dialog
+   (non-destructive — simple confirm, recoverable by signing back in)
+-------------------------------- */
+
+export function RevokeSessionsDialog({ open, onClose, user, onSuccess, t }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleConfirm = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/v1/admin/users/${user.id}/sessions`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        onSuccess(user.id)
+        onClose()
+        return
+      }
+      let data = {}
+      try { data = await res.json() } catch (_) {}
+      setError(data.error || t('common.error'))
+    } catch (_) {
+      setError(t('errors.connectionError'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClose = () => {
+    setError('')
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <i className='ri-logout-box-line' />
+        {t('sessions.adminRevokeConfirmTitle', { email: user?.email || '' })}
+      </DialogTitle>
+      <DialogContent sx={{ pt: '20px !important' }}>
+        {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+        <Typography>{t('sessions.adminRevokeConfirmBody')}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose}>{t('common.cancel')}</Button>
+        <Button
+          variant='contained'
+          onClick={handleConfirm}
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={16} /> : null}
+        >
+          {t('common.confirm')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+/* --------------------------------
    Main Page
 -------------------------------- */
 
@@ -893,6 +954,26 @@ return () => setPageInfo('', '', '')
       return {
         ...prev,
         data: prev.data.map(u => u.id === userId ? { ...u, require_2fa_enrollment: isRequired } : u),
+      }
+    }, false)
+  }, [mutateUsers])
+
+  const [revokeSessionsDialogOpen, setRevokeSessionsDialogOpen] = useState(false)
+  const [userToRevokeSessions, setUserToRevokeSessions] = useState(null)
+
+  const handleRevokeSessions = (user) => {
+    setUserToRevokeSessions(user)
+    setRevokeSessionsDialogOpen(true)
+  }
+
+  const handleSessionsRevoked = useCallback((userId) => {
+    // Optimistically zero the count for the row without a full network
+    // round-trip. mutateUsers() will reconcile on next SWR revalidation.
+    mutateUsers(prev => {
+      if (!prev?.data) return prev
+      return {
+        ...prev,
+        data: prev.data.map(u => u.id === userId ? { ...u, active_session_count: 0 } : u),
       }
     }, false)
   }, [mutateUsers])
@@ -1076,6 +1157,20 @@ return () => setPageInfo('', '', '')
         ),
       },
       {
+        field: 'active_session_count',
+        headerName: t('sessions.columnHeader'),
+        width: 90,
+        sortable: true,
+        renderCell: params => (
+          <Typography
+            variant='body2'
+            sx={{ textAlign: 'center', width: '100%', opacity: params.row.active_session_count ? 0.85 : 0.35 }}
+          >
+            {params.row.active_session_count ?? 0}
+          </Typography>
+        ),
+      },
+      {
         field: 'actions',
         headerName: t('common.actions'),
         width: 120,
@@ -1123,6 +1218,19 @@ return () => setPageInfo('', '', '')
                 </IconButton>
               </Tooltip>
             )}
+            {/* Revoke sessions: hidden on your own row — revoking here would log the admin
+                out mid-task; they already have the profile card's session card for that. */}
+            {params.row.id !== session?.user?.id && (
+              <Tooltip title={t('sessions.adminRevokeMenu')}>
+                <IconButton
+                  size='small'
+                  color='warning'
+                  onClick={() => handleRevokeSessions(params.row)}
+                >
+                  <i className='ri-logout-box-line' />
+                </IconButton>
+              </Tooltip>
+            )}
             {/* Hide delete on your own row — self-delete is refused by the backend */}
             {params.row.id !== session?.user?.id && (
               <Tooltip title={t('common.delete')}>
@@ -1139,7 +1247,7 @@ return () => setPageInfo('', '', '')
         ),
       },
     ],
-    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA, handleRequire2FA, handleClearRequire2FA]
+    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA, handleRequire2FA, handleClearRequire2FA, handleRevokeSessions]
   )
 
   return (
@@ -1244,6 +1352,14 @@ return () => setPageInfo('', '', '')
         onClose={() => setRequire2FADialogOpen(false)}
         user={userToRequire2FA}
         onSuccess={handle2FARequirementChanged}
+        t={t}
+      />
+
+      <RevokeSessionsDialog
+        open={revokeSessionsDialogOpen}
+        onClose={() => setRevokeSessionsDialogOpen(false)}
+        user={userToRevokeSessions}
+        onSuccess={handleSessionsRevoked}
         t={t}
       />
     </Box>

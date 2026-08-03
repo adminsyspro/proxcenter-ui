@@ -62,7 +62,7 @@ function walkImportGraph(entryFile: string): Map<string, string> {
  * dataflow analysis: that's what makes it "vérifiable mécaniquement" per
  * spec D2/section 11 in the first place). It cannot tell "reachable via a
  * branch a token principal can never take" from "reachable and read for
- * every caller". Two distinct entries, for two distinct reasons:
+ * every caller". Three distinct entries, for three distinct reasons:
  *
  * - `lib/storage/fleetScope.ts` (`canReadFleetStorage`) reads
  *   `getServerSession()` DIRECTLY, independent of `getPrincipal()`/the
@@ -98,16 +98,28 @@ function walkImportGraph(entryFile: string): Map<string, string> {
  *   `authOptions` from it. Recorded anyway, distinctly, so the exception
  *   list stays an exact, pinned mirror of reality rather than a vague
  *   wildcard.
+ * - `lib/auth/jwtContext.ts` is the same kind of harmless TEXTUAL false
+ *   positive as `config.ts` above, added by the auth-session-hardening
+ *   branch: it never imports or calls `getServerSession`, it only mentions
+ *   the name once, in a prose comment on line 3 ("The callback runs on
+ *   EVERY getServerSession, so on every guarded API call ..."). It is
+ *   reachable from THIS route only through a two-hop chain: `config.ts` now
+ *   imports `loadJwtContext` from it for the consolidated per-request read
+ *   that branch added to the NextAuth `jwt` callback, and `fleetScope.ts`
+ *   (already in this list, above) imports `authOptions` from `config.ts`.
+ *   No new session read reaches a token-authenticated request through this
+ *   edge; it is bookkeeping for a comment string, not a security exception.
  *
- * Both entries are PINNED below (not just permitted): if either file ever
- * stops being an offender (fixed, or the comment is reworded), the second
- * assertion in the test body fails too, forcing a conscious update instead
- * of leaving a stale exception in place.
+ * All three entries are PINNED below (not just permitted): if any of these
+ * files ever stops being an offender (fixed, or the comment is reworded),
+ * the second assertion in the test body fails too, forcing a conscious
+ * update instead of leaving a stale exception in place.
  */
 const KNOWN_SESSION_READ_EXCEPTIONS: Record<string, string[]> = {
   'storage-list': [
     path.join('lib', 'storage', 'fleetScope.ts'),
     path.join('lib', 'auth', 'config.ts'),
+    path.join('lib', 'auth', 'jwtContext.ts'),
   ],
 }
 

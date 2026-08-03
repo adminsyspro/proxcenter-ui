@@ -2568,6 +2568,7 @@
       "columns": {
         "prefix": "前缀",
         "name": "名称",
+        "tenant": "租户",
         "scopes": "权限范围",
         "expires": "到期时间",
         "lastUsed": "最近使用"

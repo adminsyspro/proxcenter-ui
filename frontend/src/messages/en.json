@@ -2599,6 +2599,7 @@
       "columns": {
         "prefix": "Prefix",
         "name": "Name",
+        "tenant": "Tenant",
         "scopes": "Scopes",
         "expires": "Expires",
         "lastUsed": "Last used"

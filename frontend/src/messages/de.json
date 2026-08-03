@@ -2569,6 +2569,7 @@
       "columns": {
         "prefix": "Präfix",
         "name": "Name",
+        "tenant": "Mandant",
         "scopes": "Berechtigungen",
         "expires": "Ablauf",
         "lastUsed": "Zuletzt verwendet"

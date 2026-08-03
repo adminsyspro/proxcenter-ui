@@ -13,6 +13,11 @@ import { getCurrentTenantId } from "@/lib/tenant"
 export const TOKEN_VIEW_SELECT = {
   id: true,
   tenantId: true,
+  // tenantId alone is an opaque cuid, useless in a table -- join the human
+  // -readable name server-side rather than making callers fetch
+  // /api/v1/tenants themselves (that route needs ADMIN_TENANTS, which an
+  // admin.apitokens holder may not have).
+  tenant: { select: { name: true } },
   name: true,
   description: true,
   tokenPrefix: true,

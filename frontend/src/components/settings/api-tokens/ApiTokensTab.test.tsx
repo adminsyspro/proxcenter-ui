@@ -45,6 +45,7 @@ function messagesWithSentinelConfirm() {
 const TOKEN_ROW = {
   id: 'tok-1',
   tenantId: 'default',
+  tenant: { name: 'Provider' },
   name: 'prometheus-prod',
   description: null,
   tokenPrefix: 'pxc_Ab12Cd34',
@@ -153,6 +154,18 @@ describe('ApiTokensTab', () => {
     expect(screen.getByText(/203\.0\.113\.9/)).toBeInTheDocument()
   })
 
+  // Owner feedback round: a Tenant column, showing the NAME the server joins
+  // in (never the raw tenantId), and a key icon leading every row's identity
+  // cell -- both plain, non-monospace text stays selectable.
+  it('shows the tenant name (not the id) in a dedicated column', async () => {
+    renderWithProviders(<ApiTokensTab />)
+    const prefixCell = await screen.findByText('pxc_Ab12Cd34')
+    expect(screen.getByText('Provider')).toBeInTheDocument()
+    expect(screen.queryByText('default')).not.toBeInTheDocument()
+    const row = prefixCell.closest('.MuiDataGrid-row') as HTMLElement
+    expect(row.querySelector('i.ri-key-2-line')).not.toBeNull()
+  })
+
   it('shows the add-on upsell instead of the list when the option is missing', async () => {
     useLicenseMock.mockReturnValue({ hasFeature: () => false, loading: false })
     renderWithProviders(<ApiTokensTab />)
@@ -198,6 +211,27 @@ describe('ApiTokensTab', () => {
   })
 
   // --- Fix round 1, finding 1: tenant + connection selectors -----------
+
+  // Owner feedback round: the tenant dropdown and the connection multi-select
+  // reuse the app's existing icon vocabulary (ri-building-line for tenants,
+  // ri-link for connections -- the same icons as the Tenants and Connections
+  // settings tabs), matching the icon+label Stack pattern the scope
+  // checkboxes already use in this file.
+  it('shows the app icon vocabulary on the tenant and connection options', async () => {
+    const dialog = await openDialogWithTenantSelector()
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
+    const tenantOption = await screen.findByRole('option', { name: 'Tenant A' })
+    expect(tenantOption.querySelector('i.ri-building-line')).not.toBeNull()
+    await userEvent.keyboard('{Escape}')
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
+    const connectionOption = await screen.findByRole('option', { name: 'Provider PVE' })
+    expect(connectionOption.querySelector('i.ri-link')).not.toBeNull()
+    // The checkbox this multi-select relies on must survive the icon addition.
+    expect(within(connectionOption).getByRole('checkbox')).not.toBeNull()
+    await userEvent.keyboard('{Escape}')
+  })
 
   it('sends the selected non-default tenant id', async () => {
     const dialog = await openDialogWithTenantSelector()

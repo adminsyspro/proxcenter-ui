@@ -66,6 +66,18 @@ describe('GET /api/v1/settings/api-tokens', () => {
     expect(body.data[0].tokenHash).toBeUndefined()
   })
 
+  // Owner feedback round: the frontend needs the tenant NAME, not just its
+  // opaque cuid, to render a Tenant column -- joined server-side rather than
+  // making the tab fetch /api/v1/tenants itself (that route needs
+  // ADMIN_TENANTS, which an admin.apitokens holder may not have).
+  it('joins the tenant name alongside tenantId', async () => {
+    await seedApiToken({ scopes: ['vms:read'] })
+    const { GET } = await import('./route')
+    const body = await readJson<any>(await callRoute(GET))
+    expect(body.data[0].tenantId).toBe('default')
+    expect(body.data[0].tenant).toEqual({ name: 'Provider' })
+  })
+
   it('non super admin sees only the current tenant', async () => {
     getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: false, tenantId: 'default' })
     const now = new Date()
@@ -108,6 +120,7 @@ describe('POST /api/v1/settings/api-tokens', () => {
     expect(body.data.token.tokenHash).toBeUndefined()
     expect(body.data.token.expiresAt).not.toBeNull()
     expect(body.data.token.connectionIds).toEqual(['conn-a'])
+    expect(body.data.token.tenant).toEqual({ name: 'Provider' })
     const row = await prismaTest.apiToken.findUnique({ where: { id: body.data.token.id } })
     expect(row?.tokenHash).toMatch(/^[0-9a-f]{64}$/)
     // audit() now also receives the transaction client (fix round 1, finding

@@ -2599,6 +2599,7 @@
       "columns": {
         "prefix": "Prefijo",
         "name": "Nombre",
+        "tenant": "Tenant",
         "scopes": "Ámbitos",
         "expires": "Caduca",
         "lastUsed": "Último uso"

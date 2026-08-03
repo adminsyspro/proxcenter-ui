@@ -23,7 +23,7 @@ describe('settings.apiTokens i18n parity across the 6 served locales', () => {
   it('declares the required keys in en.json', () => {
     for (const key of [
       'tabLabel', 'title', 'subtitle', 'newToken', 'columns.prefix', 'columns.name',
-      'columns.scopes', 'columns.expires', 'columns.lastUsed', 'never', 'revoke',
+      'columns.tenant', 'columns.scopes', 'columns.expires', 'columns.lastUsed', 'never', 'revoke',
       'revoked', 'revokeConfirm', 'revokeSuccess', 'loadError', 'createError',
       'dialog.title', 'dialog.name', 'dialog.description', 'dialog.expiration',
       'dialog.expirationNone', 'dialog.expiration30', 'dialog.expiration90',

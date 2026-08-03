@@ -2599,6 +2599,7 @@
       "columns": {
         "prefix": "접두사",
         "name": "이름",
+        "tenant": "테넌트",
         "scopes": "범위",
         "expires": "만료",
         "lastUsed": "마지막 사용"

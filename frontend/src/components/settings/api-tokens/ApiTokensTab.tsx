@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent,
-  DialogTitle, IconButton, LinearProgress, Tooltip, Typography,
+  DialogTitle, IconButton, LinearProgress, Stack, Tooltip, Typography,
 } from '@mui/material'
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 import { useTranslations } from 'next-intl'
@@ -17,6 +17,7 @@ import { Features } from '@/lib/license/features'
 type ApiTokenView = {
   id: string
   tenantId: string
+  tenant: { name: string }
   name: string
   description: string | null
   tokenPrefix: string
@@ -75,12 +76,26 @@ function ApiTokensPanel() {
     {
       field: 'tokenPrefix',
       headerName: t('columns.prefix'),
-      width: 160,
+      width: 190,
+      // Leading key icon marks every row's identity cell; the prefix text
+      // itself stays plain, selectable text (no wrapper blocks selection).
       renderCell: params => (
-        <Typography variant='body2' sx={{ fontFamily: 'monospace' }}>{params.value}</Typography>
+        <Stack direction='row' alignItems='center' spacing={1}>
+          <i className='ri-key-2-line' />
+          <Typography variant='body2' sx={{ fontFamily: 'monospace' }}>{params.value}</Typography>
+        </Stack>
       ),
     },
     { field: 'name', headerName: t('columns.name'), flex: 1, minWidth: 160 },
+    {
+      field: 'tenant',
+      headerName: t('columns.tenant'),
+      flex: 1,
+      minWidth: 140,
+      // Human-readable tenant name, joined server-side (TOKEN_VIEW_SELECT) --
+      // no monospace, this is a name, not an identifier.
+      valueGetter: (_value, row: ApiTokenView) => row.tenant?.name ?? '',
+    },
     {
       field: 'scopes',
       headerName: t('columns.scopes'),

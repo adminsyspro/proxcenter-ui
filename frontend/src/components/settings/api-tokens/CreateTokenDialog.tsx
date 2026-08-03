@@ -284,7 +284,12 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
             {tenantsAvailable && (
               <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
                 {tenants.map(tenant => (
-                  <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
+                  <MenuItem key={tenant.id} value={tenant.id}>
+                    <Stack direction='row' alignItems='center' spacing={1}>
+                      <i className='ri-building-line' />
+                      <Typography variant='body2'>{tenant.name}</Typography>
+                    </Stack>
+                  </MenuItem>
                 ))}
               </TextField>
             )}
@@ -312,7 +317,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                 {visibleConnections.map(conn => (
                   <MenuItem key={conn.id} value={conn.id}>
                     <Checkbox checked={connectionIds.includes(conn.id)} size='small' />
-                    {conn.name}
+                    <Stack direction='row' alignItems='center' spacing={1}>
+                      <i className='ri-link' />
+                      <Typography variant='body2'>{conn.name}</Typography>
+                    </Stack>
                   </MenuItem>
                 ))}
               </TextField>

@@ -4,11 +4,11 @@ import { cleanup } from '@testing-library/react'
 import { renderWithProviders, screen, userEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
-import { RevokeSessionsDialog } from './page'
+import RevokeSessionsDialog from './RevokeSessionsDialog'
 
 // Translate stub: return the key unchanged. The dialog receives `t` as a prop
-// (not the next-intl hook), matching how page.jsx passes it down — see
-// RoleDefaultScopeEditor.test.tsx for the same convention.
+// (not the next-intl hook), matching how the admin users page passes it down
+// — see RoleDefaultScopeEditor.test.tsx for the same convention.
 const t = (k: string) => k
 
 const targetUser = { id: 'u1', email: 'target@example.com' }

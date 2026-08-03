@@ -41,6 +41,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useUsers, useRbacRoles, useRbacAssignments, useTenants } from '@/hooks/useUsers'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
+import RevokeSessionsDialog from '@/components/security/RevokeSessionsDialog'
 
 /* --------------------------------
    Helpers
@@ -747,67 +748,6 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
       <DialogContent sx={{ pt: '20px !important' }}>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
         <Typography>{t(bodyKey)}</Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>{t('common.cancel')}</Button>
-        <Button
-          variant='contained'
-          onClick={handleConfirm}
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={16} /> : null}
-        >
-          {t('common.confirm')}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-}
-
-/* --------------------------------
-   Revoke Sessions Confirm Dialog
-   (non-destructive — simple confirm, recoverable by signing back in)
--------------------------------- */
-
-export function RevokeSessionsDialog({ open, onClose, user, onSuccess, t }) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleConfirm = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`/api/v1/admin/users/${user.id}/sessions`, {
-        method: 'DELETE',
-      })
-      if (res.ok) {
-        onSuccess(user.id)
-        onClose()
-        return
-      }
-      let data = {}
-      try { data = await res.json() } catch (_) {}
-      setError(data.error || t('common.error'))
-    } catch (_) {
-      setError(t('errors.connectionError'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleClose = () => {
-    setError('')
-    onClose()
-  }
-
-  return (
-    <Dialog open={open} onClose={handleClose} maxWidth='sm' fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className='ri-logout-box-line' />
-        {t('sessions.adminRevokeConfirmTitle', { email: user?.email || '' })}
-      </DialogTitle>
-      <DialogContent sx={{ pt: '20px !important' }}>
-        {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
-        <Typography>{t('sessions.adminRevokeConfirmBody')}</Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>{t('common.cancel')}</Button>

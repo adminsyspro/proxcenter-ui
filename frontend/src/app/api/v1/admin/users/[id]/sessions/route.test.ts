@@ -9,6 +9,17 @@
  * standalone action behind super-admin would be strictly more restrictive
  * than an existing route producing the same effect.
  *
+ * That permission check alone only proves the caller holds admin.users
+ * somewhere — it says nothing about which target user they may act on. So,
+ * matching every handler in the sibling `users/[id]/route.ts` exactly, this
+ * route also applies the two shared guards from
+ * `@/lib/rbac/userTargetGuards` in the same order: the protected-target
+ * check first, then tenant resolution + membership (with the provider-view
+ * bypass). Those two guards are NOT mocked in this file — their own
+ * dependencies (`isUserProtected`, `isUserSuperAdmin`, `prisma.userTenant`)
+ * are, so the real shared implementation runs and any drift in the wiring
+ * would show up here.
+ *
  * The admin surface exposes a count and nothing else: the response body must
  * never carry ipAddress or userAgent, and no per-session detail is logged to
  * the audit trail either.
@@ -19,14 +30,22 @@ import { callRoute, readJson } from "@/__tests__/setup/route-test"
 const {
   getServerSessionMock,
   checkPermissionMock,
+  isUserProtectedMock,
+  isUserSuperAdminMock,
+  getCurrentTenantIdMock,
   revokeAllSessionsMock,
   userFindUniqueMock,
+  userTenantFindUniqueMock,
   auditMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   checkPermissionMock: vi.fn(),
+  isUserProtectedMock: vi.fn(),
+  isUserSuperAdminMock: vi.fn(),
+  getCurrentTenantIdMock: vi.fn(),
   revokeAllSessionsMock: vi.fn(),
   userFindUniqueMock: vi.fn(),
+  userTenantFindUniqueMock: vi.fn(),
   auditMock: vi.fn(async () => "audit-id"),
 }))
 
@@ -35,11 +54,20 @@ vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/rbac", () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_USERS: "admin.users" },
+  isUserProtected: isUserProtectedMock,
+  isUserSuperAdmin: isUserSuperAdminMock,
+}))
+vi.mock("@/lib/tenant", () => ({
+  DEFAULT_TENANT_ID: "default",
+  getCurrentTenantId: getCurrentTenantIdMock,
 }))
 vi.mock("@/lib/auth/sessions", () => ({ revokeAllSessions: revokeAllSessionsMock }))
 vi.mock("@/lib/audit", () => ({ audit: auditMock }))
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: { findUnique: userFindUniqueMock } },
+  prisma: {
+    user: { findUnique: userFindUniqueMock },
+    userTenant: { findUnique: userTenantFindUniqueMock },
+  },
 }))
 
 async function importDELETE() {
@@ -52,7 +80,14 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: "admin-1", email: "admin@example.com" } })
     checkPermissionMock.mockResolvedValue(null)
-    userFindUniqueMock.mockResolvedValue({ email: "target@example.com" })
+    isUserProtectedMock.mockResolvedValue(false)
+    isUserSuperAdminMock.mockResolvedValue(false)
+    // Provider view by default (default tenant) — matches the sibling
+    // routes' default bypass path used by most of these tests; the
+    // tenant-scoped path is exercised explicitly below.
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindUniqueMock.mockResolvedValue({ id: "target-1", email: "target@example.com" })
+    userTenantFindUniqueMock.mockResolvedValue(null)
     revokeAllSessionsMock.mockResolvedValue(3)
     auditMock.mockResolvedValue("audit-id")
   })
@@ -85,7 +120,7 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
 
   it("allows an admin to target their own account", async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: "admin-1", email: "admin@example.com" } })
-    userFindUniqueMock.mockResolvedValue({ email: "admin@example.com" })
+    userFindUniqueMock.mockResolvedValue({ id: "admin-1", email: "admin@example.com" })
 
     const DELETE = await importDELETE()
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "admin-1" } })
@@ -125,13 +160,89 @@ describe("DELETE /api/v1/admin/users/[id]/sessions", () => {
     expect(serialised).not.toMatch(/userAgent/i)
   })
 
-  it("returns 404 and never revokes when the target user does not exist", async () => {
+  it("returns the sibling's 404 (and the sibling's exact message) when the target does not exist", async () => {
     userFindUniqueMock.mockResolvedValue(null)
 
     const DELETE = await importDELETE()
     const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "ghost" } })
 
     expect(res.status).toBe(404)
+    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
     expect(revokeAllSessionsMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a non-super-admin caller targeting a protected (super_admin) user, before any tenant lookup", async () => {
+    isUserProtectedMock.mockResolvedValue(true)
+    isUserSuperAdminMock.mockResolvedValue(false)
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
+
+    expect(res.status).toBe(404)
+    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
+    expect(revokeAllSessionsMock).not.toHaveBeenCalled()
+    expect(isUserSuperAdminMock).toHaveBeenCalledWith("admin-1")
+    // Blocked before tenant resolution / target lookup ever runs — same
+    // order as GET/PATCH/DELETE /api/v1/users/[id].
+    expect(getCurrentTenantIdMock).not.toHaveBeenCalled()
+    expect(userFindUniqueMock).not.toHaveBeenCalled()
+    expect(userTenantFindUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it("allows a super-admin caller to target a protected (super_admin) user", async () => {
+    isUserProtectedMock.mockResolvedValue(true)
+    isUserSuperAdminMock.mockResolvedValue(true)
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
+
+    expect(res.status).toBe(200)
+    expect(revokeAllSessionsMock).toHaveBeenCalledWith("target-1")
+  })
+
+  it("returns the sibling's 404 when a tenant-scoped caller's target has no membership in their tenant", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-a")
+    userTenantFindUniqueMock.mockResolvedValue(null)
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
+
+    expect(res.status).toBe(404)
+    expect(await readJson<any>(res)).toEqual({ error: "Utilisateur non trouvé" })
+    expect(revokeAllSessionsMock).not.toHaveBeenCalled()
+    expect(userTenantFindUniqueMock).toHaveBeenCalledWith({
+      where: { userId_tenantId: { userId: "target-1", tenantId: "tenant-a" } },
+      include: { user: true },
+    })
+    // Tenant-scoped path never falls back to the cross-tenant lookup.
+    expect(userFindUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it("revokes a tenant-scoped caller's own-tenant target found via membership", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-a")
+    userTenantFindUniqueMock.mockResolvedValue({
+      user: { id: "target-1", email: "target@example.com" },
+    })
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
+
+    expect(res.status).toBe(200)
+    expect(revokeAllSessionsMock).toHaveBeenCalledWith("target-1")
+    const entry = auditMock.mock.calls[0][0]
+    expect(entry.resourceName).toBe("target@example.com")
+  })
+
+  it("lets a provider-view caller target a user regardless of tenant (sibling bypass)", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindUniqueMock.mockResolvedValue({ id: "target-1", email: "target@example.com" })
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "target-1" } })
+
+    expect(res.status).toBe(200)
+    // Bypasses tenant membership entirely, same as the sibling routes.
+    expect(userTenantFindUniqueMock).not.toHaveBeenCalled()
+    expect(revokeAllSessionsMock).toHaveBeenCalledWith("target-1")
   })
 })

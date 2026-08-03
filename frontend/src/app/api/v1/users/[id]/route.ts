@@ -7,37 +7,10 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
-import { checkPermission, PERMISSIONS, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
-
-/**
- * Hide provider-level accounts (super_admin + provider_admin) from
- * non-super-admin callers. Returns 404 rather than 403 so existence is not
- * leaked.
- */
-async function denyIfTargetIsProtectedAndCallerIsNot(
-  targetUserId: string,
-  callerUserId: string | undefined
-): Promise<NextResponse | null> {
-  if (!(await isUserProtected(targetUserId))) return null
-  if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
-}
-
-/**
- * Fetch a user that belongs to the given tenant. Returns the full Prisma row
- * or null if the user doesn't exist or has no membership in this tenant.
- * Centralised so the GET / PATCH / DELETE handlers all use the same lookup
- * + tenant-scoping rules.
- */
-async function findUserInTenant(userId: string, tenantId: string) {
-  const membership = await prisma.userTenant.findUnique({
-    where: { userId_tenantId: { userId, tenantId } },
-    include: { user: true },
-  })
-  return membership?.user ?? null
-}
 
 export const runtime = "nodejs"
 

@@ -10,6 +10,8 @@ import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdap, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcRoleId, syncOidcRoleAssignment } from "./oidc"
+import { loadJwtContext } from "./jwtContext"
+import { createSession, evaluateSession, touchSession } from "./sessions"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -40,6 +42,14 @@ declare module "next-auth/jwt" {
     authProvider: "credentials" | "ldap" | "oidc"
     tenantId: string
     mustEnroll2fa?: boolean
+    /**
+     * Server-side session row id (sessions table). Absent only on tokens
+     * issued before session hardening, or when the row insert failed at
+     * sign-in — both refused on the next read-path evaluation.
+     */
+    sid?: string
+    /** When the user authenticated, epoch ms. */
+    authAt?: number
   }
 }
 
@@ -54,6 +64,25 @@ import {
   envPrefersSecureCookies,
   resolveCookieSecure,
 } from './cookies'
+
+/**
+ * Best-effort request origin for a new session row.
+ *
+ * The jwt callback receives no request object, so this reads the ambient
+ * request headers. headers() throws outside a request scope, hence the
+ * try/catch: an unknown origin is a cosmetic loss, a thrown sign-in is not.
+ */
+async function requestOrigin(): Promise<{ ipAddress: string | null; userAgent: string | null }> {
+  try {
+    const { headers } = await import("next/headers")
+    const h = await headers()
+    const fwd = h.get("x-forwarded-for")
+    const ip = fwd ? fwd.split(",")[0]?.trim() : h.get("x-real-ip")
+    return { ipAddress: ip || null, userAgent: h.get("user-agent") }
+  } catch {
+    return { ipAddress: null, userAgent: null }
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   cookies: {
@@ -508,6 +537,10 @@ export const authOptions: NextAuthOptions = {
       return true
     },
     async jwt({ token, user, account }) {
+      // ---- SIGN-IN PATH -------------------------------------------------
+      // callbacks.jwt runs here from core/routes/callback.js:397-413, which
+      // has NO try/catch around it. Anything thrown below is a 500 on login
+      // for every user. This branch must therefore swallow every error.
       if (user) {
         token.id = user.id
         token.email = user.email
@@ -516,25 +549,81 @@ export const authOptions: NextAuthOptions = {
         // Avatar will be fetched from DB in session callback
         token.role = user.role
         token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
-      }
 
-      // Always refresh tenantId from DB (supports tenant switching without re-login)
-      if (token.id) {
         try {
-          const { getUserDefaultTenantId } = await import("@/lib/tenant")
-          token.tenantId = await getUserDefaultTenantId(token.id as string)
+          const origin = await requestOrigin()
+          token.sid = await createSession({ userId: user.id, ...origin })
+          token.authAt = Date.now()
+        } catch (e: any) {
+          // No sid means the next read-path evaluation refuses this token, so
+          // the user is asked to sign in again. That is the safe outcome; a
+          // 500 here would deny everyone.
+          console.error('[auth-session] could not create the session row:', e?.message ?? e)
+        }
+
+        try {
+          const ctx = await loadJwtContext(user.id, null)
+          token.tenantId = ctx.tenantId
+          token.mustEnroll2fa = ctx.mustEnroll2fa
         } catch {
           token.tenantId = token.tenantId || 'default'
-        }
-      }
-
-      if (token.id) {
-        try {
-          const { needsEnrollment } = await import("@/lib/auth/enforce-2fa")
-          token.mustEnroll2fa = await needsEnrollment(token.id)
-        } catch {
           token.mustEnroll2fa = false
         }
+
+        return token
+      }
+
+      // ---- READ PATH ----------------------------------------------------
+      // Reached from core/routes/session.js:53, which IS wrapped in a
+      // try/catch that calls sessionStore.clean(). Throwing here therefore
+      // clears the cookie and makes getServerSession return null, which is
+      // exactly the refusal we want, on every guarded route, with no
+      // call-site changes.
+      if (!token.id) return token
+
+      const sid = token.sid ?? null
+      if (!sid) {
+        // A token with no sid predates session hardening (or its row insert
+        // failed at sign-in): no row can vouch for it, so refuse without a
+        // database read. This is the intended one-off reconnection at deploy,
+        // and it must hold even while the database is unreachable — the
+        // fail-open below only protects sessions that were once valid.
+        throw new Error('Session not valid: no sid on token')
+      }
+
+      let ctx
+      try {
+        ctx = await loadJwtContext(token.id, sid)
+      } catch (e: any) {
+        // FAIL OPEN, deliberately: a Postgres outage already breaks every
+        // route (they all need the DB, including to decrypt the PVE token),
+        // so refusing buys no security and only causes a reconnection storm
+        // when the database comes back. Logged loudly on purpose.
+        console.error('[auth-session] validity check unavailable, allowing:', e?.message ?? e)
+        return token
+      }
+
+      if (!ctx.enabled) {
+        throw new Error('Account disabled')
+      }
+
+      const verdict = evaluateSession(ctx.session)
+      if (!verdict.alive) {
+        // Cast: tsconfig has strict:false, which disables discriminated-union
+        // narrowing, so `verdict.reason` does not typecheck on its own.
+        const { reason } = verdict as { alive: false; reason: string }
+        throw new Error(`Session not valid: ${reason}`)
+      }
+
+      token.tenantId = ctx.tenantId
+      token.mustEnroll2fa = ctx.mustEnroll2fa
+      if (!token.authAt && ctx.session) token.authAt = ctx.session.createdAt.getTime()
+
+      // Throttled inside touchSession using the row we already read.
+      try {
+        await touchSession(sid, new Date(), ctx.session)
+      } catch (e: any) {
+        console.warn('[auth-session] lastSeenAt refresh failed:', e?.message ?? e)
       }
 
       return token
@@ -598,12 +687,14 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 jours
-    // Refresh the JWT (and re-run the jwt() callback that recomputes
-    // mustEnroll2fa) every 60 s of session activity. Closes the gap where
-    // an admin enables the 2FA-required policy and an already-logged-in
-    // session would otherwise keep its stale token until it expires.
-    updateAge: 60,
+    // Aligned on SESSION_ABSOLUTE_TIMEOUT so the cookie cannot outlive the
+    // session. This is only the second barrier: the row in `sessions` is what
+    // actually decides, since a JWT's exp is frozen at encoding time.
+    //
+    // updateAge is intentionally absent: next-auth only reads it in the
+    // database branch (core/routes/session.js:109, inside the else), so with
+    // strategy "jwt" it did nothing. lastSeenAt throttling is ours.
+    maxAge: 7 * 24 * 60 * 60,
   },
   secret: process.env.NEXTAUTH_SECRET || "build-time-placeholder",
 }

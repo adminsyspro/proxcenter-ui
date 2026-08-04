@@ -33,6 +33,11 @@ export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Self-targeting is legitimate (a super admin may end their own sessions)
+  // but must never be a surprise: warn before the click, and navigate to
+  // /login after it instead of updating a list this tab can no longer read.
+  const isSelf = !!user?.id && user.id === currentUserId
+
   const handleConfirm = async () => {
     setLoading(true)
     setError('')
@@ -44,7 +49,7 @@ export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t
         // "Every session of user X" includes the caller's own when X is the
         // caller: this tab's session is already revoked server-side. Navigate
         // now instead of letting the page 401 until a poller reacts.
-        if (user?.id && user.id === currentUserId) {
+        if (isSelf) {
           redirectToLoginOnce()
           return
         }
@@ -75,6 +80,9 @@ export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t
       </DialogTitle>
       <DialogContent sx={{ pt: '20px !important' }}>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+        {isSelf && (
+          <Alert severity='warning' sx={{ mb: 2 }}>{t('sessions.adminRevokeAllOwnConfirmWarning')}</Alert>
+        )}
         <Typography>{t('sessions.adminRevokeConfirmBody')}</Typography>
       </DialogContent>
       <DialogActions>

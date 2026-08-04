@@ -154,4 +154,20 @@ describe('RevokeSessionsDialog', () => {
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('u1'))
     expect(redirectToLoginOnceMock).not.toHaveBeenCalled()
   })
+
+  it('warns when the target user is the caller themselves', () => {
+    renderWithProviders(
+      <RevokeSessionsDialog open user={targetUser} currentUserId='u1' onClose={vi.fn()} onSuccess={vi.fn()} t={t} />,
+    )
+
+    expect(screen.getByText('sessions.adminRevokeAllOwnConfirmWarning')).toBeInTheDocument()
+  })
+
+  it('does not warn when the target is another user', () => {
+    renderWithProviders(
+      <RevokeSessionsDialog open user={targetUser} currentUserId='someone-else' onClose={vi.fn()} onSuccess={vi.fn()} t={t} />,
+    )
+
+    expect(screen.queryByText('sessions.adminRevokeAllOwnConfirmWarning')).not.toBeInTheDocument()
+  })
 })

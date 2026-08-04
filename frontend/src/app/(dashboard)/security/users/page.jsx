@@ -791,6 +791,9 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
 
 function AdminSessionsTab({ t }) {
   const { data, error: fetchError, isLoading, mutate } = useAdminSessions(true)
+  // Only used to hand the caller's id to RevokeSessionsDialog, which decides
+  // whether a revoke-all targets the caller themselves (warning + redirect).
+  const { data: session } = useSession()
   const sessions = data?.data || []
   const truncated = data?.truncated === true
   const loadError = fetchError ? t('errors.connectionError') : ''
@@ -809,6 +812,25 @@ function AdminSessionsTab({ t }) {
     mutate(prev => {
       if (!prev?.data) return prev
       return { ...prev, data: prev.data.filter(s => s.id !== sessionId) }
+    }, false)
+  }, [mutate])
+
+  const [revokeAllDialogOpen, setRevokeAllDialogOpen] = useState(false)
+  const [userToRevokeAll, setUserToRevokeAll] = useState(null)
+
+  const handleRevokeAllForUser = (row) => {
+    // RevokeSessionsDialog expects a user shape ({ id, email }); the sessions
+    // row carries both, under session-listing names.
+    setUserToRevokeAll({ id: row.userId, email: row.userEmail })
+    setRevokeAllDialogOpen(true)
+  }
+
+  const handleAllRevoked = useCallback((userId) => {
+    // Optimistically drop every session row of that user without a full
+    // network round-trip. mutate() will reconcile on next SWR revalidation.
+    mutate(prev => {
+      if (!prev?.data) return prev
+      return { ...prev, data: prev.data.filter(s => s.userId !== userId) }
     }, false)
   }, [mutate])
 
@@ -887,18 +909,31 @@ function AdminSessionsTab({ t }) {
       {
         field: 'actions',
         headerName: t('common.actions'),
-        width: 90,
+        width: 110,
         sortable: false,
         renderCell: params => (
-          <Tooltip title={t('sessions.adminRevokeOneMenu')}>
-            <IconButton
-              size='small'
-              color='warning'
-              onClick={() => handleRevoke(params.row)}
-            >
-              <i className='ri-logout-box-line' />
-            </IconButton>
-          </Tooltip>
+          <>
+            <Tooltip title={t('sessions.adminRevokeOneMenu')}>
+              <IconButton
+                size='small'
+                color='warning'
+                onClick={() => handleRevoke(params.row)}
+              >
+                {/* circle-r = THIS session (same icon as the profile card's
+                    single revoke); box = ALL sessions of the row's user. */}
+                <i className='ri-logout-circle-r-line' />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={t('sessions.adminRevokeMenu')}>
+              <IconButton
+                size='small'
+                color='warning'
+                onClick={() => handleRevokeAllForUser(params.row)}
+              >
+                <i className='ri-logout-box-line' />
+              </IconButton>
+            </Tooltip>
+          </>
         ),
       },
     ],
@@ -954,6 +989,15 @@ function AdminSessionsTab({ t }) {
         onClose={() => setRevokeDialogOpen(false)}
         session={sessionToRevoke}
         onSuccess={handleRevoked}
+        t={t}
+      />
+
+      <RevokeSessionsDialog
+        open={revokeAllDialogOpen}
+        onClose={() => setRevokeAllDialogOpen(false)}
+        user={userToRevokeAll}
+        onSuccess={handleAllRevoked}
+        currentUserId={session?.user?.id}
         t={t}
       />
     </>
@@ -1099,26 +1143,6 @@ return () => setPageInfo('', '', '')
       return {
         ...prev,
         data: prev.data.map(u => u.id === userId ? { ...u, require_2fa_enrollment: isRequired } : u),
-      }
-    }, false)
-  }, [mutateUsers])
-
-  const [revokeSessionsDialogOpen, setRevokeSessionsDialogOpen] = useState(false)
-  const [userToRevokeSessions, setUserToRevokeSessions] = useState(null)
-
-  const handleRevokeSessions = (user) => {
-    setUserToRevokeSessions(user)
-    setRevokeSessionsDialogOpen(true)
-  }
-
-  const handleSessionsRevoked = useCallback((userId) => {
-    // Optimistically zero the count for the row without a full network
-    // round-trip. mutateUsers() will reconcile on next SWR revalidation.
-    mutateUsers(prev => {
-      if (!prev?.data) return prev
-      return {
-        ...prev,
-        data: prev.data.map(u => u.id === userId ? { ...u, active_session_count: 0 } : u),
       }
     }, false)
   }, [mutateUsers])
@@ -1363,19 +1387,6 @@ return () => setPageInfo('', '', '')
                 </IconButton>
               </Tooltip>
             )}
-            {/* Revoke sessions: hidden on your own row — revoking here would log the admin
-                out mid-task; they already have the profile card's session card for that. */}
-            {params.row.id !== session?.user?.id && (
-              <Tooltip title={t('sessions.adminRevokeMenu')}>
-                <IconButton
-                  size='small'
-                  color='warning'
-                  onClick={() => handleRevokeSessions(params.row)}
-                >
-                  <i className='ri-logout-box-line' />
-                </IconButton>
-              </Tooltip>
-            )}
             {/* Hide delete on your own row — self-delete is refused by the backend */}
             {params.row.id !== session?.user?.id && (
               <Tooltip title={t('common.delete')}>
@@ -1392,7 +1403,7 @@ return () => setPageInfo('', '', '')
         ),
       },
     ],
-    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA, handleRequire2FA, handleClearRequire2FA, handleRevokeSessions]
+    [t, showRbac, showTenants, session?.user?.id, handleDisable2FA, handleRequire2FA, handleClearRequire2FA]
   )
 
   return (
@@ -1501,15 +1512,6 @@ return () => setPageInfo('', '', '')
         onClose={() => setRequire2FADialogOpen(false)}
         user={userToRequire2FA}
         onSuccess={handle2FARequirementChanged}
-        t={t}
-      />
-
-      <RevokeSessionsDialog
-        open={revokeSessionsDialogOpen}
-        onClose={() => setRevokeSessionsDialogOpen(false)}
-        user={userToRevokeSessions}
-        onSuccess={handleSessionsRevoked}
-        currentUserId={session?.user?.id}
         t={t}
       />
     </Box>

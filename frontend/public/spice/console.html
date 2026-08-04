@@ -41,8 +41,40 @@
     const messageBox = document.getElementById('message');
     let sc = null;
 
-    title.textContent = `SPICE • ${type?.toUpperCase()} ${vmid} • ${node}`;
-    document.title = `SPICE - ${vmid} - ${node}`;
+    // Même libellé dans la barre d'outils et dans le titre de fenêtre, nom de
+    // la VM en tête pour survivre à la troncature de la barre des tâches
+    // (issue #630). Le type est toujours qemu ici, SPICE le sous-entend.
+    let vmName = null;
+
+    function renderVmLabel() {
+      const suffix = `SPICE ${vmid} • ${node}`;
+      const label = vmName ? `${vmName} • ${suffix}` : suffix;
+
+      document.title = label;
+      title.textContent = label;
+    }
+
+    renderVmLabel();
+
+    // Cette page ne suit pas l'état de la VM: un seul GET suffit à nommer la
+    // fenêtre. Un échec laisse simplement le libellé sur son repli.
+    async function fetchVmName() {
+      if (!connId || !type || !node || !vmid) return;
+
+      try {
+        const res = await fetch(
+          `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.data?.name) {
+          vmName = json.data.name;
+          renderVmLabel();
+        }
+      } catch (e) {
+        console.error('Failed to fetch VM name:', e);
+      }
+    }
 
     function setStatus(s, text) { dot.className = s; status.textContent = '• ' + text; }
     function fail(big, small) {
@@ -88,6 +120,7 @@
         });
       } catch (e) { fail('SPICE init failed', e.message); }
     }
+    fetchVmName();
     connect();
   </script>
 </body>

@@ -116,8 +116,39 @@
     let fitAddon = null;
     let socket = null;
     
-    document.title = `Terminal - ${type?.toUpperCase()} ${vmid} - ${node}`;
-    vmInfo.textContent = `${type?.toUpperCase()} ${vmid} • ${node}`;
+    // Nom de la VM en tête du libellé, comme les consoles noVNC et SPICE
+    // (issue #630) : c'est ce que la barre des tâches laisse voir.
+    let vmName = null;
+
+    function renderVmLabel() {
+      const suffix = `Terminal ${type?.toUpperCase()} ${vmid} • ${node}`;
+      const label = vmName ? `${vmName} • ${suffix}` : suffix;
+
+      document.title = label;
+      vmInfo.textContent = label;
+    }
+
+    renderVmLabel();
+
+    // Un seul GET suffit à nommer la fenêtre; en cas d'échec le libellé garde
+    // son repli.
+    async function fetchVmName() {
+      if (!type || !node || !vmid) return;
+
+      try {
+        const res = await fetch(
+          `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.data?.name) {
+          vmName = json.data.name;
+          renderVmLabel();
+        }
+      } catch (err) {
+        console.error('Failed to fetch VM name:', err);
+      }
+    }
     
     function setStatus(status, text) {
       statusDot.className = status;
@@ -317,6 +348,7 @@
     btnClose.addEventListener('click', () => window.close());
     
     // Démarrer
+    fetchVmName();
     connect();
   </script>
 </body>

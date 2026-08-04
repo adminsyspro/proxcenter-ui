@@ -117,4 +117,32 @@ describe('RevokeSingleSessionDialog', () => {
 
     expect(screen.getByText('sessions.adminRevokeOneConfirmTitle')).toBeInTheDocument()
   })
+
+  it('warns when the target session is the caller\'s own current session', async () => {
+    renderWithProviders(
+      <RevokeSingleSessionDialog
+        open
+        session={{ ...targetSession, current: true }}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        t={t}
+      />,
+    )
+
+    expect(screen.getByText('sessions.adminRevokeOwnConfirmWarning')).toBeInTheDocument()
+  })
+
+  it('does not show the own-session warning for a session that is not current', async () => {
+    renderWithProviders(
+      <RevokeSingleSessionDialog
+        open
+        session={{ ...targetSession, current: false }}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        t={t}
+      />,
+    )
+
+    expect(screen.queryByText('sessions.adminRevokeOwnConfirmWarning')).not.toBeInTheDocument()
+  })
 })

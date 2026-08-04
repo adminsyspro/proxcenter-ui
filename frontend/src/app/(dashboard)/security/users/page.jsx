@@ -780,6 +780,7 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
 function AdminSessionsTab({ t }) {
   const { data, error: fetchError, isLoading, mutate } = useAdminSessions(true)
   const sessions = data?.data || []
+  const truncated = data?.truncated === true
   const loadError = fetchError ? t('errors.connectionError') : ''
 
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
@@ -807,7 +808,15 @@ function AdminSessionsTab({ t }) {
         flex: 1,
         minWidth: 200,
         renderCell: params => (
-          <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{params.row.userEmail}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{params.row.userEmail}</Typography>
+            {/* The listing is "every session in the installation", including the
+                caller's own — mark it the way the profile card marks its current
+                session, so a revoke click here is never a surprise. */}
+            {params.row.current && (
+              <Chip label={t('sessions.currentChip')} size='small' color='success' />
+            )}
+          </Box>
         ),
       },
       {
@@ -893,6 +902,7 @@ function AdminSessionsTab({ t }) {
       </Box>
 
       {loadError && <Alert severity='error' sx={{ mb: 2 }}>{loadError}</Alert>}
+      {truncated && <Alert severity='warning' sx={{ mb: 2 }}>{t('sessions.adminAllTruncatedWarning')}</Alert>}
 
       <Box sx={{ flex: 1, minHeight: 400 }}>
         {!isLoading && sessions.length === 0 && !loadError ? (

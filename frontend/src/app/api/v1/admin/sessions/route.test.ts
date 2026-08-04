@@ -11,16 +11,28 @@
  * Liveness comes from aliveWhere() — the same boundary-tested predicate the
  * self-service and per-user routes use. This file does not re-derive the
  * liveness rule, it only checks the predicate reaches the query.
+ *
+ * The query is bounded (MAX_SESSION_ROWS in ./route.ts): an MSP installation
+ * mid-incident can have far more live sessions than a DataGrid should try to
+ * render in one response. Overflow must never be silent — the response says
+ * `truncated: true` rather than quietly dropping rows.
+ *
+ * The caller's own session is marked `current: true` via the same
+ * getToken()+sessionCookieName() pattern as /api/v1/auth/sessions/route.ts,
+ * so the UI can warn before a revoke click signs the admin out of the
+ * screen they are on.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 const {
   requireSuperAdminCallerMock,
+  getTokenMock,
   sessionFindManyMock,
   tenantFindManyMock,
 } = vi.hoisted(() => ({
   requireSuperAdminCallerMock: vi.fn(),
+  getTokenMock: vi.fn(),
   sessionFindManyMock: vi.fn(),
   tenantFindManyMock: vi.fn(),
 }))
@@ -28,6 +40,8 @@ const {
 vi.mock("@/lib/auth/totp-admin", () => ({
   requireSuperAdminCaller: requireSuperAdminCallerMock,
 }))
+vi.mock("next-auth/jwt", () => ({ getToken: getTokenMock }))
+vi.mock("@/lib/auth/cookies", () => ({ sessionCookieName: () => "next-auth.session-token" }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     session: { findMany: sessionFindManyMock },
@@ -60,6 +74,7 @@ function row(overrides: Partial<{
 beforeEach(() => {
   vi.clearAllMocks()
   requireSuperAdminCallerMock.mockResolvedValue(null)
+  getTokenMock.mockResolvedValue({}) // no sid: no row marked current unless overridden
   sessionFindManyMock.mockResolvedValue([])
   tenantFindManyMock.mockResolvedValue([])
 })
@@ -144,8 +159,9 @@ describe("GET /api/v1/admin/sessions", () => {
     const res = await callRoute(GET as any, { method: "GET" })
     const body = await readJson<any>(res)
 
+    expect(Object.keys(body).sort()).toEqual(["data", "truncated"])
     expect(Object.keys(body.data[0]).sort()).toEqual(
-      ["browser", "createdAt", "id", "ipAddress", "lastSeenAt", "os", "tenantName", "userEmail", "userId"].sort(),
+      ["browser", "createdAt", "current", "id", "ipAddress", "lastSeenAt", "os", "tenantName", "userEmail", "userId"].sort(),
     )
     const serialised = JSON.stringify(body)
     expect(serialised).not.toMatch(/userAgent/i)
@@ -161,5 +177,70 @@ describe("GET /api/v1/admin/sessions", () => {
     const body = await readJson<any>(res)
 
     expect(body.data[0].tenantName).toBe("ghost-tenant")
+  })
+
+  describe("bounding (never silently drop rows)", () => {
+    it("requests MAX_SESSION_ROWS + 1 rows and reports truncated: false under the cap", async () => {
+      sessionFindManyMock.mockResolvedValue([row()])
+      tenantFindManyMock.mockResolvedValue([{ id: "tenant-a", name: "Tenant A" }])
+
+      const GET = await importGET()
+      const res = await callRoute(GET as any, { method: "GET" })
+      const body = await readJson<any>(res)
+
+      expect(sessionFindManyMock.mock.calls[0][0].take).toBe(501)
+      expect(body.truncated).toBe(false)
+      expect(body.data).toHaveLength(1)
+    })
+
+    it("truncates to 500 rows and reports truncated: true when the 501st row comes back", async () => {
+      const rows = Array.from({ length: 501 }, (_, i) =>
+        row({ id: `sess-${i}`, user: { email: `u${i}@example.com`, tenantId: "tenant-a" } }),
+      )
+      sessionFindManyMock.mockResolvedValue(rows)
+      tenantFindManyMock.mockResolvedValue([{ id: "tenant-a", name: "Tenant A" }])
+
+      const GET = await importGET()
+      const res = await callRoute(GET as any, { method: "GET" })
+      const body = await readJson<any>(res)
+
+      expect(body.truncated).toBe(true)
+      expect(body.data).toHaveLength(500)
+      // The 500 kept are the first 500 as ordered by the query (lastSeenAt
+      // desc), not an arbitrary subset — dropping the tail, not the head.
+      expect(body.data[0].id).toBe("sess-0")
+      expect(body.data[499].id).toBe("sess-499")
+    })
+  })
+
+  describe("marking the caller's own session", () => {
+    it("marks the row matching the token's sid current:true and every other row current:false", async () => {
+      getTokenMock.mockResolvedValue({ sid: "sess-2" })
+      sessionFindManyMock.mockResolvedValue([
+        row({ id: "sess-1", user: { email: "u1@example.com", tenantId: "tenant-a" } }),
+        row({ id: "sess-2", userId: "u2", user: { email: "u2@example.com", tenantId: "tenant-a" } }),
+      ])
+      tenantFindManyMock.mockResolvedValue([{ id: "tenant-a", name: "Tenant A" }])
+
+      const GET = await importGET()
+      const res = await callRoute(GET as any, { method: "GET" })
+      const body = await readJson<any>(res)
+
+      const bySid = new Map(body.data.map((s: any) => [s.id, s.current]))
+      expect(bySid.get("sess-1")).toBe(false)
+      expect(bySid.get("sess-2")).toBe(true)
+    })
+
+    it("marks every row current:false when the token has no sid", async () => {
+      getTokenMock.mockResolvedValue({})
+      sessionFindManyMock.mockResolvedValue([row({ id: "sess-1" })])
+      tenantFindManyMock.mockResolvedValue([{ id: "tenant-a", name: "Tenant A" }])
+
+      const GET = await importGET()
+      const res = await callRoute(GET as any, { method: "GET" })
+      const body = await readJson<any>(res)
+
+      expect(body.data[0].current).toBe(false)
+    })
   })
 })

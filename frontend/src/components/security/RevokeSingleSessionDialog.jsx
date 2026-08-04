@@ -69,6 +69,14 @@ export default function RevokeSingleSessionDialog({ open, onClose, session, onSu
       </DialogTitle>
       <DialogContent sx={{ pt: '20px !important' }}>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
+        {/* The list has no way to hide the caller's own session — it's still
+            "every session in the installation" — so a revoke click on that
+            row must not be a surprise. Not blocked (a super admin is
+            entitled to end their own session), just called out before the
+            click. */}
+        {session?.current && (
+          <Alert severity='warning' sx={{ mb: 2 }}>{t('sessions.adminRevokeOwnConfirmWarning')}</Alert>
+        )}
         <Typography>{t('sessions.adminRevokeOneConfirmBody')}</Typography>
       </DialogContent>
       <DialogActions>

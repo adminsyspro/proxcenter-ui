@@ -7,6 +7,7 @@
 // branding, login backgrounds and compliance PDF logos.
 import path from 'node:path'
 
+import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
@@ -35,5 +36,16 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on the sweep: the rows stay non-terminal and the
     // next boot retries.
     console.error('[startup] orphaned migration sweep failed (non-fatal):', err)
+  }
+
+  try {
+    // Bounds how long a dead session row's ipAddress/userAgent survives for a
+    // user who never signs in again. Runs on every HA replica; no leader
+    // election needed since the purge is an idempotent deleteMany.
+    startSessionSweeper()
+  } catch (err) {
+    // Boot must never depend on this: the rows stay in place and the next
+    // boot retries starting the sweeper.
+    console.error('[startup] session sweeper failed to start (non-fatal):', err)
   }
 }

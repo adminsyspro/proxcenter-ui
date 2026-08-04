@@ -3,7 +3,7 @@
  * Each route is dynamically imported AFTER mocks are set so Vitest's module
  * registry wires the fakes in correctly.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 // ─── Mock factories ────────────────────────────────────────────────────────
@@ -84,6 +84,16 @@ vi.mock("@/lib/audit", () => ({ audit: auditMock }))
 vi.mock("qrcode", () => ({ default: { toDataURL: qrToDataURLMock } }))
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+
+// cookies.ts is real code in this file (not mocked): resolveCookieSecure()
+// reads NEXTAUTH_URL, so tests that exercise the Secure flag must pin and
+// restore it.
+const ORIGINAL_NEXTAUTH_URL = process.env.NEXTAUTH_URL
+
+afterEach(() => {
+  if (ORIGINAL_NEXTAUTH_URL === undefined) delete process.env.NEXTAUTH_URL
+  else process.env.NEXTAUTH_URL = ORIGINAL_NEXTAUTH_URL
+})
 
 function makeSession(overrides: Record<string, any> = {}) {
   return {
@@ -272,6 +282,75 @@ describe("POST /api/v1/auth/2fa/enroll/verify", () => {
     expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: "2fa_enrolled" }),
     )
+  })
+
+  // This route previously derived the cookie's `secure` flag from the cookie
+  // NAME, which stays unprefixed unless NEXTAUTH_URL is https. That silently
+  // wrote a non-Secure cookie on an HTTPS request. The fix reads the actual
+  // transport via resolveCookieSecure(req.headers) instead, so these two
+  // cases must diverge even though NEXTAUTH_URL (and therefore the cookie
+  // name) is held fixed across both.
+  it("sets the Secure flag on the cookie when the request arrived over https", async () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000"
+    getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
+    verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:SECRET" })
+    decryptSecretMock.mockReturnValue("SECRET")
+    checkTotpCodeMock.mockReturnValue(true)
+    generateRecoveryCodesMock.mockReturnValue(["CODE1-AAAAA", "CODE2-BBBBB"])
+    transactionMock.mockImplementation((cb: (tx: any) => Promise<any>) =>
+      cb({
+        user: { update: vi.fn().mockResolvedValue({}) },
+        userTotpRecoveryCode: {
+          deleteMany: vi.fn().mockResolvedValue({}),
+          createMany: vi.fn().mockResolvedValue({}),
+        },
+      }),
+    )
+    replaceRecoveryCodesMock.mockResolvedValue(undefined)
+    auditMock.mockResolvedValue(undefined)
+    getTokenMock.mockResolvedValue({ sub: "user-1", mustEnroll2fa: true })
+    encodeMock.mockResolvedValue("new-jwt-token")
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, {
+      body: { enrollToken: "tok", code: "123456" },
+      headers: { "x-forwarded-proto": "https" },
+    })
+    expect(res.status).toBe(200)
+
+    const setCookie = res.headers.get("set-cookie")
+    expect(setCookie).not.toBeNull()
+    expect(setCookie).toContain("Secure")
+  })
+
+  it("omits the Secure flag when there is no forwarded-proto and NEXTAUTH_URL is http", async () => {
+    process.env.NEXTAUTH_URL = "http://localhost:3000"
+    getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
+    verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:SECRET" })
+    decryptSecretMock.mockReturnValue("SECRET")
+    checkTotpCodeMock.mockReturnValue(true)
+    generateRecoveryCodesMock.mockReturnValue(["CODE1-AAAAA", "CODE2-BBBBB"])
+    transactionMock.mockImplementation((cb: (tx: any) => Promise<any>) =>
+      cb({
+        user: { update: vi.fn().mockResolvedValue({}) },
+        userTotpRecoveryCode: {
+          deleteMany: vi.fn().mockResolvedValue({}),
+          createMany: vi.fn().mockResolvedValue({}),
+        },
+      }),
+    )
+    replaceRecoveryCodesMock.mockResolvedValue(undefined)
+    auditMock.mockResolvedValue(undefined)
+    getTokenMock.mockResolvedValue({ sub: "user-1", mustEnroll2fa: true })
+    encodeMock.mockResolvedValue("new-jwt-token")
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, { body: { enrollToken: "tok", code: "123456" } })
+    expect(res.status).toBe(200)
+
+    const setCookie = res.headers.get("set-cookie")
+    expect(setCookie).not.toBeNull()
+    expect(setCookie).not.toContain("Secure")
   })
 })
 

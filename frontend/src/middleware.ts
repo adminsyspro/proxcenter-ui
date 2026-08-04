@@ -5,6 +5,8 @@ import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
 import { matchPublicApiPath } from "@/lib/api-tokens/allowlist"
+import { sessionCookieName } from "@/lib/auth/cookies"
+import { isPastAbsoluteCap } from "@/lib/auth/durations"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
@@ -269,7 +271,8 @@ export async function middleware(request: NextRequest) {
     // Vérifier le token JWT
     const token = await getToken({
       req: request,
-      secret: AUTH_SECRET
+      secret: AUTH_SECRET,
+      cookieName: sessionCookieName()
     })
 
     // Si pas de token, rediriger vers login
@@ -279,6 +282,28 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set("callbackUrl", pathname)
 
       return NextResponse.redirect(loginUrl)
+    }
+
+    // Absolute cap, checked here so it also holds for page navigation. getToken
+    // only decodes the JWT (jwt/index.js:118) — no callbacks, so the read-path
+    // validation never runs for the middleware. authAt makes the one deadline
+    // that matters against a stolen cookie enforceable with pure arithmetic,
+    // keeping this file Prisma-free and Edge-valid. isPastAbsoluteCap is the
+    // same predicate lib/auth/sessions.ts:evaluateSession uses for the DB-backed
+    // row's createdAt, so the two never drift into separately-worded copies of
+    // one rule.
+    //
+    // A token without authAt is left alone: the read path refuses it anyway,
+    // and redirecting here as well risks a loop. This code only runs past the
+    // isPublicRoute early-return above, so /login itself can never be
+    // redirected by this check.
+    if (token.authAt && isPastAbsoluteCap(Number(token.authAt))) {
+      const url = request.nextUrl.clone()
+
+      url.pathname = "/login"
+      url.search = ""
+
+      return NextResponse.redirect(url)
     }
 
     if (token.mustEnroll2fa && !isEnrollBypass(pathname)) {
@@ -331,7 +356,8 @@ export async function middleware(request: NextRequest) {
   // Vérifier le token JWT pour les API
   const token = await getToken({
     req: request,
-    secret: AUTH_SECRET
+    secret: AUTH_SECRET,
+    cookieName: sessionCookieName()
   })
 
   // Si pas de token, retourner 401 pour les API

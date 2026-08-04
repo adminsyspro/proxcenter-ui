@@ -347,19 +347,23 @@ model UserTotpRecoveryCode {
   @@map("user_totp_recovery_codes")
 }
 
+// Server-side session store. The cookie stays a NextAuth JWT; it carries this
+// row's id as `sid`. Presence + revokedAt + lastSeenAt + createdAt are what
+// make a JWT session revocable and time-bounded. No expiresAt column on
+// purpose: both deadlines are derived from the CURRENT configuration, so
+// changing a timeout applies to sessions already open.
 model Session {
-  id        String   @id
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @map("created_at")
-  ipAddress String?  @map("ip_address")
-  userAgent String?  @map("user_agent")
+  id         String    @id
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @map("created_at")
+  lastSeenAt DateTime  @map("last_seen_at")
+  revokedAt  DateTime? @map("revoked_at")
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
 
   @@index([userId])
-  @@index([token])
-  @@index([expiresAt])
+  @@index([lastSeenAt])
   @@map("sessions")
 }
 

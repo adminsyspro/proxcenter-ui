@@ -24,6 +24,7 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import TwoFactorCard from '@/components/profile/TwoFactorCard'
 import SessionsCard from '@/components/profile/SessionsCard'
+import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
 
 
 // Fonction pour obtenir les initiales
@@ -143,9 +144,12 @@ return
 return
       }
 
-      setPasswordSuccess(t('common.success'))
-      setNewPassword('')
-      setConfirmPassword('')
+      // Changing your own password revokes every session of the account,
+      // including the one this tab is on (users/[id] PATCH →
+      // revokeAllSessions with no exception, by design). A success message
+      // here would be one the dead session cannot back — every next call
+      // 401s. Go to /login now; the user signs back in with the new password.
+      redirectToLoginOnce()
     } catch (e) {
       setPasswordError(t('settings.connectionError'))
     } finally {

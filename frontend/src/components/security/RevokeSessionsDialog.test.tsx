@@ -6,6 +6,15 @@ import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import RevokeSessionsDialog from './RevokeSessionsDialog'
 
+const { redirectToLoginOnceMock } = vi.hoisted(() => ({ redirectToLoginOnceMock: vi.fn() }))
+
+// Partial module mock: the dialog must call the SHARED redirect helper (the
+// same one useSWRFetch's fetcher uses on a 401), not roll its own navigation.
+vi.mock('@/hooks/useSWRFetch', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/hooks/useSWRFetch')>()),
+  redirectToLoginOnce: redirectToLoginOnceMock,
+}))
+
 // Translate stub: return the key unchanged. The dialog receives `t` as a prop
 // (not the next-intl hook), matching how the admin users page passes it down
 // — see RoleDefaultScopeEditor.test.tsx for the same convention.
@@ -15,7 +24,10 @@ const targetUser = { id: 'u1', email: 'target@example.com' }
 const SESSIONS_URL = '*/api/v1/admin/users/u1/sessions'
 
 describe('RevokeSessionsDialog', () => {
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    redirectToLoginOnceMock.mockClear()
+  })
 
   it('issues DELETE /api/v1/admin/users/<id>/sessions and calls onSuccess(user.id) then onClose()', async () => {
     const user = userEvent.setup()
@@ -88,5 +100,58 @@ describe('RevokeSessionsDialog', () => {
 
     // Let the in-flight request resolve so it doesn't leak into the next test.
     resolveDelete?.()
+  })
+
+  it('revoking all sessions of the caller themselves navigates to /login instead of updating the list', async () => {
+    const user = userEvent.setup()
+    const onSuccess = vi.fn()
+    const onClose = vi.fn()
+
+    server.use(
+      http.delete(SESSIONS_URL, () => HttpResponse.json({ data: { revoked: 3 } })),
+    )
+
+    renderWithProviders(
+      <RevokeSessionsDialog
+        open
+        user={targetUser}
+        currentUserId='u1'
+        onClose={onClose}
+        onSuccess={onSuccess}
+        t={t}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'common.confirm' }))
+
+    await waitFor(() => expect(redirectToLoginOnceMock).toHaveBeenCalledTimes(1))
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("revoking another user's sessions does not navigate even with a currentUserId present", async () => {
+    const user = userEvent.setup()
+    const onSuccess = vi.fn()
+    const onClose = vi.fn()
+
+    server.use(
+      http.delete(SESSIONS_URL, () => HttpResponse.json({ data: { revoked: 2 } })),
+    )
+
+    renderWithProviders(
+      <RevokeSessionsDialog
+        open
+        user={targetUser}
+        currentUserId='someone-else'
+        onClose={onClose}
+        onSuccess={onSuccess}
+        t={t}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'common.confirm' }))
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('u1'))
+    expect(redirectToLoginOnceMock).not.toHaveBeenCalled()
   })
 })

@@ -13,6 +13,8 @@ import {
   Typography,
 } from '@mui/material'
 
+import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
+
 /* --------------------------------
    Revoke Single Session Confirm Dialog (super-admin, one session)
    (non-destructive — simple confirm, recoverable by signing back in)
@@ -42,6 +44,15 @@ export default function RevokeSingleSessionDialog({ open, onClose, session, onSu
         method: 'DELETE',
       })
       if (res.ok) {
+        // Revoking the row this tab is sitting on kills THIS session: every
+        // call the page makes from here on will 401. Don't wait for a poller
+        // to notice — leave for /login now. Deterministic counterpart of the
+        // 401 redirect in useSWRFetch's fetcher, for the one case where the
+        // client knows it caused the session's death.
+        if (session?.current) {
+          redirectToLoginOnce()
+          return
+        }
         onSuccess(session.id)
         onClose()
         return

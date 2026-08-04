@@ -19,7 +19,11 @@ import { dequal } from 'dequal'
 const REDIRECT_WINDOW_MS = 2000
 let lastRedirectAt = 0
 
-function redirectToLoginOnce() {
+// Exported: also called deliberately by the flows that knowingly kill the
+// caller's own session (admin sessions-tab revoke of the current row, admin
+// revoke-all targeting yourself, self password change). Those must not wait
+// for some poller's 401 echo — they know at click time the session is dead.
+export function redirectToLoginOnce() {
   // This module can be evaluated server-side (SSR); nothing to do there.
   if (typeof window === 'undefined') return
 

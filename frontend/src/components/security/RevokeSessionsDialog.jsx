@@ -13,6 +13,8 @@ import {
   Typography,
 } from '@mui/material'
 
+import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
+
 /* --------------------------------
    Revoke Sessions Confirm Dialog
    (non-destructive — simple confirm, recoverable by signing back in)
@@ -27,7 +29,7 @@ import {
    useTranslations() pattern.
 -------------------------------- */
 
-export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t }) {
+export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t, currentUserId }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -39,6 +41,13 @@ export default function RevokeSessionsDialog({ open, onClose, user, onSuccess, t
         method: 'DELETE',
       })
       if (res.ok) {
+        // "Every session of user X" includes the caller's own when X is the
+        // caller: this tab's session is already revoked server-side. Navigate
+        // now instead of letting the page 401 until a poller reacts.
+        if (user?.id && user.id === currentUserId) {
+          redirectToLoginOnce()
+          return
+        }
         onSuccess(user.id)
         onClose()
         return

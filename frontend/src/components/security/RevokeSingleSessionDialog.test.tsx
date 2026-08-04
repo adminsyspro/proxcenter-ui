@@ -6,6 +6,15 @@ import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import RevokeSingleSessionDialog from './RevokeSingleSessionDialog'
 
+const { redirectToLoginOnceMock } = vi.hoisted(() => ({ redirectToLoginOnceMock: vi.fn() }))
+
+// Partial module mock: the dialog must call the SHARED redirect helper (the
+// same one useSWRFetch's fetcher uses on a 401), not roll its own navigation.
+vi.mock('@/hooks/useSWRFetch', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/hooks/useSWRFetch')>()),
+  redirectToLoginOnce: redirectToLoginOnceMock,
+}))
+
 // Translate stub: return the key unchanged. The dialog receives `t` as a prop
 // (not the next-intl hook), matching how the admin users page passes it down
 // — same convention as RevokeSessionsDialog.test.tsx.
@@ -15,7 +24,10 @@ const targetSession = { id: 'sess-1', userEmail: 'target@example.com' }
 const SESSION_URL = '*/api/v1/admin/sessions/sess-1'
 
 describe('RevokeSingleSessionDialog', () => {
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    redirectToLoginOnceMock.mockClear()
+  })
 
   it('issues DELETE /api/v1/admin/sessions/<sid> and calls onSuccess(session.id) then onClose()', async () => {
     const user = userEvent.setup()
@@ -144,5 +156,57 @@ describe('RevokeSingleSessionDialog', () => {
     )
 
     expect(screen.queryByText('sessions.adminRevokeOwnConfirmWarning')).not.toBeInTheDocument()
+  })
+
+  it("revoking the caller's own current session navigates to /login instead of updating the list", async () => {
+    const user = userEvent.setup()
+    const onSuccess = vi.fn()
+    const onClose = vi.fn()
+
+    server.use(
+      http.delete(SESSION_URL, () => HttpResponse.json({ data: { ok: true } })),
+    )
+
+    renderWithProviders(
+      <RevokeSingleSessionDialog
+        open
+        session={{ ...targetSession, current: true }}
+        onClose={onClose}
+        onSuccess={onSuccess}
+        t={t}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'common.confirm' }))
+
+    await waitFor(() => expect(redirectToLoginOnceMock).toHaveBeenCalledTimes(1))
+    // The page is being left: the row-drop callback and onClose must NOT run.
+    expect(onSuccess).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("revoking a session that is not the caller's does not navigate", async () => {
+    const user = userEvent.setup()
+    const onSuccess = vi.fn()
+    const onClose = vi.fn()
+
+    server.use(
+      http.delete(SESSION_URL, () => HttpResponse.json({ data: { ok: true } })),
+    )
+
+    renderWithProviders(
+      <RevokeSingleSessionDialog
+        open
+        session={{ ...targetSession, current: false }}
+        onClose={onClose}
+        onSuccess={onSuccess}
+        t={t}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'common.confirm' }))
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('sess-1'))
+    expect(redirectToLoginOnceMock).not.toHaveBeenCalled()
   })
 })

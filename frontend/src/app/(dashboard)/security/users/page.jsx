@@ -45,6 +45,7 @@ import { TableSkeleton } from '@/components/skeletons'
 import RevokeSessionsDialog from '@/components/security/RevokeSessionsDialog'
 import RevokeSingleSessionDialog from '@/components/security/RevokeSingleSessionDialog'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
+import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
 
 /* --------------------------------
    Helpers
@@ -299,6 +300,17 @@ return
         setError(data.error || (t ? t('common.error') : 'Error'))
 
 return
+      }
+
+      // A self-edit that sets a new password (or unchecks Enabled) revokes
+      // every session of the account, including the one this tab is on
+      // (users/[id] PATCH → revokeAllSessions with no exception). Everything
+      // this function would do next — the RBAC assignment calls below,
+      // onSave()'s revalidation — can only 401 against the dead session.
+      // Leave for /login now; the operator signs back in with the new password.
+      if (isEdit && isSelf && (password || !enabled)) {
+        redirectToLoginOnce()
+        return
       }
 
       const userId = isEdit ? user.id : data.data.id
@@ -1497,6 +1509,7 @@ return () => setPageInfo('', '', '')
         onClose={() => setRevokeSessionsDialogOpen(false)}
         user={userToRevokeSessions}
         onSuccess={handleSessionsRevoked}
+        currentUserId={session?.user?.id}
         t={t}
       />
     </Box>

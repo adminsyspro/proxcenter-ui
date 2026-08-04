@@ -163,9 +163,22 @@ node bundle-novnc.js
     let reconnectTimer = null;
     let userDisconnected = false; // true when user explicitly closes
     
-    document.title = `Console - ${type?.toUpperCase()} ${vmid} - ${node}`;
-    vmInfo.textContent = `${type?.toUpperCase()} ${vmid} • ${node}`;
-    
+    // Le nom de la VM mène le libellé: la barre des tâches tronque après une
+    // quinzaine de caractères, et c'est le seul champ qui distingue deux
+    // consoles ouvertes côte à côte (issue #630). Le nom n'arrive qu'avec la
+    // première réponse /status, d'où le repli "vmid • node" en attendant.
+    let vmName = null;
+
+    function renderVmLabel() {
+      const suffix = `${type?.toUpperCase()} ${vmid} • ${node}`;
+      const label = vmName ? `${vmName} • ${suffix}` : suffix;
+
+      document.title = label;
+      vmInfo.textContent = label;
+    }
+
+    renderVmLabel();
+
     function setStatus(status, text) {
       statusDot.className = status;
       statusText.textContent = `• ${text}`;
@@ -197,6 +210,14 @@ node bundle-novnc.js
         if (res.ok) {
           const json = await res.json();
           vmStatus = json?.data?.status || 'unknown';
+
+          const name = json?.data?.name;
+
+          if (name && name !== vmName) {
+            vmName = name;
+            renderVmLabel();
+          }
+
           updateVmButtons();
         }
       } catch (err) {

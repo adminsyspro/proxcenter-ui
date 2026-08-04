@@ -7410,7 +7410,16 @@
     "columnHeader": "Sessions",
     "adminRevokeMenu": "Révoquer les sessions",
     "adminRevokeConfirmTitle": "Révoquer les sessions de {email}",
-    "adminRevokeConfirmBody": "Cela déconnecte immédiatement l'utilisateur de toutes ses sessions actives. Il pourra se reconnecter à tout moment."
+    "adminRevokeConfirmBody": "Cela déconnecte immédiatement l'utilisateur de toutes ses sessions actives. Il pourra se reconnecter à tout moment.",
+    "adminAllTab": "Toutes les sessions",
+    "adminAllEmptyTitle": "Aucune session active",
+    "adminAllEmptyDesc": "Il n'y a actuellement aucune session active dans cette installation.",
+    "userHeader": "Utilisateur",
+    "tenantHeader": "Tenant",
+    "deviceHeader": "Appareil",
+    "adminRevokeOneMenu": "Révoquer la session",
+    "adminRevokeOneConfirmTitle": "Révoquer la session de {email} ?",
+    "adminRevokeOneConfirmBody": "Cela déconnecte immédiatement cet appareil. L'utilisateur pourra se reconnecter à tout moment."
   },
   "taskTracker": {
     "completed": "{description} - Terminé",

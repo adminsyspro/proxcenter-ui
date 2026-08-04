@@ -38,10 +38,13 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
-import { useUsers, useRbacRoles, useRbacAssignments, useTenants } from '@/hooks/useUsers'
+import { useRBAC } from '@/contexts/RBACContext'
+import { useUsers, useRbacRoles, useRbacAssignments, useTenants, useAdminSessions } from '@/hooks/useUsers'
 import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
 import RevokeSessionsDialog from '@/components/security/RevokeSessionsDialog'
+import RevokeSingleSessionDialog from '@/components/security/RevokeSingleSessionDialog'
+import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 
 /* --------------------------------
    Helpers
@@ -765,6 +768,177 @@ function Require2FADialog({ open, mode, onClose, user, onSuccess, t }) {
 }
 
 /* --------------------------------
+   Admin Sessions Tab (super-admin only)
+
+   Every live session in the installation, across every tenant — a
+   deliberate reversal of the "count only" boundary the sibling
+   admin/users/[id]/sessions route still documents. Gated purely by the
+   parent only mounting this when useRBAC().isAdmin is true; the API route
+   re-checks with requireSuperAdminCaller() regardless.
+-------------------------------- */
+
+function AdminSessionsTab({ t }) {
+  const { data, error: fetchError, isLoading, mutate } = useAdminSessions(true)
+  const sessions = data?.data || []
+  const loadError = fetchError ? t('errors.connectionError') : ''
+
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
+  const [sessionToRevoke, setSessionToRevoke] = useState(null)
+
+  const handleRevoke = (row) => {
+    setSessionToRevoke(row)
+    setRevokeDialogOpen(true)
+  }
+
+  const handleRevoked = useCallback((sessionId) => {
+    // Optimistically drop the row without a full network round-trip.
+    // mutate() will reconcile on next SWR revalidation.
+    mutate(prev => {
+      if (!prev?.data) return prev
+      return { ...prev, data: prev.data.filter(s => s.id !== sessionId) }
+    }, false)
+  }, [mutate])
+
+  const columns = useMemo(
+    () => [
+      {
+        field: 'userEmail',
+        headerName: t('sessions.userHeader'),
+        flex: 1,
+        minWidth: 200,
+        renderCell: params => (
+          <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{params.row.userEmail}</Typography>
+        ),
+      },
+      {
+        field: 'tenantName',
+        headerName: t('sessions.tenantHeader'),
+        width: 160,
+        renderCell: params => (
+          <Typography variant='body2' noWrap>{params.row.tenantName}</Typography>
+        ),
+      },
+      {
+        field: 'createdAt',
+        headerName: t('sessions.signedInLabel'),
+        width: 160,
+        renderCell: params => (
+          <Typography variant='body2' sx={{ opacity: 0.7 }}>
+            {new Date(params.row.createdAt).toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
+        field: 'lastSeenAt',
+        headerName: t('sessions.lastActiveLabel'),
+        width: 150,
+        renderCell: params => (
+          <Typography variant='body2' sx={{ opacity: 0.7 }}>
+            {timeAgo(params.row.lastSeenAt, t)}
+          </Typography>
+        ),
+      },
+      {
+        field: 'ipAddress',
+        headerName: t('sessions.ipLabel'),
+        width: 140,
+        renderCell: params => (
+          // No monospace on the IP — project-wide convention.
+          <Typography variant='body2'>{params.row.ipAddress || t('common.unknown')}</Typography>
+        ),
+      },
+      {
+        field: 'device',
+        headerName: t('sessions.deviceHeader'),
+        width: 170,
+        sortable: false,
+        renderCell: params => {
+          const parts = [params.row.browser, params.row.os].filter(Boolean)
+          const label = parts.length > 0 ? parts.join(' · ') : t('common.unknown')
+          return (
+            <Tooltip title={params.row.userAgent || t('common.unknown')} slotProps={tooltipSlotProps}>
+              {/* No monospace on the device label — project-wide convention. */}
+              <Typography variant='body2' noWrap>{label}</Typography>
+            </Tooltip>
+          )
+        },
+      },
+      {
+        field: 'actions',
+        headerName: t('common.actions'),
+        width: 90,
+        sortable: false,
+        renderCell: params => (
+          <Tooltip title={t('sessions.adminRevokeOneMenu')}>
+            <IconButton
+              size='small'
+              color='warning'
+              onClick={() => handleRevoke(params.row)}
+            >
+              <i className='ri-logout-box-line' />
+            </IconButton>
+          </Tooltip>
+        ),
+      },
+    ],
+    [t]
+  )
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant='body2' sx={{ opacity: 0.6 }}>
+          {sessions.length} {t('sessions.columnHeader').toLowerCase()}
+        </Typography>
+      </Box>
+
+      {loadError && <Alert severity='error' sx={{ mb: 2 }}>{loadError}</Alert>}
+
+      <Box sx={{ flex: 1, minHeight: 400 }}>
+        {!isLoading && sessions.length === 0 && !loadError ? (
+          <EmptyState
+            icon='ri-device-line'
+            title={t('sessions.adminAllEmptyTitle')}
+            description={t('sessions.adminAllEmptyDesc')}
+            size='large'
+          />
+        ) : (
+          <DataGrid
+            rows={sessions}
+            columns={columns}
+            loading={isLoading}
+            pageSizeOptions={[10, 25, 50]}
+            disableRowSelectionOnClick
+            rowHeight={52}
+            columnHeaderHeight={40}
+            sx={{
+              border: 'none',
+              '& .MuiDataGrid-cell': {
+                display: 'flex',
+                alignItems: 'center',
+                overflow: 'hidden',
+              },
+              '& .MuiDataGrid-columnHeaders': {
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              },
+            }}
+          />
+        )}
+      </Box>
+
+      <RevokeSingleSessionDialog
+        open={revokeDialogOpen}
+        onClose={() => setRevokeDialogOpen(false)}
+        session={sessionToRevoke}
+        onSuccess={handleRevoked}
+        t={t}
+      />
+    </>
+  )
+}
+
+/* --------------------------------
    Main Page
 -------------------------------- */
 
@@ -772,6 +946,7 @@ export default function UsersPage() {
   const { data: session } = useSession()
   const t = useTranslations()
   const { hasFeature } = useLicense()
+  const { isAdmin } = useRBAC()
   const showRbac = hasFeature(Features.RBAC)
   const showTenants = hasFeature(Features.MULTI_TENANCY)
   // Cross-tenant management (list every user, edit memberships from the
@@ -781,6 +956,14 @@ export default function UsersPage() {
   const isInDefaultTenant = (session?.user?.tenantId || 'default') === 'default'
   const enableTenantMgmt = showTenants && isInDefaultTenant
   const [activeTab, setActiveTab] = useState(0)
+
+  // The Sessions tab (index 1) only exists for super admins. Derived rather
+  // than reset via an effect (a synchronous setState in a bare useEffect
+  // triggers react-hooks/set-state-in-effect and an extra render): if
+  // isAdmin is false — on load before RBAC resolves, or because the flag
+  // flips while that tab is active — this renders tab 0 immediately,
+  // without ever landing on a blank card for tab 1.
+  const effectiveTab = isAdmin ? activeTab : 0
 
   const { setPageInfo } = usePageTitle()
 
@@ -1193,12 +1376,15 @@ return () => setPageInfo('', '', '')
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
       <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={effectiveTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tab label={t('navigation.users')} icon={<i className='ri-user-line' />} iconPosition='start' />
+          {isAdmin && (
+            <Tab label={t('sessions.adminAllTab')} icon={<i className='ri-device-line' />} iconPosition='start' />
+          )}
         </Tabs>
 
         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {activeTab === 0 && (
+          {effectiveTab === 0 && (
             <>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant='body2' sx={{ opacity: 0.6 }}>
@@ -1251,6 +1437,7 @@ return () => setPageInfo('', '', '')
               </Box>
             </>
           )}
+          {effectiveTab === 1 && <AdminSessionsTab t={t} />}
         </CardContent>
       </Card>
 

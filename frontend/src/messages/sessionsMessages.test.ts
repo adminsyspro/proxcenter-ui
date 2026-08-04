@@ -51,6 +51,15 @@ describe('sessions message namespace', () => {
       'adminRevokeMenu',
       'adminRevokeConfirmTitle',
       'adminRevokeConfirmBody',
+      'adminAllTab',
+      'adminAllEmptyTitle',
+      'adminAllEmptyDesc',
+      'userHeader',
+      'tenantHeader',
+      'deviceHeader',
+      'adminRevokeOneMenu',
+      'adminRevokeOneConfirmTitle',
+      'adminRevokeOneConfirmBody',
     ]) {
       expect(reference).toContain(required)
     }

@@ -34,6 +34,7 @@ export type AuditAction =
   | "login_failed"
   | "password_changed"
   | "sessions_revoked"
+  | "session_revoked_single"
 
   // CRUD
   | "create"

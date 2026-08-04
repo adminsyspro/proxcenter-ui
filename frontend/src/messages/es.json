@@ -7409,7 +7409,16 @@
     "columnHeader": "Sessions",
     "adminRevokeMenu": "Revoke sessions",
     "adminRevokeConfirmTitle": "Revoke sessions for {email}",
-    "adminRevokeConfirmBody": "This immediately signs the user out of every active session. They can sign back in right away."
+    "adminRevokeConfirmBody": "This immediately signs the user out of every active session. They can sign back in right away.",
+    "adminAllTab": "All sessions",
+    "adminAllEmptyTitle": "No active sessions",
+    "adminAllEmptyDesc": "There are no active sessions in this installation right now.",
+    "userHeader": "User",
+    "tenantHeader": "Tenant",
+    "deviceHeader": "Device",
+    "adminRevokeOneMenu": "Revoke session",
+    "adminRevokeOneConfirmTitle": "Revoke session for {email}?",
+    "adminRevokeOneConfirmBody": "This immediately signs this device out. The user can sign back in right away."
   },
   "taskTracker": {
     "completed": "{description} - Completado",

@@ -8,7 +8,7 @@ import { scopePbsDataForTenant, type PbsServerData, type PbsDatastoreData } from
 import { pveFetch } from "@/lib/proxmox/client"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { isSharedStorage } from "@/lib/proxmox/storage"
-import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, isConnectionVisible, type RbacInfraScope } from "@/lib/rbac"
+import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, isConnectionVisible, mayHaveVisibleGuests, pruneEmptyConnections, type RbacInfraScope } from "@/lib/rbac"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import {
   getInventoryFromCache,
@@ -506,11 +506,17 @@ async function fetchOnePbs(conn: { id: string; name: string }): Promise<PbsServe
 /* RBAC filtering for a single cluster                                 */
 /* ------------------------------------------------------------------ */
 
-async function applyRbacToCluster(
+/**
+ * Scope one cluster for the current viewer: per-guest RBAC filter, then the
+ * vDC mask, then the RBAC node prune. Returns null when the cluster must not be
+ * sent at all (nothing left to show and no outright grant on it).
+ */
+async function scopeClusterForViewer(
   cluster: ClusterData,
   rbacCtx: any,
+  mask: VdcScope | null,
   rbacScope: RbacInfraScope | null,
-): Promise<ClusterData> {
+): Promise<ClusterData | null> {
   let result = cluster
   if (rbacCtx && !rbacCtx.isAdmin) {
     const filteredNodes = await Promise.all(
@@ -531,8 +537,11 @@ async function applyRbacToCluster(
     )
     result = { ...cluster, nodes: filteredNodes }
   }
-  // Apply RBAC node prune (composed with vDC mask at call site)
-  return applyRbacInfraFilter(result, rbacScope)
+  // vDC mask first (it also drops guests by pool), then the RBAC node prune, so
+  // a guest-derived perimeter is computed on the final guest set (issue #633).
+  const scoped = applyRbacInfraFilter(applyVdcFilter(result, mask), rbacScope)
+  const kept = pruneEmptyConnections([scoped], rbacScope)
+  return kept.length > 0 ? kept[0] : null
 }
 
 /* ------------------------------------------------------------------ */
@@ -572,29 +581,44 @@ export async function GET(request: NextRequest) {
         }
 
         try {
-          // Filter clusters by vDC scope then RBAC infra scope (intersection)
+          // Filter clusters by vDC scope then RBAC infra scope (intersection).
+          // Candidate set only: a guest-derived scope is resolved per cluster below.
           let visibleClusters = mask ? cached.clusters.filter(c => mask.connectionIds.has(c.id)) : cached.clusters
-          visibleClusters = filterVisibleConnections(visibleClusters, rbacScope)
+          visibleClusters = filterCandidateConnections(visibleClusters, rbacScope)
 
           const visiblePbs = filterVisibleConnections(cached.pbsServers, rbacScope)
           const visibleExt = filterVisibleConnections(cached.externalHypervisors, rbacScope)
 
+          const scopedClusters: ClusterData[] = []
+          for (const cluster of visibleClusters) {
+            const scoped = await scopeClusterForViewer(cluster, rbacCtx, mask, rbacScope)
+            if (scoped) scopedClusters.push(scoped)
+          }
+
           send('init', {
-            totalPve: visibleClusters.length,
+            totalPve: scopedClusters.length,
             totalPbs: visiblePbs.length,
             totalExt: visibleExt.length,
             cached: true,
           })
 
-          for (const cluster of visibleClusters) {
-            send('cluster', applyVdcFilter(await applyRbacToCluster(cluster, rbacCtx, rbacScope), mask))
+          for (const cluster of scopedClusters) {
+            send('cluster', cluster)
           }
           for (const pbs of visiblePbs) {
             const scoped = await scopePbsDataForTenant(pbs, mask)
             if (scoped) send('pbs', scoped)
           }
           if (cached.storages) {
-            const visibleStorages = mask ? cached.storages.filter((s: any) => mask.connectionIds.has(s.connId)) : cached.storages
+            // Storage is keyed by connId, not id, so the RBAC gate is spelled out
+            // here. Strict on purpose, same predicate as the cache-miss path: a
+            // guest-derived (tag/pool) perimeter grants guests, never host data,
+            // and both paths must answer identically whatever the cache state
+            // (issue #633).
+            const visibleStorages = cached.storages.filter((s: any) =>
+              (!mask || mask.connectionIds.has(s.connId)) &&
+              (!rbacScope || isConnectionVisible(rbacScope, s.connId))
+            )
             for (const storage of visibleStorages) {
               const scoped = scopeStorageDataForTenant(storage, mask)
               if (scoped) send('storage', scoped)
@@ -677,15 +701,23 @@ export async function GET(request: NextRequest) {
           ? new Set(pveConnections.filter(c => mask.connectionIds.has(c.id)).map(c => c.id))
           : null
 
-        // RBAC infra scope prune: build a set of RBAC-visible connection ids
-        const rbacVisiblePveIds = rbacScope
-          ? new Set(pveConnections.filter(c => isConnectionVisible(rbacScope, c.id)).map(c => c.id))
+        // RBAC infra scope prune: candidate ids only. A guest-derived (tag/pool)
+        // scope keeps every connection here and is resolved per cluster below.
+        const rbacCandidatePveIds = rbacScope
+          ? new Set(pveConnections.filter(c => mayHaveVisibleGuests(rbacScope, c.id)).map(c => c.id))
           : null
 
         // A PVE connection is streamed only if it passes BOTH vDC and RBAC filters
         const isVisibleConn = (connId: string) =>
           (!vdcVisibleIds || vdcVisibleIds.has(connId)) &&
-          (!rbacVisiblePveIds || rbacVisiblePveIds.has(connId))
+          (!rbacCandidatePveIds || rbacCandidatePveIds.has(connId))
+
+        // Storage is host data, not guest data: a guest-derived (tag/pool)
+        // perimeter must never surface it, or the candidate set above would hand
+        // a tag-scoped user the storage layout of every connection (issue #633).
+        const isInfraVisibleConn = (connId: string) =>
+          (!vdcVisibleIds || vdcVisibleIds.has(connId)) &&
+          (!rbacScope || isConnectionVisible(rbacScope, connId))
 
         const visiblePveCount = pveConnections.filter(c => isVisibleConn(c.id)).length
 
@@ -717,13 +749,14 @@ export async function GET(request: NextRequest) {
 
           // Only stream clusters visible to both vDC and RBAC infra scope
           if (isVisibleConn(conn.id)) {
-            send('cluster', applyVdcFilter(await applyRbacToCluster(cluster, rbacCtx, rbacScope), mask))
+            const scoped = await scopeClusterForViewer(cluster, rbacCtx, mask, rbacScope)
+            if (scoped) send('cluster', scoped)
           }
 
           // Fetch storage data for this cluster and emit immediately (only if visible)
           const storageData = await fetchStoragesForCluster(conn, cluster)
           allStorages.push(storageData)
-          if (isVisibleConn(conn.id)) {
+          if (isInfraVisibleConn(conn.id)) {
             const scoped = scopeStorageDataForTenant(storageData, mask)
             if (scoped) send('storage', scoped)
           }

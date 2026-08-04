@@ -54,6 +54,14 @@ async function importPOST() {
   return mod.POST
 }
 
+/** Create a user through the route with a valid default payload. */
+async function createUser(body: Record<string, unknown> = {}) {
+  const POST = await importPOST()
+  return callRoute(POST as any, {
+    body: { email: "u@example.com", password: "longenoughpw", ...body },
+  })
+}
+
 describe("POST /api/v1/users — Community auto super-admin (issue #512)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -68,6 +76,7 @@ describe("POST /api/v1/users — Community auto super-admin (issue #512)", () =>
       edition: "community",
       licensed: false,
       features: [],
+      resolved: true,
     })
     const POST = await importPOST()
     const res = await callRoute(POST as any, {
@@ -102,6 +111,7 @@ describe("POST /api/v1/users — Community auto super-admin (issue #512)", () =>
       edition: "enterprise",
       licensed: true,
       features: ["rbac"],
+      resolved: true,
     })
     const POST = await importPOST()
     const res = await callRoute(POST as any, {
@@ -115,6 +125,61 @@ describe("POST /api/v1/users — Community auto super-admin (issue #512)", () =>
     expect(rbacUserRoleCreateMock).not.toHaveBeenCalled()
     expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({ details: expect.objectContaining({ superAdminGranted: false }) }),
+    )
+  })
+})
+
+/**
+ * The auto-grant may only fire on a POSITIVELY established Community verdict.
+ * getServerLicense() fails closed to a Community-looking payload whenever the
+ * orchestrator is unreachable or answers non-2xx, and an expired Enterprise
+ * licence also reports enterprise:false — granting global super-admin on
+ * either would be a privilege escalation (issue #633 follow-up).
+ */
+describe("POST /api/v1/users, the grant needs a resolved licence (issue #633)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    checkPermissionMock.mockResolvedValue(null)
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindUniqueMock.mockResolvedValue(null)
+  })
+
+  it("does not grant super-admin when the license verdict is unresolved", async () => {
+    getServerLicenseMock.mockResolvedValue({
+      enterprise: false, edition: "community", licensed: false, expired: false,
+      features: [], options: [], resolved: false,
+    })
+    const res = await createUser()
+
+    expect(res.status).toBe(200)
+    expect(rbacUserRoleCreateMock).not.toHaveBeenCalled()
+    expect(userCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: "user" }) }),
+    )
+  })
+
+  it("does not grant super-admin when an enterprise license has expired", async () => {
+    getServerLicenseMock.mockResolvedValue({
+      enterprise: false, edition: "enterprise", licensed: true, expired: true,
+      features: [], options: [], resolved: true,
+    })
+    const res = await createUser()
+
+    expect(res.status).toBe(200)
+    expect(rbacUserRoleCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("files the Community grant on the tenant the user was created in", async () => {
+    getServerLicenseMock.mockResolvedValue({
+      enterprise: false, edition: "community", licensed: false, expired: false,
+      features: [], options: [], resolved: true,
+    })
+    tenantFindManyMock.mockResolvedValue([{ id: "tenant-b" }])
+    const res = await createUser({ tenantIds: ["tenant-b"] })
+
+    expect(res.status).toBe(200)
+    expect(rbacUserRoleCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ tenantId: "tenant-b" }) }),
     )
   })
 })

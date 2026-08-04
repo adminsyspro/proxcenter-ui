@@ -1,5 +1,7 @@
 /**
- * Scope-routing tests for GET /api/v1/inventory.
+ * Scope-routing tests for GET /api/v1/inventory and for the cached burst of
+ * GET /api/v1/inventory/stream (both consume the same cache and the same RBAC
+ * chokepoints, so they share these mocks).
  *
  * Strategy: mock @/lib/cache/inventoryCache to return a pre-built "fresh"
  * payload (two clusters, one PBS server per cluster's connection). This avoids
@@ -19,6 +21,19 @@ import { readJson } from "../../../../__tests__/setup/route-test"
 async function callGet(handler: (req: NextRequest, ctx: any) => Promise<Response>) {
   const req = new NextRequest("http://test.local/api/v1/inventory")
   return handler(req, { params: Promise.resolve({}) })
+}
+
+/** Parse an SSE body into { event, data } pairs, in emission order. */
+async function readSse(res: Response): Promise<Array<{ event: string; data: any }>> {
+  const body = await res.text()
+  const events: Array<{ event: string; data: any }> = []
+  for (const chunk of body.split("\n\n")) {
+    const lines = chunk.split("\n")
+    const event = lines.find(l => l.startsWith("event: "))?.slice(7)
+    const raw = lines.find(l => l.startsWith("data: "))?.slice(6)
+    if (event && raw !== undefined) events.push({ event, data: JSON.parse(raw) })
+  }
+  return events
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +189,145 @@ function makeRawInventory() {
       totalBackups: 8,
     },
   }
+}
+
+/**
+ * Same shape as makeRawInventory, with tags on the guests so a tag grant can be
+ * simulated, plus one storage payload per connection (the SSE burst replays
+ * cached.storages, which the snapshot route never reads):
+ *   connA: n1 -> guest 100 (prod;web), n2 -> guest 200 (staging)
+ *   connB: m1 -> guest 300 (staging)   <- nothing a prod-tagged user may see
+ */
+function makeTaggedInventory() {
+  return {
+    ...makeRawInventory(),
+    clusters: [
+      {
+        id: "connA",
+        name: "Cluster A",
+        type: "pve",
+        isCluster: true,
+        status: "online" as const,
+        nodes: [
+          {
+            node: "n1",
+            status: "online",
+            guests: [{ vmid: 100, type: "qemu", status: "running", name: "vm100", node: "n1", tags: "prod;web" }],
+          },
+          {
+            node: "n2",
+            status: "online",
+            guests: [{ vmid: 200, type: "qemu", status: "stopped", name: "vm200", node: "n2", tags: "staging" }],
+          },
+        ],
+      },
+      {
+        id: "connB",
+        name: "Cluster B",
+        type: "pve",
+        isCluster: false,
+        status: "online" as const,
+        nodes: [
+          {
+            node: "m1",
+            status: "online",
+            guests: [{ vmid: 300, type: "lxc", status: "running", name: "ct300", node: "m1", tags: "staging" }],
+          },
+        ],
+      },
+    ],
+    externalHypervisors: [{ id: "extA", name: "vCenter A", type: "vmware" }],
+    storages: [makeStorageData("connA", "Cluster A", "n1"), makeStorageData("connB", "Cluster B", "m1")],
+  }
+}
+
+/** One StorageData payload as the poller caches it, for a single connection. */
+function makeStorageData(connId: string, connName: string, node: string) {
+  return {
+    connId,
+    connName,
+    isCluster: false,
+    nodes: [
+      {
+        node,
+        status: "online",
+        storages: [
+          {
+            storage: "local-lvm",
+            node,
+            type: "lvmthin",
+            shared: false,
+            content: ["images"],
+            used: 1,
+            total: 10,
+            usedPct: 10,
+            status: "active",
+            enabled: true,
+          },
+        ],
+      },
+    ],
+    sharedStorages: [],
+  }
+}
+
+/**
+ * Tagged inventory with pools, so the vDC mask and the RBAC perimeter can be
+ * composed on the same tree:
+ *   connA: n1 -> guest 100 (prod, poolA), n2 -> guest 200 (prod, poolB)
+ * A tenant whose vDC only owns poolA must end up with n1 alone: n2's only guest
+ * is dropped by the vDC pool filter, so the node is no longer a perimeter.
+ */
+function makePooledInventory() {
+  return {
+    ...makeRawInventory(),
+    clusters: [
+      {
+        id: "connA",
+        name: "Cluster A",
+        type: "pve",
+        isCluster: true,
+        status: "online" as const,
+        nodes: [
+          {
+            node: "n1",
+            status: "online",
+            guests: [{ vmid: 100, type: "qemu", status: "running", name: "vm100", node: "n1", tags: "prod", pool: "poolA" }],
+          },
+          {
+            node: "n2",
+            status: "online",
+            guests: [{ vmid: 200, type: "qemu", status: "running", name: "vm200", node: "n2", tags: "prod", pool: "poolB" }],
+          },
+        ],
+      },
+    ],
+  }
+}
+
+/** Minimal iaas vDC scope: connA, nodes n1+n2, pool poolA only. */
+function poolAVdcScope() {
+  return {
+    kind: "iaas" as const,
+    vdcScope: {
+      connectionIds: new Set(["connA"]),
+      pbsConnectionIds: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1", "n2"])]]),
+      storagesByConnection: new Map<string, Set<string>>(),
+      poolsByConnection: new Map([["connA", new Set(["poolA"])]]),
+      vnetsByConnection: new Map<string, Set<string>>(),
+      sharedBridgesByConnection: new Map<string, Set<string>>(),
+      pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+      pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+    },
+  }
+}
+
+/** Stand-in for the real per-guest RBAC filter: keeps guests tagged `prod`. */
+function keepProdTaggedGuests() {
+  filterVmsByPermissionMock.mockImplementation((_principal: any, vms: any[]) =>
+    Promise.resolve(vms.filter(vm => String(vm.tags || "").split(/[;,]/).includes("prod")))
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -374,5 +528,318 @@ describe("GET /api/v1/inventory RBAC infra-scope pruning", () => {
     const adminBody = await readJson<any>(adminRes)
     const adminData = adminBody?.data ?? adminBody
     expect(adminData.externalHypervisors.map((h: any) => h.id).sort()).toEqual(["extA", "extB"])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Guest-derived perimeter (tag / pool grants) -- issue #633
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/inventory guest-derived perimeter (tag/pool scopes)", () => {
+  beforeEach(() => {
+    getInventoryFromCacheMock.mockReturnValue({ status: "fresh", data: makeTaggedInventory() })
+    keepProdTaggedGuests()
+    getRBACContextMock.mockResolvedValue({ userId: "u-tag", isAdmin: false, tenantId: "default" })
+  })
+
+  /** A user whose only grant is `tag=prod`: no infra set at all. */
+  function tagOnlyScope() {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+  }
+
+  it("tag-scoped user: keeps the connection and only the nodes hosting a visible guest", async () => {
+    tagOnlyScope()
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    expect(res.status).toBe(200)
+
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.clusters.map((c: any) => c.id)).toEqual(["connA"])
+    expect(data.clusters[0].nodes.map((n: any) => n.node)).toEqual(["n1"])
+    // vmid is stringified by the route before the per-guest filter runs.
+    expect(data.clusters[0].nodes[0].guests.map((g: any) => g.vmid)).toEqual(["100"])
+  })
+
+  it("tag-scoped user: drops a connection where no guest survived", async () => {
+    tagOnlyScope()
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    // connB only hosts staging guests -> nothing left, so no bare shell.
+    expect(data.clusters.map((c: any) => c.id)).toEqual(["connA"])
+    expect(data.stats.totalClusters).toBe(1)
+  })
+
+  it("tag-scoped user: PBS servers and external hypervisors stay hidden", async () => {
+    tagOnlyScope()
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.pbsServers).toEqual([])
+    expect(data.externalHypervisors).toEqual([])
+    expect(data.stats.totalPbsServers).toBe(0)
+  })
+
+  it("tag-scoped user: stats are recomputed from the pruned tree", async () => {
+    tagOnlyScope()
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.stats.totalNodes).toBe(1)
+    expect(data.stats.onlineNodes).toBe(1)
+    expect(data.stats.totalGuests).toBe(1)
+    expect(data.stats.runningGuests).toBe(1)
+  })
+
+  it("tag-scoped user: nothing visible anywhere yields an empty tree, not a shell", async () => {
+    tagOnlyScope()
+    // No guest matches the grant on any connection.
+    filterVmsByPermissionMock.mockResolvedValue([])
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.clusters).toEqual([])
+    expect(data.stats.totalGuests).toBe(0)
+  })
+
+  it("tag + node grant: the granted node is kept even with no visible guest on it", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n2"])]]),
+      guestDerived: true,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.clusters.map((c: any) => c.id)).toEqual(["connA"])
+    // n1 comes from the tag grant, n2 from the explicit node grant (empty).
+    expect(data.clusters[0].nodes.map((n: any) => n.node)).toEqual(["n1", "n2"])
+    expect(data.stats.totalNodes).toBe(2)
+    expect(data.stats.totalGuests).toBe(1)
+  })
+
+  it("tag + connection grant: the whole granted connection stays, even empty", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set(["connB"]),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    // connA survives through its prod guest, connB through the outright grant.
+    expect(data.clusters.map((c: any) => c.id).sort()).toEqual(["connA", "connB"])
+    const connB = data.clusters.find((c: any) => c.id === "connB")
+    expect(connB.nodes.map((n: any) => n.node)).toEqual(["m1"])
+    expect(connB.nodes[0].guests).toEqual([])
+  })
+
+  it("node-scoped user is unaffected: guestDerived false still prunes to the granted node", async () => {
+    // Same fixture and same guest filter, but a purely infra-derived perimeter.
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    expect(data.clusters.map((c: any) => c.id)).toEqual(["connA"])
+    expect(data.clusters[0].nodes.map((n: any) => n.node)).toEqual(["n1"])
+    expect(data.stats.totalNodes).toBe(1)
+  })
+
+  it("node-scoped user keeps a granted connection whose nodes all lost their guests", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n2"])]]),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    const body = await readJson<any>(res)
+    const data = body?.data ?? body
+
+    // The connection prune must not touch an outright grant.
+    expect(data.clusters.map((c: any) => c.id)).toEqual(["connA"])
+    expect(data.clusters[0].nodes.map((n: any) => n.node)).toEqual(["n2"])
+    expect(data.stats.totalGuests).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SSE cached burst: same perimeter rules, and the composition ORDER
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/inventory/stream cached burst", () => {
+  /** Drive the stream handler and return its parsed events. */
+  async function callStream() {
+    const { GET } = await import("./stream/route")
+    const req = new NextRequest("http://test.local/api/v1/inventory/stream")
+    return readSse(await GET(req))
+  }
+
+  const clusterIds = (events: Array<{ event: string; data: any }>) =>
+    events.filter(e => e.event === "cluster").map(e => e.data.id)
+
+  beforeEach(() => {
+    getInventoryFromCacheMock.mockReturnValue({ status: "fresh", data: makeTaggedInventory() })
+    keepProdTaggedGuests()
+    getRBACContextMock.mockResolvedValue({ userId: "u-tag", isAdmin: false, tenantId: "default" })
+  })
+
+  it("tag-scoped user: streams only the connection and node that kept a guest", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+
+    const events = await callStream()
+
+    expect(clusterIds(events)).toEqual(["connA"])
+    const connA = events.find(e => e.event === "cluster")!.data
+    expect(connA.nodes.map((n: any) => n.node)).toEqual(["n1"])
+    expect(connA.nodes[0].guests.map((g: any) => g.vmid)).toEqual(["100"])
+    // init must not promise a cluster that got dropped.
+    expect(events.find(e => e.event === "init")!.data.totalPve).toBe(1)
+  })
+
+  it("tag-scoped user: no PBS and no external event", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+
+    const events = await callStream()
+
+    expect(events.filter(e => e.event === "pbs")).toEqual([])
+    expect(events.filter(e => e.event === "external")).toEqual([])
+  })
+
+  it("tag-scoped user: no storage event at all, but the cluster event still arrives", async () => {
+    // Storage is host data. A guest-derived perimeter never grants it, on the
+    // cached path exactly like on the cache-miss path (issue #633).
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+
+    const events = await callStream()
+
+    expect(events.filter(e => e.event === "storage")).toEqual([])
+    expect(clusterIds(events)).toEqual(["connA"])
+  })
+
+  it("node-scoped user still gets the storage event of the connection they hold", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const events = await callStream()
+
+    // connA is granted, connB is not: the gate is the same strict predicate the
+    // cache-miss path uses, so both paths agree.
+    expect(events.filter(e => e.event === "storage").map(e => e.data.connId)).toEqual(["connA"])
+  })
+
+  it("admin: every storage event is streamed", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "admin", isAdmin: true, tenantId: "default" })
+
+    const events = await callStream()
+
+    expect(events.filter(e => e.event === "storage").map(e => e.data.connId)).toEqual(["connA", "connB"])
+  })
+
+  it("node-scoped user is unaffected: only the granted node is streamed", async () => {
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const events = await callStream()
+
+    expect(clusterIds(events)).toEqual(["connA"])
+    expect(events.find(e => e.event === "cluster")!.data.nodes.map((n: any) => n.node)).toEqual(["n1"])
+  })
+
+  it("admin: every cluster and node is streamed, and the scope is never consulted", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "admin", isAdmin: true, tenantId: "default" })
+
+    const events = await callStream()
+
+    expect(clusterIds(events).sort()).toEqual(["connA", "connB"])
+    expect(getRbacInfraScopeMock).not.toHaveBeenCalled()
+  })
+
+  it("vDC tenant with a tag grant: the perimeter is computed AFTER the vDC pool filter", async () => {
+    // n2's only guest is prod-tagged (RBAC keeps it) but sits in poolB, which
+    // the vDC drops. The node must not survive as an empty shell: proof the
+    // RBAC node prune runs after applyVdcFilter, not before it.
+    getInventoryFromCacheMock.mockReturnValue({ status: "fresh", data: makePooledInventory() })
+    getInfraMock.mockResolvedValue(poolAVdcScope())
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+
+    const events = await callStream()
+
+    expect(clusterIds(events)).toEqual(["connA"])
+    const connA = events.find(e => e.event === "cluster")!.data
+    expect(connA.nodes.map((n: any) => n.node)).toEqual(["n1"])
+    expect(connA.nodes[0].guests.map((g: any) => g.vmid)).toEqual(["100"])
+  })
+
+  it("vDC tenant with a tag grant: nothing left in the vDC means no cluster event", async () => {
+    getInventoryFromCacheMock.mockReturnValue({ status: "fresh", data: makePooledInventory() })
+    getInfraMock.mockResolvedValue(poolAVdcScope())
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      guestDerived: true,
+    })
+    // The tag grant matches nothing at all.
+    filterVmsByPermissionMock.mockResolvedValue([])
+
+    const events = await callStream()
+
+    expect(clusterIds(events)).toEqual([])
+    expect(events.find(e => e.event === "init")!.data.totalPve).toBe(0)
   })
 })

@@ -2,13 +2,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../../__tests__/setup/route-test"
 
+/**
+ * Two groups live here, sharing the mock scaffolding below:
+ *   - "scope routing" covers the tenant / vDC / infra-scope gate and reads the
+ *     stream through collectSseText.
+ *   - "tag/pool guest-derived delta gate" covers issue #633 and drives the
+ *     captured subscriber directly (see emitThroughGate further down).
+ */
+
 // Hoist mocks so vi.mock factories can reference them
-const { getInfraMock, subscribeMock, tenantConnectionIdsMock, getRbacInfraScopeMock, getRBACContextMock } = vi.hoisted(() => ({
+const {
+  getInfraMock,
+  subscribeMock,
+  tenantConnectionIdsMock,
+  getRbacInfraScopeMock,
+  getRBACContextMock,
+  loadGuestVisibilityCheckMock,
+} = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   subscribeMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
   getRbacInfraScopeMock: vi.fn(),
   getRBACContextMock: vi.fn(),
+  loadGuestVisibilityCheckMock: vi.fn(),
 }))
 
 // Keep real maskingScope; only stub getTenantInfrastructureScope
@@ -22,7 +38,8 @@ vi.mock("@/lib/tenant", () => ({
   getTenantConnectionIds: (...a: any[]) => tenantConnectionIdsMock(...a),
 }))
 
-// Use real isConnectionVisible from infraScope; mock only the DB-touching helpers
+// Use real isConnectionVisible / mayHaveVisibleGuests from infraScope; mock only
+// the DB-touching helpers
 vi.mock("@/lib/rbac", async (orig) => {
   const real = await orig<typeof import("@/lib/rbac")>()
   return {
@@ -31,6 +48,7 @@ vi.mock("@/lib/rbac", async (orig) => {
     PERMISSIONS: { VM_VIEW: "vm.view" },
     getRBACContext: (...a: any[]) => getRBACContextMock(...a),
     getRbacInfraScope: (...a: any[]) => getRbacInfraScopeMock(...a),
+    loadGuestVisibilityCheck: (...a: any[]) => loadGuestVisibilityCheckMock(...a),
   }
 })
 
@@ -334,5 +352,267 @@ describe("GET /api/v1/inventory/events scope routing", () => {
     const text = await collectSseText(res)
     expect(text).toContain("event: node:update")
     expect(text).toContain('"node":"node1"')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #633: guest-derived (tag/pool) perimeter on the live delta stream.
+//
+// The route holds the SSE connection open forever, so these cases never await
+// the whole body: `subscribe` is mocked to CAPTURE the subscriber callback, the
+// handler is invoked, and the callback is then driven with a batch of events so
+// we can read back exactly what the gate let through. Stricter than
+// collectSseText above, which stops at the first frame in stopAfterConnected
+// mode and would therefore miss a leak enqueued right after "connected".
+// ---------------------------------------------------------------------------
+
+type SentEvent = { event: string; data: any }
+
+const gateDecoder = new TextDecoder()
+
+/** Split one SSE chunk into its `event:` / `data:` pairs. */
+function parseSse(chunk: string): SentEvent[] {
+  return chunk
+    .split("\n\n")
+    .map(block => block.trim())
+    .filter(Boolean)
+    .map(block => {
+      const lines = block.split("\n")
+      const eventLine = lines.find(l => l.startsWith("event: ")) ?? ""
+      const dataLine = lines.find(l => l.startsWith("data: "))
+      return {
+        event: eventLine.slice("event: ".length),
+        data: dataLine ? JSON.parse(dataLine.slice("data: ".length)) : {},
+      }
+    })
+}
+
+/**
+ * Drain everything already queued on an open stream. The stream never ends, so
+ * a read that finds nothing is raced against a short timer. The losing read is
+ * abandoned, which is safe only because the caller cancels right after.
+ */
+async function drainQueued(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<SentEvent[]> {
+  const out: SentEvent[] = []
+  for (;;) {
+    const next = await Promise.race([
+      reader.read().then(r => (r.done ? null : gateDecoder.decode(r.value))),
+      new Promise<undefined>(resolve => setTimeout(() => resolve(undefined), 30)),
+    ])
+    if (next === undefined || next === null) break
+    out.push(...parseSse(next))
+  }
+  return out
+}
+
+/**
+ * Open the SSE route, push `events` through the subscriber, and return the
+ * events the gate forwarded (the initial `connected` frame excluded).
+ */
+async function emitThroughGate(events: any[]): Promise<SentEvent[]> {
+  let captured: ((evs: any[]) => void) | null = null
+  subscribeMock.mockImplementation((fn: (evs: any[]) => void) => {
+    captured = fn
+    return () => {}
+  })
+
+  const { GET } = await import("./route")
+  const res = await callRoute(GET, { method: "GET" })
+  expect(res.status).toBe(200)
+  expect(res.headers.get("content-type")).toContain("text/event-stream")
+
+  const reader = res.body!.getReader()
+  // The `connected` frame is enqueued synchronously by start(), so this read
+  // never blocks and leaves no pending read behind.
+  const connected = parseSse(gateDecoder.decode((await reader.read()).value!))
+  expect(connected[0].event).toBe("connected")
+
+  expect(captured).toBeTypeOf("function")
+  captured!(events)
+
+  const sent = await drainQueued(reader)
+  // Cancelling unsubscribes and clears the heartbeat interval.
+  await reader.cancel()
+  return sent
+}
+
+const VM_PROD = {
+  event: "vm:update" as const,
+  connId: "connA",
+  node: "n1",
+  type: "qemu",
+  vmid: "100",
+  status: "running",
+  tags: "prod",
+}
+
+const VM_STAGING = {
+  event: "vm:update" as const,
+  connId: "connA",
+  node: "n1",
+  type: "qemu",
+  vmid: "101",
+  status: "running",
+  tags: "staging",
+}
+
+/** Predicate standing in for a `tag=prod` grant. */
+function prodOnly() {
+  return vi.fn((guest: any) => String(guest.tags ?? "").split(/[;,]/).includes("prod"))
+}
+
+describe("GET /api/v1/inventory/events tag/pool guest-derived delta gate", () => {
+  beforeEach(() => {
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["connA"]))
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+  })
+
+  it("tag-scoped user receives vm events for guests the predicate accepts", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    const check = prodOnly()
+    loadGuestVisibilityCheckMock.mockResolvedValue(check)
+
+    const sent = await emitThroughGate([VM_PROD, VM_STAGING])
+
+    expect(sent.map(e => e.data.vmid)).toEqual(["100"])
+    // The gate must hand the guest metadata (tags included) to the predicate,
+    // which is exactly what the poller now carries on vm:* events.
+    expect(check).toHaveBeenCalledWith(expect.objectContaining({ vmid: "100", tags: "prod" }))
+  })
+
+  it("tag-scoped user receives vm:added and vm:removed for accepted guests too", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    loadGuestVisibilityCheckMock.mockResolvedValue(prodOnly())
+
+    const sent = await emitThroughGate([
+      { ...VM_PROD, event: "vm:added" },
+      { ...VM_STAGING, event: "vm:added" },
+      { ...VM_PROD, event: "vm:removed" },
+      { ...VM_STAGING, event: "vm:removed" },
+    ])
+
+    expect(sent.map(e => `${e.event}:${e.data.vmid}`)).toEqual(["vm:added:100", "vm:removed:100"])
+  })
+
+  it("tag-scoped user receives no node:update without a node grant", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    loadGuestVisibilityCheckMock.mockResolvedValue(prodOnly())
+
+    const sent = await emitThroughGate([
+      { event: "node:update", connId: "connA", node: "n1", status: "online" },
+    ])
+
+    expect(sent).toEqual([])
+  })
+
+  it("tag-scoped user with an extra node grant still gets that node:update", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1"])]]),
+      guestDerived: true,
+    })
+    loadGuestVisibilityCheckMock.mockResolvedValue(prodOnly())
+
+    const sent = await emitThroughGate([
+      { event: "node:update", connId: "connA", node: "n1", status: "online" },
+      { event: "node:update", connId: "connA", node: "n2", status: "online" },
+      // Not tagged prod, but sitting on a granted node: the node grant wins.
+      { ...VM_STAGING, node: "n1" },
+    ])
+
+    expect(sent.map(e => `${e.event}:${e.data.node}`)).toEqual([
+      "node:update:n1",
+      "vm:update:n1",
+    ])
+  })
+
+  it("node-scoped user is unaffected: granted node passes, other node dropped", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u3", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["connA", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const sent = await emitThroughGate([
+      { ...VM_PROD, tags: undefined },
+      { event: "vm:update", connId: "connA", node: "n2", type: "qemu", vmid: "200", status: "running" },
+      { event: "node:update", connId: "connA", node: "n1", status: "online" },
+    ])
+
+    expect(sent.map(e => e.data.vmid ?? e.data.node)).toEqual(["100", "n1"])
+    // No guest-derived grant => no predicate load at all.
+    expect(loadGuestVisibilityCheckMock).not.toHaveBeenCalled()
+  })
+
+  it("connection-scoped user is unaffected: every node of the connection passes", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u4", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set(["connA"]),
+      nodesByConnection: new Map(),
+      guestDerived: false,
+    })
+
+    const sent = await emitThroughGate([
+      VM_STAGING,
+      { event: "node:update", connId: "connA", node: "n7", status: "online" },
+    ])
+
+    expect(sent.map(e => e.event)).toEqual(["vm:update", "node:update"])
+    expect(loadGuestVisibilityCheckMock).not.toHaveBeenCalled()
+  })
+
+  it("admin (null scope) receives everything", async () => {
+    const sent = await emitThroughGate([
+      { event: "vm:update", connId: "connA", node: "n9", type: "qemu", vmid: "900", status: "running" },
+    ])
+
+    expect(sent).toHaveLength(1)
+    expect(getRbacInfraScopeMock).not.toHaveBeenCalled()
+    expect(loadGuestVisibilityCheckMock).not.toHaveBeenCalled()
+  })
+
+  it("an event from a connection outside the tenant is always dropped", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    loadGuestVisibilityCheckMock.mockResolvedValue(vi.fn().mockReturnValue(true))
+
+    const sent = await emitThroughGate([{ ...VM_PROD, connId: "connOther" }])
+
+    expect(sent).toEqual([])
+  })
+
+  it("a guest-derived scope whose predicate rejects everything receives nothing", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "t1" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    loadGuestVisibilityCheckMock.mockResolvedValue(vi.fn().mockReturnValue(false))
+
+    const sent = await emitThroughGate([VM_PROD, VM_STAGING])
+
+    expect(sent).toEqual([])
   })
 })

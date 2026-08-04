@@ -12,6 +12,7 @@ const COMMUNITY_FALLBACK = {
   expired: false,
   features: [] as string[],
   options: [] as string[],
+  resolved: false,
 }
 
 export type ServerLicense = {
@@ -21,6 +22,13 @@ export type ServerLicense = {
   expired: boolean
   features: string[]
   options: string[]
+
+  /**
+   * True only when the orchestrator answered with a parseable payload. Absent or
+   * false means this verdict is the fail-closed fallback: safe to DENY on, never
+   * safe to GRANT a privilege on (issue #633 follow-up).
+   */
+  resolved?: boolean
 }
 
 /**
@@ -59,6 +67,7 @@ export async function getServerLicense(): Promise<ServerLicense> {
       expired,
       features: data.features ?? [],
       options: data.options ?? [],
+      resolved: true,
     }
   } catch {
     return { ...COMMUNITY_FALLBACK }

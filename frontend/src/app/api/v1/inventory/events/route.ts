@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 import { subscribe, type InventoryEvent } from "@/lib/cache/inventoryPoller"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
-import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, isConnectionVisible, type RbacInfraScope } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, mayHaveVisibleGuests, loadGuestVisibilityCheck, type GuestVisibilityCheck, type RbacInfraScope } from "@/lib/rbac"
 import { demoResponse } from "@/lib/demo/demo-api"
 
 export const runtime = "nodejs"
@@ -55,6 +55,12 @@ export async function GET(request: NextRequest) {
     ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
     : null
 
+  // Guest-level predicate, loaded once: needed when the perimeter is derived
+  // from tag/pool grants, which no connection or node check can answer.
+  const guestCheck: GuestVisibilityCheck | null = rbacScope?.guestDerived
+    ? await loadGuestVisibilityCheck(rbacCtx.userId, PERMISSIONS.VM_VIEW, rbacCtx.tenantId)
+    : null
+
   const encoder = new TextEncoder()
 
   let unsubscribe: (() => void) | null = null
@@ -90,19 +96,28 @@ export async function GET(request: NextRequest) {
           if (!tenantConnIds.has(ev.connId)) continue
 
           // RBAC infra scope: drop events for connections the user cannot see.
-          if (rbacScope && !isConnectionVisible(rbacScope, ev.connId)) continue
+          // A guest-derived (tag/pool) scope cannot rule a connection out here,
+          // only the per-guest predicate below can (issue #633).
+          if (rbacScope && !mayHaveVisibleGuests(rbacScope, ev.connId)) continue
 
           // Generic node-level gate: applies to ALL event types that carry a node.
-          // When the user holds a node-scoped grant on this connection (i.e. the
-          // connection is NOT in fullConnections), every event whose node is not in
-          // the granted set must be dropped. Connection-level events without a node
+          // When the user holds no whole-connection grant here, an event whose node
+          // is not in the granted set is dropped, unless it is a vm:* event whose
+          // guest matches a tag/pool grant. Connection-level events without a node
           // field already passed the connection gate above and are kept as-is.
           // This subsumes the old node:update-only check and also covers vm:* events.
           if (rbacScope && !rbacScope.fullConnections.has(ev.connId)) {
             const evNode = (ev as { node?: string }).node
-            if (evNode !== undefined) {
-              const allowedNodes = rbacScope.nodesByConnection.get(ev.connId)
-              if (!allowedNodes || !allowedNodes.has(evNode)) continue
+            const allowedNodes = rbacScope.nodesByConnection.get(ev.connId)
+            const nodeGranted = evNode !== undefined && !!allowedNodes && allowedNodes.has(evNode)
+
+            if (ev.event.startsWith('vm:')) {
+              // Granted node, or a guest matching a tag/pool grant.
+              if (!nodeGranted && !(guestCheck && guestCheck(ev as any))) continue
+            } else if (evNode !== undefined && !nodeGranted) {
+              // Node-level events need a real node grant: a tag/pool user gets
+              // guest deltas only, never host metrics.
+              continue
             }
           }
 

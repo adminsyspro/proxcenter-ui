@@ -139,6 +139,42 @@ describe('requireEnterprise', () => {
   })
 })
 
+describe('resolved marker (issue #633)', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.unstubAllGlobals()
+  })
+
+  it('marks a parsed license as resolved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ licensed: false, edition: 'community' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      )
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    expect((await getServerLicense()).resolved).toBe(true)
+  })
+
+  it('does not mark the fallback as resolved when the orchestrator is unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
+    const { getServerLicense } = await import('./requireEnterprise')
+    expect((await getServerLicense()).resolved).toBe(false)
+  })
+
+  it('does not mark the fallback as resolved on a non-2xx answer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('Service Unavailable', { status: 503 }))
+    )
+    const { getServerLicense } = await import('./requireEnterprise')
+    expect((await getServerLicense()).resolved).toBe(false)
+  })
+})
+
 describe('P1: expired handling', () => {
   beforeEach(() => {
     vi.resetModules()

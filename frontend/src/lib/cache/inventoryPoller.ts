@@ -16,11 +16,16 @@ import { getFailureCount, getNodeIps } from "@/lib/cache/nodeIpCache"
 
 // ---------- Types ----------
 
+/**
+ * `tags` travels in its raw PVE form (a `;` separated string) on every vm:*
+ * event: the RBAC delta gate needs it to match tag-scoped grants, and
+ * normalizeGuestTags in the RBAC layer owns the parsing (issue #633).
+ */
 export type InventoryEvent =
-  | { event: 'vm:update'; connId: string; vmid: string | number; node: string; type: string; status: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; name?: string; pool?: string }
+  | { event: 'vm:update'; connId: string; vmid: string | number; node: string; type: string; status: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; name?: string; pool?: string; tags?: string }
   | { event: 'node:update'; connId: string; node: string; status: string; cpu?: number; mem?: number; maxmem?: number }
-  | { event: 'vm:added'; connId: string; vmid: string | number; node: string; type: string; status: string; name?: string; cpu?: number; mem?: number; maxmem?: number; template?: number; pool?: string }
-  | { event: 'vm:removed'; connId: string; vmid: string | number; node: string; type: string; pool?: string }
+  | { event: 'vm:added'; connId: string; vmid: string | number; node: string; type: string; status: string; name?: string; cpu?: number; mem?: number; maxmem?: number; template?: number; pool?: string; tags?: string }
+  | { event: 'vm:removed'; connId: string; vmid: string | number; node: string; type: string; pool?: string; tags?: string }
 
 export type Subscriber = (events: InventoryEvent[]) => void
 
@@ -41,6 +46,7 @@ type ResourceSnapshot = {
   vmid?: string | number
   template?: number
   pool?: string
+  tags?: string
 }
 
 type ConnectionPoller = {
@@ -122,6 +128,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
           vmid: r.vmid,
           template: r.template,
           pool: r.pool,
+          tags: r.tags,
         }
 
         const prev = poller.prevState.get(id)
@@ -142,6 +149,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
               maxmem: r.maxmem,
               template: r.template,
               pool: r.pool,
+              tags: r.tags,
             })
           }
         } else if (prev.node !== curr.node) {
@@ -156,6 +164,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
             node: prev.node!,
             type: r.type,
             pool: prev.pool,
+            tags: prev.tags,
           })
           events.push({
             event: 'vm:added',
@@ -170,6 +179,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
             maxmem: r.maxmem,
             template: r.template,
             pool: r.pool,
+            tags: r.tags,
           })
         } else if (hasChanged(prev, curr)) {
           events.push({
@@ -187,6 +197,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
             uptime: r.uptime,
             name: r.name,
             pool: r.pool,
+            tags: r.tags,
           })
         }
 
@@ -234,6 +245,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
             node: snap.node!,
             type: snap.type,
             pool: snap.pool,
+            tags: snap.tags,
           })
           poller.prevState.delete(id)
         }

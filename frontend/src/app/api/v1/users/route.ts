@@ -234,10 +234,14 @@ export async function POST(req: Request) {
     // grant every new user full super-admin access, mirroring the initial
     // setup account, so additional users can actually manage the platform.
     // Enterprise leaves the grant out: scoped roles are assigned separately
-    // through the RBAC picker. A fail-closed license (orchestrator
-    // unreachable) is treated as Community, consistent with the rest of the app.
+    // through the RBAC picker.
+    //
+    // The verdict must be POSITIVELY established: an unreachable orchestrator
+    // or an expired Enterprise licence both report enterprise:false, and
+    // granting global super-admin on either would be a privilege escalation.
+    // Only a resolved Community edition qualifies.
     const license = await getServerLicense()
-    const grantSuperAdmin = !license.enterprise
+    const grantSuperAdmin = license.resolved === true && license.edition === "community"
 
     await prisma.$transaction([
       prisma.user.create({
@@ -272,7 +276,7 @@ export async function POST(req: Request) {
                 roleId: "role_super_admin",
                 scopeType: "global",
                 scopeTarget: null,
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId: initialTenantIds[0] ?? DEFAULT_TENANT_ID,
                 grantedAt: now,
               },
             }),

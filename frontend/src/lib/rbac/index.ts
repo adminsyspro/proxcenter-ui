@@ -16,13 +16,24 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import {
   deriveRbacInfraScope,
   isConnectionVisible,
+  mayHaveVisibleGuests,
   applyRbacInfraFilter,
   filterVisibleConnections,
+  filterCandidateConnections,
+  pruneEmptyConnections,
   tokenInfraScope,
   type RbacInfraScope,
 } from './infraScope'
 
-export { isConnectionVisible, applyRbacInfraFilter, filterVisibleConnections, type RbacInfraScope }
+export {
+  isConnectionVisible,
+  mayHaveVisibleGuests,
+  applyRbacInfraFilter,
+  filterVisibleConnections,
+  filterCandidateConnections,
+  pruneEmptyConnections,
+  type RbacInfraScope,
+}
 
 export interface PermissionCheck {
   userId: string
@@ -667,6 +678,22 @@ export async function requireAdmin(): Promise<NextResponse | null> {
 }
 
 /**
+ * Tags as they arrive from PVE: a `;` or `,` separated string, or already an
+ * array. Shared by filterVmsByPermission and loadGuestVisibilityCheck so both
+ * match tag grants identically.
+ */
+function normalizeGuestTags(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[]
+  if (typeof value === "string") {
+    return value
+      .split(/[;,]/)
+      .map(t => t.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+/**
  * Filter a list of VMs based on user permissions
  * Each VM should have: connId, node, type, vmid (or id in format "connId:type:node:vmid")
  */
@@ -716,14 +743,7 @@ export async function filterVmsByPermission<T extends { id?: string; connId?: st
     // Tags/pool come from the VM payload itself — needed so tag/pool scopes
     // can match on the second pass inside scopeMatches.
     const vmAny = vm as any
-    const tags = Array.isArray(vmAny.tags)
-      ? vmAny.tags
-      : typeof vmAny.tags === "string"
-        ? vmAny.tags
-            .split(/[;,]/)
-            .map((t: string) => t.trim())
-            .filter(Boolean)
-        : []
+    const tags = normalizeGuestTags(vmAny.tags)
 
     if (checkGrants(grants, permission, "vm", resourceId, { tags, pool: vmAny.pool || undefined })) {
       result.push(vm)
@@ -784,4 +804,49 @@ export async function getRbacInfraScope(
   const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
   return deriveRbacInfraScope(grants)
+}
+
+export type GuestVisibilityCheck = (guest: {
+  connId?: string
+  node?: string
+  type?: string
+  vmid?: string | number
+  tags?: string[] | string
+  pool?: string
+}) => boolean
+
+/**
+ * Load a user's grants ONCE and return a synchronous predicate telling whether
+ * a single guest is visible. Same matching rules as filterVmsByPermission,
+ * including tag/pool metadata, but usable from a hot path such as the SSE
+ * delta gate where one DB round-trip per event is not acceptable.
+ *
+ * The grants are a snapshot: a long-lived subscriber keeps the perimeter it was
+ * created with until it reconnects, exactly like getRbacInfraScope above.
+ */
+export async function loadGuestVisibilityCheck(
+  principalOrUserId: string | Principal,
+  permission: string = PERMISSIONS.VM_VIEW,
+  tenantId?: string,
+): Promise<GuestVisibilityCheck> {
+  const token = asTokenPrincipal(principalOrUserId)
+  if (token) {
+    if (!token.permissions?.has(permission)) return () => false
+    const allowed = token.connectionIds ? new Set(token.connectionIds) : null
+    if (!allowed) return () => true
+    return guest => guest.connId !== undefined && allowed.has(guest.connId)
+  }
+
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
+  const grants = await loadUserGrants(userId, tid)
+
+  return guest => {
+    if (!guest.connId || !guest.node || !guest.type || guest.vmid === undefined) return false
+    const resourceId = buildVmResourceId(guest.connId, guest.node, guest.type, String(guest.vmid))
+    return checkGrants(grants, permission, "vm", resourceId, {
+      tags: normalizeGuestTags(guest.tags),
+      pool: guest.pool || undefined,
+    })
+  }
 }

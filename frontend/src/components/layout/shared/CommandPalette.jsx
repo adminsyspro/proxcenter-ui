@@ -18,6 +18,7 @@ import { useTranslations } from 'next-intl'
 
 import { menuData } from '@/@menu/menuData'
 import { useRBAC } from '@/contexts/RBACContext'
+import { hasInfraScope } from '@/lib/rbac/scopeKinds'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
@@ -72,11 +73,12 @@ const CommandPalette = ({ open, onClose }) => {
   const router = useRouter()
   const t = useTranslations()
   const tCmd = useTranslations('commandPalette')
-  const { hasAnyPermission, loading: rbacLoading } = useRBAC()
+  const { hasAnyPermission, scopeTypes, isAdmin, loading: rbacLoading } = useRBAC()
   const { hasFeature, loading: licenseLoading } = useLicense()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const isProviderTenant = currentTenant?.id === 'default'
+  const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -165,12 +167,16 @@ const CommandPalette = ({ open, onClose }) => {
 
     // Mirror GenerateMenu.canView: while contexts are loading we keep
     // everything visible to avoid flickering; once loaded we apply the same
-    // four gates (vdc / provider-tenant / RBAC / license) the sidebar uses.
+    // five gates (vdc / provider-tenant / infra-scope / RBAC / license) the
+    // sidebar uses. The infra-scope gate matters: a tag or pool scoped user
+    // keeps vm.view, so without it Topology stayed reachable from the palette
+    // and bounced straight back to the dashboard (issue #633).
     const canView = (entry) => {
       if (rbacLoading || licenseLoading || tenantLoading || vdcLoading) return true
       if (entry.requires?.hasVdc === true && !hasVdc) return false
       if (entry.requires?.hasVdc === false && hasVdc) return false
       if (entry.requires?.isProviderTenant === true && !isProviderTenant) return false
+      if (entry.requires?.infraScope === true && !infraScoped) return false
       if (entry.permissions && entry.permissions.length > 0 && !hasAnyPermission(entry.permissions)) return false
       if (entry.requiredFeature && !hasFeature(entry.requiredFeature)) return false
 
@@ -212,7 +218,7 @@ const CommandPalette = ({ open, onClose }) => {
     }
 
     return items
-  }, [t, hasAnyPermission, hasFeature, hasVdc, isProviderTenant, rbacLoading, licenseLoading, tenantLoading, vdcLoading])
+  }, [t, hasAnyPermission, hasFeature, hasVdc, isProviderTenant, infraScoped, rbacLoading, licenseLoading, tenantLoading, vdcLoading])
 
   // -----------------------------------------------------------------------
   // 2. Actions — static list filtered by RBAC/License

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
-import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections } from "@/lib/rbac"
+import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, pruneEmptyConnections } from "@/lib/rbac"
 import { applyVdcFilter } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getInventorySWR, type ClusterData } from "@/lib/inventory/fetchRawInventory"
@@ -55,7 +55,10 @@ async function handler(request: NextRequest, ctx: GuardedRouteContext) {
     // 3) Deep-clone clusters pour le filtrage RBAC (ne pas muter le cache).
     //    Filter by vDC connection scope first, then by RBAC infra scope (intersection).
     let visibleRawClusters = mask ? raw.clusters.filter(c => mask.connectionIds.has(c.id)) : raw.clusters
-    visibleRawClusters = filterVisibleConnections(visibleRawClusters, rbacScope)
+
+    // Candidate set only: a guest-derived (tag/pool) scope cannot decide here,
+    // the surviving guests below define the real perimeter (issue #633).
+    visibleRawClusters = filterCandidateConnections(visibleRawClusters, rbacScope)
 
     let clusters: ClusterData[] = visibleRawClusters.map(c => ({
       ...c,
@@ -95,6 +98,9 @@ async function handler(request: NextRequest, ctx: GuardedRouteContext) {
       // Apply vDC filter (nodes + pool membership), then RBAC node prune (composed)
       return applyRbacInfraFilter(applyVdcFilter(filtered, mask), rbacScope)
     }))
+
+    // Drop connections that no longer carry a single node the user may see.
+    clusters = pruneEmptyConnections(clusters, rbacScope)
 
     // 5) Prune PBS servers and external hypervisors by RBAC infra scope (.id = connection id)
     const visiblePbs = filterVisibleConnections(raw.pbsServers, rbacScope)

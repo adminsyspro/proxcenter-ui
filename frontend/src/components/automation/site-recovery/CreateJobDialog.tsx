@@ -15,6 +15,7 @@ import type { BandwidthWindow, CreateReplicationJobRequest } from '@/lib/orchest
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import NumericTextField from '@/components/ui/NumericTextField'
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -717,10 +718,12 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           {/* VMID Prefix */}
           <Box>
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.vmidPrefix')}</Typography>
-            <TextField
+            <NumericTextField
               type='number'
-              value={vmidPrefix || ''}
-              onChange={e => setVmidPrefix(Number(e.target.value) || 0)}
+              value={vmidPrefix}
+              onChange={setVmidPrefix}
+              fallback={0}
+              format={n => (n === 0 ? '' : String(n))}
               size='small'
               fullWidth
               placeholder='0'

@@ -53,6 +53,15 @@ export default defineConfig({
           environment: 'jsdom',
           include: ['src/**/*.test.tsx'],
           setupFiles: ['./src/__tests__/setup/jsdom-setup.ts'],
+          // Vitest's 5s default is not a budget these tests were written
+          // against, it is just the default — and under `--coverage` on a
+          // loaded machine it starts failing whole files that pass in
+          // isolation, including synchronous ones (a sync test can only
+          // "time out" when its worker is starved of CPU). Measured on this
+          // suite: 15 such failures at 5s, 0 at 20s, with the wall time
+          // unchanged at ~240s. Raising it removes that false-red class
+          // without hiding a genuinely hung test, which still fails.
+          testTimeout: 20_000,
         },
       },
     ],

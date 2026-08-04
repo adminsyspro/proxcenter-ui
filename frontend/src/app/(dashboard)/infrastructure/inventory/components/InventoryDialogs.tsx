@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 
 import { NodeRow, BulkAction } from '@/components/NodesTable'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 
 // Dynamic imports for HardwareModals (code-split, loaded on demand)
@@ -1383,7 +1384,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                   </FormControl>
                   {memoryCapable && (
                     <>
-                      <TextField
+                      <NumericTextField
                         fullWidth
                         size="small"
                         type="number"
@@ -1391,16 +1392,11 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
                         helperText={t('inventory.displayMemoryHelper')}
                         inputProps={{ min: 4, max: 512, step: 1 }}
                         InputProps={{ endAdornment: <InputAdornment position="end">MB</InputAdornment> }}
-                        value={memoryValue ?? ''}
-                        onChange={(e) => {
-                          const n = Number.parseInt(e.target.value, 10)
-                          if (Number.isFinite(n)) setEditOptionValue(buildValue(vgaType, n, clipboard))
-                        }}
-                        onBlur={(e) => {
-                          const n = Number.parseInt(e.target.value, 10)
-                          const clamped = Number.isFinite(n) ? Math.max(4, Math.min(512, n)) : 16
-                          setEditOptionValue(buildValue(vgaType, clamped, clipboard))
-                        }}
+                        value={memoryValue ?? 16}
+                        onChange={(n) => setEditOptionValue(buildValue(vgaType, n, clipboard))}
+                        fallback={16}
+                        min={4}
+                        max={512}
                       />
                       <FormControl fullWidth size="small">
                         <InputLabel>{t('inventory.displayClipboard')}</InputLabel>

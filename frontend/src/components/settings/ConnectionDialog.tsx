@@ -39,6 +39,7 @@ import {
 
 import { COUNTRIES, findCountry } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
 
@@ -986,11 +987,14 @@ export default function ConnectionDialog({
         <Collapse in={form.sshEnabled}>
           <Box sx={{ mt: 2, pl: 2, borderLeft: '2px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
+              <NumericTextField
                 label={t('settings.sshPort')}
                 type="number"
                 value={form.sshPort}
-                onChange={e => handleChange('sshPort', Number.parseInt(e.target.value) || 22)}
+                onChange={port => handleChange('sshPort', port)}
+                fallback={22}
+                min={1}
+                max={65535}
                 sx={{ width: 120 }}
                 InputProps={{
                   inputProps: { min: 1, max: 65535 }

@@ -33,6 +33,8 @@ import {
   Typography,
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
+
 const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 // PVE accepts both `daily HH:MM` and bare `HH:MM` for the daily case.
@@ -225,16 +227,18 @@ export default function BackupSchedulePicker({ value, onChange, disabled = false
       )}
 
       {frequency === 'monthly' && (
-        <TextField
+        <NumericTextField
           size="small"
           type="number"
           label={t('backups.scheduleDayOfMonth')}
           value={dayOfMonth}
-          onChange={(e) => {
-            const v = Math.max(1, Math.min(31, Number.parseInt(e.target.value, 10) || 1))
+          onChange={(v) => {
             setDayOfMonth(v)
             emit({ dayOfMonth: v })
           }}
+          fallback={1}
+          min={1}
+          max={31}
           inputProps={{ min: 1, max: 31 }}
           disabled={disabled}
           sx={{ maxWidth: 200 }}

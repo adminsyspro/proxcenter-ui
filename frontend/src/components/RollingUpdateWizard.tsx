@@ -43,6 +43,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+
+import NumericTextField from '@/components/ui/NumericTextField'
+
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
@@ -927,30 +930,39 @@ export default function RollingUpdateWizard({
                         />
                       </Box>
                       
-                      <TextField
+                      <NumericTextField
                         label={t('updates.migrationTimeout')}
                         type="number"
                         size="small"
                         value={config.migration_timeout}
-                        onChange={(e) => setConfig(c => ({ ...c, migration_timeout: Number.parseInt(e.target.value) || 600 }))}
+                        onChange={(migration_timeout) => setConfig(c => ({ ...c, migration_timeout }))}
+                        fallback={600}
+                        min={60}
+                        max={3600}
                         InputProps={{ inputProps: { min: 60, max: 3600 } }}
                       />
-                      
-                      <TextField
+
+                      <NumericTextField
                         label={t('updates.rebootTimeoutSeconds')}
                         type="number"
                         size="small"
                         value={config.reboot_timeout}
-                        onChange={(e) => setConfig(c => ({ ...c, reboot_timeout: Number.parseInt(e.target.value) || 300 }))}
+                        onChange={(reboot_timeout) => setConfig(c => ({ ...c, reboot_timeout }))}
+                        fallback={300}
+                        min={60}
+                        max={1800}
                         InputProps={{ inputProps: { min: 60, max: 1800 } }}
                       />
-                      
-                      <TextField
+
+                      <NumericTextField
                         label={t('updates.minHealthyNodes')}
                         type="number"
                         size="small"
                         value={config.min_healthy_nodes}
-                        onChange={(e) => setConfig(c => ({ ...c, min_healthy_nodes: Number.parseInt(e.target.value) || 2 }))}
+                        onChange={(min_healthy_nodes) => setConfig(c => ({ ...c, min_healthy_nodes }))}
+                        fallback={2}
+                        min={1}
+                        max={10}
                         InputProps={{ inputProps: { min: 1, max: 10 } }}
                         helperText={t('updates.minHealthyNodesHelper')}
                       />

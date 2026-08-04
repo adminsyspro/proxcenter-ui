@@ -73,6 +73,7 @@ import HaRuleDialog from '../HaRuleDialog'
 import EntityTagManager from '../components/EntityTagManager'
 import CephTopology from '../components/CephTopology'
 import { AddIcon } from '../components/IconWrappers'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
@@ -1773,21 +1774,23 @@ export default function ClusterTabs(props: any) {
                                       </FormControl>
                                     )}
 
-                                    <TextField
+                                    <NumericTextField
                                       size="small"
                                       type="number"
                                       label="Max Restart"
                                       value={autoHaSettings.max_restart ?? 1}
-                                      onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, max_restart: Number.parseInt(e.target.value) || 0 }))}
+                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_restart: n }))}
+                                      fallback={0}
                                       inputProps={{ min: 0, max: 10 }}
                                       sx={{ flex: 1 }}
                                     />
-                                    <TextField
+                                    <NumericTextField
                                       size="small"
                                       type="number"
                                       label="Max Relocate"
                                       value={autoHaSettings.max_relocate ?? 1}
-                                      onChange={(e) => setAutoHaSettings((prev: any) => ({ ...prev, max_relocate: Number.parseInt(e.target.value) || 0 }))}
+                                      onChange={(n) => setAutoHaSettings((prev: any) => ({ ...prev, max_relocate: n }))}
+                                      fallback={0}
                                       inputProps={{ min: 0, max: 10 }}
                                       sx={{ flex: 1 }}
                                     />
@@ -4396,14 +4399,14 @@ export default function ClusterTabs(props: any) {
                 </Select>
               </FormControl>
               <Box sx={{ display: 'flex', gap: 2 }}>
-                <TextField
+                <NumericTextField
                   fullWidth size="small" type="number" label={t('cluster.maxRestart')}
-                  value={addHaMaxRestart} onChange={(e) => setAddHaMaxRestart(Number(e.target.value))}
+                  value={addHaMaxRestart} onChange={setAddHaMaxRestart} fallback={0}
                   inputProps={{ min: 0, max: 10 }}
                 />
-                <TextField
+                <NumericTextField
                   fullWidth size="small" type="number" label={t('cluster.maxRelocate')}
-                  value={addHaMaxRelocate} onChange={(e) => setAddHaMaxRelocate(Number(e.target.value))}
+                  value={addHaMaxRelocate} onChange={setAddHaMaxRelocate} fallback={0}
                   inputProps={{ min: 0, max: 10 }}
                 />
               </Box>

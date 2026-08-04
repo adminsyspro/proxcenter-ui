@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { useTenant } from '@/contexts/TenantContext'
+import NumericTextField from '@/components/ui/NumericTextField'
 import BackupSchedulePicker from './BackupSchedulePicker'
 
 import {
@@ -804,12 +805,14 @@ return '—'
                 value={formData.comment}
                 onChange={(e) => setFormData(prev => ({ ...prev, comment: e.target.value }))}
               />
-              <TextField
+              <NumericTextField
                 size="small"
                 label={t('backups.retention')}
                 type="number"
                 value={formData.maxfiles}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: Number.parseInt(e.target.value) || 1 }))}
+                onChange={(v) => setFormData(prev => ({ ...prev, maxfiles: v }))}
+                fallback={1}
+                min={1}
                 inputProps={{ min: 1 }}
               />
               <TextField
@@ -1553,12 +1556,14 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
                   }
                   label={t('backups.ignoreVerified')}
                 />
-                <TextField
+                <NumericTextField
                   size="small"
                   label={t('backups.reVerifyAfter')}
                   type="number"
                   value={formData.outdatedAfter}
-                  onChange={(e) => setFormData(prev => ({ ...prev, outdatedAfter: Number.parseInt(e.target.value) || 30 }))}
+                  onChange={(v) => setFormData(prev => ({ ...prev, outdatedAfter: v }))}
+                  fallback={30}
+                  min={1}
                   inputProps={{ min: 1 }}
                 />
               </>
@@ -1570,44 +1575,54 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
                 <Divider />
                 <Typography variant="subtitle2" fontWeight={600}>{t('backups.retentionPolicy')}</Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
-                  <TextField
+                  <NumericTextField
                     size="small"
                     label={t('backups.keepLast')}
                     type="number"
                     value={formData.keepLast}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepLast: Number.parseInt(e.target.value) || 0 }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, keepLast: v }))}
+                    fallback={0}
+                    min={0}
                     inputProps={{ min: 0 }}
                   />
-                  <TextField
+                  <NumericTextField
                     size="small"
                     label={t('backups.keepDaily')}
                     type="number"
                     value={formData.keepDaily}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepDaily: Number.parseInt(e.target.value) || 0 }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, keepDaily: v }))}
+                    fallback={0}
+                    min={0}
                     inputProps={{ min: 0 }}
                   />
-                  <TextField
+                  <NumericTextField
                     size="small"
                     label={t('backups.keepWeekly')}
                     type="number"
                     value={formData.keepWeekly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepWeekly: Number.parseInt(e.target.value) || 0 }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, keepWeekly: v }))}
+                    fallback={0}
+                    min={0}
                     inputProps={{ min: 0 }}
                   />
-                  <TextField
+                  <NumericTextField
                     size="small"
                     label={t('backups.keepMonthly')}
                     type="number"
                     value={formData.keepMonthly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepMonthly: Number.parseInt(e.target.value) || 0 }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, keepMonthly: v }))}
+                    fallback={0}
+                    min={0}
                     inputProps={{ min: 0 }}
                   />
-                  <TextField
+                  <NumericTextField
                     size="small"
                     label={t('backups.keepYearly')}
                     type="number"
                     value={formData.keepYearly}
-                    onChange={(e) => setFormData(prev => ({ ...prev, keepYearly: Number.parseInt(e.target.value) || 0 }))}
+                    onChange={(v) => setFormData(prev => ({ ...prev, keepYearly: v }))}
+                    fallback={0}
+                    min={0}
                     inputProps={{ min: 0 }}
                   />
                 </Box>

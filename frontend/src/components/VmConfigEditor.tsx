@@ -256,6 +256,29 @@ function SliderWithInput({
 /* Parse helpers                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Read a numeric setting out of the config for display, keeping a real 0.
+ *
+ * The old `config.shares || 1000` idiom laundered 0 into the default, which
+ * made the field impossible to set to 0: typing the digit fed 0 back through
+ * `||`, the value prop jumped to the default and SliderWithInput repainted the
+ * box with it (discussion #634).
+ *
+ * A plain `?? fallback` is not enough either. The GET route hands PVE's config
+ * through verbatim and `config` starts life as `{}`, so a field may be absent
+ * or a string — PVE reports `memory` as "current=8192,max=32768" on virtio-mem
+ * guests, and older releases stringify plain integers. Those must not reach
+ * SliderWithInput, whose Slider needs a number. So parse, and fall back only
+ * when there is genuinely no number to show. Display only: `config` itself is
+ * untouched, so handleSave still diffs the original value and writes nothing
+ * for a field the user never edited.
+ */
+function numOr(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''))
+
+  return Number.isFinite(n) ? n : fallback
+}
+
 function parseNetworkConfig(netStr: string): Partial<NetworkInfo> {
   // Format: "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,firewall=1,tag=100"
   const parts = netStr.split(',')
@@ -623,7 +646,7 @@ return
               <Stack spacing={3}>
                 <SliderWithInput
                   label={t('vmConfig.cpuCores')}
-                  value={config.cores || 1}
+                  value={numOr(config.cores, 1)}
                   onChange={(val) => updateConfig('cores', val)}
                   min={1}
                   max={Math.min(maxCores, 128)}
@@ -632,7 +655,7 @@ return
                 
                 <SliderWithInput
                   label={t('vmConfig.sockets')}
-                  value={config.sockets || 1}
+                  value={numOr(config.sockets, 1)}
                   onChange={(val) => updateConfig('sockets', val)}
                   min={1}
                   max={4}
@@ -677,7 +700,7 @@ return
                 
                 <SliderWithInput
                   label={t('vmConfig.cpuLimit')}
-                  value={config.cpulimit || 0}
+                  value={numOr(config.cpulimit, 0)}
                   onChange={(val) => updateConfig('cpulimit', val)}
                   min={0}
                   max={(config.cores || 1) * (config.sockets || 1)}
@@ -687,7 +710,7 @@ return
                 
                 <SliderWithInput
                   label={t('vmConfig.cpuUnits')}
-                  value={config.cpuunits || 1024}
+                  value={numOr(config.cpuunits, 1024)}
                   onChange={(val) => updateConfig('cpuunits', val)}
                   min={2}
                   max={262144}
@@ -712,7 +735,7 @@ return
               <Stack spacing={3}>
                 <SliderWithInput
                   label={t('vmConfig.memoryRam')}
-                  value={config.memory || 512}
+                  value={numOr(config.memory, 512)}
                   onChange={(val) => updateConfig('memory', val)}
                   min={64}
                   max={Math.min(maxMemory, 512 * 1024)}
@@ -727,7 +750,7 @@ return
                 
                 <SliderWithInput
                   label={t('vmConfig.balloonMin')}
-                  value={config.balloon || 0}
+                  value={numOr(config.balloon, 0)}
                   onChange={(val) => updateConfig('balloon', val)}
                   min={0}
                   max={config.memory || 512}
@@ -744,7 +767,7 @@ return
                 
                 <SliderWithInput
                   label={t('vmConfig.memoryShares')}
-                  value={config.shares || 1000}
+                  value={numOr(config.shares, 1000)}
                   onChange={(val) => updateConfig('shares', val)}
                   min={0}
                   max={50000}

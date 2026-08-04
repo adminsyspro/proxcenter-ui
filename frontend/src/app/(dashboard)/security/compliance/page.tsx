@@ -14,6 +14,7 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features } from '@/contexts/LicenseContext'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { usePVEConnections } from '@/hooks/useConnections'
 import {
   useHardeningChecks, useSecurityPolicies,
@@ -1045,11 +1046,13 @@ function PoliciesTab() {
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.minLength')}
                   value={form.password_min_length}
-                  onChange={(e) => handleChange('password_min_length', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('password_min_length', v)}
+                  fallback={0}
+                  max={128}
                   size="small"
                   inputProps={{ min: 1, max: 128 }}
                 />
@@ -1084,20 +1087,24 @@ function PoliciesTab() {
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.sessionTimeout')}
                   value={form.session_timeout_minutes}
-                  onChange={(e) => handleChange('session_timeout_minutes', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('session_timeout_minutes', v)}
+                  fallback={0}
+                  min={0}
                   size="small"
                   helperText={t('compliance.sessionTimeoutHelper')}
                   inputProps={{ min: 0 }}
                 />
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.maxConcurrentSessions')}
                   value={form.session_max_concurrent}
-                  onChange={(e) => handleChange('session_max_concurrent', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('session_max_concurrent', v)}
+                  fallback={0}
+                  min={0}
                   size="small"
                   helperText={t('compliance.maxConcurrentHelper')}
                   inputProps={{ min: 0 }}
@@ -1117,20 +1124,24 @@ function PoliciesTab() {
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.maxFailedAttempts')}
                   value={form.login_max_failed_attempts}
-                  onChange={(e) => handleChange('login_max_failed_attempts', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('login_max_failed_attempts', v)}
+                  fallback={0}
+                  min={0}
                   size="small"
                   helperText={t('compliance.maxFailedHelper')}
                   inputProps={{ min: 0 }}
                 />
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.lockoutDuration')}
                   value={form.login_lockout_duration_minutes}
-                  onChange={(e) => handleChange('login_lockout_duration_minutes', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('login_lockout_duration_minutes', v)}
+                  fallback={0}
+                  min={0}
                   size="small"
                   helperText={t('compliance.lockoutHelper')}
                   inputProps={{ min: 0 }}
@@ -1150,11 +1161,12 @@ function PoliciesTab() {
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
+                <NumericTextField
                   type="number"
                   label={t('compliance.retentionDays')}
                   value={form.audit_retention_days}
-                  onChange={(e) => handleChange('audit_retention_days', Number.parseInt(e.target.value) || 0)}
+                  onChange={(v) => handleChange('audit_retention_days', v)}
+                  fallback={0}
                   size="small"
                   helperText={t('compliance.retentionHelper')}
                   inputProps={{ min: 1 }}

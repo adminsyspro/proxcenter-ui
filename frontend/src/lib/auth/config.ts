@@ -716,12 +716,25 @@ export const authOptions: NextAuthOptions = {
   // decode failure (corrupted token, changed NEXTAUTH_SECRET), so the real
   // signal drowns in routine noise. Only OUR own refusals (matched exactly
   // above) are downgraded to one quiet info line with no stack; everything
-  // else — including a real JWT_SESSION_ERROR — falls through to the same
-  // loud, stack-carrying output next-auth would have produced. It cannot
-  // delegate to next-auth's real default logger: `next-auth/utils/logger`
-  // is not a published subpath (its package.json `exports` map omits it;
-  // `require("next-auth/utils/logger")` throws ERR_PACKAGE_PATH_NOT_EXPORTED),
-  // so this reproduces that default's formatting inline instead.
+  // else falls through untouched.
+  //
+  // It cannot delegate to next-auth's real default logger: `next-auth/utils
+  // /logger` is not a published subpath (its package.json `exports` map
+  // omits it; `require("next-auth/utils/logger")` throws
+  // ERR_PACKAGE_PATH_NOT_EXPORTED). An earlier version of this reproduced
+  // that default's `formatError` inline (Error -> {message, stack, name}),
+  // but that reformatting only special-cased a bare Error: for the several
+  // codes next-auth reports with an ENVELOPE object — OAUTH_CALLBACK_ERROR,
+  // OAUTH_CALLBACK_HANDLER_ERROR, OAUTH_PARSE_PROFILE_ERROR,
+  // SIGNIN_OAUTH_ERROR, SIGNIN_EMAIL_ERROR — it discarded every sibling key
+  // (providerId, error_description, the raw OAuthProfile, ...) and kept only
+  // the nested `.error`. That is exactly the OIDC diagnostic detail this app
+  // needs when SSO breaks, so instead of rebuilding next-auth's formatting,
+  // log the metadata exactly as received: `console.error` already renders a
+  // bare Error with its message and stack, and renders an envelope object
+  // with every one of its fields, so nothing can be dropped because nothing
+  // is reconstructed. The cosmetic difference from next-auth's own default
+  // shape is an acceptable trade for never losing a diagnostic field.
   logger: {
     error(code, metadata) {
       if (isOurSessionRefusal(code, metadata)) {
@@ -729,15 +742,7 @@ export const authOptions: NextAuthOptions = {
         return
       }
 
-      const err = metadata instanceof Error ? metadata : metadata.error
-      const formatted: unknown = err instanceof Error ? { message: err.message, stack: err.stack, name: err.name } : metadata
-
-      console.error(
-        `[next-auth][error][${code}]`,
-        `\nhttps://next-auth.js.org/errors#${code.toLowerCase()}`,
-        (formatted as { message?: string } | undefined)?.message,
-        formatted,
-      )
+      console.error(`[next-auth][error][${code}]`, metadata)
     },
   },
   session: {

@@ -52,22 +52,26 @@ describe('authOptions.logger.error', () => {
     expect(consoleInfoSpy).not.toHaveBeenCalled()
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
 
-    const [, , message, metadata] = consoleErrorSpy.mock.calls[0]
-    expect(message).toBe('JWT invalid')
-    expect(metadata).toMatchObject({ message: 'JWT invalid', name: 'Error' })
-    expect((metadata as { stack?: string }).stack).toContain('JWT invalid')
+    const [prefix, metadata] = consoleErrorSpy.mock.calls[0]
+    expect(prefix).toContain('JWT_SESSION_ERROR')
+    // Logged AS RECEIVED (no reformatting): the raw Error instance itself,
+    // so its message and stack are exactly what console.error renders them
+    // to be, not a rebuilt {message, stack, name} object.
+    expect(metadata).toBe(unrelated)
+    expect((metadata as Error).message).toBe('JWT invalid')
+    expect((metadata as Error).stack).toContain('JWT invalid')
   })
 
-  it('passes through a different error code untouched (loud, default shape)', () => {
+  it('passes through a different error code untouched (loud, unmodified metadata)', () => {
     const err = new Error('some oauth failure')
 
     errorLog('OAUTH_CALLBACK_ERROR', err)
 
     expect(consoleInfoSpy).not.toHaveBeenCalled()
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
-    const [prefix, , message] = consoleErrorSpy.mock.calls[0]
+    const [prefix, metadata] = consoleErrorSpy.mock.calls[0]
     expect(prefix).toContain('OAUTH_CALLBACK_ERROR')
-    expect(message).toBe('some oauth failure')
+    expect(metadata).toBe(err)
   })
 
   it('a message that merely CONTAINS our refusal text as a substring is NOT matched (exact match only)', () => {
@@ -79,5 +83,31 @@ describe('authOptions.logger.error', () => {
     // proving the check is not a loose substring test.
     expect(consoleInfoSpy).not.toHaveBeenCalled()
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserves every field of an ENVELOPE metadata object (OIDC provider errors must not lose context)', () => {
+    // Several next-auth codes (OAUTH_CALLBACK_ERROR, OAUTH_CALLBACK_HANDLER_ERROR,
+    // OAUTH_PARSE_PROFILE_ERROR, SIGNIN_OAUTH_ERROR, SIGNIN_EMAIL_ERROR) report
+    // an envelope object, not a bare Error. A hand-rolled reformatter that only
+    // special-cases `instanceof Error` would silently drop providerId here —
+    // this is the regression test for exactly that mistake.
+    const envelope = {
+      error: new Error('boom'),
+      providerId: 'keycloak',
+      error_description: 'invalid_grant',
+    }
+
+    errorLog('OAUTH_CALLBACK_ERROR', envelope)
+
+    expect(consoleInfoSpy).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+
+    const [, metadata] = consoleErrorSpy.mock.calls[0]
+    // Logged as the exact same reference: nothing was reconstructed, so
+    // providerId (and every other sibling key) cannot have been dropped.
+    expect(metadata).toBe(envelope)
+    expect((metadata as typeof envelope).providerId).toBe('keycloak')
+    expect((metadata as typeof envelope).error_description).toBe('invalid_grant')
+    expect((metadata as typeof envelope).error).toBe(envelope.error)
   })
 })

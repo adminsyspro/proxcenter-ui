@@ -31,6 +31,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
 
 // Storage types that support multiple disk image formats (file-based storages)
@@ -660,11 +661,14 @@ return
                 <MenuItem value="ide">IDE</MenuItem>
               </Select>
             </FormControl>
-            <TextField
+            <NumericTextField
               size="small"
               type="number"
               value={reassignIndex}
-              onChange={(e) => setReassignIndex(Number.parseInt(e.target.value) || 0)}
+              onChange={setReassignIndex}
+              fallback={0}
+              min={0}
+              max={30}
               sx={{ width: 80 }}
               inputProps={{ min: 0, max: 30 }}
             />

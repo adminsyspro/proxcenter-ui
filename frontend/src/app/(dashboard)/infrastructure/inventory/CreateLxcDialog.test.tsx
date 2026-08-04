@@ -18,6 +18,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  userEvent,
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -709,5 +710,130 @@ describe('CreateLxcDialog - Template tab', () => {
       name: /ubuntu-22\.04-standard_22\.04-1_amd64\.tar\.gz/,
     })
     expect(ubuntuOption).toBeInTheDocument()
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 11. Numeric fields must be clearable (discussion #634)
+//
+// Every numeric field here used to be written as
+//   value={n} onChange={e => setN(Number.parseInt(e.target.value) || fallback)}
+// Deleting the last digit yields '', parseInt('') is NaN and `|| fallback`
+// wrote the default straight back, so the input could never be empty and the
+// next keystroke was appended to the number that had just snapped back
+// (type 20 over a 1 and you get 120). They now use NumericTextField, which
+// keeps its own string buffer and only ever hands the parent a finite number.
+// ------------------------------------------------------------------ //
+
+describe('CreateLxcDialog - clearable numeric fields', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  /** Switch tab and wait until it is actually the selected one. */
+  async function goToTab(name: string) {
+    fireEvent.click(screen.getByRole('tab', { name }))
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name }).getAttribute('aria-selected')).toBe('true')
+    })
+  }
+
+  it('the disk size can be emptied, and a retyped size replaces it instead of gluing the old digit in front (discussion #634)', async () => {
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('Disks')
+
+    const diskSize = screen.getByLabelText('Disk size (GiB)') as HTMLInputElement
+    expect(diskSize.value).toBe('8')
+
+    await userEvent.clear(diskSize)
+    // The reported symptom: with the old coercion this was already '1' again.
+    expect(diskSize.value).toBe('')
+
+    await userEvent.type(diskSize, '20')
+    expect(diskSize.value).toBe('20')
+
+    // The rootfs chip renders `${rootSize} GiB` from the committed state, so it
+    // proves the parent got 20 -- not 120 (old digit glued in front) and not 820.
+    expect(screen.getByText('20 GiB')).toBeInTheDocument()
+    expect(screen.queryByText('120 GiB')).not.toBeInTheDocument()
+    expect(screen.queryByText('820 GiB')).not.toBeInTheDocument()
+  })
+
+  it('a disk size left empty commits the fallback on blur, so the create payload can never carry an empty size', async () => {
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('Disks')
+
+    const diskSize = screen.getByLabelText('Disk size (GiB)') as HTMLInputElement
+
+    await userEvent.clear(diskSize)
+    expect(diskSize.value).toBe('')
+
+    // Blur (tabbing out, or clicking Create) commits the fallback the old
+    // `|| 1` coercion used, so `rootfs: ${rootStorage}:${rootSize}` always
+    // interpolates a number.
+    await userEvent.tab()
+    expect(diskSize.value).toBe('1')
+    expect(screen.getByText('1 GiB')).toBeInTheDocument()
+  })
+
+  // Cores / Memory / Swap carried exactly the same defect. The committed value
+  // is asserted through the heading that mirrors it, so the test fails if the
+  // parent state kept the old number.
+  const clearableFields = [
+    { tab: 'CPU', label: 'Cores', initial: '1', typed: '4', committed: /Cores: 4/ },
+    { tab: 'Memory', label: 'Memory (MiB)', initial: '512', typed: '2048', committed: /Memory \(MiB\): 2 GiB/ },
+    { tab: 'Memory', label: 'Swap (MiB)', initial: '512', typed: '256', committed: /Swap \(MiB\): 256 MiB/ },
+  ]
+
+  it.each(clearableFields)(
+    '$label can be cleared and retyped without the old value gluing itself in front',
+    async ({ tab, label, initial, typed, committed }) => {
+      renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+      await waitForDataLoad()
+      await goToTab(tab)
+
+      const input = screen.getByLabelText(label) as HTMLInputElement
+      expect(input.value).toBe(initial)
+
+      await userEvent.clear(input)
+      expect(input.value).toBe('')
+
+      await userEvent.type(input, typed)
+      expect(input.value).toBe(typed)
+      expect(screen.getByText(committed)).toBeInTheDocument()
+    },
+  )
+
+  it('the advanced CPU limit and CPU units fields are clearable too', async () => {
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('CPU')
+
+    // Both fields live behind the collapsed "Advanced Options" header.
+    fireEvent.click(screen.getByText('Advanced Options'))
+
+    const cpuLimit = screen.getByLabelText('CPU limit') as HTMLInputElement
+    // 0 means "unlimited": format() renders it blank so the placeholder shows.
+    expect(cpuLimit.value).toBe('')
+
+    await userEvent.type(cpuLimit, '1')
+    expect(cpuLimit.value).toBe('1')
+
+    await userEvent.clear(cpuLimit)
+    expect(cpuLimit.value).toBe('')
+    // Blurring an empty CPU limit means unlimited again -- still blank, not '0'.
+    await userEvent.tab()
+    expect(cpuLimit.value).toBe('')
+
+    const cpuUnits = screen.getByLabelText('CPU units') as HTMLInputElement
+    expect(cpuUnits.value).toBe('1024')
+
+    await userEvent.clear(cpuUnits)
+    expect(cpuUnits.value).toBe('')
+
+    await userEvent.type(cpuUnits, '2048')
+    expect(cpuUnits.value).toBe('2048')
   })
 })

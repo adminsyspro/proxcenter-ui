@@ -36,6 +36,8 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 import { useTranslations } from 'next-intl'
 
+import NumericTextField from '@/components/ui/NumericTextField'
+
 /* -----------------------------
   BackupJobsSection Component
 ------------------------------ */
@@ -698,12 +700,14 @@ export default function BackupJobsSection({ pveConnections = [] }) {
                 placeholder={t('backups.jobDescription')}
               />
 
-              <TextField
+              <NumericTextField
                 size="small"
                 label={t('backups.retentionBackupCount')}
                 type="number"
                 value={formData.maxfiles}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxfiles: Number.parseInt(e.target.value) || 1 }))}
+                onChange={(v) => setFormData(prev => ({ ...prev, maxfiles: v }))}
+                fallback={1}
+                min={1}
                 inputProps={{ min: 1 }}
               />
             </Box>

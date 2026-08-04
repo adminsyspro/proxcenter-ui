@@ -2,9 +2,10 @@
 
 import { useTranslations } from 'next-intl'
 import {
-  Box, Button, IconButton, MenuItem, Select, Stack, TextField, Tooltip, Typography,
+  Box, Button, IconButton, MenuItem, Select, Stack, Tooltip, Typography,
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
 import type { BandwidthWindow } from '@/lib/orchestrator/site-recovery.types'
 
 interface Props {
@@ -131,11 +132,13 @@ export default function BandwidthWindowsEditor({ value, onChange, staticRateMbps
                   <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block' }}>
                     {t('siteRecovery.bandwidth.rate')}
                   </Typography>
-                  <TextField
+                  <NumericTextField
                     type='number'
                     size='small'
                     value={w.rate_limit_mbps}
-                    onChange={e => updateAt(idx, { rate_limit_mbps: Math.max(0, Number(e.target.value) || 0) })}
+                    onChange={rate_limit_mbps => updateAt(idx, { rate_limit_mbps })}
+                    fallback={0}
+                    min={0}
                     InputProps={{ endAdornment: <Typography variant='caption' sx={{ color: 'text.secondary' }}>Mbps</Typography> }}
                     fullWidth
                   />

@@ -8,6 +8,7 @@ import {
   Stack, TextField, MenuItem, FormControlLabel, Switch, Box, Typography, Alert,
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
 import DatacenterAssignmentTree, { type AssignmentState } from './DatacenterAssignmentTree'
 
 export interface DatacenterValues {
@@ -247,22 +248,28 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
             <Typography variant="overline" color="text.secondary">{t('settings.green.dc.energySection')}</Typography>
           </Box>
           <Stack direction="row" spacing={2}>
-            <TextField
+            <NumericTextField
               label={t('settings.green.dc.pue')}
               type="number"
               value={form.pue}
-              onChange={e => setForm(s => ({ ...s, pue: Number(e.target.value) }))}
+              onChange={pue => setForm(s => ({ ...s, pue }))}
+              fallback={1}
+              min={1}
+              parse={Number.parseFloat}
               size="small"
               fullWidth
               required
               inputProps={{ step: 0.01, min: 1.0, max: 3.0 }}
               helperText="1.0 = perfect; typical 1.2–1.6"
             />
-            <TextField
+            <NumericTextField
               label={t('settings.green.dc.electricityPrice')}
               type="number"
               value={form.electricityPrice}
-              onChange={e => setForm(s => ({ ...s, electricityPrice: Number(e.target.value) }))}
+              onChange={electricityPrice => setForm(s => ({ ...s, electricityPrice }))}
+              fallback={0}
+              min={0}
+              parse={Number.parseFloat}
               size="small"
               fullWidth
               required
@@ -299,15 +306,18 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
                 </MenuItem>
               ))}
             </TextField>
-            <TextField
+            <NumericTextField
               label={t('settings.green.dc.co2Factor')}
               type="number"
               value={form.co2Factor}
-              onChange={e => setForm(s => ({
+              onChange={co2Factor => setForm(s => ({
                 ...s,
-                co2Factor: Number(e.target.value),
+                co2Factor,
                 co2CountryPreset: 'custom',
               }))}
+              fallback={0}
+              min={0}
+              parse={Number.parseFloat}
               size="small"
               fullWidth
               required

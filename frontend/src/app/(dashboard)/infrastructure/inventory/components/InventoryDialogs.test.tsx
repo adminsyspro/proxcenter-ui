@@ -30,6 +30,7 @@ import {
   waitFor,
   fireEvent,
   within,
+  userEvent,
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -529,6 +530,55 @@ describe('InventoryDialogs', () => {
     fireEvent.click(noneOption)
     // 'none' is not in MEMORY_CAPABLE, so buildValue('none', undefined, '') = 'none'
     expect(setEditOptionValue).toHaveBeenCalledWith('none')
+  })
+
+  // 8b. editOptionDialog - vga display memory can be emptied
+  it('editOptionDialog vga: display memory can be cleared and retyped without the old digits sticking', async () => {
+    // The field is controlled by editOptionValue (a VGA string), so the retype
+    // path only exercises the bug when the parent really owns that string: a
+    // vi.fn() spy would freeze the value and hide the buffer's behaviour.
+    const baseProps = makeProps({
+      editOptionDialog: {
+        key: 'vga',
+        label: 'Display',
+        value: 'std,memory=32',
+        type: 'vga',
+        options: [{ value: 'std', label: 'Standard (std)' }],
+      },
+    })
+
+    function Harness() {
+      const [editOptionValue, setEditOptionValue] = React.useState('std,memory=32')
+
+      return (
+        <InventoryDialogs
+          {...baseProps}
+          editOptionValue={editOptionValue}
+          setEditOptionValue={setEditOptionValue}
+        />
+      )
+    }
+
+    renderWithProviders(<Harness />)
+
+    const input = screen.getByRole('spinbutton', { name: 'Memory' }) as HTMLInputElement
+    expect(input.value).toBe('32')
+
+    await userEvent.clear(input)
+    // Before the fix the controlled value snapped straight back to '32'.
+    expect(input.value).toBe('')
+
+    await userEvent.type(input, '64')
+    expect(input.value).toBe('64')
+
+    fireEvent.blur(input)
+    expect(input.value).toBe('64')
+
+    // Emptying it again and leaving the field commits the 16 MB PVE default,
+    // and buildValue drops the redundant `memory=16` segment.
+    await userEvent.clear(input)
+    fireEvent.blur(input)
+    expect(input.value).toBe('16')
   })
 
   // 9. createBackupDialog

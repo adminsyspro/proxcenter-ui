@@ -24,6 +24,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 import type { Storage } from './utils'
 
 type HardwareType = 'usb' | 'pci' | 'serial' | 'cloudinit' | 'audio' | 'rng'
@@ -458,22 +459,24 @@ export function AddOtherHardwareDialog({
                 onChange={e => setRngSource(e.target.value)}
                 helperText="/dev/urandom (default) or /dev/random (blocking)"
               />
-              <TextField
+              <NumericTextField
                 fullWidth
                 size="small"
                 label="Max Bytes per Period"
                 type="number"
                 value={rngMaxBytes}
-                onChange={e => setRngMaxBytes(Number(e.target.value))}
+                onChange={setRngMaxBytes}
+                fallback={0}
                 helperText="Maximum bytes of entropy injected per period (0 = unlimited)"
               />
-              <TextField
+              <NumericTextField
                 fullWidth
                 size="small"
                 label="Period (ms)"
                 type="number"
                 value={rngPeriod}
-                onChange={e => setRngPeriod(Number(e.target.value))}
+                onChange={setRngPeriod}
+                fallback={0}
                 helperText="Time interval in milliseconds for rate-limiting entropy"
               />
               <Alert severity="info" sx={{ fontSize: 13 }}>

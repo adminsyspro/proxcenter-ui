@@ -26,6 +26,8 @@ import {
   Typography
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
+
 async function fetchJson(url, init) {
   const r = await fetch(url, init)
   const text = await r.text()
@@ -288,15 +290,18 @@ return
               }}
             />
 
-            <TextField
+            {/* ?? and not ||: with || a committed 0 is laundered back to 587 on
+                the way in, and the field snaps to 587 under the cursor. */}
+            <NumericTextField
               fullWidth
               type='number'
               label={t('notifications.smtp.port')}
-              value={settings.email?.smtp_port || 587}
-              onChange={e => setSettings(s => ({
+              value={settings.email?.smtp_port ?? 587}
+              onChange={port => setSettings(s => ({
                 ...s,
-                email: { ...s.email, smtp_port: Number.parseInt(e.target.value) || 587 }
+                email: { ...s.email, smtp_port: port }
               }))}
+              fallback={587}
               helperText={t('notifications.smtp.portHelper')}
             />
 
@@ -610,12 +615,15 @@ return
               </Select>
             </FormControl>
 
-            <TextField
+            {/* ?? and not ||: see the SMTP port field — || would launder a
+                committed 0 back to 100 while the user is still typing. */}
+            <NumericTextField
               fullWidth
               type='number'
               label={t('notifications.rateLimit')}
-              value={settings.rate_limit_per_hour || 100}
-              onChange={e => setSettings(s => ({ ...s, rate_limit_per_hour: Number.parseInt(e.target.value) || 100 }))}
+              value={settings.rate_limit_per_hour ?? 100}
+              onChange={limit => setSettings(s => ({ ...s, rate_limit_per_hour: limit }))}
+              fallback={100}
               InputProps={{
                 endAdornment: <InputAdornment position='end'>emails/h</InputAdornment>
               }}

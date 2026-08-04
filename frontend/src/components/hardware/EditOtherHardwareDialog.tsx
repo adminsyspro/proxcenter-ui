@@ -25,6 +25,7 @@ import {
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 
 export type OtherHardwareItem = {
   id: string
@@ -386,22 +387,24 @@ export function EditOtherHardwareDialog({
                   onChange={e => setRngSource(e.target.value)}
                   helperText={t('hardware.rngSourceHelper')}
                 />
-                <TextField
+                <NumericTextField
                   fullWidth
                   size="small"
                   label={t('hardware.rngMaxBytes')}
                   type="number"
                   value={rngMaxBytes}
-                  onChange={e => setRngMaxBytes(Number(e.target.value))}
+                  onChange={setRngMaxBytes}
+                  fallback={0}
                   helperText={t('hardware.rngMaxBytesHelper')}
                 />
-                <TextField
+                <NumericTextField
                   fullWidth
                   size="small"
                   label={t('hardware.rngPeriod')}
                   type="number"
                   value={rngPeriod}
-                  onChange={e => setRngPeriod(Number(e.target.value))}
+                  onChange={setRngPeriod}
+                  fallback={0}
                   helperText={t('hardware.rngPeriodHelper')}
                 />
               </Stack>

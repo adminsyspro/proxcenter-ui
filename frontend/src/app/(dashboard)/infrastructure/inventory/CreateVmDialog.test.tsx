@@ -24,6 +24,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  userEvent,
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -699,5 +700,88 @@ describe('CreateVmDialog - System tab', () => {
     await waitFor(() => {
       expect(screen.getByText(/UEFI requires a q35 machine type/i)).toBeInTheDocument()
     })
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 9. Numeric fields must be clearable (discussion #634)
+//
+// This dialog used to carry its own private copy of the buffered numeric
+// input; it now imports the shared @/components/ui/NumericTextField, and the
+// last two raw fields (disk size, CPU limit) were converted to it. These tests
+// pin the user-visible contract of that swap: the field can be emptied, and
+// what you type next replaces the old value instead of being appended to it.
+// ------------------------------------------------------------------ //
+
+describe('CreateVmDialog - clearable numeric fields', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  /** Switch tab and wait until it is actually the selected one. */
+  async function goToTab(name: string) {
+    fireEvent.click(screen.getByRole('tab', { name }))
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name }).getAttribute('aria-selected')).toBe('true')
+    })
+  }
+
+  it('Cores can be emptied and retyped without the old digit gluing itself in front', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('CPU')
+
+    const cores = screen.getByLabelText('Cores') as HTMLInputElement
+    expect(cores.value).toBe('1')
+
+    await userEvent.clear(cores)
+    expect(cores.value).toBe('')
+
+    await userEvent.type(cores, '8')
+    expect(cores.value).toBe('8')
+    // Total cores = sockets x cores, read from the committed state: 8, not 18.
+    expect(screen.getByText(/Total cores: 8/i)).toBeInTheDocument()
+  })
+
+  it('the disk size can be emptied and retyped, and the disk header follows the committed value', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('Disks')
+
+    // The first disk card is expanded by default (expandedDisks = {0}).
+    const diskSize = screen.getByLabelText('Disk size (GiB)') as HTMLInputElement
+    expect(diskSize.value).toBe('32')
+
+    await userEvent.clear(diskSize)
+    expect(diskSize.value).toBe('')
+
+    await userEvent.type(diskSize, '64')
+    expect(diskSize.value).toBe('64')
+    expect(screen.getByText('64 GiB')).toBeInTheDocument()
+    expect(screen.queryByText('3264 GiB')).not.toBeInTheDocument()
+  })
+
+  it('the CPU limit keeps its "unlimited" sentinel while staying clearable', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await goToTab('CPU')
+
+    // The CPU limit lives behind the collapsed "Advanced Options" header.
+    fireEvent.click(screen.getByText('Advanced Options'))
+
+    const cpuLimit = screen.getByLabelText('CPU limit') as HTMLInputElement
+    // 0 is displayed as the word 'unlimited' (unchanged from before the swap).
+    expect(cpuLimit.value).toBe('unlimited')
+
+    await userEvent.clear(cpuLimit)
+    expect(cpuLimit.value).toBe('')
+
+    await userEvent.type(cpuLimit, '2')
+    expect(cpuLimit.value).toBe('2')
+
+    // Emptying it again and blurring means unlimited: back to the sentinel.
+    await userEvent.clear(cpuLimit)
+    await userEvent.tab()
+    expect(cpuLimit.value).toBe('unlimited')
   })
 })

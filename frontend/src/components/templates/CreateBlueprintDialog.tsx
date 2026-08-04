@@ -29,6 +29,7 @@ import type { CatalogImage } from '@/lib/templates/blueprintImages'
 import { splitCatalogImages, hasMeaningfulCloudInit } from '@/lib/templates/blueprintImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import type { NetworkOption } from '@/lib/templates/networkOptions'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { useToast } from '@/contexts/ToastContext'
 import { useTenant } from '@/contexts/TenantContext'
 import VendorLogo from './VendorLogo'
@@ -249,7 +250,14 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
   }, [name, description, imageSlug, hardware, cloudInit, tags, isPublic, blueprint, onClose, showToast, t, useDhcp, ipCidrValid])
 
   // Disk size as integer GB
-  const diskGb = Number.parseInt(hardware.diskSize) || 20
+  const parsedDiskGb = Number.parseInt(hardware.diskSize)
+  const diskGb = parsedDiskGb || 20
+  // The manual input needs the parsed size without that `|| 20`: a committed
+  // '0G' would otherwise bounce back as 20 and the sync effect would rewrite
+  // the buffer mid-keystroke ('0' → '20' → '208' on the next keypress). Only
+  // an unparseable size (malformed blueprint JSON) falls back, and to the
+  // same 1 the field commits on blur.
+  const diskGbInput = Number.isNaN(parsedDiskGb) ? 1 : parsedDiskGb
 
   return (
     <Dialog open={open} onClose={() => onClose()} maxWidth="sm" fullWidth>
@@ -336,11 +344,14 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                   onChange={(_, v) => setHardware(h => ({ ...h, cores: v as number }))}
                   sx={{ flex: 1 }}
                 />
-                <TextField
+                <NumericTextField
                   type="number"
                   size="small"
                   value={hardware.cores}
-                  onChange={e => setHardware(h => ({ ...h, cores: Number.parseInt(e.target.value) || 1 }))}
+                  onChange={n => setHardware(h => ({ ...h, cores: n }))}
+                  fallback={1}
+                  min={1}
+                  max={128}
                   sx={{ width: 92 }}
                   slotProps={{ htmlInput: { min: 1, max: 128 } }}
                 />
@@ -364,11 +375,13 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                   valueLabelFormat={(v) => `${v / 1024} GB`}
                   sx={{ flex: 1 }}
                 />
-                <TextField
+                <NumericTextField
                   type="number"
                   size="small"
                   value={hardware.memory}
-                  onChange={e => setHardware(h => ({ ...h, memory: Number.parseInt(e.target.value) || 128 }))}
+                  onChange={n => setHardware(h => ({ ...h, memory: n }))}
+                  fallback={128}
+                  min={128}
                   sx={{ width: 92 }}
                   helperText="MB"
                   slotProps={{ htmlInput: { min: 128, step: 256 } }}
@@ -391,14 +404,13 @@ export default function CreateBlueprintDialog({ open, onClose, blueprint }: Crea
                   onChange={(_, v) => setHardware(h => ({ ...h, diskSize: `${v as number}G` }))}
                   sx={{ flex: 1 }}
                 />
-                <TextField
+                <NumericTextField
                   type="number"
                   size="small"
-                  value={diskGb}
-                  onChange={e => {
-                    const gb = Number.parseInt(e.target.value) || 1
-                    setHardware(h => ({ ...h, diskSize: `${gb}G` }))
-                  }}
+                  value={diskGbInput}
+                  onChange={gb => setHardware(h => ({ ...h, diskSize: `${gb}G` }))}
+                  fallback={1}
+                  min={1}
                   sx={{ width: 92 }}
                   helperText="GB"
                   slotProps={{ htmlInput: { min: 1 } }}

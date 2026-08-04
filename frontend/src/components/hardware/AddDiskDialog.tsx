@@ -28,6 +28,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 import type { Storage } from './utils'
 
 // ==================== ADD DISK DIALOG ====================
@@ -376,11 +377,14 @@ return match ? Number.parseInt(match[1]) : -1
                   <MenuItem value="ide">IDE</MenuItem>
                 </Select>
               </FormControl>
-              <TextField
+              <NumericTextField
                 size="small"
                 type="number"
                 value={busIndex}
-                onChange={(e) => setBusIndex(Number.parseInt(e.target.value) || 0)}
+                onChange={setBusIndex}
+                fallback={0}
+                min={0}
+                max={30}
                 sx={{ width: 80 }}
                 inputProps={{ min: 0, max: 30 }}
               />
@@ -466,12 +470,14 @@ return match ? Number.parseInt(match[1]) : -1
             {deviceType === 'disk' && <>
             {/* Disk Size & Format */}
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <TextField
+              <NumericTextField
                 size="small"
                 label="Disk size (GiB)"
                 type="number"
                 value={diskSize}
-                onChange={(e) => setDiskSize(Number.parseInt(e.target.value) || 1)}
+                onChange={setDiskSize}
+                fallback={1}
+                min={1}
                 inputProps={{ min: 1 }}
               />
               <FormControl fullWidth size="small">

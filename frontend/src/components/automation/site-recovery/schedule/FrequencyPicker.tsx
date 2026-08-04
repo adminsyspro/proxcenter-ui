@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import {
   Box, Checkbox, FormControlLabel, IconButton, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography
 } from '@mui/material'
+import NumericTextField from '@/components/ui/NumericTextField'
 import type { ScheduleSpec } from './types'
 
 interface Props {
@@ -43,11 +44,14 @@ export default function FrequencyPicker({ value, onChange, disabled }: Props) {
         <Stack spacing={1.5}>
           <Box>
             <Typography variant='caption'>{t('siteRecovery.schedule.everyNHours')}</Typography>
-            <TextField
+            <NumericTextField
               type='number' size='small' fullWidth
               inputProps={{ min: 1, max: 24 }}
               value={value.everyHours}
-              onChange={e => onChange({ ...value, everyHours: Math.max(1, Math.min(24, Number(e.target.value) || 1)) })}
+              onChange={everyHours => onChange({ ...value, everyHours })}
+              fallback={1}
+              min={1}
+              max={24}
               disabled={disabled}
             />
           </Box>
@@ -68,18 +72,24 @@ export default function FrequencyPicker({ value, onChange, disabled }: Props) {
           />
           {value.windowStart !== undefined && value.windowEnd !== undefined && (
             <Stack direction='row' spacing={1}>
-              <TextField
+              <NumericTextField
                 type='number' label={t('siteRecovery.schedule.startHour')} size='small'
                 inputProps={{ min: 0, max: 23 }}
                 value={value.windowStart}
-                onChange={e => onChange({ ...value, windowStart: Math.max(0, Math.min(23, Number(e.target.value))) })}
+                onChange={windowStart => onChange({ ...value, windowStart })}
+                fallback={0}
+                min={0}
+                max={23}
                 disabled={disabled}
               />
-              <TextField
+              <NumericTextField
                 type='number' label={t('siteRecovery.schedule.endHour')} size='small'
                 inputProps={{ min: 0, max: 23 }}
                 value={value.windowEnd}
-                onChange={e => onChange({ ...value, windowEnd: Math.max(0, Math.min(23, Number(e.target.value))) })}
+                onChange={windowEnd => onChange({ ...value, windowEnd })}
+                fallback={0}
+                min={0}
+                max={23}
                 disabled={disabled}
               />
             </Stack>

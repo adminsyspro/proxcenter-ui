@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import NumericTextField from '@/components/ui/NumericTextField'
 import dynamic from 'next/dynamic'
 
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
@@ -1140,13 +1141,15 @@ export default function FlowsTab() {
             InputProps={{ sx: { fontFamily: 'monospace' } }}
             sx={{ mb: 2 }}
           />
-          <TextField
+          <NumericTextField
             fullWidth
             size="small"
             type="number"
             label="Sampling Rate"
             value={samplingRate}
-            onChange={(e) => setSamplingRate(Math.max(1, Number.parseInt(e.target.value) || 512))}
+            onChange={setSamplingRate}
+            fallback={512}
+            min={1}
             InputProps={{ sx: { fontFamily: 'monospace' } }}
           />
           <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>

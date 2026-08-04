@@ -82,60 +82,7 @@ import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
-
-function BufferedNumberField({
-  value,
-  onCommit,
-  display,
-  parse,
-  fallback,
-  ...rest
-}: Omit<React.ComponentProps<typeof TextField>, 'value' | 'onChange'> & {
-  value: number
-  onCommit: (n: number) => void
-  display?: (n: number) => string
-  parse?: (s: string) => number
-  fallback: number
-}) {
-  const fmt = display || ((n: number) => String(n))
-  const prs = parse || ((s: string) => Number(s))
-  const [raw, setRaw] = useState<string>(fmt(value))
-
-  useEffect(() => {
-    setRaw(fmt(value))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value
-
-    setRaw(text)
-
-    if (text === '' || text === '-' || text === '.') return
-
-    const n = prs(text)
-
-    if (Number.isFinite(n)) onCommit(n)
-  }
-
-  const handleBlur = () => {
-    if (raw === '' || raw === '-' || raw === '.') {
-      onCommit(fallback)
-      setRaw(fmt(fallback))
-
-      return
-    }
-
-    const n = prs(raw)
-
-    if (!Number.isFinite(n)) {
-      onCommit(fallback)
-      setRaw(fmt(fallback))
-    }
-  }
-
-  return <TextField value={raw} onChange={handleChange} onBlur={handleBlur} {...rest} />
-}
+import NumericTextField from '@/components/ui/NumericTextField'
 
 export default function VmDetailTabs(props: any) {
   const t = useTranslations()
@@ -942,11 +889,11 @@ export default function VmDetailTabs(props: any) {
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.sockets')}</Typography>
-                                <BufferedNumberField
+                                <NumericTextField
                                   size="small"
                                   type="number"
                                   value={cpuSockets}
-                                  onCommit={setCpuSockets}
+                                  onChange={setCpuSockets}
                                   fallback={1}
                                   sx={{ width: 70 }}
                                   inputProps={{ min: 1, max: maxSockets }}
@@ -968,11 +915,11 @@ export default function VmDetailTabs(props: any) {
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
-                                <BufferedNumberField
+                                <NumericTextField
                                   size="small"
                                   type="number"
                                   value={cpuCores}
-                                  onCommit={setCpuCores}
+                                  onChange={setCpuCores}
                                   fallback={1}
                                   sx={{ width: 70 }}
                                   inputProps={{ min: 1 }}
@@ -1124,11 +1071,13 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ mt: 2 }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                                   <Typography variant="body2" fontWeight={600}>{t('inventory.cpuLimit')}</Typography>
-                                  <TextField
+                                  <NumericTextField
                                     size="small"
                                     type="number"
                                     value={cpuLimit}
-                                    onChange={(e) => setCpuLimit(Number(e.target.value))}
+                                    onChange={setCpuLimit}
+                                    fallback={0}
+                                    parse={Number.parseFloat}
                                     sx={{ width: 100 }}
                                     inputProps={{ min: 0, max: 128, step: 0.5 }}
                                   />
@@ -1300,19 +1249,25 @@ export default function VmDetailTabs(props: any) {
                           <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                               <Typography variant="body2" fontWeight={600}>{t('inventoryPage.memory')}</Typography>
-                              <BufferedNumberField
+                              {/* The field shows GB, the state holds MB: format divides, parse
+                                  multiplies, so `min` is expressed in MB like `memory`. parse uses
+                                  parseFloat, not Number, because Number('') is 0 and would commit
+                                  0 MB on blur instead of falling back to 1 GB. The 512 MB floor
+                                  lives in `min` (applied on blur) rather than in onChange: a
+                                  parent that re-clamped mid-keystroke would rewrite the buffer
+                                  under the user's fingers. */}
+                              <NumericTextField
                                 size="small"
                                 type="number"
                                 value={memory}
-                                display={(v) => String(Math.round(v / 1024))}
-                                parse={(s) => Number(s) * 1024}
-                                onCommit={(newMem) => {
-                                  const clamped = Math.max(512, newMem)
-
-                                  setMemory(clamped)
-                                  if (balloonEnabled && balloon > clamped) setBalloon(clamped)
+                                format={(v) => String(Math.round(v / 1024))}
+                                parse={(s) => Number.parseFloat(s) * 1024}
+                                onChange={(newMem) => {
+                                  setMemory(newMem)
+                                  if (balloonEnabled && balloon > newMem) setBalloon(newMem)
                                 }}
                                 fallback={1024}
+                                min={512}
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                 }}
@@ -1365,11 +1320,21 @@ export default function VmDetailTabs(props: any) {
                               <Box sx={{ mt: 2 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                   <Typography variant="body2" fontWeight={600}>{t('inventory.minMemoryBalloon')}</Typography>
-                                  <TextField
+                                  {/* The field shows GB, the state holds MB: format divides, parse
+                                      multiplies, so min/max are expressed in MB like `balloon`.
+                                      The "never above the VM's memory" ceiling is `max` (applied on
+                                      blur) instead of a Math.min in onChange: clamping in the
+                                      parent would rewrite the buffer on every keystroke. */}
+                                  <NumericTextField
                                     size="small"
                                     type="number"
-                                    value={(balloon / 1024).toFixed(0)}
-                                    onChange={(e) => setBalloon(Math.min(Number(e.target.value) * 1024, memory))}
+                                    value={balloon}
+                                    format={(v) => (v / 1024).toFixed(0)}
+                                    parse={(s) => Number.parseFloat(s) * 1024}
+                                    onChange={setBalloon}
+                                    fallback={0}
+                                    min={0}
+                                    max={memory}
                                     InputProps={{
                                       endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                     }}
@@ -1410,11 +1375,13 @@ export default function VmDetailTabs(props: any) {
                                 <i className="ri-swap-line" style={{ marginRight: 4 }} />
                                 {t('inventory.swap')}
                               </Typography>
-                              <TextField
+                              <NumericTextField
                                 size="small"
                                 type="number"
                                 value={swap}
-                                onChange={(e) => setSwap(Math.max(0, Number(e.target.value)))}
+                                onChange={setSwap}
+                                fallback={0}
+                                min={0}
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">MB</InputAdornment>,
                                 }}
@@ -4500,20 +4467,22 @@ return (
                                   </Select>
                                 </FormControl>
 
-                                <TextField
+                                <NumericTextField
                                   label={t('cluster.maxRestart')}
                                   type="number"
                                   size="small"
                                   value={haMaxRestart}
-                                  onChange={(e) => setHaMaxRestart(Number.parseInt(e.target.value) || 0)}
+                                  onChange={setHaMaxRestart}
+                                  fallback={0}
                                   inputProps={{ min: 0, max: 10 }}
                                 />
-                                <TextField
+                                <NumericTextField
                                   label={t('cluster.maxRelocate')}
                                   type="number"
                                   size="small"
                                   value={haMaxRelocate}
-                                  onChange={(e) => setHaMaxRelocate(Number.parseInt(e.target.value) || 0)}
+                                  onChange={setHaMaxRelocate}
+                                  fallback={0}
                                   inputProps={{ min: 0, max: 10 }}
                                 />
 

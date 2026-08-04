@@ -41,6 +41,7 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { formatBytes } from '@/utils/format'
 import { AllVmItem } from './InventoryTree'
@@ -102,55 +103,6 @@ const createDefaultNic = (): NicConfig => ({
   rateLimit: '',
   mtu: '1500',
 })
-
-function NumericTextField({
-  value,
-  onChange,
-  fallback,
-  parse = Number.parseInt,
-  ...rest
-}: Omit<React.ComponentProps<typeof TextField>, 'value' | 'onChange'> & {
-  value: number
-  onChange: (v: number) => void
-  fallback: number
-  parse?: (s: string) => number
-}) {
-  const [raw, setRaw] = useState<string>(String(value))
-
-  useEffect(() => {
-    setRaw(String(value))
-  }, [value])
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const text = e.target.value
-
-    setRaw(text)
-
-    if (text === '' || text === '-') return
-
-    const num = parse(text)
-
-    if (Number.isFinite(num)) onChange(num)
-  }
-
-  const handleBlur = () => {
-    if (raw === '' || raw === '-') {
-      onChange(fallback)
-      setRaw(String(fallback))
-
-      return
-    }
-
-    const num = parse(raw)
-
-    if (!Number.isFinite(num)) {
-      onChange(fallback)
-      setRaw(String(fallback))
-    }
-  }
-
-  return <TextField value={raw} onChange={handleChange} onBlur={handleBlur} {...rest} />
-}
 
 function CreateVmDialog({
   open,
@@ -1582,13 +1534,12 @@ return
                               </FormHelperText>
                             )}
                           </FormControl>
-                          <TextField
+                          <NumericTextField
                             label={t('inventory.createVm.diskSizeGib')}
-                            value={disk.size === 0 ? '' : disk.size}
-                            onChange={(e) => {
-                              const n = Number.parseInt(e.target.value, 10)
-                              updateDisk(diskIdx, { size: Number.isFinite(n) ? n : 0 })
-                            }}
+                            value={disk.size}
+                            onChange={(n) => updateDisk(diskIdx, { size: n })}
+                            fallback={0}
+                            format={(n) => (n === 0 ? '' : String(n))}
                             size="small"
                             type="number"
                           />
@@ -1752,10 +1703,13 @@ return
                       size="small"
                       type="number"
                     />
-                    <TextField
+                    <NumericTextField
                       label={t('inventory.createVm.cpuLimit')}
-                      value={cpuLimit === 0 ? 'unlimited' : cpuLimit}
-                      onChange={(e) => setCpuLimit(e.target.value === 'unlimited' ? 0 : Number.parseFloat(e.target.value) || 0)}
+                      value={cpuLimit}
+                      onChange={setCpuLimit}
+                      fallback={0}
+                      parse={Number.parseFloat}
+                      format={(n) => (n === 0 ? 'unlimited' : String(n))}
                       size="small"
                       placeholder="unlimited"
                     />

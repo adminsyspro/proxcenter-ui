@@ -13,9 +13,10 @@ import {
   Slider,
   Snackbar,
   Switch,
-  TextField,
   Typography,
 } from '@mui/material'
+
+import NumericTextField from '@/components/ui/NumericTextField'
 
 const DEFAULTS = {
   cpu_warning: 80,
@@ -157,11 +158,17 @@ export default function AlertThresholdsTab() {
             <Typography variant='caption' color='text.secondary'>{t('alerts.snapshotAgeDesc')}</Typography>
             {thresholds.snapshot_max_age_days > 0 ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
-                <TextField
+                {/* The Math.max stays on the commit: this whole field is only
+                    rendered while snapshot_max_age_days > 0, so writing a 0
+                    mid-keystroke would unmount the input under the cursor and
+                    flip the Switch off. min={1} still clamps on blur. */}
+                <NumericTextField
                   type='number'
                   size='small'
                   value={thresholds.snapshot_max_age_days}
-                  onChange={(e) => setThresholds(th => ({ ...th, snapshot_max_age_days: Math.max(1, Number.parseInt(e.target.value) || 1) }))}
+                  onChange={(days) => setThresholds(th => ({ ...th, snapshot_max_age_days: Math.max(1, days) }))}
+                  fallback={1}
+                  min={1}
                   slotProps={{ htmlInput: { min: 1, max: 365 } }}
                   sx={{ width: 80 }}
                 />

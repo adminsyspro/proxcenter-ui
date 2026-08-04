@@ -35,6 +35,7 @@ import {
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
+import NumericTextField from '@/components/ui/NumericTextField'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
 import IsoNetworkReservation from './IsoNetworkReservation'
@@ -932,12 +933,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       {isoBlocker}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-        <TextField
+        <NumericTextField
           size="small"
           label={t('templates.deploy.target.vmid')}
           type="number"
           value={vmid}
-          onChange={e => setVmid(Number.parseInt(e.target.value) || 100)}
+          onChange={setVmid}
+          fallback={100}
+          min={100}
           required
           slotProps={{ htmlInput: { min: 100 } }}
         />
@@ -1020,11 +1023,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                   sx={{ '& .MuiSlider-markLabel': { fontSize: '0.7rem' } }}
                 />
               </Box>
-              <TextField
+              <NumericTextField
                 size="small"
                 type="number"
                 value={cores}
-                onChange={e => setCores(Math.max(1, Number.parseInt(e.target.value) || 1))}
+                onChange={setCores}
+                fallback={1}
+                min={1}
+                max={128}
                 slotProps={{ htmlInput: { min: 1, max: 128 } }}
                 sx={{ width: 120 }}
               />
@@ -1083,11 +1089,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                   sx={{ '& .MuiSlider-markLabel': { fontSize: '0.65rem' } }}
                 />
               </Box>
-              <TextField
+              <NumericTextField
                 size="small"
                 type="number"
                 value={memory}
-                onChange={e => setMemory(Math.max(128, Number.parseInt(e.target.value) || 128))}
+                onChange={setMemory}
+                fallback={128}
+                min={128}
                 slotProps={{
                   htmlInput: { min: 128, step: 128 },
                   input: { endAdornment: <InputAdornment position="end" sx={{ '& p': { fontSize: 11, opacity: 0.6 } }}>MB</InputAdornment> },
@@ -1103,7 +1111,15 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // existing payload + parseDiskSizeMb keeps working unchanged.
         // Slider operates in GiB ints; conversions are trivial.
         const diskMarks = [10, 20, 50, 100, 250, 500, 1000]
-        const diskGiB = Math.max(diskMarks[0], Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || diskMarks[0])
+        const parsedDiskGiB = Number.parseInt(String(diskSize).replace(/G$/i, ''), 10)
+        const diskGiB = Math.max(diskMarks[0], parsedDiskGiB || diskMarks[0])
+        // The manual input binds to the parsed size, not to the slider-floored
+        // value and not through a `||` fallback: every number the field can
+        // commit — 0 included — has to survive the round-trip, or the sync
+        // effect rewrites the buffer mid-keystroke ('5' → 10 → '10', or
+        // '0' → 1 → '18' on the next keypress). Only an unparseable size
+        // falls back, and to the same 1 the field commits on blur.
+        const diskGiBTyped = Number.isNaN(parsedDiskGiB) ? 1 : parsedDiskGiB
         const diskGiBToSlider = (gib: number) => {
           for (let i = diskMarks.length - 1; i >= 0; i--) {
             if (gib >= diskMarks[i]) {
@@ -1148,11 +1164,13 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                   sx={{ '& .MuiSlider-markLabel': { fontSize: '0.65rem' } }}
                 />
               </Box>
-              <TextField
+              <NumericTextField
                 size="small"
                 type="number"
-                value={diskGiB}
-                onChange={e => setDiskSize(`${Math.max(1, Number.parseInt(e.target.value) || 1)}G`)}
+                value={diskGiBTyped}
+                onChange={n => setDiskSize(`${n}G`)}
+                fallback={1}
+                min={1}
                 slotProps={{
                   htmlInput: { min: 1, step: 1 },
                   input: { endAdornment: <InputAdornment position="end" sx={{ '& p': { fontSize: 11, opacity: 0.6 } }}>GB</InputAdornment> },

@@ -9,6 +9,7 @@ import {
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import NumericTextField from '@/components/ui/NumericTextField'
 import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
 interface Connection {
@@ -134,10 +135,12 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
             <Typography variant='subtitle2' sx={{ mb: 0.5 }}>
               {t('siteRecovery.createJob.rateLimit')}
             </Typography>
-            <TextField
+            <NumericTextField
               type='number' size='small' fullWidth
               value={rateLimit}
-              onChange={e => setRateLimit(Math.max(0, Number(e.target.value) || 0))}
+              onChange={setRateLimit}
+              fallback={0}
+              min={0}
               helperText={t('siteRecovery.editJob.rateLimitHelp')}
             />
           </Box>

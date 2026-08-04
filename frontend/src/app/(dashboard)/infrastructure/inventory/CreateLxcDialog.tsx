@@ -36,6 +36,7 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import NumericTextField from '@/components/ui/NumericTextField'
 import { AllVmItem } from './InventoryTree'
 
 function CreateLxcDialog({
@@ -1018,10 +1019,13 @@ return
                     ))}
                   </Select>
                 </FormControl>
-                <TextField
+                <NumericTextField
                   label={t('inventory.createLxc.diskSizeGib')}
                   value={rootSize}
-                  onChange={(e) => setRootSize(Number.parseInt(e.target.value) || 1)}
+                  onChange={setRootSize}
+                  fallback={1}
+                  min={1}
+                  max={1000}
                   size="small"
                   type="number"
                   inputProps={{ min: 1, max: 1000 }}
@@ -1054,10 +1058,13 @@ return
                 </Box>
               </Box>
 
-              <TextField
+              <NumericTextField
                 label={t('inventory.createLxc.cores')}
                 value={cpuCores}
-                onChange={(e) => setCpuCores(Number.parseInt(e.target.value) || 1)}
+                onChange={setCpuCores}
+                fallback={1}
+                min={1}
+                max={128}
                 size="small"
                 type="number"
                 inputProps={{ min: 1, max: 128 }}
@@ -1075,19 +1082,25 @@ return
                 </Box>
                 <Collapse in={cpuAdvancedExpanded}>
                   <Box sx={{ px: 2, pb: 2, pt: 0.5, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                    <TextField
+                    <NumericTextField
                       label={t('inventory.createLxc.cpuLimit')}
-                      value={cpuLimit === 0 ? '' : cpuLimit}
-                      onChange={(e) => setCpuLimit(Number.parseFloat(e.target.value) || 0)}
+                      value={cpuLimit}
+                      onChange={setCpuLimit}
+                      fallback={0}
+                      parse={Number.parseFloat}
+                      format={(n) => (n === 0 ? '' : String(n))}
+                      min={0}
+                      max={cpuCores}
                       size="small"
                       type="number"
                       placeholder={t('inventory.createLxc.unlimited')}
                       inputProps={{ min: 0, max: cpuCores, step: 0.1 }}
                     />
-                    <TextField
+                    <NumericTextField
                       label={t('inventory.createLxc.cpuUnits')}
                       value={cpuUnits}
-                      onChange={(e) => setCpuUnits(Number.parseInt(e.target.value) || 1024)}
+                      onChange={setCpuUnits}
+                      fallback={1024}
                       size="small"
                       type="number"
                     />
@@ -1152,10 +1165,12 @@ return
                 />
               </Box>
 
-              <TextField
+              <NumericTextField
                 label={t('inventory.createLxc.memoryMib')}
                 value={memorySize}
-                onChange={(e) => setMemorySize(Number.parseInt(e.target.value) || 128)}
+                onChange={setMemorySize}
+                fallback={128}
+                min={16}
                 size="small"
                 type="number"
                 inputProps={{ min: 16, step: 32 }}
@@ -1184,10 +1199,12 @@ return
                 </Box>
               </Box>
 
-              <TextField
+              <NumericTextField
                 label={t('inventory.createLxc.swapMib')}
                 value={swapSize}
-                onChange={(e) => setSwapSize(Number.parseInt(e.target.value) || 0)}
+                onChange={setSwapSize}
+                fallback={0}
+                min={0}
                 size="small"
                 type="number"
                 inputProps={{ min: 0, step: 32 }}

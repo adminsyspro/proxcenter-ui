@@ -24,6 +24,7 @@ import {
   Typography,
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 
 interface CustomImageDialogProps {
@@ -452,37 +453,45 @@ export default function CustomImageDialog({ open, onClose, editData }: CustomIma
               onChange={e => setDefaultDiskSize(e.target.value)}
               placeholder="20G"
             />
-            <TextField
+            <NumericTextField
               size="small"
               label={t('templates.catalog.minCores')}
               type="number"
               value={minCores}
-              onChange={e => setMinCores(Number.parseInt(e.target.value) || 1)}
+              onChange={setMinCores}
+              fallback={1}
+              min={1}
               slotProps={{ htmlInput: { min: 1 } }}
             />
-            <TextField
+            <NumericTextField
               size="small"
               label={t('templates.catalog.recCores')}
               type="number"
               value={recommendedCores}
-              onChange={e => setRecommendedCores(Number.parseInt(e.target.value) || 2)}
+              onChange={setRecommendedCores}
+              fallback={2}
+              min={1}
               slotProps={{ htmlInput: { min: 1 } }}
             />
-            <TextField
+            <NumericTextField
               size="small"
               label={t('templates.catalog.minMem')}
               type="number"
               value={minMemory}
-              onChange={e => setMinMemory(Number.parseInt(e.target.value) || 512)}
+              onChange={setMinMemory}
+              fallback={512}
+              min={128}
               helperText="MB"
               slotProps={{ htmlInput: { min: 128, step: 256 } }}
             />
-            <TextField
+            <NumericTextField
               size="small"
               label={t('templates.catalog.recMem')}
               type="number"
               value={recommendedMemory}
-              onChange={e => setRecommendedMemory(Number.parseInt(e.target.value) || 2048)}
+              onChange={setRecommendedMemory}
+              fallback={2048}
+              min={128}
               helperText="MB"
               slotProps={{ htmlInput: { min: 128, step: 256 } }}
             />

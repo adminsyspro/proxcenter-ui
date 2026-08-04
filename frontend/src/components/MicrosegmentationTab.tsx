@@ -45,6 +45,7 @@ import {
   useTheme,
 } from '@mui/material'
 
+import NumericTextField from '@/components/ui/NumericTextField'
 import VMIsolationPanel from './VMIsolationPanel'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -308,7 +309,12 @@ return config.excludePatterns.some(pattern =>
     })
   }
   
-  if (loading) {
+  // Only take over the whole tab while there is nothing to show yet. The gateway
+  // offset is a dependency of loadAnalysis, so committing a digit re-runs the
+  // fetch; swapping the subtree for a spinner on every refetch unmounted the
+  // config dialog and destroyed the field being typed into, which cost the user
+  // every keystroke after the first (discussion #634).
+  if (loading && !analysis) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
         <CircularProgress />
@@ -755,11 +761,14 @@ IN  DROP   -source net-dmz-k8s     # Bloquer VLAN entrant`}
                     label={
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>{t('microseg.configDialog.custom')}</Typography>
-                        <TextField
+                        <NumericTextField
                           size="small"
                           type="number"
                           value={config.customOffset}
-                          onChange={(e) => setConfig({ ...config, customOffset: Number.parseInt(e.target.value) || 1 })}
+                          onChange={(customOffset) => setConfig({ ...config, customOffset })}
+                          fallback={1}
+                          min={1}
+                          max={254}
                           disabled={config.gatewayMode !== 'custom'}
                           sx={{ width: 80 }}
                           inputProps={{ min: 1, max: 254 }}

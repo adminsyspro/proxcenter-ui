@@ -7425,7 +7425,7 @@
     "adminRevokeAllOwnConfirmWarning": "Cela inclut votre session actuelle. Confirmer vous déconnectera immédiatement.",
     "adminRevokeEveryButton": "Révoquer toutes les sessions",
     "adminRevokeEveryConfirmTitle": "Révoquer toutes les sessions ?",
-    "adminRevokeEveryConfirmBody": "Cela déconnecte immédiatement tous les utilisateurs de l'installation. Votre session actuelle est conservée. Chacun peut se reconnecter aussitôt."
+    "adminRevokeEveryConfirmBody": "Cela déconnecte immédiatement tous les utilisateurs de l'installation, vous y compris. Chacun peut se reconnecter aussitôt."
   },
   "taskTracker": {
     "completed": "{description} - Terminé",

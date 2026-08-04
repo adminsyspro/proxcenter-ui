@@ -6,6 +6,13 @@ import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import RevokeEverySessionDialog from './RevokeEverySessionDialog'
 
+const { redirectToLoginOnceMock } = vi.hoisted(() => ({ redirectToLoginOnceMock: vi.fn() }))
+
+vi.mock('@/hooks/useSWRFetch', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/hooks/useSWRFetch')>()),
+  redirectToLoginOnce: redirectToLoginOnceMock,
+}))
+
 // Translate stub: return the key unchanged — same convention as the two
 // sibling revoke dialogs' tests.
 const t = (k: string) => k
@@ -13,11 +20,13 @@ const t = (k: string) => k
 const SESSIONS_URL = '*/api/v1/admin/sessions'
 
 describe('RevokeEverySessionDialog', () => {
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    redirectToLoginOnceMock.mockClear()
+  })
 
-  it('issues DELETE /api/v1/admin/sessions and calls onSuccess() then onClose()', async () => {
+  it('issues DELETE /api/v1/admin/sessions and navigates to /login (the caller is signed out too)', async () => {
     const user = userEvent.setup()
-    const onSuccess = vi.fn()
     const onClose = vi.fn()
     let deleteCalls = 0
 
@@ -29,19 +38,19 @@ describe('RevokeEverySessionDialog', () => {
     )
 
     renderWithProviders(
-      <RevokeEverySessionDialog open onClose={onClose} onSuccess={onSuccess} t={t} />,
+      <RevokeEverySessionDialog open onClose={onClose} t={t} />,
     )
 
     await user.click(screen.getByRole('button', { name: 'common.confirm' }))
 
     await waitFor(() => expect(deleteCalls).toBe(1))
-    expect(onSuccess).toHaveBeenCalledOnce()
-    expect(onClose).toHaveBeenCalledOnce()
+    await waitFor(() => expect(redirectToLoginOnceMock).toHaveBeenCalledTimes(1))
+    // The page is being left; the dialog does not bother closing first.
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('surfaces errors.connectionError on a network failure and does not close', async () => {
     const user = userEvent.setup()
-    const onSuccess = vi.fn()
     const onClose = vi.fn()
 
     server.use(
@@ -49,14 +58,14 @@ describe('RevokeEverySessionDialog', () => {
     )
 
     renderWithProviders(
-      <RevokeEverySessionDialog open onClose={onClose} onSuccess={onSuccess} t={t} />,
+      <RevokeEverySessionDialog open onClose={onClose} t={t} />,
     )
 
     await user.click(screen.getByRole('button', { name: 'common.confirm' }))
 
     expect(await screen.findByText('errors.connectionError')).toBeInTheDocument()
-    expect(onSuccess).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+    expect(redirectToLoginOnceMock).not.toHaveBeenCalled()
   })
 
   it('disables the confirm button while the request is in flight', async () => {
@@ -74,7 +83,7 @@ describe('RevokeEverySessionDialog', () => {
     )
 
     renderWithProviders(
-      <RevokeEverySessionDialog open onClose={vi.fn()} onSuccess={vi.fn()} t={t} />,
+      <RevokeEverySessionDialog open onClose={vi.fn()} t={t} />,
     )
 
     const confirmBtn = screen.getByRole('button', { name: 'common.confirm' })

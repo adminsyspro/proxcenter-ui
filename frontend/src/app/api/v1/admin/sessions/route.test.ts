@@ -278,8 +278,7 @@ describe("DELETE /api/v1/admin/sessions", () => {
     expect(auditMock).not.toHaveBeenCalled()
   })
 
-  it("revokes every live session except the caller's own current one", async () => {
-    getTokenMock.mockResolvedValue({ sid: "caller-sid" })
+  it("revokes every live session, the caller's own included", async () => {
     sessionUpdateManyMock.mockResolvedValue({ count: 7 })
 
     const DELETE = await importDELETE()
@@ -291,27 +290,12 @@ describe("DELETE /api/v1/admin/sessions", () => {
 
     expect(sessionUpdateManyMock).toHaveBeenCalledTimes(1)
     const arg = sessionUpdateManyMock.mock.calls[0][0]
-    expect(arg.where).toEqual({ revokedAt: null, id: { not: "caller-sid" } })
+    // Total by design: no id exclusion, whatever the caller's token holds.
+    expect(arg.where).toEqual({ revokedAt: null })
     expect(arg.data.revokedAt).toBeInstanceOf(Date)
   })
 
-  it("revokes truly everything when the caller token carries no sid", async () => {
-    getTokenMock.mockResolvedValue(null)
-    sessionUpdateManyMock.mockResolvedValue({ count: 9 })
-
-    const DELETE = await importDELETE()
-    const res = await callRoute(DELETE as any, { method: "DELETE" })
-    const body = await readJson<any>(res)
-
-    expect(res.status).toBe(200)
-    expect(body).toEqual({ data: { revoked: 9 } })
-
-    const arg = sessionUpdateManyMock.mock.calls[0][0]
-    expect(arg.where).toEqual({ revokedAt: null })
-  })
-
   it("writes one audit entry naming the action and the count", async () => {
-    getTokenMock.mockResolvedValue({ sid: "caller-sid" })
     sessionUpdateManyMock.mockResolvedValue({ count: 3 })
 
     const DELETE = await importDELETE()
@@ -322,7 +306,8 @@ describe("DELETE /api/v1/admin/sessions", () => {
       action: "sessions_revoked_all",
       category: "auth",
       status: "success",
-      details: { by: "admin", revoked: 3, callerSessionKept: true },
+      details: { by: "admin", revoked: 3 },
     })
+    expect(auditMock.mock.calls[0][0].details).not.toHaveProperty("callerSessionKept")
   })
 })

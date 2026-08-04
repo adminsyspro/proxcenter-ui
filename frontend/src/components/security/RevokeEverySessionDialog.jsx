@@ -13,15 +13,17 @@ import {
   Typography,
 } from '@mui/material'
 
+import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
+
 /* --------------------------------
    Revoke Every Session Confirm Dialog (super-admin, installation-wide)
    (non-destructive — everyone can sign back in right away)
 
-   The collection DELETE excludes the caller's current session server-side
-   by design: this is an incident action ("everyone out") and signing the
-   operator out mid-incident would slow the response. Their own row stays
-   one click away in the listing behind this dialog, with its own warning
-   and /login redirect. Do not "fix" this to also revoke the caller.
+   The collection DELETE is TOTAL by design (a product call, reversing the
+   first version's caller-exception): it revokes the caller's own session
+   too, so on success this dialog's only correct move is the same
+   deterministic /login redirect every other self-revocation flow uses —
+   the page behind it can no longer make an authenticated call.
 
    Named RevokeEverySessionDialog — "Every" = every user of the
    installation — so it cannot be confused with its siblings
@@ -30,7 +32,7 @@ import {
    convention of the page that renders it.
 -------------------------------- */
 
-export default function RevokeEverySessionDialog({ open, onClose, onSuccess, t }) {
+export default function RevokeEverySessionDialog({ open, onClose, t }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -40,8 +42,10 @@ export default function RevokeEverySessionDialog({ open, onClose, onSuccess, t }
     try {
       const res = await fetch('/api/v1/admin/sessions', { method: 'DELETE' })
       if (res.ok) {
-        onSuccess()
-        onClose()
+        // Every session is gone, this tab's included: the session is dead
+        // server-side, nothing here can succeed anymore. Straight to /login,
+        // no poller wait.
+        redirectToLoginOnce()
         return
       }
       let data = {}

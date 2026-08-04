@@ -101,28 +101,18 @@ export async function GET(req: Request) {
 }
 
 // DELETE /api/v1/admin/sessions — revoke every live session in the
-// installation EXCEPT the caller's own current one. This is an incident
-// action ("everyone out"); signing the operator out mid-incident would only
-// slow the response, and their own session stays one click away in the same
-// listing, behind its own warning and /login redirect. Same response shape
-// as the per-user collection DELETE: { data: { revoked: n } }.
-export async function DELETE(req: Request) {
+// installation, the caller's own included. Total by design (product call,
+// reversing the first version's caller-exception): the UI redirects the
+// caller to /login immediately after. All auth reads happen BEFORE the
+// revoke, so the audit entry can still name the caller.
+// Same response shape as the per-user collection DELETE: { data: { revoked: n } }.
+export async function DELETE() {
   const denied = await requireSuperAdminCaller()
   if (denied) return denied
 
   const session = await getServerSession(authOptions)
 
-  // Same getToken()+sessionCookieName() pattern as the GET above: `sid` is
-  // deliberately absent from the session callback, the raw JWT is the only
-  // place to learn which row is the caller's own.
-  const token = await getToken({
-    req: req as any,
-    secret: process.env.NEXTAUTH_SECRET || "",
-    cookieName: sessionCookieName(),
-  })
-  const callerSid = token?.sid ?? null
-
-  const revoked = await revokeEverySession(callerSid)
+  const revoked = await revokeEverySession()
 
   await audit({
     action: "sessions_revoked_all",
@@ -133,7 +123,7 @@ export async function DELETE(req: Request) {
     resourceId: session?.user?.id ?? "unknown",
     resourceName: "every session in the installation",
     status: "success",
-    details: { by: "admin", revoked, callerSessionKept: callerSid !== null },
+    details: { by: "admin", revoked },
   })
 
   return NextResponse.json({ data: { revoked } })

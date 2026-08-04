@@ -235,18 +235,15 @@ describe('revocation', () => {
     expect(where.id).toBeUndefined()
   })
 
-  it('revokeEverySession can spare the caller\'s own current session', async () => {
-    updateManyMock.mockResolvedValue({ count: 7 })
-    await expect(revokeEverySession('keep-me')).resolves.toBe(7)
-    expect(updateManyMock.mock.calls[0][0].where).toEqual({
-      revokedAt: null, id: { not: 'keep-me' },
-    })
-  })
+  it('revokeEverySession marks every live row revoked, with no exclusion', async () => {
+    updateManyMock.mockResolvedValue({ count: 12 })
 
-  it('revokeEverySession with no exception revokes every live row installation-wide', async () => {
-    updateManyMock.mockResolvedValue({ count: 9 })
-    await expect(revokeEverySession()).resolves.toBe(9)
-    expect(updateManyMock.mock.calls[0][0].where).toEqual({ revokedAt: null })
+    const count = await revokeEverySession()
+
+    expect(count).toBe(12)
+    const arg = updateManyMock.mock.calls[0][0]
+    expect(arg.where).toEqual({ revokedAt: null })
+    expect(arg.data.revokedAt).toBeInstanceOf(Date)
   })
 })
 

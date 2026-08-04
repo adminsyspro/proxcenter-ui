@@ -837,15 +837,6 @@ function AdminSessionsTab({ t }) {
 
   const [revokeEveryDialogOpen, setRevokeEveryDialogOpen] = useState(false)
 
-  const handleEveryRevoked = useCallback(() => {
-    // The server kept only the caller's session; reflect that without a
-    // network round-trip. mutate() will reconcile on next SWR revalidation.
-    mutate(prev => {
-      if (!prev?.data) return prev
-      return { ...prev, data: prev.data.filter(s => s.current) }
-    }, false)
-  }, [mutate])
-
   const columns = useMemo(
     () => [
       {
@@ -958,10 +949,11 @@ function AdminSessionsTab({ t }) {
         <Typography variant='body2' sx={{ opacity: 0.6 }}>
           {sessions.length} {t('sessions.columnHeader').toLowerCase()}
         </Typography>
-        {/* Same visibility rule as the profile card's revoke-all: pointless
-            when the only live session is the caller's own (the DELETE keeps
-            it by design). */}
-        {sessions.some(s => !s.current) && (
+        {/* Visible whenever anything is revocable — one session or a
+            hundred. The DELETE is total (caller included), so even a lone
+            own session is a valid target; the dialog says so and the
+            confirm ends on the /login redirect. */}
+        {sessions.length > 0 && (
           <Button
             variant='outlined'
             color='error'
@@ -1030,7 +1022,6 @@ function AdminSessionsTab({ t }) {
       <RevokeEverySessionDialog
         open={revokeEveryDialogOpen}
         onClose={() => setRevokeEveryDialogOpen(false)}
-        onSuccess={handleEveryRevoked}
         t={t}
       />
     </>

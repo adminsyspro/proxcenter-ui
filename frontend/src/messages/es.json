@@ -7424,7 +7424,7 @@
     "adminRevokeAllOwnConfirmWarning": "This includes your own current session. Confirming will sign you out immediately.",
     "adminRevokeEveryButton": "Revoke all sessions",
     "adminRevokeEveryConfirmTitle": "Revoke every session?",
-    "adminRevokeEveryConfirmBody": "This immediately signs out every user of the installation. Your own current session is kept. Everyone can sign back in right away."
+    "adminRevokeEveryConfirmBody": "This immediately signs out every user of the installation, including yourself. Everyone can sign back in right away."
   },
   "taskTracker": {
     "completed": "{description} - Completado",

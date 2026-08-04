@@ -157,17 +157,14 @@ export async function revokeAllSessions(
 }
 
 /**
- * Installation-wide revoke: every live session of every user, except the
- * caller's own current one when provided. The exception is the point — this
- * backs the admin "everyone out" incident button, and signing the operator
- * out mid-incident would only slow the response.
+ * Installation-wide revoke: every live session of every user, the caller's
+ * own included. Total by design — this backs the admin "everyone out"
+ * button, and the UI's next act is to send the caller to /login through the
+ * same deterministic redirect as every other self-revocation flow.
  */
-export async function revokeEverySession(exceptSid?: string | null): Promise<number> {
+export async function revokeEverySession(): Promise<number> {
   const res = await prisma.session.updateMany({
-    where: {
-      revokedAt: null,
-      ...(exceptSid ? { id: { not: exceptSid } } : {}),
-    },
+    where: { revokedAt: null },
     data: { revokedAt: new Date() },
   })
   return res.count

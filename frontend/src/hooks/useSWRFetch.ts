@@ -1,28 +1,45 @@
 import useSWR, { type SWRConfiguration } from 'swr'
 import { dequal } from 'dequal'
-import { getSession } from 'next-auth/react'
 
-// A dead session makes every hook on the page 401 within the same tick.
-// next-auth throttles its own re-checks via __NEXTAUTH._lastSync, but that is
-// an internal detail of next-auth, not something to depend on here — this is
-// a second, local throttle so a burst of 401s triggers at most one
-// getSession() call within RECHECK_WINDOW_MS.
-const RECHECK_WINDOW_MS = 2000
-let lastRecheckAt = 0
+// A dead session makes every hook on the page 401 within the same tick. A
+// 401 is proof the session is already gone server-side — the jwt callback
+// refused and the cookie was cleared before this response was even sent — so
+// there is nothing left to re-check; redirect straight away.
+//
+// next-auth's own getSession() cannot do this job from here: it fetches
+// /api/auth/session and then only notifies OTHER tabs, via a
+// localStorage-backed channel (node_modules/next-auth/client/_utils.js:
+// `post` does localStorage.setItem, `receive` listens for the DOM "storage"
+// event). Per the storage-event spec, that event fires in every other
+// same-origin document and NEVER in the one that wrote the value — so
+// calling getSession() from this tab's own fetcher updates every other open
+// tab's SessionProvider but never this one, leaving this tab waiting on
+// AuthProvider's 60s refetchInterval. Hence the hard navigation below
+// instead.
+const REDIRECT_WINDOW_MS = 2000
+let lastRedirectAt = 0
 
-function recheckSessionOnce() {
+function redirectToLoginOnce() {
+  // This module can be evaluated server-side (SSR); nothing to do there.
+  if (typeof window === 'undefined') return
+
+  // Already on the login page: don't re-navigate into a redirect loop.
+  if (window.location.pathname.startsWith('/login')) return
+
+  // A dead session makes ~10 hooks 401 at once; only one navigation is
+  // needed. Same throttle shape as before, just guarding a navigation now
+  // instead of a getSession() call.
   const now = Date.now()
-  if (now - lastRecheckAt < RECHECK_WINDOW_MS) return
-  lastRecheckAt = now
-  // getSession() calls next-auth's own fetchData("session", ...), which hits
-  // /api/auth/session directly with the platform fetch — it never goes
-  // through this file's fetcher, so this cannot recurse. It updates
-  // next-auth's internal session state, which flips useSession() to
-  // "unauthenticated" so SessionExpiryGuard redirects, instead of waiting up
-  // to 60s for AuthProvider's refetchInterval to tick.
-  // Fire-and-forget: never awaited here, so it cannot delay or change the
-  // error this fetcher throws below.
-  void getSession().catch(() => {})
+  if (now - lastRedirectAt < REDIRECT_WINDOW_MS) return
+  lastRedirectAt = now
+
+  // Hard navigation (not next/navigation's router — this is a plain module,
+  // not a component). replace(), not assign(), so the dead page doesn't
+  // stay in history — consistent with SessionExpiryGuard's router.replace().
+  // callbackUrl mirrors SessionExpiryGuard's and middleware.ts's own
+  // no-token redirect so re-authenticating returns the user where they were.
+  const callbackUrl = encodeURIComponent(window.location.pathname)
+  window.location.replace(`/login?callbackUrl=${callbackUrl}`)
 }
 
 // Exported for testing: this is the file's chokepoint for every SWR-backed
@@ -30,10 +47,10 @@ function recheckSessionOnce() {
 // rather than only indirectly through a hook that calls it.
 export const fetcher = (url: string) => fetch(url, { cache: 'no-store' }).then(async res => {
   if (!res.ok) {
-    // 401 = not authenticated (session is dead) → worth an immediate recheck.
-    // 403 = authenticated but forbidden for this resource, a normal outcome
-    // for a user lacking a right — must NOT trigger a sign-out.
-    if (res.status === 401) recheckSessionOnce()
+    // 401 = not authenticated (session is dead) → redirect now. 403 =
+    // authenticated but forbidden for this resource, a normal outcome for a
+    // user lacking a right — must NOT trigger a sign-out.
+    if (res.status === 401) redirectToLoginOnce()
     throw new Error(`API error: ${res.status}`)
   }
   const text = await res.text()

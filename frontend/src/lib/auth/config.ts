@@ -85,6 +85,28 @@ async function requestOrigin(): Promise<{ ipAddress: string | null; userAgent: s
   }
 }
 
+/**
+ * Exact messages the `jwt` callback's READ PATH throws below (never the
+ * sign-in path, which never throws). Every one is a deliberate, expected
+ * refusal — a legacy cookie with no `sid`, one of `evaluateSession`'s
+ * `DeadReason`s (missing/revoked/idle/absolute — see ./sessions.ts), or a
+ * disabled account — not evidence of a corrupted token or a rotated
+ * NEXTAUTH_SECRET. This is an exact-match Set, not a substring test, so an
+ * unrelated error that merely mentions "session" cannot be swept in here.
+ */
+const OUR_SESSION_REFUSAL_MESSAGES = new Set<string>([
+  'Session not valid: no sid on token',
+  'Session not valid: missing',
+  'Session not valid: revoked',
+  'Session not valid: idle',
+  'Session not valid: absolute',
+  'Account disabled',
+])
+
+function isOurSessionRefusal(code: string, metadata: unknown): metadata is Error {
+  return code === 'JWT_SESSION_ERROR' && metadata instanceof Error && OUR_SESSION_REFUSAL_MESSAGES.has(metadata.message)
+}
+
 export const authOptions: NextAuthOptions = {
   cookies: {
     sessionToken: {
@@ -685,6 +707,38 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/login",
     error: "/login",
+  },
+  // Every idle timeout, absolute-cap expiry, revocation, and pre-branch
+  // cookie surfaces as a JWT_SESSION_ERROR (next-auth core/routes/session.js
+  // catches the jwt callback's throw, calls sessionStore.clean(), logs, and
+  // returns an empty body). next-auth's default logger prints those at
+  // `error` level with a full stack — indistinguishable from a genuine
+  // decode failure (corrupted token, changed NEXTAUTH_SECRET), so the real
+  // signal drowns in routine noise. Only OUR own refusals (matched exactly
+  // above) are downgraded to one quiet info line with no stack; everything
+  // else — including a real JWT_SESSION_ERROR — falls through to the same
+  // loud, stack-carrying output next-auth would have produced. It cannot
+  // delegate to next-auth's real default logger: `next-auth/utils/logger`
+  // is not a published subpath (its package.json `exports` map omits it;
+  // `require("next-auth/utils/logger")` throws ERR_PACKAGE_PATH_NOT_EXPORTED),
+  // so this reproduces that default's formatting inline instead.
+  logger: {
+    error(code, metadata) {
+      if (isOurSessionRefusal(code, metadata)) {
+        console.info('[auth-session] session refused, cookie cleared:', metadata.message)
+        return
+      }
+
+      const err = metadata instanceof Error ? metadata : metadata.error
+      const formatted: unknown = err instanceof Error ? { message: err.message, stack: err.stack, name: err.name } : metadata
+
+      console.error(
+        `[next-auth][error][${code}]`,
+        `\nhttps://next-auth.js.org/errors#${code.toLowerCase()}`,
+        (formatted as { message?: string } | undefined)?.message,
+        formatted,
+      )
+    },
   },
   session: {
     strategy: "jwt",

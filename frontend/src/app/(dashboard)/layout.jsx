@@ -20,6 +20,7 @@ import Navbar from '@components/layout/vertical/Navbar'
 import ScrollToTop from '@core/components/scroll-to-top'
 import TasksFooter from '@components/TasksFooter'
 import OnboardingGuard from '@components/OnboardingGuard'
+import SessionExpiryGuard from '@components/SessionExpiryGuard'
 import TopBannerStack from '@components/broadcast/TopBannerStack'
 import DemoInterceptor from '@components/DemoInterceptor'
 import { ProxCenterTasksProvider } from '@/contexts/ProxCenterTasksContext'
@@ -62,12 +63,16 @@ const Layout = async props => {
         systemMode={systemMode}
         verticalLayout={
           <VerticalLayout navigation={<Navigation mode={mode} />} navbar={<Navbar />}>
-            <OnboardingGuard>{children}</OnboardingGuard>
+            <SessionExpiryGuard>
+              <OnboardingGuard>{children}</OnboardingGuard>
+            </SessionExpiryGuard>
           </VerticalLayout>
         }
         horizontalLayout={
           <HorizontalLayout header={<Header />}>
-            <OnboardingGuard>{children}</OnboardingGuard>
+            <SessionExpiryGuard>
+              <OnboardingGuard>{children}</OnboardingGuard>
+            </SessionExpiryGuard>
           </HorizontalLayout>
         }
       />

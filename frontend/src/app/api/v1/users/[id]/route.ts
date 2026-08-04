@@ -6,37 +6,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
-import { checkPermission, PERMISSIONS, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { safeLog } from "@/lib/log/sanitize"
+import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
-
-/**
- * Hide provider-level accounts (super_admin + provider_admin) from
- * non-super-admin callers. Returns 404 rather than 403 so existence is not
- * leaked.
- */
-async function denyIfTargetIsProtectedAndCallerIsNot(
-  targetUserId: string,
-  callerUserId: string | undefined
-): Promise<NextResponse | null> {
-  if (!(await isUserProtected(targetUserId))) return null
-  if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
-  return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
-}
-
-/**
- * Fetch a user that belongs to the given tenant. Returns the full Prisma row
- * or null if the user doesn't exist or has no membership in this tenant.
- * Centralised so the GET / PATCH / DELETE handlers all use the same lookup
- * + tenant-scoping rules.
- */
-async function findUserInTenant(userId: string, tenantId: string) {
-  const membership = await prisma.userTenant.findUnique({
-    where: { userId_tenantId: { userId, tenantId } },
-    include: { user: true },
-  })
-  return membership?.user ?? null
-}
 
 export const runtime = "nodejs"
 
@@ -335,6 +309,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const updated = Object.keys(data).length > 0
       ? await prisma.user.update({ where: { id }, data })
       : user
+
+    // A password change (or a disable) must kill the sessions that are already
+    // open, otherwise a stolen cookie survives the exact action a compromised
+    // user takes to defend themselves. No exception sid: the caller's own
+    // session goes too, which is the expected outcome of "change my password".
+    if (password || enabled === false) {
+      try {
+        const { revokeAllSessions } = await import("@/lib/auth/sessions")
+        const revoked = await revokeAllSessions(id)
+        if (revoked > 0) {
+          console.log(`[auth-session] revoked ${revoked} session(s) for ${safeLog(id)}`)
+        }
+      } catch (e: any) {
+        // The password is already changed; failing the request now would be
+        // worse than leaving the sweep to the next read-path evaluation.
+        console.error('[auth-session] revocation after credential change failed:', e?.message ?? e)
+      }
+    }
 
     // Audit
     const { audit } = await import("@/lib/audit")

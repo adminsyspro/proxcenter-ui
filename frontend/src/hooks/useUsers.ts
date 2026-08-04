@@ -18,3 +18,10 @@ export function useTenants(enabled: boolean) {
   // sessions and from Community editions where multi-tenancy is hidden.
   return useSWRFetch(enabled ? '/api/v1/tenants' : null, { revalidateOnFocus: false })
 }
+
+export function useAdminSessions(enabled: boolean) {
+  // /api/v1/admin/sessions is gated to super admins by requireSuperAdminCaller.
+  // The caller passes `enabled` so a non-super-admin (or the tab before it is
+  // selected) never issues the request.
+  return useSWRFetch(enabled ? '/api/v1/admin/sessions' : null, { revalidateOnFocus: true })
+}

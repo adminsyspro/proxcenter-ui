@@ -11,6 +11,7 @@ import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { getServerLicense } from "@/lib/auth/requireEnterprise"
+import { aliveWhere } from "@/lib/auth/sessions"
 
 export const runtime = "nodejs"
 
@@ -80,7 +81,10 @@ export async function GET() {
     // collapse their list to a single "all tenants" chip — they're
     // pinned to every tenant by design (cf. createTenant).
     const visibleUserIds = memberships.map(m => m.userId)
-    const [allMemberships, superAdminRows] = visibleUserIds.length > 0
+    // Session counts: one grouped query for the whole page, scoped to the
+    // users actually being returned. A count() per user would be an N+1 on
+    // a list route; users absent from the grouped result get 0 below.
+    const [allMemberships, superAdminRows, sessionCounts] = visibleUserIds.length > 0
       ? await Promise.all([
           prisma.userTenant.findMany({
             where: { userId: { in: visibleUserIds } },
@@ -95,8 +99,13 @@ export async function GET() {
             select: { userId: true },
             distinct: ["userId"],
           }),
+          prisma.session.groupBy({
+            by: ["userId"],
+            where: { userId: { in: visibleUserIds }, ...aliveWhere() },
+            _count: true,
+          }),
         ])
-      : [[], []]
+      : [[], [], []]
     const tenantsByUser = new Map<string, Array<{ id: string; name: string; isDefault: boolean }>>()
     for (const m of allMemberships) {
       const list = tenantsByUser.get(m.userId) ?? []
@@ -104,6 +113,9 @@ export async function GET() {
       tenantsByUser.set(m.userId, list)
     }
     const superAdminIds = new Set(superAdminRows.map(r => r.userId))
+    const sessionCountByUser = new Map<string, number>(
+      sessionCounts.map(row => [row.userId, row._count]),
+    )
 
     const users = memberships.map(m => ({
       id: m.user.id,
@@ -118,6 +130,7 @@ export async function GET() {
       created_at: m.user.createdAt.toISOString(),
       updated_at: m.user.updatedAt.toISOString(),
       is_super_admin: superAdminIds.has(m.user.id),
+      active_session_count: sessionCountByUser.get(m.user.id) ?? 0,
       tenants: (tenantsByUser.get(m.user.id) ?? []).sort((a, b) => {
         if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1
         return a.name.localeCompare(b.name)

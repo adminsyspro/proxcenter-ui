@@ -10,12 +10,15 @@
 // Gated by requireSuperAdminCaller(), not checkPermission(ADMIN_USERS).
 import { NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
+import { getServerSession } from "next-auth"
 
 import { prisma } from "@/lib/db/prisma"
+import { authOptions } from "@/lib/auth/config"
 import { sessionCookieName } from "@/lib/auth/cookies"
-import { aliveWhere } from "@/lib/auth/sessions"
+import { aliveWhere, revokeEverySession } from "@/lib/auth/sessions"
 import { deviceLabel } from "@/lib/auth/deviceLabel"
 import { requireSuperAdminCaller } from "@/lib/auth/totp-admin"
+import { audit } from "@/lib/audit"
 
 export const runtime = "nodejs"
 
@@ -95,4 +98,43 @@ export async function GET(req: Request) {
   })
 
   return NextResponse.json({ data, truncated })
+}
+
+// DELETE /api/v1/admin/sessions — revoke every live session in the
+// installation EXCEPT the caller's own current one. This is an incident
+// action ("everyone out"); signing the operator out mid-incident would only
+// slow the response, and their own session stays one click away in the same
+// listing, behind its own warning and /login redirect. Same response shape
+// as the per-user collection DELETE: { data: { revoked: n } }.
+export async function DELETE(req: Request) {
+  const denied = await requireSuperAdminCaller()
+  if (denied) return denied
+
+  const session = await getServerSession(authOptions)
+
+  // Same getToken()+sessionCookieName() pattern as the GET above: `sid` is
+  // deliberately absent from the session callback, the raw JWT is the only
+  // place to learn which row is the caller's own.
+  const token = await getToken({
+    req: req as any,
+    secret: process.env.NEXTAUTH_SECRET || "",
+    cookieName: sessionCookieName(),
+  })
+  const callerSid = token?.sid ?? null
+
+  const revoked = await revokeEverySession(callerSid)
+
+  await audit({
+    action: "sessions_revoked_all",
+    category: "auth",
+    userId: session?.user?.id,
+    userEmail: session?.user?.email ?? undefined,
+    resourceType: "user",
+    resourceId: session?.user?.id ?? "unknown",
+    resourceName: "every session in the installation",
+    status: "success",
+    details: { by: "admin", revoked, callerSessionKept: callerSid !== null },
+  })
+
+  return NextResponse.json({ data: { revoked } })
 }

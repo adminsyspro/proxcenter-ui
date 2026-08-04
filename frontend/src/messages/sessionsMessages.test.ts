@@ -63,6 +63,9 @@ describe('sessions message namespace', () => {
       'adminAllTruncatedWarning',
       'adminRevokeOwnConfirmWarning',
       'adminRevokeAllOwnConfirmWarning',
+      'adminRevokeEveryButton',
+      'adminRevokeEveryConfirmTitle',
+      'adminRevokeEveryConfirmBody',
     ]) {
       expect(reference).toContain(required)
     }

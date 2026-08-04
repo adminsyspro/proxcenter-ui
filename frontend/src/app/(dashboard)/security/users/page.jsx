@@ -44,6 +44,7 @@ import EmptyState from '@/components/EmptyState'
 import { TableSkeleton } from '@/components/skeletons'
 import RevokeSessionsDialog from '@/components/security/RevokeSessionsDialog'
 import RevokeSingleSessionDialog from '@/components/security/RevokeSingleSessionDialog'
+import RevokeEverySessionDialog from '@/components/security/RevokeEverySessionDialog'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import { redirectToLoginOnce } from '@/hooks/useSWRFetch'
 
@@ -834,6 +835,17 @@ function AdminSessionsTab({ t }) {
     }, false)
   }, [mutate])
 
+  const [revokeEveryDialogOpen, setRevokeEveryDialogOpen] = useState(false)
+
+  const handleEveryRevoked = useCallback(() => {
+    // The server kept only the caller's session; reflect that without a
+    // network round-trip. mutate() will reconcile on next SWR revalidation.
+    mutate(prev => {
+      if (!prev?.data) return prev
+      return { ...prev, data: prev.data.filter(s => s.current) }
+    }, false)
+  }, [mutate])
+
   const columns = useMemo(
     () => [
       {
@@ -946,6 +958,20 @@ function AdminSessionsTab({ t }) {
         <Typography variant='body2' sx={{ opacity: 0.6 }}>
           {sessions.length} {t('sessions.columnHeader').toLowerCase()}
         </Typography>
+        {/* Same visibility rule as the profile card's revoke-all: pointless
+            when the only live session is the caller's own (the DELETE keeps
+            it by design). */}
+        {sessions.some(s => !s.current) && (
+          <Button
+            variant='outlined'
+            color='error'
+            size='small'
+            startIcon={<i className='ri-logout-box-line' />}
+            onClick={() => setRevokeEveryDialogOpen(true)}
+          >
+            {t('sessions.adminRevokeEveryButton')}
+          </Button>
+        )}
       </Box>
 
       {loadError && <Alert severity='error' sx={{ mb: 2 }}>{loadError}</Alert>}
@@ -998,6 +1024,13 @@ function AdminSessionsTab({ t }) {
         user={userToRevokeAll}
         onSuccess={handleAllRevoked}
         currentUserId={session?.user?.id}
+        t={t}
+      />
+
+      <RevokeEverySessionDialog
+        open={revokeEveryDialogOpen}
+        onClose={() => setRevokeEveryDialogOpen(false)}
+        onSuccess={handleEveryRevoked}
         t={t}
       />
     </>

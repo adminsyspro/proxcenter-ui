@@ -29,22 +29,31 @@ const {
   requireSuperAdminCallerMock,
   getTokenMock,
   sessionFindManyMock,
+  sessionUpdateManyMock,
   tenantFindManyMock,
+  auditMock,
+  getServerSessionMock,
 } = vi.hoisted(() => ({
   requireSuperAdminCallerMock: vi.fn(),
   getTokenMock: vi.fn(),
   sessionFindManyMock: vi.fn(),
+  sessionUpdateManyMock: vi.fn(),
   tenantFindManyMock: vi.fn(),
+  auditMock: vi.fn(),
+  getServerSessionMock: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/totp-admin", () => ({
   requireSuperAdminCaller: requireSuperAdminCallerMock,
 }))
 vi.mock("next-auth/jwt", () => ({ getToken: getTokenMock }))
+vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
+vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/auth/cookies", () => ({ sessionCookieName: () => "next-auth.session-token" }))
+vi.mock("@/lib/audit", () => ({ audit: auditMock }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    session: { findMany: sessionFindManyMock },
+    session: { findMany: sessionFindManyMock, updateMany: sessionUpdateManyMock },
     tenant: { findMany: tenantFindManyMock },
   },
 }))
@@ -76,7 +85,10 @@ beforeEach(() => {
   requireSuperAdminCallerMock.mockResolvedValue(null)
   getTokenMock.mockResolvedValue({}) // no sid: no row marked current unless overridden
   sessionFindManyMock.mockResolvedValue([])
+  sessionUpdateManyMock.mockResolvedValue({ count: 0 })
   tenantFindManyMock.mockResolvedValue([])
+  auditMock.mockResolvedValue(undefined)
+  getServerSessionMock.mockResolvedValue({ user: { id: "admin-1", email: "admin@example.com" } })
 })
 
 describe("GET /api/v1/admin/sessions", () => {
@@ -241,6 +253,76 @@ describe("GET /api/v1/admin/sessions", () => {
       const body = await readJson<any>(res)
 
       expect(body.data[0].current).toBe(false)
+    })
+  })
+})
+
+describe("DELETE /api/v1/admin/sessions", () => {
+  async function importDELETE() {
+    const mod = await import("./route")
+    return mod.DELETE
+  }
+
+  it("is refused when the caller is not a super admin, before any write", async () => {
+    const denial = new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "content-type": "application/json" },
+    })
+    requireSuperAdminCallerMock.mockResolvedValue(denial)
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE" })
+
+    expect(res.status).toBe(403)
+    expect(sessionUpdateManyMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it("revokes every live session except the caller's own current one", async () => {
+    getTokenMock.mockResolvedValue({ sid: "caller-sid" })
+    sessionUpdateManyMock.mockResolvedValue({ count: 7 })
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE" })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(body).toEqual({ data: { revoked: 7 } })
+
+    expect(sessionUpdateManyMock).toHaveBeenCalledTimes(1)
+    const arg = sessionUpdateManyMock.mock.calls[0][0]
+    expect(arg.where).toEqual({ revokedAt: null, id: { not: "caller-sid" } })
+    expect(arg.data.revokedAt).toBeInstanceOf(Date)
+  })
+
+  it("revokes truly everything when the caller token carries no sid", async () => {
+    getTokenMock.mockResolvedValue(null)
+    sessionUpdateManyMock.mockResolvedValue({ count: 9 })
+
+    const DELETE = await importDELETE()
+    const res = await callRoute(DELETE as any, { method: "DELETE" })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(body).toEqual({ data: { revoked: 9 } })
+
+    const arg = sessionUpdateManyMock.mock.calls[0][0]
+    expect(arg.where).toEqual({ revokedAt: null })
+  })
+
+  it("writes one audit entry naming the action and the count", async () => {
+    getTokenMock.mockResolvedValue({ sid: "caller-sid" })
+    sessionUpdateManyMock.mockResolvedValue({ count: 3 })
+
+    const DELETE = await importDELETE()
+    await callRoute(DELETE as any, { method: "DELETE" })
+
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      action: "sessions_revoked_all",
+      category: "auth",
+      status: "success",
+      details: { by: "admin", revoked: 3, callerSessionKept: true },
     })
   })
 })

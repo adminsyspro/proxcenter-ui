@@ -7422,7 +7422,10 @@
     "adminRevokeOneConfirmBody": "Cela déconnecte immédiatement cet appareil. L'utilisateur pourra se reconnecter à tout moment.",
     "adminAllTruncatedWarning": "Affichage des 500 sessions les plus récemment actives. Cette installation compte davantage de sessions actives : certaines ne sont pas affichées.",
     "adminRevokeOwnConfirmWarning": "Il s'agit de votre propre session actuelle. Confirmer vous déconnectera immédiatement.",
-    "adminRevokeAllOwnConfirmWarning": "Cela inclut votre session actuelle. Confirmer vous déconnectera immédiatement."
+    "adminRevokeAllOwnConfirmWarning": "Cela inclut votre session actuelle. Confirmer vous déconnectera immédiatement.",
+    "adminRevokeEveryButton": "Révoquer toutes les sessions",
+    "adminRevokeEveryConfirmTitle": "Révoquer toutes les sessions ?",
+    "adminRevokeEveryConfirmBody": "Cela déconnecte immédiatement tous les utilisateurs de l'installation. Votre session actuelle est conservée. Chacun peut se reconnecter aussitôt."
   },
   "taskTracker": {
     "completed": "{description} - Terminé",

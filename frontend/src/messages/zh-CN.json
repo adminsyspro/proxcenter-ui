@@ -7281,7 +7281,10 @@
     "adminRevokeOneConfirmBody": "This immediately signs this device out. The user can sign back in right away.",
     "adminAllTruncatedWarning": "Showing the 500 most recently active sessions. This installation has more live sessions than that — some are not shown.",
     "adminRevokeOwnConfirmWarning": "This is your own current session. Confirming will sign you out immediately.",
-    "adminRevokeAllOwnConfirmWarning": "This includes your own current session. Confirming will sign you out immediately."
+    "adminRevokeAllOwnConfirmWarning": "This includes your own current session. Confirming will sign you out immediately.",
+    "adminRevokeEveryButton": "Revoke all sessions",
+    "adminRevokeEveryConfirmTitle": "Revoke every session?",
+    "adminRevokeEveryConfirmBody": "This immediately signs out every user of the installation. Your own current session is kept. Everyone can sign back in right away."
   },
   "taskTracker": {
     "completed": "{description} - 已完成",

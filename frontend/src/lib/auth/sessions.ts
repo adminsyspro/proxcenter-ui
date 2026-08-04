@@ -156,6 +156,23 @@ export async function revokeAllSessions(
   return res.count
 }
 
+/**
+ * Installation-wide revoke: every live session of every user, except the
+ * caller's own current one when provided. The exception is the point — this
+ * backs the admin "everyone out" incident button, and signing the operator
+ * out mid-incident would only slow the response.
+ */
+export async function revokeEverySession(exceptSid?: string | null): Promise<number> {
+  const res = await prisma.session.updateMany({
+    where: {
+      revokedAt: null,
+      ...(exceptSid ? { id: { not: exceptSid } } : {}),
+    },
+    data: { revokedAt: new Date() },
+  })
+  return res.count
+}
+
 export async function purgeDeadSessions(now: Date = new Date()): Promise<number> {
   const res = await prisma.session.deleteMany({ where: isDeadPredicate(now) })
   return res.count

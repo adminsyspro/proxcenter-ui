@@ -32,6 +32,7 @@ import {
   listSessions,
   revokeSession,
   revokeAllSessions,
+  revokeEverySession,
   purgeDeadSessions,
   countActiveSessions,
   TOUCH_THROTTLE_MS,
@@ -232,6 +233,20 @@ describe('revocation', () => {
     const where = updateManyMock.mock.calls[0][0].where
     expect(where).toMatchObject({ userId: 'u1', revokedAt: null })
     expect(where.id).toBeUndefined()
+  })
+
+  it('revokeEverySession can spare the caller\'s own current session', async () => {
+    updateManyMock.mockResolvedValue({ count: 7 })
+    await expect(revokeEverySession('keep-me')).resolves.toBe(7)
+    expect(updateManyMock.mock.calls[0][0].where).toEqual({
+      revokedAt: null, id: { not: 'keep-me' },
+    })
+  })
+
+  it('revokeEverySession with no exception revokes every live row installation-wide', async () => {
+    updateManyMock.mockResolvedValue({ count: 9 })
+    await expect(revokeEverySession()).resolves.toBe(9)
+    expect(updateManyMock.mock.calls[0][0].where).toEqual({ revokedAt: null })
   })
 })
 

@@ -22,6 +22,7 @@ import {
   resolveTenantVmidRange,
   getUsedVmidsForTenant,
   findNextFreeVmid,
+  findVmidRangeConflict,
   checkVmidAgainstTenantRange,
 } from './vmidRange'
 
@@ -108,6 +109,46 @@ describe('findNextFreeVmid', () => {
   })
   it('returns null when exhausted', () => {
     expect(findNextFreeVmid(range, new Set([200, 201, 202, 203, 204]))).toBeNull()
+  })
+})
+
+describe('findVmidRangeConflict', () => {
+  it('queries with the overlap where clause and returns the conflicting tenant', async () => {
+    tenantFindFirstMock.mockResolvedValue({ id: 't2', name: 'Other Tenant' })
+    const result = await findVmidRangeConflict(200, 300)
+    expect(result).toEqual({ id: 't2', name: 'Other Tenant' })
+    expect(tenantFindFirstMock).toHaveBeenCalledWith({
+      where: {
+        vmidRangeStart: { lte: 300 },
+        vmidRangeEnd: { gte: 200 },
+      },
+      select: { id: true, name: true },
+    })
+  })
+
+  it('returns null when no tenant range overlaps', async () => {
+    tenantFindFirstMock.mockResolvedValue(null)
+    expect(await findVmidRangeConflict(200, 300)).toBeNull()
+  })
+
+  it('includes id: { not: excludeTenantId } in the where clause when provided', async () => {
+    tenantFindFirstMock.mockResolvedValue(null)
+    await findVmidRangeConflict(200, 300, 't1')
+    expect(tenantFindFirstMock).toHaveBeenCalledWith({
+      where: {
+        vmidRangeStart: { lte: 300 },
+        vmidRangeEnd: { gte: 200 },
+        id: { not: 't1' },
+      },
+      select: { id: true, name: true },
+    })
+  })
+
+  it('omits the id exclusion when excludeTenantId is not provided', async () => {
+    tenantFindFirstMock.mockResolvedValue(null)
+    await findVmidRangeConflict(200, 300)
+    const call = tenantFindFirstMock.mock.calls.at(-1)?.[0]
+    expect(call.where).not.toHaveProperty('id')
   })
 })
 

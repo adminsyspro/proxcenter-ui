@@ -439,9 +439,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Attach a pre-allocated block volume to a SCSI slot
     async function attachBlockDisk(i: number, volumeId: string) {
-      // Same EFI SATA rule as convertAndImportDisk — OVMF has no LSI driver, boot disk must
-      // land on a bus OVMF can enumerate (AHCI/SATA). Data disks stay on SCSI.
-      const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
+      // Boot disk slot comes from the mapper (sata0 for OVMF and Windows guests,
+      // #653). Data disks stay on SCSI.
+      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
@@ -1659,11 +1659,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = storageTempDir ? `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}` : `${tempBase}/proxcenter-mig-${jobId}-disk${i}`
-      // For EFI guests, attach the boot disk (i=0) as SATA: OVMF ships AHCI/VirtIO/NVMe/USB
-      // drivers but not LSI, so a disk attached to the default `scsihw: lsi` controller is
-      // invisible to the firmware. Windows has AHCI built-in, so this works without driver
-      // injection. Data disks (i>=1) stay on SCSI for performance.
-      const scsiSlot = (pveParams.bios === "ovmf" && i === 0) ? "sata0" : `scsi${i}`
+      // Boot disk slot comes from the mapper: sata0 for OVMF guests (the firmware
+      // cannot enumerate an LSI controller) and for Windows guests (no boot-start
+      // VirtIO driver in an untouched guest, #653). Data disks (i>=1) stay on
+      // SCSI for performance.
+      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
 
       // Convert VMDK to target format
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
@@ -2058,9 +2058,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           // Device spec matching the disk controller
           let deviceSpec: string
-          if (diskBus === "scsi") {
+          if (diskBus === "scsi" && !(di === 0 && pveParams.bootDiskSlot === "sata0")) {
             deviceSpec = `scsi-hd,bus=scsihw0.0,scsi-id=${di},lun=0,drive=${driveId},bootindex=${di}`
           } else {
+            // Boot disk rides the q35 AHCI when the guest cannot boot from SCSI
+            // (Windows / OVMF, #653) — mirrors the sata0 slot used at cutover.
             deviceSpec = `ide-hd,drive=${driveId},bus=ide.${Math.floor(di / 2)},unit=${di % 2},bootindex=${di}`
           }
 
@@ -2137,7 +2139,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
                 ndbSocketPaths.push(sockPath)
                 const driveId = `nbd-disk${di}`
                 const driveSpec = `file.driver=nbd,file.path=${sockPath},format=raw,if=none,id=${driveId},cache=writeback,aio=threads`
-                const deviceSpec = diskBus === "scsi"
+                // Same boot-disk rule as the SSHFS -args builder above: sata0
+                // guests (Windows / OVMF, #653) boot from the q35 AHCI.
+                const deviceSpec = diskBus === "scsi" && !(di === 0 && pveParams.bootDiskSlot === "sata0")
                   ? `scsi-hd,bus=scsihw0.0,scsi-id=${di},lun=0,drive=${driveId},bootindex=${di}`
                   : `ide-hd,drive=${driveId},bus=ide.${Math.floor(di / 2)},unit=${di % 2},bootindex=${di}`
                 nbdFallbackParts.push(`-drive ${driveSpec}`)
@@ -2533,20 +2537,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await executeSSH(config.targetConnectionId, nodeIp,
           `sed -i '/^args:/d' "${confPath}"`)
 
-        // For EFI guests with a SCSI source controller, attach the boot disk as SATA.
-        // OVMF ships AHCI/VirtIO/NVMe/USB drivers but NOT an LSI SCSI driver, so it cannot
-        // enumerate (and therefore cannot boot) a disk attached via scsihw=lsi. Windows has
-        // AHCI in its built-in driver set, so moving the boot disk to SATA works without
-        // guest driver injection. Data disks stay on SCSI for performance.
-        const forceEfiSataForBoot = pveParams.bios === "ovmf" && diskBus === "scsi"
-        if (forceEfiSataForBoot) {
-          await appendLog(jobId, "EFI guest: attaching boot disk as SATA (OVMF lacks LSI SCSI driver)", "info")
+        // When the source controller is SCSI but the guest cannot boot from it,
+        // attach the boot disk as SATA instead. The sata0 decision now comes from
+        // pveParams.bootDiskSlot: OVMF guests (the firmware cannot enumerate an
+        // LSI controller) and Windows guests (no boot-start VirtIO/LSI driver in
+        // an untouched guest, #653). Data disks stay on SCSI for performance.
+        const forceSataForBoot = pveParams.bootDiskSlot === "sata0" && diskBus === "scsi"
+        if (forceSataForBoot) {
+          await appendLog(jobId, "Attaching boot disk as SATA (firmware or guest cannot boot from the SCSI controller without drivers)", "info")
         }
         const slotPerDisk: string[] = []
         for (let di = 0; di < localVolumes.length; di++) {
           let slot: string
-          if (forceEfiSataForBoot && di === 0) slot = "sata0"
-          else if (forceEfiSataForBoot) slot = `scsi${di - 1}`
+          if (forceSataForBoot && di === 0) slot = "sata0"
+          else if (forceSataForBoot) slot = `scsi${di - 1}`
           else slot = diskBus === "scsi" ? `scsi${di}` : `sata${di}`
           slotPerDisk.push(slot)
         }
@@ -2763,18 +2767,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await updateJob(jobId, "configuring", { progress: 90 })
       await appendLog(jobId, "Configuring VM (boot order, agent)...")
 
-      // Set boot order — honour the EFI SATA rule applied in convertAndImportDisk/attachBlockDisk.
-      const finalBootSlot = pveParams.bios === "ovmf" ? "sata0" : "scsi0"
+      // Set boot order — same slot the attach helpers used for disk 0.
+      const finalBootSlot = pveParams.bootDiskSlot
       await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: `order=${finalBootSlot}` }))
 
-      // For Windows VMs: advise on post-migration driver work. The boot chain is correct
-      // out of the box (EFI guests get their boot disk on SATA — OVMF can boot it; BIOS
-      // guests stay on LSI SCSI which SeaBIOS reads natively) and the e1000 NIC uses
-      // Windows' built-in driver, so the VM comes up. Installing VirtIO afterwards gives
-      // better disk and network performance but is optional.
+      // For Windows VMs: advise on post-migration driver work. The boot disk is
+      // on SATA (inbox boot-start AHCI driver — Windows has no LSI driver and
+      // VirtIO is never boot-start in an untouched guest, #653) and the e1000
+      // NIC uses the inbox driver, so the VM comes up. Data disks sit on VirtIO
+      // SCSI and appear once the virtio-win drivers are installed.
       if (isWindowsVm(vmConfig)) {
-        const bootBusLabel = pveParams.bios === "ovmf" ? "SATA (OVMF-compatible)" : "LSI SCSI"
-        await appendLog(jobId, `Windows VM detected - boot disk on ${bootBusLabel} + e1000 NIC (built-in Windows drivers). Install VirtIO drivers from the virtio-win ISO afterwards for better disk/network performance.`, "warn")
+        await appendLog(jobId, `Windows VM detected - boot disk on SATA + e1000 NIC (built-in Windows drivers). Install VirtIO drivers from the virtio-win ISO afterwards for better disk/network performance and to bring up any VirtIO SCSI data disks.`, "warn")
       }
 
       await appendLog(jobId, "VM configuration complete", "success")

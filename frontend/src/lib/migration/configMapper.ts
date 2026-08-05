@@ -16,6 +16,7 @@ export interface PveVmCreateParams {
   bios: string
   machine: string
   boot: string
+  bootDiskSlot: "sata0" | "scsi0"
   agent: string
   // Network
   net0: string
@@ -70,10 +71,18 @@ export function mapEsxiToPveConfig(
   const isEfi = esxiConfig.firmware === "efi"
   const isWin = isWindowsVm(esxiConfig)
 
-  // For Windows without virtio drivers, use LSI + e1000 initially for boot compatibility
-  // For Linux, use virtio for best performance
-  const scsihw = isWin ? "lsi" : "virtio-scsi-single"
+  // virtio-scsi for every guest: data disks appear as soon as VirtIO drivers are
+  // installed. The boot disk cannot rely on that (a raw byte copy never has a
+  // boot-start VirtIO driver), so Windows boots from SATA — AHCI is inbox and
+  // boot-start in every supported Windows. The old `lsi` fallback bluescreened
+  // every modern Windows with INACCESSIBLE_BOOT_DEVICE: no inbox LSI driver
+  // since the XP era (#653).
+  const scsihw = "virtio-scsi-single"
   const nicModel = isWin ? "e1000" : mapNicModel(esxiConfig.nics[0]?.type || "Vmxnet3")
+  // Boot disk bus: SATA when the firmware is OVMF (existing rule — OVMF cannot
+  // enumerate an LSI controller) or the guest is Windows (#653). Data disks
+  // stay on SCSI.
+  const bootDiskSlot: "sata0" | "scsi0" = isEfi || isWin ? "sata0" : "scsi0"
 
   const tagSuffix =
     typeof vlanTag === "number" && Number.isInteger(vlanTag) && vlanTag >= 1 && vlanTag <= 4094
@@ -103,7 +112,8 @@ export function mapEsxiToPveConfig(
     scsihw,
     bios: isEfi ? "ovmf" : "seabios",
     machine: "q35",
-    boot: "order=scsi0",
+    boot: `order=${bootDiskSlot}`,
+    bootDiskSlot,
     agent: "1",
     net0: `${nicModel},bridge=${networkBridge}${macSuffix}${tagSuffix}`,
   }

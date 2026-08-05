@@ -51,6 +51,10 @@ vi.mock('@/contexts/TenantContext', () => ({
 
 const CONN_ID = connections[0].id   // 'conn-1'
 const NODE_NAME = nodes[0].node     // 'pve1'
+// Default next-CTID fixture. This matches the client fallback's own result
+// for every existing test's allVms EXCEPT the [100,101] one (which overrides
+// this handler locally to 102) -- see "auto-sets CT ID to the next free ID".
+const NEXT_CTID = 100
 
 // ------------------------------------------------------------------ //
 // MSW handler factory
@@ -92,6 +96,13 @@ function seedAllHandlers() {
     http.get(
       `*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/storage/local/content`,
       () => HttpResponse.json({ data: templates }),
+    ),
+
+    // 7. Next CT ID from the cluster API -- fired by the connection-change
+    //    effect. Seeded so the suite runs quiet (no unhandled-request noise);
+    //    see NEXT_CTID above for why this value was picked.
+    http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+      HttpResponse.json({ data: NEXT_CTID }),
     ),
   )
 }
@@ -612,6 +623,16 @@ describe('CreateLxcDialog - CT ID generation', () => {
   })
 
   it('auto-sets CT ID to the next free ID when allVms is provided', async () => {
+    // This allVms set uses up the default NEXT_CTID fixture (100), so the
+    // nextid handler must be overridden to agree with the client-computed
+    // next-free id (102) -- otherwise the connection-change effect's
+    // server-backed fetch would clobber the correct value with a stale one.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 102 }),
+      ),
+    )
+
     renderWithProviders(
       <CreateLxcDialog
         {...makeProps({

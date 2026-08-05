@@ -575,18 +575,31 @@ describe('CloneVmDialog - MSP tenant VMID range', () => {
     seedAllHandlers()
   })
 
-  it('flags an out-of-range VMID prefill for an MSP tenant without user input', async () => {
+  it('blanks the VMID instead of falling back to the nextVmid prop when nextid is exhausted for an MSP tenant', async () => {
     useTenantMock.mockReturnValue({
       currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 189334001, vmidRangeEnd: 189334999 },
       loading: false,
       isFullClusterView: true,
     })
+    // Force fetchNextVmid to resolve to null (utils.ts returns null for any
+    // non-OK response) so the prefill effect must choose between the parent's
+    // (out-of-range) nextVmid estimate and blanking the field.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ error: 'VMID range exhausted (189334001-189334999)' }, { status: 409 }),
+      ),
+    )
 
     renderWithProviders(<CloneVmDialog {...makeProps({ nextVmid: 150 })} />)
     await waitForDataLoad()
 
-    // Both the seeded prop (150) and the /cluster/nextid fixture (101) fall
-    // below the tenant's range -- the error surfaces without any user input.
-    expect(await screen.findByText(/189334001/)).toBeInTheDocument()
+    // The seeded prop (150) is what the OLD "else if (nextVmid)" branch would
+    // have substituted -- asserting blank instead proves the new
+    // "else if (tenantVmidRange) setNewVmid('')" branch actually ran.
+    await waitFor(() => {
+      const input = screen.getAllByRole('spinbutton')[0] as HTMLInputElement
+      expect(input.value).toBe('')
+    })
+    expect(screen.getByRole('button', { name: /^clone$/i })).toBeDisabled()
   })
 })

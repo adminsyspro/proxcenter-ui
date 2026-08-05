@@ -110,4 +110,52 @@ describe('PUT /api/v1/tenants/[id] vmidRange', () => {
     expect(res.status).toBe(400)
     expect(updateTenantMock).not.toHaveBeenCalled()
   })
+
+  it('404s when the tenant disappears between the request and the range/MSP check', async () => {
+    tenantFindUniqueMock.mockResolvedValue(null)
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: { id: 't1' },
+      body: { vmidRangeStart: 100, vmidRangeEnd: 200 },
+    })
+    expect(res.status).toBe(404)
+    expect(updateTenantMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/tenants/[id]', () => {
+  it('returns operatingModel and both range fields alongside the existing fields', async () => {
+    tenantFindUniqueMock.mockResolvedValue({
+      id: 't1',
+      slug: 'acme',
+      name: 'Acme',
+      description: null,
+      enabled: true,
+      settings: null,
+      operatingModel: 'msp',
+      vmidRangeStart: 100,
+      vmidRangeEnd: 200,
+      createdBy: 'u1',
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    })
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { method: 'GET', params: { id: 't1' } })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.data).toMatchObject({
+      id: 't1',
+      operatingModel: 'msp',
+      vmidRangeStart: 100,
+      vmidRangeEnd: 200,
+    })
+  })
+
+  it('404s when the tenant does not exist', async () => {
+    tenantFindUniqueMock.mockResolvedValue(null)
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { method: 'GET', params: { id: 'missing' } })
+    expect(res.status).toBe(404)
+  })
 })

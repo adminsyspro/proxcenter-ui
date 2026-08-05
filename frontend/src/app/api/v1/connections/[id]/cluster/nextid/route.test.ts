@@ -105,6 +105,17 @@ describe('GET nextid — with range', () => {
     expect(json?.error).toContain('200-204')
   })
 
+  it('?vmid= with an invalid format is rejected even when a range applies', async () => {
+    resolveTenantVmidRangeMock.mockResolvedValue(range)
+    getUsedVmidsForTenantMock.mockResolvedValue({ used: new Set<number>(), unreachable: [] })
+    const GET = await loadGet()
+    const res = await callRoute(GET, { params: { id: 'conn-1' }, searchParams: { vmid: 'abc' } })
+    expect(res.status).toBe(200)
+    const json = await readJson<{ available: boolean; error: string }>(res)
+    expect(json?.available).toBe(false)
+    expect(json?.error).toContain('integer between 100 and 999999999')
+  })
+
   it('?vmid= free is available, ?vmid= used is not', async () => {
     resolveTenantVmidRangeMock.mockResolvedValue(range)
     getUsedVmidsForTenantMock.mockResolvedValue({ used: new Set([201]), unreachable: [] })

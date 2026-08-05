@@ -128,6 +128,13 @@ function CreateVmDialog({
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
   const hideNodePicker = !tenantLoading && !!currentTenant && !isFullClusterView
 
+  // MSP tenant VMID range (null when no enforcement applies)
+  const tenantVmidRange = useMemo(() => {
+    const start = currentTenant?.vmidRangeStart
+    const end = currentTenant?.vmidRangeEnd
+    return typeof start === 'number' && typeof end === 'number' ? { start, end } : null
+  }, [currentTenant])
+
   // États du formulaire
   const [activeTab, setActiveTab] = useState(0)
   const [creating, setCreating] = useState(false)
@@ -207,27 +214,44 @@ function CreateVmDialog({
   const [nics, setNics] = useState<NicConfig[]>([createDefaultNic()])
   const [expandedNics, setExpandedNics] = useState<Set<number>>(new Set([0]))
 
+  // Client-side fallback when the nextid API is unreachable — range-aware so
+  // it never proposes an out-of-range VMID for MSP tenants.
+  const fallbackNextVmid = () => {
+    const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
+    const startId = tenantVmidRange ? tenantVmidRange.start : 100
+    const maxId = tenantVmidRange ? tenantVmidRange.end : 999999999
+    let nextId = startId
+    while (usedVmids.has(nextId) && nextId <= maxId) nextId++
+    if (nextId > maxId && tenantVmidRange) {
+      setVmid('')
+      setVmidError(t('inventory.createVm.vmIdRangeExhausted', { start: tenantVmidRange.start, end: tenantVmidRange.end }))
+      return
+    }
+    setVmid(String(nextId))
+    setVmidError(null)
+  }
+
   // Load next VMID from the Proxmox cluster API
   const loadNextVmid = async (connId: string) => {
     try {
       const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/nextid`)
-      if (res.ok) {
-        const json = await res.json()
-        if (json.data) {
-          setVmid(String(json.data))
-          setVmidError(null)
-          return
-        }
+      const json = await res.json().catch(() => null)
+      if (res.ok && json?.data) {
+        setVmid(String(json.data))
+        setVmidError(null)
+        return
+      }
+      // Range exhausted (409) or explicit error while a range applies: show
+      // it — the client fallback could only propose out-of-range ids.
+      if (tenantVmidRange && json?.error) {
+        setVmid('')
+        setVmidError(String(json.error))
+        return
       }
     } catch (e) {
       console.error('Error loading next VMID from API:', e)
     }
-    // Fallback: client-side computation
-    const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
-    let nextId = 100
-    while (usedVmids.has(nextId)) nextId++
-    setVmid(String(nextId))
-    setVmidError(null)
+    fallbackNextVmid()
   }
 
   // Load bridges from node via network-choices endpoint
@@ -452,10 +476,15 @@ return
 
     if (vmidNum > 999999999) {
       setVmidError(t('inventory.createVm.vmIdMax'))
-      
+
 return
     }
-    
+
+    if (tenantVmidRange && (vmidNum < tenantVmidRange.start || vmidNum > tenantVmidRange.end)) {
+      setVmidError(t('inventory.createVm.vmIdOutOfRange', { start: tenantVmidRange.start, end: tenantVmidRange.end }))
+      return
+    }
+
     // Vérifier si le VMID est déjà utilisé
     const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === vmidNum)
 
@@ -473,11 +502,7 @@ return
     if (selectedConnection) {
       await loadNextVmid(selectedConnection)
     } else {
-      const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
-      let nextId = 100
-      while (usedVmids.has(nextId)) nextId++
-      setVmid(String(nextId))
-      setVmidError(null)
+      fallbackNextVmid()
     }
   }
 

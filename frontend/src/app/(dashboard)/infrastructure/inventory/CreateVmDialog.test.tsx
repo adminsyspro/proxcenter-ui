@@ -47,9 +47,8 @@ vi.mock('@/contexts/RBACContext', () => ({
   useRBAC: () => ({ isAdmin: true }),
 }))
 
-vi.mock('@/contexts/TenantContext', () => ({
-  useTenant: () => ({ currentTenant: null, loading: false, isFullClusterView: true }),
-}))
+const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => useTenantMock() }))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -169,6 +168,10 @@ async function waitForDataLoad() {
     expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled()
   })
 }
+
+beforeEach(() => {
+  useTenantMock.mockReturnValue({ currentTenant: null, loading: false, isFullClusterView: true })
+})
 
 afterEach(() => {
   cleanup()
@@ -783,5 +786,127 @@ describe('CreateVmDialog - clearable numeric fields', () => {
     await userEvent.clear(cpuLimit)
     await userEvent.tab()
     expect(cpuLimit.value).toBe('unlimited')
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 10. MSP tenant VMID range (#647)
+// ------------------------------------------------------------------ //
+
+describe('CreateVmDialog - MSP tenant VMID range', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  it('flags a VMID outside the MSP tenant range', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 189334001, vmidRangeEnd: 189334999 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    // The nextid API prefill should land inside the tenant's range.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 189334001 }),
+      ),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    const vmidField = await screen.findByDisplayValue('189334001')
+    await userEvent.clear(vmidField)
+    await userEvent.type(vmidField, '150')
+    // Out-of-range message cites the range.
+    expect(await screen.findByText(/189334001/)).toBeInTheDocument()
+  })
+
+  it('flags a VMID above the MSP tenant range too', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 300 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 200 }),
+      ),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    const vmidField = await screen.findByDisplayValue('200')
+    await userEvent.clear(vmidField)
+    await userEvent.type(vmidField, '999')
+    expect(await screen.findByText(/200-300/)).toBeInTheDocument()
+  })
+
+  it('falls back to the client-side range-aware id and reports exhaustion when nextid is unreachable', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 201 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () => HttpResponse.error()),
+    )
+
+    renderWithProviders(
+      <CreateVmDialog
+        {...makeProps({
+          allVms: [
+            { vmid: '200', connId: CONN_ID, node: NODE_NAME } as any,
+            { vmid: '201', connId: CONN_ID, node: NODE_NAME } as any,
+          ],
+        })}
+      />,
+    )
+    await waitForDataLoad()
+
+    // Both ids in the [200,201] range are used, so the client-side fallback
+    // (fallbackNextVmid) reports the range as exhausted and clears the field.
+    expect(await screen.findByText(/200-201/)).toBeInTheDocument()
+    const vmidField = screen.getByLabelText('VM ID') as HTMLInputElement
+    expect(vmidField.value).toBe('')
+  })
+
+  it('surfaces the server error without falling back when nextid explicitly errors on a range tenant', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 300 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ error: 'VMID range exhausted (200-300)' }, { status: 409 }),
+      ),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    // The server's message is shown verbatim -- not the client fallback text.
+    expect(await screen.findByText('VMID range exhausted (200-300)')).toBeInTheDocument()
+    const vmidField = screen.getByLabelText('VM ID') as HTMLInputElement
+    expect(vmidField.value).toBe('')
+  })
+
+  it('regenerate button uses the client-side fallback when no connection is selected', async () => {
+    // No connections at all -- selectedConnection stays '' so generateNextVmid
+    // takes the fallbackNextVmid() branch instead of loadNextVmid().
+    server.use(
+      http.get('*/api/v1/connections', () => HttpResponse.json({ data: [] })),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps({ allVms: [{ vmid: '100' } as any] })} />)
+
+    const vmidField = await screen.findByLabelText('VM ID') as HTMLInputElement
+    const regenerateBtn = screen.getByRole('button', { name: 'Generate next available ID' })
+    fireEvent.click(regenerateBtn)
+
+    await waitFor(() => {
+      expect(vmidField.value).toBe('101')
+    })
   })
 })

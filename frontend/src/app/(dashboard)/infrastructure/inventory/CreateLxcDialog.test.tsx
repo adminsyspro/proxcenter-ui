@@ -41,9 +41,8 @@ vi.mock('@/contexts/RBACContext', () => ({
   useRBAC: () => ({ isAdmin: true }),
 }))
 
-vi.mock('@/contexts/TenantContext', () => ({
-  useTenant: () => ({ currentTenant: null, loading: false, isFullClusterView: true }),
-}))
+const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => useTenantMock() }))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -51,6 +50,10 @@ vi.mock('@/contexts/TenantContext', () => ({
 
 const CONN_ID = connections[0].id   // 'conn-1'
 const NODE_NAME = nodes[0].node     // 'pve1'
+// Default next-CTID fixture. This matches the client fallback's own result
+// for every existing test's allVms EXCEPT the [100,101] one (which overrides
+// this handler locally to 102) -- see "auto-sets CT ID to the next free ID".
+const NEXT_CTID = 100
 
 // ------------------------------------------------------------------ //
 // MSW handler factory
@@ -93,6 +96,13 @@ function seedAllHandlers() {
       `*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/storage/local/content`,
       () => HttpResponse.json({ data: templates }),
     ),
+
+    // 7. Next CT ID from the cluster API -- fired by the connection-change
+    //    effect. Seeded so the suite runs quiet (no unhandled-request noise);
+    //    see NEXT_CTID above for why this value was picked.
+    http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+      HttpResponse.json({ data: NEXT_CTID }),
+    ),
   )
 }
 
@@ -134,6 +144,10 @@ async function waitForDataLoad() {
     expect(comboboxes[0].textContent).toContain('pve1')
   })
 }
+
+beforeEach(() => {
+  useTenantMock.mockReturnValue({ currentTenant: null, loading: false, isFullClusterView: true })
+})
 
 afterEach(() => {
   cleanup()
@@ -612,6 +626,16 @@ describe('CreateLxcDialog - CT ID generation', () => {
   })
 
   it('auto-sets CT ID to the next free ID when allVms is provided', async () => {
+    // This allVms set uses up the default NEXT_CTID fixture (100), so the
+    // nextid handler must be overridden to agree with the client-computed
+    // next-free id (102) -- otherwise the connection-change effect's
+    // server-backed fetch would clobber the correct value with a stale one.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 102 }),
+      ),
+    )
+
     renderWithProviders(
       <CreateLxcDialog
         {...makeProps({
@@ -627,6 +651,122 @@ describe('CreateLxcDialog - CT ID generation', () => {
     // CT ID 100 and 101 are used, so the next free is 102.
     const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
     expect(ctidInput.value).toBe('102')
+  })
+
+  it('re-fetches the next CT ID when the regenerate button is clicked with a connection selected', async () => {
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 150 }),
+      ),
+    )
+
+    const regenerateBtn = screen.getByRole('button', { name: 'Generate next available ID' })
+    fireEvent.click(regenerateBtn)
+
+    await waitFor(() => {
+      const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
+      expect(ctidInput.value).toBe('150')
+    })
+  })
+
+  it('regenerate button uses the client-side fallback when no connection is selected', async () => {
+    // No connections at all -- selectedConnection stays '' so generateNextCtid
+    // takes the fallbackNextCtid() branch instead of loadNextCtid().
+    server.use(
+      http.get('*/api/v1/connections', () => HttpResponse.json({ data: [] })),
+    )
+
+    renderWithProviders(
+      <CreateLxcDialog {...makeProps({ allVms: [{ vmid: '100', connId: CONN_ID, node: NODE_NAME } as any] })} />,
+    )
+
+    const ctidInput = await screen.findByLabelText('CT ID') as HTMLInputElement
+    const regenerateBtn = screen.getByRole('button', { name: 'Generate next available ID' })
+    fireEvent.click(regenerateBtn)
+
+    await waitFor(() => {
+      expect(ctidInput.value).toBe('101')
+    })
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 9b. MSP tenant VMID range (#647)
+// ------------------------------------------------------------------ //
+
+describe('CreateLxcDialog - MSP tenant VMID range', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  it('flags a CT ID outside the MSP tenant range', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 300 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 200 }),
+      ),
+    )
+
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    const ctidInput = await screen.findByDisplayValue('200')
+    fireEvent.change(ctidInput, { target: { value: '999' } })
+    expect(await screen.findByText(/200-300/)).toBeInTheDocument()
+  })
+
+  it('falls back to the client-side range-aware id and reports exhaustion when nextid is unreachable', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 201 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () => HttpResponse.error()),
+    )
+
+    renderWithProviders(
+      <CreateLxcDialog
+        {...makeProps({
+          allVms: [
+            { vmid: '200', connId: CONN_ID, node: NODE_NAME } as any,
+            { vmid: '201', connId: CONN_ID, node: NODE_NAME } as any,
+          ],
+        })}
+      />,
+    )
+    await waitForDataLoad()
+
+    expect(await screen.findByText(/200-201/)).toBeInTheDocument()
+    const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
+    expect(ctidInput.value).toBe('')
+  })
+
+  it('surfaces the server error without falling back when nextid explicitly errors on a range tenant', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 200, vmidRangeEnd: 300 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ error: 'CT ID range exhausted (200-300)' }, { status: 409 }),
+      ),
+    )
+
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    expect(await screen.findByText('CT ID range exhausted (200-300)')).toBeInTheDocument()
+    const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
+    expect(ctidInput.value).toBe('')
   })
 })
 

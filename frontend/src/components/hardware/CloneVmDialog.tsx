@@ -57,6 +57,14 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   // we just hide the controls and ship sensible defaults.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const isProviderTenant = !tenantLoading && isFullClusterView
+
+  // MSP tenant VMID range (null when no enforcement applies)
+  const tenantVmidRange = useMemo(() => {
+    const start = currentTenant?.vmidRangeStart
+    const end = currentTenant?.vmidRangeEnd
+    return typeof start === 'number' && typeof end === 'number' ? { start, end } : null
+  }, [currentTenant])
+
   const [cloning, setCloning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nodes, setNodes] = useState<NodeInfo[]>([])
@@ -100,10 +108,12 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
     if (newVmid === '' || newVmid === 0) return t('hardware.vmIdRequired')
     if (newVmid < 100) return t('hardware.vmIdMinimum')
     if (newVmid > 999999999) return t('hardware.vmIdTooLarge')
+    if (tenantVmidRange && (newVmid < tenantVmidRange.start || newVmid > tenantVmidRange.end))
+      return t('hardware.vmIdOutOfRange', { start: tenantVmidRange.start, end: tenantVmidRange.end })
     if (existingVmids.includes(newVmid)) return t('hardware.vmIdAlreadyUsed', { id: newVmid })
 
     return null
-  }, [newVmid, existingVmids, t])
+  }, [newVmid, existingVmids, t, tenantVmidRange])
 
   // Charger les nodes du cluster
   useEffect(() => {
@@ -280,11 +290,14 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       // Bail if the dialog closed or the user already typed their own VMID.
       if (cancelled || userEditedVmidRef.current) return
       if (id !== null) setNewVmid(id)
+      // Range likely exhausted (the API refused): don't substitute the
+      // parent's estimate — it can only be out of range or stale.
+      else if (tenantVmidRange) setNewVmid('')
       else if (nextVmid) setNewVmid(nextVmid)
     })()
 
     return () => { cancelled = true }
-  }, [open, connId, nextVmid])
+  }, [open, connId, nextVmid, tenantVmidRange])
 
   const getRecommendedNodeLocal = (nodeList: NodeInfo[]): NodeInfo | null => {
     if (nodeList.length === 0) return null

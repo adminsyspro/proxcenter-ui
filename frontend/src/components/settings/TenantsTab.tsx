@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 
 import {
   Alert,
@@ -46,6 +46,8 @@ interface Tenant {
   createdAt: string
   updatedAt: string
   operatingModel?: string | null
+  vmidRangeStart?: number | null
+  vmidRangeEnd?: number | null
 }
 
 interface TenantUser {
@@ -82,7 +84,15 @@ export default function TenantsTab() {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
-  const [form, setForm] = useState({ name: '', slug: '', description: '', enabled: true, operatingModel: 'iaas' })
+  const [form, setForm] = useState({
+    name: '',
+    slug: '',
+    description: '',
+    enabled: true,
+    operatingModel: 'iaas',
+    vmidRangeStart: '',
+    vmidRangeEnd: '',
+  })
   const [saving, setSaving] = useState(false)
 
   // Users state (inside edit dialog)
@@ -167,12 +177,21 @@ export default function TenantsTab() {
 
   const handleCreate = () => {
     setEditingTenant(null)
-    setForm({ name: '', slug: '', description: '', enabled: true, operatingModel: 'iaas' })
+    setForm({
+      name: '',
+      slug: '',
+      description: '',
+      enabled: true,
+      operatingModel: 'iaas',
+      vmidRangeStart: '',
+      vmidRangeEnd: '',
+    })
     setTenantUsers([])
     setAllUsers([])
     setSelectedUser(null)
     setAllConnections([])
     setSelectedConnection('')
+    setError('')
     setDialogOpen(true)
   }
 
@@ -184,9 +203,12 @@ export default function TenantsTab() {
       description: tenant.description || '',
       enabled: !!tenant.enabled,
       operatingModel: tenant.operatingModel || 'iaas',
+      vmidRangeStart: tenant.vmidRangeStart != null ? String(tenant.vmidRangeStart) : '',
+      vmidRangeEnd: tenant.vmidRangeEnd != null ? String(tenant.vmidRangeEnd) : '',
     })
     setSelectedUser(null)
     setSelectedConnection('')
+    setError('')
     setDialogOpen(true)
     fetchTenantUsers(tenant.id)
 
@@ -194,6 +216,28 @@ export default function TenantsTab() {
       fetchConnections()
     }
   }
+
+  const isMspForm = editingTenant ? editingTenant.operatingModel === 'msp' : form.operatingModel === 'msp'
+
+  const vmidRangeError = useMemo(() => {
+    // Not an MSP form: the fields are unmounted, so their (possibly stale)
+    // buffers must never gate the Save button.
+    if (!isMspForm) return null
+
+    const rawStart = form.vmidRangeStart.trim()
+    const rawEnd = form.vmidRangeEnd.trim()
+
+    if (!rawStart && !rawEnd) return null
+    if (!rawStart || !rawEnd) return t('tenants.vmidRangeIncomplete')
+
+    const start = Number.parseInt(rawStart, 10)
+    const end = Number.parseInt(rawEnd, 10)
+
+    if (start < 100 || end > 999999999) return t('tenants.vmidRangeBounds')
+    if (start > end) return t('tenants.vmidRangeInvalid')
+
+    return null
+  }, [isMspForm, form.vmidRangeStart, form.vmidRangeEnd, t])
 
   const handleSave = async () => {
     setSaving(true)
@@ -213,6 +257,12 @@ export default function TenantsTab() {
       // operatingModel only sent on create (immutable after creation)
       if (!editingTenant) {
         body.operatingModel = form.operatingModel
+      }
+
+      // VMID range: MSP only; empty fields clear the range (null)
+      if (isMspForm) {
+        body.vmidRangeStart = form.vmidRangeStart.trim() ? Number.parseInt(form.vmidRangeStart, 10) : null
+        body.vmidRangeEnd = form.vmidRangeEnd.trim() ? Number.parseInt(form.vmidRangeEnd, 10) : null
       }
 
       const res = await fetch(url, {
@@ -527,6 +577,11 @@ export default function TenantsTab() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingTenant ? t('tenants.editTenant') : t('tenants.newTenant')}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '20px !important' }}>
+          {error && (
+            <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>
+              {error}
+            </Alert>
+          )}
           <TextField
             label={t('common.name')}
             value={form.name}
@@ -582,6 +637,33 @@ export default function TenantsTab() {
                 </MenuItem>
               </Select>
             </FormControl>
+          )}
+
+          {/* VMID range — MSP tenants only. Enforced for new guests created
+              through ProxCenter; existing guests are unaffected. */}
+          {isMspForm && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 2 }}>{t('tenants.vmidRange')}</Typography>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <TextField
+                  fullWidth
+                  label={t('tenants.vmidRangeStart')}
+                  value={form.vmidRangeStart}
+                  onChange={(e) => setForm((f) => ({ ...f, vmidRangeStart: e.target.value.replace(/[^0-9]/g, '').slice(0, 9) }))}
+                  inputProps={{ inputMode: 'numeric' }}
+                />
+                <TextField
+                  fullWidth
+                  label={t('tenants.vmidRangeEnd')}
+                  value={form.vmidRangeEnd}
+                  onChange={(e) => setForm((f) => ({ ...f, vmidRangeEnd: e.target.value.replace(/[^0-9]/g, '').slice(0, 9) }))}
+                  inputProps={{ inputMode: 'numeric' }}
+                />
+              </Box>
+              <Typography variant="caption" color={vmidRangeError ? 'error' : 'text.secondary'}>
+                {vmidRangeError ?? t('tenants.vmidRangeHelp')}
+              </Typography>
+            </Box>
           )}
 
           <FormControlLabel
@@ -794,6 +876,7 @@ export default function TenantsTab() {
                                 sx={{ height: 16, fontSize: '0.6rem' }}
                               />
                             }
+                            secondaryTypographyProps={{ component: 'div' }}
                           />
                         </ListItem>
                       ))}
@@ -809,7 +892,7 @@ export default function TenantsTab() {
           <Button
             variant="contained"
             onClick={handleSave}
-            disabled={saving || !form.name || !form.slug}
+            disabled={saving || !form.name || !form.slug || !!vmidRangeError}
           >
             {saving ? t('tenants.saving') : editingTenant ? t('common.update') : t('common.create')}
           </Button>

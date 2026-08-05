@@ -45,6 +45,8 @@ vi.mock('@/lib/vdc/ipamSync', () => ({ syncIpamForVmConfig: syncIpamForVmConfigM
 vi.mock('@/lib/vdc/ipam', () => ({ releaseAllocationsForVm: vi.fn() }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: waitForTaskMock }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
+vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
 
 async function loadPost() {
   const mod = await import('./route')
@@ -71,11 +73,26 @@ beforeEach(() => {
   resolveSubnetForBridgeMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
+  checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
   // Default: config reads return an empty config, clone POST returns a UPID.
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
     if (opts?.method === 'POST') return 'UPID:clone:1'
     if (opts?.method === 'PUT') return null
     return {}
+  })
+})
+
+describe('POST clone — MSP VMID range enforcement', () => {
+  it('rejects a newid outside the tenant range and never calls PVE clone', async () => {
+    checkVmidAgainstTenantRangeMock.mockResolvedValue({ ok: false, status: 400, error: 'VMID must be within your tenant range 200-300' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(400)
+    expect(checkVmidAgainstTenantRangeMock).toHaveBeenCalledWith('tenant-1', 101)
+    const cloneCall = pveFetchMock.mock.calls.find(
+      (c) => String(c[1]).endsWith('/clone') && c[2]?.method === 'POST',
+    )
+    expect(cloneCall).toBeUndefined()
   })
 })
 

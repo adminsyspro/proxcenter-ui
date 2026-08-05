@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { assessFramework } from './frameworkAssessment'
 import type { HardeningCheck } from './hardening'
 import type { FrameworkDef, Crosswalk } from './frameworks/types'
+import { getCrosswalk, getFramework } from './frameworks'
 
 const def: FrameworkDef = {
   id: 'nist-800-171-r2', name: 'X', version: 'r2', sourceUrl: '',
@@ -74,5 +75,40 @@ describe('assessFramework', () => {
     }
     const a = assessFramework([check('chk_pass2', 'pass'), check('chk_skip2', 'skip')], def, cw)
     expect(a.controls.find(c => c.id === 'A')!.status).toBe('satisfied')
+  })
+})
+
+describe('assessFramework over the CIS Controls catalogue', () => {
+  it('reconciles the family breakdown with the totals and orders families numerically', () => {
+    const cisDef = getFramework('cis-controls-v8-1')
+    const cisCw = getCrosswalk('cis-controls-v8-1')
+    const a = assessFramework([
+      check('os_disk_encryption', 'pass'),
+      check('svc_auditd', 'fail'),
+      check('backup_schedule', 'warning'),
+      check('ssh_root_login', 'skip'),
+    ], cisDef, cisCw)
+
+    expect(a.totalControls).toBe(153)
+    expect(a.satisfied + a.partial + a.failed + a.notAssessed).toBe(153)
+    expect(a.assessedControls).toBe(a.satisfied + a.partial + a.failed)
+
+    const sum = (k: 'satisfied' | 'partial' | 'failed' | 'notAssessed') =>
+      a.families.reduce((n, f) => n + f[k], 0)
+    expect(sum('satisfied')).toBe(a.satisfied)
+    expect(sum('partial')).toBe(a.partial)
+    expect(sum('failed')).toBe(a.failed)
+    expect(sum('notAssessed')).toBe(a.notAssessed)
+
+    // 3.11 satisfied, 8.2/8.5/8.8 failed, 11.2 partial-by-warning, and the
+    // skipped SSH check leaves 5.4 not assessed.
+    expect(a.controls.find(c => c.id === '3.11')?.status).toBe('satisfied')
+    expect(a.controls.find(c => c.id === '8.2')?.status).toBe('failed')
+    expect(a.controls.find(c => c.id === '11.2')?.status).toBe('partial')
+    expect(a.controls.find(c => c.id === '5.4')?.status).toBe('not_assessed')
+
+    // Zero-padded families keep the localeCompare sort in numeric order.
+    const prefixes = a.families.map(f => f.family.slice(0, 2))
+    expect([...prefixes].sort()).toEqual(prefixes)
   })
 })

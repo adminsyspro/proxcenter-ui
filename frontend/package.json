@@ -127,7 +127,7 @@
     "hono": ">=4.12.21",
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
-    "fast-uri": "^3.1.4",
+    "fast-uri": "^3.1.5",
     "shell-quote": ">=1.10.0"
   },
   "overrides": {
@@ -143,7 +143,7 @@
     "hono": ">=4.12.21",
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
-    "fast-uri": "^3.1.4",
+    "fast-uri": "^3.1.5",
     "postcss": "$postcss",
     "js-cookie": "^3.0.7",
     "shell-quote": ">=1.10.0",

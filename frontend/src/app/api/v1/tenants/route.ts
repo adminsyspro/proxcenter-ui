@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
+import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { audit } from "@/lib/audit"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
@@ -42,6 +43,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "operatingModel must be 'iaas' or 'msp'" }, { status: 400 })
   }
 
+  // Optional MSP VMID range (both bounds or none; MSP only; no overlap
+  // with another tenant's range).
+  const rangeParse = parseVmidRangeInput(body)
+  if (!rangeParse.ok) {
+    return NextResponse.json({ error: rangeParse.error }, { status: 400 })
+  }
+  const vmidRange = rangeParse.range ?? null
+  if (vmidRange) {
+    if (body.operatingModel !== 'msp') {
+      return NextResponse.json({ error: "A VMID range is only available for MSP tenants" }, { status: 400 })
+    }
+    const conflict = await findVmidRangeConflict(vmidRange.start, vmidRange.end)
+    if (conflict) {
+      return NextResponse.json(
+        { error: `VMID range overlaps the range of tenant "${conflict.name}"` },
+        { status: 409 }
+      )
+    }
+  }
+
   try {
     const tenant = await createTenant({
       slug: body.slug,
@@ -49,6 +70,8 @@ export async function POST(req: NextRequest) {
       description: body.description,
       createdBy: session?.user?.id,
       operatingModel: body.operatingModel,
+      vmidRangeStart: vmidRange?.start ?? null,
+      vmidRangeEnd: vmidRange?.end ?? null,
     })
 
     await audit({

@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateTenant, deleteTenant, DEFAULT_TENANT_ID, requireProviderTenant } from "@/lib/tenant"
+import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { getServerSession } from "next-auth"
@@ -31,6 +32,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       description: row.description,
       enabled: row.enabled,
       settings: row.settings,
+      operatingModel: row.operatingModel,
+      vmidRangeStart: row.vmidRangeStart,
+      vmidRangeEnd: row.vmidRangeEnd,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
@@ -56,6 +60,25 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   // Cannot disable default tenant
   if (id === DEFAULT_TENANT_ID && body.enabled === false) {
     return NextResponse.json({ error: "Cannot disable the default tenant" }, { status: 400 })
+  }
+
+  const rangeParse = parseVmidRangeInput(body)
+  if (!rangeParse.ok) {
+    return NextResponse.json({ error: rangeParse.error }, { status: 400 })
+  }
+  if (rangeParse.range) {
+    const existing = await prisma.tenant.findUnique({ where: { id }, select: { operatingModel: true } })
+    if (!existing) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
+    if (existing.operatingModel !== 'msp') {
+      return NextResponse.json({ error: "A VMID range is only available for MSP tenants" }, { status: 400 })
+    }
+    const conflict = await findVmidRangeConflict(rangeParse.range.start, rangeParse.range.end, id)
+    if (conflict) {
+      return NextResponse.json(
+        { error: `VMID range overlaps the range of tenant "${conflict.name}"` },
+        { status: 409 }
+      )
+    }
   }
 
   try {

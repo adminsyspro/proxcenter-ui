@@ -11,6 +11,8 @@ interface TenantInfo {
   name: string
   description?: string | null
   operatingModel?: string | null
+  vmidRangeStart?: number | null
+  vmidRangeEnd?: number | null
 }
 
 interface TenantContextType {

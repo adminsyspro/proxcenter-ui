@@ -876,6 +876,7 @@ export default function TenantsTab() {
                                 sx={{ height: 16, fontSize: '0.6rem' }}
                               />
                             }
+                            secondaryTypographyProps={{ component: 'div' }}
                           />
                         </ListItem>
                       ))}

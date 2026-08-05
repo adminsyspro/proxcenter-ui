@@ -47,9 +47,8 @@ vi.mock('@/contexts/RBACContext', () => ({
   useRBAC: () => ({ isAdmin: true }),
 }))
 
-vi.mock('@/contexts/TenantContext', () => ({
-  useTenant: () => ({ currentTenant: null, loading: false, isFullClusterView: true }),
-}))
+const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => useTenantMock() }))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -169,6 +168,10 @@ async function waitForDataLoad() {
     expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled()
   })
 }
+
+beforeEach(() => {
+  useTenantMock.mockReturnValue({ currentTenant: null, loading: false, isFullClusterView: true })
+})
 
 afterEach(() => {
   cleanup()
@@ -783,5 +786,38 @@ describe('CreateVmDialog - clearable numeric fields', () => {
     await userEvent.clear(cpuLimit)
     await userEvent.tab()
     expect(cpuLimit.value).toBe('unlimited')
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 10. MSP tenant VMID range (#647)
+// ------------------------------------------------------------------ //
+
+describe('CreateVmDialog - MSP tenant VMID range', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  it('flags a VMID outside the MSP tenant range', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 189334001, vmidRangeEnd: 189334999 },
+      loading: false,
+      isFullClusterView: true,
+    })
+    // The nextid API prefill should land inside the tenant's range.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/cluster/nextid`, () =>
+        HttpResponse.json({ data: 189334001 }),
+      ),
+    )
+
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    const vmidField = await screen.findByDisplayValue('189334001')
+    await userEvent.clear(vmidField)
+    await userEvent.type(vmidField, '150')
+    // Out-of-range message cites the range.
+    expect(await screen.findByText(/189334001/)).toBeInTheDocument()
   })
 })

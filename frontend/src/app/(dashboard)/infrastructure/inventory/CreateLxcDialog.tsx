@@ -63,6 +63,13 @@ function CreateLxcDialog({
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
   const hideNodePicker = !tenantLoading && !!currentTenant && !isFullClusterView
 
+  // MSP tenant VMID range (null when no enforcement applies)
+  const tenantVmidRange = useMemo(() => {
+    const start = currentTenant?.vmidRangeStart
+    const end = currentTenant?.vmidRangeEnd
+    return typeof start === 'number' && typeof end === 'number' ? { start, end } : null
+  }, [currentTenant])
+
   const [activeTab, setActiveTab] = useState(0)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -134,19 +141,48 @@ function CreateLxcDialog({
   const [cpuAdvancedExpanded, setCpuAdvancedExpanded] = useState(false)
   const [netAdvancedExpanded, setNetAdvancedExpanded] = useState(false)
 
+  // Client-side fallback — range-aware (see CreateVmDialog.fallbackNextVmid)
+  const fallbackNextCtid = (scopedVms: typeof allVms) => {
+    const usedIds = new Set(scopedVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
+    const startId = tenantVmidRange ? tenantVmidRange.start : 100
+    const maxId = tenantVmidRange ? tenantVmidRange.end : 999999999
+    let nextId = startId
+    while (usedIds.has(nextId) && nextId <= maxId) nextId++
+    if (nextId > maxId && tenantVmidRange) {
+      setCtid('')
+      setCtidError(t('inventory.createLxc.ctIdRangeExhausted', { start: tenantVmidRange.start, end: tenantVmidRange.end }))
+      return
+    }
+    setCtid(String(nextId))
+    setCtidError(null)
+  }
+
+  // Ask the server for the next CT ID (range-aware for MSP tenants), falling
+  // back to the client-side estimate when the API is unreachable.
+  const loadNextCtid = async (connId: string) => {
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/nextid`)
+      const json = await res.json().catch(() => null)
+      if (res.ok && json?.data) {
+        setCtid(String(json.data))
+        setCtidError(null)
+        return
+      }
+      if (tenantVmidRange && json?.error) {
+        setCtid('')
+        setCtidError(String(json.error))
+        return
+      }
+    } catch (e) {
+      console.error('Error loading next CT ID from API:', e)
+    }
+    fallbackNextCtid(allVms.filter(vm => vm.connId === connId))
+  }
+
   // Calculer le prochain CTID disponible (global sur toutes les VMs)
   useEffect(() => {
     if (allVms.length > 0) {
-      const usedIds = allVms.map(vm => Number.parseInt(String(vm.vmid), 10))
-
-      let nextId = 100
-
-      while (usedIds.includes(nextId)) {
-        nextId++
-      }
-
-      setCtid(String(nextId))
-      setCtidError(null)
+      fallbackNextCtid(allVms)
     }
   }, [allVms])
 
@@ -176,6 +212,11 @@ return
 return
     }
 
+    if (tenantVmidRange && (ctidNum < tenantVmidRange.start || ctidNum > tenantVmidRange.end)) {
+      setCtidError(t('inventory.createLxc.ctIdOutOfRange', { start: tenantVmidRange.start, end: tenantVmidRange.end }))
+      return
+    }
+
     const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === ctidNum)
 
     if (isUsed) {
@@ -189,18 +230,11 @@ return
 
   // Générer le prochain CTID disponible pour la connexion sélectionnée
   const generateNextCtid = () => {
-    const scopedVms = selectedConnection
-      ? allVms.filter(vm => vm.connId === selectedConnection)
-      : allVms
-    const usedIds = new Set(scopedVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
-
-    let nextId = 100
-    while (usedIds.has(nextId)) {
-      nextId++
+    if (selectedConnection) {
+      void loadNextCtid(selectedConnection)
+      return
     }
-
-    setCtid(String(nextId))
-    setCtidError(null)
+    fallbackNextCtid(allVms)
   }
 
   // Charger toutes les connexions et tous leurs nodes
@@ -375,6 +409,13 @@ return
       loadBridges(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
+
+  // Ask the server for the next free CT ID whenever the connection changes
+  // (range-aware for MSP tenants; mirrors CreateVmDialog's reload-on-connection-change).
+  useEffect(() => {
+    if (open && selectedConnection) void loadNextCtid(selectedConnection)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, selectedConnection])
 
   // Charger les pools de ressources quand la connexion change
   useEffect(() => {

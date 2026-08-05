@@ -35,9 +35,8 @@ import { CloneVmDialog } from './CloneVmDialog'
 // Context mocks
 // ------------------------------------------------------------------ //
 
-vi.mock('@/contexts/TenantContext', () => ({
-  useTenant: () => ({ currentTenant: null, loading: false, isFullClusterView: true }),
-}))
+const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
+vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => useTenantMock() }))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -171,6 +170,10 @@ function setVmid(value: string) {
   expect(inputs.length).toBeGreaterThanOrEqual(1)
   fireEvent.change(inputs[0], { target: { value } })
 }
+
+beforeEach(() => {
+  useTenantMock.mockReturnValue({ currentTenant: null, loading: false, isFullClusterView: true })
+})
 
 afterEach(() => {
   cleanup()
@@ -560,5 +563,30 @@ describe('CloneVmDialog - Cancel button', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 8. MSP tenant VMID range (#647)
+// ------------------------------------------------------------------ //
+
+describe('CloneVmDialog - MSP tenant VMID range', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  it('flags an out-of-range VMID prefill for an MSP tenant without user input', async () => {
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 't1', slug: 'acme', name: 'Acme', operatingModel: 'msp', vmidRangeStart: 189334001, vmidRangeEnd: 189334999 },
+      loading: false,
+      isFullClusterView: true,
+    })
+
+    renderWithProviders(<CloneVmDialog {...makeProps({ nextVmid: 150 })} />)
+    await waitForDataLoad()
+
+    // Both the seeded prop (150) and the /cluster/nextid fixture (101) fall
+    // below the tenant's range -- the error surfaces without any user input.
+    expect(await screen.findByText(/189334001/)).toBeInTheDocument()
   })
 })

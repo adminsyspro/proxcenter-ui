@@ -4,6 +4,14 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { getCurrentTenantId } from "@/lib/tenant"
+import {
+  resolveTenantVmidRange,
+  getUsedVmidsForTenant,
+  findNextFreeVmid,
+  noteRecentVmidAllocation,
+  withRecentVmidAllocations,
+} from "@/lib/tenant/vmidRange"
 
 export const runtime = "nodejs"
 
@@ -30,6 +38,45 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const conn = await getConnectionById(id)
     const url = new URL(req.url)
     const vmidParam = url.searchParams.get("vmid")
+
+    // MSP tenant with a VMID range: ProxCenter computes the next free VMID
+    // inside the range across ALL of the tenant's connections. PVE's own
+    // /cluster/nextid can't do this (per-cluster, and its default upper
+    // bound never reaches high ranges like 189334001).
+    const tenantId = await getCurrentTenantId()
+    const range = await resolveTenantVmidRange(tenantId)
+
+    if (range) {
+      const { used, unreachable } = await getUsedVmidsForTenant(tenantId)
+      if (unreachable.length > 0) {
+        // Fail closed: a skipped cluster could hide a duplicate.
+        return NextResponse.json(
+          { error: `Cannot verify VMID uniqueness across your clusters: connection(s) unreachable: ${unreachable.join(", ")}` },
+          { status: 503 }
+        )
+      }
+
+      if (vmidParam) {
+        const requested = Number(vmidParam)
+        if (!Number.isInteger(requested) || requested < 100 || requested > 999999999) {
+          return NextResponse.json({ data: requested, available: false, error: "VMID must be an integer between 100 and 999999999" })
+        }
+        if (requested < range.start || requested > range.end) {
+          return NextResponse.json({ data: requested, available: false, error: `VMID must be within your tenant range ${range.start}-${range.end}` })
+        }
+        if (used.has(requested)) {
+          return NextResponse.json({ data: requested, available: false, error: `VM ${requested} already exists` })
+        }
+        return NextResponse.json({ data: requested, available: true })
+      }
+
+      const next = findNextFreeVmid(range, withRecentVmidAllocations(tenantId, used))
+      if (next === null) {
+        return NextResponse.json({ error: `VMID range exhausted (${range.start}-${range.end})` }, { status: 409 })
+      }
+      noteRecentVmidAllocation(tenantId, next)
+      return NextResponse.json({ data: next, available: true })
+    }
 
     if (vmidParam) {
       const requested = Number(vmidParam)

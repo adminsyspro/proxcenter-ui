@@ -151,3 +151,32 @@ export async function checkVmidAgainstTenantRange(
   }
   return { ok: true }
 }
+
+const RECENT_VMID_TTL_MS = 60_000
+
+function recentVmidMap(): Map<string, Map<number, number>> {
+  const g = globalThis as Record<string, any>
+  g.__proxcenter_recent_vmids__ ??= new Map()
+  return g.__proxcenter_recent_vmids__
+}
+
+/** Remember a vmid suggested to this tenant so the next suggestion skips it. */
+export function noteRecentVmidAllocation(tenantId: string, vmid: number): void {
+  const perTenant = recentVmidMap()
+  const entry = perTenant.get(tenantId) ?? new Map<number, number>()
+  entry.set(vmid, Date.now() + RECENT_VMID_TTL_MS)
+  perTenant.set(tenantId, entry)
+}
+
+/** Union of `used` and the tenant's non-expired recent suggestions. */
+export function withRecentVmidAllocations(tenantId: string, used: Set<number>): Set<number> {
+  const entry = recentVmidMap().get(tenantId)
+  if (!entry) return used
+  const now = Date.now()
+  const merged = new Set(used)
+  for (const [vmid, expiresAt] of entry) {
+    if (expiresAt <= now) entry.delete(vmid)
+    else merged.add(vmid)
+  }
+  return merged
+}

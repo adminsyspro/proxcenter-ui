@@ -9,6 +9,7 @@ import { getAllowedBridgesForTenant, resolveSubnetForBridge, parseBridgeFromNet 
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
+import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 
 export const runtime = "nodejs"
 
@@ -68,6 +69,14 @@ export async function POST(
 
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
+
+    // MSP VMID range: enforced for NEW guests only (existing guests are
+    // never retro-checked).
+    const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.vmid))
+    if (!vmidRangeCheck.ok) {
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+    }
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 

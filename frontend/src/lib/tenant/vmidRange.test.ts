@@ -24,6 +24,8 @@ import {
   findNextFreeVmid,
   findVmidRangeConflict,
   checkVmidAgainstTenantRange,
+  noteRecentVmidAllocation,
+  withRecentVmidAllocations,
 } from './vmidRange'
 
 beforeEach(() => {
@@ -32,6 +34,7 @@ beforeEach(() => {
   connectionFindManyMock.mockReset().mockResolvedValue([])
   pveFetchMock.mockReset()
   getConnectionByIdMock.mockReset().mockImplementation(async (id: string) => ({ id, baseUrl: 'x', apiToken: 'y' }))
+  ;(globalThis as any).__proxcenter_recent_vmids__ = new Map()
 })
 
 describe('parseVmidRangeInput', () => {
@@ -185,5 +188,17 @@ describe('checkVmidAgainstTenantRange', () => {
     connectionFindManyMock.mockResolvedValue([{ id: 'c1', name: 'alpha', tenantId: 't1' }])
     pveFetchMock.mockResolvedValue([{ vmid: 250 }])
     expect(await checkVmidAgainstTenantRange('t1', 251)).toEqual({ ok: true })
+  })
+})
+
+describe('recent vmid suggestions', () => {
+  it('skips a recently suggested vmid and expires it after the TTL', () => {
+    vi.useFakeTimers()
+    noteRecentVmidAllocation('t1', 200)
+    expect(withRecentVmidAllocations('t1', new Set([100]))).toEqual(new Set([100, 200]))
+    expect(withRecentVmidAllocations('t2', new Set())).toEqual(new Set())
+    vi.advanceTimersByTime(61_000)
+    expect(withRecentVmidAllocations('t1', new Set())).toEqual(new Set())
+    vi.useRealTimers()
   })
 })

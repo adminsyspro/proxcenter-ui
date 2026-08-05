@@ -19,6 +19,7 @@ import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { getVdcScope } from "@/lib/vdc/scope"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
+import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 
 export const runtime = "nodejs"
 
@@ -59,6 +60,13 @@ export async function POST(req: Request) {
 
     // Resolve image: built-in first, then custom from DB
     const tenantId = await getCurrentTenantId()
+
+    // MSP VMID range: template/ISO deployments create brand-new guests too.
+    const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.vmid))
+    if (!vmidRangeCheck.ok) {
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+    }
+
     let image = getImageBySlug(body.imageSlug) as any
     let isCustom = false
     let sourceType = 'url'

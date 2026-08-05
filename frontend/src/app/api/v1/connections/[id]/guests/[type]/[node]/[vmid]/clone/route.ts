@@ -12,6 +12,7 @@ import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { stripMacFromNet } from "@/lib/vdc/ipamScan"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
+import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 
 export const runtime = "nodejs"
 
@@ -55,6 +56,13 @@ export async function POST(
 
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
+
+    // MSP VMID range: the clone target vmid must obey the tenant range.
+    const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.newid))
+    if (!vmidRangeCheck.ok) {
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+    }
+
     let vdcPoolName: string | null = null
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)

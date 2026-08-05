@@ -728,7 +728,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const reconfig = new URLSearchParams()
     const slots: string[] = []
     for (let i = 0; i < vmConfig.disks.length; i++) {
-      const slot = pveParams.bios === "ovmf" && i === 0 ? "sata0" : `scsi${i}`
+      const slot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
       slots.push(slot)
       reconfig.set(slot, allocatedVolumes[i].volumeId)
     }

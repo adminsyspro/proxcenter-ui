@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     // MSP VMID range: template/ISO deployments create brand-new guests too.
     const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.vmid))
     if (!vmidRangeCheck.ok) {
-      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
     let image = getImageBySlug(body.imageSlug) as any

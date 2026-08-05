@@ -60,7 +60,7 @@ export async function POST(
     // MSP VMID range: the clone target vmid must obey the tenant range.
     const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.newid))
     if (!vmidRangeCheck.ok) {
-      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
     let vdcPoolName: string | null = null

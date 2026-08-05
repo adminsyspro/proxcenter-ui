@@ -17,9 +17,13 @@ export interface VmidRange {
   end: number
 }
 
-export type ParsedVmidRange =
-  | { ok: true; range: VmidRange | null | undefined }
-  | { ok: false; error: string }
+export interface ParsedVmidRange {
+  ok: boolean
+  /** Set only when ok: undefined = fields absent (leave unchanged), null = clear, object = new range. */
+  range?: VmidRange | null
+  /** Set only when !ok. */
+  error?: string
+}
 
 /**
  * Parse vmidRangeStart/vmidRangeEnd from a request body.
@@ -122,6 +126,14 @@ export async function findVmidRangeConflict(
   })
 }
 
+export interface VmidRangeCheck {
+  ok: boolean
+  /** Set only when !ok. */
+  status?: 400 | 409 | 503
+  /** Set only when !ok. */
+  error?: string
+}
+
 /**
  * Enforcement check shared by the create, clone and template-deploy routes:
  * ok when no range applies; 400 outside the tenant range; 409 already in use
@@ -131,7 +143,7 @@ export async function findVmidRangeConflict(
 export async function checkVmidAgainstTenantRange(
   tenantId: string,
   vmid: number,
-): Promise<{ ok: true } | { ok: false; status: 400 | 409 | 503; error: string }> {
+): Promise<VmidRangeCheck> {
   const range = await resolveTenantVmidRange(tenantId)
   if (!range) return { ok: true }
 

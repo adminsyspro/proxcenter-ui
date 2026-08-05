@@ -74,7 +74,7 @@ export async function POST(
     // never retro-checked).
     const vmidRangeCheck = await checkVmidAgainstTenantRange(tenantId, Number(body.vmid))
     if (!vmidRangeCheck.ok) {
-      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status })
+      return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
     try {

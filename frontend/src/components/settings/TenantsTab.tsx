@@ -191,6 +191,7 @@ export default function TenantsTab() {
     setSelectedUser(null)
     setAllConnections([])
     setSelectedConnection('')
+    setError('')
     setDialogOpen(true)
   }
 
@@ -207,6 +208,7 @@ export default function TenantsTab() {
     })
     setSelectedUser(null)
     setSelectedConnection('')
+    setError('')
     setDialogOpen(true)
     fetchTenantUsers(tenant.id)
 
@@ -575,6 +577,11 @@ export default function TenantsTab() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingTenant ? t('tenants.editTenant') : t('tenants.newTenant')}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '20px !important' }}>
+          {error && (
+            <Alert severity="error" onClose={() => setError('')} sx={{ mb: 1 }}>
+              {error}
+            </Alert>
+          )}
           <TextField
             label={t('common.name')}
             value={form.name}

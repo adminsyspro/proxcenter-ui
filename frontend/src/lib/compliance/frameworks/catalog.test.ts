@@ -61,4 +61,11 @@ describe('CIS Controls v8.1 catalogue', () => {
       expect(c.family.slice(0, 2)).toBe(c.id.split('.')[0].padStart(2, '0'))
     }
   })
+
+  it('has no irregular whitespace in titles or families', () => {
+    for (const c of CIS_CONTROLS_V8_1_CONTROLS) {
+      expect(c.title).toBe(c.title.replace(/\s+/g, ' ').trim())
+      expect(c.family).toBe(c.family.replace(/\s+/g, ' ').trim())
+    }
+  })
 })

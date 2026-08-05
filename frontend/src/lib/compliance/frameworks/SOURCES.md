@@ -48,9 +48,14 @@ public-domain NIST OSCAL content. Regenerate after bumping a pinned source.
   Safeguard identifiers (1.1 .. 18.5) and short titles only, 153 safeguards across the 18 controls,
   distributed 5/7/14/12/6/8/7/12/7/7/5/8/11/9/7/14/9/5. CIS descriptive text is copyright
   Center for Internet Security and is not redistributed here.
-- Not script-generated at build time, deliberately: the CIS pages are not a versioned artefact
-  like the NIST OSCAL content, so a scraper in CI would break on the next site redesign.
-  The catalogue test asserts the counts and the id and family shapes instead.
+- Not script-generated *at build time*, deliberately: the CIS pages are not a versioned artefact
+  like the NIST OSCAL content, so a scraper in CI would break on the next site redesign. Nothing
+  scrapes cisecurity.org, ever. The one-time extraction above is pinned as
+  `frontend/scripts/cis-controls-v8.1-safeguards.json` and turned into the catalogue by
+  `frontend/scripts/extract-cis-safeguards.ts` (`npx tsx scripts/extract-cis-safeguards.ts`),
+  mirroring `extract-oscal-controls.ts`, so the catalogue remains reproducible and auditable
+  without a second visit to cisecurity.org. The catalogue test also asserts the counts and the
+  id and family shapes.
 - Family is the parent control with a zero-padded number, so lexicographic ordering matches
   numeric ordering wherever families are sorted with localeCompare.
 - Crosswalk: conservative first-pass mapping, pending formal GRC review. 56 of the 58 crosswalk

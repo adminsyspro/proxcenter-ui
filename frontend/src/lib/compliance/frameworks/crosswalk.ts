@@ -77,14 +77,20 @@ const toCmmc = (id: string) => {
   return `${domain}.L2-${id}`
 }
 
+// Ordered to match FRAMEWORK_IDS. A typed map instead of an if/else chain: an
+// id added to FrameworkId without a corresponding entry here is a compile
+// error, not a runtime throw discovered only when someone requests it.
+const COLUMN: Record<FrameworkId, (e: Entry) => string[]> = {
+  'nist-800-53-r5':    e => e.c80053,
+  'nist-800-171-r2':   e => e.c800171,
+  'cmmc-l2':           e => e.c800171.map(toCmmc),
+  'iso-27001-2022':    e => e.c27001,
+  'cis-controls-v8-1': e => e.cCIS,
+}
+
 export function getCrosswalk(id: FrameworkId): Crosswalk {
-  let column: (e: Entry) => string[]
-  if (id === 'nist-800-53-r5') column = e => e.c80053
-  else if (id === 'nist-800-171-r2') column = e => e.c800171
-  else if (id === 'iso-27001-2022') column = e => e.c27001
-  else if (id === 'cis-controls-v8-1') column = e => e.cCIS
-  else if (id === 'cmmc-l2') column = e => e.c800171.map(toCmmc)
-  else throw new Error(`getCrosswalk: unknown framework: ${id} (expected one of ${FRAMEWORK_IDS.join(', ')})`)
+  const column = COLUMN[id]
+  if (!column) throw new Error(`getCrosswalk: unknown framework: ${id} (expected one of ${FRAMEWORK_IDS.join(', ')})`)
 
   const out: Crosswalk = {}
   for (const [checkId, e] of Object.entries(CHECK_CROSSWALK)) {

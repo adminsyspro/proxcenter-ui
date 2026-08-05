@@ -61,19 +61,29 @@ describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
   })
 })
 
-describe("mapEsxiToPveConfig — baseline behavior (unchanged)", () => {
-  it("uses virtio-scsi-single + virtio NIC for Linux", () => {
+describe("mapEsxiToPveConfig — controller and boot disk bus (#653)", () => {
+  it("uses virtio-scsi-single + virtio NIC for Linux, boot disk on scsi0", () => {
     const p = mapEsxiToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0")
     expect(p.scsihw).toBe("virtio-scsi-single")
     expect(p.net0.startsWith("virtio,")).toBe(true)
+    expect(p.bootDiskSlot).toBe("scsi0")
+    expect(p.boot).toBe("order=scsi0")
   })
 
-  it("uses lsi + e1000 NIC for Windows (no injected drivers)", () => {
+  it("keeps virtio-scsi-single but boots Windows from SATA (no inbox LSI/VirtIO boot driver)", () => {
     const p = mapEsxiToPveConfig(
       makeConfig({ guestId: "windows9Server64Guest", guestOS: "Microsoft Windows Server 2022 (64-bit)" }),
       100, "local-lvm", "vmbr0",
     )
-    expect(p.scsihw).toBe("lsi")
+    expect(p.scsihw).toBe("virtio-scsi-single")
     expect(p.net0.startsWith("e1000,")).toBe(true)
+    expect(p.bootDiskSlot).toBe("sata0")
+    expect(p.boot).toBe("order=sata0")
+  })
+
+  it("boots EFI guests from SATA regardless of OS", () => {
+    const p = mapEsxiToPveConfig(makeConfig({ firmware: "efi" }), 100, "local-lvm", "vmbr0")
+    expect(p.bootDiskSlot).toBe("sata0")
+    expect(p.boot).toBe("order=sata0")
   })
 })

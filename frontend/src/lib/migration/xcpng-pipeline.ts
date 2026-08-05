@@ -422,7 +422,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Attach a pre-allocated block volume to a SCSI slot
     async function attachBlockDisk(i: number, volumeId: string) {
-      const scsiSlot = `scsi${i}`
+      // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
+      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
       const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
@@ -577,7 +578,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
-      const scsiSlot = `scsi${i}`
+      // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
+      const scsiSlot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
 
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting VHD to ${importFormat} format...`)
       await updateJob(jobId, "transferring", { currentStep: `converting_disk_${i + 1}` })
@@ -796,10 +798,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await updateJob(jobId, "configuring", { progress: 90 })
     await appendLog(jobId, "Configuring VM (boot order, agent)...")
 
-    await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: "order=scsi0" }))
+    await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, new URLSearchParams({ boot: `order=${pveParams.bootDiskSlot}` }))
 
     if (isWindowsXoVm(vmConfig)) {
-      await appendLog(jobId, "Windows VM detected — using LSI SCSI + e1000 NIC for initial boot compatibility. Install VirtIO drivers for best performance.", "warn")
+      await appendLog(jobId, "Windows VM detected — boot disk on SATA + e1000 NIC (built-in Windows drivers). Install VirtIO drivers for better performance and to bring up any VirtIO SCSI data disks.", "warn")
     }
 
     await appendLog(jobId, "VM configuration complete", "success")

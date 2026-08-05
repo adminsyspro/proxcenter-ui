@@ -42,11 +42,13 @@ export function mapXoToPveConfig(
   const isEfi = xoConfig.firmware === "uefi"
   const isWin = isWindowsXoVm(xoConfig)
 
-  // XCP-ng VMs often use paravirtualized drivers already
-  // For Windows: use LSI + e1000 for safe boot compatibility
-  // For Linux: use virtio since XO Linux VMs are usually already using PV drivers
-  const scsihw = isWin ? "lsi" : "virtio-scsi-single"
+  // virtio-scsi for every guest; Windows keeps e1000 (inbox driver). Boot disk
+  // goes to SATA for Windows and EFI guests — same rule as the ESXi mapper: an
+  // untouched Windows guest has no boot-start VirtIO (or LSI) driver and stops
+  // with INACCESSIBLE_BOOT_DEVICE (#653).
+  const scsihw = "virtio-scsi-single"
   const nicModel = isWin ? "e1000" : "virtio"
+  const bootDiskSlot: "sata0" | "scsi0" = isEfi || isWin ? "sata0" : "scsi0"
 
   const tagSuffix =
     typeof vlanTag === "number" && Number.isInteger(vlanTag) && vlanTag >= 1 && vlanTag <= 4094
@@ -64,7 +66,8 @@ export function mapXoToPveConfig(
     scsihw,
     bios: isEfi ? "ovmf" : "seabios",
     machine: "q35",
-    boot: "order=scsi0",
+    boot: `order=${bootDiskSlot}`,
+    bootDiskSlot,
     agent: "1",
     net0: `${nicModel},bridge=${networkBridge}${tagSuffix}`,
   }

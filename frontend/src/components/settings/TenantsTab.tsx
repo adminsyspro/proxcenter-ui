@@ -218,6 +218,10 @@ export default function TenantsTab() {
   const isMspForm = editingTenant ? editingTenant.operatingModel === 'msp' : form.operatingModel === 'msp'
 
   const vmidRangeError = useMemo(() => {
+    // Not an MSP form: the fields are unmounted, so their (possibly stale)
+    // buffers must never gate the Save button.
+    if (!isMspForm) return null
+
     const rawStart = form.vmidRangeStart.trim()
     const rawEnd = form.vmidRangeEnd.trim()
 
@@ -231,7 +235,7 @@ export default function TenantsTab() {
     if (start > end) return t('tenants.vmidRangeInvalid')
 
     return null
-  }, [form.vmidRangeStart, form.vmidRangeEnd, t])
+  }, [isMspForm, form.vmidRangeStart, form.vmidRangeEnd, t])
 
   const handleSave = async () => {
     setSaving(true)

@@ -2560,8 +2560,11 @@ return
                   {/* Temporary storage — used by virt-v2v for vcenter/hyperv/nutanix sources,
                       and by the direct-ESXi pipeline for SSHFS mount root + VMDK dumps + clone
                       targets. /tmp is often a tiny tmpfs on PVE; offering the selector lets the
-                      user pin the multi-GB work to a real filesystem. */}
-                  {vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
+                      user pin the multi-GB work to a real filesystem. Hidden for warm: nbdkit
+                      streams from VMware straight into the target block device (only byte-sized
+                      sockets/pw files touch /tmp), so the 2x-disk space requirement below would
+                      be a false alarm there. */}
+                  {migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
                     <Box>
                       <TextField
                         select
@@ -3649,8 +3652,10 @@ return
                     Without this, paths default to /tmp on the target node, which is
                     often a small partition (tmpfs or root FS). For bulk jobs with
                     several multi-GB VMs the dir fills up and subsequent migrations
-                    hang or fail with "no space left on device". */}
-                {vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
+                    hang or fail with "no space left on device". Hidden for warm:
+                    nbdkit streams straight into the target block device, so the
+                    2x-disk space requirement would be a false alarm there. */}
+                {migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (() => {
                   const selectedBulkVms = (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
                   // Peak disk usage in bulk = biggest committed disk × 2 (source + converted).
                   // Sequential runs (BULK_MIG_CONCURRENCY=1) so only one VM occupies tempStorage at a time.

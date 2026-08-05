@@ -6774,7 +6774,8 @@
         "nist-800-53-r5": "NIST SP 800-53 es el catálogo federal de EE. UU. de controles de seguridad y privacidad para sistemas de información y organizaciones. La línea base Moderate se aplica a sistemas en los que una pérdida de confidencialidad, integridad o disponibilidad tendría un efecto adverso grave.",
         "nist-800-171-r2": "NIST SP 800-171 define requisitos para proteger información no clasificada controlada (CUI) en sistemas y organizaciones no federales: 110 requisitos en 14 familias. Es la línea base técnica sobre la que se construye CMMC Level 2.",
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) es el framework del Departamento de Defensa de EE. UU. para proteger CUI en toda la cadena de suministro de defensa. Level 2 se mapea uno a uno con los 110 requisitos de NIST SP 800-171 Rev 2.",
-        "iso-27001-2022": "ISO/IEC 27001 es el estándar internacional para sistemas de gestión de seguridad de la información (ISMS). El Anexo A enumera 93 controles en ámbitos organizativos, de personas, físicos y tecnológicos."
+        "iso-27001-2022": "ISO/IEC 27001 es el estándar internacional para sistemas de gestión de seguridad de la información (ISMS). El Anexo A enumera 93 controles en ámbitos organizativos, de personas, físicos y tecnológicos.",
+        "cis-controls-v8-1": "18 controles y 153 salvaguardas del Center for Internet Security. Solo identificadores y títulos breves; la puntuación es una tasa técnica de cumplimiento, no una certificación CIS."
       }
     }
   },

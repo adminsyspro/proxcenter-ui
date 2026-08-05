@@ -134,6 +134,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       assessedOk: 'assessed OK',
       controlsAssessed: 'controls assessed',
       noAssessed: 'No controls assessed yet',
+      sourceLink: 'Framework reference',
+      colDetail: 'Detail',
     }
     const reportT = (k: string): string => {
       const suffix = k.replace('compliance.frameworks.', '')

@@ -3,6 +3,7 @@ import { NIST_800_53_R5_CONTROLS } from './catalog.nist-800-53-r5'
 import { NIST_800_171_R2_CONTROLS } from './catalog.nist-800-171-r2'
 import { CMMC_L2_CONTROLS } from './catalog.cmmc-l2'
 import { ISO_27001_2022_CONTROLS } from './catalog.iso-27001-2022'
+import { CIS_CONTROLS_V8_1_CONTROLS } from './catalog.cis-controls-v8-1'
 
 export { getCrosswalk } from './crosswalk'
 
@@ -40,6 +41,14 @@ export const FRAMEWORKS: FrameworkDef[] = [
     sourceUrl: 'https://www.iso.org/standard/27001',
     provenanceNote: 'Annex A control identifiers and concise titles. ISO/IEC 27001 normative text is copyright ISO and is not reproduced here.',
     controls: ISO_27001_2022_CONTROLS,
+  },
+  {
+    id: 'cis-controls-v8-1',
+    name: 'CIS Controls',
+    version: 'v8.1',
+    sourceUrl: 'https://www.cisecurity.org/controls/cis-controls-list',
+    provenanceNote: 'Safeguard identifiers and short titles only. CIS Controls descriptive text is copyright Center for Internet Security and is not reproduced here. The score is a technical pass rate over assessable safeguards, not a CIS certification.',
+    controls: CIS_CONTROLS_V8_1_CONTROLS,
   },
 ]
 

@@ -120,6 +120,22 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     expect(capturedHtml).not.toContain('compliance.frameworks.controlsAssessed')
   })
 
+  it('streams a PDF for the CIS Controls v8.1 framework', async () => {
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, {
+      params: { frameworkId: 'cis-controls-v8-1' },
+      searchParams: { connectionId: 'c1' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/pdf')
+
+    const disposition = res.headers.get('content-disposition') ?? ''
+    expect(disposition).toContain('attachment')
+    // RFC 6266 quoted form; the filename portion (inside quotes) must be sanitized
+    expect(disposition).toMatch(/^attachment; filename="[^"/\\<>]+\.pdf"$/)
+  })
+
   it('returns 400 when connectionId is missing', async () => {
     const { GET } = await import('./route')
     const res = await callRoute(GET, {

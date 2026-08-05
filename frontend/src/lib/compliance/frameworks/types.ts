@@ -1,4 +1,4 @@
-export const FRAMEWORK_IDS = ['nist-800-53-r5', 'nist-800-171-r2', 'cmmc-l2', 'iso-27001-2022'] as const
+export const FRAMEWORK_IDS = ['nist-800-53-r5', 'nist-800-171-r2', 'cmmc-l2', 'iso-27001-2022', 'cis-controls-v8-1'] as const
 export type FrameworkId = (typeof FRAMEWORK_IDS)[number]
 
 export interface FrameworkControl {

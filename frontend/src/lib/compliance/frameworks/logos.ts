@@ -10,6 +10,7 @@ export const FRAMEWORK_LOGO_FILES: Record<FrameworkId, string> = {
   'nist-800-171-r2': 'nist.png',
   'cmmc-l2': 'cmmc.png',
   'iso-27001-2022': 'iso.png',
+  'cis-controls-v8-1': 'cis.png',
 }
 
 export const FRAMEWORK_LOGO_DIR = '/images/frameworks'

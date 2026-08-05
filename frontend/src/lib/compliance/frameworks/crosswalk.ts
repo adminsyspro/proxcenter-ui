@@ -1,10 +1,11 @@
-import type { Crosswalk, FrameworkId } from './types'
+import { FRAMEWORK_IDS, type Crosswalk, type FrameworkId } from './types'
 
 // First-pass ISO 27001:2022 and CIS Controls v8.1 crosswalk mappings — conservative, pending GRC review.
 interface Entry { c80053: string[]; c800171: string[]; c27001: string[]; cCIS: string[]; rationale: string }
 
 // Single source of truth. 800-53 uses base control ids present in the Moderate
 // baseline; 800-171 uses 3.x.x ids. CMMC L2 is derived from 800-171.
+// prettier-ignore
 const CHECK_CROSSWALK: Record<string, Entry> = {
   cluster_fw_enabled:       { c80053: ['SC-7'],                  c800171: ['3.13.1', '3.13.5'],  c27001: ['A.8.20', 'A.8.22'], cCIS: ['4.4', '13.4'],       rationale: 'Cluster firewall enforces boundary protection.' },
   cluster_policy_in:        { c80053: ['SC-7'],                  c800171: ['3.13.6'],            c27001: ['A.8.20'],           cCIS: ['4.4'],               rationale: 'Default-deny inbound policy (deny by default).' },
@@ -77,15 +78,17 @@ const toCmmc = (id: string) => {
 }
 
 export function getCrosswalk(id: FrameworkId): Crosswalk {
+  let column: (e: Entry) => string[]
+  if (id === 'nist-800-53-r5') column = e => e.c80053
+  else if (id === 'nist-800-171-r2') column = e => e.c800171
+  else if (id === 'iso-27001-2022') column = e => e.c27001
+  else if (id === 'cis-controls-v8-1') column = e => e.cCIS
+  else if (id === 'cmmc-l2') column = e => e.c800171.map(toCmmc)
+  else throw new Error(`getCrosswalk: unknown framework: ${id} (expected one of ${FRAMEWORK_IDS.join(', ')})`)
+
   const out: Crosswalk = {}
   for (const [checkId, e] of Object.entries(CHECK_CROSSWALK)) {
-    let controlIds: string[]
-    if (id === 'nist-800-53-r5') controlIds = e.c80053
-    else if (id === 'nist-800-171-r2') controlIds = e.c800171
-    else if (id === 'iso-27001-2022') controlIds = e.c27001
-    else if (id === 'cmmc-l2') controlIds = e.c800171.map(toCmmc)
-    else throw new Error(`getCrosswalk: unknown framework: ${id}`)
-    out[checkId] = { controlIds, rationale: e.rationale }
+    out[checkId] = { controlIds: column(e), rationale: e.rationale }
   }
   return out
 }

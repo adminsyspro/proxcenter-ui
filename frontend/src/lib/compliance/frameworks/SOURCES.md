@@ -39,3 +39,21 @@ public-domain NIST OSCAL content. Regenerate after bumping a pinned source.
   in this first pass. The login-banner / system-use notification check (`access_login_banner`)
   has no clear Annex A equivalent (ISO 27001:2022 includes no control equivalent to NIST AC-8 /
   NIST SP 800-171 3.1.9) and carries an empty c27001 list, pending GRC review.
+
+## CIS Controls v8.1
+
+- Authority: <https://www.cisecurity.org/controls/cis-controls-list>
+- Catalogue: authored from the CIS Controls v8.1 safeguard set, extracted 2026-08-05 from the
+  public CIS Controls Navigator listing (<https://www.cisecurity.org/controls/cis-controls-navigator>).
+  Safeguard identifiers (1.1 .. 18.5) and short titles only, 153 safeguards across the 18 controls,
+  distributed 5/7/14/12/6/8/7/12/7/7/5/8/11/9/7/14/9/5. CIS descriptive text is copyright
+  Center for Internet Security and is not redistributed here.
+- Not script-generated at build time, deliberately: the CIS pages are not a versioned artefact
+  like the NIST OSCAL content, so a scraper in CI would break on the next site redesign.
+  The catalogue test asserts the counts and the id and family shapes instead.
+- Family is the parent control with a zero-padded number, so lexicographic ordering matches
+  numeric ordering wherever families are sorted with localeCompare.
+- Crosswalk: conservative first-pass mapping, pending formal GRC review. 56 of the 58 crosswalk
+  entries map to at least one safeguard. `access_login_banner` has no CIS v8.1 equivalent (same
+  gap as ISO Annex A), and `vm_no_usb_passthrough` has none either: v8.1 carries no
+  removable-media restriction safeguard, 3.9 being encryption and 10.3 autorun.

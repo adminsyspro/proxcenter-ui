@@ -6774,7 +6774,8 @@
         "nist-800-53-r5": "NIST SP 800-53 is the U.S. federal catalog of security and privacy controls for information systems and organizations. The Moderate baseline applies to systems where a loss of confidentiality, integrity, or availability would have a serious adverse effect.",
         "nist-800-171-r2": "NIST SP 800-171 defines requirements for protecting Controlled Unclassified Information (CUI) in nonfederal systems and organizations: 110 requirements across 14 families. It is the technical baseline that CMMC Level 2 builds on.",
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) is the U.S. Department of Defense framework for safeguarding CUI across the defense supply chain. Level 2 maps one-to-one to the 110 NIST SP 800-171 Rev 2 requirements.",
-        "iso-27001-2022": "ISO/IEC 27001 is the international standard for information security management systems (ISMS). Annex A lists 93 controls across organizational, people, physical, and technological themes."
+        "iso-27001-2022": "ISO/IEC 27001 is the international standard for information security management systems (ISMS). Annex A lists 93 controls across organizational, people, physical, and technological themes.",
+        "cis-controls-v8-1": "18 controls and 153 safeguards from the Center for Internet Security. Identifiers and short titles only; the score is a technical pass rate, not a CIS certification."
       }
     }
   },

@@ -21,6 +21,8 @@ export interface Tenant {
   description: string | null
   enabled: boolean
   operatingModel: string | null
+  vmidRangeStart: number | null
+  vmidRangeEnd: number | null
   settings: Record<string, any> | null
   createdBy: string | null
   createdAt: string
@@ -34,6 +36,8 @@ function rowToTenant(row: {
   description: string | null
   enabled: boolean
   operatingModel: string | null
+  vmidRangeStart: number | null
+  vmidRangeEnd: number | null
   settings: Prisma.JsonValue | null
   createdBy: string | null
   createdAt: Date
@@ -46,6 +50,8 @@ function rowToTenant(row: {
     description: row.description,
     enabled: row.enabled,
     operatingModel: row.operatingModel,
+    vmidRangeStart: row.vmidRangeStart,
+    vmidRangeEnd: row.vmidRangeEnd,
     settings:
       row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
         ? (row.settings as Record<string, any>)
@@ -400,6 +406,8 @@ export async function createTenant(data: {
   description?: string
   createdBy?: string
   operatingModel?: 'iaas' | 'msp'
+  vmidRangeStart?: number | null
+  vmidRangeEnd?: number | null
 }): Promise<Tenant> {
   const id = crypto.randomUUID()
   const now = new Date()
@@ -412,6 +420,8 @@ export async function createTenant(data: {
       enabled: true,
       // v1.5: non-default tenants need operating_model (DB CHECK); default to iaas.
       operatingModel: data.operatingModel ?? 'iaas',
+      vmidRangeStart: data.vmidRangeStart ?? null,
+      vmidRangeEnd: data.vmidRangeEnd ?? null,
       createdBy: data.createdBy || null,
       createdAt: now,
       updatedAt: now,
@@ -453,7 +463,14 @@ export async function createTenant(data: {
  */
 export async function updateTenant(
   id: string,
-  data: { name?: string; slug?: string; description?: string; enabled?: boolean },
+  data: {
+    name?: string
+    slug?: string
+    description?: string
+    enabled?: boolean
+    vmidRangeStart?: number | null
+    vmidRangeEnd?: number | null
+  },
 ): Promise<Tenant | null> {
   const existing = await prisma.tenant.findUnique({ where: { id } })
   if (!existing) return null
@@ -465,6 +482,8 @@ export async function updateTenant(
       slug: data.slug ?? existing.slug,
       description: data.description ?? existing.description,
       enabled: data.enabled !== undefined ? data.enabled : existing.enabled,
+      vmidRangeStart: data.vmidRangeStart !== undefined ? data.vmidRangeStart : existing.vmidRangeStart,
+      vmidRangeEnd: data.vmidRangeEnd !== undefined ? data.vmidRangeEnd : existing.vmidRangeEnd,
       updatedAt: new Date(),
     },
   })

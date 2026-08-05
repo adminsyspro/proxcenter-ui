@@ -499,6 +499,11 @@ model Tenant {
   // 'default' (provider) tenant. Enforced by CHECK constraints in the
   // msp_alpha1_schema migration.
   operatingModel String? @map("operating_model")
+  // Optional VMID range for MSP tenants: new guests created through
+  // ProxCenter take a VMID inside [start, end]; existing guests are
+  // left alone. Both set or both NULL (validated in the routes).
+  vmidRangeStart Int? @map("vmid_range_start")
+  vmidRangeEnd   Int? @map("vmid_range_end")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")

@@ -835,6 +835,74 @@ describe('migration dialog options', () => {
     expect(screen.queryByText(QCOW2_LABEL)).not.toBeInTheDocument()
   })
 
+  // Warm migration streams via nbdkit straight into the target block device and
+  // never stages the disk locally, so the virt-v2v temp-storage selector and its
+  // "2x the VM disk" space requirement must not be shown in warm mode (a partner
+  // read the false space error as warm needing ~192 GB of /tmp it does not use).
+  const GIB = 1073741824
+  const VCENTER_VM = { ...ESXI_VM, hostType: 'vcenter', committed: 100 * GIB }
+  const PREFLIGHT_TEMP_TOO_SMALL = {
+    checked: true, ok: true, installing: false, errors: [] as string[],
+    virtV2vInstalled: true, virtioWinInstalled: true, nbdkitInstalled: true,
+    nbdcopyInstalled: true, guestfsToolsInstalled: true, ovmfInstalled: true,
+    detectedDisks: [] as string[],
+    tempStorages: [{ path: '/tmp', availableBytes: 150 * GIB, totalBytes: 200 * GIB, filesystem: 'ext4' }],
+  }
+
+  it('hides the Temporary Storage selector and its space error in warm mode (single VM)', () => {
+    const { unmount } = renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: VCENTER_VM,
+          migType: 'cold',
+          migTempStorage: '/tmp',
+          vcenterPreflight: PREFLIGHT_TEMP_TOO_SMALL,
+        })}
+      />,
+    )
+    expect(screen.getAllByText('Temporary Storage').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Insufficient space/)).toBeInTheDocument()
+    unmount()
+
+    renderWithProviders(
+      <InventoryDialogs
+        {...makeProps({
+          esxiMigrateVm: VCENTER_VM,
+          migType: 'warm',
+          migTempStorage: '/tmp',
+          vcenterPreflight: PREFLIGHT_TEMP_TOO_SMALL,
+        })}
+      />,
+    )
+    expect(screen.queryByText('Temporary Storage')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Insufficient space/)).not.toBeInTheDocument()
+  })
+
+  it('hides the Temporary Storage selector and its space error in warm mode (bulk)', () => {
+    const bulkProps = (migType: 'cold' | 'warm') =>
+      makeProps({
+        bulkMigOpen: true,
+        bulkMigHostInfo: {
+          hostType: 'vcenter',
+          connectionId: 'vc-1',
+          connectionName: 'vcenter-lab',
+          vms: [{ vmid: '42', name: 'web01', status: 'poweredOff', committed: 100 * GIB }],
+        },
+        bulkMigSelected: new Set(['42']),
+        migType,
+        migTempStorage: '/tmp',
+        vcenterPreflight: PREFLIGHT_TEMP_TOO_SMALL,
+      })
+    const { unmount } = renderWithProviders(<InventoryDialogs {...bulkProps('cold')} />)
+    expect(screen.getAllByText('Temporary Storage').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Insufficient space/)).toBeInTheDocument()
+    unmount()
+
+    renderWithProviders(<InventoryDialogs {...bulkProps('warm')} />)
+    expect(screen.queryByText('Temporary Storage')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Insufficient space/)).not.toBeInTheDocument()
+  })
+
   it('forwards convertDisksToQcow2=true in the single-VM migration request', async () => {
     const bodies: any[] = []
     server.use(

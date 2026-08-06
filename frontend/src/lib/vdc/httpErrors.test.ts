@@ -29,4 +29,11 @@ describe('mapCreateVdcError', () => {
   it('falls back to 500 for anything else', () => {
     expect(mapCreateVdcError(new Error('ECONNREFUSED')).status).toBe(500)
   })
+
+  it('maps the not-in-provider-pool guard message to 400', () => {
+    const e = new Error(
+      'Connection conn-9 is not in the provider pool — vDCs can only be created on provider-pool connections'
+    )
+    expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
+  })
 })

@@ -301,6 +301,19 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     )
   }
 
+  // 2bis. vDCs may only slice provider-pool connections (IaaS/MSP
+  // exclusivity). The FK to provider_connections would reject the insert
+  // anyway, but only after the PVE pool was created — refuse up front.
+  const poolMembership = await prisma.providerConnection.findUnique({
+    where: { connectionId: input.connectionId },
+    select: { connectionId: true },
+  })
+  if (!poolMembership) {
+    throw new Error(
+      `Connection ${input.connectionId} is not in the provider pool — vDCs can only be created on provider-pool connections`
+    )
+  }
+
   // 3. Allocate vDC id (needed for zone generation)
   const id = randomUUID()
   const now = new Date()

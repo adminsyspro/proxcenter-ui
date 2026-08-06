@@ -1145,9 +1145,13 @@ export default function VdcTab() {
     : []
   const tenantHasExistingVdc = existingTenantVdcs.length > 0
   const occupiedConnectionIds = new Set(existingTenantVdcs.map((v: any) => v.connectionId))
+  // vDCs may only slice provider-pool connections (IaaS/MSP exclusivity) —
+  // an MSP-owned connection can appear in `connections` (it's still a `pve`
+  // connection) but must never be offered as a cluster to carve a vDC from.
+  const poolConnections = connections.filter((c: any) => c.inProviderPool)
   const allClustersUsed =
-    tenantHasExistingVdc && connections.length > 0 &&
-    connections.every((c: any) => occupiedConnectionIds.has(c.id))
+    tenantHasExistingVdc && poolConnections.length > 0 &&
+    poolConnections.every((c) => occupiedConnectionIds.has(c.id))
 
   return (
     <Box>
@@ -1315,7 +1319,7 @@ export default function VdcTab() {
 
           {/* Connection / Cluster */}
           <Autocomplete
-            options={editingVdc ? connections : connections.filter((c) => !occupiedConnectionIds.has(c.id))}
+            options={editingVdc ? connections : poolConnections.filter((c) => !occupiedConnectionIds.has(c.id))}
             getOptionLabel={(o) => o.name || o.id}
             value={connections.find((c) => c.id === form.connectionId) || null}
             onChange={(_, v) => {

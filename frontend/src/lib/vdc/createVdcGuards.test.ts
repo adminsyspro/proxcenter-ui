@@ -16,6 +16,7 @@ const {
     vdc: { findFirst: vi.fn(), findUnique: vi.fn() },
     vdcVnet: { findMany: vi.fn() },
     connection: { findUnique: vi.fn(), findMany: vi.fn() },
+    providerConnection: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   } as any,
   clearVdcScopeCacheMock: vi.fn(),
@@ -81,6 +82,7 @@ beforeEach(() => {
   prismaMock.vdc.findFirst.mockResolvedValue(null)
   prismaMock.connection.findUnique.mockResolvedValue(null)
   prismaMock.connection.findMany.mockResolvedValue([])
+  prismaMock.providerConnection.findUnique.mockResolvedValue({ connectionId: 'conn-2' })
 })
 
 describe('createVdc guards', () => {
@@ -117,6 +119,13 @@ describe('createVdc guards', () => {
   it('still rejects the provider tenant', async () => {
     await expect(createVdc({ ...baseInput, tenantId: 'default' }, null)).rejects.toThrow(
       /provider tenant/
+    )
+  })
+
+  it('rejects a connection that is not in the provider pool', async () => {
+    prismaMock.providerConnection.findUnique.mockResolvedValue(null)
+    await expect(createVdc(baseInput, null)).rejects.toThrow(
+      /not in the provider pool/
     )
   })
 })

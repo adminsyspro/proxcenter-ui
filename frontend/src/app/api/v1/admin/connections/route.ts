@@ -36,7 +36,16 @@ export async function GET(req: Request) {
       },
     })
 
-    return NextResponse.json({ data: connections })
+    // vDCs may only slice provider-pool connections (IaaS/MSP exclusivity).
+    // Load the pool membership once and flag each connection so consumers
+    // (e.g. the vDC cluster picker) can filter MSP-owned connections out.
+    const pool = new Set(
+      (await prisma.providerConnection.findMany({ select: { connectionId: true } })).map(p => p.connectionId)
+    )
+
+    return NextResponse.json({
+      data: connections.map(c => ({ ...c, inProviderPool: pool.has(c.id) })),
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

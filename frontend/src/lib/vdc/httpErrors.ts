@@ -18,6 +18,7 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
   if (msg.includes('cannot be created on the provider tenant') || msg.startsWith('Tenant not found')) {
     return { status: 400, message: msg }
   }
+  if (msg.includes('not in the provider pool')) return { status: 400, message: msg }
 
   return { status: 500, message: msg }
 }

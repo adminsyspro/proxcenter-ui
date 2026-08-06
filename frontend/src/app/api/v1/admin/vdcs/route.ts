@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listVdcs, createVdc } from "@/lib/vdc"
+import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
 
@@ -103,22 +104,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ data: vdc }, { status: 201 })
   } catch (e: any) {
-    const msg = e?.message || String(e)
-
-    // Slug conflict
-    if (msg.includes("already exists")) {
-      return NextResponse.json({ error: msg }, { status: 409 })
-    }
-
-    // Business-rule rejections surfaced as Error by createVdc are validation
-    // problems, not server faults — surface them as 400 so the client can
-    // show the message instead of a generic "Server Error". Covers the
-    // "default tenant" refusal (see frontend/src/lib/vdc/index.ts) and the
-    // "Tenant not found" lookup miss.
-    if (msg.includes("cannot be created on the provider tenant") || msg.startsWith("Tenant not found")) {
-      return NextResponse.json({ error: msg }, { status: 400 })
-    }
-
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const { status, message } = mapCreateVdcError(e)
+    return NextResponse.json({ error: message }, { status })
   }
 }

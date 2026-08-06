@@ -179,6 +179,87 @@ export function formatOsType(code: string | undefined): string {
   return osTypeLabels[code] || code
 }
 
+/* ------------------------------------------------------------------ */
+/* QEMU machine type                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * PVE stores `machine` as a property string whose default key is the machine
+ * type: `[type=]<machine type>[,viommu=…][,aw-bits=…][,enable-s3=…][,enable-s4=…]`.
+ * The type must match qemu-server's regex, which knows `pc`, `q35`, `virt` and
+ * their pinned variants (`pc-i440fx-9.2+pve1`, `pc-q35-8.1`) — but never the
+ * marketing name `i440fx`. The i440fx machine is spelled `pc`; sending
+ * `machine=i440fx` is what PVE rejected in issue #657.
+ */
+export type MachineFamily = 'pc' | 'q35' | 'other'
+
+export function parseMachineType(raw: string | undefined | null): {
+  family: MachineFamily
+  type: string
+  extras: string[]
+} {
+  const parts = String(raw ?? '').split(',').map(p => p.trim()).filter(Boolean)
+  const typePart = parts.find(p => !p.includes('=') || p.startsWith('type='))
+  const type = (typePart ?? '').replace(/^type=/, '')
+  const extras = parts.filter(p => p !== typePart)
+
+  // pc-q35-* also starts with "pc-", so q35 has to be tested first.
+  let family: MachineFamily = 'other'
+  if (/^(q35|pc-q35)(-|$)/.test(type)) family = 'q35'
+  else if (type === '' || /^(pc|pc-i440fx)(-|$)/.test(type)) family = 'pc'
+
+  return { family, type, extras }
+}
+
+/**
+ * Rebuild the `machine` value for the family the user picked, keeping every
+ * property-string key we do not own (viommu, enable-s3/s4…) and the pinned
+ * version when the family is unchanged. Version pins are family-specific, so
+ * switching families has to fall back to the bare family name.
+ */
+export function buildMachineType(raw: string | undefined | null, family: 'pc' | 'q35'): string {
+  const current = parseMachineType(raw)
+  const type = current.family === family && current.type ? current.type : family
+
+  return [type, ...current.extras].join(',')
+}
+
+/** Human-readable machine type for the read-only Hardware row. */
+export function formatMachineType(raw: string | undefined | null): string {
+  const { type, extras } = parseMachineType(raw)
+  const base = type || 'pc'
+
+  return [base === 'pc' ? 'pc (i440fx)' : base, ...extras].join(', ')
+}
+
+/**
+ * Everything the Hardware "Machine type" row needs. Option values are the exact
+ * strings PUT back to PVE, and every label states what that option will write.
+ */
+export function machineTypeRow(raw: string | undefined | null): {
+  value: string
+  editValue: string
+  options: { value: string; label: string }[]
+} {
+  const current = String(raw ?? '')
+  const { family } = parseMachineType(current)
+  const options = (['pc', 'q35'] as const).map(f => {
+    const value = buildMachineType(current, f)
+
+    return { value, label: formatMachineType(value) }
+  })
+
+  // An unrecognised family (arm64 `virt`…) keeps its own entry so the Select
+  // shows the truth instead of going blank.
+  if (family === 'other') options.push({ value: current, label: formatMachineType(current) })
+
+  return {
+    value: formatMachineType(current),
+    editValue: family === 'other' ? current : buildMachineType(current, family),
+    options,
+  }
+}
+
 export function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const u = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -1134,7 +1215,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
         systemInfo = {
           bios: config.bios || 'seabios',
-          machine: config.machine || 'i440fx',
+          machine: config.machine || '',
           vga: config.vga || 'std',
           scsihw: config.scsihw || 'virtio-scsi-single',
         }

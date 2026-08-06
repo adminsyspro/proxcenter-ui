@@ -75,7 +75,7 @@ const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachCo
 const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
+import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow } from '../helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
@@ -1924,9 +1924,10 @@ export default function VmDetailTabs(props: any) {
                                       key: 'machine',
                                       icon: 'ri-instance-line',
                                       label: t('inventory.machineType'),
-                                      value: data.systemInfo.machine || 'i440fx',
-                                      editValue: data.systemInfo.machine || 'i440fx',
-                                      options: [{ value: 'i440fx', label: 'i440fx (Default)' }, { value: 'q35', label: 'q35' }],
+                                      // Option values are the strings we PUT back to PVE: they carry the
+                                      // whole property string (version pin, viommu, enable-s3/s4…) and
+                                      // spell the i440fx machine `pc` — `i440fx` fails PVE's regex (#657).
+                                      ...machineTypeRow(data.systemInfo.machine),
                                     },
                                     {
                                       key: 'vga',

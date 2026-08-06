@@ -26,6 +26,10 @@ import {
   formatRrdTick,
   formatRrdTooltipTs,
   rrdTimeframeFromSeries,
+  parseMachineType,
+  buildMachineType,
+  formatMachineType,
+  machineTypeRow,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -847,5 +851,152 @@ describe('rrdTimeframeFromSeries', () => {
   it('falls back to hour when timestamps are not finite', () => {
     expect(rrdTimeframeFromSeries([pt(NaN), pt(NaN)])).toBe('hour')
     expect(rrdTimeframeFromSeries([{ t: 'x' } as any, { t: 'y' } as any])).toBe('hour')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* QEMU machine type                                                   */
+/* ------------------------------------------------------------------ */
+
+describe('parseMachineType', () => {
+  it('treats an unset machine as the i440fx family', () => {
+    expect(parseMachineType(undefined)).toEqual({ family: 'pc', type: '', extras: [] })
+    expect(parseMachineType('')).toEqual({ family: 'pc', type: '', extras: [] })
+  })
+
+  it('recognises the bare families', () => {
+    expect(parseMachineType('pc').family).toBe('pc')
+    expect(parseMachineType('q35').family).toBe('q35')
+  })
+
+  it('recognises pinned versions, and does not mistake pc-q35 for i440fx', () => {
+    expect(parseMachineType('pc-i440fx-9.2+pve1').family).toBe('pc')
+    expect(parseMachineType('pc-i440fx-8.1.pxe').family).toBe('pc')
+    expect(parseMachineType('pc-q35-8.1').family).toBe('q35')
+    expect(parseMachineType('pc-q35-9.2+pve1').family).toBe('q35')
+  })
+
+  it('splits the property string, with or without the explicit type= key', () => {
+    expect(parseMachineType('q35,viommu=intel')).toEqual({
+      family: 'q35', type: 'q35', extras: ['viommu=intel'],
+    })
+    expect(parseMachineType('type=q35,viommu=intel,aw-bits=48')).toEqual({
+      family: 'q35', type: 'q35', extras: ['viommu=intel', 'aw-bits=48'],
+    })
+    expect(parseMachineType('pc-i440fx-9.2+pve1,enable-s3=1')).toEqual({
+      family: 'pc', type: 'pc-i440fx-9.2+pve1', extras: ['enable-s3=1'],
+    })
+  })
+
+  it('flags an unknown family instead of silently claiming i440fx', () => {
+    expect(parseMachineType('virt').family).toBe('other')
+    expect(parseMachineType('virt-8.1').family).toBe('other')
+  })
+})
+
+describe('buildMachineType', () => {
+  it('spells the i440fx machine "pc" — "i440fx" is rejected by PVE', () => {
+    expect(buildMachineType('', 'pc')).toBe('pc')
+    expect(buildMachineType('q35', 'pc')).toBe('pc')
+  })
+
+  it('switches to q35', () => {
+    expect(buildMachineType('', 'q35')).toBe('q35')
+    expect(buildMachineType('pc', 'q35')).toBe('q35')
+  })
+
+  it('keeps a pinned version when the family is unchanged', () => {
+    expect(buildMachineType('pc-i440fx-9.2+pve1', 'pc')).toBe('pc-i440fx-9.2+pve1')
+    expect(buildMachineType('pc-q35-8.1', 'q35')).toBe('pc-q35-8.1')
+  })
+
+  it('drops the version pin when switching family, since pins are family-specific', () => {
+    expect(buildMachineType('pc-i440fx-9.2+pve1', 'q35')).toBe('q35')
+    expect(buildMachineType('pc-q35-8.1', 'pc')).toBe('pc')
+  })
+
+  it('preserves the other property-string keys instead of wiping them', () => {
+    expect(buildMachineType('q35,viommu=intel', 'pc')).toBe('pc,viommu=intel')
+    expect(buildMachineType('type=q35,viommu=intel,aw-bits=48', 'q35')).toBe('q35,viommu=intel,aw-bits=48')
+    expect(buildMachineType('pc,enable-s3=1,enable-s4=0', 'q35')).toBe('q35,enable-s3=1,enable-s4=0')
+  })
+
+  it('overwrites an unrecognised family with the requested one', () => {
+    expect(buildMachineType('virt', 'q35')).toBe('q35')
+  })
+
+  it('only ever emits a type PVE accepts', () => {
+    // Verbatim from qemu-server PVE/QemuServer/Machine.pm $machine_fmt{type}{pattern}.
+    // This is the check that rejected `machine=i440fx` and produced issue #657.
+    const PVE_MACHINE_TYPE = /^(pc|pc(-i440fx)?-\d+(\.\d+)+(\+pve\d+)?(\.pxe)?|q35|pc-q35-\d+(\.\d+)+(\+pve\d+)?(\.pxe)?|virt(?:-\d+(\.\d+)+)?(\+pve\d+)?)$/
+    const currents = ['', 'pc', 'q35', 'pc-i440fx-9.2+pve1', 'pc-q35-8.1', 'q35,viommu=intel', 'type=pc,enable-s3=1', 'virt']
+
+    for (const current of currents) {
+      for (const family of ['pc', 'q35'] as const) {
+        const emitted = buildMachineType(current, family)
+        expect(emitted.split(',')[0]).toMatch(PVE_MACHINE_TYPE)
+      }
+    }
+  })
+})
+
+describe('formatMachineType', () => {
+  it('names the default machine so the row is readable', () => {
+    expect(formatMachineType('')).toBe('pc (i440fx)')
+    expect(formatMachineType(undefined)).toBe('pc (i440fx)')
+    expect(formatMachineType('pc')).toBe('pc (i440fx)')
+  })
+
+  it('shows the pinned version and the extra keys verbatim', () => {
+    expect(formatMachineType('q35')).toBe('q35')
+    expect(formatMachineType('pc-i440fx-9.2+pve1')).toBe('pc-i440fx-9.2+pve1')
+    expect(formatMachineType('type=q35,viommu=intel')).toBe('q35, viommu=intel')
+  })
+})
+
+describe('machineTypeRow', () => {
+  it('offers pc and q35, and preselects i440fx when the VM has no machine key', () => {
+    const row = machineTypeRow('')
+
+    expect(row.value).toBe('pc (i440fx)')
+    expect(row.editValue).toBe('pc')
+    expect(row.options).toEqual([
+      { value: 'pc', label: 'pc (i440fx)' },
+      { value: 'q35', label: 'q35' },
+    ])
+  })
+
+  it('preselects an option that actually exists, so the Select is never blank', () => {
+    for (const raw of ['', 'pc', 'q35', 'pc-i440fx-9.2+pve1', 'pc-q35-8.1', 'q35,viommu=intel', 'virt']) {
+      const row = machineTypeRow(raw)
+
+      expect(row.options.map(o => o.value)).toContain(row.editValue)
+    }
+  })
+
+  it('keeps the pinned version selectable instead of silently unpinning it', () => {
+    const row = machineTypeRow('pc-i440fx-9.2+pve1')
+
+    expect(row.editValue).toBe('pc-i440fx-9.2+pve1')
+    expect(row.options).toEqual([
+      { value: 'pc-i440fx-9.2+pve1', label: 'pc-i440fx-9.2+pve1' },
+      { value: 'q35', label: 'q35' },
+    ])
+  })
+
+  it('carries the other property-string keys into both options', () => {
+    const row = machineTypeRow('q35,viommu=intel')
+
+    expect(row.value).toBe('q35, viommu=intel')
+    expect(row.editValue).toBe('q35,viommu=intel')
+    expect(row.options.map(o => o.value)).toEqual(['pc,viommu=intel', 'q35,viommu=intel'])
+  })
+
+  it('adds an entry for an unrecognised family rather than dropping the VM into a blank Select', () => {
+    const row = machineTypeRow('virt')
+
+    expect(row.editValue).toBe('virt')
+    expect(row.options).toHaveLength(3)
+    expect(row.options[2]).toEqual({ value: 'virt', label: 'virt' })
   })
 })

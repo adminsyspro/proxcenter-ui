@@ -39,15 +39,26 @@ beforeEach(async () => {
 interface VdcOpts {
   id: string
   connectionId: string
+  tenantId?: string
   slug?: string
   sdnZoneName?: string | null
+}
+
+// The (tenant_id, connection_id) unique constraint means two vDCs on the
+// same connection must belong to different tenants. Use this to create
+// the extra tenant(s) a fixture needs.
+async function addTenant(id: string): Promise<void> {
+  const now = new Date()
+  await prismaTest.tenant.create({
+    data: { id, slug: id, name: id, operatingModel: 'iaas', createdAt: now, updatedAt: now },
+  })
 }
 
 async function addVdc(opts: VdcOpts): Promise<void> {
   await prismaTest.vdc.create({
     data: {
       id: opts.id,
-      tenantId: 'tenant-1',
+      tenantId: opts.tenantId ?? 'tenant-1',
       connectionId: opts.connectionId,
       name: opts.id,
       slug: opts.slug ?? opts.id,
@@ -87,8 +98,17 @@ describe('generateZoneName', () => {
 
   it('throws on double collision', async () => {
     const hash = crypto.createHash('sha1').update('vdc-4').digest('hex').slice(0, 2)
+    // Zone-name collisions must be checked per connection, across tenants —
+    // so the two colliding vDCs below belong to different tenants on conn1.
+    await addTenant('tenant-2')
     await addVdc({ id: 'other-1', connectionId: 'conn1', slug: 'acme-prod', sdnZoneName: 'zacmepro' })
-    await addVdc({ id: 'other-2', connectionId: 'conn1', slug: 'acme-prod-2', sdnZoneName: 'zacmep' + hash })
+    await addVdc({
+      id: 'other-2',
+      connectionId: 'conn1',
+      tenantId: 'tenant-2',
+      slug: 'acme-prod-2',
+      sdnZoneName: 'zacmep' + hash,
+    })
     await expect(
       generateZoneName('conn1', { id: 'vdc-4', slug: 'acme-prod' }),
     ).rejects.toThrow('Cannot generate unique SDN zone name')
@@ -116,8 +136,11 @@ describe('allocateVni', () => {
   })
 
   it('VNI is unique across vDCs on the same PVE connection', async () => {
+    // VNI uniqueness is a per-connection property that spans tenants, so
+    // vdc-A and vdc-B belong to different tenants on the same connection.
+    await addTenant('tenant-2')
     await addVdc({ id: 'vdc-A', connectionId: 'conn-shared' })
-    await addVdc({ id: 'vdc-B', connectionId: 'conn-shared' })
+    await addVdc({ id: 'vdc-B', connectionId: 'conn-shared', tenantId: 'tenant-2' })
     await addVnet('vdc-A', 'lan', 10000)
     await addVnet('vdc-A', 'dmz', 10001)
     expect(await allocateVni('vdc-B')).toBe(10002)
@@ -154,8 +177,12 @@ describe('generatePveVnetId', () => {
   })
 
   it('same displayName in 2 vDCs -> 2 different ids (MSP requirement)', async () => {
+    // The MSP requirement is that two DIFFERENT tenants sharing a PVE
+    // connection can't collide on a vnet id, so vdc-A and vdc-B here
+    // belong to different tenants on the same connection.
+    await addTenant('tenant-2')
     await addVdc({ id: 'vdc-A', connectionId: 'conn-shared' })
-    await addVdc({ id: 'vdc-B', connectionId: 'conn-shared' })
+    await addVdc({ id: 'vdc-B', connectionId: 'conn-shared', tenantId: 'tenant-2' })
     const idA = await generatePveVnetId('vdc-A', 'lan')
     const idB = await generatePveVnetId('vdc-B', 'lan')
     expect(idA).not.toBe(idB)

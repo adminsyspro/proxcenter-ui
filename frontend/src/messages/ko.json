@@ -7078,7 +7078,8 @@
     "pbsCancel": "취소",
     "pbsCreate": "생성",
     "pbsClose": "닫기",
-    "tenantHasVdcs": "이 테넌트에는 이미 {count, plural, =1 {vDC가 있습니다: {names}} other {vDC #개가 있습니다: {names}}}. 테넌트당 vDC는 하나만 허용되므로 기존 vDC를 편집하여 변경하세요.",
+    "tenantHasVdcs": "이 테넌트는 이미 {count, plural, =1 {vDC {names}} other {vDC #개({names})}}를 보유하고 있습니다. 아직 vDC가 없는 클러스터에 새로 만들 수 있습니다.",
+    "tenantAllClustersUsed": "이 테넌트는 이미 모든 사용 가능한 클러스터에 vDC를 보유하고 있습니다.",
     "tenantUsers": "테넌트 사용자"
   },
   "myVdc": {

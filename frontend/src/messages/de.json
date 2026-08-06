@@ -7068,7 +7068,8 @@
     "pbsClose": "Schließen",
     "storage": "Speicher",
     "backups": "Backups",
-    "tenantHasVdcs": "Dieser Tenant hat bereits {count, plural, =1 {ein vDC: {names}} other {# vDCs: {names}}}. Bearbeiten Sie das bestehende vDC, um Änderungen vorzunehmen — nur ein vDC pro Tenant ist erlaubt.",
+    "tenantHasVdcs": "Dieser Tenant besitzt bereits {count, plural, =1 {ein vDC: {names}} other {# vDCs: {names}}}. Sie können ein weiteres auf einem noch nicht abgedeckten Cluster anlegen.",
+    "tenantAllClustersUsed": "Dieser Tenant besitzt bereits auf jedem verfügbaren Cluster ein vDC.",
     "tenantUsers": "Tenant-Benutzer"
   },
   "sdn": {

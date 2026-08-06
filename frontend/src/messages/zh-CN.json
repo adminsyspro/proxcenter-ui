@@ -7071,7 +7071,8 @@
     "pbsClose": "关闭",
     "storage": "存储",
     "backups": "备份",
-    "tenantHasVdcs": "该租户已有 {count, plural, =1 {1 个 vDC：{names}} other {# 个 vDC：{names}}}。请编辑现有 vDC 进行修改 — 每个租户仅允许一个 vDC。",
+    "tenantHasVdcs": "该租户已拥有 {count, plural, =1 {一个 vDC:{names}} other {# 个 vDC:{names}}}。您可以在尚未覆盖的集群上再创建一个。",
+    "tenantAllClustersUsed": "该租户在每个可用集群上都已拥有 vDC。",
     "tenantUsers": "租户用户"
   },
   "sdn": {

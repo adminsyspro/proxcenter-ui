@@ -7078,7 +7078,8 @@
     "pbsCancel": "Cancelar",
     "pbsCreate": "Crear",
     "pbsClose": "Cerrar",
-    "tenantHasVdcs": "Este tenant ya tiene {count, plural, =1 {un vDC: {names}} other {# vDCs: {names}}}. Edita el vDC existente para hacer cambios — solo se permite un vDC por tenant.",
+    "tenantHasVdcs": "Este tenant ya tiene {count, plural, =1 {un vDC: {names}} other {# vDC: {names}}}. Puede crear otro en un clúster aún no cubierto.",
+    "tenantAllClustersUsed": "Este tenant ya tiene un vDC en cada clúster disponible.",
     "tenantUsers": "Usuarios del tenant"
   },
   "myVdc": {

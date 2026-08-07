@@ -229,6 +229,7 @@
     "horizontalLayout": "Horizontal layout",
     "verticalLayout": "Vertical layout",
     "switchTenant": "Switch tenant",
+    "switchVdc": "Switch vDC",
     "searchTenants": "Search tenants"
   },
   "pxcore": {
@@ -7085,6 +7086,7 @@
   "myVdc": {
     "title": "My Datacenter",
     "selectVdc": "Select vDC",
+    "allVdcs": "All vDCs",
     "noVdcs": "No virtual datacenter is assigned to your tenant.",
     "nodes": "Nodes",
     "storages": "Storages",

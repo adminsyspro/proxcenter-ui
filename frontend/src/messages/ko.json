@@ -229,6 +229,7 @@
     "horizontalLayout": "가로 레이아웃",
     "verticalLayout": "세로 레이아웃",
     "switchTenant": "테넌트 전환",
+    "switchVdc": "vDC 전환",
     "searchTenants": "테넌트 검색"
   },
   "pxcore": {
@@ -7085,6 +7086,7 @@
   "myVdc": {
     "title": "내 데이터센터",
     "selectVdc": "vDC 선택",
+    "allVdcs": "모든 vDC",
     "noVdcs": "테넌트에 할당된 가상 데이터센터가 없습니다.",
     "nodes": "노드",
     "storages": "스토리지",

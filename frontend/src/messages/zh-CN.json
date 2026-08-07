@@ -228,6 +228,7 @@
     "horizontalLayout": "水平布局",
     "verticalLayout": "垂直布局",
     "switchTenant": "Switch tenant",
+    "switchVdc": "切换 vDC",
     "searchTenants": "Search tenants"
   },
   "pxcore": {
@@ -6910,6 +6911,7 @@
   "myVdc": {
     "title": "我的数据中心",
     "selectVdc": "选择 vDC",
+    "allVdcs": "所有 vDC",
     "noVdcs": "您的租户未分配任何虚拟数据中心。",
     "nodes": "节点",
     "storages": "存储",

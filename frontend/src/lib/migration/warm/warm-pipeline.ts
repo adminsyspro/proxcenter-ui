@@ -222,6 +222,18 @@ export function scaleWarmProgress(rangeStart: number, rangeEnd: number, doneByte
   return Math.round(rangeStart + (rangeEnd - rangeStart) * fraction)
 }
 
+/**
+ * Progress windows for one disk of the checksum fallback on the locked 10→80
+ * full_copy scale. Each disk gets an equal slice (span = 70/diskCount); the
+ * first 30% of the slice is the checksum scan (reads only, nothing copied yet),
+ * the remaining 70% is the block apply. Pure — unit-tested like scaleWarmProgress.
+ */
+export function checksumDiskWindows(diskIndex: number, diskCount: number): { scanStart: number; scanEnd: number; applyEnd: number } {
+  const span = 70 / diskCount
+  const scanStart = 10 + span * diskIndex
+  return { scanStart, scanEnd: scanStart + 0.3 * span, applyEnd: 10 + span * (diskIndex + 1) }
+}
+
 /** One copy pass's slot on the locked progress scale (see scaleWarmProgress). */
 interface PassWindow {
   status: WarmStatus
@@ -516,7 +528,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         // Progress first, then the log line — appendLog stamps each entry with
         // the job's current progress, which is why the lines used to read 0 (#502).
         void (async () => {
-          await updateJobLive(jobId, pass.status, { currentStep: pass.currentStep, progress: pct, bytesTransferred: BigInt(passBytes), transferSpeed: `${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
+          await updateJobLive(jobId, pass.status, { currentStep: pass.currentStep, currentDisk: diskIndex, progress: pct, bytesTransferred: BigInt(passBytes), transferSpeed: `${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
           await appendLog(jobId, `Disk ${diskIndex}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
         })().catch(() => {})
       }
@@ -569,6 +581,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         for (let i = 0; i < vmConfig.disks.length; i++) {
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           const disk = vmConfig.disks[i]
+          // Cheap live write so the task readout can say "Disk n of m" while this
+          // disk streams; keeps the pass's finer step label (e.g. delta_2).
+          await updateJobLive(jobId, window.status, { currentStep: window.currentStep, currentDisk: i })
           bytes += await readAndApply(disk, i, snapMor, extentsByDisk.get(disk.deviceKey)!, pass)
           // Correct the estimate with the disk's exact extent total: the dd
           // accumulator is conservative (see createDdProgressAccumulator).
@@ -641,13 +656,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
       await updateJob(jobId, "cutover", { progress: 95 })
-      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId)
+      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
+        "Cutover: requesting clean guest shutdown (VMware Tools)…")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
       await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*", { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
     } else {
       // ── checksum fallback: stop source, full block-diff vs the (zeroed) target ──
-      await updateJob(jobId, "cutover")
-      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId)
+      // The early shutdown belongs to the full copy on this path, NOT the cutover:
+      // a "cutover" badge at minute 0 read as "almost done" while the whole copy
+      // was still ahead, and the generic shutdown line hid that the VM would stay
+      // off for the entire transfer (#587 field feedback).
+      await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
+      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
+        "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…")
       await updateJob(jobId, "full_copy", { progress: 10 })
       const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, "warm migration", false)
       if (!snapMor) throw new Error("CreateSnapshot (checksum) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually")
@@ -662,16 +683,38 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           activeReaders.push(reader)
           try {
             const dev = targetDev.get(disk.deviceKey)!
-            const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes)
-            // Per-disk progress window: unlike runCbtPass there is no upfront
+            // Per-disk progress windows: unlike runCbtPass there is no upfront
             // all-disk denominator here (the checksum scan needs each disk's
-            // reader), so each disk gets an equal slice of the 10→80 window.
-            const span = 70 / vmConfig.disks.length
+            // reader), so each disk gets an equal slice of the 10→80 window —
+            // the first 30% for the scan, the rest for the apply.
+            const win = checksumDiskWindows(i, vmConfig.disks.length)
+            const capGB = (disk.capacityBytes / 1073741824).toFixed(1)
+            // #587 field feedback: this scan ran ~25 min per 60 GB disk (hours on
+            // multi-TB) in total silence — no log line, no progress — and read as
+            // a hang. Announce it and stream its progress below.
+            await appendLog(jobId, `Disk ${i}: scanning source and target block checksums (${capGB} GB) — nothing is copied during this phase; it reads the whole disk and can take a long time`)
+            let lastScanFlush = 0
+            const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes, {
+              inactivityMs: APPLY_INACTIVITY_MS,
+              onProgress: (scannedBlocks, totalBlocks) => {
+                const now = Date.now()
+                if (now - lastScanFlush < PROGRESS_LOG_INTERVAL_MS) return
+                lastScanFlush = now
+                const pct = scaleWarmProgress(win.scanStart, win.scanEnd, scannedBlocks, totalBlocks)
+                const scanPct = totalBlocks > 0 ? Math.round((scannedBlocks / totalBlocks) * 100) : 100
+                // Progress first, then the log line — appendLog stamps each entry
+                // with the job's current progress (#502).
+                void (async () => {
+                  await updateJobLive(jobId, "full_copy", { currentStep: "full_copy", currentDisk: i, progress: pct, transferSpeed: null })
+                  await appendLog(jobId, `Disk ${i}: checksum scan ${scanPct}% (reading source and target)`)
+                })().catch(() => {})
+              },
+            })
             await applyExtents(reader.nbdDev, dev, extents, disk.capacityBytes, "checksum apply failed", i, {
               status: "full_copy", currentStep: "full_copy",
-              rangeStart: 10 + span * i, rangeEnd: 10 + span * (i + 1),
+              rangeStart: win.scanEnd, rangeEnd: win.applyEnd,
               totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0,
-              lastPct: Math.round(10 + span * i),
+              lastPct: Math.round(win.scanEnd),
             })
           } finally {
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -787,9 +830,13 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
  * Clean guest shutdown then CONFIRM the source is powered off. Mandatory for a
  * valid final delta (section 9): a delta taken while the guest still writes is
  * invalid, so there is no proceed-anyway. Aborts if the source never stops.
+ * `announce` is the log line for the shutdown request: the CBT path shuts down
+ * at cutover (seconds of downtime left) while the checksum fallback shuts down
+ * BEFORE the copy (VM off for the whole transfer) — one hardcoded "Cutover: …"
+ * line misled operators on the fallback path (#587 field feedback).
  */
-async function cleanShutdownAndConfirm(jobId: string, session: SoapSession, vmid: string): Promise<void> {
-  await appendLog(jobId, "Cutover: requesting clean guest shutdown (VMware Tools)…")
+async function cleanShutdownAndConfirm(jobId: string, session: SoapSession, vmid: string, announce: string): Promise<void> {
+  await appendLog(jobId, announce)
   await soapGuestShutdown(session, vmid).catch(async (e: any) => {
     await appendLog(jobId, `Guest shutdown could not be initiated (${e?.message || e}); waiting for manual/hard power-off`, "warn")
   })

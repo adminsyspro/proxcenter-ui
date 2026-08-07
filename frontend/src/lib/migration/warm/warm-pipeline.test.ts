@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { planPasses, buildThickZeroScript, scaleWarmProgress, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
+import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
 import { parseDdProgress } from "./dd-progress"
 import { volumesToFree, volumesToKeep, type AllocatedVolume } from "../pvesm-alloc"
 import { prismaTest, truncate } from "../../../__tests__/setup/prisma-test"
@@ -156,6 +156,31 @@ describe("scaleWarmProgress", () => {
 
   it("rounds to a whole percent (the job column is an Int)", () => {
     expect(scaleWarmProgress(0, 10, 1, 3)).toBe(3)
+  })
+})
+
+describe("checksumDiskWindows", () => {
+  // Checksum fallback slices of the locked 10→80 full_copy window: per disk,
+  // the first 30% of the slice is the scan, the remaining 70% the apply.
+  it("gives a single disk the whole 10→80 window, scan ending at 31", () => {
+    expect(checksumDiskWindows(0, 1)).toEqual({ scanStart: 10, scanEnd: 31, applyEnd: 80 })
+  })
+
+  it("splits multiple disks into equal contiguous slices", () => {
+    expect(checksumDiskWindows(0, 2)).toEqual({ scanStart: 10, scanEnd: 20.5, applyEnd: 45 })
+    expect(checksumDiskWindows(1, 2)).toEqual({ scanStart: 45, scanEnd: 55.5, applyEnd: 80 })
+  })
+
+  it("keeps windows contiguous and monotonic: one disk's applyEnd is the next disk's scanStart", () => {
+    for (const count of [1, 2, 3, 5]) {
+      for (let i = 0; i < count; i++) {
+        const w = checksumDiskWindows(i, count)
+        expect(w.scanStart).toBeLessThan(w.scanEnd)
+        expect(w.scanEnd).toBeLessThan(w.applyEnd)
+        if (i > 0) expect(w.scanStart).toBeCloseTo(checksumDiskWindows(i - 1, count).applyEnd, 10)
+      }
+      expect(checksumDiskWindows(count - 1, count).applyEnd).toBeCloseTo(80, 10)
+    }
   })
 })
 

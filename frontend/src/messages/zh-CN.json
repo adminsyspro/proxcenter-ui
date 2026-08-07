@@ -2095,6 +2095,12 @@
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
       "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅<link>温迁移节点准备指南</link>。",
+      "warmCbtFallbackTitle": "CBT 不可用：本次温迁移将使用校验和回退方式",
+      "warmCbtFallbackReasonSnapshot": "源虚拟机存在 VMware 快照，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackReasonHwVersion": "源虚拟机的虚拟硬件版本低于 vmx-07，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackReasonDiskMode": "源虚拟机存在独立磁盘或多写入（multi-writer）磁盘，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackDowntime": "使用校验和回退时，源虚拟机会在复制开始时关机，并在整个传输期间保持关机状态：停机时间随磁盘总大小增长。",
+      "warmCbtFallbackSnapshotHint": "在开始前删除或整合 VMware 快照，可让虚拟机保持在线，直到最后的短暂切换。",
       "migrationTypeSshfsBoot": "SSHFS 启动（实验性）",
       "migrationTypeSshfsBootDesc": "近零停机：虚拟机在数秒内从远程 ESXi 磁盘启动到 Proxmox。实验性：Guest 必须能在目标控制器上无人值守地启动；可能在 EFI Windows 或需要驱动注入的 Guest 上失败。生产环境请优先使用 Live 或离线迁移。",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 启动是实验性功能，仅当 Guest 能在目标上无需驱动适配而正确启动时才有效。对于 EFI Windows、来自 vCenter 的虚拟机或任何关键生产场景，请使用 Live 或离线模式。",
@@ -3644,6 +3650,23 @@
       "completed": "已完成",
       "cancelled": "已取消"
     },
+    "steps": {
+      "planning": "规划中",
+      "enabling_cbt": "正在启用 CBT",
+      "preparing_disks": "正在准备目标磁盘",
+      "full_copy": "全量复制",
+      "delta": "增量同步",
+      "source_shutdown": "正在关闭源虚拟机",
+      "awaiting_cutover": "等待切换决定",
+      "cutover": "切换",
+      "verify": "校验中",
+      "converting_disks": "正在转换磁盘",
+      "preflight": "预检",
+      "transferring": "正在传输磁盘",
+      "creating_vm": "正在创建虚拟机",
+      "configuring": "正在配置虚拟机",
+      "pending": "等待中"
+    },
     "shared": {
       "detailTitle": "迁移任务",
       "startedBy": "由 {name} 发起",
@@ -3653,6 +3676,9 @@
       "cancelConfirmLeftovers": "已复制的卷和部分创建的 VMID 可能会留在目标节点上。如果不需要，请手动清理。",
       "cancelConfirmKeep": "继续迁移",
       "cancelling": "正在取消...",
+      "diskOf": "磁盘 {n}/{m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "预计剩余 {eta}",
       "cancelFailed": "取消迁移失败"
     },
     "types": {

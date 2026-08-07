@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildScopeOptions, resolveScopeTargetLabel, formatScopeTarget } from './scope-options'
+import {
+  buildScopeOptions,
+  resolveScopeTargetLabel,
+  formatScopeTarget,
+  buildVdcScopeOptions,
+  buildVdcNameByPool,
+} from './scope-options'
 
 const t = (_k: string, _v?: any) => '' // sublabels not asserted here
 
@@ -95,5 +101,30 @@ describe('formatScopeTarget', () => {
   it('leaves tag/pool targets untouched and falls back on unknown connection', () => {
     expect(formatScopeTarget(connNames, 'pool', 'dbpool')).toBe('dbpool')
     expect(formatScopeTarget(connNames, 'connection', 'ghost')).toBe('ghost')
+  })
+})
+
+describe('buildVdcScopeOptions', () => {
+  const vdcs = [
+    { tenantId: 't1', pvePoolName: 'vdc-acme-paris', name: 'ACME — Paris', enabled: true },
+    { tenantId: 't1', pvePoolName: 'vdc-acme-fra', name: 'ACME — Frankfurt', enabled: false },
+    { tenantId: 't2', pvePoolName: 'vdc-beta-x', name: 'Beta — X', enabled: true },
+  ]
+
+  it('lists only the targeted tenant enabled vDCs, id = pvePoolName', () => {
+    expect(buildVdcScopeOptions(vdcs, 't1')).toEqual([
+      { id: 'vdc-acme-paris', label: 'ACME — Paris', sublabel: 'vdc-acme-paris', icon: 'ri-cloud-line' },
+    ])
+  })
+
+  it('empty for a tenant without vDCs', () => {
+    expect(buildVdcScopeOptions(vdcs, 't9')).toEqual([])
+  })
+})
+
+describe('buildVdcNameByPool', () => {
+  it('maps pvePoolName to the display name', () => {
+    expect(buildVdcNameByPool([{ pvePoolName: 'vdc-acme-paris', name: 'ACME — Paris' }]).get('vdc-acme-paris'))
+      .toBe('ACME — Paris')
   })
 })

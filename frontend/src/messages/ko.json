@@ -5289,6 +5289,8 @@
     "limitedToTag": "특정 태그가 있는 VM으로 제한",
     "poolScope": "풀",
     "limitedToPool": "특정 풀의 VM으로 제한",
+    "vdcScope": "vDC",
+    "limitedToVdc": "가상 데이터센터로 제한",
     "tagUsedByVms": "VM {count}개",
     "poolContainsVms": "VM {count}개",
     "tags": "태그",

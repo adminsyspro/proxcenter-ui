@@ -5289,6 +5289,8 @@
     "limitedToTag": "Limité aux VMs avec un tag spécifique",
     "poolScope": "Pool",
     "limitedToPool": "Limité aux VMs d'un pool spécifique",
+    "vdcScope": "vDC",
+    "limitedToVdc": "Limité à un datacenter virtuel",
     "tagUsedByVms": "{count} VM(s)",
     "poolContainsVms": "{count} VM(s)",
     "tags": "tags",

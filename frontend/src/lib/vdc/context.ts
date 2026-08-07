@@ -19,6 +19,11 @@ export { VDC_CONTEXT_COOKIE }
 const validationCache = new Map<string, { value: string | null; expiry: number }>()
 const VALIDATION_TTL_MS = 5_000
 
+// Size cap: an authenticated client controls the raw cookie value, and only
+// successful validations are memoized (see below) — this is a backstop
+// against an unbounded map if a client cycles through many junk ids.
+const VALIDATION_CACHE_MAX = 1000
+
 /** Purges the memoized cookie validations (all tenants when omitted). */
 export function clearVdcContextCache(tenantId?: string): void {
   if (tenantId) {
@@ -66,6 +71,14 @@ export async function getVdcContext(tenantId: string): Promise<string | null> {
   }
 
   const value = vdc?.id ?? null
-  validationCache.set(key, { value, expiry: now + VALIDATION_TTL_MS })
+  // Only memoize successful validations — caching every failed/junk cookie
+  // value would let an authenticated client grow the map unboundedly.
+  if (value !== null) {
+    if (validationCache.size >= VALIDATION_CACHE_MAX) {
+      // Map preserves insertion order: evict the oldest entry.
+      validationCache.delete(validationCache.keys().next().value as string)
+    }
+    validationCache.set(key, { value, expiry: now + VALIDATION_TTL_MS })
+  }
   return value
 }

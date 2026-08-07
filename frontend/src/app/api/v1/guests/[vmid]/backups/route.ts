@@ -62,7 +62,9 @@ export async function GET(
     // by their vDC bindings (vdc_pbs_namespaces) using the global client +
     // an id whitelist, mirroring `/api/v1/connections?type=pbs`.
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Object surface: the backups OF THIS VM — a deep-linked out-of-context
+    // VM must still list its own backups.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const sessionPrisma = await getSessionPrisma()
     // iaas uses GLOBAL + vDC id filter (provider-owned PBS, tenant can't see them via session);
     // provider uses GLOBAL with no filter (all PBS); msp uses SESSION (its own owned PBS).

@@ -77,6 +77,10 @@ const CACHE_TTL_MS = 5_000
  * "I am the provider", not as "no restrictions". A tenant without vDCs ends
  * up with a non-null empty scope and is denied access through the existing
  * Set lookups.
+ *
+ * Rule of thumb for callers: an allow/deny verdict or anything feeding
+ * enforcement resolves the UNION ({ ignoreVdcContext: true }); anything
+ * shaping a user-visible list follows the context (default).
  */
 export async function getVdcScope(
   tenantId: string,

@@ -38,7 +38,9 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // API tokens never depend on the browser view-context cookie
+    // (shared cookie jar case) — global ruling n°4.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: ctx?.principal?.kind === 'token' })
     const plan = inventoryConnectionPlan(infra)
     const connPrisma = plan.pveClient === 'global' ? globalPrisma : prisma
 

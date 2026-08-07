@@ -74,4 +74,12 @@ describe('getVdcContext', () => {
     await getVdcContext('t1')
     expect(vdcFindFirstMock).toHaveBeenCalledTimes(1)
   })
+
+  it('does not memoize a failed validation (unknown id) -- every call re-queries', async () => {
+    cookiesMock.mockResolvedValue(cookieJar('v-unknown'))
+    vdcFindFirstMock.mockResolvedValue(null)
+    await getVdcContext('t1')
+    await getVdcContext('t1')
+    expect(vdcFindFirstMock).toHaveBeenCalledTimes(2)
+  })
 })

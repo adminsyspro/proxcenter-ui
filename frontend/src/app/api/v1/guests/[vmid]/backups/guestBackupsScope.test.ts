@@ -106,4 +106,14 @@ describe("GET /api/v1/guests/[vmid]/backups PBS connection scope", () => {
     const filter = findManyGlobalMock.mock.calls[0][0].where?.id?.in
     expect(new Set(filter)).toEqual(new Set(["pbs-1", "pbs-2"]))
   })
+
+  it("resolves the union regardless of the vDC view context (object surface: this VM's own backups)", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { method: "GET", params: { vmid: "100" } })
+
+    expect(res.status).toBe(200)
+    expect(getInfraMock).toHaveBeenCalledWith("tenant-x", { ignoreVdcContext: true })
+  })
 })

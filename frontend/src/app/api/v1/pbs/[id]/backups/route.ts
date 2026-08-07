@@ -39,6 +39,16 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const access = await assertVdcPbsAccess(id)
     if (access instanceof Response) return access
 
+    // P1<->P1.5 seam: the union access VERDICT above stays untouched, but the
+    // DISPLAYED namespaces must follow the active vDC view context — otherwise
+    // the list here still shows vDC-B namespaces while the restore dialog
+    // hides its selector and locks the target to vDC A, and a restore can
+    // silently target the wrong vDC. Token callers never depend on the
+    // cookie (global ruling n°4); the 5s memo makes this second resolution
+    // of the scope cheap.
+    const tenantId = await getCurrentTenantId()
+    const narrowed = await getVdcScope(tenantId, { ignoreVdcContext: ctx?.principal?.kind === 'token' })
+
     const cookieStore = await cookies()
     const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
 
@@ -75,9 +85,17 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     }
 
     // Tenant scoping: restrict to the caller's authorised (datastore, namespace) pairs.
+    // The union access list is the outer authorization bound; intersecting
+    // with the context-narrowed scope can only REMOVE entries from it, never
+    // add ones the union verdict didn't already authorise. A no-op when no
+    // view context is set (narrowed == union).
     if (access.kind === 'tenant') {
       const allowedSet = new Set(access.allowed.map(p => `${p.datastore}|${p.namespace}`))
-      allBackups = allBackups.filter(b => allowedSet.has(`${b.datastore}|${b.namespace}`))
+      const narrowedNs = narrowed?.pbsNamespacesByConnection.get(id) ?? []
+      const narrowedSet = new Set(narrowedNs.map(p => `${p.datastore}|${p.namespace}`))
+      allBackups = allBackups.filter(b =>
+        allowedSet.has(`${b.datastore}|${b.namespace}`) && narrowedSet.has(`${b.datastore}|${b.namespace}`)
+      )
     }
 
     // ── vmName enrichment ──
@@ -91,12 +109,12 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const blankNames = allBackups.some(b => !b.vmName)
     if (blankNames) {
       try {
-        const tenantId = await getCurrentTenantId()
-        const vdcScope = await getVdcScope(tenantId)
+        // Reuse the already-resolved `narrowed` scope (list and enrichment
+        // must agree on which vDC view context they're rendering).
         const sessionPrisma = await getSessionPrisma()
-        const connPrisma = vdcScope ? globalPrisma : sessionPrisma
+        const connPrisma = narrowed ? globalPrisma : sessionPrisma
         const pveWhere: any = { type: 'pve' }
-        if (vdcScope) pveWhere.id = { in: [...vdcScope.connectionIds] }
+        if (narrowed) pveWhere.id = { in: [...narrowed.connectionIds] }
         const pveConns = await connPrisma.connection.findMany({
           where: pveWhere,
           select: { id: true, tenantId: true },

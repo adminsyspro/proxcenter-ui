@@ -407,7 +407,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         setConnections(conns)
         // Tenant: auto-pick the first connection from their vDC scope so
         // step Target requires no input. Provider keeps manual selection
-        // unless there's a single option.
+        // unless there's a single option. With a precise vDC context the
+        // connections list is narrowed server-side to that vDC's cluster,
+        // so this pin targets the context vDC by construction; in the
+        // union view a multi-vDC tenant still gets conns[0] (known
+        // follow-up: explicit vDC selector, out of scope here).
         if (conns.length === 1 || (hideInfra && conns.length > 0)) {
           setConnectionId(conns[0].id)
         }

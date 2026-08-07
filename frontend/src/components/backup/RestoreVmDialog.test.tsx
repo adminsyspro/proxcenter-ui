@@ -42,10 +42,17 @@ import RestoreVmDialog from './RestoreVmDialog'
 // Context mocks
 // ------------------------------------------------------------------ //
 
-// Provider path: currentTenant=null means isVdcTenant=false, full surface shown.
+// Provider path (default, reset in the top-level beforeEach below):
+// currentTenant=null means isVdcTenant=false, full surface shown. Individual
+// describe blocks (Task 8) override this to exercise the vDC-tenant path.
+const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
 vi.mock('@/contexts/TenantContext', () => ({
-  useTenant: () => ({ currentTenant: null, loading: false }),
+  useTenant: () => useTenantMock(),
 }))
+
+beforeEach(() => {
+  useTenantMock.mockReturnValue({ currentTenant: null, loading: false })
+})
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -380,5 +387,177 @@ describe('RestoreVmDialog - Cancel button', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 7. vDC context (Task 8): the header switcher's pc_vdc_context cookie
+// wins the default target and hides the selector when it does.
+//
+// Strategy: an isVdcTenant + multi-vDC fixture (two vDCs, each on its own
+// connection/node so we can tell which one the auto-resolve effect picked)
+// with connectionId/node left unlocked (undefined) so the effect's
+// "cross-PVE caller" branch runs and the selector can render. Which vDC
+// got applied is observed via the connection/node the dialog fetches
+// storages/resources for afterwards -- isVdcTenant mode hides every other
+// infra picker, so that's the only DOM-adjacent signal available. The
+// submit button only enables once connectionId+node are known, which we
+// use as the "effect has resolved" wait condition.
+//
+// getByLabelText is unreliable for MUI Select in jsdom (see file header
+// gotcha), so selector presence/absence is asserted via the InputLabel's
+// rendered text ("Select vDC" -- myVdc.selectVdc in en.json) instead.
+// ------------------------------------------------------------------ //
+
+describe('RestoreVmDialog - vDC context (Task 8)', () => {
+  const VDC_A_ID = 'vdc-a'
+  const VDC_B_ID = 'vdc-b'
+  const VDC_A_CONN = 'conn-vdc-a'
+  const VDC_B_CONN = 'conn-vdc-b'
+  const VDC_A_NODE = 'pve-vdc-a'
+  const VDC_B_NODE = 'pve-vdc-b'
+
+  const vdcA = {
+    id: VDC_A_ID,
+    name: 'vDC Paris',
+    connectionId: VDC_A_CONN,
+    enabled: true,
+    nodes: [VDC_A_NODE],
+    pbsBindings: [
+      { id: 'bind-a', vdcId: VDC_A_ID, pbsConnectionId: 'pbs-a', pbsConnectionName: 'PBS A', datastore: 'ds-a', namespace: '', mode: 'auto', createdAt: '2025-01-01T00:00:00Z' },
+    ],
+  }
+  const vdcB = {
+    id: VDC_B_ID,
+    name: 'vDC Frankfurt',
+    connectionId: VDC_B_CONN,
+    enabled: true,
+    nodes: [VDC_B_NODE],
+    pbsBindings: [
+      { id: 'bind-b', vdcId: VDC_B_ID, pbsConnectionId: 'pbs-b', pbsConnectionName: 'PBS B', datastore: 'ds-b', namespace: '', mode: 'auto', createdAt: '2025-01-01T00:00:00Z' },
+    ],
+  }
+
+  // PBS tuple matches vdc-a's binding only -- the binding heuristic (P1
+  // default) would pick vdc-a. The context-cookie test sets the cookie to
+  // vdc-b to prove the context overrides that heuristic.
+  const backupMatchingVdcA = {
+    ...backupRef,
+    pbsId: 'pbs-a',
+    datastore: 'ds-a',
+  }
+
+  let storagesRequests: string[] = []
+  let resourcesRequests: string[] = []
+
+  function seedVdcTenantHandlers() {
+    storagesRequests = []
+    resourcesRequests = []
+    server.use(
+      http.get('*/api/v1/vdcs', () => HttpResponse.json({ data: [vdcA, vdcB] })),
+      http.get('*/api/v1/connections', ({ request }) => {
+        const url = new URL(request.url)
+        if (url.searchParams.get('type') === 'pve') return HttpResponse.json({ data: connections })
+        return HttpResponse.json({ data: [] })
+      }),
+      http.get('*/api/v1/connections/:connId/nodes', () =>
+        HttpResponse.json({ data: nodes }),
+      ),
+      http.get('*/api/v1/connections/:connId/nodes/:node/storages', ({ params }) => {
+        storagesRequests.push(`${params.connId}/${params.node}`)
+        return HttpResponse.json({ data: storage })
+      }),
+      http.get('*/api/v1/connections/:connId/resources', ({ params }) => {
+        resourcesRequests.push(String(params.connId))
+        return HttpResponse.json({ data: resources })
+      }),
+    )
+  }
+
+  function makeVdcProps(overrides: Partial<DialogProps> = {}): DialogProps {
+    return {
+      open: true,
+      onClose: vi.fn(),
+      onStarted: vi.fn(),
+      // Unlocked so the "cross-PVE caller" branch of the auto-resolve
+      // effect runs and the multi-vDC selector can render.
+      connectionId: undefined,
+      node: undefined,
+      type: 'qemu',
+      backup: backupMatchingVdcA,
+      sourceVmid: SOURCE_VMID,
+      ...overrides,
+    }
+  }
+
+  function findSubmitButton() {
+    return screen.getAllByRole('button').find(
+      (b) => b.textContent?.trim() === 'Restore VM',
+    )
+  }
+
+  beforeEach(() => {
+    seedVdcTenantHandlers()
+    useTenantMock.mockReturnValue({
+      currentTenant: { id: 'tenant-1', slug: 'acme', name: 'Acme', operatingModel: 'iaas' },
+      loading: false,
+    })
+  })
+
+  afterEach(() => {
+    // jsdom's document persists across tests in this file -- always clear.
+    document.cookie = 'pc_vdc_context=; max-age=0'
+  })
+
+  it('defaults to the context vDC and hides the selector when pc_vdc_context is set', async () => {
+    document.cookie = 'pc_vdc_context=vdc-b; path=/'
+
+    renderWithProviders(<RestoreVmDialog {...makeVdcProps()} />)
+
+    // Wait for the auto-resolve effect to land: canSubmit requires
+    // connectionId+node, which only become non-empty once applyVdc runs.
+    await waitFor(() => {
+      const btn = findSubmitButton()
+      expect(btn).not.toBeUndefined()
+      expect(btn).not.toBeDisabled()
+    })
+
+    // 2 vDCs loaded (tenantVdcs.length > 1) yet the selector stays hidden
+    // because pickedVdcId === the active context. (MUI renders the
+    // InputLabel text twice -- visible label + fieldset legend -- hence
+    // queryAllByText over queryByText.)
+    expect(screen.queryAllByText('Select vDC')).toHaveLength(0)
+
+    // The applied target is vdc-b (the context), not vdc-a (the binding
+    // match) -- proven by which connection/node storages+resources were
+    // fetched for.
+    await waitFor(() => {
+      expect(storagesRequests).toContain(`${VDC_B_CONN}/${VDC_B_NODE}`)
+    })
+    expect(storagesRequests).not.toContain(`${VDC_A_CONN}/${VDC_A_NODE}`)
+    expect(resourcesRequests).toContain(VDC_B_CONN)
+    expect(resourcesRequests).not.toContain(VDC_A_CONN)
+  })
+
+  it('keeps the P1 behavior (selector + binding default) without a context cookie', async () => {
+    renderWithProviders(<RestoreVmDialog {...makeVdcProps()} />)
+
+    await waitFor(() => {
+      const btn = findSubmitButton()
+      expect(btn).not.toBeUndefined()
+      expect(btn).not.toBeDisabled()
+    })
+
+    // No context cookie: 2 vDCs loaded => the selector must render. (MUI
+    // renders the InputLabel text twice -- visible label + fieldset legend.)
+    expect(screen.getAllByText('Select vDC').length).toBeGreaterThan(0)
+
+    // Default target = the PBS-binding match (vdc-a), not vdc-b.
+    await waitFor(() => {
+      expect(storagesRequests).toContain(`${VDC_A_CONN}/${VDC_A_NODE}`)
+    })
+    expect(storagesRequests).not.toContain(`${VDC_B_CONN}/${VDC_B_NODE}`)
+    expect(resourcesRequests).toContain(VDC_A_CONN)
+    expect(resourcesRequests).not.toContain(VDC_B_CONN)
   })
 })

@@ -30,6 +30,7 @@ import {
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useTenant } from '@/contexts/TenantContext'
 import { formatDateTime } from '@/lib/i18n/date'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 interface BackupRef {
   /** Full PVE volid, e.g. `pbs:backup/vm/100/2025-04-01T10:00:00Z`.
@@ -183,7 +184,12 @@ export default function RestoreVmDialog({
               (backup.namespace === undefined || b.namespace === (backup.namespace || ''))
             )
           )
-          const target = byBinding || list[0]
+          // Precise vDC context (header switcher): it wins over the PBS
+          // binding heuristic — the visible backups are already narrowed to
+          // that vDC server-side, so target and source always agree.
+          const ctxVdcId = readVdcContextCookie()
+          const byContext = ctxVdcId ? list.find((v) => v.id === ctxVdcId) : undefined
+          const target = byContext || byBinding || list[0]
           if (target) applyVdc(target)
         }
       } catch { /* ignore — falls through to the normal pickers, which we hide anyway */ }
@@ -508,7 +514,8 @@ export default function RestoreVmDialog({
             </Box>
           )}
 
-          {isVdcTenant && !callerLocksConn && tenantVdcs.length > 1 && (
+          {isVdcTenant && !callerLocksConn && tenantVdcs.length > 1 &&
+            !(readVdcContextCookie() && pickedVdcId === readVdcContextCookie()) && (
             <FormControl fullWidth size="small">
               <InputLabel>{t('myVdc.selectVdc')}</InputLabel>
               <Select

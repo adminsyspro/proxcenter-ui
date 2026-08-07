@@ -132,11 +132,18 @@ export async function GET(
         const capacityKB = d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1]
         const fileName = d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || ''
         const thinProvisioned = d.includes('<thinProvisioned>true</thinProvisioned>')
+        // diskMode/sharing feed the client-side CBT-eligibility check for the
+        // warm-migration fallback warning (independent / multi-writer disks
+        // make CBT unavailable).
+        const diskMode = d.match(/<diskMode>([^<]*)<\/diskMode>/)?.[1] || ''
+        const sharing = d.match(/<sharing>([^<]*)<\/sharing>/)?.[1] || ''
         disks.push({
           label,
           capacityBytes: capacityBytes ? Number.parseInt(capacityBytes, 10) : (capacityKB ? Number.parseInt(capacityKB, 10) * 1024 : 0),
           fileName,
           thinProvisioned,
+          diskMode,
+          sharing,
         })
       }
 

@@ -2126,6 +2126,12 @@
       "warmPreflightFailedTitle": "대상 노드가 웜 마이그레이션 준비가 되지 않았습니다",
       "warmPreflightMissing": "노드에 없는 항목: {items}.",
       "warmPreflightDocsHint": "먼저 Proxmox 노드를 준비한 후(nbdkit, nbdkit VDDK 플러그인, nbd-client, Broadcom VDDK 설치) 노드를 다시 선택하세요. <link>웜 마이그레이션 노드 설정 가이드</link>를 참조하세요.",
+      "warmCbtFallbackTitle": "CBT를 사용할 수 없음: 이 웜 마이그레이션은 체크섬 폴백을 사용합니다",
+      "warmCbtFallbackReasonSnapshot": "소스 VM에 기존 VMware 스냅샷이 있어 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackReasonHwVersion": "소스 VM의 가상 하드웨어 버전이 vmx-07 미만이어서 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackReasonDiskMode": "소스 VM에 독립(independent) 디스크 또는 multi-writer 디스크가 있어 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackDowntime": "체크섬 폴백에서는 복사 시작 시점에 소스 VM이 종료되고 전송이 끝날 때까지 꺼진 상태로 유지됩니다. 중단 시간은 전체 디스크 크기에 비례합니다.",
+      "warmCbtFallbackSnapshotHint": "시작하기 전에 VMware 스냅샷을 제거하거나 통합하면 마지막 짧은 컷오버까지 VM이 온라인 상태를 유지합니다.",
       "migrationTypeSshfsBoot": "SSHFS 부팅 (실험적)",
       "migrationTypeSshfsBootDesc": "다운타임 거의 없음: VM이 몇 초 안에 원격 ESXi 디스크에서 Proxmox로 부팅됩니다. 실험적 기능: 게스트가 대상 컨트롤러에서 무인 부팅되어야 하며, EFI Windows 또는 드라이버 주입이 필요한 게스트에서는 실패할 수 있습니다. 프로덕션에서는 라이브 또는 오프라인을 사용하세요.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 부팅은 실험적 기능이며, 게스트가 드라이버 조정 없이 대상에서 올바르게 부팅되는 경우에만 작동합니다. EFI Windows, vCenter에서 가져온 VM, 프로덕션 크리티컬 워크로드에는 라이브 또는 오프라인을 선택하세요.",
@@ -3683,6 +3689,23 @@
       "completed": "완료됨",
       "cancelled": "취소됨"
     },
+    "steps": {
+      "planning": "계획 중",
+      "enabling_cbt": "CBT 활성화 중",
+      "preparing_disks": "대상 디스크 준비 중",
+      "full_copy": "전체 복사",
+      "delta": "델타 동기화",
+      "source_shutdown": "소스 VM 종료 중",
+      "awaiting_cutover": "컷오버 결정 대기 중",
+      "cutover": "컷오버",
+      "verify": "검증 중",
+      "converting_disks": "디스크 변환 중",
+      "preflight": "사전 점검",
+      "transferring": "디스크 전송 중",
+      "creating_vm": "VM 생성 중",
+      "configuring": "VM 구성 중",
+      "pending": "대기 중"
+    },
     "shared": {
       "detailTitle": "마이그레이션 작업",
       "startedBy": "{name}이(가) 시작함",
@@ -3692,6 +3715,9 @@
       "cancelConfirmLeftovers": "이미 복사된 볼륨과 부분적으로 생성된 VMID가 대상 노드에 남을 수 있습니다. 필요하지 않으면 수동으로 정리하십시오.",
       "cancelConfirmKeep": "마이그레이션 계속하기",
       "cancelling": "취소 중...",
+      "diskOf": "디스크 {n} / {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "약 {eta} 남음",
       "cancelFailed": "마이그레이션을 취소하지 못했습니다"
     },
     "types": {

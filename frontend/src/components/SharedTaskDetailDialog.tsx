@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import type { SharedTask } from '@/lib/tasks/sharedTask'
+import { parseSpeedMBps, etaSeconds, formatEta, stepLabelKey } from '@/lib/tasks/taskProgressDisplay'
 
 type DetailResponse = { data: SharedTask & { logs?: unknown[] } }
 
@@ -24,6 +25,29 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const canCancel = !!task && task.kind === 'migration' && !['completed', 'failed', 'cancelled'].includes(task.status)
+
+  // Compact live readout under the progress bar, assembled from fields the
+  // SharedTask payload already carries (the warm pipeline keeps currentDisk /
+  // bytes / speed up to date). Each piece renders only when its data exists,
+  // so a task without transfer telemetry degrades to just the step label.
+  const readout: string[] = []
+  if (task) {
+    const stepKey = stepLabelKey(task.currentStep)
+    if (task.currentStep) readout.push(stepKey ? t(`tasks.steps.${stepKey}`) : task.currentStep)
+    if (task.currentDisk != null && task.totalDisks) {
+      // currentDisk is the pipeline's 0-based loop index.
+      readout.push(t('tasks.shared.diskOf', { n: task.currentDisk + 1, m: task.totalDisks }))
+    }
+    if (task.bytesTransferred != null && task.totalBytes != null) {
+      readout.push(t('tasks.shared.gbProgress', {
+        done: (task.bytesTransferred / 1073741824).toFixed(1),
+        total: (task.totalBytes / 1073741824).toFixed(1),
+      }))
+    }
+    if (task.transferSpeed) readout.push(task.transferSpeed)
+    const eta = etaSeconds(task.bytesTransferred, task.totalBytes, parseSpeedMBps(task.transferSpeed))
+    if (eta != null) readout.push(t('tasks.shared.eta', { eta: formatEta(eta) }))
+  }
 
   const handleClose = () => {
     setConfirmOpen(false)
@@ -77,7 +101,11 @@ export default function SharedTaskDetailDialog({ jobId, onClose }: { jobId: stri
               </Typography>
             </Box>
             <LinearProgress variant={task.progress > 0 ? 'determinate' : 'indeterminate'} value={task.progress} />
-            {task.currentStep && <Typography variant="body2">{task.currentStep}</Typography>}
+            {readout.length > 0 && (
+              <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                {readout.join(' · ')}
+              </Typography>
+            )}
             {task.error && <Typography variant="body2" color="error">{task.error}</Typography>}
             {cancelError && <Alert severity="error">{cancelError}</Alert>}
             {Array.isArray(task.logs) && task.logs.length > 0 && (

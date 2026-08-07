@@ -2096,6 +2096,12 @@
       "warmPreflightFailedTitle": "Zielknoten ist nicht bereit fur die Warm-Migration",
       "warmPreflightMissing": "Fehlt auf dem Knoten: {items}.",
       "warmPreflightDocsHint": "Bereiten Sie zuerst den Proxmox-Knoten vor (nbdkit, das nbdkit-VDDK-Plugin, nbd-client und das Broadcom-VDDK installieren), dann wahlen Sie den Knoten erneut aus. Siehe die <link>Anleitung zur Knotenvorbereitung fur die Warm-Migration</link>.",
+      "warmCbtFallbackTitle": "CBT nicht verfugbar: diese Warm-Migration verwendet den Prufsummen-Fallback",
+      "warmCbtFallbackReasonSnapshot": "Die Quell-VM hat einen vorhandenen VMware-Snapshot, daher kann die Anderungsverfolgung (CBT) nicht verwendet werden.",
+      "warmCbtFallbackReasonHwVersion": "Die virtuelle Hardware-Version der Quell-VM liegt unter vmx-07, daher kann die Anderungsverfolgung (CBT) nicht verwendet werden.",
+      "warmCbtFallbackReasonDiskMode": "Die Quell-VM hat eine unabhangige oder Multi-Writer-Disk, daher kann die Anderungsverfolgung (CBT) nicht verwendet werden.",
+      "warmCbtFallbackDowntime": "Mit dem Prufsummen-Fallback wird die Quell-VM zu Beginn der Kopie heruntergefahren und bleibt wahrend der gesamten Ubertragung ausgeschaltet: die Ausfallzeit skaliert mit der Gesamtgrosse der Disks.",
+      "warmCbtFallbackSnapshotHint": "Werden die VMware-Snapshots vor dem Start entfernt oder konsolidiert, bleibt die VM bis zur kurzen finalen Umschaltung online.",
       "migrationTypeSshfsBoot": "SSHFS Boot (Experimentell)",
       "migrationTypeSshfsBootDesc": "Nahezu null Ausfallzeit: VM startet auf Proxmox von entfernten ESXi-Disks in Sekunden. Experimentell: der Gast muss unbeaufsichtigt auf dem Ziel-Controller booten; kann bei EFI-Windows oder Gasten fehlschlagen, die eine Treiberinjektion benotigen. Fur Produktion Live oder Offline bevorzugen.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot ist experimentell und funktioniert nur, wenn der Gast ohne Treiberanpassung auf dem Ziel korrekt bootet. Fur EFI-Windows, vCenter-VMs oder produktionskritische Systeme Live oder Offline verwenden.",
@@ -3645,6 +3651,23 @@
       "completed": "Abgeschlossen",
       "cancelled": "Abgebrochen"
     },
+    "steps": {
+      "planning": "Planung",
+      "enabling_cbt": "CBT wird aktiviert",
+      "preparing_disks": "Ziel-Disks werden vorbereitet",
+      "full_copy": "Vollständige Kopie",
+      "delta": "Delta-Synchronisierung",
+      "source_shutdown": "Quell-VM wird heruntergefahren",
+      "awaiting_cutover": "Warten auf die Umschalt-Entscheidung",
+      "cutover": "Umschaltung",
+      "verify": "Überprüfung",
+      "converting_disks": "Disks werden konvertiert",
+      "preflight": "Vorabprüfungen",
+      "transferring": "Disks werden übertragen",
+      "creating_vm": "VM wird erstellt",
+      "configuring": "VM wird konfiguriert",
+      "pending": "Ausstehend"
+    },
     "shared": {
       "detailTitle": "Migrationsaufgabe",
       "startedBy": "Gestartet von {name}",
@@ -3654,6 +3677,9 @@
       "cancelConfirmLeftovers": "Bereits kopierte Volumes und eine teilweise erstellte VMID können auf dem Zielknoten verbleiben. Bereinigen Sie sie manuell, wenn Sie sie nicht benötigen.",
       "cancelConfirmKeep": "Migration fortsetzen",
       "cancelling": "Wird abgebrochen...",
+      "diskOf": "Festplatte {n} von {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "~{eta} verbleibend",
       "cancelFailed": "Migration konnte nicht abgebrochen werden"
     },
     "types": {

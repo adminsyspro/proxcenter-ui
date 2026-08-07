@@ -2126,6 +2126,12 @@
       "warmPreflightFailedTitle": "El nodo destino no está listo para la migración warm",
       "warmPreflightMissing": "Falta en el nodo: {items}.",
       "warmPreflightDocsHint": "Prepara primero el nodo Proxmox (instala nbdkit, el plugin nbdkit VDDK, nbd-client y Broadcom VDDK) y vuelve a seleccionar el nodo. Consulta la <link>guía de preparación del nodo para migración warm</link>.",
+      "warmCbtFallbackTitle": "CBT no disponible: esta migración warm usará el fallback por sumas de verificación",
+      "warmCbtFallbackReasonSnapshot": "La VM de origen tiene un snapshot de VMware existente, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackReasonHwVersion": "La versión de hardware virtual de la VM de origen es inferior a vmx-07, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackReasonDiskMode": "La VM de origen tiene un disco independiente o multi-writer, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackDowntime": "Con el fallback por sumas de verificación, la VM de origen se apaga al inicio de la copia y permanece apagada durante toda la transferencia: la indisponibilidad depende del tamaño total de los discos.",
+      "warmCbtFallbackSnapshotHint": "Eliminar o consolidar los snapshots de VMware antes de empezar mantiene la VM online hasta el breve cutover final.",
       "migrationTypeSshfsBoot": "Arranque SSHFS (experimental)",
       "migrationTypeSshfsBootDesc": "Downtime casi nulo: la VM arranca en Proxmox desde discos ESXi remotos en segundos. Experimental: el guest debe arrancar sin intervención en la controladora destino; puede fallar con Windows EFI o guests que necesiten inyección de drivers. Usa Live u Offline en producción.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot es experimental y solo funciona si el guest arranca correctamente en el destino sin adaptar drivers. Para Windows EFI, VMs procedentes de vCenter o cualquier carga crítica de producción, elige Live u Offline.",
@@ -3683,6 +3689,23 @@
       "completed": "Completado",
       "cancelled": "Cancelado"
     },
+    "steps": {
+      "planning": "Planificación",
+      "enabling_cbt": "Habilitando CBT",
+      "preparing_disks": "Preparando los discos de destino",
+      "full_copy": "Copia completa",
+      "delta": "Sincronización delta",
+      "source_shutdown": "Apagando la VM de origen",
+      "awaiting_cutover": "Esperando la decisión de cutover",
+      "cutover": "Cutover",
+      "verify": "Verificando",
+      "converting_disks": "Convirtiendo discos",
+      "preflight": "Comprobaciones previas",
+      "transferring": "Transfiriendo discos",
+      "creating_vm": "Creando la VM",
+      "configuring": "Configurando la VM",
+      "pending": "Pendiente"
+    },
     "shared": {
       "detailTitle": "Tarea de migración",
       "startedBy": "Iniciada por {name}",
@@ -3692,6 +3715,9 @@
       "cancelConfirmLeftovers": "Los volúmenes ya copiados y un VMID creado parcialmente pueden permanecer en el nodo de destino. Límpielos manualmente si no los necesita.",
       "cancelConfirmKeep": "Seguir migrando",
       "cancelling": "Cancelando...",
+      "diskOf": "Disco {n} de {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "~{eta} restante",
       "cancelFailed": "No se pudo cancelar la migración"
     },
     "types": {

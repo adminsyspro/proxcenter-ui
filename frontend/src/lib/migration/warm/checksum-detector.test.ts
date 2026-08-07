@@ -44,11 +44,21 @@ describe("buildBlockChecksumCmd", () => {
 })
 
 describe("scanBlockChecksums", () => {
-  beforeEach(() => mockSSH.mockReset())
+  // Braces matter: mockReset() returns the mock, and a function returned from
+  // beforeEach is treated by vitest as a cleanup hook and re-invoked with NO
+  // arguments after the test — which would run the mock implementation again.
+  beforeEach(() => { mockSSH.mockReset() })
   it("parses one md5 per line into an array", async () => {
     mockSSH.mockResolvedValue({ success: true, output: "aaa\nbbb\nccc\n" })
     const sums = await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 3)
     expect(sums).toEqual(["aaa", "bbb", "ccc"])
+  })
+  it("forwards inactivityMs and onData to executeSSH", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: "aaa" })
+    const onData = () => {}
+    await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 1, { inactivityMs: 1234, onData })
+    expect(mockSSH).toHaveBeenCalledTimes(1)
+    expect(mockSSH.mock.calls[0][4]).toEqual({ inactivityMs: 1234, onData })
   })
   it("returns an empty list for a zero-length disk without issuing SSH", async () => {
     const sums = await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 0)
@@ -62,7 +72,10 @@ describe("scanBlockChecksums", () => {
 })
 
 describe("detectChangedExtentsByChecksum", () => {
-  beforeEach(() => mockSSH.mockReset())
+  // Braces matter: mockReset() returns the mock, and a function returned from
+  // beforeEach is treated by vitest as a cleanup hook and re-invoked with NO
+  // arguments after the test — which would run the mock implementation again.
+  beforeEach(() => { mockSSH.mockReset() })
   it("scans source + target and returns the differing extents", async () => {
     mockSSH.mockImplementation(async (...args: unknown[]) => {
       const cmd = String(args[2] ?? "")
@@ -71,5 +84,51 @@ describe("detectChangedExtentsByChecksum", () => {
     })
     const ext = await detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd3", "/dev/dm-9", B, 3 * B - 1)
     expect(ext).toEqual([{ offset: B, length: B }])
+  })
+
+  it("reports scan progress by counting hash lines across both scans (2*numBlocks total)", async () => {
+    // Stream the hashes in chunks, one of them split mid-line: the partial line
+    // must not count until its newline arrives.
+    mockSSH.mockImplementation(async (...args: unknown[]) => {
+      const cmd = String(args[2] ?? "")
+      const opts = args[4] as { onData?: (c: string) => void }
+      if (cmd.includes("/dev/nbd3")) {
+        opts.onData?.("a\nb")   // 1 full line + a partial
+        opts.onData?.("\nc\n")  // completes "b", then "c"
+        return { success: true, output: "a\nb\nc" }
+      }
+      opts.onData?.("a\nX\nc\n") // 3 lines in one chunk
+      return { success: true, output: "a\nX\nc" }
+    })
+    const seen: Array<[number, number]> = []
+    await detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd3", "/dev/dm-9", B, 3 * B - 1,
+      { onProgress: (scanned, total) => seen.push([scanned, total]) })
+    expect(seen.every(([, total]) => total === 6)).toBe(true)
+    // monotonic non-decreasing scanned counter…
+    for (let i = 1; i < seen.length; i++) expect(seen[i][0]).toBeGreaterThanOrEqual(seen[i - 1][0])
+    // …ending with every block of both scans counted
+    expect(seen[seen.length - 1][0]).toBe(6)
+  })
+
+  it("forwards inactivityMs to both underlying scans", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: "a" })
+    await detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd3", "/dev/dm-9", B, B,
+      { inactivityMs: 4321 })
+    expect(mockSSH).toHaveBeenCalledTimes(2)
+    for (const call of mockSSH.mock.calls) {
+      expect((call[4] as { inactivityMs?: number }).inactivityMs).toBe(4321)
+    }
+  })
+
+  it("stays silent (no onProgress calls) when the callback is not provided", async () => {
+    mockSSH.mockImplementation(async (...args: unknown[]) => {
+      const opts = args[4] as { onData?: (c: string) => void }
+      opts.onData?.("a\n")
+      return { success: true, output: "a" }
+    })
+    // No onProgress: the onData counters must not throw on the undefined callback.
+    await expect(
+      detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd3", "/dev/dm-9", B, B),
+    ).resolves.toEqual([])
   })
 })

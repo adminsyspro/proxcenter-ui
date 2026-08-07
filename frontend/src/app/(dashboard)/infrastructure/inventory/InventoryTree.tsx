@@ -57,6 +57,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -421,6 +422,9 @@ function selectionFromItemId(itemId: string): InventorySelection | null {
 
   if (!id) return null
 
+  // vDC root nodes are expand-only containers: no detail panel to select.
+  if (type === 'vdc') return null
+
   if (type === 'cluster' || type === 'node' || type === 'vm' || type === 'storage' || type === 'pbs' || type === 'datastore' || type === 'ext' || type === 'ext-type' || type === 'extvm') {
     return { type: type as any, id } as InventorySelection
   }
@@ -460,6 +464,20 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // cluster view like the provider, not the vDC abstraction.
   const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
   const isFullClusterView = isProviderTenant || isMspTenant
+  // connectionId → vDC (tenant IaaS only): drives the per-vDC root nodes.
+  // Bijective thanks to the DB unique (tenant_id, connection_id). Empty for
+  // provider/MSP (their /api/v1/vdcs list is empty or unused) — fail-open to
+  // the current tree shape when the fetch errors.
+  const { vdcs: myVdcs } = useMyVdcs()
+  const vdcByConnId = useMemo(() => {
+    const m = new Map<string, { id: string; name: string }>()
+    if (!isFullClusterView) {
+      for (const v of myVdcs) {
+        if (v.enabled !== false && v.connectionId) m.set(v.connectionId, { id: v.id, name: v.name })
+      }
+    }
+    return m
+  }, [myVdcs, isFullClusterView])
   // Expand/collapse persistence is scoped per tenant. In MSP mode each tenant
   // owns different clusters (different connIds), so the persisted expand IDs
   // (`cluster:<connId>`, `node:<connId>:<n>`, ...) of one tenant never match
@@ -651,6 +669,24 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     } catch {}
     setIsHydrated(true)
   }, [tenantLoading, tenantScope])
+
+  // First render after the vDC level ships: expand the new roots once per
+  // tenant, remembered via a localStorage flag — NOT by sniffing the live
+  // expansion list (SWR refreshes re-fire this effect with fresh references,
+  // and a user who collapsed the only vdc: row would otherwise be re-expanded
+  // on the next refocus). Tenant-scoped like the other persistence keys.
+  useEffect(() => {
+    if (!isHydrated || vdcByConnId.size === 0) return
+    const flagKey = `inventoryVdcSeeded::${tenantScope}`
+    try {
+      if (localStorage.getItem(flagKey)) return
+      localStorage.setItem(flagKey, '1')
+    } catch { return }
+    setManualExpandedItems(prev => {
+      const ids = [...vdcByConnId.values()].map(v => `vdc:${v.id}`).filter(id => !prev.includes(id))
+      return ids.length ? [...prev, ...ids] : prev
+    })
+  }, [isHydrated, vdcByConnId, tenantScope])
 
   // Persist viewMode (only when not externally controlled)
   useEffect(() => {
@@ -1912,20 +1948,24 @@ return null
     const items: string[] = []
 
     filteredClusters.forEach(clu => {
+      const cluVdc = vdcByConnId.get(clu.connId)
+      if (cluVdc) items.push(`vdc:${cluVdc.id}`)
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => {
         items.push(`node:${clu.connId}:${n.node}`)
       })
     })
-    
+
 return items
-  }, [filteredClusters, search])
+  }, [filteredClusters, search, vdcByConnId])
 
   // Expand/Collapse all for tree mode
   const expandAll = useCallback(() => {
     programmaticExpand.current = true
     const items: string[] = []
     clusters.forEach(clu => {
+      const cluVdc = vdcByConnId.get(clu.connId)
+      if (cluVdc) items.push(`vdc:${cluVdc.id}`)
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => items.push(`node:${clu.connId}:${n.node}`))
     })
@@ -1985,7 +2025,7 @@ return items
       // Data already loaded — expand now
       expandNetworkTreeItemsRef.current()
     }
-  }, [clusters, clusterStorages, pbsServers, externalHypervisors])
+  }, [clusters, clusterStorages, pbsServers, externalHypervisors, vdcByConnId])
 
   const collapseAll = useCallback(() => {
     programmaticExpand.current = true
@@ -3383,6 +3423,91 @@ return (
           }}
         >
         {filteredClusters.map(clu => {
+          // Shared VM leaf for tenant-facing branches (vDC root below, and the
+          // flat non-admin branch further down) — kept as a single definition
+          // so the two never diverge. Also carries showVmId/lock, which the
+          // provider/cluster branches already pass and this one previously
+          // didn't (preexisting inconsistency, fixed here).
+          const renderTenantVmLeaf = (
+            clu: TreeCluster,
+            n: TreeCluster['nodes'][number],
+            vm: TreeCluster['nodes'][number]['vms'][number]
+          ) => {
+            const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
+            const isMigrating = isVmMigrating(clu.connId, vm.vmid)
+            const vmContent = (
+              <TreeItem
+                key={vmKey}
+                itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
+                disabled={isMigrating}
+                onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template, clu.sshEnabled)}
+                sx={{
+                  opacity: isMigrating ? 0.5 : 1,
+                  '& > .MuiTreeItem-content': {
+                    cursor: isMigrating ? 'not-allowed' : 'pointer',
+                  }
+                }}
+                label={
+                  <VmItem
+                    vmKey={vmKey}
+                    connId={clu.connId}
+                    connName={clu.name}
+                    node={n.node}
+                    vmType={vm.type}
+                    vmid={vm.vmid}
+                    name={vm.name}
+                    status={vm.status}
+                    cpu={vm.cpu}
+                    mem={vm.mem}
+                    maxmem={vm.maxmem}
+                    template={vm.template}
+                    isCluster={clu.isCluster}
+                    isSelected={false}
+                    isMigrating={isMigrating}
+                    isPendingAction={isVmPendingAction(clu.connId, vm.vmid)}
+                    isFavorite={favorites.has(vmKey)}
+                    onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
+                    onClick={() => {}}
+                    onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
+                    onContextMenu={() => {}}
+                    variant="tree"
+                    t={t}
+                    tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                    showVmId={showVmId}
+                    lock={vm.lock}
+                  />
+                }
+              />
+            )
+            return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+          }
+
+          // Tenant IaaS: one root node per vDC (Cloud Director shape). The
+          // vDC REPLACES the cluster/node level — children are the guests of
+          // the connection directly (a tenant never sees PVE node names).
+          // Falls through to the legacy branches when the vDC list hasn't
+          // loaded (or errored): fail-open to the previous tree shape.
+          const cluVdc = vdcByConnId.get(clu.connId)
+          if (cluVdc && !isFullClusterView) {
+            const allVms = clu.nodes.flatMap(n => n.vms.map(vm => ({ n, vm })))
+
+            return (
+              <TreeItem
+                key={`vdc:${cluVdc.id}`}
+                itemId={`vdc:${cluVdc.id}`}
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box component="i" className="ri-cloud-line" sx={{ fontSize: 16, color: 'primary.main', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{cluVdc.name}</span>
+                    <span style={{ opacity: 0.5, fontSize: 11 }}>({allVms.length})</span>
+                  </Box>
+                }
+              >
+                {allVms.map(({ n, vm }) => renderTenantVmLeaf(clu, n, vm))}
+              </TreeItem>
+            )
+          }
+
           // Flatten when only 1 node is visible (standalone host, or tenant
           // scoped to a single node of a cluster) — no intermediate cluster
           // root in either case.
@@ -3495,53 +3620,7 @@ return (
                   </Tooltip>
                 }
               >
-                {n.vms.map(vm => {
-                  const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
-                  const isMigrating = isVmMigrating(clu.connId, vm.vmid)
-                  const vmContent = (
-                  <TreeItem
-                    key={vmKey}
-                    itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
-                    disabled={isMigrating}
-                    onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template, clu.sshEnabled)}
-                    sx={{
-                      opacity: isMigrating ? 0.5 : 1,
-                      '& > .MuiTreeItem-content': {
-                        cursor: isMigrating ? 'not-allowed' : 'pointer',
-                      }
-                    }}
-                    label={
-                      <VmItem
-                        vmKey={vmKey}
-                        connId={clu.connId}
-                        connName={clu.name}
-                        node={n.node}
-                        vmType={vm.type}
-                        vmid={vm.vmid}
-                        name={vm.name}
-                        status={vm.status}
-                        cpu={vm.cpu}
-                        mem={vm.mem}
-                        maxmem={vm.maxmem}
-                        template={vm.template}
-                        isCluster={clu.isCluster}
-                        isSelected={false}
-                        isMigrating={isMigrating}
-                        isPendingAction={isVmPendingAction(clu.connId, vm.vmid)}
-                        isFavorite={favorites.has(vmKey)}
-                        onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
-                        onClick={() => {}}
-                        onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
-                        onContextMenu={() => {}}
-                        variant="tree"
-                        t={t}
-                        tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      />
-                    }
-                  />
-                  )
-                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
-                })}
+                {n.vms.map(vm => renderTenantVmLeaf(clu, n, vm))}
               </TreeItem>
             ))
           }

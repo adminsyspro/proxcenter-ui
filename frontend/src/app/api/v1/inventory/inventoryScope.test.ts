@@ -68,6 +68,9 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
 vi.mock("@/lib/tenant", () => ({
   getCurrentTenantId: async () => "t1",
   getSessionPrisma: async () => ({}),
+  // Read directly by @/lib/vdc/context's getVdcContext (called unconditionally
+  // by the routes under test now that they resolve the vDC view context).
+  DEFAULT_TENANT_ID: "default",
 }))
 
 // Stub the inventory cache so the route takes the "fresh" path without any
@@ -528,6 +531,32 @@ describe("GET /api/v1/inventory RBAC infra-scope pruning", () => {
     const adminBody = await readJson<any>(adminRes)
     const adminData = adminBody?.data ?? adminBody
     expect(adminData.externalHypervisors.map((h: any) => h.id).sort()).toEqual(["extA", "extB"])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// API-token principal: the view-context cookie must never apply (shared
+// cookie jar case) -- a token always resolves the FULL union.
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/inventory API-token principal", () => {
+  it("forces the union: ignoreVdcContext on the infra scope, null vdcContext into the SWR read", async () => {
+    getRBACContextMock.mockResolvedValue({
+      isAdmin: false,
+      tenantId: "t1",
+      principal: { kind: "token", tokenId: "tok1", tenantId: "t1", connectionIds: null },
+    })
+
+    const { GET } = await import("./route")
+    const res = await callGet(GET)
+    expect(res.status).toBe(200)
+
+    // getCurrentTenantId is mocked to resolve "t1" (see the "@/lib/tenant" mock above).
+    expect(getInfraMock).toHaveBeenCalledWith("t1", { ignoreVdcContext: true })
+    // getInventorySWR's 5th arg (vdcContext) reaches getInventoryFromCache unchanged:
+    // deleting the `isTokenPrincipal ?` ternary in route.ts would resolve the view
+    // cookie instead of null here, and this assertion would catch it.
+    expect(getInventoryFromCacheMock).toHaveBeenCalledWith("t1", null)
   })
 })
 

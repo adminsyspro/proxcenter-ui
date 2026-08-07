@@ -10,7 +10,7 @@
  * Per-tenant indexes to ensure tenant isolation.
  */
 
-import { getInventoryFromCache } from "./inventoryCache"
+import { getTenantInventoriesFromCache } from "./inventoryCache"
 
 export interface VmMeta {
   tags: string[]
@@ -25,23 +25,35 @@ type TenantIndex = {
 const tenantIndexes = new Map<string, TenantIndex>()
 
 function rebuildIndex(tenantId: string): Map<string, VmMeta> | null {
-  const cache = getInventoryFromCache(tenantId)
-  if (cache.status === "miss") return null
+  // Merge every warm inventory of this tenant across vDC view contexts
+  // (issue #633 regression class): with an active context cookie, every
+  // browser inventory read warms `t::<vdcId>` and `t::all` can go stale or
+  // stay cold, so reading only the union key would go blind on tag/pool
+  // RBAC and alert visibility. A narrowed entry holds a SUBSET of the
+  // tenant's guests, so merging only adds coverage — the tenant-prefix
+  // scoping of getTenantInventoriesFromCache means this can never leak
+  // another tenant's data. Entries come back freshest-first; the first
+  // hit for a resourceId is kept, so the freshest entry wins on conflict.
+  const inventories = getTenantInventoriesFromCache(tenantId)
+  if (inventories.length === 0) return null
 
   const idx = new Map<string, VmMeta>()
 
-  for (const cluster of cache.data.clusters) {
-    for (const node of cluster.nodes || []) {
-      for (const g of (node.guests || []) as any[]) {
-        const rid = `${cluster.id}:${node.node}:${g.type}:${g.vmid}`
-        const tags =
-          typeof g.tags === "string"
-            ? g.tags
-                .split(/[;,]/)
-                .map((t: string) => t.trim())
-                .filter(Boolean)
-            : []
-        idx.set(rid, { tags, pool: g.pool || undefined })
+  for (const cache of inventories) {
+    for (const cluster of cache.clusters) {
+      for (const node of cluster.nodes || []) {
+        for (const g of (node.guests || []) as any[]) {
+          const rid = `${cluster.id}:${node.node}:${g.type}:${g.vmid}`
+          if (idx.has(rid)) continue
+          const tags =
+            typeof g.tags === "string"
+              ? g.tags
+                  .split(/[;,]/)
+                  .map((t: string) => t.trim())
+                  .filter(Boolean)
+              : []
+          idx.set(rid, { tags, pool: g.pool || undefined })
+        }
       }
     }
   }

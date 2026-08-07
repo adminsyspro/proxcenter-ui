@@ -4,6 +4,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission, getRbacInfraScope, applyRbacInfraFilter, filterVisibleConnections, filterCandidateConnections, pruneEmptyConnections } from "@/lib/rbac"
 import { applyVdcFilter } from "@/lib/vdc/scope"
+import { getVdcContext } from "@/lib/vdc/context"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getInventorySWR, type ClusterData } from "@/lib/inventory/fetchRawInventory"
 import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
@@ -35,18 +36,22 @@ async function handler(request: NextRequest, ctx: GuardedRouteContext) {
 
     const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Resolve the RBAC principal BEFORE the scope: API tokens must never
+    // depend on a browser view-context cookie (shared cookie jar case).
+    const rbacCtx = await getRBACContext()
+    const isTokenPrincipal = rbacCtx?.principal?.kind === 'token'
+    const vdcContext = isTokenPrincipal ? null : await getVdcContext(tenantId)
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: isTokenPrincipal })
     const mask = maskingScope(infra)
 
     // 1) Tenter le cache (sauf si refresh forcé)
-    const { raw, cached } = await getInventorySWR(tenantId, infra, forceRefresh)
+    const { raw, cached } = await getInventorySWR(tenantId, infra, forceRefresh, false, vdcContext)
 
     // 2) Resolve RBAC context + infra scope once, before any filtering.
     //    A PRINCIPAL, never a synthetic userId (hard gate 1, Task 18): for a
     //    token, getRbacInfraScope/filterVmsByPermission below intersect
     //    token.connectionIds with this already tenant-scoped tree — the
     //    connection perimeter of the aggregated route (spec section 6).
-    const rbacCtx = await getRBACContext()
     const rbacPrincipal = rbacCtx?.principal ?? (rbacCtx?.userId as string | undefined)
     const rbacScope = rbacCtx && !rbacCtx.isAdmin && rbacPrincipal
       ? await getRbacInfraScope(rbacPrincipal, rbacCtx.tenantId)

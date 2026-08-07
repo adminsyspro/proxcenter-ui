@@ -514,24 +514,29 @@ return aId - bId
 /**
  * Blocking fetch with thundering-herd protection.
  * Used on cache miss or force refresh — the caller awaits the result.
+ *
+ * `vdcContext` MUST describe the same scope `infra` was resolved under — a
+ * narrowed `infra` stored under the union cache key (or vice-versa) poisons
+ * the cache: the next reader for the wrong context gets someone else's slice
+ * of the inventory (or a truncated one).
  */
-export async function blockingFetch(tenantId: string, infra: InfraScope) {
-  let inflight = getInflightFetch(tenantId)
+export async function blockingFetch(tenantId: string, infra: InfraScope, vdcContext: string | null = null) {
+  let inflight = getInflightFetch(tenantId, vdcContext)
 
   if (inflight === null) {
     const startTime = Date.now()
     inflight = fetchRawInventory(infra)
       .then(result => {
         console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
-        setCachedInventory(result, tenantId)
-        setInflightFetch(null, tenantId)
+        setCachedInventory(result, tenantId, vdcContext)
+        setInflightFetch(null, tenantId, vdcContext)
         return result
       })
       .catch(err => {
-        setInflightFetch(null, tenantId)
+        setInflightFetch(null, tenantId, vdcContext)
         throw err
       })
-    setInflightFetch(inflight, tenantId)
+    setInflightFetch(inflight, tenantId, vdcContext)
   }
 
   return inflight
@@ -540,22 +545,27 @@ export async function blockingFetch(tenantId: string, infra: InfraScope) {
 /**
  * Trigger a background revalidation if one isn't already in progress.
  * Fire-and-forget — errors are logged but don't affect the current request.
+ *
+ * `vdcContext` MUST describe the same scope `infra` was resolved under — a
+ * narrowed `infra` stored under the union cache key (or vice-versa) poisons
+ * the cache: the next reader for the wrong context gets someone else's slice
+ * of the inventory (or a truncated one).
  */
-export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScope) {
-  if (getInflightFetch(tenantId) !== null) return
+export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScope, vdcContext: string | null = null) {
+  if (getInflightFetch(tenantId, vdcContext) !== null) return
 
   const startTime = Date.now()
   const revalidation = fetchRawInventory(infra)
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
-      setCachedInventory(result, tenantId)
-      setInflightFetch(null, tenantId)
+      setCachedInventory(result, tenantId, vdcContext)
+      setInflightFetch(null, tenantId, vdcContext)
     })
     .catch(err => {
       console.error('[inventory] Background revalidation failed:', err?.message)
-      setInflightFetch(null, tenantId)
+      setInflightFetch(null, tenantId, vdcContext)
     })
-  setInflightFetch(revalidation as any, tenantId)
+  setInflightFetch(revalidation as any, tenantId, vdcContext)
 }
 
 /** All-empty shape, same fields as a real RawInventory, served on a cold
@@ -587,29 +597,35 @@ function emptyRawInventory(): RawInventory {
  * miss, a non-blocking caller gets an empty inventory immediately while a
  * background fetch warms the cache for the NEXT scrape. Every existing
  * caller omits the flag and keeps blocking, unchanged.
+ *
+ * `vdcContext` MUST describe the same scope `infra` was resolved under — a
+ * narrowed `infra` stored under the union cache key (or vice-versa) poisons
+ * the cache: the next reader for the wrong context gets someone else's slice
+ * of the inventory (or a truncated one).
  */
 export async function getInventorySWR(
   tenantId: string,
   infra: InfraScope,
   forceRefresh = false,
   nonBlocking = false,
+  vdcContext: string | null = null,
 ): Promise<{ raw: RawInventory; cached: boolean }> {
   if (forceRefresh) {
-    return { raw: await blockingFetch(tenantId, infra), cached: false }
+    return { raw: await blockingFetch(tenantId, infra, vdcContext), cached: false }
   }
-  const cacheResult = getInventoryFromCache(tenantId)
+  const cacheResult = getInventoryFromCache(tenantId, vdcContext)
   if (cacheResult.status === "fresh") {
     return { raw: cacheResult.data as RawInventory, cached: true }
   }
   if (cacheResult.status === "stale") {
     console.log('[inventory] Serving stale data, revalidating in background')
-    triggerBackgroundRevalidation(tenantId, infra)
+    triggerBackgroundRevalidation(tenantId, infra, vdcContext)
     return { raw: cacheResult.data as RawInventory, cached: true }
   }
   if (nonBlocking) {
     console.log('[inventory] Cold cache, serving empty and warming in background (non-blocking caller)')
-    triggerBackgroundRevalidation(tenantId, infra)
+    triggerBackgroundRevalidation(tenantId, infra, vdcContext)
     return { raw: emptyRawInventory(), cached: false }
   }
-  return { raw: await blockingFetch(tenantId, infra), cached: false }
+  return { raw: await blockingFetch(tenantId, infra, vdcContext), cached: false }
 }

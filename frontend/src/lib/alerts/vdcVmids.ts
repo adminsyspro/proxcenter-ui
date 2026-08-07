@@ -9,6 +9,7 @@
  */
 
 import { getVdcScope } from "@/lib/vdc/scope"
+import { getVdcContext } from "@/lib/vdc/context"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 
@@ -25,15 +26,31 @@ const TTL_MS = 60_000
  * vDC pools. An empty map is returned for the provider tenant or any
  * tenant with no vDC scope.
  */
-export async function getVdcVmidsByConnection(tenantId: string): Promise<Map<string, Set<string>>> {
+export async function getVdcVmidsByConnection(
+  tenantId: string,
+  opts?: { ignoreVdcContext?: boolean }
+): Promise<Map<string, Set<string>>> {
+  // Keyed per (tenant, vDC context): the scope below is context-narrowed, so
+  // a VMID map warmed under context A must not serve the union view. Object
+  // routes (alerts by id) pass ignoreVdcContext → union entry.
+  //
+  // NOTE: getVdcContext is resolved TWICE on a cache miss — once here for the
+  // key, once more inside getVdcScope below to build the scope itself. Both
+  // calls are absorbed by getVdcContext's own 5s validation memo (context.ts)
+  // so they agree in practice. A straddle (cookie/DB state changing between
+  // the two calls, right as the 5s memo expires) can mis-key this entry for
+  // at most that window; it self-heals at this cache's own 60s TTL.
+  const vdcContext = opts?.ignoreVdcContext ? null : await getVdcContext(tenantId)
+  const key = `${tenantId}::${vdcContext ?? 'all'}`
+
   const now = Date.now()
-  const cached = cache.get(tenantId)
+  const cached = cache.get(key)
   if (cached && cached.expiry > now) return cached.data
 
-  const vdcScope = await getVdcScope(tenantId)
+  const vdcScope = await getVdcScope(tenantId, opts)
   const result = new Map<string, Set<string>>()
   if (!vdcScope) {
-    cache.set(tenantId, { data: result, expiry: now + TTL_MS })
+    cache.set(key, { data: result, expiry: now + TTL_MS })
     return result
   }
 
@@ -62,12 +79,19 @@ export async function getVdcVmidsByConnection(tenantId: string): Promise<Map<str
     })
   )
 
-  cache.set(tenantId, { data: result, expiry: now + TTL_MS })
+  cache.set(key, { data: result, expiry: now + TTL_MS })
   return result
 }
 
 /** Manually invalidate the cache (e.g. after vDC mutations). */
 export function clearVdcVmidsCache(tenantId?: string): void {
-  if (tenantId) cache.delete(tenantId)
-  else cache.clear()
+  if (tenantId) {
+    // Keys are `${tenantId}::${vdcId | 'all'}` — purge every context entry.
+    const prefix = `${tenantId}::`
+    for (const key of cache.keys()) {
+      if (key.startsWith(prefix)) cache.delete(key)
+    }
+  } else {
+    cache.clear()
+  }
 }

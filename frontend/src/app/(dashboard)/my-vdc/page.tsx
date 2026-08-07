@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Typography, MenuItem, Select, FormControl, InputLabel, Alert, Stack } from '@mui/material'
+import { Box, Typography, Alert, Stack, Card, CardActionArea, Chip, Button } from '@mui/material'
 
 import MyVdcOverview from '@/components/mydc/MyVdcOverview'
+import QuotaDonut from '@/components/mydc/QuotaDonut'
+import { readVdcContextCookie, setVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 export default function MyVdcPage() {
   const t = useTranslations()
@@ -28,7 +30,12 @@ export default function MyVdcPage() {
       const list = Array.isArray(json.data) ? json.data : []
 
       setVdcs(list)
-      setSelectedVdcId(prev => prev || (list[0]?.id ?? ''))
+      // Single-vDC tenants keep the direct overview; multi-vDC tenants land
+      // on the cards grid (selectedVdcId stays '' until a card is clicked).
+      // active[0] first (a disabled vDC must not shadow the active one),
+      // list[0] as last resort so a disabled-only tenant keeps today's view.
+      const active = list.filter((v: any) => v.enabled !== false)
+      setSelectedVdcId(prev => prev || (active.length <= 1 ? (active[0]?.id ?? list[0]?.id ?? '') : ''))
       setError(null)
     } catch (e: any) {
       setError(e?.message || String(e))
@@ -56,8 +63,6 @@ export default function MyVdcPage() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [loadVdcs])
 
-  const selectedVdc = vdcs.find((v) => v.id === selectedVdcId)
-
   if (loading) return <Box p={3}>{t('common.loading')}</Box>
   if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>
   if (vdcs.length === 0) {
@@ -69,25 +74,78 @@ export default function MyVdcPage() {
     )
   }
 
+  const activeVdcs = vdcs.filter((v) => v.enabled !== false)
+  const selectedVdc = vdcs.find((v) => v.id === selectedVdcId)
+  const contextId = readVdcContextCookie()
+  const formatMbAsGb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`
+  const unlimitedLabel = t('vdc.quotaUnlimited')
+
+  const openVdc = (v: any) => {
+    // Card click = set the global context AND open the overview locally.
+    // No reload needed here: the next server-rendered navigation picks the
+    // cookie up; the local overview is already vDC-scoped by construction.
+    setVdcContextCookie(v.id)
+    setSelectedVdcId(v.id)
+  }
+
+  // Multi-vDC landing: one card per active vDC, Cloud Director style.
+  if (activeVdcs.length > 1 && !selectedVdc) {
+    return (
+      <Box sx={{ px: 3, pb: 3, pt: 0 }}>
+        <Typography variant="h5" gutterBottom>{t('vdc.title')}</Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 2,
+          }}
+        >
+          {activeVdcs.map((v) => {
+            const usage = v.usage || {}
+            const quota = v.quota || {}
+            const isContext = v.id === contextId
+
+            return (
+              <Card key={v.id} variant="outlined" sx={{ position: 'relative' }}>
+                <CardActionArea onClick={() => openVdc(v)} sx={{ p: 2 }}>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
+                    <Box component="i" className="ri-cloud-line" sx={{ fontSize: 22, color: 'primary.main' }} />
+                    <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ flexGrow: 1 }}>
+                      {v.name}
+                    </Typography>
+                    {isContext && (
+                      <Chip size="small" color="primary" variant="outlined" label={t('myVdc.currentContext')} sx={{ height: 20, fontSize: '0.7rem' }} />
+                    )}
+                  </Stack>
+                  <Stack direction="row" spacing={2} justifyContent="center" mb={1.5}>
+                    <QuotaDonut icon="ri-cpu-line" size={64} used={usage.usedVcpus || 0} max={quota.maxVcpus} unlimitedLabel={unlimitedLabel} />
+                    <QuotaDonut icon="ri-ram-2-line" size={64} used={usage.usedRamMb || 0} max={quota.maxRamMb ?? null} formatValue={formatMbAsGb} unlimitedLabel={unlimitedLabel} />
+                    <QuotaDonut icon="ri-hard-drive-2-line" size={64} used={usage.usedStorageMb || 0} max={quota.maxStorageMb ?? null} formatValue={formatMbAsGb} unlimitedLabel={unlimitedLabel} />
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" textAlign="center">
+                    {t('myVdc.vmCount', { count: usage.usedVms || 0 })}
+                  </Typography>
+                </CardActionArea>
+              </Card>
+            )
+          })}
+        </Box>
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ px: 3, pb: 3, pt: 0 }}>
-      {vdcs.length > 1 && (
-        <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-          <FormControl size="small" sx={{ minWidth: 240 }}>
-            <InputLabel>{t('myVdc.selectVdc')}</InputLabel>
-            <Select
-              value={selectedVdcId}
-              label={t('myVdc.selectVdc')}
-              onChange={(e) => setSelectedVdcId(e.target.value)}
-            >
-              {vdcs.map((v) => (
-                <MenuItem key={v.id} value={v.id}>{v.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
+      {activeVdcs.length > 1 && (
+        <Button
+          size="small"
+          startIcon={<i className="ri-arrow-left-line" style={{ fontSize: 16 }} />}
+          onClick={() => setSelectedVdcId('')}
+          sx={{ mb: 1, textTransform: 'none' }}
+        >
+          {t('myVdc.backToVdcList')}
+        </Button>
       )}
-
       {selectedVdc && (
         <MyVdcOverview
           vdc={selectedVdc}

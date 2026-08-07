@@ -8,6 +8,8 @@ import { prisma } from '@/lib/db/prisma'
 import { isSharedStorage } from '@/lib/proxmox/storage'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
+import { clearVdcContextCache, getVdcContext } from './context'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -76,23 +78,39 @@ const CACHE_TTL_MS = 5_000
  * up with a non-null empty scope and is denied access through the existing
  * Set lookups.
  */
-export async function getVdcScope(tenantId: string): Promise<VdcScope | null> {
+export async function getVdcScope(
+  tenantId: string,
+  opts?: {
+    /**
+     * Authorization callers (ownership checks, token scoping) must see the
+     * tenant's FULL union regardless of the view context — a deep link to a
+     * vDC-B object keeps working while the browser is in context A (design
+     * ruling: the cookie is a view filter, not a security boundary).
+     */
+    ignoreVdcContext?: boolean
+  }
+): Promise<VdcScope | null> {
   // Default tenant = provider, no filtering
   if (tenantId === DEFAULT_TENANT_ID) return null
 
-  // Check cache
+  // Resolve the vDC view context (null = union). Fail-open by contract.
+  const vdcContext = opts?.ignoreVdcContext ? null : await getVdcContext(tenantId)
+
+  // Check cache — keyed per (tenant, context) so a narrowed scope can never
+  // be served to the union view or to another context.
+  const cacheKey = `${tenantId}::${vdcContext ?? 'all'}`
   const now = Date.now()
-  const cached = scopeCache.get(tenantId)
+  const cached = scopeCache.get(cacheKey)
 
   if (cached && cached.expiry > now) {
     return cached.data
   }
 
   // Build scope from DB
-  const scope = await buildVdcScope(tenantId)
+  const scope = await buildVdcScope(tenantId, vdcContext)
 
   // Cache the result
-  scopeCache.set(tenantId, { data: scope, expiry: now + CACHE_TTL_MS })
+  scopeCache.set(cacheKey, { data: scope, expiry: now + CACHE_TTL_MS })
 
   return scope
 }
@@ -101,11 +119,14 @@ export async function getVdcScope(tenantId: string): Promise<VdcScope | null> {
 // buildVdcScope (internal)
 // ---------------------------------------------------------------------------
 
-async function buildVdcScope(tenantId: string): Promise<VdcScope> {
+async function buildVdcScope(tenantId: string, vdcContext: string | null = null): Promise<VdcScope> {
   // 1. Find all enabled vDCs for this tenant + their child rows in a single
   //    Prisma query (replaces the SQLite N+1 prepared-statement loop).
+  //    With a vDC view context, restrict to that single vDC — tenantId stays
+  //    in the where so a forged foreign id yields zero rows (deny-by-
+  //    construction empty scope, same contract as a vDC-less tenant).
   const vdcRows = await prisma.vdc.findMany({
-    where: { tenantId, enabled: true },
+    where: { tenantId, enabled: true, ...(vdcContext ? { id: vdcContext } : {}) },
     select: {
       id: true,
       connectionId: true,
@@ -272,7 +293,11 @@ export async function guardTenantStorageWrite(
   const { pveFetch } = await import('@/lib/proxmox/client')
   const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
 
-  const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+  // Authorization verdict (design ruling §5): judged against the tenant's
+  // FULL union — the view context must not turn a legitimate access into a 403.
+  const infra = await getTenantInfrastructureScope(await getCurrentTenantId(), {
+    ignoreVdcContext: true,
+  })
   // Provider: no restriction.
   if (infra.kind === 'provider') return null
   // MSP: the tenant owns the whole (dedicated) cluster — any storage on an
@@ -332,7 +357,11 @@ export async function assertVdcPbsAccess(connId: string): Promise<VdcPbsAccess |
   const { NextResponse } = await import('next/server')
   const { getTenantInfrastructureScope } = await import('@/lib/tenant/infraScope')
 
-  const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+  // Authorization verdict (design ruling §5): judged against the tenant's
+  // FULL union — the view context must not turn a legitimate access into a 403.
+  const infra = await getTenantInfrastructureScope(await getCurrentTenantId(), {
+    ignoreVdcContext: true,
+  })
   if (infra.kind === 'provider') return { kind: 'admin' }
   // MSP: owns the PBS connection directly → full (admin-like) access, no
   // namespace filtering (dedicated cluster).
@@ -367,8 +396,14 @@ export async function assertVdcPbsAccess(connId: string): Promise<VdcPbsAccess |
  */
 export function clearVdcScopeCache(tenantId?: string): void {
   if (tenantId) {
-    scopeCache.delete(tenantId)
+    // Keys are `${tenantId}::${vdcId | 'all'}` — purge every context entry.
+    const prefix = `${tenantId}::`
+    for (const key of scopeCache.keys()) {
+      if (key.startsWith(prefix)) scopeCache.delete(key)
+    }
+    clearVdcContextCache(tenantId)
   } else {
     scopeCache.clear()
+    clearVdcContextCache()
   }
 }

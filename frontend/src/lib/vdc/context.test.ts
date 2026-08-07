@@ -15,7 +15,7 @@ vi.mock('next/headers', () => ({ cookies: cookiesMock }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { vdc: { findFirst: vdcFindFirstMock } } }))
 vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default' }))
 
-import { getVdcContext } from './context'
+import { clearVdcContextCache, getVdcContext } from './context'
 
 const cookieJar = (value?: string) => ({
   get: (name: string) =>
@@ -24,6 +24,7 @@ const cookieJar = (value?: string) => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearVdcContextCache() // flush the module-level validation memo between cases
   cookiesMock.mockResolvedValue(cookieJar(undefined))
   vdcFindFirstMock.mockResolvedValue(null)
 })
@@ -64,5 +65,13 @@ describe('getVdcContext', () => {
     cookiesMock.mockResolvedValue(cookieJar('v42'))
     vdcFindFirstMock.mockRejectedValue(new Error('connection lost'))
     await expect(getVdcContext('t1')).resolves.toBeNull()
+  })
+
+  it('memoizes the validation result for 5s per (tenant, vdcId)', async () => {
+    cookiesMock.mockResolvedValue(cookieJar('v42'))
+    vdcFindFirstMock.mockResolvedValue({ id: 'v42' })
+    await getVdcContext('t1')
+    await getVdcContext('t1')
+    expect(vdcFindFirstMock).toHaveBeenCalledTimes(1)
   })
 })

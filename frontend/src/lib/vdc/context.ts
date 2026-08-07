@@ -13,6 +13,24 @@ import { VDC_CONTEXT_COOKIE } from './contextCookie'
 
 export { VDC_CONTEXT_COOKIE }
 
+// 5s TTL memo of the validation query — getVdcScope resolves the context on
+// every call and several routes resolve the scope more than once per
+// request. Same staleness window as the scope cache safety net.
+const validationCache = new Map<string, { value: string | null; expiry: number }>()
+const VALIDATION_TTL_MS = 5_000
+
+/** Purges the memoized cookie validations (all tenants when omitted). */
+export function clearVdcContextCache(tenantId?: string): void {
+  if (tenantId) {
+    const prefix = `${tenantId}::`
+    for (const key of validationCache.keys()) {
+      if (key.startsWith(prefix)) validationCache.delete(key)
+    }
+  } else {
+    validationCache.clear()
+  }
+}
+
 /**
  * Resolves the active vDC context for a tenant, or null for the union view.
  * null when: provider tenant, no cookie, cookie outside a request scope
@@ -31,6 +49,11 @@ export async function getVdcContext(tenantId: string): Promise<string | null> {
   }
   if (!raw) return null
 
+  const key = `${tenantId}::${raw}`
+  const now = Date.now()
+  const cached = validationCache.get(key)
+  if (cached && cached.expiry > now) return cached.value
+
   let vdc: { id: string } | null = null
   try {
     vdc = await prisma.vdc.findFirst({
@@ -42,5 +65,7 @@ export async function getVdcContext(tenantId: string): Promise<string | null> {
     return null
   }
 
-  return vdc?.id ?? null
+  const value = vdc?.id ?? null
+  validationCache.set(key, { value, expiry: now + VALIDATION_TTL_MS })
+  return value
 }

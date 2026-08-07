@@ -113,6 +113,9 @@ describe('guardTenantStorageWrite', () => {
 
       const res = await guardTenantStorageWrite('conn-1', 'local-zfs')
       expect(res).toBeNull()
+      expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith(expect.any(String), {
+        ignoreVdcContext: true,
+      })
     })
 
     it('returns 403 when storage is in scope but backend is shared (shared=1)', async () => {
@@ -225,6 +228,9 @@ describe('assertVdcPbsAccess', () => {
       )
       const result = await assertVdcPbsAccess('pbs-1')
       expect(result).toEqual({ kind: 'tenant', allowed: namespaces })
+      expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith(expect.any(String), {
+        ignoreVdcContext: true,
+      })
     })
 
     it('returns 403 when the connection has no PBS namespaces', async () => {

@@ -38,9 +38,11 @@ type GroupedVmsViewProps = {
   favorites?: Set<string>
   onToggleFavorite?: (vm: VmRow) => void
   migratingVmIds?: Set<string>
+  showVdcColumn?: boolean
+  vdcNameByConn?: Map<string, string>
 }
 
-function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds }: GroupedVmsViewProps) {
+function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn }: GroupedVmsViewProps) {
   const t = useTranslations()
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -89,6 +91,7 @@ return next
     isCluster: vm.isCluster,
     osInfo: vm.osInfo,
     lock: vm.lock,
+    vdcName: vdcNameByConn?.get(vm.connId),
   })
   
   return (
@@ -192,6 +195,7 @@ return next
                         favorites={favorites}
                         onToggleFavorite={onToggleFavorite}
                         migratingVmIds={migratingVmIds}
+                        showVdcColumn={showVdcColumn}
                       />
                     </Box>
                   )}

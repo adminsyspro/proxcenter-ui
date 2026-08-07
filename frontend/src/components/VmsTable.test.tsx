@@ -555,3 +555,25 @@ describe('VmsTable - locked vm', () => {
     expect(container.querySelector('.ri-lock-fill')).toBeInTheDocument()
   })
 })
+
+// ------------------------------------------------------------------ //
+// 15. vDC column (tenant IaaS union view)
+// ------------------------------------------------------------------ //
+
+describe('VmsTable - vDC column', () => {
+  it('renders the vDC column when showVdcColumn is set', () => {
+    renderWithProviders(
+      <VmsTable vms={[{ ...vmRowsFixture[0], vdcName: 'ACME — Paris' }]} showVdcColumn />,
+    )
+    expect(screen.getByText('vDC')).toBeInTheDocument()
+    expect(screen.getByText('ACME — Paris')).toBeInTheDocument()
+  })
+
+  it('hides the vDC column by default (provider view / precise context)', () => {
+    renderWithProviders(
+      <VmsTable vms={[{ ...vmRowsFixture[0], vdcName: 'ACME — Paris' }]} />,
+    )
+    expect(screen.queryByText('vDC')).not.toBeInTheDocument()
+    expect(screen.queryByText('ACME — Paris')).not.toBeInTheDocument()
+  })
+})

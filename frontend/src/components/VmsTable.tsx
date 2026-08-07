@@ -453,6 +453,7 @@ export type VmRow = {
   isCluster?: boolean
   osInfo?: OsInfo | null
   lock?: string
+  vdcName?: string
 }
 
 type VmsTableProps = {
@@ -484,6 +485,8 @@ type VmsTableProps = {
   migratingVmIds?: Set<string>  // IDs des VMs en cours de migration (format: "connId:vmid")
   // Colonnes masquées par défaut (en plus de vmid)
   defaultHiddenColumns?: string[]
+  // vDC — tenant IaaS union view only (see the column block in the columns useMemo)
+  showVdcColumn?: boolean
 }
 
 /* -----------------------------
@@ -515,7 +518,8 @@ function VmsTable({
   favorites,
   onToggleFavorite,
   migratingVmIds,
-  defaultHiddenColumns
+  defaultHiddenColumns,
+  showVdcColumn = false
 }: VmsTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -567,6 +571,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       type: true,
       status: true,
       node: true,
+      vdcName: true,
       ha: true,
       cpu: true,
       ram: true,
@@ -1013,7 +1018,28 @@ return (
         )
       })
     }
-    
+
+    // vDC — tenant IaaS union view only (provider/MSP see the node column,
+    // tenants see which of their vDCs hosts the guest).
+    if (showVdcColumn) {
+      cols.push({
+        field: 'vdcName',
+        headerName: 'vDC',
+        flex: 0.5,
+        minWidth: 90,
+        maxWidth: 180,
+        renderHeader: headerWithIcon('ri-cloud-line', 'vDC'),
+        renderCell: (params) => (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, overflow: 'hidden' }}>
+            <i className="ri-cloud-line" style={{ fontSize: 13, opacity: 0.7, flexShrink: 0 }} />
+            <Typography variant='body2' sx={{ fontSize: '0.7rem', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {params.row.vdcName || ''}
+            </Typography>
+          </Box>
+        )
+      })
+    }
+
     // Colonne HA - toujours inclus quand expanded et qu'il y a des VMs cluster
     if (showNode || expanded) {
       const hasClusterVms = vms.some(vm => vm.isCluster)
@@ -1670,6 +1696,7 @@ return (
       trend: !isLargeDesktop, // Trend seulement sur grands écrans
       trendIoNet: !isLargeDesktop, // IO/Net trend seulement sur grands écrans
       node: isMobile,      // Node masqué sur mobile
+      vdcName: isMobile,   // vDC masqué sur mobile
     }
     
     return cols.filter(col => {
@@ -1687,7 +1714,7 @@ return true
       // MUI re-runs flex layout on every columns-prop change and ignores width.
       return { ...col, width: saved, flex: undefined }
     })
-  }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths])
+  }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths, showVdcColumn])
 
   return (
     <Box sx={{

@@ -35,7 +35,14 @@ export default function MyVdcPage() {
       // active[0] first (a disabled vDC must not shadow the active one),
       // list[0] as last resort so a disabled-only tenant keeps today's view.
       const active = list.filter((v: any) => v.enabled !== false)
-      setSelectedVdcId(prev => prev || (active.length <= 1 ? (active[0]?.id ?? list[0]?.id ?? '') : ''))
+      // Precise vDC context → land directly on that vDC's dashboard (skip the
+      // cards grid). Only an ACTIVE vDC matching the cookie counts; otherwise
+      // fall back to the aggregated cards (multi) / direct overview (mono).
+      const ctx = readVdcContextCookie()
+      const ctxVdc = ctx ? active.find((v: any) => v.id === ctx) : undefined
+      setSelectedVdcId(prev =>
+        prev || (ctxVdc?.id ?? (active.length <= 1 ? (active[0]?.id ?? list[0]?.id ?? '') : ''))
+      )
       setError(null)
     } catch (e: any) {
       setError(e?.message || String(e))

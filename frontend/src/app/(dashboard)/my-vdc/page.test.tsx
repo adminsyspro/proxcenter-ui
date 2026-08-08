@@ -68,4 +68,22 @@ describe('/my-vdc landing', () => {
     await waitFor(() => expect(screen.getByTestId('overview')).toBeTruthy())
     expect(screen.getByTestId('overview').textContent).toBe('ACME — Paris')
   })
+
+  it('precise context cookie (matching an active vDC) lands directly on that vDC, skipping the cards', async () => {
+    document.cookie = 'pc_vdc_context=vB; path=/'
+    mockVdcsResponse([vdc('vA', 'ACME — Paris'), vdc('vB', 'ACME — Frankfurt')])
+    render(<MyVdcPage />)
+    await waitFor(() => expect(screen.getByTestId('overview')).toBeTruthy())
+    expect(screen.getByTestId('overview').textContent).toBe('ACME — Frankfurt')
+    expect(screen.queryByText('ACME — Paris')).toBeNull()
+  })
+
+  it('stale/foreign context cookie (id not among the tenant vDCs) falls back to the cards grid', async () => {
+    document.cookie = 'pc_vdc_context=vGhost; path=/'
+    mockVdcsResponse([vdc('vA', 'ACME — Paris'), vdc('vB', 'ACME — Frankfurt')])
+    render(<MyVdcPage />)
+    await waitFor(() => expect(screen.getByText('ACME — Paris')).toBeTruthy())
+    expect(screen.getByText('ACME — Frankfurt')).toBeTruthy()
+    expect(screen.queryByTestId('overview')).toBeNull()
+  })
 })

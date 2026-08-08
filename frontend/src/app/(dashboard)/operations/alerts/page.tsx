@@ -417,8 +417,14 @@ return true
       message: t('alerts.resolveConfirm', { count: activeCount }),
       onConfirm: async () => {
         try {
-          // DELETE /api/v1/orchestrator/alerts résout toutes les alertes
-          await fetch('/api/v1/orchestrator/alerts', { method: 'DELETE' })
+          // DELETE /api/v1/orchestrator/alerts/clear résout les alertes du
+          // périmètre de l'appelant (provider = fleet entière, tenant =
+          // uniquement ses propres connexions). Le DELETE brut sur
+          // /orchestrator/alerts exige désormais un connection_id pour un
+          // tenant (défense en profondeur pour les appels API directs) —
+          // /clear reste l'endpoint utilisé par cette page, sans sélecteur
+          // de connexion nécessaire.
+          await fetch('/api/v1/orchestrator/alerts/clear', { method: 'DELETE' })
           showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {

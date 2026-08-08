@@ -2,8 +2,10 @@ import { NextResponse } from "next/server"
 
 import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
-import { getPbsConnectionById } from "@/lib/connections/getConnection"
+import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { assertVdcPbsAccess, getVdcScope } from "@/lib/vdc/scope"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -37,11 +39,49 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     if (denied) return denied
 
-    const conn = await getPbsConnectionById(id)
+    // Access verdict (union, same as GET /api/v1/pbs/[id]/backups): super
+    // admins and MSP tenants owning this PBS outright get { kind: 'admin' }
+    // (no namespace filtering); vDC (iaas) tenants get { kind: 'tenant',
+    // allowed } carrying their authorised (datastore, namespace) pairs;
+    // anyone else is rejected here.
+    const access = await assertVdcPbsAccess(id)
+    if (access instanceof Response) return access
 
-    // Récupérer les datastores d'abord (nécessaire pour prune et GC jobs)
+    // This route is session-only (not on the public-API token allowlist —
+    // only pbs/[id]/backups is), so there is no token principal to consider:
+    // the DISPLAYED namespaces always follow the active vDC view context,
+    // same pattern as the backups route's non-token branch.
+    let allowedSet: Set<string> | null = null
+    let allowedDatastores: Set<string> | null = null
+    if (access.kind === 'tenant') {
+      const tenantId = await getCurrentTenantId()
+      const narrowed = await getVdcScope(tenantId)
+      const unionKeys = new Set(access.allowed.map(p => `${p.datastore}|${p.namespace}`))
+      const narrowedNs = narrowed?.pbsNamespacesByConnection.get(id) ?? []
+      const narrowedKeys = new Set(narrowedNs.map(p => `${p.datastore}|${p.namespace}`))
+      allowedSet = new Set([...unionKeys].filter(k => narrowedKeys.has(k)))
+      allowedDatastores = new Set([...allowedSet].map(k => k.split('|')[0]))
+    }
+    // Deny-by-default: a job whose (datastore, namespace) pair isn't in the
+    // caller's allowed set is excluded. admin/msp (allowedSet === null) see
+    // everything, unchanged.
+    const inScope = (datastore?: string, ns?: string): boolean =>
+      !allowedSet || allowedSet.has(`${datastore ?? ''}|${ns ?? ''}`)
+
+    const conn = access.kind === 'admin'
+      ? await getPbsConnectionById(id)
+      : await getPbsConnectionByIdUnscoped(id)
+
+    // Récupérer les datastores d'abord (nécessaire pour prune et GC jobs).
+    // For a scoped tenant, narrow to their authorised datastores up-front so
+    // prune-job/gc calls are never even made against a datastore they have
+    // no binding on (and the returned `datastores` list never leaks names
+    // of datastores outside their scope).
     const datastores = await pbsFetch<any[]>(conn, "/admin/datastore").catch(() => [])
-    const datastoreNames = (datastores || []).map(ds => ds.store || ds.name).filter(Boolean)
+    let datastoreNames = (datastores || []).map(ds => ds.store || ds.name).filter(Boolean)
+    if (allowedDatastores) {
+      datastoreNames = datastoreNames.filter(store => allowedDatastores!.has(store))
+    }
 
     // Récupérer tous les types de jobs en parallèle
     const [syncJobs, verifyJobs] = await Promise.all([
@@ -102,8 +142,9 @@ return { datastore: store, ...gcStatus }
     // Flatten prune jobs
     const pruneJobs = pruneJobsArrays.flat()
 
-    // Formater les Sync Jobs
-    const formattedSyncJobs = (syncJobs || []).map((job: any) => ({
+    // Formater les Sync Jobs — /admin/sync is NOT datastore-scoped (returns
+    // jobs across the whole PBS), so it needs an explicit (store, ns) check.
+    const formattedSyncJobs = (syncJobs || []).filter((job: any) => inScope(job.store, job.ns || '')).map((job: any) => ({
       id: job.id,
       type: 'sync',
       enabled: job.disable !== true && job.disable !== 1,
@@ -130,8 +171,9 @@ return { datastore: store, ...gcStatus }
       _raw: job
     }))
 
-    // Formater les Verify Jobs
-    const formattedVerifyJobs = (verifyJobs || []).map((job: any) => ({
+    // Formater les Verify Jobs — /admin/verify is likewise PBS-wide, not
+    // datastore-scoped.
+    const formattedVerifyJobs = (verifyJobs || []).filter((job: any) => inScope(job.store, job.ns || '')).map((job: any) => ({
       id: job.id,
       type: 'verify',
       enabled: job.disable !== true && job.disable !== 1,
@@ -154,8 +196,9 @@ return { datastore: store, ...gcStatus }
       _raw: job
     }))
 
-    // Formater les Prune Jobs
-    const formattedPruneJobs = pruneJobs.map((job: any) => ({
+    // Formater les Prune Jobs — fetched per (already datastore-narrowed)
+    // store, but each store can hold namespaces outside the tenant's scope.
+    const formattedPruneJobs = pruneJobs.filter((job: any) => inScope(job.datastore, job.ns || '')).map((job: any) => ({
       id: job.id,
       type: 'prune',
       enabled: job.disable !== true && job.disable !== 1,
@@ -183,7 +226,10 @@ return { datastore: store, ...gcStatus }
       _raw: job
     }))
 
-    // Formater les GC configs (pas vraiment des "jobs" mais des configs de garbage collection)
+    // Formater les GC configs (pas vraiment des "jobs" mais des configs de
+    // garbage collection). GC operates at the whole-datastore level (no
+    // namespace concept), already implicitly scoped since `gcConfigs` was
+    // only computed from the narrowed `datastoreNames` above.
     const formattedGcConfigs = gcConfigs.map((gc: any) => ({
       id: `gc-${gc.datastore}`,
       type: 'gc',
@@ -202,8 +248,8 @@ return { datastore: store, ...gcStatus }
       _raw: gc
     }))
 
-    // Formater les Tape Backup Jobs
-    const formattedTapeJobs = (tapeJobs || []).map((job: any) => ({
+    // Formater les Tape Backup Jobs — PBS-wide endpoint, not datastore-scoped.
+    const formattedTapeJobs = (tapeJobs || []).filter((job: any) => inScope(job.store, job.ns || '')).map((job: any) => ({
       id: job.id,
       type: 'tape',
       enabled: job.disable !== true && job.disable !== 1,

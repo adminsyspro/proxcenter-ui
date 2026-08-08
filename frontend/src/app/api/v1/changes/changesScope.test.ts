@@ -107,4 +107,33 @@ describe("GET /api/v1/changes scope routing", () => {
     expect(ids).not.toContain("ev1")
     expect(ids).not.toContain("ev2")
   })
+
+  it("iaas: excludes a record from a connection present in the tenant union but absent from the narrowed vDC scope", async () => {
+    // Union has both c1 and c2 (e.g. two vDCs on a shared cluster), but the
+    // current vDC view context only narrows to c1. Before the fix the
+    // perimeter check ran against the union, so c2's record would pass and
+    // leak into this context; the node/pool masks below would then be
+    // skipped for it too (no key for c2 in the narrowed maps).
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+    const CONN_RECORD_C2 = { id: "ev3", connectionId: "c2", node: "n1", pool: "pool-a" }
+    orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, CONN_RECORD, CONN_RECORD_C2] })
+
+    const vdcScope = {
+      connectionIds: new Set(["c1"]),
+      pbsConnectionIds: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["n1"])]]),
+      poolsByConnection: new Map([["c1", new Set(["pool-a"])]]),
+    }
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    const ids = body.data.map((r: any) => r.id)
+    expect(ids).not.toContain("ev1")
+    expect(ids).toContain("ev2")
+    expect(ids).not.toContain("ev3")
+  })
 })

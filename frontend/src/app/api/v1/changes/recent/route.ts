@@ -33,7 +33,12 @@ export async function GET(req: Request) {
       data.data = data.data
         .filter((c: any) => {
           if (!c.connectionId) return infra.kind === 'provider'
-          if (!tenantConnectionIds.has(c.connectionId)) return false
+          // iaas: the LIST perimeter follows the vDC view context (narrowed
+          // connection set — missing key = deny). The union set only backs
+          // provider/msp and ownership verdicts elsewhere.
+          if (vdcScope) {
+            if (!vdcScope.connectionIds.has(c.connectionId)) return false
+          } else if (!tenantConnectionIds.has(c.connectionId)) return false
           if (!vdcScope) return true
           const allowedNodes = vdcScope.nodesByConnection.get(c.connectionId)
           if (allowedNodes && c.node && !allowedNodes.has(c.node)) return false

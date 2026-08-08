@@ -37,7 +37,12 @@ export async function GET(req: Request) {
         // Strict: drop records without a connection. App-wide events are
         // cluster-less and can leak provider-internal state to tenants.
         if (!c.connectionId) return infra.kind === 'provider'
-        if (!tenantConnectionIds.has(c.connectionId)) return false
+        // iaas: the LIST perimeter follows the vDC view context (narrowed
+        // connection set — missing key = deny). The union set only backs
+        // provider/msp and ownership verdicts elsewhere.
+        if (vdcScope) {
+          if (!vdcScope.connectionIds.has(c.connectionId)) return false
+        } else if (!tenantConnectionIds.has(c.connectionId)) return false
         // Provider tenants (no scope) keep the connection-level filter only.
         if (!vdcScope) return true
         // vDC tenants: enforce node + pool whitelists from the scope.

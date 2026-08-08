@@ -152,6 +152,31 @@ describe("GET /api/v1/tasks/running scope routing", () => {
     expect(body.data).toHaveLength(1)
   })
 
+  it("iaas: the connection query uses the narrowed vDC scope, not the broader tenant union", async () => {
+    // Union has both c1 and c2 (e.g. two vDCs on a shared cluster), but the
+    // current vDC view context only narrows to c1. Before the fix the
+    // perimeter query ran against the union, so c2 (another vDC's
+    // connection) would have been queried and its tasks masked with
+    // possibly-missing keys.
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+    const vdcScope = {
+      connectionIds: new Set(["c1"]),
+      pbsConnectionIds: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      poolsByConnection: new Map<string, Set<string>>(),
+    }
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+    getVdcVmidsMock.mockResolvedValue(new Map([["c1", new Set<number>([100])]]))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    expect(prismFindManyMock).toHaveBeenCalledWith({
+      where: { type: "pve", id: { in: ["c1"] } },
+    })
+  })
+
   it("provider: passes each connection's own tenantId to getConnectionById", async () => {
     getInfraMock.mockResolvedValue({ kind: "provider" })
 

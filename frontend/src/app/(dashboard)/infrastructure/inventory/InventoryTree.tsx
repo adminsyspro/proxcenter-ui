@@ -485,6 +485,14 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // Active vDC count, gates the per-vDC group headers in union view: below
   // 2 there is nothing to disambiguate, so grouping stays off everywhere.
   const activeVdcCount = isFullClusterView ? 0 : myVdcs.filter((v) => v.enabled !== false).length
+  // Task 16 — single shared gate for the collapsible vDC nodes across all
+  // three surfaces (guests / network / backup): aggregated view only (no
+  // active precise context) AND at least 2 vDCs to disambiguate. Provider/
+  // MSP (`isFullClusterView`), a precise vDC context (`ctxIsActiveVdc`), or
+  // a mono-vDC tenant all fall through to the plain pre-vDC-chantier shape
+  // on every surface — computed once here and reused everywhere so the
+  // three surfaces can never drift apart.
+  const showVdcNodes = !isFullClusterView && !ctxIsActiveVdc && activeVdcCount >= 2
   // Expand/collapse persistence is scoped per tenant. In MSP mode each tenant
   // owns different clusters (different connIds), so the persisted expand IDs
   // (`cluster:<connId>`, `node:<connId>:<n>`, ...) of one tenant never match
@@ -583,6 +591,27 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Sections collapsed (pour les modes hosts, pools, tags)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['storage', 'pbs', 'migrate-ext']))
 
+  // Task 16 — per-vDC collapse state for the guest list's vDC group nodes
+  // (`showVdcNodes`). Expanded by default; persisted per tenant like the
+  // other expand/collapse buckets below.
+  const [collapsedVdcs, setCollapsedVdcs] = useState<Set<string>>(new Set())
+
+  // Task 16 (round 2) — Network/Backup vDC group nodes (`tvnetgrp:`/
+  // `pbsvdcgrp:`) live inside a *controlled* SimpleTreeView, where absence
+  // from `expandedItems` means collapsed. A vDC group must render expanded
+  // by default, so these two sets are the real source of truth for "the
+  // user explicitly collapsed this vDC group" — independent of
+  // `networkTreeExpandedItems`/`backupExpandedItems` below, which only ever
+  // track manual expand/collapse of regular (non-vDC-group) nodes. See
+  // `effectiveNetworkExpanded`/`effectiveBackupExpanded` further down: they
+  // union the manual state with "every current vDC group id not in this
+  // collapse set," which is immune to `myVdcs` (SWR) reference churn —
+  // unlike a once-per-mount "seed expandedItems" effect, which would
+  // re-fire and silently re-expand a group the user just collapsed (the
+  // Task 6 regression this deliberately avoids repeating).
+  const [collapsedNetworkVdcs, setCollapsedNetworkVdcs] = useState<Set<string>>(new Set())
+  const [collapsedBackupVdcs, setCollapsedBackupVdcs] = useState<Set<string>>(new Set())
+
   // Storage tree expanded items (persisted)
   const [storageExpandedItems, setStorageExpandedItems] = useState<string[]>([])
 
@@ -615,6 +644,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       } else {
         next.add(key)
       }
+      return next
+    })
+  }
+
+  const toggleVdcCollapsed = (vdcId: string) => {
+    setCollapsedVdcs(prev => {
+      const next = new Set(prev)
+      if (next.has(vdcId)) next.delete(vdcId)
+      else next.add(vdcId)
       return next
     })
   }
@@ -673,6 +711,24 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       }
       const savedNetTreeExpanded = localStorage.getItem(k('inventoryNetworkTreeExpandedItems'))
       if (savedNetTreeExpanded) setNetworkTreeExpandedItems(JSON.parse(savedNetTreeExpanded))
+
+      const savedVdcCollapsed = localStorage.getItem(k('inventoryVdcCollapsed'))
+      if (savedVdcCollapsed) {
+        const parsed = JSON.parse(savedVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedVdcs(new Set(parsed))
+      }
+
+      const savedNetVdcCollapsed = localStorage.getItem(k('inventoryVdcNetCollapsed'))
+      if (savedNetVdcCollapsed) {
+        const parsed = JSON.parse(savedNetVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedNetworkVdcs(new Set(parsed))
+      }
+
+      const savedBackupVdcCollapsed = localStorage.getItem(k('inventoryVdcBackupCollapsed'))
+      if (savedBackupVdcCollapsed) {
+        const parsed = JSON.parse(savedBackupVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedBackupVdcs(new Set(parsed))
+      }
     } catch {}
     setIsHydrated(true)
   }, [tenantLoading, tenantScope])
@@ -691,6 +747,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   useEffect(() => {
     if (isHydrated) localStorage.setItem(`inventoryCollapsedSections::${tenantScope}`, JSON.stringify([...collapsedSections]))
   }, [collapsedSections, isHydrated, tenantScope])
+
+  // Persist collapsedVdcs (Task 16)
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcCollapsed::${tenantScope}`, JSON.stringify([...collapsedVdcs]))
+  }, [collapsedVdcs, isHydrated, tenantScope])
+
+  // Persist collapsedNetworkVdcs / collapsedBackupVdcs (Task 16 round 2)
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcNetCollapsed::${tenantScope}`, JSON.stringify([...collapsedNetworkVdcs]))
+  }, [collapsedNetworkVdcs, isHydrated, tenantScope])
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcBackupCollapsed::${tenantScope}`, JSON.stringify([...collapsedBackupVdcs]))
+  }, [collapsedBackupVdcs, isHydrated, tenantScope])
 
   // Persist storageExpandedItems
   useEffect(() => {
@@ -2304,14 +2373,13 @@ return favorites.has(vmKey)
     () => (ctxIsActiveVdc ? tenantVnets.filter((v) => v.vdcId === ctxCookie) : tenantVnets),
     [tenantVnets, ctxIsActiveVdc, ctxCookie]
   )
-  // Union view, ≥2 active vDCs: group the visible tvnets under a header per
-  // vDC, including an empty group for a vDC that owns no VNet yet — a
-  // tenant should see every vDC they hold, not just the ones already
-  // populated. Below 2 vDCs (mono-vDC, or a precise context already down to
-  // one) there is nothing to disambiguate, so grouping stays off and the
-  // flat list renders exactly as before.
+  // Union view, ≥2 active vDCs (`showVdcNodes`): group the visible tvnets
+  // under a collapsible vDC node per vDC, including an empty group for a
+  // vDC that owns no VNet yet — a tenant should see every vDC they hold,
+  // not just the ones already populated. Gated off (flat list, exactly as
+  // before) in a precise context or for a mono-vDC tenant.
   const tenantVnetGrouping = useMemo(() => {
-    if (ctxIsActiveVdc || activeVdcCount < 2) return null
+    if (!showVdcNodes) return null
     const byVdc = new Map<string, { vdcId: string; vdcName: string; vnets: TenantVnetItem[] }>()
     for (const v of myVdcs) {
       if (v.enabled !== false) byVdc.set(v.id, { vdcId: v.id, vdcName: v.name, vnets: [] })
@@ -2325,7 +2393,7 @@ return favorites.has(vmKey)
     for (const g of byVdc.values()) g.vnets.sort((a, b) => a.displayName.localeCompare(b.displayName))
     const groups = [...byVdc.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
     return { groups, unmapped }
-  }, [ctxIsActiveVdc, activeVdcCount, myVdcs, visibleTenantVnets])
+  }, [showVdcNodes, myVdcs, visibleTenantVnets])
   // Shared leaf renderer for a single tenant VNet — used by both the flat
   // list (mono-vDC / precise context) and the per-vDC grouped tree below.
   const renderTvnetLeaf = useCallback((v: TenantVnetItem) => (
@@ -2351,11 +2419,12 @@ return favorites.has(vmKey)
   // context returns only its own PBS namespaces), so this only matters for
   // the union view: a client-side join of each vDC's `pbsBindings`
   // (pbsConnectionId + datastore) against the payload's PBS servers /
-  // datastores. Below 2 active vDCs there's nothing to disambiguate, so
-  // grouping stays off and the tree renders exactly as before.
+  // datastores. Gated on the shared `showVdcNodes` — below 2 active vDCs,
+  // in a precise context, or for provider/MSP, grouping stays off and the
+  // tree renders exactly as before.
   type PbsVdcEntry = { pbs: TreePbsServer; datastore: TreePbsDatastore }
   const pbsVdcGrouping = useMemo(() => {
-    if (isFullClusterView || ctxIsActiveVdc || activeVdcCount < 2) return null
+    if (!showVdcNodes) return null
     // (pbsConnectionId, datastore) -> vDCs bound to it. A datastore can be
     // bound by more than one vDC (shared PBS target) — it will appear
     // under every one of them below.
@@ -2390,7 +2459,36 @@ return favorites.has(vmKey)
     }
     const sortedGroups = [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
     return { groups: sortedGroups, unmapped }
-  }, [isFullClusterView, ctxIsActiveVdc, activeVdcCount, myVdcs, pbsServers])
+  }, [showVdcNodes, myVdcs, pbsServers])
+
+  // Task 16 (round 2) — same "absence = expanded" union as the Network tree
+  // (see `effectiveNetworkExpanded` above), for `pbsvdcgrp:<vdcId>` groups.
+  const effectiveBackupExpanded = useMemo(() => {
+    if (!pbsVdcGrouping) return backupExpandedItems
+    const groupIds = pbsVdcGrouping.groups
+      .map(g => `pbsvdcgrp:${g.vdcId}`)
+      .filter(id => !collapsedBackupVdcs.has(id.slice('pbsvdcgrp:'.length)))
+    return [...new Set([...backupExpandedItems, ...groupIds])]
+  }, [backupExpandedItems, pbsVdcGrouping, collapsedBackupVdcs])
+
+  const handleBackupExpandedChange = useCallback((_event: React.SyntheticEvent | null, itemIds: string[]) => {
+    if (!isHydrated) return
+    const prevEffective = new Set(effectiveBackupExpanded)
+    const nextSet = new Set(itemIds)
+    const newlyCollapsed = [...prevEffective].filter(id => id.startsWith('pbsvdcgrp:') && !nextSet.has(id))
+    const newlyExpanded = [...nextSet].filter(id => id.startsWith('pbsvdcgrp:') && !prevEffective.has(id))
+    if (newlyCollapsed.length || newlyExpanded.length) {
+      setCollapsedBackupVdcs(prev => {
+        const next = new Set(prev)
+        for (const id of newlyCollapsed) next.add(id.slice('pbsvdcgrp:'.length))
+        for (const id of newlyExpanded) next.delete(id.slice('pbsvdcgrp:'.length))
+        return next
+      })
+    }
+    setBackupExpandedItems(itemIds.filter(id => !id.startsWith('pbsvdcgrp:')))
+    expandingRef.current = true
+    requestAnimationFrame(() => { expandingRef.current = false })
+  }, [isHydrated, effectiveBackupExpanded])
   // Shared PBS server / datastore label renderers — used by the plain flat
   // tree (unchanged rendering) and, when grouping (Task 14), both by the
   // per-vDC groups and the ungrouped tail, so the visual result stays
@@ -2448,6 +2546,48 @@ return favorites.has(vmKey)
   const [expandedNetSections, setExpandedNetSections] = useState<Set<string>>(new Set())
   // Network tree expanded items (not persisted — data is lazy-loaded)
   const [networkTreeExpandedItems, setNetworkTreeExpandedItems] = useState<string[]>([])
+
+  // Task 16 (round 2) — "absence = expanded" for the vDC group level: union
+  // the user's manually-expanded regular nodes with every current
+  // `tvnetgrp:<vdcId>` that isn't in `collapsedNetworkVdcs`. `tenantVnetGrouping`
+  // is `null` outside the aggregated ≥2-vDC view, so this degrades to
+  // `networkTreeExpandedItems` unchanged everywhere else (provider tree,
+  // mono-vDC, precise context) — immune to `myVdcs` (SWR) reference churn
+  // since the collapse set, not a re-fired seed effect, is the source of
+  // truth for "did the user collapse this group."
+  const effectiveNetworkExpanded = useMemo(() => {
+    if (!tenantVnetGrouping) return networkTreeExpandedItems
+    const groupIds = tenantVnetGrouping.groups
+      .map(g => `tvnetgrp:${g.vdcId}`)
+      .filter(id => !collapsedNetworkVdcs.has(id.slice('tvnetgrp:'.length)))
+    return [...new Set([...networkTreeExpandedItems, ...groupIds])]
+  }, [networkTreeExpandedItems, tenantVnetGrouping, collapsedNetworkVdcs])
+
+  // Routes a user's expand/collapse toggle to the right store: a
+  // `tvnetgrp:` id goes to `collapsedNetworkVdcs` (the vDC-group source of
+  // truth), everything else to `networkTreeExpandedItems` as before. Shared
+  // by both the tenant (tvnetgrp-aware) and provider network SimpleTreeViews
+  // — for the provider tree no itemId ever starts with `tvnetgrp:`, so the
+  // extra filtering is a no-op there.
+  const handleNetworkExpandedChange = useCallback((_event: React.SyntheticEvent | null, itemIds: string[]) => {
+    if (!isHydrated) return
+    const prevEffective = new Set(effectiveNetworkExpanded)
+    const nextSet = new Set(itemIds)
+    const newlyCollapsed = [...prevEffective].filter(id => id.startsWith('tvnetgrp:') && !nextSet.has(id))
+    const newlyExpanded = [...nextSet].filter(id => id.startsWith('tvnetgrp:') && !prevEffective.has(id))
+    if (newlyCollapsed.length || newlyExpanded.length) {
+      setCollapsedNetworkVdcs(prev => {
+        const next = new Set(prev)
+        for (const id of newlyCollapsed) next.add(id.slice('tvnetgrp:'.length))
+        for (const id of newlyExpanded) next.delete(id.slice('tvnetgrp:'.length))
+        return next
+      })
+    }
+    setNetworkTreeExpandedItems(itemIds.filter(id => !id.startsWith('tvnetgrp:')))
+    expandingRef.current = true
+    requestAnimationFrame(() => { expandingRef.current = false })
+  }, [isHydrated, effectiveNetworkExpanded])
+
   const toggleNetSection = useCallback((key: string) => {
     setExpandedNetSections(prev => {
       const next = new Set(prev)
@@ -2760,31 +2900,34 @@ return favorites.has(vmKey)
   // Per-vDC guest grouping for the flat list tenants actually see (`vms`
   // mode — `tree` is unreachable to them, forced by useRBACScopeProfile; the
   // vDC root nodes that used to live in the tree arm were dead code for that
-  // population). One header row per vDC in `vdcByConnId`, including vDCs
-  // with no cluster in inventory yet — they still render, with "(0)" (the
-  // OVH / PVE-STORE-GRA4 case from the QA pass). Provider/MSP tenants
-  // (`isFullClusterView`) and any tenant whose vDC list is empty (still
-  // loading, or `useMyVdcs` failed) fall through to `null` here, which keeps
-  // the plain flat list exactly as before — `vdcByConnId` already degrades
-  // to an empty map in both cases, so this is naturally fail-open.
+  // population). One collapsible header row per active vDC in `myVdcs`,
+  // including vDCs with no cluster in inventory yet — they still render,
+  // with "(0)" (the OVH / PVE-STORE-GRA4 case from the QA pass). Gated on
+  // the shared `showVdcNodes` (aggregated view, ≥2 vDCs, no active precise
+  // context) — below that, or if `useMyVdcs` failed/is still loading, this
+  // is `null` and `flatItems` falls back to the plain flat list exactly as
+  // before the vDC chantier, which is naturally fail-open.
   const vmsGroupedRows = useMemo(() => {
-    if (isFullClusterView || vdcByConnId.size === 0) return null
+    if (!showVdcNodes) return null
     const groups = new Map<string, { vdcId: string; vdcName: string; vms: typeof displayVms }>()
-    for (const [connId, v] of vdcByConnId) groups.set(connId, { vdcId: v.id, vdcName: v.name, vms: [] })
+    for (const v of myVdcs) {
+      if (v.enabled !== false) groups.set(v.id, { vdcId: v.id, vdcName: v.name, vms: [] })
+    }
     const unmapped: typeof displayVms = []
     for (const vm of displayVms) {
-      const g = groups.get(vm.connId)
+      const vdc = vdcByConnId.get(vm.connId)
+      const g = vdc ? groups.get(vdc.id) : undefined
       if (g) g.vms.push(vm)
       else unmapped.push(vm) // defensive: stale/unmapped connId — still shown, ungrouped
     }
     const rows: (VdcHeaderRow | (typeof displayVms)[number])[] = []
     for (const g of [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))) {
       rows.push({ __vdcHeader: { vdcId: g.vdcId, vdcName: g.vdcName, count: g.vms.length } })
-      rows.push(...g.vms)
+      if (!collapsedVdcs.has(g.vdcId)) rows.push(...g.vms)
     }
     rows.push(...unmapped)
     return rows
-  }, [isFullClusterView, vdcByConnId, displayVms])
+  }, [showVdcNodes, myVdcs, vdcByConnId, displayVms, collapsedVdcs])
 
   const flatItems = useMemo(() => {
     if (viewMode === 'vms') return (vmsGroupedRows ?? displayVms) as typeof displayVms
@@ -3035,7 +3178,8 @@ return favorites.has(vmKey)
                 const row = flatItems![virtualRow.index] as unknown as (VdcHeaderRow | (typeof displayVms)[number])
 
                 if ('__vdcHeader' in row) {
-                  const { vdcName, count } = row.__vdcHeader
+                  const { vdcId, vdcName, count } = row.__vdcHeader
+                  const isVdcCollapsed = collapsedVdcs.has(vdcId)
                   return (
                     <Box
                       key={virtualRow.key}
@@ -3049,19 +3193,35 @@ return favorites.has(vmKey)
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
                     >
-                      {/* Per-vDC group separator (Task 13) — plain, non-collapsible:
-                          the vms arm is virtualized and has no existing collapse
-                          mechanism to reuse, unlike the hosts/pools/tags modes. */}
+                      {/* Per-vDC collapsible group node (Task 16) — +1 node level
+                          above the guests, same collapse affordance/icon vocabulary
+                          as the other section and host-row headers in this file
+                          (ri-add-line closed / ri-subtract-line open). Toggling
+                          omits/re-includes this vDC's VM rows from `flatItems`;
+                          the virtualizer already remeasures on that change. */}
                       <Box
+                        onClick={() => toggleVdcCollapsed(vdcId)}
                         sx={{
-                          display: 'flex', alignItems: 'center', gap: 1, pl: 3, pr: 1.5, py: 0.5,
-                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-                          borderBottom: '1px solid', borderColor: 'divider',
+                          // Plain indented tree-node row — no filled banner, matching
+                          // the tvnetgrp/pbsvdcgrp vDC nodes in NETWORK/BACKUP (native
+                          // TreeItem rows have no background/border of their own).
+                          // `pl: 0.75` sits shallower than the VM rows below it
+                          // (`px: 1.5`), so the vDC node reads as +1 level ABOVE its
+                          // guests — same parent/child relationship as a tvnetgrp
+                          // TreeItem sitting above its (unindented-by-us, natively
+                          // nested) tvnet leaves.
+                          display: 'flex', alignItems: 'center', gap: 1, pl: 0.75, pr: 1.5, py: 0.5,
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: 'action.hover' },
                         }}
                       >
+                        <Box component="i" className={isVdcCollapsed ? 'ri-add-line' : 'ri-subtract-line'} sx={{ fontSize: 14, opacity: 0.7 }} />
                         <Box component="i" className="ri-cloud-line" sx={{ fontSize: 14, opacity: 0.7 }} />
-                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{vdcName}</Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.5 }}>({count})</Typography>
+                        {/* Match the tvnetgrp/pbsvdcgrp label exactly (full
+                            text.primary, weight 700, size 13) — only the
+                            count stays muted, same as the other sections. */}
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{vdcName}</Typography>
+                        <span style={{ opacity: 0.5, fontSize: 11 }}>({count})</span>
                       </Box>
                     </Box>
                   )
@@ -4114,13 +4274,8 @@ return (
                   expansionTrigger="iconContainer"
                   slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
                   selectedItems={selectedItemId || ''}
-                  expandedItems={networkTreeExpandedItems}
-                  onExpandedItemsChange={(_event, itemIds) => {
-                    if (!isHydrated) return
-                    setNetworkTreeExpandedItems(itemIds)
-                    expandingRef.current = true
-                    requestAnimationFrame(() => { expandingRef.current = false })
-                  }}
+                  expandedItems={effectiveNetworkExpanded}
+                  onExpandedItemsChange={handleNetworkExpandedChange}
                   onSelectedItemsChange={(_event, ids) => {
                     if (expandingRef.current) return
                     const picked = Array.isArray(ids) ? ids[0] : ids
@@ -4167,13 +4322,8 @@ return (
                 expansionTrigger="iconContainer"
             slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
                 selectedItems={selectedItemId || ''}
-                expandedItems={networkTreeExpandedItems}
-                onExpandedItemsChange={(_event, itemIds) => {
-                  if (!isHydrated) return
-                  setNetworkTreeExpandedItems(itemIds)
-                  expandingRef.current = true
-                  requestAnimationFrame(() => { expandingRef.current = false })
-                }}
+                expandedItems={effectiveNetworkExpanded}
+                onExpandedItemsChange={handleNetworkExpandedChange}
                 onSelectedItemsChange={(_event, ids) => {
                   if (expandingRef.current) return
                   const picked = Array.isArray(ids) ? ids[0] : ids
@@ -4377,13 +4527,8 @@ return (
             expansionTrigger="iconContainer"
             slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
             selectedItems={selectedItemId || ''}
-            expandedItems={backupExpandedItems}
-            onExpandedItemsChange={(_event, itemIds) => {
-              if (!isHydrated) return
-              setBackupExpandedItems(itemIds)
-              expandingRef.current = true
-              requestAnimationFrame(() => { expandingRef.current = false })
-            }}
+            expandedItems={effectiveBackupExpanded}
+            onExpandedItemsChange={handleBackupExpandedChange}
             onSelectedItemsChange={(_event, ids) => {
               if (expandingRef.current) return
               const picked = Array.isArray(ids) ? ids[0] : ids

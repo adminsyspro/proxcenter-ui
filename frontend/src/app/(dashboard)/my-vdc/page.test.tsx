@@ -1,8 +1,9 @@
 /**
  * Landing behavior of /my-vdc: multi-vDC tenants get cards; a card click
- * sets the pc_vdc_context cookie and opens the overview; single-vDC tenants
- * keep the direct overview. MyVdcOverview and QuotaDonut are mocked — this
- * tests the page's routing logic, not the cockpit.
+ * mirrors the header VdcSwitcher — it sets the pc_vdc_context cookie and
+ * reloads (no in-page overview swap); single-vDC tenants keep the direct
+ * overview. MyVdcOverview and QuotaDonut are mocked — this tests the page's
+ * routing logic, not the cockpit.
  * Run: npx vitest run "src/app/(dashboard)/my-vdc/page.test.tsx"
  */
 import React from 'react'
@@ -53,13 +54,28 @@ describe('/my-vdc landing', () => {
     expect(screen.queryByTestId('overview')).toBeNull()
   })
 
-  it('card click sets the context cookie and opens the overview', async () => {
-    mockVdcsResponse([vdc('vA', 'ACME — Paris'), vdc('vB', 'ACME — Frankfurt')])
-    render(<MyVdcPage />)
-    await waitFor(() => expect(screen.getByText('ACME — Paris')).toBeTruthy())
-    await userEvent.click(screen.getByText('ACME — Paris'))
-    expect(document.cookie).toContain('pc_vdc_context=vA')
-    expect(screen.getByTestId('overview').textContent).toBe('ACME — Paris')
+  it('card click mirrors the header switcher: sets the context cookie and reloads', async () => {
+    // jsdom's window.location.reload is a non-configurable prototype getter,
+    // so vi.spyOn can't stub it directly — redefine window.location for the
+    // duration of this test instead, restoring it afterwards.
+    const originalLocation = window.location
+    const reloadMock = vi.fn()
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, reload: reloadMock },
+    })
+
+    try {
+      mockVdcsResponse([vdc('vA', 'ACME — Paris'), vdc('vB', 'ACME — Frankfurt')])
+      render(<MyVdcPage />)
+      await waitFor(() => expect(screen.getByText('ACME — Paris')).toBeTruthy())
+      await userEvent.click(screen.getByText('ACME — Paris'))
+      expect(document.cookie).toContain('pc_vdc_context=vA')
+      expect(reloadMock).toHaveBeenCalledTimes(1)
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: originalLocation })
+    }
   })
 
   it('single-vDC tenant goes straight to the overview (unchanged behavior)', async () => {

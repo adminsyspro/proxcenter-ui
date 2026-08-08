@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Typography, Alert, Stack, Card, CardActionArea, Chip, Button } from '@mui/material'
+import { Box, Typography, Alert, Stack, Card, CardActionArea, Chip } from '@mui/material'
 
 import MyVdcOverview from '@/components/mydc/MyVdcOverview'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
@@ -88,11 +88,12 @@ export default function MyVdcPage() {
   const unlimitedLabel = t('vdc.quotaUnlimited')
 
   const openVdc = (v: any) => {
-    // Card click = set the global context AND open the overview locally.
-    // No reload needed here: the next server-rendered navigation picks the
-    // cookie up; the local overview is already vDC-scoped by construction.
+    // Card click = choose this vDC as the global context, exactly like the
+    // header VdcSwitcher: set the cookie and reload so every page/API narrows
+    // to it. The header switcher stays the single control for context — no
+    // in-page navigation state to keep in sync.
     setVdcContextCookie(v.id)
-    setSelectedVdcId(v.id)
+    window.location.reload()
   }
 
   // Multi-vDC landing: one card per active vDC, Cloud Director style.
@@ -143,16 +144,6 @@ export default function MyVdcPage() {
 
   return (
     <Box sx={{ px: 3, pb: 3, pt: 0 }}>
-      {activeVdcs.length > 1 && (
-        <Button
-          size="small"
-          startIcon={<i className="ri-arrow-left-line" style={{ fontSize: 16 }} />}
-          onClick={() => setSelectedVdcId('')}
-          sx={{ mb: 1, textTransform: 'none' }}
-        >
-          {t('myVdc.backToVdcList')}
-        </Button>
-      )}
       {selectedVdc && (
         <MyVdcOverview
           vdc={selectedVdc}

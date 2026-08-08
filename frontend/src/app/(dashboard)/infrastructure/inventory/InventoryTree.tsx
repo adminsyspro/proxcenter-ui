@@ -58,6 +58,7 @@ import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -475,6 +476,15 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
     }
     return m
   }, [myVdcs, isFullClusterView])
+  // vDC context filter — Network/Backup tenant tree sections (Task 14). A
+  // cookie matching one of OUR active vDCs narrows those sections to just
+  // that vDC; anything else (unset, foreign, or a disabled vDC) fails open
+  // to the union. Same contract as Task 7's InventoryDetails vDC column.
+  const ctxCookie = readVdcContextCookie()
+  const ctxIsActiveVdc = !isFullClusterView && !!ctxCookie && myVdcs.some((v) => v.id === ctxCookie && v.enabled !== false)
+  // Active vDC count, gates the per-vDC group headers in union view: below
+  // 2 there is nothing to disambiguate, so grouping stays off everywhere.
+  const activeVdcCount = isFullClusterView ? 0 : myVdcs.filter((v) => v.enabled !== false).length
   // Expand/collapse persistence is scoped per tenant. In MSP mode each tenant
   // owns different clusters (different connIds), so the persisted expand IDs
   // (`cluster:<connId>`, `node:<connId>:<n>`, ...) of one tenant never match
@@ -2287,6 +2297,153 @@ return favorites.has(vmKey)
   const [tenantVnets, setTenantVnets] = useState<TenantVnetItem[]>([])
   const [tenantVnetsLoading, setTenantVnetsLoading] = useState(false)
   const tenantVnetsFetchedRef = useRef(false)
+  // Task 14 — context filter: a precise vDC context narrows the tenant VNet
+  // view to just that vDC's tvnets, same as the server already does for
+  // the guest list. Union view (no active context) keeps every tvnet.
+  const visibleTenantVnets = useMemo(
+    () => (ctxIsActiveVdc ? tenantVnets.filter((v) => v.vdcId === ctxCookie) : tenantVnets),
+    [tenantVnets, ctxIsActiveVdc, ctxCookie]
+  )
+  // Union view, ≥2 active vDCs: group the visible tvnets under a header per
+  // vDC, including an empty group for a vDC that owns no VNet yet — a
+  // tenant should see every vDC they hold, not just the ones already
+  // populated. Below 2 vDCs (mono-vDC, or a precise context already down to
+  // one) there is nothing to disambiguate, so grouping stays off and the
+  // flat list renders exactly as before.
+  const tenantVnetGrouping = useMemo(() => {
+    if (ctxIsActiveVdc || activeVdcCount < 2) return null
+    const byVdc = new Map<string, { vdcId: string; vdcName: string; vnets: TenantVnetItem[] }>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false) byVdc.set(v.id, { vdcId: v.id, vdcName: v.name, vnets: [] })
+    }
+    const unmapped: TenantVnetItem[] = []
+    for (const vnet of visibleTenantVnets) {
+      const g = byVdc.get(vnet.vdcId)
+      if (g) g.vnets.push(vnet)
+      else unmapped.push(vnet) // defensive: vDC no longer in myVdcs (stale fetch/race)
+    }
+    for (const g of byVdc.values()) g.vnets.sort((a, b) => a.displayName.localeCompare(b.displayName))
+    const groups = [...byVdc.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
+    return { groups, unmapped }
+  }, [ctxIsActiveVdc, activeVdcCount, myVdcs, visibleTenantVnets])
+  // Shared leaf renderer for a single tenant VNet — used by both the flat
+  // list (mono-vDC / precise context) and the per-vDC grouped tree below.
+  const renderTvnetLeaf = useCallback((v: TenantVnetItem) => (
+    <TreeItem
+      key={`tvnet:${v.vdcId}:${v.displayName}`}
+      itemId={`tvnet:${v.vdcId}:${v.displayName}`}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+          <i className="ri-git-branch-line" style={{ fontSize: 14, opacity: 0.55 }} />
+          <Typography variant="body2" sx={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {v.displayName}
+          </Typography>
+          {v.subnet && (
+            <span style={{ opacity: 0.45, fontSize: 11 }}>{v.subnet.cidr}</span>
+          )}
+        </Box>
+      }
+    />
+  ), [])
+  // Per-vDC attribution for the BACKUP tree (Task 14) — the union payload
+  // (`pbsServers`) carries no vDC identity, unlike the Network tree's
+  // tvnets. Context narrowing already happens server-side (a precise vDC
+  // context returns only its own PBS namespaces), so this only matters for
+  // the union view: a client-side join of each vDC's `pbsBindings`
+  // (pbsConnectionId + datastore) against the payload's PBS servers /
+  // datastores. Below 2 active vDCs there's nothing to disambiguate, so
+  // grouping stays off and the tree renders exactly as before.
+  type PbsVdcEntry = { pbs: TreePbsServer; datastore: TreePbsDatastore }
+  const pbsVdcGrouping = useMemo(() => {
+    if (isFullClusterView || ctxIsActiveVdc || activeVdcCount < 2) return null
+    // (pbsConnectionId, datastore) -> vDCs bound to it. A datastore can be
+    // bound by more than one vDC (shared PBS target) — it will appear
+    // under every one of them below.
+    const boundVdcsByKey = new Map<string, Array<{ id: string; name: string }>>()
+    for (const v of myVdcs) {
+      if (v.enabled === false) continue
+      for (const b of v.pbsBindings ?? []) {
+        const key = `${b.pbsConnectionId}::${b.datastore}`
+        const list = boundVdcsByKey.get(key)
+        if (list) list.push({ id: v.id, name: v.name })
+        else boundVdcsByKey.set(key, [{ id: v.id, name: v.name }])
+      }
+    }
+    const groups = new Map<string, { vdcId: string; vdcName: string; entries: PbsVdcEntry[] }>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false) groups.set(v.id, { vdcId: v.id, vdcName: v.name, entries: [] })
+    }
+    const unmapped: PbsVdcEntry[] = []
+    for (const pbs of pbsServers) {
+      for (const datastore of pbs.datastores) {
+        const boundVdcs = boundVdcsByKey.get(`${pbs.connId}::${datastore.name}`)
+        if (!boundVdcs || boundVdcs.length === 0) {
+          unmapped.push({ pbs, datastore }) // defensive: not bound to any vDC
+          continue
+        }
+        for (const bv of boundVdcs) {
+          const g = groups.get(bv.id)
+          if (g) g.entries.push({ pbs, datastore })
+          else unmapped.push({ pbs, datastore }) // defensive: binding's vDC no longer in myVdcs
+        }
+      }
+    }
+    const sortedGroups = [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
+    return { groups: sortedGroups, unmapped }
+  }, [isFullClusterView, ctxIsActiveVdc, activeVdcCount, myVdcs, pbsServers])
+  // Shared PBS server / datastore label renderers — used by the plain flat
+  // tree (unchanged rendering) and, when grouping (Task 14), both by the
+  // per-vDC groups and the ungrouped tail, so the visual result stays
+  // identical in every branch.
+  const renderPbsLabel = useCallback((pbs: TreePbsServer) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+        <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 16 }} />
+        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: pbs.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
+      </Box>
+      <span style={{ fontSize: 13 }}>{pbs.name}</span>
+      <span style={{ opacity: 0.5, fontSize: 11 }}>
+        ({pbs.stats.backupCount} backups)
+      </span>
+    </Box>
+  ), [])
+  const renderDatastoreLabel = useCallback((ds: TreePbsDatastore) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <i className='ri-database-2-line' style={{ opacity: 0.6, fontSize: 14 }} />
+      <span style={{ fontSize: 13 }}>{ds.name}</span>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          ml: 'auto',
+          opacity: 0.6
+        }}
+      >
+        <Box
+          sx={{
+            width: 40,
+            height: 4,
+            bgcolor: 'divider',
+            borderRadius: 1,
+            overflow: 'hidden'
+          }}
+        >
+          <Box
+            sx={{
+              width: `${ds.usagePercent}%`,
+              height: '100%',
+              bgcolor: ds.usagePercent > 90 ? 'error.main' : ds.usagePercent > 70 ? 'warning.main' : 'success.main',
+            }}
+          />
+        </Box>
+        <span style={{ fontSize: 10 }}>{ds.usagePercent}%</span>
+      </Box>
+      <span style={{ opacity: 0.5, fontSize: 11 }}>
+        ({ds.backupCount})
+      </span>
+    </Box>
+  ), [])
   // Network sub-items: inverted logic — collapsed by default, expanded when added to this set
   const [expandedNetSections, setExpandedNetSections] = useState<Set<string>>(new Set())
   // Network tree expanded items (not persisted — data is lazy-loaded)
@@ -3932,9 +4089,9 @@ return (
                 ({new Set(networkSdnVnets.map(v => v.vnet)).size} VNets)
               </Typography>
             )}
-            {!isFullClusterView && tenantVnets.length > 0 && (
+            {!isFullClusterView && visibleTenantVnets.length > 0 && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                ({tenantVnets.length} VNet{tenantVnets.length > 1 ? 's' : ''})
+                ({visibleTenantVnets.length} VNet{visibleTenantVnets.length > 1 ? 's' : ''})
               </Typography>
             )}
           </Box>
@@ -3948,7 +4105,7 @@ return (
                   <CircularProgress size={16} />
                   <Typography variant="caption" sx={{ ml: 1, opacity: 0.5 }}>Loading VNets...</Typography>
                 </Box>
-              ) : tenantVnets.length === 0 && tenantVnetsFetchedRef.current ? (
+              ) : !tenantVnetGrouping && visibleTenantVnets.length === 0 && tenantVnetsFetchedRef.current ? (
                 <Box sx={{ py: 2, textAlign: 'center' }}>
                   <Typography variant="caption" sx={{ opacity: 0.4 }}>No VNets yet</Typography>
                 </Box>
@@ -3972,23 +4129,28 @@ return (
                     if (sel) onSelect(sel)
                   }}
                 >
-                  {tenantVnets.map((v) => (
-                    <TreeItem
-                      key={`tvnet:${v.vdcId}:${v.displayName}`}
-                      itemId={`tvnet:${v.vdcId}:${v.displayName}`}
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
-                          <i className="ri-git-branch-line" style={{ fontSize: 14, opacity: 0.55 }} />
-                          <Typography variant="body2" sx={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {v.displayName}
-                          </Typography>
-                          {v.subnet && (
-                            <span style={{ opacity: 0.45, fontSize: 11 }}>{v.subnet.cidr}</span>
-                          )}
-                        </Box>
-                      }
-                    />
-                  ))}
+                  {tenantVnetGrouping ? (
+                    <>
+                      {tenantVnetGrouping.groups.map((g) => (
+                        <TreeItem
+                          key={`tvnetgrp:${g.vdcId}`}
+                          itemId={`tvnetgrp:${g.vdcId}`}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+                              <i className="ri-cloud-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{g.vdcName}</Typography>
+                              <span style={{ opacity: 0.5, fontSize: 11 }}>({g.vnets.length})</span>
+                            </Box>
+                          }
+                        >
+                          {g.vnets.map((v) => renderTvnetLeaf(v))}
+                        </TreeItem>
+                      ))}
+                      {tenantVnetGrouping.unmapped.map((v) => renderTvnetLeaf(v))}
+                    </>
+                  ) : (
+                    visibleTenantVnets.map((v) => renderTvnetLeaf(v))
+                  )}
                 </SimpleTreeView>
               )
             ) : networkLoading ? (
@@ -4230,69 +4392,81 @@ return (
               if (sel) onSelect(sel)
             }}
           >
-          {pbsServers.map(pbs => (
-            <TreeItem
-              key={`pbs:${pbs.connId}`}
-              itemId={`pbs:${pbs.connId}`}
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
-                    <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 16 }} />
-                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: pbs.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
-                  </Box>
-                  <span style={{ fontSize: 13 }}>{pbs.name}</span>
-                  <span style={{ opacity: 0.5, fontSize: 11 }}>
-                    ({pbs.stats.backupCount} backups)
-                  </span>
-                </Box>
-              }
-            >
-              {/* Datastores du serveur PBS */}
-              {pbs.datastores.map(ds => (
+          {pbsVdcGrouping ? (
+            <>
+              {pbsVdcGrouping.groups.map((g) => (
                 <TreeItem
-                  key={`datastore:${pbs.connId}:${ds.name}`}
-                  itemId={`datastore:${pbs.connId}:${ds.name}`}
+                  key={`pbsvdcgrp:${g.vdcId}`}
+                  itemId={`pbsvdcgrp:${g.vdcId}`}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className='ri-database-2-line' style={{ opacity: 0.6, fontSize: 14 }} />
-                      <span style={{ fontSize: 13 }}>{ds.name}</span>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          ml: 'auto',
-                          opacity: 0.6
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: 40,
-                            height: 4,
-                            bgcolor: 'divider',
-                            borderRadius: 1,
-                            overflow: 'hidden'
-                          }}
-                        >
-                          <Box
-                            sx={{
-                              width: `${ds.usagePercent}%`,
-                              height: '100%',
-                              bgcolor: ds.usagePercent > 90 ? 'error.main' : ds.usagePercent > 70 ? 'warning.main' : 'success.main',
-                            }}
-                          />
-                        </Box>
-                        <span style={{ fontSize: 10 }}>{ds.usagePercent}%</span>
-                      </Box>
-                      <span style={{ opacity: 0.5, fontSize: 11 }}>
-                        ({ds.backupCount})
-                      </span>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+                      <i className="ri-cloud-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{g.vdcName}</Typography>
+                      <span style={{ opacity: 0.5, fontSize: 11 }}>({g.entries.length})</span>
                     </Box>
                   }
-                />
+                >
+                  {/* A datastore bound by ≥2 vDCs (shared PBS target) is
+                      listed under each — the count shown stays the
+                      tenant-scope total for that datastore, the payload has
+                      no per-vDC breakdown (accepted caveat). The vdcId
+                      suffix only disambiguates the itemId across groups;
+                      selectionFromItemId/helpers.ts still split on the
+                      first two segments (connId, datastore name). */}
+                  {g.entries.map(({ pbs, datastore: ds }) => (
+                    <TreeItem
+                      key={`datastore:${pbs.connId}:${ds.name}:${g.vdcId}`}
+                      itemId={`datastore:${pbs.connId}:${ds.name}:${g.vdcId}`}
+                      label={renderDatastoreLabel(ds)}
+                    />
+                  ))}
+                </TreeItem>
               ))}
-            </TreeItem>
-          ))}
+              {/* Datastores present in the payload but bound to no vDC
+                  (defensive — e.g. a legacy PBS namespace never attached to
+                  a vDC): kept in an ungrouped tail, as today. */}
+              {(() => {
+                const tailByPbs = new Map<string, { pbs: TreePbsServer; datastores: TreePbsDatastore[] }>()
+                for (const { pbs, datastore } of pbsVdcGrouping.unmapped) {
+                  const entry = tailByPbs.get(pbs.connId)
+                  if (entry) entry.datastores.push(datastore)
+                  else tailByPbs.set(pbs.connId, { pbs, datastores: [datastore] })
+                }
+                return [...tailByPbs.values()].map(({ pbs, datastores }) => (
+                  <TreeItem
+                    key={`pbs:${pbs.connId}`}
+                    itemId={`pbs:${pbs.connId}`}
+                    label={renderPbsLabel(pbs)}
+                  >
+                    {datastores.map((ds) => (
+                      <TreeItem
+                        key={`datastore:${pbs.connId}:${ds.name}`}
+                        itemId={`datastore:${pbs.connId}:${ds.name}`}
+                        label={renderDatastoreLabel(ds)}
+                      />
+                    ))}
+                  </TreeItem>
+                ))
+              })()}
+            </>
+          ) : (
+            pbsServers.map(pbs => (
+              <TreeItem
+                key={`pbs:${pbs.connId}`}
+                itemId={`pbs:${pbs.connId}`}
+                label={renderPbsLabel(pbs)}
+              >
+                {/* Datastores du serveur PBS */}
+                {pbs.datastores.map(ds => (
+                  <TreeItem
+                    key={`datastore:${pbs.connId}:${ds.name}`}
+                    itemId={`datastore:${pbs.connId}:${ds.name}`}
+                    label={renderDatastoreLabel(ds)}
+                  />
+                ))}
+              </TreeItem>
+            ))
+          )}
           </SimpleTreeView>
           </Collapse>
         </>

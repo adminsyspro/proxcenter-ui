@@ -422,9 +422,6 @@ function selectionFromItemId(itemId: string): InventorySelection | null {
 
   if (!id) return null
 
-  // vDC root nodes are expand-only containers: no detail panel to select.
-  if (type === 'vdc') return null
-
   if (type === 'cluster' || type === 'node' || type === 'vm' || type === 'storage' || type === 'pbs' || type === 'datastore' || type === 'ext' || type === 'ext-type' || type === 'extvm') {
     return { type: type as any, id } as InventorySelection
   }
@@ -669,24 +666,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     } catch {}
     setIsHydrated(true)
   }, [tenantLoading, tenantScope])
-
-  // First render after the vDC level ships: expand the new roots once per
-  // tenant, remembered via a localStorage flag — NOT by sniffing the live
-  // expansion list (SWR refreshes re-fire this effect with fresh references,
-  // and a user who collapsed the only vdc: row would otherwise be re-expanded
-  // on the next refocus). Tenant-scoped like the other persistence keys.
-  useEffect(() => {
-    if (!isHydrated || vdcByConnId.size === 0) return
-    const flagKey = `inventoryVdcSeeded::${tenantScope}`
-    try {
-      if (localStorage.getItem(flagKey)) return
-      localStorage.setItem(flagKey, '1')
-    } catch { return }
-    setManualExpandedItems(prev => {
-      const ids = [...vdcByConnId.values()].map(v => `vdc:${v.id}`).filter(id => !prev.includes(id))
-      return ids.length ? [...prev, ...ids] : prev
-    })
-  }, [isHydrated, vdcByConnId, tenantScope])
 
   // Persist viewMode (only when not externally controlled)
   useEffect(() => {
@@ -1948,8 +1927,6 @@ return null
     const items: string[] = []
 
     filteredClusters.forEach(clu => {
-      const cluVdc = vdcByConnId.get(clu.connId)
-      if (cluVdc) items.push(`vdc:${cluVdc.id}`)
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => {
         items.push(`node:${clu.connId}:${n.node}`)
@@ -1957,15 +1934,13 @@ return null
     })
 
 return items
-  }, [filteredClusters, search, vdcByConnId])
+  }, [filteredClusters, search])
 
   // Expand/Collapse all for tree mode
   const expandAll = useCallback(() => {
     programmaticExpand.current = true
     const items: string[] = []
     clusters.forEach(clu => {
-      const cluVdc = vdcByConnId.get(clu.connId)
-      if (cluVdc) items.push(`vdc:${cluVdc.id}`)
       items.push(`cluster:${clu.connId}`)
       clu.nodes.forEach(n => items.push(`node:${clu.connId}:${n.node}`))
     })
@@ -2025,7 +2000,7 @@ return items
       // Data already loaded — expand now
       expandNetworkTreeItemsRef.current()
     }
-  }, [clusters, clusterStorages, pbsServers, externalHypervisors, vdcByConnId])
+  }, [clusters, clusterStorages, pbsServers, externalHypervisors])
 
   const collapseAll = useCallback(() => {
     programmaticExpand.current = true
@@ -2623,12 +2598,43 @@ return favorites.has(vmKey)
     onExternalHypervisorsChange?.(externalHypervisors)
   }, [externalHypervisors, onExternalHypervisorsChange])
 
+  type VdcHeaderRow = { __vdcHeader: { vdcId: string; vdcName: string; count: number } }
+
+  // Per-vDC guest grouping for the flat list tenants actually see (`vms`
+  // mode — `tree` is unreachable to them, forced by useRBACScopeProfile; the
+  // vDC root nodes that used to live in the tree arm were dead code for that
+  // population). One header row per vDC in `vdcByConnId`, including vDCs
+  // with no cluster in inventory yet — they still render, with "(0)" (the
+  // OVH / PVE-STORE-GRA4 case from the QA pass). Provider/MSP tenants
+  // (`isFullClusterView`) and any tenant whose vDC list is empty (still
+  // loading, or `useMyVdcs` failed) fall through to `null` here, which keeps
+  // the plain flat list exactly as before — `vdcByConnId` already degrades
+  // to an empty map in both cases, so this is naturally fail-open.
+  const vmsGroupedRows = useMemo(() => {
+    if (isFullClusterView || vdcByConnId.size === 0) return null
+    const groups = new Map<string, { vdcId: string; vdcName: string; vms: typeof displayVms }>()
+    for (const [connId, v] of vdcByConnId) groups.set(connId, { vdcId: v.id, vdcName: v.name, vms: [] })
+    const unmapped: typeof displayVms = []
+    for (const vm of displayVms) {
+      const g = groups.get(vm.connId)
+      if (g) g.vms.push(vm)
+      else unmapped.push(vm) // defensive: stale/unmapped connId — still shown, ungrouped
+    }
+    const rows: (VdcHeaderRow | (typeof displayVms)[number])[] = []
+    for (const g of [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))) {
+      rows.push({ __vdcHeader: { vdcId: g.vdcId, vdcName: g.vdcName, count: g.vms.length } })
+      rows.push(...g.vms)
+    }
+    rows.push(...unmapped)
+    return rows
+  }, [isFullClusterView, vdcByConnId, displayVms])
+
   const flatItems = useMemo(() => {
-    if (viewMode === 'vms') return displayVms
+    if (viewMode === 'vms') return (vmsGroupedRows ?? displayVms) as typeof displayVms
     if (viewMode === 'favorites') return favoritesList
     if (viewMode === 'templates') return filteredVms.filter(vm => vm.template)
     return null
-  }, [viewMode, displayVms, favoritesList, filteredVms])
+  }, [viewMode, vmsGroupedRows, displayVms, favoritesList, filteredVms])
 
   const virtualizer = useVirtualizer({
     count: flatItems?.length ?? 0,
@@ -2860,7 +2866,7 @@ return favorites.has(vmKey)
               </Typography>
             </Box>
           )}
-          {displayVms.length === 0 ? (
+          {flatItems!.length === 0 ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant='body2' sx={{ opacity: 0.6 }}>
                 {search.trim() ? `${t('common.noResults')} "${search}"` : t('common.noResults')}
@@ -2869,7 +2875,42 @@ return favorites.has(vmKey)
           ) : (
             <Box sx={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualRow => {
-                const vm = flatItems![virtualRow.index]
+                const row = flatItems![virtualRow.index] as unknown as (VdcHeaderRow | (typeof displayVms)[number])
+
+                if ('__vdcHeader' in row) {
+                  const { vdcName, count } = row.__vdcHeader
+                  return (
+                    <Box
+                      key={virtualRow.key}
+                      ref={virtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {/* Per-vDC group separator (Task 13) — plain, non-collapsible:
+                          the vms arm is virtualized and has no existing collapse
+                          mechanism to reuse, unlike the hosts/pools/tags modes. */}
+                      <Box
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 1, pl: 3, pr: 1.5, py: 0.5,
+                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                          borderBottom: '1px solid', borderColor: 'divider',
+                        }}
+                      >
+                        <Box component="i" className="ri-cloud-line" sx={{ fontSize: 14, opacity: 0.7 }} />
+                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{vdcName}</Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.5 }}>({count})</Typography>
+                      </Box>
+                    </Box>
+                  )
+                }
+
+                const vm = row
                 const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                 return (
                   <Box
@@ -3423,11 +3464,11 @@ return (
           }}
         >
         {filteredClusters.map(clu => {
-          // Shared VM leaf for tenant-facing branches (vDC root below, and the
-          // flat non-admin branch further down) — kept as a single definition
-          // so the two never diverge. Also carries showVmId/lock, which the
-          // provider/cluster branches already pass and this one previously
-          // didn't (preexisting inconsistency, fixed here).
+          // Shared VM leaf for the tenant-facing flat non-admin branch below
+          // (it used to also serve a per-vDC tree root, removed — the vDC
+          // grouping now lives in the `vms` view those tenants actually see,
+          // see the per-vDC header rows further down). Carries showVmId/lock
+          // like the provider/cluster branches.
           const renderTenantVmLeaf = (
             clu: TreeCluster,
             n: TreeCluster['nodes'][number],
@@ -3480,32 +3521,6 @@ return (
               />
             )
             return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
-          }
-
-          // Tenant IaaS: one root node per vDC (Cloud Director shape). The
-          // vDC REPLACES the cluster/node level — children are the guests of
-          // the connection directly (a tenant never sees PVE node names).
-          // Falls through to the legacy branches when the vDC list hasn't
-          // loaded (or errored): fail-open to the previous tree shape.
-          const cluVdc = vdcByConnId.get(clu.connId)
-          if (cluVdc && !isFullClusterView) {
-            const allVms = clu.nodes.flatMap(n => n.vms.map(vm => ({ n, vm })))
-
-            return (
-              <TreeItem
-                key={`vdc:${cluVdc.id}`}
-                itemId={`vdc:${cluVdc.id}`}
-                label={
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Box component="i" className="ri-cloud-line" sx={{ fontSize: 16, color: 'primary.main', flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{cluVdc.name}</span>
-                    <span style={{ opacity: 0.5, fontSize: 11 }}>({allVms.length})</span>
-                  </Box>
-                }
-              >
-                {allVms.map(({ n, vm }) => renderTenantVmLeaf(clu, n, vm))}
-              </TreeItem>
-            )
           }
 
           // Flatten when only 1 node is visible (standalone host, or tenant

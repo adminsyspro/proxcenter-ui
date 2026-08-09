@@ -2126,6 +2126,12 @@
       "warmPreflightFailedTitle": "Le noeud cible n'est pas pret pour la migration a chaud",
       "warmPreflightMissing": "Manquant sur le noeud : {items}.",
       "warmPreflightDocsHint": "Preparez d'abord le noeud Proxmox (installez nbdkit, le plugin VDDK de nbdkit, nbd-client et le VDDK Broadcom), puis reselectionnez le noeud. Consultez le <link>guide de preparation du noeud pour la migration a chaud</link>.",
+      "warmCbtFallbackTitle": "CBT indisponible : cette migration a chaud utilisera le repli par sommes de controle",
+      "warmCbtFallbackReasonSnapshot": "La VM source possede un snapshot VMware existant, le suivi des blocs modifies (CBT) ne peut donc pas etre utilise.",
+      "warmCbtFallbackReasonHwVersion": "La version de materiel virtuel de la VM source est inferieure a vmx-07, le suivi des blocs modifies (CBT) ne peut donc pas etre utilise.",
+      "warmCbtFallbackReasonDiskMode": "La VM source possede un disque independant ou multi-writer, le suivi des blocs modifies (CBT) ne peut donc pas etre utilise.",
+      "warmCbtFallbackDowntime": "Avec le repli par sommes de controle, la VM source est arretee au debut de la copie et reste eteinte pendant tout le transfert : l'indisponibilite depend de la taille totale des disques.",
+      "warmCbtFallbackSnapshotHint": "Supprimer ou consolider les snapshots VMware avant de lancer garde la VM en ligne jusqu'a la bascule finale courte.",
       "migrationTypeSshfsBoot": "SSHFS Boot (Experimental)",
       "migrationTypeSshfsBootDesc": "Downtime quasi-nul : la VM demarre sur Proxmox depuis les disques ESXi distants en quelques secondes. Experimental : le guest doit booter sans adaptation sur le controleur cible, peut echouer pour Windows EFI ou les guests necessitant une injection de drivers. Preferer Live ou Offline en production.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot est experimental et ne fonctionne que si le guest boote correctement sur la cible sans adaptation de drivers. Pour Windows EFI, les VMs issues de vCenter, ou tout environnement critique, utilisez Live ou Offline.",
@@ -3683,6 +3689,23 @@
       "completed": "Terminé",
       "cancelled": "Annulé"
     },
+    "steps": {
+      "planning": "Planification",
+      "enabling_cbt": "Activation du CBT",
+      "preparing_disks": "Préparation des disques cibles",
+      "full_copy": "Copie complète",
+      "delta": "Synchronisation delta",
+      "source_shutdown": "Arrêt de la VM source",
+      "awaiting_cutover": "En attente de la décision de bascule",
+      "cutover": "Bascule",
+      "verify": "Vérification",
+      "converting_disks": "Conversion des disques",
+      "preflight": "Vérifications préalables",
+      "transferring": "Transfert des disques",
+      "creating_vm": "Création de la VM",
+      "configuring": "Configuration de la VM",
+      "pending": "En attente"
+    },
     "shared": {
       "detailTitle": "Tâche de migration",
       "startedBy": "Lancé par {name}",
@@ -3692,6 +3715,9 @@
       "cancelConfirmLeftovers": "Des volumes déjà copiés et un VMID partiellement créé peuvent rester sur le nœud cible. Nettoyez-les manuellement si vous n'en avez pas besoin.",
       "cancelConfirmKeep": "Continuer la migration",
       "cancelling": "Annulation...",
+      "diskOf": "Disque {n} sur {m}",
+      "gbProgress": "{done} / {total} Go",
+      "eta": "~{eta} restant",
       "cancelFailed": "Échec de l'annulation de la migration"
     },
     "types": {

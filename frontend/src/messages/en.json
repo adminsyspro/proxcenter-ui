@@ -2126,6 +2126,12 @@
       "warmPreflightFailedTitle": "Target node is not ready for warm migration",
       "warmPreflightMissing": "Missing on the node: {items}.",
       "warmPreflightDocsHint": "Prepare the Proxmox node first (install nbdkit, the nbdkit VDDK plugin, nbd-client and the Broadcom VDDK), then reselect the node. See the <link>warm migration node setup guide</link>.",
+      "warmCbtFallbackTitle": "CBT unavailable: this warm migration will use the checksum fallback",
+      "warmCbtFallbackReasonSnapshot": "The source VM has an existing VMware snapshot, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackReasonHwVersion": "The source VM's virtual hardware version is below vmx-07, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackReasonDiskMode": "The source VM has an independent or multi-writer disk, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackDowntime": "With the checksum fallback the source VM is shut down at the start of the copy and stays powered off for the whole transfer: downtime scales with the total disk size.",
+      "warmCbtFallbackSnapshotHint": "Removing or consolidating the VMware snapshots before starting keeps the VM online until the final short cutover.",
       "migrationTypeSshfsBoot": "SSHFS Boot (Experimental)",
       "migrationTypeSshfsBootDesc": "Near-zero downtime: VM boots on Proxmox from remote ESXi disks within seconds. Experimental: the guest must boot unattended on the target controller; may fail for EFI Windows or guests needing driver injection. Prefer Live or Offline for production.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot is experimental and only works when the guest boots correctly on the target without driver adaptation. For EFI Windows, vCenter-sourced VMs, or anything production-critical, choose Live or Offline.",
@@ -3683,6 +3689,23 @@
       "completed": "Completed",
       "cancelled": "Cancelled"
     },
+    "steps": {
+      "planning": "Planning",
+      "enabling_cbt": "Enabling CBT",
+      "preparing_disks": "Preparing target disks",
+      "full_copy": "Full copy",
+      "delta": "Delta sync",
+      "source_shutdown": "Shutting down the source VM",
+      "awaiting_cutover": "Awaiting cutover decision",
+      "cutover": "Cutover",
+      "verify": "Verifying",
+      "converting_disks": "Converting disks",
+      "preflight": "Preflight checks",
+      "transferring": "Transferring disks",
+      "creating_vm": "Creating the VM",
+      "configuring": "Configuring the VM",
+      "pending": "Pending"
+    },
     "shared": {
       "detailTitle": "Migration task",
       "startedBy": "Started by {name}",
@@ -3692,6 +3715,9 @@
       "cancelConfirmLeftovers": "Volumes already copied and a partially created VMID may remain on the target node. Clean them up manually if you do not need them.",
       "cancelConfirmKeep": "Keep migrating",
       "cancelling": "Cancelling...",
+      "diskOf": "Disk {n} of {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "~{eta} remaining",
       "cancelFailed": "Failed to cancel the migration"
     },
     "types": {

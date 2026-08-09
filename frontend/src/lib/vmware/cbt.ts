@@ -42,18 +42,11 @@ export function parseSnapshotChangeIds(deviceXml: string): Map<number, string> {
   return map
 }
 
-export interface CbtEligibilityInput { hwVersion: string; disks: { diskMode?: string; sharing?: string }[] }
-
-/** Pure eligibility check: CBT needs hw version >= 7 and no independent / multi-writer disks. */
-export function cbtEligibility(vm: CbtEligibilityInput): { eligible: boolean; reason?: string } {
-  const ver = Number.parseInt(vm.hwVersion.replace("vmx-", ""), 10) || 0
-  if (ver < 7) return { eligible: false, reason: `hardware version ${vm.hwVersion} is below vmx-07` }
-  for (const d of vm.disks) {
-    if ((d.diskMode || "").includes("independent")) return { eligible: false, reason: "independent disk present" }
-    if (d.sharing === "sharingMultiWriter") return { eligible: false, reason: "multi-writer disk present" }
-  }
-  return { eligible: true }
-}
+// The pure eligibility check lives in its own dependency-free module so client
+// components can import it without dragging in the SOAP client; re-exported
+// here so existing server-side importers keep compiling unchanged.
+export { cbtEligibility } from "./cbt-eligibility"
+export type { CbtEligibilityInput } from "./cbt-eligibility"
 
 // ---- SOAP callers ----
 

@@ -5,7 +5,8 @@ import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { assertVdcPbsAccess, getVdcScope } from "@/lib/vdc/scope"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -25,6 +26,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const access = await assertVdcPbsAccess(id)
     if (access instanceof Response) return access
 
+    // Union verdict stays the outer authorization bound; the DISPLAYED data
+    // follows the active vDC view context. Intersecting can only REMOVE
+    // entries, never add ones the union didn't authorise. No-op without a
+    // view context (narrowed == union). These session-only routes have no
+    // token principal: cookie-less callers carry no context by construction.
+    let effectiveAllowed: ReadonlyArray<{ datastore: string; namespace: string }> = []
+    if (access.kind === 'tenant') {
+      const tenantId = await getCurrentTenantId()
+      const narrowed = await getVdcScope(tenantId)
+      const narrowedNs = narrowed?.pbsNamespacesByConnection.get(id) ?? []
+      const narrowedSet = new Set(narrowedNs.map(p => `${p.datastore}|${p.namespace}`))
+      effectiveAllowed = access.allowed.filter(a => narrowedSet.has(`${a.datastore}|${a.namespace}`))
+    }
+
     const conn = access.kind === 'admin'
       ? await getPbsConnectionById(id)
       : await getPbsConnectionByIdUnscoped(id)
@@ -34,7 +49,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // For vDC tenants, restrict to their bound datastores.
     const allowedDatastores = access.kind === 'tenant'
-      ? new Set(access.allowed.map(a => a.datastore))
+      ? new Set(effectiveAllowed.map(a => a.datastore))
       : null
     const visibleDatastores = (datastores || []).filter((ds: any) => {
       if (!allowedDatastores) return true

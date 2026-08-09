@@ -3180,6 +3180,7 @@ return favorites.has(vmKey)
                 if ('__vdcHeader' in row) {
                   const { vdcId, vdcName, count } = row.__vdcHeader
                   const isVdcCollapsed = collapsedVdcs.has(vdcId)
+                  const isVdcEmpty = count === 0
                   return (
                     <Box
                       key={virtualRow.key}
@@ -3198,9 +3199,12 @@ return favorites.has(vmKey)
                           as the other section and host-row headers in this file
                           (ri-add-line closed / ri-subtract-line open). Toggling
                           omits/re-includes this vDC's VM rows from `flatItems`;
-                          the virtualizer already remeasures on that change. */}
+                          the virtualizer already remeasures on that change.
+                          When `count === 0` (Task 19) there is nothing to expand:
+                          no chevron, no click affordance — just a spacer to keep
+                          the cloud icon/label aligned with non-empty vDC rows. */}
                       <Box
-                        onClick={() => toggleVdcCollapsed(vdcId)}
+                        onClick={isVdcEmpty ? undefined : () => toggleVdcCollapsed(vdcId)}
                         sx={{
                           // Plain indented tree-node row — no filled banner, matching
                           // the tvnetgrp/pbsvdcgrp vDC nodes in NETWORK/BACKUP (native
@@ -3211,11 +3215,14 @@ return favorites.has(vmKey)
                           // TreeItem sitting above its (unindented-by-us, natively
                           // nested) tvnet leaves.
                           display: 'flex', alignItems: 'center', gap: 1, pl: 0.75, pr: 1.5, py: 0.5,
-                          cursor: 'pointer',
-                          '&:hover': { bgcolor: 'action.hover' },
+                          ...(isVdcEmpty ? {} : { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }),
                         }}
                       >
-                        <Box component="i" className={isVdcCollapsed ? 'ri-add-line' : 'ri-subtract-line'} sx={{ fontSize: 14, opacity: 0.7 }} />
+                        {isVdcEmpty ? (
+                          <Box component="span" sx={{ width: 14, flexShrink: 0 }} />
+                        ) : (
+                          <Box component="i" className={isVdcCollapsed ? 'ri-add-line' : 'ri-subtract-line'} sx={{ fontSize: 14, opacity: 0.7 }} />
+                        )}
                         <Box component="i" className="ri-cloud-line" sx={{ fontSize: 14, opacity: 0.7 }} />
                         {/* Match the tvnetgrp/pbsvdcgrp label exactly (full
                             text.primary, weight 700, size 13) — only the

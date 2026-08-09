@@ -57,4 +57,15 @@ describe('VmItem node caption (issue #666)', () => {
     renderWithProviders(<Harness {...baseProps} variant="flat" showNode />)
     expect(screen.getByText('web-01')).toBeInTheDocument()
   })
+
+  it('reacts to showNode flipping on an already-mounted instance (exercises the memo comparator)', () => {
+    const { rerender } = renderWithProviders(<Harness {...baseProps} variant="flat" />)
+    expect(screen.queryByText(/pve-2-2/)).not.toBeInTheDocument()
+
+    rerender(<Harness {...baseProps} variant="flat" showNode />)
+    expect(screen.getByText('· pve-2-2')).toBeInTheDocument()
+
+    rerender(<Harness {...baseProps} variant="flat" showNode={false} />)
+    expect(screen.queryByText(/pve-2-2/)).not.toBeInTheDocument()
+  })
 })

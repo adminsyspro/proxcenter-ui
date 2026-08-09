@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
+import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
+import { cpuGroupHeaderSx } from './cpuSelectStyles'
 
 import {
   Alert,
@@ -143,6 +145,7 @@ function CreateVmDialog({
   // Données dynamiques
   const [connections, setConnections] = useState<any[]>([])
   const [nodes, setNodes] = useState<any[]>([])
+  const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
   const [storages, setStorages] = useState<any[]>([])
   const [isoImages, setIsoImages] = useState<any[]>([])
   const [networks, setNetworks] = useState<any[]>([])
@@ -289,6 +292,24 @@ function CreateVmDialog({
     }
   }
 
+  // Charge les modèles CPU custom du cluster (cpu-models.conf) pour le Select
+  // CPU Type, sinon impossible de créer une VM avec un modèle custom (#665)
+  const loadCustomCpuModels = async (connId: string, node: string) => {
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/cpu-models`
+      )
+      if (res.ok) {
+        const json = await res.json()
+        setCustomCpuModels(extractCustomCpuModels(json?.data))
+        return
+      }
+      setCustomCpuModels([])
+    } catch {
+      setCustomCpuModels([])
+    }
+  }
+
   // Disk array helpers
   const addDisk = () => {
     setDisks(prev => {
@@ -375,6 +396,13 @@ function CreateVmDialog({
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
       loadBridges(selectedConnection, resolvedNode)
+    }
+  }, [selectedConnection, resolvedNode])
+
+  // Charger les modèles CPU custom quand un node est sélectionné
+  useEffect(() => {
+    if (selectedConnection && resolvedNode) {
+      loadCustomCpuModels(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
 
@@ -1665,19 +1693,23 @@ return
                 <FormControl fullWidth size="small" sx={{ gridColumn: '1 / -1' }}>
                   <InputLabel>{t('inventory.createVm.cpuType')}</InputLabel>
                   <Select value={cpuType} onChange={(e) => setCpuType(e.target.value)} label={t('inventory.createVm.cpuType')}>
-                    <ListSubheader>Special</ListSubheader>
+                    {customCpuModels.length > 0 && <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Custom</ListSubheader>}
+                    {customCpuModels.map((m: string) => (
+                      <MenuItem key={m} value={m}>{m}</MenuItem>
+                    ))}
+                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Special</ListSubheader>
                     <MenuItem value="host">host</MenuItem>
                     <MenuItem value="max">max</MenuItem>
                     <MenuItem value="kvm64">kvm64</MenuItem>
                     <MenuItem value="kvm32">kvm32</MenuItem>
                     <MenuItem value="qemu64">qemu64</MenuItem>
                     <MenuItem value="qemu32">qemu32</MenuItem>
-                    <ListSubheader>x86-64 Levels</ListSubheader>
+                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>x86-64 Levels</ListSubheader>
                     <MenuItem value="x86-64-v2">x86-64-v2</MenuItem>
                     <MenuItem value="x86-64-v2-AES">x86-64-v2-AES (Recommended)</MenuItem>
                     <MenuItem value="x86-64-v3">x86-64-v3</MenuItem>
                     <MenuItem value="x86-64-v4">x86-64-v4</MenuItem>
-                    <ListSubheader>Intel</ListSubheader>
+                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Intel</ListSubheader>
                     <MenuItem value="Conroe">Conroe</MenuItem>
                     <MenuItem value="Penryn">Penryn</MenuItem>
                     <MenuItem value="Nehalem">Nehalem</MenuItem>
@@ -1693,7 +1725,7 @@ return
                     <MenuItem value="Icelake-Server">Icelake-Server</MenuItem>
                     <MenuItem value="SapphireRapids">SapphireRapids</MenuItem>
                     <MenuItem value="GraniteRapids">GraniteRapids</MenuItem>
-                    <ListSubheader>AMD</ListSubheader>
+                    <ListSubheader disableSticky sx={cpuGroupHeaderSx}>AMD</ListSubheader>
                     <MenuItem value="Opteron_G5">Opteron G5</MenuItem>
                     <MenuItem value="EPYC">EPYC</MenuItem>
                     <MenuItem value="EPYC-Rome">EPYC-Rome</MenuItem>

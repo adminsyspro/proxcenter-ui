@@ -186,6 +186,34 @@ export async function POST(
       }
     }
 
+    // 5b. Type CPU nommé (builtin ou custom-*) : vérifier qu'il existe sur la
+    // cible. Les modèles custom vivent dans /etc/pve/virtual-guest/cpu-models.conf
+    // de chaque cluster ; absent de la cible, remote-migrate échoue après coup (#665).
+    if (cpuTypeRaw && cpuTypeRaw !== 'host' && cpuTypeRaw !== 'max') {
+      const cpuTypeName = String(vmConfig.cpu).split(',')[0].trim()
+      try {
+        const targetCpus = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(targetNode)}/capabilities/qemu/cpu`)
+        const available = new Set((Array.isArray(targetCpus) ? targetCpus : []).map((c: any) => String(c?.name || '').toLowerCase()))
+        if (available.size > 0 && !available.has(cpuTypeRaw)) {
+          issues.push({
+            type: 'error',
+            code: 'CPU_TYPE_NOT_ON_TARGET',
+            message: `CPU type "${cpuTypeName}" is not available on target node "${targetNode}"`,
+            details: cpuTypeRaw.startsWith('custom-')
+              ? `"${cpuTypeName}" is a custom CPU model defined on the source cluster (/etc/pve/virtual-guest/cpu-models.conf). Define the same model on the target cluster before migrating, or switch the VM to a built-in CPU type.`
+              : `The target node does not report this CPU type in its QEMU capabilities. Switch the VM to a CPU type available on the target (e.g. "x86-64-v2-AES") before migrating.`
+          })
+        }
+      } catch (e: any) {
+        issues.push({
+          type: 'warning',
+          code: 'CPU_TYPE_CHECK_FAILED',
+          message: `Could not verify that CPU type "${cpuTypeName}" is available on the target`,
+          details: e?.message || String(e)
+        })
+      }
+    }
+
     // ========== VÉRIFICATIONS CIBLE ==========
 
     // 6. Vérifier que le nœud cible existe et est online

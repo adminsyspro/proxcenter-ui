@@ -83,6 +83,8 @@ import InventorySummary from '../components/InventorySummary'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { extractCustomCpuModels, isKnownCpuType } from '@/lib/inventory/cpuModels'
+import { cpuGroupHeaderSx } from '../cpuSelectStyles'
 
 export default function VmDetailTabs(props: any) {
   const t = useTranslations()
@@ -102,6 +104,25 @@ export default function VmDetailTabs(props: any) {
   const [hwQuotaBlocked, setHwQuotaBlocked] = useState(false)
   const vmConnId = props.selection?.id ? parseVmId(props.selection.id).connId : undefined
   const { getColor: getTagColor } = useTagColors(vmConnId)
+
+  // Modèles CPU custom du cluster (cpu-models.conf). Le Select "CPU Type" est
+  // statique : sans cette liste, une VM configurée en "custom-*" affiche un
+  // champ vide (#665).
+  const [customCpuModels, setCustomCpuModels] = useState<string[]>([])
+  useEffect(() => {
+    const { connId, node, type } = props.selection?.id ? parseVmId(props.selection.id) : { connId: '', node: '', type: '' }
+    if (!connId || !node || type !== 'qemu') { setCustomCpuModels([]); return }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/cpu-models`)
+        if (!res.ok) return
+        const json = await res.json()
+        if (!cancelled) setCustomCpuModels(extractCustomCpuModels(json?.data))
+      } catch { /* on retombe sur la liste statique */ }
+    })()
+    return () => { cancelled = true }
+  }, [props.selection?.id])
 
   // Fetch vDC quota+usage for the connection that hosts this VM. Skipped
   // for the provider (no vDC mapping → API returns nothing). Refreshed
@@ -957,19 +978,28 @@ export default function VmDetailTabs(props: any) {
                               label={t('inventory.cpuType')}
                               onChange={(e) => setCpuType(e.target.value)}
                             >
-                              <ListSubheader>Special</ListSubheader>
+                              {(customCpuModels.length > 0 || Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType))) && (
+                                <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Custom</ListSubheader>
+                              )}
+                              {customCpuModels.map((m: string) => (
+                                <MenuItem key={m} value={m}>{m}</MenuItem>
+                              ))}
+                              {Boolean(cpuType && !isKnownCpuType(cpuType) && !customCpuModels.includes(cpuType)) && (
+                                <MenuItem value={cpuType}>{cpuType}</MenuItem>
+                              )}
+                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Special</ListSubheader>
                               <MenuItem value="host">host ({t('inventory.maxPerformance')})</MenuItem>
                               <MenuItem value="max">max</MenuItem>
                               <MenuItem value="kvm64">kvm64 ({t('inventory.compatible')})</MenuItem>
                               <MenuItem value="kvm32">kvm32</MenuItem>
                               <MenuItem value="qemu64">qemu64 ({t('inventory.emulation')})</MenuItem>
                               <MenuItem value="qemu32">qemu32</MenuItem>
-                              <ListSubheader>x86-64 Microarchitecture Levels</ListSubheader>
+                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>x86-64 Microarchitecture Levels</ListSubheader>
                               <MenuItem value="x86-64-v2">x86-64-v2</MenuItem>
                               <MenuItem value="x86-64-v2-AES">x86-64-v2-AES (Recommended)</MenuItem>
                               <MenuItem value="x86-64-v3">x86-64-v3</MenuItem>
                               <MenuItem value="x86-64-v4">x86-64-v4</MenuItem>
-                              <ListSubheader>Intel</ListSubheader>
+                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Intel</ListSubheader>
                               <MenuItem value="486">486</MenuItem>
                               <MenuItem value="pentium">Pentium</MenuItem>
                               <MenuItem value="pentium2">Pentium 2</MenuItem>
@@ -1020,7 +1050,7 @@ export default function VmDetailTabs(props: any) {
                               <MenuItem value="SapphireRapids-v2">SapphireRapids-v2</MenuItem>
                               <MenuItem value="GraniteRapids">GraniteRapids</MenuItem>
                               <MenuItem value="KnightsMill">KnightsMill</MenuItem>
-                              <ListSubheader>AMD</ListSubheader>
+                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>AMD</ListSubheader>
                               <MenuItem value="athlon">Athlon</MenuItem>
                               <MenuItem value="phenom">Phenom</MenuItem>
                               <MenuItem value="Opteron_G1">Opteron G1</MenuItem>
@@ -1039,7 +1069,7 @@ export default function VmDetailTabs(props: any) {
                               <MenuItem value="EPYC-Milan">EPYC-Milan</MenuItem>
                               <MenuItem value="EPYC-Milan-v2">EPYC-Milan-v2</MenuItem>
                               <MenuItem value="EPYC-Genoa">EPYC-Genoa</MenuItem>
-                              <ListSubheader>Legacy</ListSubheader>
+                              <ListSubheader disableSticky sx={cpuGroupHeaderSx}>Legacy</ListSubheader>
                               <MenuItem value="coreduo">Core Duo</MenuItem>
                               <MenuItem value="core2duo">Core 2 Duo</MenuItem>
                             </Select>

@@ -6989,6 +6989,7 @@
     "edit": "Editar vDC",
     "delete": "Eliminar vDC",
     "name": "Nombre",
+    "nameHelper": "Opcional. Déjelo vacío para usar el nombre predeterminado (tenant — cluster).",
     "slug": "Slug",
     "slugHelp": "Solo letras minúsculas, números y guiones. Se creará automáticamente un pool PVE.",
     "description": "Descripción",

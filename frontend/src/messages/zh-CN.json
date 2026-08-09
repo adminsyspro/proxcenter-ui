@@ -7048,6 +7048,7 @@
     }
   },
   "vdc": {
+    "nameHelper": "可选。留空则使用默认名称（租户 — 集群）。",
     "createNeedsTenant": "请先创建一个非 default 租户。vDC 不能在 provider 租户上创建。",
     "primaryStorageTitle": "主存储",
     "primaryStorageHint": "承载此 vDC 所有虚拟机磁盘的单个共享存储。本地存储和仅 ISO/备份的存储已自动过滤。",

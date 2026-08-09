@@ -7046,6 +7046,7 @@
     }
   },
   "vdc": {
+    "nameHelper": "Optional. Leer lassen, um den Standardnamen zu verwenden (Tenant — Cluster).",
     "primaryStorageTitle": "Hauptspeicher",
     "primaryStorageHint": "Einzelner Shared-Storage, der alle VM-Disks dieser vDC trägt. Lokale und ISO/Backup-only Speicher werden automatisch ausgefiltert.",
     "primaryStorageLabel": "Speicher",

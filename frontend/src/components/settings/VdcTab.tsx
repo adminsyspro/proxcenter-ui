@@ -544,9 +544,16 @@ export default function VdcTab() {
       }
 
       if (editingVdc) {
-        // PUT - update
+        // PUT - update. An emptied Name field falls back to the derived
+        // name (renaming a vDC back to default) and — as a last resort, if
+        // `tenants` wasn't loaded — to the vDC's current name so we never
+        // submit an empty string.
+        const resolvedName = form.name.trim() ||
+          computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, editingVdc.connectionId) ||
+          editingVdc.name
+
         const body: any = {
-          name: form.name,
+          name: resolvedName,
           description: form.description || undefined,
           nodes: nodesPayload,
           primaryStorage: form.primaryStorage,
@@ -565,11 +572,15 @@ export default function VdcTab() {
           throw new Error(err.error || t('vdc.failedSave'))
         }
       } else {
-        // POST - create
+        // POST - create. An empty Name field falls back to the derived
+        // "tenant — cluster" name (see computeVdcName).
+        const resolvedName = form.name.trim() ||
+          computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, form.connectionId)
+
         const body = {
           tenantId: form.tenantId,
           connectionId: form.connectionId,
-          name: form.name,
+          name: resolvedName,
           slug: form.slug,
           description: form.description || undefined,
           nodes: nodesPayload,
@@ -1264,7 +1275,6 @@ export default function VdcTab() {
                 tenantId: v.id,
                 connectionId,
                 ...(occupied ? { nodes: [], primaryStorage: '' } : {}),
-                name: computeVdcName(v, connectionId),
                 slug: computeVdcSlug(v, connectionId),
               }))
               if (occupied) setAvailableResources(null)
@@ -1286,6 +1296,19 @@ export default function VdcTab() {
                 }}
               />
             )}
+          />
+
+          {/* Name — optional; leaving it empty falls back to the derived
+              "tenant — cluster" name at submit time (see handleSave). The
+              placeholder previews that derived name so an empty field reads
+              as an obvious, safe default rather than a mistake. */}
+          <TextField
+            label={t('vdc.name')}
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder={computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, form.connectionId)}
+            helperText={t('vdc.nameHelper')}
+            fullWidth
           />
 
           {/* Informational: lists the tenant's existing vDCs (with their
@@ -1327,17 +1350,18 @@ export default function VdcTab() {
                 if (editingVdc) {
                   return { ...f, connectionId: v?.id || '', nodes: [], primaryStorage: '' }
                 }
-                // Re-derive name + slug now that the connection is known —
-                // see computeVdcSlug/computeVdcName. The slug must be unique
-                // per tenant (DB: unique(tenant_id, slug)), which the
-                // cluster suffix provides across clusters.
+                // Re-derive the slug now that the connection is known — see
+                // computeVdcSlug. The slug must be unique per tenant (DB:
+                // unique(tenant_id, slug)), which the cluster suffix provides
+                // across clusters. `name` is left alone: it's user-editable
+                // (see the Name field above) and only falls back to the
+                // derived name at submit time (see handleSave).
                 const tenant = tenants.find((tn) => tn.id === f.tenantId) || null
                 return {
                   ...f,
                   connectionId: v?.id || '',
                   nodes: [],
                   primaryStorage: '',
-                  name: computeVdcName(tenant, v?.id || ''),
                   slug: computeVdcSlug(tenant, v?.id || ''),
                 }
               })

@@ -1845,6 +1845,11 @@ return next
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
 
+  // #666: reveal each guest's PVE node in the flat lists while a search
+  // filter is active — provider/MSP only, vDC tenants never see node names
+  // (same gate as the detail-header node chip in InventoryDetails).
+  const showNodeCaption = isFullClusterView && search.trim().length > 0
+
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(timer)
@@ -2870,6 +2875,7 @@ return favorites.has(vmKey)
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
                       lock={vm.lock}
                     />
                   </Box>
@@ -2936,6 +2942,7 @@ return favorites.has(vmKey)
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
                       lock={vm.lock}
                     />
                   </Box>
@@ -3280,6 +3287,7 @@ return (
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
                       lock={vm.lock}
                     />
                   </Box>

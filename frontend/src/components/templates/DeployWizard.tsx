@@ -41,6 +41,7 @@ import VendorLogo from './VendorLogo'
 import IsoNetworkReservation from './IsoNetworkReservation'
 import { useTenant } from '@/contexts/TenantContext'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 interface DeployWizardProps {
   open: boolean
@@ -121,6 +122,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   const [isoStorage, setIsoStorage] = useState('')
   const [vmid, setVmid] = useState<number>(100)
   const [vmName, setVmName] = useState('')
+  // Multi-vDC tenant, aggregated view: the explicit target vDC (resolved
+  // below instead of silently pinning conns[0]).
+  const [tenantVdcs, setTenantVdcs] = useState<any[]>([])
+  const [deployVdcId, setDeployVdcId] = useState('')
 
   // Hardware step
   const [cores, setCores] = useState(2)
@@ -409,15 +414,61 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         // step Target requires no input. Provider keeps manual selection
         // unless there's a single option. With a precise vDC context the
         // connections list is narrowed server-side to that vDC's cluster,
-        // so this pin targets the context vDC by construction; in the
-        // union view a multi-vDC tenant still gets conns[0] (known
-        // follow-up: explicit vDC selector, out of scope here).
+        // so this pin targets the context vDC by construction. In the union
+        // view a multi-vDC tenant also gets this conns[0] pin as a first
+        // pass, but the vDC-resolution effect below re-asserts the correct
+        // connection once its own fetch resolves (explicit vDC selector).
         if (conns.length === 1 || (hideInfra && conns.length > 0)) {
           setConnectionId(conns[0].id)
         }
       })
       .catch(() => {})
   }, [open, hideInfra])
+
+  // Multi-vDC tenant, aggregated view: resolve the target vDC explicitly
+  // instead of silently pinning conns[0].
+  useEffect(() => {
+    if (!open || !hideInfra) { setTenantVdcs([]); setDeployVdcId(''); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/v1/vdcs', { cache: 'no-store' })
+        if (cancelled || !r.ok) return
+        const j = await r.json()
+        const list = (Array.isArray(j?.data) ? j.data : []).filter(
+          (v: any) => (v.connectionId ?? v.connection_id) && v.enabled !== false
+        )
+        setTenantVdcs(list)
+        if (list.length === 0) return // legacy tenant without vDCs: conns[0] pin stays
+        // Retry preference read directly from the (stable) prop, never from
+        // connectionId/its ref — that state is also driven by the
+        // concurrent, independent connections-fetch conns[0] pin, which can
+        // land first and silently overwrite the retry's original target.
+        const retryConn = prefillBlueprint?._retryFrom?.connectionId
+        const byConn = retryConn
+          ? list.find((v: any) => (v.connectionId ?? v.connection_id) === retryConn)
+          : undefined
+        const ctxVdcId = readVdcContextCookie()
+        const byContext = ctxVdcId ? list.find((v: any) => v.id === ctxVdcId) : undefined
+        const target = byConn || byContext || list[0]
+        setDeployVdcId(target.id)
+      } catch { /* ignore — legacy pin behavior */ }
+    })()
+    return () => { cancelled = true }
+  }, [open, hideInfra])
+
+  // Invariant: for a vDC tenant the pinned connection always follows the
+  // selected vDC — re-asserts itself if the conns[0] pin from the
+  // connections effect lands after the vDC fetch resolved.
+  useEffect(() => {
+    if (!deployVdcId) return
+    const v = tenantVdcs.find((x: any) => x.id === deployVdcId)
+    const target = v ? (v.connectionId ?? v.connection_id) : undefined
+    if (target && target !== connectionId) {
+      setConnectionId(target)
+      setNode(''); setStorage(''); setIsoStorage('')
+    }
+  }, [deployVdcId, tenantVdcs, connectionId])
 
   // Fetch nodes when connection changes
   useEffect(() => {
@@ -832,10 +883,27 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       </Alert>
     ) : null
 
-    // Tenant-facing simplified target: VM name only, the rest auto-resolved.
+    // Tenant-facing simplified target: VM name only, the rest auto-resolved
+    // — except the target vDC itself, which a multi-vDC tenant in the
+    // aggregated view must pick explicitly (precise context hides this,
+    // the header switcher already governs it).
     if (hideInfra) {
       return (
         <Stack spacing={2}>
+          {tenantVdcs.length > 1 && !(readVdcContextCookie() && deployVdcId === readVdcContextCookie()) && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>{t('myVdc.selectVdc')}</InputLabel>
+              <Select
+                value={deployVdcId}
+                label={t('myVdc.selectVdc')}
+                onChange={(e) => setDeployVdcId(String(e.target.value))}
+              >
+                {tenantVdcs.map((v: any) => (
+                  <MenuItem key={v.id} value={v.id}>{v.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <TextField
             size="small"
             fullWidth
@@ -1538,6 +1606,8 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     if (!image) return null
 
     const selectedConn = connections.find(c => c.id === connectionId)
+    // Tenant: show the vDC name, not the raw connection name it maps to.
+    const selectedVdc = hideInfra ? tenantVdcs.find((v: any) => v.id === deployVdcId) : undefined
 
     return (
       <Stack spacing={2}>
@@ -1558,7 +1628,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         <Box>
           <Typography variant="overline" sx={{ opacity: 0.6 }}>{t('templates.deploy.steps.target')}</Typography>
           <Typography variant="body2">
-            {selectedConn?.name} &rarr; {node} &rarr; {storage}
+            {selectedVdc ? selectedVdc.name : selectedConn?.name} &rarr; {node} &rarr; {storage}
             {isIsoMode && isoStorage && <> &middot; ISO: {isoStorage}</>}
           </Typography>
           <Typography variant="body2">

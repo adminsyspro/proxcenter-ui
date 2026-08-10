@@ -101,6 +101,31 @@ describe('VmsTable - basic render', () => {
     // When showNode=false no .node-name elements exist
     expect(container.querySelectorAll('.node-name').length).toBe(0)
   })
+
+  it('shows the NodeIcon pastille (not the bare logo) in the node cell when nodeStatuses has an entry (#666)', () => {
+    const row = vmRowsFixture[0]
+    const nodeStatuses = new Map([[`${row.connId}:${row.node}`, 'online']])
+    const { container } = renderWithProviders(
+      <VmsTable vms={[row]} showNode nodeStatuses={nodeStatuses} />,
+    )
+    const nodeNameEl = container.querySelector('.node-name')
+    expect(nodeNameEl).not.toBeNull()
+    expect(nodeNameEl!.textContent).toBe('pve1')
+    // NodeIcon wraps its <img> + status dot in a <span>; the bare-logo
+    // fallback (no nodeStatuses entry) is a lone <img> sibling instead.
+    const iconWrapper = nodeNameEl!.previousElementSibling
+    expect(iconWrapper?.tagName).toBe('SPAN')
+    expect(iconWrapper?.querySelector('img')).toBeInTheDocument()
+  })
+
+  it('falls back to the bare Proxmox logo in the node cell when nodeStatuses has no entry for this node (#666)', () => {
+    const { container } = renderWithProviders(
+      <VmsTable vms={[vmRowsFixture[0]]} showNode />,
+    )
+    const nodeNameEl = container.querySelector('.node-name')
+    const iconWrapper = nodeNameEl!.previousElementSibling
+    expect(iconWrapper?.tagName).toBe('IMG')
+  })
 })
 
 // ------------------------------------------------------------------ //

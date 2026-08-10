@@ -13,7 +13,7 @@ import {
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import { StatusIcon } from './TreeIcons'
+import { NodeIcon, StatusIcon } from './TreeIcons'
 
 // Re-export getVmIcon for consumers that import from VmItem
 export { getVmIcon } from './TreeIcons'
@@ -94,6 +94,8 @@ export type VmItemProps = {
   tags?: string[]
   showVmId?: boolean
   lock?: string
+  showNode?: boolean
+  nodeStatus?: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -127,6 +129,8 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     tags,
     showVmId,
     lock,
+    showNode,
+    nodeStatus,
   } = props
   const { getColor, getShape } = useTagColors(connId)
   const shape = getShape(connId)
@@ -168,6 +172,19 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
       />
     )
   }) : null
+
+  // #666 — PVE placement readable from the flat lists while a search
+  // filter is active. Never rendered for vDC tenants (call sites gate on
+  // isFullClusterView, same rule as the detail-header node chip).
+  const nodeCaption = showNode ? (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+      <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary' }}>-</Typography>
+      <NodeIcon status={nodeStatus} size={14} />
+      <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>
+        {node}
+      </Typography>
+    </Box>
+  ) : null
 
   if (variant === 'tree') {
     const cpuPct = getCpuPct(cpu)
@@ -338,6 +355,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
+          {nodeCaption}
           <Chip label={vmType === 'lxc' ? 'LXC' : 'VM'} size="small" sx={{ height: 16, fontSize: 10 }} />
         </Box>
       </Box>
@@ -385,6 +403,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
+          {nodeCaption}
           {template && (
             <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
           )}
@@ -461,6 +480,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
           <Typography variant="body2" sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {showVmId ? `${vmid} - ${name}` : name}
           </Typography>
+          {nodeCaption}
           {template && (
             <Chip label={t('inventory.template')} size="small" sx={{ height: 16, fontSize: 10, ml: 0.5 }} />
           )}
@@ -495,5 +515,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   prev.template === next.template &&
   prev.tags?.join(';') === next.tags?.join(';') &&
   prev.showVmId === next.showVmId &&
-  prev.lock === next.lock
+  prev.lock === next.lock &&
+  prev.showNode === next.showNode &&
+  prev.nodeStatus === next.nodeStatus
 )

@@ -1845,6 +1845,30 @@ return next
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
 
+  // #666: reveal each guest's PVE node in the flat lists while a search
+  // filter is active — provider/MSP only, vDC tenants never see node names
+  // (same gate as the detail-header node chip in InventoryDetails).
+  const showNodeCaption = isFullClusterView && search.trim().length > 0
+
+  // Node status for the flat-list captions (NodeIcon pastille) — keyed like
+  // hostsList entries, from the same clusters data.
+  const nodeStatusByKey = useMemo(() => {
+    const m = new Map<string, string | undefined>()
+    clusters.forEach(clu => {
+      clu.nodes.forEach(n => m.set(`${clu.connId}:${n.node}`, n.status))
+    })
+    return m
+  }, [clusters])
+
+  // Clusters that are genuinely single-node (standalone host, or tenant
+  // scoped to one node) — the tree flattens only those. A multi-node
+  // cluster reduced to one visible node by the search filter keeps its
+  // full cluster → node → VM hierarchy.
+  const singleNodeConnIds = useMemo(
+    () => new Set(clusters.filter(c => c.nodes.length === 1).map(c => c.connId)),
+    [clusters]
+  )
+
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(timer)
@@ -2870,6 +2894,8 @@ return favorites.has(vmKey)
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
+                      nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
                       lock={vm.lock}
                     />
                   </Box>
@@ -2936,6 +2962,8 @@ return favorites.has(vmKey)
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
+                      nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
                       lock={vm.lock}
                     />
                   </Box>
@@ -3280,6 +3308,8 @@ return (
                       t={t}
                       tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
                       showVmId={showVmId}
+                      showNode={showNodeCaption}
+                      nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
                       lock={vm.lock}
                     />
                   </Box>
@@ -3386,7 +3416,7 @@ return (
           // Flatten when only 1 node is visible (standalone host, or tenant
           // scoped to a single node of a cluster) — no intermediate cluster
           // root in either case.
-          if (clu.nodes.length === 1) {
+          if (singleNodeConnIds.has(clu.connId)) {
             const n = clu.nodes[0]
 
             

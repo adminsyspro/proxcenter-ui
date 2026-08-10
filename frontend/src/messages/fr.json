@@ -4315,6 +4315,10 @@
       "restorePointsLoadFailed": "Les points de restauration n'ont pas pu être chargés, le dernier état répliqué sera utilisé.",
       "restorePointRebaseWarning": "Basculer vers un point de restauration plus ancien supprime définitivement les snapshots DR plus récents de cette VM."
     },
+    "screenshots": {
+      "view": "Voir la capture au boot",
+      "capturedAt": "Capturée à"
+    },
     "emergencyDR": {
       "title": "DR d'urgence",
       "noVMs": "Aucune VM prête pour le DR",

@@ -4276,6 +4276,10 @@
       "restorePointsLoadFailed": "无法加载恢复点，将使用最新的复制状态。",
       "restorePointRebaseWarning": "故障转移到更早的恢复点将永久删除该 VM 更新的灾备快照。"
     },
+    "screenshots": {
+      "view": "查看启动截图",
+      "capturedAt": "截图时间"
+    },
     "emergencyDR": {
       "title": "紧急灾难恢复",
       "noVMs": "无灾备就绪的 VM",

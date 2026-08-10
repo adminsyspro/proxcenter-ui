@@ -10,6 +10,8 @@ import {
 
 import EmptyState from '@/components/EmptyState'
 
+import ExecutionScreenshots from './ExecutionScreenshots'
+
 import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -320,7 +322,6 @@ export default function RecoveryPlansTab({
                     <Stack spacing={0.5}>
                       {history.slice(0, 10).map(exec => (
                         <Box key={exec.id} sx={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           py: 0.75, px: 1, borderRadius: 1,
                           bgcolor: alpha(
                             exec.status === 'completed' ? theme.palette.success.main :
@@ -328,20 +329,28 @@ export default function RecoveryPlansTab({
                             theme.palette.info.main, 0.05
                           )
                         }}>
-                          <Box>
-                            <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'capitalize' }}>
-                              {exec.type}
-                            </Typography>
-                            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                              {new Date(exec.started_at).toLocaleString()}
-                            </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Box>
+                              <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'capitalize' }}>
+                                {exec.type}
+                              </Typography>
+                              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                                {new Date(exec.started_at).toLocaleString()}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              size='small'
+                              label={exec.status}
+                              color={exec.status === 'completed' ? 'success' : exec.status === 'failed' ? 'error' : 'info'}
+                              sx={{ height: 20, fontSize: '0.65rem' }}
+                            />
                           </Box>
-                          <Chip
-                            size='small'
-                            label={exec.status}
-                            color={exec.status === 'completed' ? 'success' : exec.status === 'failed' ? 'error' : 'info'}
-                            sx={{ height: 20, fontSize: '0.65rem' }}
-                          />
+                          {exec.type === 'test' && (
+                            <ExecutionScreenshots
+                              executionId={exec.id}
+                              vmNameMap={Object.fromEntries((selected.vms || []).map(v => [v.vm_id, v.vm_name]))}
+                            />
+                          )}
                         </Box>
                       ))}
                     </Stack>

@@ -8,6 +8,8 @@ import {
   IconButton, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 
+import { ScreenshotPreviewDialog, useExecutionScreenshots, type ScreenshotMeta } from './ExecutionScreenshots'
+
 import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Main Component ─────────────────────────────────────────────────────
@@ -35,6 +37,8 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const [selectedPoints, setSelectedPoints] = useState<Record<number, string>>({})
+  const screenshots = useExecutionScreenshots(execution && type === 'test' ? execution.id : null)
+  const [screenshotPreview, setScreenshotPreview] = useState<ScreenshotMeta | null>(null)
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
 
@@ -316,6 +320,21 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                         </IconButton>
                       </Tooltip>
                     )}
+                    {(() => {
+                      const shot = screenshots.find(s => s.vm_id === vm.vm_id)
+                      if (!shot) return null
+                      return (
+                        <Tooltip title={t('siteRecovery.screenshots.view')}>
+                          <IconButton
+                            size='small'
+                            onClick={() => setScreenshotPreview(shot)}
+                            sx={{ color: 'text.secondary' }}
+                          >
+                            <i className='ri-camera-line' />
+                          </IconButton>
+                        </Tooltip>
+                      )
+                    })()}
                   </Box>
                 ))}
               </Stack>
@@ -359,6 +378,14 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           </>
         )}
       </DialogActions>
+      {execution && (
+        <ScreenshotPreviewDialog
+          executionId={execution.id}
+          shot={screenshotPreview}
+          label={screenshotPreview ? (vmNameMap?.[screenshotPreview.vm_id] || `VM ${screenshotPreview.vm_id}`) : ''}
+          onClose={() => setScreenshotPreview(null)}
+        />
+      )}
     </Dialog>
   )
 }

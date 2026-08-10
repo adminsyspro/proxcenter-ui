@@ -4315,6 +4315,10 @@
       "restorePointsLoadFailed": "Restore points could not be loaded, the latest replicated state will be used.",
       "restorePointRebaseWarning": "Failing over to an older restore point permanently deletes the newer DR snapshots of that VM."
     },
+    "screenshots": {
+      "view": "View boot screenshot",
+      "capturedAt": "Captured at"
+    },
     "emergencyDR": {
       "title": "Emergency DR",
       "noVMs": "No DR-ready VMs",

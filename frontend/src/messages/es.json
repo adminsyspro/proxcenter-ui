@@ -4315,6 +4315,10 @@
       "restorePointsLoadFailed": "No se pudieron cargar los puntos de restauración, se usará el último estado replicado.",
       "restorePointRebaseWarning": "Hacer failover a un punto de restauración más antiguo elimina permanentemente los snapshots DR más recientes de esa VM."
     },
+    "screenshots": {
+      "view": "Ver la captura de arranque",
+      "capturedAt": "Capturada a las"
+    },
     "emergencyDR": {
       "title": "DR de emergencia",
       "noVMs": "No hay VMs listas para DR",

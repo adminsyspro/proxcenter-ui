@@ -4277,6 +4277,10 @@
       "restorePointsLoadFailed": "Wiederherstellungspunkte konnten nicht geladen werden, der neueste replizierte Zustand wird verwendet.",
       "restorePointRebaseWarning": "Ein Failover auf einen älteren Wiederherstellungspunkt löscht dauerhaft die neueren DR-Snapshots dieser VM."
     },
+    "screenshots": {
+      "view": "Boot-Screenshot ansehen",
+      "capturedAt": "Aufgenommen um"
+    },
     "emergencyDR": {
       "title": "Notfall-DR",
       "noVMs": "Keine DR-bereiten VMs",

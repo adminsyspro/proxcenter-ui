@@ -537,6 +537,10 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   getExecution(id: string) {
     return this.get<any>(`/replication/executions/${id}`)
   }
+
+  getExecutionScreenshots(id: string) {
+    return this.get<{ vm_id: number; target_vmid: number; captured_at: string }[]>(`/replication/executions/${id}/screenshots`)
+  }
 }
 
 // ============================================

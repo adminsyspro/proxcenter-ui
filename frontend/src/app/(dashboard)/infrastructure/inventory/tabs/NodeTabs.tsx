@@ -335,7 +335,7 @@ export default function NodeTabs(props: any) {
   // #666: node status lookup for the VmsTable node column pastille (full
   // view), reusing the `hosts` prop InventoryDetails already passes down.
   const nodeStatuses = useMemo(
-    () => new Map((hosts || []).map((h: any) => [h.key, h.status])),
+    () => new Map<string, string | undefined>((hosts || []).map((h: any) => [h.key as string, h.status as string | undefined])),
     [hosts]
   )
 

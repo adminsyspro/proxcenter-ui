@@ -173,6 +173,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                             return (
                               <Select
                                 size='small'
+                                displayEmpty
                                 value={selectedPoints[vm.vm_id] || ''}
                                 onChange={e => {
                                   const val = e.target.value

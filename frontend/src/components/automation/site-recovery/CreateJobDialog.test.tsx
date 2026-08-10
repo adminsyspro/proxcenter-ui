@@ -13,6 +13,7 @@
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { SWRConfig } from 'swr'
 
 import { renderWithProviders, screen, userEvent, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
@@ -100,16 +101,22 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
 
     const onSubmit = vi.fn()
     renderWithProviders(
-      <CreateJobDialog
-        open
-        onClose={vi.fn()}
-        onSubmit={onSubmit}
-        connections={[
-          { id: 'src', name: 'Source', hasCeph: true },
-          { id: 'dst', name: 'Target', hasCeph: true },
-        ]}
-        allVMs={[{ vmid: 100, name: 'web-01', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 10 }]}
-      />,
+      // renderWithProviders's own SWRConfig sets revalidateOnMount:false (to
+      // keep other tests from triggering background fetches); this dialog's
+      // VM list depends on a real SWR fetch resolving, so override it back
+      // on for this one render — SWRConfig context merges when nested.
+      <SWRConfig value={{ revalidateOnMount: true }}>
+        <CreateJobDialog
+          open
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+          connections={[
+            { id: 'src', name: 'Source', hasCeph: true },
+            { id: 'dst', name: 'Target', hasCeph: true },
+          ]}
+          allVMs={[{ vmid: 100, name: 'web-01', node: 'node1', connId: 'src', type: 'qemu', status: 'running', tags: [], diskGb: 10 }]}
+        />
+      </SWRConfig>,
     )
 
     // Source cluster

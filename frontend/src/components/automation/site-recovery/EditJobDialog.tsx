@@ -9,6 +9,7 @@ import {
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import RetentionSlider from './RetentionSlider'
 import NumericTextField from '@/components/ui/NumericTextField'
 import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
@@ -157,35 +158,19 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
             <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
               {t('siteRecovery.createJob.snapshotRetentionHelp')}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Box sx={{ flex: 1 }}>
-                <NumericTextField
-                  type='number'
-                  value={keepSource}
-                  onChange={setKeepSource}
-                  fallback={3}
-                  min={2}
-                  max={500}
-                  size='small'
-                  fullWidth
-                  label={t('siteRecovery.createJob.retentionSource')}
-                />
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <NumericTextField
-                  type='number'
-                  value={keepTarget}
-                  onChange={setKeepTarget}
-                  fallback={3}
-                  min={2}
-                  max={500}
-                  size='small'
-                  fullWidth
-                  label={t('siteRecovery.createJob.retentionTarget')}
-                  helperText={t('siteRecovery.createJob.retentionTargetHelp')}
-                />
-              </Box>
-            </Box>
+            <Stack spacing={1}>
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionSource')}
+                value={keepSource}
+                onChange={setKeepSource}
+              />
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionTarget')}
+                value={keepTarget}
+                onChange={setKeepTarget}
+                helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+              />
+            </Stack>
           </Box>
 
           <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={rateLimit} />

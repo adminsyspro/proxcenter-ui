@@ -62,8 +62,10 @@ function renderDialog(overrides: Partial<ReplicationJob> = {}) {
 // window exists, so role alone identifies it.
 const rateLimit = () => screen.getAllByRole('spinbutton')[0] as HTMLInputElement
 const save = () => screen.getByRole('button', { name: 'Save changes' })
-const retentionSource = () => screen.getByLabelText('Keep on source') as HTMLInputElement
-const retentionTarget = () => screen.getByLabelText('Keep on target (DR)') as HTMLInputElement
+// getByRole('spinbutton'): the sliders now carry the same accessible name, so
+// getByLabelText would match two elements per retention setting.
+const retentionSource = () => screen.getByRole('spinbutton', { name: 'Keep on source' }) as HTMLInputElement
+const retentionTarget = () => screen.getByRole('spinbutton', { name: 'Keep on target (DR)' }) as HTMLInputElement
 
 describe('EditJobDialog rate limit', () => {
   it('shows the job rate limit', () => {

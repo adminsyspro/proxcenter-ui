@@ -34,8 +34,10 @@ function renderDialog() {
 // DOM order: retention-source, retention-target, VMID prefix.
 const prefix = () => screen.getAllByRole('spinbutton').at(-1) as HTMLInputElement
 const blur = () => userEvent.click(screen.getByText('VMID Prefix'))
-const retentionSource = () => screen.getByLabelText('Keep on source') as HTMLInputElement
-const retentionTarget = () => screen.getByLabelText('Keep on target (DR)') as HTMLInputElement
+// getByRole('spinbutton'): the sliders now carry the same accessible name, so
+// getByLabelText would match two elements per retention setting.
+const retentionSource = () => screen.getByRole('spinbutton', { name: 'Keep on source' }) as HTMLInputElement
+const retentionTarget = () => screen.getByRole('spinbutton', { name: 'Keep on target (DR)' }) as HTMLInputElement
 
 describe('CreateJobDialog VMID prefix', () => {
   it('renders blank rather than 0 when no prefix is set', () => {

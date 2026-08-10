@@ -332,6 +332,13 @@ export default function NodeTabs(props: any) {
     return tags ? String(tags).split(';').filter(Boolean) : []
   }, [hostsData, nodeNodeName])
 
+  // #666: node status lookup for the VmsTable node column pastille (full
+  // view), reusing the `hosts` prop InventoryDetails already passes down.
+  const nodeStatuses = useMemo(
+    () => new Map((hosts || []).map((h: any) => [h.key, h.status])),
+    [hosts]
+  )
+
   // Fetch Ceph OSD flags when on OSD sub-tab
   useEffect(() => {
     if (nodeTab !== 8 || nodeCephSubTab !== 2 || !nodeConnId || !data.clusterName) return
@@ -1170,6 +1177,7 @@ export default function NodeTabs(props: any) {
                           vms={data.vmsData as VmRow[]}
                           compact={!expandedVmsTable}
                           expanded={expandedVmsTable}
+                          nodeStatuses={nodeStatuses}
                           maxHeight="100%"
                           autoPageSize
                           showTrends

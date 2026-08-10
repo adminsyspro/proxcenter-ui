@@ -13,7 +13,7 @@ import {
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
-import { StatusIcon } from './TreeIcons'
+import { NodeIcon, StatusIcon } from './TreeIcons'
 
 // Re-export getVmIcon for consumers that import from VmItem
 export { getVmIcon } from './TreeIcons'
@@ -95,6 +95,7 @@ export type VmItemProps = {
   showVmId?: boolean
   lock?: string
   showNode?: boolean
+  nodeStatus?: string
 }
 
 /* ------------------------------------------------------------------ */
@@ -129,6 +130,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     showVmId,
     lock,
     showNode,
+    nodeStatus,
   } = props
   const { getColor, getShape } = useTagColors(connId)
   const shape = getShape(connId)
@@ -175,9 +177,13 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   // filter is active. Never rendered for vDC tenants (call sites gate on
   // isFullClusterView, same rule as the detail-header node chip).
   const nodeCaption = showNode ? (
-    <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
-      {`· ${node}`}
-    </Typography>
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+      <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary' }}>-</Typography>
+      <NodeIcon status={nodeStatus} size={14} />
+      <Typography variant="body2" sx={{ fontSize: 13, color: 'text.secondary', whiteSpace: 'nowrap' }}>
+        {node}
+      </Typography>
+    </Box>
   ) : null
 
   if (variant === 'tree') {
@@ -510,5 +516,6 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
   prev.tags?.join(';') === next.tags?.join(';') &&
   prev.showVmId === next.showVmId &&
   prev.lock === next.lock &&
-  prev.showNode === next.showNode
+  prev.showNode === next.showNode &&
+  prev.nodeStatus === next.nodeStatus
 )

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { vmIconOpacity } from '@/app/(dashboard)/infrastructure/inventory/helpers'
+import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 
 import { createPortal } from 'react-dom'
@@ -467,6 +468,7 @@ type VmsTableProps = {
   expanded?: boolean
   maxHeight?: number | string
   showNode?: boolean
+  nodeStatuses?: Map<string, string | undefined>  // #666: node column pastille, keyed `${connId}:${node}`
   showTrends?: boolean
   showActions?: boolean
   showIpSnap?: boolean  // Afficher les colonnes IP et Snapshots
@@ -502,6 +504,7 @@ function VmsTable({
   expanded = false,
   maxHeight = 400,
   showNode = false,
+  nodeStatuses,
   showTrends = false,
   showActions = false,
   showIpSnap = false,
@@ -972,7 +975,14 @@ return (
         minWidth: 80,
         maxWidth: 150,
         renderHeader: headerWithIcon('ri-server-line', 'Node'),
-        renderCell: (params) => (
+        renderCell: (params) => {
+          // #666: same NodeIcon (logo + status pastille) vocabulary as the
+          // inventory tree/flat lists. Falls back to the bare logo when the
+          // node's status isn't known here — a pastille with no real status
+          // would default to red and lie.
+          const nodeSt = nodeStatuses?.get(`${params.row.connId}:${params.row.node}`)
+
+          return (
           <Box
             sx={{
               display: 'flex',
@@ -989,13 +999,17 @@ return (
               }
             }}
           >
-            <img
-              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
-              alt=""
-              width={14}
-              height={14}
-              style={{ opacity: 0.7, flexShrink: 0 }}
-            />
+            {nodeSt ? (
+              <NodeIcon status={nodeSt} size={14} />
+            ) : (
+              <img
+                src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                alt=""
+                width={14}
+                height={14}
+                style={{ opacity: 0.7, flexShrink: 0 }}
+              />
+            )}
             <Typography
               className="node-name"
               variant='body2'
@@ -1010,10 +1024,11 @@ return (
               {params.row.node}
             </Typography>
           </Box>
-        )
+          )
+        }
       })
     }
-    
+
     // Colonne HA - toujours inclus quand expanded et qu'il y a des VMs cluster
     if (showNode || expanded) {
       const hasClusterVms = vms.some(vm => vm.isCluster)
@@ -1687,7 +1702,7 @@ return true
       // MUI re-runs flex layout on every columns-prop change and ignores width.
       return { ...col, width: saved, flex: undefined }
     })
-  }, [isCompact, expanded, showNode, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths])
+  }, [isCompact, expanded, showNode, nodeStatuses, showTrends, showActions, showIpSnap, onVmAction, onMigrate, canMigrate, onNodeClick, primaryColor, trendsData, trendsLoading, vms, isMobile, isTablet, isSmallDesktop, isLargeDesktop, favorites, onToggleFavorite, visibleColumns, columnWidths])
 
   return (
     <Box sx={{

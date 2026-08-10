@@ -1040,6 +1040,10 @@ export default function InventoryDetails({
   // VMs sans templates (pour affichage dans les modes vms, tree, hosts, pools, tags)
   const displayVms = useMemo(() => allVms.filter(vm => !vm.template), [allVms])
 
+  // #666: node status lookup for the VmsTable node column pastille, keyed
+  // like HostItem.key (`${connId}:${node}`).
+  const nodeStatuses = useMemo(() => new Map(hosts.map(h => [h.key, h.status])), [hosts])
+
   // Mapping vmid → name pour affichage dans storage content
   const vmNamesMap = useMemo(() => {
     const map: Record<string, string> = {}
@@ -2646,6 +2650,7 @@ return vm?.isCluster ?? false
                     }))}
                     expanded
                     showNode
+                    nodeStatuses={nodeStatuses}
                     showTrends
                     showActions
                     showIpSnap={showIpSnap}
@@ -2694,6 +2699,7 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'pools' && pools.length > 0 ? (
           <GroupedVmsView
@@ -2713,6 +2719,7 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'tags' && tags.length > 0 ? (
           <GroupedVmsView
@@ -2733,6 +2740,7 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'templates' ? (
 
@@ -2786,6 +2794,7 @@ return vm?.isCluster ?? false
                     }))}
                     expanded
                     showNode
+                    nodeStatuses={nodeStatuses}
                     showActions
                     onVmAction={handleTableVmAction}
                     onNodeClick={handleNodeClick}

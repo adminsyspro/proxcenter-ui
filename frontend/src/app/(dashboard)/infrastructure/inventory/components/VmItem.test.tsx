@@ -39,7 +39,7 @@ describe('VmItem node caption (issue #666)', () => {
     'shows the node caption on the %s variant when showNode is set',
     variant => {
       renderWithProviders(<Harness {...baseProps} variant={variant} showNode />)
-      expect(screen.getByText('· pve-2-2')).toBeInTheDocument()
+      expect(screen.getByText('pve-2-2')).toBeInTheDocument()
     },
   )
 
@@ -63,7 +63,7 @@ describe('VmItem node caption (issue #666)', () => {
     expect(screen.queryByText(/pve-2-2/)).not.toBeInTheDocument()
 
     rerender(<Harness {...baseProps} variant="flat" showNode />)
-    expect(screen.getByText('· pve-2-2')).toBeInTheDocument()
+    expect(screen.getByText('pve-2-2')).toBeInTheDocument()
 
     rerender(<Harness {...baseProps} variant="flat" showNode={false} />)
     expect(screen.queryByText(/pve-2-2/)).not.toBeInTheDocument()

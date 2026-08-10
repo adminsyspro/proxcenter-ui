@@ -337,7 +337,7 @@ interface ProtectionTabProps {
   logs: ReplicationJobLog[]
   logsLoading: boolean
   connections: Connection[]
-  vmNameMap?: Record<number, string>
+  vmNamesByConn?: Record<string, Record<number, string>>
   onSyncJob: (id: string) => void
   onPauseJob: (id: string) => void
   onResumeJob: (id: string) => void
@@ -348,7 +348,7 @@ interface ProtectionTabProps {
 }
 
 export default function ProtectionTab({
-  jobs, loading, logs, logsLoading, connections, vmNameMap,
+  jobs, loading, logs, logsLoading, connections, vmNamesByConn,
   onSyncJob, onPauseJob, onResumeJob, onDeleteJob, onEditJob,
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
@@ -451,14 +451,14 @@ export default function ProtectionTab({
     const qq = q.trim().toLowerCase()
 
     return (jobs || []).filter(j => {
-      const label = jobLabel(j, vmNameMap)
+      const label = jobLabel(j, vmNamesByConn?.[j.source_cluster])
       const matchQ = !qq || label.toLowerCase().includes(qq) ||
         (j.name || '').toLowerCase().includes(qq) ||
         connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
 
       return matchQ && (statusFilter === 'all' || j.status === statusFilter)
     })
-  }, [jobs, q, statusFilter, connName, vmNameMap])
+  }, [jobs, q, statusFilter, connName, vmNamesByConn])
 
   const grouped = useMemo(() => {
     const map = new Map<string, ReplicationJob[]>()
@@ -614,7 +614,7 @@ export default function ProtectionTab({
                 {/* Group jobs */}
                 <Stack spacing={1}>
                   {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNameMap} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
                   ))}
                 </Stack>
               </Box>
@@ -638,16 +638,16 @@ export default function ProtectionTab({
                 </Tooltip>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
-                    {selected.name || jobLabel(selected, vmNameMap)}
+                    {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
                   </Typography>
                   {selected.name && (
                     <Typography variant='body2' sx={{ color: 'text.primary', fontWeight: 500, mb: 0.25 }}>
-                      {jobLabel(selected, vmNameMap)}
+                      {jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
                     </Typography>
                   )}
                   <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                     {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
-                      const name = vmNameMap?.[id]
+                      const name = vmNamesByConn?.[selected.source_cluster]?.[id]
                       return name ? `${id} - ${name}` : `${id}`
                     }).join(', ')}
                   </Typography>

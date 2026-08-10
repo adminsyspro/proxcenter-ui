@@ -4178,7 +4178,9 @@
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Delete Recovery Plan",
-      "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone."
+      "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone.",
+      "cleanupPending": "Cleanup pending",
+      "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test."
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {
@@ -4296,7 +4298,9 @@
       "cleanupDone": "Cleanup completed",
       "stopped": "stopped",
       "disksRolledBack": "RBD disk(s) rolled back",
-      "jobsResumed": "replication job(s) resumed"
+      "jobsResumed": "replication job(s) resumed",
+      "testActiveBanner": "A test failover started {date} is awaiting cleanup. Test VMs may still be running on the DR site.",
+      "testConflict": "A test failover is already active for this plan. Clean it up first."
     },
     "emergencyDR": {
       "title": "Emergency DR",

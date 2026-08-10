@@ -827,9 +827,9 @@ const ReplicationFlow = ({ sites, connectivity, latencyMs, jobs, connections, t 
 
 // ── Failed jobs widget ─────────────────────────────────────────────────
 
-const FailedJobsWidget = ({ jobs, vmNameMap, onSyncJob, t }: {
+const FailedJobsWidget = ({ jobs, vmNamesByConn, onSyncJob, t }: {
   jobs: ReplicationJob[]
-  vmNameMap?: Record<number, string>
+  vmNamesByConn?: Record<string, Record<number, string>>
   onSyncJob?: (id: string) => void
   t: any
 }) => {
@@ -855,7 +855,7 @@ const FailedJobsWidget = ({ jobs, vmNameMap, onSyncJob, t }: {
             const label = j.name || (
               j.tags?.length
                 ? j.tags.map(tag => `#${tag}`).join(', ')
-                : (j.vm_ids || []).slice(0, 2).map(id => vmNameMap?.[id] || `VM ${id}`).join(', ')
+                : (j.vm_ids || []).slice(0, 2).map(id => vmNamesByConn?.[j.source_cluster]?.[id] || `VM ${id}`).join(', ')
             )
             const retryInfo = j.next_retry_at && (j.retry_count || 0) < 3
               ? t('siteRecovery.dashboard.retryIn', { in: Math.max(0, Math.round((new Date(j.next_retry_at).getTime() - Date.now()) / 1000 / 60)) })
@@ -903,11 +903,11 @@ interface DashboardTabProps {
   loading: boolean
   jobs?: ReplicationJob[]
   connections?: { id: string; name: string }[]
-  vmNameMap?: Record<number, string>
+  vmNamesByConn?: Record<string, Record<number, string>>
   onSyncJob?: (id: string) => void
 }
 
-export default function DashboardTab({ health, loading, jobs, connections, vmNameMap, onSyncJob }: DashboardTabProps) {
+export default function DashboardTab({ health, loading, jobs, connections, vmNamesByConn, onSyncJob }: DashboardTabProps) {
   const t = useTranslations()
   const theme = useTheme()
 
@@ -1001,7 +1001,7 @@ export default function DashboardTab({ health, loading, jobs, connections, vmNam
       </Box>
 
       {/* Failed jobs (only when error_count > 0) */}
-      <FailedJobsWidget jobs={jobs || []} vmNameMap={vmNameMap} onSyncJob={onSyncJob} t={t} />
+      <FailedJobsWidget jobs={jobs || []} vmNamesByConn={vmNamesByConn} onSyncJob={onSyncJob} t={t} />
 
       {/* Charts Row */}
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>

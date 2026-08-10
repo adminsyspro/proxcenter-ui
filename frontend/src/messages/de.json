@@ -4140,7 +4140,9 @@
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Wiederherstellungsplan löschen",
-      "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+      "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+      "cleanupPending": "Bereinigung ausstehend",
+      "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten."
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
@@ -4258,7 +4260,9 @@
       "cleanupDone": "Cleanup abgeschlossen",
       "stopped": "Gestoppt",
       "disksRolledBack": "RBD-Festplatte(n) zurückgesetzt",
-      "jobsResumed": "Replikation job(s) resumed"
+      "jobsResumed": "Replikation job(s) resumed",
+      "testActiveBanner": "Ein am {date} gestarteter Test-Failover wartet auf die Bereinigung. Test-VMs könnten noch auf dem DR-Standort laufen.",
+      "testConflict": "Für diesen Plan ist bereits ein Test-Failover aktiv. Bereinigen Sie ihn zuerst."
     },
     "emergencyDR": {
       "title": "Notfall-DR",

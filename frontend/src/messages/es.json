@@ -4178,7 +4178,9 @@
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Eliminar plan de recuperación",
-      "deletePlanConfirm": "¿Seguro que quieres eliminar este plan de recuperación? Esta acción no se puede deshacer."
+      "deletePlanConfirm": "¿Seguro que quieres eliminar este plan de recuperación? Esta acción no se puede deshacer.",
+      "cleanupPending": "Limpieza pendiente",
+      "testActiveTooltip": "Hay un failover de prueba activo en el sitio DR. Ejecuta la limpieza antes de iniciar una nueva prueba."
     },
     "rpoTargetLabel": "RPO objetivo",
     "createJob": {
@@ -4296,7 +4298,9 @@
       "cleanupDone": "Limpieza completada",
       "stopped": "detenida",
       "disksRolledBack": "disco(s) RBD revertido(s)",
-      "jobsResumed": "trabajo(s) de replicación reanudado(s)"
+      "jobsResumed": "trabajo(s) de replicación reanudado(s)",
+      "testActiveBanner": "Un failover de prueba iniciado el {date} está esperando limpieza. Las VMs de prueba pueden seguir ejecutándose en el sitio DR.",
+      "testConflict": "Ya hay un failover de prueba activo para este plan. Límpialo primero."
     },
     "emergencyDR": {
       "title": "DR de emergencia",

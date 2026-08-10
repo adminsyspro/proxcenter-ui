@@ -22,12 +22,13 @@ interface FailoverDialogProps {
   cleanupLoading?: boolean
   cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
   execution: RecoveryExecution | null
+  errorMessage?: string | null
   targetConnId?: string
   connections?: { id: string; name: string }[]
   vmNameMap?: Record<number, string>
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, targetConnId, connections, vmNameMap }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const isDestructive = type === 'failover' || type === 'failback'
@@ -40,7 +41,11 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   if (!plan) return null
 
   const confirmRequired = isDestructive ? plan.name : null
-  const canConfirm = !isDestructive || confirmText === confirmRequired
+  // A test failover started before this page load has no in-memory
+  // `execution` yet — the rehydration fetch on open is still in flight or
+  // failed. Block a second test-failover attempt until it resolves.
+  const testActiveUnresolved = type === 'test' && !!plan.active_test_execution_id && !execution
+  const canConfirm = (!isDestructive || confirmText === confirmRequired) && !testActiveUnresolved
 
   const typeConfig = {
     test: {
@@ -77,6 +82,14 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
       <DialogContent>
         <Stack spacing={2}>
           <Alert severity={config.severity}>{config.description}</Alert>
+
+          {testActiveUnresolved && (
+            <Alert severity='warning'>
+              {t('siteRecovery.failover.testActiveBanner', {
+                date: plan.last_test ? new Date(plan.last_test).toLocaleString() : ''
+              })}
+            </Alert>
+          )}
 
           {type === 'test' && (
             <Chip
@@ -252,8 +265,9 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           )}
         </Stack>
       </DialogContent>
+      {errorMessage && <Alert severity='error' sx={{ mx: 3 }}>{errorMessage}</Alert>}
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        {!isExecuting && (
+        {!execution && (
           <>
             <Button onClick={onClose}>{t('common.cancel')}</Button>
             <Button

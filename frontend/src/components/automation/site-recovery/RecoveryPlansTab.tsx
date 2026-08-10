@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Card, CardContent, Chip, Collapse, Divider, Drawer,
-  IconButton, Stack, Typography, alpha, useTheme
+  IconButton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
 import EmptyState from '@/components/EmptyState'
@@ -110,6 +110,16 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
         )}
       </Box>
 
+      {/* Cleanup pending warning */}
+      {plan.active_test_execution_id && (
+        <Box sx={{ flex: '0 0 auto' }}>
+          <Chip size='small' color='warning' variant='outlined'
+            icon={<i className='ri-eraser-line' />}
+            label={t('siteRecovery.plans.cleanupPending')}
+            sx={{ height: 22, fontSize: '0.65rem' }} />
+        </Box>
+      )}
+
       {/* Status */}
       <Box sx={{ flex: '0 0 auto' }}>
         <PlanStatusBadge status={plan.status} t={t} />
@@ -131,13 +141,14 @@ interface RecoveryPlansTabProps {
   onFailover: (id: string) => void
   onFailback: (id: string) => void
   onDeletePlan: (id: string) => void
+  onCleanupTest: (id: string) => void
   connections?: Array<{ id: string; name: string }>
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
-  onTestFailover, onFailover, onFailback, onDeletePlan,
+  onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest,
   connections
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
@@ -336,13 +347,31 @@ export default function RecoveryPlansTab({
                   {t('siteRecovery.plans.actions')}
                 </Typography>
                 <Stack spacing={1}>
-                  <Button
-                    variant='outlined' size='small' fullWidth
-                    startIcon={<i className='ri-test-tube-line' />}
-                    onClick={() => onTestFailover(selected.id)}
+                  {selected.active_test_execution_id && (
+                    <Button
+                      variant='contained' size='small' color='warning' fullWidth
+                      startIcon={<i className='ri-eraser-line' />}
+                      onClick={() => onCleanupTest(selected.id)}
+                    >
+                      {t('siteRecovery.failover.cleanup')}
+                    </Button>
+                  )}
+                  <Tooltip
+                    title={t('siteRecovery.plans.testActiveTooltip')}
+                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing')}
+                    arrow
                   >
-                    {t('siteRecovery.plans.testFailover')}
-                  </Button>
+                    <span style={{ display: 'block' }}>
+                      <Button
+                        variant='outlined' size='small' fullWidth
+                        startIcon={<i className='ri-test-tube-line' />}
+                        onClick={() => onTestFailover(selected.id)}
+                        disabled={!!selected.active_test_execution_id || selected.status === 'executing'}
+                      >
+                        {t('siteRecovery.plans.testFailover')}
+                      </Button>
+                    </span>
+                  </Tooltip>
                   <Button
                     variant='contained' size='small' color='warning' fullWidth
                     startIcon={<i className='ri-shield-star-line' />}

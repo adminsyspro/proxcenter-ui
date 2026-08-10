@@ -4139,7 +4139,9 @@
       "failover": "故障转移",
       "failback": "故障回切",
       "deletePlan": "删除恢复计划",
-      "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。"
+      "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。",
+      "cleanupPending": "待清理",
+      "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {
@@ -4257,7 +4259,9 @@
       "cleanupDone": "清理完成",
       "stopped": "已停止",
       "disksRolledBack": "RBD 磁盘已回滚",
-      "jobsResumed": "复制任务已恢复"
+      "jobsResumed": "复制任务已恢复",
+      "testActiveBanner": "于 {date} 启动的测试故障转移正在等待清理。测试 VM 可能仍在灾备站点上运行。",
+      "testConflict": "此计划已有一个测试故障转移正在进行。请先清理它。"
     },
     "emergencyDR": {
       "title": "紧急灾难恢复",

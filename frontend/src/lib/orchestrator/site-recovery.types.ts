@@ -105,6 +105,7 @@ export interface RecoveryPlan {
   vms: RecoveryPlanVM[]
   last_test: string | null
   last_failover: string | null
+  active_test_execution_id?: string | null
   created_at: string
   updated_at: string
 }

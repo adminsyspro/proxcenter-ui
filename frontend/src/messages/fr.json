@@ -4218,6 +4218,11 @@
       "sshFailed": "Échec de la connexion SSH directe",
       "sshRequirement": "Le SSH sans mot de passe doit être configuré entre les clusters source et cible. Assurez-vous que root peut se connecter en SSH de la source vers la cible sans invite de mot de passe.",
       "sshRetry": "Réessayer",
+      "snapshotRetention": "Rétention des snapshots",
+      "snapshotRetentionHelp": "Nombre de snapshots miroir conservés par disque après chaque synchronisation (minimum 2).",
+      "retentionSource": "Conserver sur la source",
+      "retentionTarget": "Conserver sur la cible (DR)",
+      "retentionTargetHelp": "Plus de snapshots côté DR offre plus de points de restauration, au prix de la capacité Ceph.",
       "vmidPrefix": "Préfixe VMID",
       "vmidPrefixHelp": "Préfixe ajouté aux IDs de VM sur le cluster cible (ex : préfixe 9 + VM 100 = 9100). Laisser vide ou 0 pour garder le même VMID.",
       "engine": "Moteur de réplication",
@@ -4300,7 +4305,13 @@
       "disksRolledBack": "disque(s) RBD restauré(s)",
       "jobsResumed": "job(s) de réplication repris",
       "testActiveBanner": "Un test de bascule démarré le {date} attend son nettoyage. Des VM de test peuvent encore tourner sur le site de secours.",
-      "testConflict": "Un test de bascule est déjà actif pour ce plan. Nettoyez-le d'abord."
+      "testConflict": "Un test de bascule est déjà actif pour ce plan. Nettoyez-le d'abord.",
+      "restorePoint": "Point de restauration",
+      "restorePointLatest": "Le plus récent (défaut)",
+      "restorePointsHelp": "Chaque VM démarrera depuis le snapshot répliqué sélectionné.",
+      "restorePointsNone": "Aucun point de restauration",
+      "restorePointsLoadFailed": "Les points de restauration n'ont pas pu être chargés, le dernier état répliqué sera utilisé.",
+      "restorePointRebaseWarning": "Basculer vers un point de restauration plus ancien supprime définitivement les snapshots DR plus récents de cette VM."
     },
     "emergencyDR": {
       "title": "DR d'urgence",

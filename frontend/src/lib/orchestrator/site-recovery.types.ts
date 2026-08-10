@@ -42,6 +42,8 @@ export interface ReplicationJob {
   error_message?: string
   created_at: string
   updated_at: string
+  snapshot_keep_source?: number
+  snapshot_keep_target?: number
 }
 
 export interface CreateReplicationJobRequest {
@@ -60,6 +62,8 @@ export interface CreateReplicationJobRequest {
   vmid_prefix?: number
   install_pv?: boolean
   network_mapping: Record<string, string>
+  snapshot_keep_source?: number
+  snapshot_keep_target?: number
 }
 
 export interface UpdateReplicationJobRequest {
@@ -71,6 +75,8 @@ export interface UpdateReplicationJobRequest {
   rate_limit_mbps?: number
   bandwidth_windows?: BandwidthWindow[]
   network_mapping?: Record<string, string>
+  snapshot_keep_source?: number
+  snapshot_keep_target?: number
 }
 
 export interface ReplicationJobLog {
@@ -122,6 +128,32 @@ export interface UpdateRecoveryPlanRequest {
   name?: string
   description?: string
   vms?: Array<{ vm_id: number; tier: 1 | 2 | 3; boot_order: number }>
+}
+
+// ============================================
+// Restore Points
+// ============================================
+
+export interface RestorePoint {
+  snapshot: string
+  created_ts: number
+  created_iso: string
+}
+
+export interface VMRestorePoints {
+  vm_id: number
+  vm_name: string
+  target_vmid: number
+  job_id?: string
+  disk_count: number
+  restore_points: RestorePoint[]
+  error?: string
+}
+
+export interface PlanRestorePoints {
+  plan_id: string
+  target_cluster: string
+  vms: VMRestorePoints[]
 }
 
 // ============================================

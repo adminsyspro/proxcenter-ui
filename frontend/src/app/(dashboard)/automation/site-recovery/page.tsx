@@ -85,6 +85,14 @@ export default function SiteRecoveryPage() {
   const { data: connectionsData } = useSWR<{ data: any[] }>('/api/v1/connections?type=pve', fetcher)
   const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
 
+  // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
+  const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading } = useSWR(
+    failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback'
+      ? `/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/restore-points`
+      : null,
+    (url: string) => fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+  )
+
   // Page title
   useEffect(() => {
     setPageInfo(t('siteRecovery.title'), t('siteRecovery.subtitle'), 'ri-shield-star-line')
@@ -257,13 +265,15 @@ export default function SiteRecoveryPage() {
     }
   }, [plans])
 
-  const handleFailoverConfirm = useCallback(async () => {
+  const handleFailoverConfirm = useCallback(async (options?: { restorePoints?: Record<number, string> }) => {
     if (!failoverDialog.planId) return
     const endpoint = failoverDialog.type === 'test' ? 'test-failover' : failoverDialog.type
 
     const body = failoverDialog.type === 'test'
-      ? JSON.stringify({ network_isolated: true })
-      : undefined
+      ? JSON.stringify({ network_isolated: true, ...(options?.restorePoints ? { restore_points: options.restorePoints } : {}) })
+      : failoverDialog.type === 'failover'
+        ? (options?.restorePoints ? JSON.stringify({ restore_points: options.restorePoints }) : undefined)
+        : undefined
 
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/${endpoint}`, {
@@ -514,6 +524,9 @@ export default function SiteRecoveryPage() {
           targetConnId={failoverPlan?.target_cluster}
           connections={connections}
           vmNameMap={failoverPlan ? vmNamesByConn[failoverPlan.source_cluster] : undefined}
+          restorePoints={restorePoints}
+          restorePointsLoading={restorePointsLoading}
+          restorePointsError={!!restorePointsError}
         />
       </Box>
     </EnterpriseGuard>

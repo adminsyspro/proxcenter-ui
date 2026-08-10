@@ -4218,6 +4218,11 @@
       "sshFailed": "Direct SSH connection failed",
       "sshRequirement": "Passwordless SSH must be configured between source and target clusters. Ensure root can SSH from source to target without a password prompt.",
       "sshRetry": "Retry",
+      "snapshotRetention": "Snapshot retention",
+      "snapshotRetentionHelp": "Mirror snapshots kept per disk after each sync (minimum 2).",
+      "retentionSource": "Keep on source",
+      "retentionTarget": "Keep on target (DR)",
+      "retentionTargetHelp": "More snapshots on the DR side means more restore points, at the cost of Ceph capacity.",
       "vmidPrefix": "VMID Prefix",
       "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID.",
       "engine": "Replication Engine",
@@ -4300,7 +4305,13 @@
       "disksRolledBack": "RBD disk(s) rolled back",
       "jobsResumed": "replication job(s) resumed",
       "testActiveBanner": "A test failover started {date} is awaiting cleanup. Test VMs may still be running on the DR site.",
-      "testConflict": "A test failover is already active for this plan. Clean it up first."
+      "testConflict": "A test failover is already active for this plan. Clean it up first.",
+      "restorePoint": "Restore point",
+      "restorePointLatest": "Latest (default)",
+      "restorePointsHelp": "Each VM will boot from the selected replicated snapshot.",
+      "restorePointsNone": "No restore points",
+      "restorePointsLoadFailed": "Restore points could not be loaded, the latest replicated state will be used.",
+      "restorePointRebaseWarning": "Failing over to an older restore point permanently deletes the newer DR snapshots of that VM."
     },
     "emergencyDR": {
       "title": "Emergency DR",

@@ -6,7 +6,7 @@ import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
 
@@ -28,7 +28,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const response = await client.executeFailover(id)
+    const body = await request.json().catch(() => undefined)
+    const response = await client.executeFailover(id, body)
 
     return NextResponse.json(response.data)
   } catch (e: any) {

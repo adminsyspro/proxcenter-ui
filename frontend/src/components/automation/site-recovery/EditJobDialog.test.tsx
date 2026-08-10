@@ -62,6 +62,8 @@ function renderDialog(overrides: Partial<ReplicationJob> = {}) {
 // window exists, so role alone identifies it.
 const rateLimit = () => screen.getAllByRole('spinbutton')[0] as HTMLInputElement
 const save = () => screen.getByRole('button', { name: 'Save changes' })
+const retentionSource = () => screen.getByLabelText('Keep on source') as HTMLInputElement
+const retentionTarget = () => screen.getByLabelText('Keep on target (DR)') as HTMLInputElement
 
 describe('EditJobDialog rate limit', () => {
   it('shows the job rate limit', () => {
@@ -93,5 +95,35 @@ describe('EditJobDialog rate limit', () => {
     await userEvent.click(save())
     expect(rateLimit().value).toBe('0')
     expect(onSubmit).toHaveBeenCalledWith('job-1', expect.objectContaining({ rate_limit_mbps: 0 }))
+  })
+})
+
+describe('EditJobDialog snapshot retention (issue #664)', () => {
+  it('prefills 3 when the job has no retention fields (old backend)', () => {
+    renderDialog({ snapshot_keep_source: undefined, snapshot_keep_target: undefined })
+    expect(retentionSource().value).toBe('3')
+    expect(retentionTarget().value).toBe('3')
+  })
+
+  it('prefills the job effective retention values when present', () => {
+    renderDialog({ snapshot_keep_source: 5, snapshot_keep_target: 10 })
+    expect(retentionSource().value).toBe('5')
+    expect(retentionTarget().value).toBe('10')
+  })
+
+  it('submits edited retention values', async () => {
+    const { onSubmit } = renderDialog({ snapshot_keep_source: 3, snapshot_keep_target: 3 })
+
+    await userEvent.clear(retentionSource())
+    await userEvent.type(retentionSource(), '7')
+    await userEvent.clear(retentionTarget())
+    await userEvent.type(retentionTarget(), '20')
+
+    await userEvent.click(save())
+
+    expect(onSubmit).toHaveBeenCalledWith('job-1', expect.objectContaining({
+      snapshot_keep_source: 7,
+      snapshot_keep_target: 20,
+    }))
   })
 })

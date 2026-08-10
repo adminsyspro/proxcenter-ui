@@ -73,6 +73,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [vmidPrefix, setVmidPrefix] = useState<number>(0)
   const [installPv, setInstallPv] = useState(true)
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
+  const [keepSource, setKeepSource] = useState(3)
+  const [keepTarget, setKeepTarget] = useState(3)
 
   // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
   const { data: cephVMsData } = useSWR(
@@ -280,6 +282,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       vmid_prefix: vmidPrefix || undefined,
       install_pv: installPv || undefined,
       network_mapping: {},
+      snapshot_keep_source: keepSource,
+      snapshot_keep_target: keepTarget,
     }
     if (scheduleValue.mode === 'rpo') {
       onSubmit({ ...base, rpo_target: scheduleValue.rpoTargetSeconds })
@@ -310,6 +314,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setVmidPrefix(0)
     setInstallPv(true)
     setBandwidthWindows([])
+    setKeepSource(3)
+    setKeepTarget(3)
     setVmSearch('')
     setSshCheck('idle')
     setSshError('')
@@ -714,6 +720,43 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           <ScheduleBuilder value={scheduleValue} onChange={setScheduleValue} />
 
           <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={0} />
+
+          {/* Snapshot retention */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.snapshotRetention')}</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              {t('siteRecovery.createJob.snapshotRetentionHelp')}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <NumericTextField
+                  type='number'
+                  value={keepSource}
+                  onChange={setKeepSource}
+                  fallback={3}
+                  min={2}
+                  max={500}
+                  size='small'
+                  fullWidth
+                  label={t('siteRecovery.createJob.retentionSource')}
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <NumericTextField
+                  type='number'
+                  value={keepTarget}
+                  onChange={setKeepTarget}
+                  fallback={3}
+                  min={2}
+                  max={500}
+                  size='small'
+                  fullWidth
+                  label={t('siteRecovery.createJob.retentionTarget')}
+                  helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+                />
+              </Box>
+            </Box>
+          </Box>
 
           {/* VMID Prefix */}
           <Box>

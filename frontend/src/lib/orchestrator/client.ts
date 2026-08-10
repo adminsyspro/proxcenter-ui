@@ -490,6 +490,10 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any>(`/replication/plans/${id}`)
   }
 
+  getPlanRestorePoints(planId: string) {
+    return this.get<any>(`/replication/plans/${planId}/restore-points`)
+  }
+
   createRecoveryPlan(body: any) {
     return this.post<any>('/replication/plans', body)
   }
@@ -502,12 +506,12 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.delete<{ status: string }>(`/replication/plans/${id}`)
   }
 
-  testFailover(planId: string, body?: { network_isolated?: boolean }) {
+  testFailover(planId: string, body?: { network_isolated?: boolean; restore_points?: Record<number, string> }) {
     return this.post<any>(`/replication/plans/${planId}/test-failover`, body)
   }
 
-  executeFailover(planId: string) {
-    return this.post<any>(`/replication/plans/${planId}/failover`)
+  executeFailover(planId: string, body?: { restore_points?: Record<number, string> }) {
+    return this.post<any>(`/replication/plans/${planId}/failover`, body)
   }
 
   executeFailback(planId: string) {

@@ -4180,6 +4180,11 @@
       "sshFailed": "Direct SSH connection fehlgeschlagen",
       "sshRequirement": "Passwortloses SSH muss zwischen Quell- und Ziel-Cluster konfiguriert sein. Stellen Sie sicher, dass Root sich ohne Passwortabfrage per SSH vom Quell- zum Ziel-Cluster verbinden kann.",
       "sshRetry": "Wiederholen",
+      "snapshotRetention": "Snapshot-Aufbewahrung",
+      "snapshotRetentionHelp": "Anzahl der pro Datenträger nach jeder Synchronisierung aufbewahrten Spiegel-Snapshots (mindestens 2).",
+      "retentionSource": "Aufbewahren auf der Quelle",
+      "retentionTarget": "Aufbewahren auf dem Ziel (DR)",
+      "retentionTargetHelp": "Mehr Snapshots auf der DR-Seite bedeuten mehr Wiederherstellungspunkte, kosten aber mehr Ceph-Kapazität.",
       "vmidPrefix": "VMID-Präfix",
       "vmidPrefixHelp": "Präfix für VM-IDs auf dem Ziel-Cluster (z.B. Präfix 9 + VM 100 = 9100). Leer oder 0 lassen, um die gleiche VMID beizubehalten.",
       "engine": "Replikation Engine",
@@ -4262,7 +4267,13 @@
       "disksRolledBack": "RBD-Festplatte(n) zurückgesetzt",
       "jobsResumed": "Replikation job(s) resumed",
       "testActiveBanner": "Ein am {date} gestarteter Test-Failover wartet auf die Bereinigung. Test-VMs könnten noch auf dem DR-Standort laufen.",
-      "testConflict": "Für diesen Plan ist bereits ein Test-Failover aktiv. Bereinigen Sie ihn zuerst."
+      "testConflict": "Für diesen Plan ist bereits ein Test-Failover aktiv. Bereinigen Sie ihn zuerst.",
+      "restorePoint": "Wiederherstellungspunkt",
+      "restorePointLatest": "Neuester (Standard)",
+      "restorePointsHelp": "Jede VM startet vom ausgewählten replizierten Snapshot.",
+      "restorePointsNone": "Keine Wiederherstellungspunkte",
+      "restorePointsLoadFailed": "Wiederherstellungspunkte konnten nicht geladen werden, der neueste replizierte Zustand wird verwendet.",
+      "restorePointRebaseWarning": "Ein Failover auf einen älteren Wiederherstellungspunkt löscht dauerhaft die neueren DR-Snapshots dieser VM."
     },
     "emergencyDR": {
       "title": "Notfall-DR",

@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, LinearProgress, Stack, TextField, Tooltip, Typography
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  IconButton, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 
-import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult } from '@/lib/orchestrator/site-recovery.types'
+import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
 // ── Main Component ─────────────────────────────────────────────────────
 
@@ -17,7 +17,7 @@ interface FailoverDialogProps {
   onClose: () => void
   plan: RecoveryPlan | null
   type: 'test' | 'failover' | 'failback'
-  onConfirm: () => void
+  onConfirm: (options?: { restorePoints?: Record<number, string> }) => void
   onCleanup?: () => void
   cleanupLoading?: boolean
   cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
@@ -26,16 +26,23 @@ interface FailoverDialogProps {
   targetConnId?: string
   connections?: { id: string; name: string }[]
   vmNameMap?: Record<number, string>
+  restorePoints?: PlanRestorePoints | null
+  restorePointsLoading?: boolean
+  restorePointsError?: boolean
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap, restorePoints, restorePointsLoading, restorePointsError }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
+  const [selectedPoints, setSelectedPoints] = useState<Record<number, string>>({})
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
 
   useEffect(() => {
-    if (!open) setConfirmText('')
+    if (!open) {
+      setConfirmText('')
+      setSelectedPoints({})
+    }
   }, [open])
 
   if (!plan) return null
@@ -83,6 +90,10 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
         <Stack spacing={2}>
           <Alert severity={config.severity}>{config.description}</Alert>
 
+          {restorePointsError && !execution && type !== 'failback' && (
+            <Alert severity='info'>{t('siteRecovery.failover.restorePointsLoadFailed')}</Alert>
+          )}
+
           {testActiveUnresolved && (
             <Alert severity='warning'>
               {t('siteRecovery.failover.testActiveBanner', {
@@ -109,6 +120,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
               const resultsByVMID: Record<number, RecoveryVMResult> = {}
               for (const r of (execution?.vm_results || [])) resultsByVMID[r.vm_id] = r
               const sortedVMs = [...plan.vms].sort((a, b) => (a.boot_order || 0) - (b.boot_order || 0))
+              const showRestoreSelector = !execution && type !== 'failback'
               return (
                 <Stack spacing={0.5} sx={{ maxHeight: 260, overflow: 'auto' }}>
                   {sortedVMs.map(vm => {
@@ -146,6 +158,43 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                         <Typography variant='caption' sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.65rem' }}>
                           {vm.vm_id}
                         </Typography>
+                        {showRestoreSelector && !restorePointsError && (
+                          restorePointsLoading ? (
+                            <CircularProgress size={14} />
+                          ) : (() => {
+                            const vmRestore = restorePoints?.vms.find(v => v.vm_id === vm.vm_id)
+                            if (!vmRestore || vmRestore.error || vmRestore.restore_points.length === 0) {
+                              return (
+                                <Typography variant='caption' sx={{ color: 'text.disabled', fontSize: '0.65rem', minWidth: 170, textAlign: 'right' }}>
+                                  {t('siteRecovery.failover.restorePointsNone')}
+                                </Typography>
+                              )
+                            }
+                            return (
+                              <Select
+                                size='small'
+                                value={selectedPoints[vm.vm_id] || ''}
+                                onChange={e => {
+                                  const val = e.target.value
+                                  setSelectedPoints(prev => {
+                                    const next = { ...prev }
+                                    if (val) next[vm.vm_id] = val
+                                    else delete next[vm.vm_id]
+                                    return next
+                                  })
+                                }}
+                                sx={{ minWidth: 170, fontSize: '0.75rem' }}
+                              >
+                                <MenuItem value=''>{t('siteRecovery.failover.restorePointLatest')}</MenuItem>
+                                {vmRestore.restore_points.map(rp => (
+                                  <MenuItem key={rp.snapshot} value={rp.snapshot}>
+                                    {new Date(rp.created_iso).toLocaleString()}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            )
+                          })()
+                        )}
                         {canConsole && (
                           <Tooltip title={t('siteRecovery.failover.openConsole')} arrow>
                             <IconButton
@@ -171,6 +220,10 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
               )
             })()}
           </Box>
+
+          {type === 'failover' && Object.keys(selectedPoints).length > 0 && (
+            <Alert severity='warning'>{t('siteRecovery.failover.restorePointRebaseWarning')}</Alert>
+          )}
 
           {/* Confirm field for destructive operations */}
           {isDestructive && !isExecuting && (
@@ -273,7 +326,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             <Button
               variant='contained'
               color={config.color}
-              onClick={onConfirm}
+              onClick={() => onConfirm(Object.keys(selectedPoints).length ? { restorePoints: selectedPoints } : undefined)}
               disabled={!canConfirm}
               startIcon={<i className={config.icon} />}
             >

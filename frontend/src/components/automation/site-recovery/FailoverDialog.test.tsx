@@ -13,8 +13,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
-import type { RecoveryPlan, RecoveryExecution } from '@/lib/orchestrator/site-recovery.types'
+import { renderWithProviders, screen, userEvent, fireEvent } from '@/__tests__/setup/renderWithProviders'
+import type { RecoveryPlan, RecoveryExecution, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
 import FailoverDialog from './FailoverDialog'
 
@@ -45,6 +45,26 @@ function execution(overrides: Partial<RecoveryExecution> = {}): RecoveryExecutio
     status: 'completed',
     started_at: '2026-01-01T00:00:00Z',
     vm_results: [],
+    ...overrides,
+  }
+}
+
+function restorePoints(overrides: Partial<PlanRestorePoints> = {}): PlanRestorePoints {
+  return {
+    plan_id: 'plan-1',
+    target_cluster: 'dst',
+    vms: [
+      {
+        vm_id: 100,
+        vm_name: 'web-01',
+        target_vmid: 9100,
+        disk_count: 1,
+        restore_points: [
+          { snapshot: 'snap-2', created_ts: 2, created_iso: '2026-06-15T12:00:00Z' },
+          { snapshot: 'snap-1', created_ts: 1, created_iso: '2026-06-10T12:00:00Z' },
+        ],
+      },
+    ],
     ...overrides,
   }
 }
@@ -100,5 +120,56 @@ describe('FailoverDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Test Failover' })).toBeDisabled()
     expect(screen.getByText(/awaiting cleanup/)).toBeInTheDocument()
+  })
+})
+
+describe('FailoverDialog restore-point selection (issue #664)', () => {
+  it('renders a restore-point selector per VM, defaulting to Latest', () => {
+    renderDialog({ type: 'test', restorePoints: restorePoints() })
+
+    const select = screen.getByRole('combobox')
+    expect(select).toHaveTextContent('Latest (default)')
+  })
+
+  it('shows a muted caption instead of a selector when a VM has no restore points', () => {
+    renderDialog({
+      type: 'test',
+      restorePoints: restorePoints({ vms: [{ vm_id: 100, vm_name: 'web-01', target_vmid: 9100, disk_count: 1, restore_points: [] }] }),
+    })
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText('No restore points')).toBeInTheDocument()
+  })
+
+  it('sends onConfirm only the non-latest selection', async () => {
+    const { onConfirm } = renderDialog({
+      type: 'failover',
+      restorePoints: restorePoints(),
+    })
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    const options = await screen.findAllByRole('option')
+    // options[0] is "Latest (default)"; options[1] is the newest restore point (snap-2).
+    await userEvent.click(options[1])
+
+    await userEvent.type(screen.getByPlaceholderText('Prod DR'), 'Prod DR')
+    await userEvent.click(screen.getByRole('button', { name: 'Execute Failover' }))
+
+    expect(onConfirm).toHaveBeenCalledWith({ restorePoints: { 100: 'snap-2' } })
+  })
+
+  it('falls back to onConfirm() with no options when Latest stays selected', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', restorePoints: restorePoints() })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test Failover' }))
+
+    expect(onConfirm).toHaveBeenCalledWith(undefined)
+  })
+
+  it('hides selectors and shows the info alert in degraded mode (restore points failed to load)', () => {
+    renderDialog({ type: 'test', restorePointsError: true })
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText(/Restore points could not be loaded/)).toBeInTheDocument()
   })
 })

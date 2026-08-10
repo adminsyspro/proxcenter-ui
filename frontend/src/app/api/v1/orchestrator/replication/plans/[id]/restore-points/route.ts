@@ -6,9 +6,9 @@ import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE, "global", "*")
+    const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
 
     if (denied) return denied
 
@@ -28,18 +28,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    let body: { network_isolated?: boolean; restore_points?: Record<number, string> } | undefined
-    try { body = await request.json() } catch { /* empty body is fine */ }
-    const response = await client.testFailover(id, body)
+    const response = await client.getPlanRestorePoints(id)
 
     return NextResponse.json(response.data)
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error executing test failover:", e)
+      console.error("Error fetching restore points:", e)
     }
 
     return NextResponse.json(
-      { error: e?.message || "Failed to execute test failover" },
+      { error: e?.message || "Failed to fetch restore points" },
       { status: 500 }
     )
   }

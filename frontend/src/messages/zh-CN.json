@@ -4179,6 +4179,11 @@
       "sshFailed": "直连 SSH 连接失败",
       "sshRequirement": "必须在源集群和目标集群之间配置免密 SSH。确保 root 用户可以从源免密 SSH 连接到目标。",
       "sshRetry": "重试",
+      "snapshotRetention": "快照保留",
+      "snapshotRetentionHelp": "每次同步后每个磁盘保留的镜像快照数量（最少 2 个）。",
+      "retentionSource": "源端保留数量",
+      "retentionTarget": "目标端（灾备）保留数量",
+      "retentionTargetHelp": "灾备端保留更多快照意味着更多恢复点，但会占用更多 Ceph 容量。",
       "vmidPrefix": "VMID 前缀",
       "vmidPrefixHelp": "添加到目标集群 VM ID 的前缀（例如前缀 9 + VM 100 = 9100）。留空或填 0 以保持相同 VMID。",
       "engine": "复制引擎",
@@ -4261,7 +4266,13 @@
       "disksRolledBack": "RBD 磁盘已回滚",
       "jobsResumed": "复制任务已恢复",
       "testActiveBanner": "于 {date} 启动的测试故障转移正在等待清理。测试 VM 可能仍在灾备站点上运行。",
-      "testConflict": "此计划已有一个测试故障转移正在进行。请先清理它。"
+      "testConflict": "此计划已有一个测试故障转移正在进行。请先清理它。",
+      "restorePoint": "恢复点",
+      "restorePointLatest": "最新（默认）",
+      "restorePointsHelp": "每个 VM 将从所选的复制快照启动。",
+      "restorePointsNone": "无恢复点",
+      "restorePointsLoadFailed": "无法加载恢复点，将使用最新的复制状态。",
+      "restorePointRebaseWarning": "故障转移到更早的恢复点将永久删除该 VM 更新的灾备快照。"
     },
     "emergencyDR": {
       "title": "紧急灾难恢复",

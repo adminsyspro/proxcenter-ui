@@ -4180,6 +4180,7 @@
       "deletePlan": "Supprimer le plan de reprise",
       "deletePlanConfirm": "Êtes-vous sûr de vouloir supprimer ce plan de reprise ? Cette action est irréversible.",
       "cleanupPending": "Nettoyage en attente",
+      "testRunning": "Test failover en cours",
       "testActiveTooltip": "Un test de bascule est actif sur le site de secours. Lancez le nettoyage avant de démarrer un nouveau test."
     },
     "rpoTargetLabel": "RPO cible",
@@ -4308,6 +4309,7 @@
       "testConflict": "Un test de bascule est déjà actif pour ce plan. Nettoyez-le d'abord.",
       "restorePoint": "Point de restauration",
       "restorePointLatest": "Le plus récent (défaut)",
+      "restorePointChoose": "Choisir le point de rétention",
       "restorePointsHelp": "Chaque VM démarrera depuis le snapshot répliqué sélectionné.",
       "restorePointsNone": "Aucun point de restauration",
       "restorePointsLoadFailed": "Les points de restauration n'ont pas pu être chargés, le dernier état répliqué sera utilisé.",

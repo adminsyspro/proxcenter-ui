@@ -86,12 +86,20 @@ export default function SiteRecoveryPage() {
   const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
 
   // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
-  const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading } = useSWR(
+  const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading, mutate: mutateRestorePoints } = useSWR(
     failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback'
       ? `/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/restore-points`
       : null,
     (url: string) => fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
   )
+
+  // Drop the cached list on every dialog open: RBD snapshots move with each
+  // sync, and a reopened dialog must never offer points from a previous look.
+  useEffect(() => {
+    if (failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback') {
+      mutateRestorePoints(undefined, { revalidate: true })
+    }
+  }, [failoverDialog.open, failoverDialog.planId, failoverDialog.type, mutateRestorePoints])
 
   // Page title
   useEffect(() => {

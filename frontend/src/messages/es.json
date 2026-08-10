@@ -4180,6 +4180,7 @@
       "deletePlan": "Eliminar plan de recuperación",
       "deletePlanConfirm": "¿Seguro que quieres eliminar este plan de recuperación? Esta acción no se puede deshacer.",
       "cleanupPending": "Limpieza pendiente",
+      "testRunning": "Failover de prueba en curso",
       "testActiveTooltip": "Hay un failover de prueba activo en el sitio DR. Ejecuta la limpieza antes de iniciar una nueva prueba."
     },
     "rpoTargetLabel": "RPO objetivo",
@@ -4308,6 +4309,7 @@
       "testConflict": "Ya hay un failover de prueba activo para este plan. Límpialo primero.",
       "restorePoint": "Punto de restauración",
       "restorePointLatest": "Más reciente (predeterminado)",
+      "restorePointChoose": "Elegir el punto de restauración",
       "restorePointsHelp": "Cada VM arrancará desde el snapshot replicado seleccionado.",
       "restorePointsNone": "Sin puntos de restauración",
       "restorePointsLoadFailed": "No se pudieron cargar los puntos de restauración, se usará el último estado replicado.",

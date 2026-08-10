@@ -152,11 +152,9 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                           variant='outlined'
                           sx={{ height: 18, fontSize: '0.6rem', minWidth: 32 }}
                         />
+                        <i className='ri-computer-line' style={{ fontSize: 14, opacity: 0.65 }} />
                         <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {vmNameMap?.[vm.vm_id] || (vm.vm_name && !vm.vm_name.startsWith('VM ') ? vm.vm_name : `VM ${vm.vm_id}`)}
-                        </Typography>
-                        <Typography variant='caption' sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                          {vm.vm_id}
                         </Typography>
                         {showRestoreSelector && !restorePointsError && (
                           restorePointsLoading ? (
@@ -171,28 +169,34 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                               )
                             }
                             return (
-                              <Select
-                                size='small'
-                                displayEmpty
-                                value={selectedPoints[vm.vm_id] || ''}
-                                onChange={e => {
-                                  const val = e.target.value
-                                  setSelectedPoints(prev => {
-                                    const next = { ...prev }
-                                    if (val) next[vm.vm_id] = val
-                                    else delete next[vm.vm_id]
-                                    return next
-                                  })
-                                }}
-                                sx={{ minWidth: 170, fontSize: '0.75rem' }}
-                              >
-                                <MenuItem value=''>{t('siteRecovery.failover.restorePointLatest')}</MenuItem>
-                                {vmRestore.restore_points.map(rp => (
-                                  <MenuItem key={rp.snapshot} value={rp.snapshot}>
-                                    {new Date(rp.created_iso).toLocaleString()}
-                                  </MenuItem>
-                                ))}
-                              </Select>
+                              <>
+                                <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                                  {t('siteRecovery.failover.restorePointChoose')}
+                                </Typography>
+                                <Select
+                                  size='small'
+                                  displayEmpty
+                                  value={selectedPoints[vm.vm_id] || ''}
+                                  onChange={e => {
+                                    const val = e.target.value
+                                    setSelectedPoints(prev => {
+                                      const next = { ...prev }
+                                      if (val) next[vm.vm_id] = val
+                                      else delete next[vm.vm_id]
+                                      return next
+                                    })
+                                  }}
+                                  sx={{ minWidth: 170, fontSize: '0.75rem' }}
+                                >
+                                  <MenuItem value=''>{t('siteRecovery.failover.restorePointLatest')}</MenuItem>
+                                  {vmRestore.restore_points.map(rp => (
+                                    <MenuItem key={rp.snapshot} value={rp.snapshot}>
+                                      <i className='ri-camera-line' style={{ fontSize: 13, marginRight: 6, opacity: 0.7 }} />
+                                      {new Date(rp.created_iso).toLocaleString()}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </>
                             )
                           })()
                         )}

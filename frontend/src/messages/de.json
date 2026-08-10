@@ -4142,6 +4142,7 @@
       "deletePlan": "Wiederherstellungsplan löschen",
       "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
       "cleanupPending": "Bereinigung ausstehend",
+      "testRunning": "Test-Failover läuft",
       "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten."
     },
     "rpoTargetLabel": "RPO-Ziel",
@@ -4270,6 +4271,7 @@
       "testConflict": "Für diesen Plan ist bereits ein Test-Failover aktiv. Bereinigen Sie ihn zuerst.",
       "restorePoint": "Wiederherstellungspunkt",
       "restorePointLatest": "Neuester (Standard)",
+      "restorePointChoose": "Wiederherstellungspunkt wählen",
       "restorePointsHelp": "Jede VM startet vom ausgewählten replizierten Snapshot.",
       "restorePointsNone": "Keine Wiederherstellungspunkte",
       "restorePointsLoadFailed": "Wiederherstellungspunkte konnten nicht geladen werden, der neueste replizierte Zustand wird verwendet.",

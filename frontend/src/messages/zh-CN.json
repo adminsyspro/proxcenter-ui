@@ -4141,6 +4141,7 @@
       "deletePlan": "删除恢复计划",
       "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。",
       "cleanupPending": "待清理",
+      "testRunning": "测试故障转移进行中",
       "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。"
     },
     "rpoTargetLabel": "RPO 目标",
@@ -4269,6 +4270,7 @@
       "testConflict": "此计划已有一个测试故障转移正在进行。请先清理它。",
       "restorePoint": "恢复点",
       "restorePointLatest": "最新（默认）",
+      "restorePointChoose": "选择恢复点",
       "restorePointsHelp": "每个 VM 将从所选的复制快照启动。",
       "restorePointsNone": "无恢复点",
       "restorePointsLoadFailed": "无法加载恢复点，将使用最新的复制状态。",

@@ -96,6 +96,18 @@ describe('RecoveryPlansTab — cleanup pending indicators', () => {
     expect(onCleanupTest).toHaveBeenCalledWith('plan-1')
   })
 
+  it('shows the "Test failover in progress" chip and no Cleanup button while the test is still executing', async () => {
+    renderTab([plan({ active_test_execution_id: 'exec-1', status: 'executing' })])
+
+    expect(screen.getByText('Test failover in progress')).toBeInTheDocument()
+    expect(screen.queryByText('Cleanup pending')).not.toBeInTheDocument()
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Test Failover' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Cleanup test' })).not.toBeInTheDocument()
+  })
+
   it('shows no chip, an enabled Test Failover button and no Cleanup button when no test is active', async () => {
     renderTab([plan({ active_test_execution_id: null })])
 

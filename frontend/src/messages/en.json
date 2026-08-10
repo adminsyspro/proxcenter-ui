@@ -4180,6 +4180,7 @@
       "deletePlan": "Delete Recovery Plan",
       "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone.",
       "cleanupPending": "Cleanup pending",
+      "testRunning": "Test failover in progress",
       "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test."
     },
     "rpoTargetLabel": "RPO target",
@@ -4308,6 +4309,7 @@
       "testConflict": "A test failover is already active for this plan. Clean it up first.",
       "restorePoint": "Restore point",
       "restorePointLatest": "Latest (default)",
+      "restorePointChoose": "Choose the restore point",
       "restorePointsHelp": "Each VM will boot from the selected replicated snapshot.",
       "restorePointsNone": "No restore points",
       "restorePointsLoadFailed": "Restore points could not be loaded, the latest replicated state will be used.",

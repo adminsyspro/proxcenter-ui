@@ -110,13 +110,21 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
         )}
       </Box>
 
-      {/* Cleanup pending warning */}
+      {/* Active test: while the plan is executing the test is still running;
+          once it finishes, active_test_execution_id alone means cleanup is due */}
       {plan.active_test_execution_id && (
         <Box sx={{ flex: '0 0 auto' }}>
-          <Chip size='small' color='warning' variant='outlined'
-            icon={<i className='ri-eraser-line' />}
-            label={t('siteRecovery.plans.cleanupPending')}
-            sx={{ height: 22, fontSize: '0.65rem' }} />
+          {plan.status === 'executing' ? (
+            <Chip size='small' color='info' variant='outlined'
+              icon={<i className='ri-test-tube-line' />}
+              label={t('siteRecovery.plans.testRunning')}
+              sx={{ height: 22, fontSize: '0.65rem' }} />
+          ) : (
+            <Chip size='small' color='warning' variant='outlined'
+              icon={<i className='ri-eraser-line' />}
+              label={t('siteRecovery.plans.cleanupPending')}
+              sx={{ height: 22, fontSize: '0.65rem' }} />
+          )}
         </Box>
       )}
 
@@ -347,7 +355,9 @@ export default function RecoveryPlansTab({
                   {t('siteRecovery.plans.actions')}
                 </Typography>
                 <Stack spacing={1}>
-                  {selected.active_test_execution_id && (
+                  {/* Cleanup only once the test finished — the orchestrator
+                      refuses it while the plan is still executing */}
+                  {selected.active_test_execution_id && selected.status !== 'executing' && (
                     <Button
                       variant='contained' size='small' color='warning' fullWidth
                       startIcon={<i className='ri-eraser-line' />}

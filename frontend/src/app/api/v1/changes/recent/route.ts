@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
-import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
+import { buildChangeVisibilityCtx, isChangeVisibleToTenant } from '@/lib/changes/visibility'
 
 export const runtime = 'nodejs'
 
@@ -17,35 +16,17 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const limit = Number.parseInt(searchParams.get('limit') || '10')
 
-    // Reachable connections = directly owned ∪ vDC-bound. Going through
-    // the helper instead of an inline prisma.connection.findMany so MSP
-    // tenants (who own no connections directly, only vDC bindings) get
-    // their changes feed populated.
-    const tenantConnectionIds = await getTenantConnectionIds()
     // Same multi-tenant tightening as /api/v1/changes — connection-level
-    // filter alone leaks neighbour activity on shared clusters.
-    const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
-    const vdcScope = maskingScope(infra)
+    // filtering alone leaks neighbour activity on shared clusters, and the
+    // change feed carries no pool field, so guest ownership (vDC pool
+    // VMIDs) is the mask. Shared logic with /changes.
+    const ctx = await buildChangeVisibilityCtx()
 
     const data = await orchestratorFetch<any>(`/changes/recent?limit=100`)
 
     if (data?.data && Array.isArray(data.data)) {
       data.data = data.data
-        .filter((c: any) => {
-          if (!c.connectionId) return infra.kind === 'provider'
-          // iaas: the LIST perimeter follows the vDC view context (narrowed
-          // connection set — missing key = deny). The union set only backs
-          // provider/msp and ownership verdicts elsewhere.
-          if (vdcScope) {
-            if (!vdcScope.connectionIds.has(c.connectionId)) return false
-          } else if (!tenantConnectionIds.has(c.connectionId)) return false
-          if (!vdcScope) return true
-          const allowedNodes = vdcScope.nodesByConnection.get(c.connectionId)
-          if (allowedNodes && c.node && !allowedNodes.has(c.node)) return false
-          const allowedPools = vdcScope.poolsByConnection.get(c.connectionId)
-          if (allowedPools && c.pool && !allowedPools.has(c.pool)) return false
-          return true
-        })
+        .filter((c: any) => isChangeVisibleToTenant(c, ctx))
         .slice(0, limit)
     }
 

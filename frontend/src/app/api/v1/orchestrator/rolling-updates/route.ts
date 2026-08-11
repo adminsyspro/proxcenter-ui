@@ -23,7 +23,8 @@ export async function GET(req: Request) {
     // connection set — missing key = deny). The union set only backs
     // provider/msp and ownership verdicts elsewhere.
     const tenantConnectionIds = await getTenantConnectionIds()
-    const vdcScope = maskingScope(await getTenantInfrastructureScope(await getCurrentTenantId()))
+    const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+    const vdcScope = maskingScope(infra)
     const perimeterConnectionIds = vdcScope ? vdcScope.connectionIds : tenantConnectionIds
 
     // Verify connection belongs to the caller's current view if specified
@@ -49,10 +50,14 @@ export async function GET(req: Request) {
       )
     }
 
-    // Filter results by the caller's current view
+    // Filter results by the caller's current view. Deny-by-default: a row
+    // with no connection_id is provider-only (never "no key = pass"), same
+    // rule as the jobs and changes feeds.
     const items = Array.isArray(data) ? data : (data?.data || data)
     if (Array.isArray(items)) {
-      const filtered = items.filter((ru: any) => !ru.connection_id || perimeterConnectionIds.has(ru.connection_id))
+      const filtered = items.filter((ru: any) =>
+        ru.connection_id ? perimeterConnectionIds.has(ru.connection_id) : infra.kind === "provider"
+      )
       return NextResponse.json({ data: filtered })
     }
 

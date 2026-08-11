@@ -2,18 +2,29 @@
  * Task 15 (security), Task 12 Step 5 verdict: DELETE /api/v1/orchestrator/alerts
  * with no connection_id wipes the orchestrator's ENTIRE active-alert set (the
  * Go orchestrator's clearAll has no tenant concept). A non-provider caller
- * must now be REQUIRED to pass a connection_id inside their own perimeter;
- * the provider keeps its unrestricted fleet-wide clear.
+ * must be REQUIRED to pass a connection_id inside their own perimeter; the
+ * provider keeps its unrestricted fleet-wide clear.
+ *
+ * Codex QA-delta review finding 3 tightened this further: even scoped to a
+ * connection, clearAll is connection-WIDE, so on a shared cluster a tenant
+ * admin wiped the neighbours' alerts. Non-provider callers now go through
+ * clearVisibleTenantAlerts (per-visible-alert deletes) and never reach the
+ * orchestrator's clearAll.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "@/__tests__/setup/route-test"
 
-const { checkPermissionMock, getCurrentTenantIdMock, tenantConnectionIdsMock, clearAllMock } = vi.hoisted(() => ({
+const { checkPermissionMock, getCurrentTenantIdMock, tenantConnectionIdsMock, clearAllMock, clearVisibleMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   getCurrentTenantIdMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
   clearAllMock: vi.fn(),
+  clearVisibleMock: vi.fn(),
+}))
+
+vi.mock("@/lib/alerts/clearVisible", () => ({
+  clearVisibleTenantAlerts: (...a: any[]) => clearVisibleMock(...a),
 }))
 
 vi.mock("@/lib/demo/demo-api", () => ({ demoResponse: () => null }))
@@ -46,6 +57,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
   clearAllMock.mockResolvedValue({ data: { status: "ok" } })
+  clearVisibleMock.mockResolvedValue(2)
 })
 
 describe("DELETE /api/v1/orchestrator/alerts — clear-all scoping", () => {
@@ -68,14 +80,16 @@ describe("DELETE /api/v1/orchestrator/alerts — clear-all scoping", () => {
     expect(clearAllMock).not.toHaveBeenCalled()
   })
 
-  it("clears alerts for a non-provider tenant whose connection_id is in their perimeter", async () => {
+  it("non-provider with an in-perimeter connection_id clears per VISIBLE alert, never via the orchestrator clearAll", async () => {
     getCurrentTenantIdMock.mockResolvedValue("tenant-a")
     tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
 
     const { DELETE } = await import("./route")
     const res = await callRoute(DELETE as any, { method: "DELETE", searchParams: { connection_id: "c1" } })
     expect(res.status).toBe(200)
-    expect(clearAllMock).toHaveBeenCalledWith("c1")
+    expect(clearVisibleMock).toHaveBeenCalledWith("c1")
+    expect(clearAllMock).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ cleared: 2 })
   })
 
   it("allows the provider to clear all alerts fleet-wide without a connection_id", async () => {

@@ -309,9 +309,11 @@ export async function GET(req: Request) {
     // Filter all jobs by tenant connections. Provider keeps the unfiltered
     // fleet view; every non-provider caller is deny-by-default: a job whose
     // metadata carries NONE of connectionId/sourceCluster/targetCluster is
-    // EXCLUDED (never "no key = pass"), and a job carrying one of those keys
-    // is kept only if it resolves (by id or by name) inside the perimeter
-    // built above.
+    // EXCLUDED (never "no key = pass"), and a job is kept only if EVERY
+    // connection ref it carries resolves (by id or by name) inside the
+    // perimeter built above — a multi-cluster job (replication, failover,
+    // cross-cluster migration) with one endpoint outside the perimeter would
+    // otherwise leak the foreign cluster's name and per-VM results.
     const tenantConnIds = new Set(connections.map((c: any) => c.id))
     const jobConnectionRefs = (j: any): string[] =>
       [j.metadata?.connectionId, j.metadata?.sourceCluster, j.metadata?.targetCluster].filter(Boolean)
@@ -322,7 +324,7 @@ export async function GET(req: Request) {
       : jobs.filter((j: any) => {
           const refs = jobConnectionRefs(j)
           if (refs.length === 0) return false
-          return refs.some(inPerimeter)
+          return refs.every(inPerimeter)
         })
 
     // Apply filters

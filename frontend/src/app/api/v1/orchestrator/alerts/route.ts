@@ -7,6 +7,7 @@ import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraSc
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 export const runtime = 'nodejs'
@@ -195,6 +196,15 @@ export async function DELETE(req: Request) {
       if (!tenantConnectionIds.has(connectionId)) {
         return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
       }
+    }
+
+    // Non-provider: the orchestrator's clearAll(connection) has no tenant
+    // concept — on a shared cluster it would wipe the neighbours' alerts
+    // too. Clear only the alerts this caller can actually see, one by one.
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      const cleared = await clearVisibleTenantAlerts(connectionId)
+
+      return NextResponse.json({ cleared })
     }
 
     const response = await alertsApi.clearAll(connectionId)

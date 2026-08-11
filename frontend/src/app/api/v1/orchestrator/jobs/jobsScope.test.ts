@@ -125,6 +125,58 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     expect(ids).not.toContain("ru-none")
   })
 
+  it("iaas: a multi-cluster job with one endpoint outside the perimeter is hidden entirely", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-a")
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: { connectionIds: new Set(["c1"]) },
+    })
+
+    // Site Recovery plan replicating from the tenant's cluster (c1) to a
+    // provider DR cluster outside their perimeter: with refs.some() the job
+    // leaked the foreign cluster's name and per-VM results.
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/replication/plans") && url.includes("/history")) {
+        return { ok: true, json: async () => ({ data: [{ id: "exec-1", type: "failover", status: "completed", started_at: "2026-01-01T00:00:00Z", vm_results: [] }] }) }
+      }
+      if (url.includes("/replication/plans")) {
+        return { ok: true, json: async () => ({ data: [{ id: "plan-1", name: "dr-plan", source_cluster: "c1", target_cluster: "c-provider-dr", last_failover: "2026-01-01T00:00:00Z" }] }) }
+      }
+      return { ok: true, json: async () => ({ data: [] }) }
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    expect(body.data.map((j: any) => j.id)).not.toContain("exec-1")
+  })
+
+  it("provider: the same multi-cluster job stays visible in the fleet view", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes("/replication/plans") && url.includes("/history")) {
+        return { ok: true, json: async () => ({ data: [{ id: "exec-1", type: "failover", status: "completed", started_at: "2026-01-01T00:00:00Z", vm_results: [] }] }) }
+      }
+      if (url.includes("/replication/plans")) {
+        return { ok: true, json: async () => ({ data: [{ id: "plan-1", name: "dr-plan", source_cluster: "c1", target_cluster: "c-provider-dr", last_failover: "2026-01-01T00:00:00Z" }] }) }
+      }
+      return { ok: true, json: async () => ({ data: [] }) }
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    expect(body.data.map((j: any) => j.id)).toContain("exec-1")
+  })
+
   it("msp: perimeter uses the owned-connection union (no vDC narrowing)", async () => {
     getCurrentTenantIdMock.mockResolvedValue("tenant-msp")
     tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))

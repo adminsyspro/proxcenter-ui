@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../../__tests__/setup/route-test"
 
-const { getInfraMock, orchestratorFetchMock, tenantConnectionIdsMock } = vi.hoisted(() => ({
+const { getInfraMock, orchestratorFetchMock, tenantConnectionIdsMock, vdcVmidsMock } = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   orchestratorFetchMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
+  vdcVmidsMock: vi.fn(),
 }))
 
 // Keep real maskingScope; only stub getTenantInfrastructureScope
@@ -23,22 +24,38 @@ vi.mock("@/lib/orchestrator/client", () => ({
   orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a),
 }))
 
+vi.mock("@/lib/alerts/vdcVmids", () => ({
+  getVdcVmidsByConnection: (...a: any[]) => vdcVmidsMock(...a),
+}))
+
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
 }))
 
-const CLUSTER_LESS = { id: "ev1", node: "n1", pool: null }
-const CONN_RECORD = { id: "ev2", connectionId: "c1", node: "n1", pool: "pool-a" }
+// Same contract as /api/v1/changes: no pool field on change records, guest
+// ownership (VMID in the vDC pools) is the mask for vDC tenants.
+const CLUSTER_LESS = { id: "ev1", node: "n1", resourceType: "vm", resourceId: "100" }
+const VM_OWNED = { id: "ev2", connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "100" }
+const VM_NEIGHBOUR = { id: "ev4", connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "999" }
+const NODE_EVENT = { id: "ev5", connectionId: "c1", node: "n1", resourceType: "node", resourceId: "n1" }
+
+const IAAS_SCOPE = {
+  connectionIds: new Set(["c1"]),
+  pbsConnectionIds: new Set<string>(),
+  nodesByConnection: new Map([["c1", new Set(["n1"])]]),
+  poolsByConnection: new Map([["c1", new Set(["pool-a"])]]),
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
-  orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, CONN_RECORD] })
+  vdcVmidsMock.mockResolvedValue(new Map([["c1", new Set(["100"])]]))
+  orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, VM_OWNED, VM_NEIGHBOUR, NODE_EVENT] })
 })
 
 describe("GET /api/v1/changes/recent scope routing", () => {
-  it("provider: cluster-less record is KEPT", async () => {
+  it("provider: every record is KEPT, including cluster-less ones", async () => {
     getInfraMock.mockResolvedValue({ kind: "provider" })
 
     const { GET } = await import("./route")
@@ -47,11 +64,10 @@ describe("GET /api/v1/changes/recent scope routing", () => {
 
     const body = await res.json()
     const ids = body.data.map((r: any) => r.id)
-    expect(ids).toContain("ev1")
-    expect(ids).toContain("ev2")
+    expect(ids).toEqual(["ev1", "ev2", "ev4", "ev5"])
   })
 
-  it("msp: cluster-less record is DROPPED, owned-connection record is KEPT (no masking)", async () => {
+  it("msp: cluster-less record is DROPPED, owned-connection records are KEPT (no guest masking)", async () => {
     getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["c1"]) })
 
     const { GET } = await import("./route")
@@ -60,18 +76,11 @@ describe("GET /api/v1/changes/recent scope routing", () => {
 
     const body = await res.json()
     const ids = body.data.map((r: any) => r.id)
-    expect(ids).not.toContain("ev1")
-    expect(ids).toContain("ev2")
+    expect(ids).toEqual(["ev2", "ev4", "ev5"])
   })
 
-  it("iaas: cluster-less record is DROPPED, connection record passes when node+pool are in scope", async () => {
-    const vdcScope = {
-      connectionIds: new Set(["c1"]),
-      pbsConnectionIds: new Set<string>(),
-      nodesByConnection: new Map([["c1", new Set(["n1"])]]),
-      poolsByConnection: new Map([["c1", new Set(["pool-a"])]]),
-    }
-    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+  it("iaas: only the vDC-owned guest record survives — neighbour VM and node/infra events are DROPPED", async () => {
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: IAAS_SCOPE })
 
     const { GET } = await import("./route")
     const res = await callRoute(GET, { method: "GET" })
@@ -79,43 +88,14 @@ describe("GET /api/v1/changes/recent scope routing", () => {
 
     const body = await res.json()
     const ids = body.data.map((r: any) => r.id)
-    expect(ids).not.toContain("ev1")
-    expect(ids).toContain("ev2")
-  })
-
-  it("iaas: drops a connection record whose node is outside the vDC scope", async () => {
-    const vdcScope = {
-      connectionIds: new Set(["c1"]),
-      pbsConnectionIds: new Set<string>(),
-      nodesByConnection: new Map([["c1", new Set(["n2"])]]),
-      poolsByConnection: new Map<string, Set<string>>(),
-    }
-    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
-
-    const { GET } = await import("./route")
-    const res = await callRoute(GET, { method: "GET" })
-    expect(res.status).toBe(200)
-
-    const body = await res.json()
-    const ids = body.data.map((r: any) => r.id)
-    expect(ids).not.toContain("ev1")
-    expect(ids).not.toContain("ev2")
+    expect(ids).toEqual(["ev2"])
   })
 
   it("iaas: excludes a record from a connection present in the tenant union but absent from the narrowed vDC scope", async () => {
-    // Union has both c1 and c2 (e.g. two vDCs on a shared cluster), but the
-    // current vDC view context only narrows to c1.
     tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
-    const CONN_RECORD_C2 = { id: "ev3", connectionId: "c2", node: "n1", pool: "pool-a" }
-    orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, CONN_RECORD, CONN_RECORD_C2] })
-
-    const vdcScope = {
-      connectionIds: new Set(["c1"]),
-      pbsConnectionIds: new Set<string>(),
-      nodesByConnection: new Map([["c1", new Set(["n1"])]]),
-      poolsByConnection: new Map([["c1", new Set(["pool-a"])]]),
-    }
-    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+    const VM_OTHER_VDC = { id: "ev3", connectionId: "c2", node: "n1", resourceType: "vm", resourceId: "100" }
+    orchestratorFetchMock.mockResolvedValue({ data: [VM_OWNED, VM_OTHER_VDC] })
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: IAAS_SCOPE })
 
     const { GET } = await import("./route")
     const res = await callRoute(GET, { method: "GET" })
@@ -123,8 +103,17 @@ describe("GET /api/v1/changes/recent scope routing", () => {
 
     const body = await res.json()
     const ids = body.data.map((r: any) => r.id)
-    expect(ids).not.toContain("ev1")
-    expect(ids).toContain("ev2")
-    expect(ids).not.toContain("ev3")
+    expect(ids).toEqual(["ev2"])
+  })
+
+  it("honors the limit param after filtering", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET", searchParams: { limit: "2" } })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    expect(body.data).toHaveLength(2)
   })
 })

@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { getTenantConnectionIds } from '@/lib/tenant'
+import { DEFAULT_TENANT_ID, getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,18 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
-    // If no specific connection, clear for each tenant connection individually
+    // Non-provider: the orchestrator's /alerts/clear is connection-wide and
+    // has no tenant concept — on a shared cluster it would wipe the
+    // neighbours' alerts too. Clear only the alerts this caller can
+    // actually see (vDC-context view, mirrors the GET list), one by one.
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      const cleared = await clearVisibleTenantAlerts(connectionId || undefined)
+
+      return NextResponse.json({ cleared })
+    }
+
+    // Provider: orchestrator-native per-connection clears.
     if (!connectionId) {
       const results = []
       for (const connId of tenantConnectionIds) {

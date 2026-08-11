@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
 
 import {
   Dialog,
@@ -222,7 +223,9 @@ export function MigrateVmDialog({
   const [haGroup, setHaGroup] = useState<string>('')
   const [haLoading, setHaLoading] = useState(false)
   const [haRemoving, setHaRemoving] = useState(false)
-  
+  const [haRules, setHaRules] = useState<HaRule[]>([])
+  const [haStatusEntries, setHaStatusEntries] = useState<HaStatusEntry[]>([])
+
   // ========== PRE-MIGRATION VALIDATION ==========
   type ValidationIssue = {
     type: 'error' | 'warning'
@@ -244,7 +247,26 @@ export function MigrateVmDialog({
   const hasLocalDisks = useMemo(() => {
     return vmDisks.some(d => d.isLocal)
   }, [vmDisks])
-  
+
+  const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
+
+  // Nœuds hébergeant une ressource en affinité négative avec cette VM (règles HA PVE 9)
+  const affinityConflictsByNode = useMemo(() => {
+    if (!isHaManaged) return new Map<string, AffinityPeer[]>()
+
+    return computeNegativeAffinityConflicts(vmSid, haRules, haStatusEntries)
+  }, [isHaManaged, vmSid, haRules, haStatusEntries])
+
+  // Ressources en affinité positive : le HA manager les co-migre avec la VM
+  const positiveAffinityPeers = useMemo(() => {
+    if (!isHaManaged) return [] as AffinityPeer[]
+
+    return getAffinityPeers(vmSid, haRules, 'positive', haStatusEntries)
+  }, [isHaManaged, vmSid, haRules, haStatusEntries])
+
+  const selectedNodeConflicts = selectedNode ? (affinityConflictsByNode.get(selectedNode) || []) : []
+  const selectedNodeBlocked = selectedNodeConflicts.some(p => p.running)
+
   // Reset states when dialog opens
   useEffect(() => {
     if (open) {
@@ -262,6 +284,8 @@ export function MigrateVmDialog({
       setIsHaManaged(false)
       setHaState('')
       setHaGroup('')
+      setHaRules([])
+      setHaStatusEntries([])
       setValidationIssues([])
       setValidationDone(false)
     }
@@ -414,12 +438,14 @@ export function MigrateVmDialog({
         
         const json = await res.json()
         const resources = json.data?.resources || []
-        
+
+        setHaRules(Array.isArray(json.data?.rules) ? json.data.rules : [])
+        setHaStatusEntries(Array.isArray(json.data?.status) ? json.data.status : [])
+
         // Chercher si cette VM est dans les ressources HA
         // Le format du sid est "vm:VMID" ou "ct:VMID"
-        const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
         const haResource = resources.find((r: any) => r.sid === vmSid)
-        
+
         if (haResource) {
           setIsHaManaged(true)
           setHaState(haResource.state || 'unknown')
@@ -662,8 +688,12 @@ export function MigrateVmDialog({
   
   const isRecommended = (node: NodeInfo): boolean => {
     if (nodes.length === 0) return false
-    const recommended = getRecommendedNode(nodes)
-    return recommended.node === node.node
+
+    // Ne jamais recommander un nœud que le HA manager refusera
+    const eligible = nodes.filter(n => !(affinityConflictsByNode.get(n.node) || []).some(p => p.running))
+    const pool = eligible.length > 0 ? eligible : nodes
+
+    return getRecommendedNode(pool).node === node.node
   }
   
   // Handle local migration
@@ -728,9 +758,8 @@ export function MigrateVmDialog({
     setError(null)
     
     try {
-      const sid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
       const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(sid)}`,
+        `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(vmSid)}`,
         { method: 'DELETE' }
       )
       
@@ -747,7 +776,6 @@ export function MigrateVmDialog({
       if (haRes.ok) {
         const haJson = await haRes.json()
         const resources = haJson.data?.resources || []
-        const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
         const haResource = resources.find((r: any) => r.sid === vmSid)
         
         if (haResource) {
@@ -974,6 +1002,18 @@ export function MigrateVmDialog({
                           </Box>
                         </Tooltip>
                       )}
+                      {(affinityConflictsByNode.get(node.node) || []).length > 0 && (
+                        <Tooltip
+                          title={t('hardware.haAffinity.nodeTooltip', {
+                            peers: (affinityConflictsByNode.get(node.node) || []).map(p => p.sid).join(', ')
+                          })}
+                          arrow
+                        >
+                          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', color: 'error.main' }}>
+                            <i className="ri-shield-cross-line" style={{ fontSize: 12 }} />
+                          </Box>
+                        </Tooltip>
+                      )}
 
                       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -997,6 +1037,33 @@ export function MigrateVmDialog({
               </Stack>
             )}
             
+            {/* Conflits d'affinité HA (PVE 9, règles « keep separated ») */}
+            {selectedNodeConflicts.length > 0 && (
+              <Alert
+                severity={selectedNodeBlocked ? 'error' : 'warning'}
+                icon={<i className="ri-shield-cross-line" />}
+              >
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {t('hardware.haAffinity.conflictTitle')}
+                </Typography>
+                {selectedNodeConflicts.map((peer) => (
+                  <Typography key={peer.sid} variant="caption" component="div" sx={{ opacity: 0.9 }}>
+                    {peer.running
+                      ? t('hardware.haAffinity.conflictBlocked', { peer: peer.sid, node: selectedNode, rule: peer.rule })
+                      : t('hardware.haAffinity.conflictStopped', { peer: peer.sid, node: selectedNode, rule: peer.rule })}
+                  </Typography>
+                ))}
+              </Alert>
+            )}
+
+            {positiveAffinityPeers.length > 0 && (
+              <Alert severity="info" icon={<i className="ri-links-line" />}>
+                <Typography variant="caption">
+                  {t('hardware.haAffinity.positiveInfo', { peers: positiveAffinityPeers.map(p => p.sid).join(', ') })}
+                </Typography>
+              </Alert>
+            )}
+
             {/* Storage selector */}
             {nodes.length > 0 && selectedNode && (
               <>
@@ -1553,7 +1620,7 @@ export function MigrateVmDialog({
           <Button 
             variant="contained" 
             onClick={handleLocalMigrate} 
-            disabled={migrating || !selectedNode || nodes.length === 0}
+            disabled={migrating || !selectedNode || nodes.length === 0 || selectedNodeBlocked}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-swap-box-line" />}
           >
             {migrating ? t('hardware.migrating') : t('hardware.migrate')}

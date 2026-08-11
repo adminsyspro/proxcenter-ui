@@ -4875,6 +4875,13 @@
     "vmIdOutOfRange": "VMID must be within your tenant range {start}-{end}",
     "fullCopyDescription": "Creates a complete and independent copy of the disk",
     "migrateTitle": "Migrate: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "HA affinity conflict",
+      "conflictBlocked": "PVE will reject this migration: {peer} is running on {node} and rule \"{rule}\" requires it to stay separated from this VM.",
+      "conflictStopped": "{peer} is assigned to {node} (currently not running) and rule \"{rule}\" requires it to stay separated from this VM. The HA manager may still reject this migration.",
+      "nodeTooltip": "Negative HA affinity with {peers}",
+      "positiveInfo": "This VM is in positive HA affinity with {peers} (kept together): the HA manager will migrate them along."
+    },
     "currentNode": "Current node:",
     "noNodeAvailable": "No other node available in the cluster for migration.",
     "targetStorageLabel": "Target storage:",

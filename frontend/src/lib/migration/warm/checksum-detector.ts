@@ -28,6 +28,14 @@ export function buildBlockChecksumCmd(device: string, blockSize: number, numBloc
     `dd if=${shellEscape(device)} bs=${blockSize} skip=$i count=1 2>/dev/null | md5sum | cut -d' ' -f1; done`
 }
 
+/** Optional streaming controls for a scan, forwarded to executeSSH. */
+export interface ScanChecksumOpts {
+  /** Fail the scan if no output arrives for this long (see SSHExecOpts). */
+  inactivityMs?: number
+  /** Called with each raw stdout/stderr chunk as the hashes stream in. */
+  onData?: (chunk: string) => void
+}
+
 /**
  * Compute per-block checksums of a device on the PVE node. Returns one hash per
  * block (0..numBlocks-1). numBlocks <= 0 short-circuits to an empty list.
@@ -38,12 +46,13 @@ export async function scanBlockChecksums(
   device: string,
   blockSize: number,
   numBlocks: number,
+  opts: ScanChecksumOpts = {},
 ): Promise<string[]> {
   if (numBlocks <= 0) return []
   // The whole disk is scanned block-by-block, which on a multi-TB disk can run
   // for many minutes; this is the no-CBT fallback where downtime scales with
   // disk size. Give it a generous timeout.
-  const res = await executeSSH(connectionId, nodeIp, buildBlockChecksumCmd(device, blockSize, numBlocks), 6 * 60 * 60 * 1000)
+  const res = await executeSSH(connectionId, nodeIp, buildBlockChecksumCmd(device, blockSize, numBlocks), 6 * 60 * 60 * 1000, opts)
   if (!res.success) throw new Error(`block checksum scan failed on ${device}: ${res.error || res.output}`)
   return (res.output || "").split("\n").map(s => s.trim()).filter(Boolean)
 }
@@ -54,6 +63,12 @@ export async function scanBlockChecksums(
  * the applier. Universal and lossless; used when CBT is ineligible or its
  * change map is invalid. The source is stopped (snapshot) before scanning by
  * the caller so the hashes are consistent.
+ *
+ * `onProgress(scannedBlocks, totalBlocks)` reports live scan progress: each
+ * completed hash prints one line, so newlines in the SSH stream count scanned
+ * blocks (robust to a chunk splitting mid-line — a partial line has no '\n'
+ * yet and is counted when its newline arrives). Source and target are scanned
+ * in parallel, hence totalBlocks = 2 * numBlocks.
  */
 export async function detectChangedExtentsByChecksum(
   connectionId: string,
@@ -62,11 +77,22 @@ export async function detectChangedExtentsByChecksum(
   dstDevice: string,
   blockSize: number,
   diskLength: number,
+  opts: { inactivityMs?: number; onProgress?: (scannedBlocks: number, totalBlocks: number) => void } = {},
 ): Promise<Extent[]> {
   const numBlocks = Math.ceil(diskLength / blockSize)
+  let srcLines = 0
+  let dstLines = 0
+  const countLines = (chunk: string) => chunk.split("\n").length - 1
+  const report = () => opts.onProgress?.(srcLines + dstLines, 2 * numBlocks)
   const [srcSums, dstSums] = await Promise.all([
-    scanBlockChecksums(connectionId, nodeIp, srcDevice, blockSize, numBlocks),
-    scanBlockChecksums(connectionId, nodeIp, dstDevice, blockSize, numBlocks),
+    scanBlockChecksums(connectionId, nodeIp, srcDevice, blockSize, numBlocks, {
+      inactivityMs: opts.inactivityMs,
+      onData: chunk => { srcLines += countLines(chunk); report() },
+    }),
+    scanBlockChecksums(connectionId, nodeIp, dstDevice, blockSize, numBlocks, {
+      inactivityMs: opts.inactivityMs,
+      onData: chunk => { dstLines += countLines(chunk); report() },
+    }),
   ])
   return diffChecksums(srcSums, dstSums, blockSize)
 }

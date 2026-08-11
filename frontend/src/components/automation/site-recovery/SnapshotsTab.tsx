@@ -34,7 +34,7 @@ interface Connection {
 
 interface Props {
   connections: Connection[]
-  vmNameMap?: Record<number, string>
+  vmNamesByConn?: Record<string, Record<number, string>>
 }
 
 function formatBytes(b: number | undefined | null): string {
@@ -53,7 +53,7 @@ function formatAge(ts: number): string {
   return `${Math.floor(diff / 86400)}d`
 }
 
-export default function SnapshotsTab({ connections, vmNameMap }: Props) {
+export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
   const t = useTranslations()
 
   const [snaps, setSnaps] = useState<MirrorSnapshot[] | null>(null)
@@ -105,7 +105,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
       if (statusFilter === 'orphan' && !s.is_orphan) return false
       if (statusFilter === 'active' && s.is_orphan) return false
       if (!qq) return true
-      const vmName = s.vmid ? vmNameMap?.[s.vmid] : undefined
+      const vmName = s.vmid ? vmNamesByConn?.[s.cluster_id]?.[s.vmid] : undefined
       return (
         s.cluster_name?.toLowerCase().includes(qq) ||
         s.pool?.toLowerCase().includes(qq) ||
@@ -115,7 +115,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
         (vmName?.toLowerCase().includes(qq) ?? false)
       )
     })
-  }, [snaps, q, clusterFilter, statusFilter, vmNameMap])
+  }, [snaps, q, clusterFilter, statusFilter, vmNamesByConn])
 
   // Reset page when filters change and current page would be out of range
   useEffect(() => {
@@ -340,7 +340,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
             <TableBody>
               {paged.map(s => {
                 const k = key(s)
-                const vmName = s.vmid ? vmNameMap?.[s.vmid] : undefined
+                const vmName = s.vmid ? vmNamesByConn?.[s.cluster_id]?.[s.vmid] : undefined
                 return (
                   <TableRow key={k} hover selected={selected.has(k)}>
                     <TableCell padding='checkbox'>
@@ -438,7 +438,7 @@ export default function SnapshotsTab({ connections, vmNameMap }: Props) {
               {!!detail.vmid && (
                 <Box>
                   <Typography variant='caption' color='text.secondary'>{t('siteRecovery.snapshots.vm')}</Typography>
-                  <Typography variant='body2'>{detail.vmid}{vmNameMap?.[detail.vmid] ? ` · ${vmNameMap[detail.vmid]}` : ''}</Typography>
+                  <Typography variant='body2'>{detail.vmid}{vmNamesByConn?.[detail.cluster_id]?.[detail.vmid] ? ` · ${vmNamesByConn[detail.cluster_id][detail.vmid]}` : ''}</Typography>
                 </Box>
               )}
               <Box>

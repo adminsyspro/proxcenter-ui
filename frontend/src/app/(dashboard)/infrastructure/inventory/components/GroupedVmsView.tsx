@@ -40,9 +40,10 @@ type GroupedVmsViewProps = {
   migratingVmIds?: Set<string>
   showVdcColumn?: boolean
   vdcNameByConn?: Map<string, string>
+  nodeStatuses?: Map<string, string | undefined>  // #666: node column pastille, keyed `${connId}:${node}`
 }
 
-function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn }: GroupedVmsViewProps) {
+function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses }: GroupedVmsViewProps) {
   const t = useTranslations()
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -187,6 +188,7 @@ return next
                         compact
                         showTrends
                         showActions
+                        nodeStatuses={nodeStatuses}
                         onLoadTrendsBatch={onLoadTrendsBatch}
                         onVmClick={onVmClick}
                         onVmAction={onVmAction}

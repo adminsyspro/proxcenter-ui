@@ -67,17 +67,26 @@ function jobLabel(job: ReplicationJob, vmNameMap?: Record<number, string>): stri
 // ── Sub-components ─────────────────────────────────────────────────────
 
 const StatusChip = ({ status, t }: { status: ReplicationJobStatus; t: any }) => {
-  const config: Record<ReplicationJobStatus, { label: string; color: 'success' | 'primary' | 'error' | 'default' | 'warning' }> = {
+  const config: Record<ReplicationJobStatus, { label: string; color: 'success' | 'primary' | 'error' | 'default' | 'warning'; icon?: string }> = {
     synced: { label: t('siteRecovery.status.synced'), color: 'success' },
     syncing: { label: t('siteRecovery.status.syncing'), color: 'primary' },
     error: { label: t('siteRecovery.status.error'), color: 'error' },
     paused: { label: t('siteRecovery.status.paused'), color: 'default' },
-    pending: { label: t('siteRecovery.status.pending'), color: 'warning' }
+    pending: { label: t('siteRecovery.status.pending'), color: 'warning' },
+    failed_over: { label: t('siteRecovery.jobs.failedOver'), color: 'warning', icon: 'ri-shield-star-line' }
   }
 
   const c = config[status] || config.paused
 
-  return <Chip size='small' label={c.label} color={c.color} variant={status === 'paused' ? 'outlined' : 'filled'} />
+  return (
+    <Chip
+      size='small'
+      label={c.label}
+      color={c.color}
+      variant={status === 'paused' ? 'outlined' : 'filled'}
+      icon={c.icon ? <i className={c.icon} /> : undefined}
+    />
+  )
 }
 
 const DetailRow = ({ icon, label, value, mono }: { icon: string; label: string; value: string; mono?: boolean }) => (
@@ -153,6 +162,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
+  const isFailedOver = job.status === 'failed_over'
   const rpoActual = computeRpoActual(job.last_sync)
   const rpoOk = rpoActual != null && rpoActual <= job.rpo_target
 
@@ -300,14 +310,18 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
           </Box>
 
           {/* Edit (does not open the drawer) */}
-          <Tooltip title={t('common.edit')} arrow>
-            <IconButton
-              size='small'
-              onClick={e => { e.stopPropagation(); onEdit() }}
-              sx={{ p: 0.5, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
-            >
-              <i className='ri-edit-line' style={{ fontSize: 16 }} />
-            </IconButton>
+          <Tooltip title={isFailedOver ? t('siteRecovery.jobs.failedOverTooltip') : t('common.edit')} arrow>
+            <span>
+              <IconButton
+                size='small'
+                disabled={isFailedOver}
+                aria-label={t('common.edit')}
+                onClick={e => { e.stopPropagation(); onEdit() }}
+                sx={{ p: 0.5, color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+              >
+                <i className='ri-edit-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </CardContent>
@@ -337,7 +351,7 @@ interface ProtectionTabProps {
   logs: ReplicationJobLog[]
   logsLoading: boolean
   connections: Connection[]
-  vmNameMap?: Record<number, string>
+  vmNamesByConn?: Record<string, Record<number, string>>
   onSyncJob: (id: string) => void
   onPauseJob: (id: string) => void
   onResumeJob: (id: string) => void
@@ -348,7 +362,7 @@ interface ProtectionTabProps {
 }
 
 export default function ProtectionTab({
-  jobs, loading, logs, logsLoading, connections, vmNameMap,
+  jobs, loading, logs, logsLoading, connections, vmNamesByConn,
   onSyncJob, onPauseJob, onResumeJob, onDeleteJob, onEditJob,
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
@@ -451,14 +465,14 @@ export default function ProtectionTab({
     const qq = q.trim().toLowerCase()
 
     return (jobs || []).filter(j => {
-      const label = jobLabel(j, vmNameMap)
+      const label = jobLabel(j, vmNamesByConn?.[j.source_cluster])
       const matchQ = !qq || label.toLowerCase().includes(qq) ||
         (j.name || '').toLowerCase().includes(qq) ||
         connName(j.source_cluster).toLowerCase().includes(qq) || connName(j.target_cluster).toLowerCase().includes(qq)
 
       return matchQ && (statusFilter === 'all' || j.status === statusFilter)
     })
-  }, [jobs, q, statusFilter, connName, vmNameMap])
+  }, [jobs, q, statusFilter, connName, vmNamesByConn])
 
   const grouped = useMemo(() => {
     const map = new Map<string, ReplicationJob[]>()
@@ -614,7 +628,7 @@ export default function ProtectionTab({
                 {/* Group jobs */}
                 <Stack spacing={1}>
                   {groupJobs.map(j => (
-                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNameMap} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                    <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
                   ))}
                 </Stack>
               </Box>
@@ -638,16 +652,16 @@ export default function ProtectionTab({
                 </Tooltip>
                 <Box sx={{ minWidth: 0, flex: 1 }}>
                   <Typography variant='h6' sx={{ fontWeight: 700, mb: 0.25 }}>
-                    {selected.name || jobLabel(selected, vmNameMap)}
+                    {selected.name || jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
                   </Typography>
                   {selected.name && (
                     <Typography variant='body2' sx={{ color: 'text.primary', fontWeight: 500, mb: 0.25 }}>
-                      {jobLabel(selected, vmNameMap)}
+                      {jobLabel(selected, vmNamesByConn?.[selected.source_cluster])}
                     </Typography>
                   )}
                   <Typography variant='caption' sx={{ color: 'text.secondary' }}>
                     {(selected.vm_ids || []).length} VM(s) — {(selected.vm_ids || []).map(id => {
-                      const name = vmNameMap?.[id]
+                      const name = vmNamesByConn?.[selected.source_cluster]?.[id]
                       return name ? `${id} - ${name}` : `${id}`
                     }).join(', ')}
                   </Typography>
@@ -661,10 +675,27 @@ export default function ProtectionTab({
 
               {/* Actions — top placement for visibility, full-width equal split */}
               <Box sx={{ display: 'flex', gap: 1, mb: 2, '& > *': { flex: 1, minWidth: 0 } }}>
-                <Button variant='contained' size='small' startIcon={<i className='ri-refresh-line' />} onClick={() => onSyncJob(selected.id)}>
-                  {t('siteRecovery.protection.syncNow')}
-                </Button>
-                {selected.status === 'paused' ? (
+                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
+                  <span style={{ display: 'block' }}>
+                    <Button
+                      variant='contained' size='small' fullWidth
+                      startIcon={<i className='ri-refresh-line' />}
+                      onClick={() => onSyncJob(selected.id)}
+                      disabled={selected.status === 'failed_over'}
+                    >
+                      {t('siteRecovery.protection.syncNow')}
+                    </Button>
+                  </span>
+                </Tooltip>
+                {selected.status === 'failed_over' ? (
+                  <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} arrow>
+                    <span style={{ display: 'block' }}>
+                      <Button variant='outlined' size='small' fullWidth startIcon={<i className='ri-play-circle-line' />} disabled>
+                        {t('siteRecovery.protection.resume')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                ) : selected.status === 'paused' ? (
                   <Button variant='outlined' size='small' startIcon={<i className='ri-play-circle-line' />} onClick={() => onResumeJob(selected.id)}>
                     {t('siteRecovery.protection.resume')}
                   </Button>
@@ -673,9 +704,18 @@ export default function ProtectionTab({
                     {t('siteRecovery.protection.pause')}
                   </Button>
                 )}
-                <Button variant='outlined' size='small' startIcon={<i className='ri-edit-line' />} onClick={() => onEditJob(selected.id)}>
-                  {t('common.edit')}
-                </Button>
+                <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
+                  <span style={{ display: 'block' }}>
+                    <Button
+                      variant='outlined' size='small' fullWidth
+                      startIcon={<i className='ri-edit-line' />}
+                      onClick={() => onEditJob(selected.id)}
+                      disabled={selected.status === 'failed_over'}
+                    >
+                      {t('common.edit')}
+                    </Button>
+                  </span>
+                </Tooltip>
                 <Button variant='outlined' size='small' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={() => setConfirmDeleteJob(selected)}>
                   {t('common.delete')}
                 </Button>

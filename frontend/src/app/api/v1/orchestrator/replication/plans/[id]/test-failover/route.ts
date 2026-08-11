@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -13,24 +13,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const client = getOrchestratorClient()
+    const { denied: scopeDenied } = await checkPlanTenantScope(id)
 
-    // Verify plan ownership
-    const tenantConnectionIds = await getTenantConnectionIds()
-    const planResponse = await client.getRecoveryPlan(id)
-    const plan = planResponse.data
+    if (scopeDenied) return scopeDenied
 
-    if (
-      plan &&
-      ((plan.source_cluster && !tenantConnectionIds.has(plan.source_cluster)) ||
-      (plan.target_cluster && !tenantConnectionIds.has(plan.target_cluster)))
-    ) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
-    }
-
-    let body: { network_isolated?: boolean } | undefined
+    let body: { network_isolated?: boolean; restore_points?: Record<number, string> } | undefined
     try { body = await request.json() } catch { /* empty body is fine */ }
-    const response = await client.testFailover(id, body)
+    const response = await getOrchestratorClient().testFailover(id, body)
 
     return NextResponse.json(response.data)
   } catch (e: any) {

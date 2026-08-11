@@ -131,6 +131,45 @@ describe('SharedTaskDetailDialog - cancel button visibility', () => {
 })
 
 // ------------------------------------------------------------------ //
+// 1b. Live progress readout (warm fallback UX: speed/bytes/disk were in the
+//     SharedTask payload but never rendered)
+// ------------------------------------------------------------------ //
+
+describe('SharedTaskDetailDialog - live progress readout', () => {
+  it('renders the full readout: translated step, disk counter, GB progress, speed and ETA', () => {
+    state.task = makeTask({
+      currentStep: 'full_copy',
+      currentDisk: 0, // pipelines write the 0-based loop index
+      totalDisks: 2,
+      bytesTransferred: 32 * 1073741824,
+      totalBytes: 64 * 1073741824,
+      transferSpeed: '128 MB/s',
+    })
+    renderDialog()
+    // 32 GiB to go at 128 MB/s -> 256 s -> "4m"
+    expect(screen.getByText('Full copy · Disk 1 of 2 · 32.0 / 64.0 GB · 128 MB/s · ~4m remaining')).toBeInTheDocument()
+  })
+
+  it('collapses numbered delta passes to the shared translated label', () => {
+    state.task = makeTask({ currentStep: 'delta_2', currentDisk: null, bytesTransferred: null, totalBytes: null, transferSpeed: null })
+    renderDialog()
+    expect(screen.getByText('Delta sync')).toBeInTheDocument()
+  })
+
+  it('falls back to the raw currentStep string for unknown steps', () => {
+    state.task = makeTask({ currentDisk: null, bytesTransferred: null, totalBytes: null, transferSpeed: null })
+    renderDialog()
+    expect(screen.getByText('Copying disk 1/2')).toBeInTheDocument()
+  })
+
+  it('omits the readout entirely when the task has no live fields', () => {
+    state.task = makeTask({ currentStep: null, currentDisk: null, totalDisks: null, bytesTransferred: null, totalBytes: null, transferSpeed: null })
+    renderDialog()
+    expect(screen.queryByText(/GB|remaining|Disk \d/)).not.toBeInTheDocument()
+  })
+})
+
+// ------------------------------------------------------------------ //
 // 2. Confirmation gate
 // ------------------------------------------------------------------ //
 

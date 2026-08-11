@@ -9,6 +9,7 @@ import {
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import RetentionSlider from './RetentionSlider'
 import NumericTextField from '@/components/ui/NumericTextField'
 import type { BandwidthWindow, ReplicationJob, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 
@@ -33,6 +34,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
   })
   const [rateLimit, setRateLimit] = useState(0)
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
+  const [keepSource, setKeepSource] = useState(3)
+  const [keepTarget, setKeepTarget] = useState(3)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [is409, setIs409] = useState(false)
@@ -48,6 +51,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
     })
     setRateLimit(job.rate_limit_mbps || 0)
     setBandwidthWindows(job.bandwidth_windows || [])
+    setKeepSource(job.snapshot_keep_source || 3)
+    setKeepTarget(job.snapshot_keep_target || 3)
     setError('')
     setIs409(false)
   }, [job])
@@ -65,6 +70,8 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
         name: name.trim(),
         rate_limit_mbps: rateLimit,
         bandwidth_windows: bandwidthWindows,
+        snapshot_keep_source: keepSource,
+        snapshot_keep_target: keepTarget,
       }
       if (scheduleValue.mode === 'scheduled' && scheduleValue.scheduleSpec) {
         req.schedule_spec = scheduleValue.scheduleSpec
@@ -143,6 +150,27 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
               min={0}
               helperText={t('siteRecovery.editJob.rateLimitHelp')}
             />
+          </Box>
+
+          {/* Snapshot retention */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.snapshotRetention')}</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              {t('siteRecovery.createJob.snapshotRetentionHelp')}
+            </Typography>
+            <Stack spacing={1}>
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionSource')}
+                value={keepSource}
+                onChange={setKeepSource}
+              />
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionTarget')}
+                value={keepTarget}
+                onChange={setKeepTarget}
+                helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+              />
+            </Stack>
           </Box>
 
           <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={rateLimit} />

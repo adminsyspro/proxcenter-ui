@@ -2127,6 +2127,12 @@
       "warmPreflightFailedTitle": "대상 노드가 웜 마이그레이션 준비가 되지 않았습니다",
       "warmPreflightMissing": "노드에 없는 항목: {items}.",
       "warmPreflightDocsHint": "먼저 Proxmox 노드를 준비한 후(nbdkit, nbdkit VDDK 플러그인, nbd-client, Broadcom VDDK 설치) 노드를 다시 선택하세요. <link>웜 마이그레이션 노드 설정 가이드</link>를 참조하세요.",
+      "warmCbtFallbackTitle": "CBT를 사용할 수 없음: 이 웜 마이그레이션은 체크섬 폴백을 사용합니다",
+      "warmCbtFallbackReasonSnapshot": "소스 VM에 기존 VMware 스냅샷이 있어 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackReasonHwVersion": "소스 VM의 가상 하드웨어 버전이 vmx-07 미만이어서 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackReasonDiskMode": "소스 VM에 독립(independent) 디스크 또는 multi-writer 디스크가 있어 변경 추적(CBT)을 사용할 수 없습니다.",
+      "warmCbtFallbackDowntime": "체크섬 폴백에서는 복사 시작 시점에 소스 VM이 종료되고 전송이 끝날 때까지 꺼진 상태로 유지됩니다. 중단 시간은 전체 디스크 크기에 비례합니다.",
+      "warmCbtFallbackSnapshotHint": "시작하기 전에 VMware 스냅샷을 제거하거나 통합하면 마지막 짧은 컷오버까지 VM이 온라인 상태를 유지합니다.",
       "migrationTypeSshfsBoot": "SSHFS 부팅 (실험적)",
       "migrationTypeSshfsBootDesc": "다운타임 거의 없음: VM이 몇 초 안에 원격 ESXi 디스크에서 Proxmox로 부팅됩니다. 실험적 기능: 게스트가 대상 컨트롤러에서 무인 부팅되어야 하며, EFI Windows 또는 드라이버 주입이 필요한 게스트에서는 실패할 수 있습니다. 프로덕션에서는 라이브 또는 오프라인을 사용하세요.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 부팅은 실험적 기능이며, 게스트가 드라이버 조정 없이 대상에서 올바르게 부팅되는 경우에만 작동합니다. EFI Windows, vCenter에서 가져온 VM, 프로덕션 크리티컬 워크로드에는 라이브 또는 오프라인을 선택하세요.",
@@ -3684,6 +3690,23 @@
       "completed": "완료됨",
       "cancelled": "취소됨"
     },
+    "steps": {
+      "planning": "계획 중",
+      "enabling_cbt": "CBT 활성화 중",
+      "preparing_disks": "대상 디스크 준비 중",
+      "full_copy": "전체 복사",
+      "delta": "델타 동기화",
+      "source_shutdown": "소스 VM 종료 중",
+      "awaiting_cutover": "컷오버 결정 대기 중",
+      "cutover": "컷오버",
+      "verify": "검증 중",
+      "converting_disks": "디스크 변환 중",
+      "preflight": "사전 점검",
+      "transferring": "디스크 전송 중",
+      "creating_vm": "VM 생성 중",
+      "configuring": "VM 구성 중",
+      "pending": "대기 중"
+    },
     "shared": {
       "detailTitle": "마이그레이션 작업",
       "startedBy": "{name}이(가) 시작함",
@@ -3693,6 +3716,9 @@
       "cancelConfirmLeftovers": "이미 복사된 볼륨과 부분적으로 생성된 VMID가 대상 노드에 남을 수 있습니다. 필요하지 않으면 수동으로 정리하십시오.",
       "cancelConfirmKeep": "마이그레이션 계속하기",
       "cancelling": "취소 중...",
+      "diskOf": "디스크 {n} / {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "약 {eta} 남음",
       "cancelFailed": "마이그레이션을 취소하지 못했습니다"
     },
     "types": {
@@ -4135,6 +4161,10 @@
       "noJobFoundDesc": "필터를 수정하거나 새 복제 작업을 생성하세요.",
       "selectJob": "상세 정보를 보려면 작업을 선택하세요."
     },
+    "jobs": {
+      "failedOver": "페일오버됨",
+      "failedOverTooltip": "이 작업의 DR 복제본이 이제 프로덕션입니다. 복제를 재개하면 덮어씁니다 — 먼저 페일백하세요."
+    },
     "plans": {
       "planName": "계획",
       "sourceDestination": "소스 / 대상",
@@ -4148,12 +4178,21 @@
       "tierImportant": "중요",
       "tierStandard": "표준",
       "executionHistory": "실행 기록",
+      "clearHistory": "기록 지우기",
+      "clearHistoryConfirm": "이 플랜의 지난 실행 기록을 모두 삭제하시겠습니까? 부팅 스크린샷도 함께 삭제됩니다. 활성 테스트 실행은 유지됩니다.",
       "actions": "작업",
       "testFailover": "테스트 페일오버",
       "failover": "페일오버",
       "failback": "페일백",
       "deletePlan": "복구 계획 삭제",
-      "deletePlanConfirm": "이 복구 계획을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+      "deletePlanConfirm": "이 복구 계획을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "cleanupPending": "정리 대기 중",
+      "testRunning": "테스트 페일오버 진행 중",
+      "testActiveTooltip": "DR 사이트에서 테스트 페일오버가 진행 중입니다. 새 테스트를 시작하기 전에 정리를 실행하세요.",
+      "failedOverTooltip": "플랜이 페일오버되었습니다 — 페일백만 가능합니다.",
+      "statusFailingBack": "페일백 진행 중",
+      "openFailback": "페일백 열기",
+      "failingBackTooltip": "플랜을 삭제하기 전에 페일백을 취소하세요."
     },
     "rpoTargetLabel": "RPO 목표",
     "createJob": {
@@ -4191,6 +4230,11 @@
       "sshFailed": "직접 SSH 연결 실패",
       "sshRequirement": "소스와 대상 클러스터 간에 비밀번호 없는 SSH가 구성되어 있어야 합니다. root가 비밀번호 입력 없이 소스에서 대상으로 SSH 접속할 수 있는지 확인하세요.",
       "sshRetry": "재시도",
+      "snapshotRetention": "스냅샷 보관",
+      "snapshotRetentionHelp": "각 동기화 후 디스크별로 보관되는 미러 스냅샷 수입니다 (최소 2개).",
+      "retentionSource": "소스에 보관",
+      "retentionTarget": "대상(DR)에 보관",
+      "retentionTargetHelp": "DR 측에 스냅샷이 많을수록 복원 지점이 늘어나지만 Ceph 용량을 더 사용합니다.",
       "vmidPrefix": "VMID 접두사",
       "vmidPrefixHelp": "대상 클러스터의 VM ID에 추가되는 접두사입니다 (예: 접두사 9 + VM 100 = 9100). 동일한 VMID를 유지하려면 비워 두거나 0을 입력하세요.",
       "engine": "복제 엔진",
@@ -4271,7 +4315,49 @@
       "cleanupDone": "정리 완료",
       "stopped": "중지됨",
       "disksRolledBack": "RBD 디스크 롤백됨",
-      "jobsResumed": "복제 작업 재개됨"
+      "jobsResumed": "복제 작업 재개됨",
+      "testActiveBanner": "{date}에 시작된 테스트 페일오버가 정리를 기다리고 있습니다. 테스트 VM이 DR 사이트에서 계속 실행 중일 수 있습니다.",
+      "testConflict": "이 계획에 대해 테스트 페일오버가 이미 진행 중입니다. 먼저 정리하세요.",
+      "restorePoint": "복원 지점",
+      "restorePointLatest": "최신 (기본값)",
+      "restorePointChoose": "복원 지점 선택",
+      "restorePointsHelp": "각 VM은 선택한 복제 스냅샷에서 부팅됩니다.",
+      "restorePointsNone": "복원 지점 없음",
+      "restorePointsLoadFailed": "복원 지점을 불러올 수 없어 최신 복제 상태가 사용됩니다.",
+      "restorePointRebaseWarning": "이전 복원 지점으로 페일오버하면 해당 VM의 최신 DR 스냅샷이 영구적으로 삭제됩니다.",
+      "step": {
+        "fencing": "소스 VM 중지 중",
+        "restoring": "선택한 복원 지점으로 롤백 중",
+        "starting": "DR 사이트에서 시작 중",
+        "fencing_dr": "DR VM 중지 중",
+        "final_sync": "최종 델타 적용 중",
+        "starting_source": "소스 사이트에서 시작 중",
+        "reprotect": "재보호 중"
+      },
+      "completeTitle": "페일오버 완료",
+      "completeVMs": "VM이 DR 사이트에서 실행 중",
+      "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다."
+    },
+    "failback": {
+      "phase1Title": "역방향 복제 진행 중",
+      "colLastSync": "마지막 역방향 동기화",
+      "colTransferred": "전송량",
+      "phase1Help": "DR VM이 온라인 상태를 유지하는 동안 역방향 복제가 실행됩니다. 마지막 동기화가 충분히 최신일 때 컷오버를 시작하세요.",
+      "neverSynced": "아직 역방향 동기화 없음",
+      "cutoverNotReady": "모든 VM의 첫 역방향 동기화를 기다리는 중",
+      "cutover": "컷오버",
+      "cutoverConfirm": "DR VM을 중지하고 최종 델타를 적용한 후 소스 VM을 시작하시겠습니까?",
+      "cancelFailback": "페일백 취소",
+      "cancelConfirm": "역방향 복제를 중지하고 플랜을 페일오버 상태로 되돌리시겠습니까? VM은 변경되지 않습니다.",
+      "completeTitle": "페일백 완료",
+      "completeReprotected": "소스 VM이 실행 중이며 복제가 원래 방향으로 다시 보호합니다."
+    },
+    "screenshots": {
+      "view": "부팅 스크린샷 보기",
+      "capturedAt": "캡처 시각",
+      "stepBoot": "VM 시작 중",
+      "stepStabilize": "게스트 안정화 대기 중",
+      "stepCapture": "부팅 스크린샷 캡처 중"
     },
     "emergencyDR": {
       "title": "긴급 DR",
@@ -4850,6 +4936,13 @@
     "vmIdOutOfRange": "VMID는 테넌트 범위 {start}-{end} 내에 있어야 합니다",
     "fullCopyDescription": "디스크의 완전하고 독립적인 복사본을 생성합니다",
     "migrateTitle": "마이그레이션: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "HA 어피니티 충돌",
+      "conflictBlocked": "PVE가 이 마이그레이션을 거부합니다: {peer}이(가) {node}에서 실행 중이며 규칙 \"{rule}\"에 따라 이 VM과 분리되어야 합니다.",
+      "conflictStopped": "{peer}이(가) {node}에 할당되어 있으며(현재 중지됨) 규칙 \"{rule}\"에 따라 이 VM과 분리되어야 합니다. HA 관리자가 이 마이그레이션을 거부할 수 있습니다.",
+      "nodeTooltip": "{peers}와(과) 부정적 HA 어피니티",
+      "positiveInfo": "이 VM은 {peers}와(과) 긍정적 HA 어피니티(함께 유지) 관계입니다. HA 관리자가 함께 마이그레이션합니다."
+    },
     "currentNode": "현재 노드:",
     "noNodeAvailable": "클러스터에 마이그레이션 가능한 다른 노드가 없습니다.",
     "targetStorageLabel": "대상 스토리지:",

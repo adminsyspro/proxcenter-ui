@@ -115,6 +115,12 @@ function seedAllHandlers() {
     http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/storage/local-vm/content`, () =>
       HttpResponse.json({ data: [] }),
     ),
+
+    // 9. Custom CPU models (cpu-models.conf) for connection + node (#665).
+    //    Empty list = no Custom section, the static CPU type options stand.
+    http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/cpu-models`, () =>
+      HttpResponse.json({ data: [] }),
+    ),
   )
 }
 

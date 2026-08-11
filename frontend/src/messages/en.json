@@ -2127,6 +2127,12 @@
       "warmPreflightFailedTitle": "Target node is not ready for warm migration",
       "warmPreflightMissing": "Missing on the node: {items}.",
       "warmPreflightDocsHint": "Prepare the Proxmox node first (install nbdkit, the nbdkit VDDK plugin, nbd-client and the Broadcom VDDK), then reselect the node. See the <link>warm migration node setup guide</link>.",
+      "warmCbtFallbackTitle": "CBT unavailable: this warm migration will use the checksum fallback",
+      "warmCbtFallbackReasonSnapshot": "The source VM has an existing VMware snapshot, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackReasonHwVersion": "The source VM's virtual hardware version is below vmx-07, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackReasonDiskMode": "The source VM has an independent or multi-writer disk, so Changed Block Tracking (CBT) cannot be used.",
+      "warmCbtFallbackDowntime": "With the checksum fallback the source VM is shut down at the start of the copy and stays powered off for the whole transfer: downtime scales with the total disk size.",
+      "warmCbtFallbackSnapshotHint": "Removing or consolidating the VMware snapshots before starting keeps the VM online until the final short cutover.",
       "migrationTypeSshfsBoot": "SSHFS Boot (Experimental)",
       "migrationTypeSshfsBootDesc": "Near-zero downtime: VM boots on Proxmox from remote ESXi disks within seconds. Experimental: the guest must boot unattended on the target controller; may fail for EFI Windows or guests needing driver injection. Prefer Live or Offline for production.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot is experimental and only works when the guest boots correctly on the target without driver adaptation. For EFI Windows, vCenter-sourced VMs, or anything production-critical, choose Live or Offline.",
@@ -3684,6 +3690,23 @@
       "completed": "Completed",
       "cancelled": "Cancelled"
     },
+    "steps": {
+      "planning": "Planning",
+      "enabling_cbt": "Enabling CBT",
+      "preparing_disks": "Preparing target disks",
+      "full_copy": "Full copy",
+      "delta": "Delta sync",
+      "source_shutdown": "Shutting down the source VM",
+      "awaiting_cutover": "Awaiting cutover decision",
+      "cutover": "Cutover",
+      "verify": "Verifying",
+      "converting_disks": "Converting disks",
+      "preflight": "Preflight checks",
+      "transferring": "Transferring disks",
+      "creating_vm": "Creating the VM",
+      "configuring": "Configuring the VM",
+      "pending": "Pending"
+    },
     "shared": {
       "detailTitle": "Migration task",
       "startedBy": "Started by {name}",
@@ -3693,6 +3716,9 @@
       "cancelConfirmLeftovers": "Volumes already copied and a partially created VMID may remain on the target node. Clean them up manually if you do not need them.",
       "cancelConfirmKeep": "Keep migrating",
       "cancelling": "Cancelling...",
+      "diskOf": "Disk {n} of {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "~{eta} remaining",
       "cancelFailed": "Failed to cancel the migration"
     },
     "types": {
@@ -4135,6 +4161,10 @@
       "noJobFoundDesc": "Modify your filters or create a new replication job.",
       "selectJob": "Select a job to view details."
     },
+    "jobs": {
+      "failedOver": "Failed over",
+      "failedOverTooltip": "This job's DR copy is now production. Resuming replication would overwrite it — failback first."
+    },
     "plans": {
       "planName": "Plan",
       "sourceDestination": "Source / Destination",
@@ -4148,12 +4178,21 @@
       "tierImportant": "Important",
       "tierStandard": "Standard",
       "executionHistory": "Execution History",
+      "clearHistory": "Clear history",
+      "clearHistoryConfirm": "Delete all past executions of this plan? Boot screenshots are deleted with them. The active test execution is kept.",
       "actions": "Actions",
       "testFailover": "Test Failover",
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Delete Recovery Plan",
-      "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone."
+      "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone.",
+      "cleanupPending": "Cleanup pending",
+      "testRunning": "Test failover in progress",
+      "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test.",
+      "failedOverTooltip": "Plan is failed over — only failback is possible.",
+      "statusFailingBack": "Failing back",
+      "openFailback": "Open failback",
+      "failingBackTooltip": "Cancel the failback before deleting this plan."
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {
@@ -4191,6 +4230,11 @@
       "sshFailed": "Direct SSH connection failed",
       "sshRequirement": "Passwordless SSH must be configured between source and target clusters. Ensure root can SSH from source to target without a password prompt.",
       "sshRetry": "Retry",
+      "snapshotRetention": "Snapshot retention",
+      "snapshotRetentionHelp": "Mirror snapshots kept per disk after each sync (minimum 2).",
+      "retentionSource": "Keep on source",
+      "retentionTarget": "Keep on target (DR)",
+      "retentionTargetHelp": "More snapshots on the DR side means more restore points, at the cost of Ceph capacity.",
       "vmidPrefix": "VMID Prefix",
       "vmidPrefixHelp": "Prefix added to VM IDs on the target cluster (e.g. prefix 9 + VM 100 = 9100). Leave empty or 0 to keep the same VMID.",
       "engine": "Replication Engine",
@@ -4271,7 +4315,49 @@
       "cleanupDone": "Cleanup completed",
       "stopped": "stopped",
       "disksRolledBack": "RBD disk(s) rolled back",
-      "jobsResumed": "replication job(s) resumed"
+      "jobsResumed": "replication job(s) resumed",
+      "testActiveBanner": "A test failover started {date} is awaiting cleanup. Test VMs may still be running on the DR site.",
+      "testConflict": "A test failover is already active for this plan. Clean it up first.",
+      "restorePoint": "Restore point",
+      "restorePointLatest": "Latest (default)",
+      "restorePointChoose": "Choose the restore point",
+      "restorePointsHelp": "Each VM will boot from the selected replicated snapshot.",
+      "restorePointsNone": "No restore points",
+      "restorePointsLoadFailed": "Restore points could not be loaded, the latest replicated state will be used.",
+      "restorePointRebaseWarning": "Failing over to an older restore point permanently deletes the newer DR snapshots of that VM.",
+      "step": {
+        "fencing": "Stopping the source VM",
+        "restoring": "Rolling back to the selected restore point",
+        "starting": "Starting on the DR site",
+        "fencing_dr": "Stopping the DR VM",
+        "final_sync": "Applying the final delta",
+        "starting_source": "Starting on the source site",
+        "reprotect": "Re-protecting"
+      },
+      "completeTitle": "Failover complete",
+      "completeVMs": "VM(s) now running on the DR site",
+      "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home."
+    },
+    "failback": {
+      "phase1Title": "Reverse replication in progress",
+      "colLastSync": "Last reverse sync",
+      "colTransferred": "Transferred",
+      "phase1Help": "Reverse replication is running while the DR VMs stay online. Trigger the cutover when the last sync is fresh enough.",
+      "neverSynced": "No reverse sync yet",
+      "cutoverNotReady": "Waiting for the first reverse sync of every VM",
+      "cutover": "Cutover",
+      "cutoverConfirm": "Stop the DR VMs, apply the final delta and start the source VMs?",
+      "cancelFailback": "Cancel failback",
+      "cancelConfirm": "Stop reverse replication and return the plan to failed over? Nothing is changed on the VMs.",
+      "completeTitle": "Failback complete",
+      "completeReprotected": "Source VMs are running and replication protects them again in the original direction."
+    },
+    "screenshots": {
+      "view": "View boot screenshot",
+      "capturedAt": "Captured at",
+      "stepBoot": "Starting VMs",
+      "stepStabilize": "Letting guests settle",
+      "stepCapture": "Capturing boot screenshots"
     },
     "emergencyDR": {
       "title": "Emergency DR",
@@ -4850,6 +4936,13 @@
     "vmIdOutOfRange": "VMID must be within your tenant range {start}-{end}",
     "fullCopyDescription": "Creates a complete and independent copy of the disk",
     "migrateTitle": "Migrate: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "HA affinity conflict",
+      "conflictBlocked": "PVE will reject this migration: {peer} is running on {node} and rule \"{rule}\" requires it to stay separated from this VM.",
+      "conflictStopped": "{peer} is assigned to {node} (currently not running) and rule \"{rule}\" requires it to stay separated from this VM. The HA manager may still reject this migration.",
+      "nodeTooltip": "Negative HA affinity with {peers}",
+      "positiveInfo": "This VM is in positive HA affinity with {peers} (kept together): the HA manager will migrate them along."
+    },
     "currentNode": "Current node:",
     "noNodeAvailable": "No other node available in the cluster for migration.",
     "targetStorageLabel": "Target storage:",

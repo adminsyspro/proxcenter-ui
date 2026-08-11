@@ -15,6 +15,7 @@ import type { BandwidthWindow, CreateReplicationJobRequest } from '@/lib/orchest
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
+import RetentionSlider from './RetentionSlider'
 import NumericTextField from '@/components/ui/NumericTextField'
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -73,6 +74,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [vmidPrefix, setVmidPrefix] = useState<number>(0)
   const [installPv, setInstallPv] = useState(true)
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
+  const [keepSource, setKeepSource] = useState(3)
+  const [keepTarget, setKeepTarget] = useState(3)
 
   // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
   const { data: cephVMsData } = useSWR(
@@ -280,6 +283,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       vmid_prefix: vmidPrefix || undefined,
       install_pv: installPv || undefined,
       network_mapping: {},
+      snapshot_keep_source: keepSource,
+      snapshot_keep_target: keepTarget,
     }
     if (scheduleValue.mode === 'rpo') {
       onSubmit({ ...base, rpo_target: scheduleValue.rpoTargetSeconds })
@@ -310,6 +315,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setVmidPrefix(0)
     setInstallPv(true)
     setBandwidthWindows([])
+    setKeepSource(3)
+    setKeepTarget(3)
     setVmSearch('')
     setSshCheck('idle')
     setSshError('')
@@ -714,6 +721,27 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
           <ScheduleBuilder value={scheduleValue} onChange={setScheduleValue} />
 
           <BandwidthWindowsEditor value={bandwidthWindows} onChange={setBandwidthWindows} staticRateMbps={0} />
+
+          {/* Snapshot retention */}
+          <Box>
+            <Typography variant='subtitle2' sx={{ mb: 0.5 }}>{t('siteRecovery.createJob.snapshotRetention')}</Typography>
+            <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
+              {t('siteRecovery.createJob.snapshotRetentionHelp')}
+            </Typography>
+            <Stack spacing={1}>
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionSource')}
+                value={keepSource}
+                onChange={setKeepSource}
+              />
+              <RetentionSlider
+                label={t('siteRecovery.createJob.retentionTarget')}
+                value={keepTarget}
+                onChange={setKeepTarget}
+                helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+              />
+            </Stack>
+          </Box>
 
           {/* VMID Prefix */}
           <Box>

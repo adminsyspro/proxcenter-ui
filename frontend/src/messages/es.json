@@ -2127,6 +2127,12 @@
       "warmPreflightFailedTitle": "El nodo destino no está listo para la migración warm",
       "warmPreflightMissing": "Falta en el nodo: {items}.",
       "warmPreflightDocsHint": "Prepara primero el nodo Proxmox (instala nbdkit, el plugin nbdkit VDDK, nbd-client y Broadcom VDDK) y vuelve a seleccionar el nodo. Consulta la <link>guía de preparación del nodo para migración warm</link>.",
+      "warmCbtFallbackTitle": "CBT no disponible: esta migración warm usará el fallback por sumas de verificación",
+      "warmCbtFallbackReasonSnapshot": "La VM de origen tiene un snapshot de VMware existente, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackReasonHwVersion": "La versión de hardware virtual de la VM de origen es inferior a vmx-07, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackReasonDiskMode": "La VM de origen tiene un disco independiente o multi-writer, por lo que no se puede usar el seguimiento de cambios (CBT).",
+      "warmCbtFallbackDowntime": "Con el fallback por sumas de verificación, la VM de origen se apaga al inicio de la copia y permanece apagada durante toda la transferencia: la indisponibilidad depende del tamaño total de los discos.",
+      "warmCbtFallbackSnapshotHint": "Eliminar o consolidar los snapshots de VMware antes de empezar mantiene la VM online hasta el breve cutover final.",
       "migrationTypeSshfsBoot": "Arranque SSHFS (experimental)",
       "migrationTypeSshfsBootDesc": "Downtime casi nulo: la VM arranca en Proxmox desde discos ESXi remotos en segundos. Experimental: el guest debe arrancar sin intervención en la controladora destino; puede fallar con Windows EFI o guests que necesiten inyección de drivers. Usa Live u Offline en producción.",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot es experimental y solo funciona si el guest arranca correctamente en el destino sin adaptar drivers. Para Windows EFI, VMs procedentes de vCenter o cualquier carga crítica de producción, elige Live u Offline.",
@@ -3684,6 +3690,23 @@
       "completed": "Completado",
       "cancelled": "Cancelado"
     },
+    "steps": {
+      "planning": "Planificación",
+      "enabling_cbt": "Habilitando CBT",
+      "preparing_disks": "Preparando los discos de destino",
+      "full_copy": "Copia completa",
+      "delta": "Sincronización delta",
+      "source_shutdown": "Apagando la VM de origen",
+      "awaiting_cutover": "Esperando la decisión de cutover",
+      "cutover": "Cutover",
+      "verify": "Verificando",
+      "converting_disks": "Convirtiendo discos",
+      "preflight": "Comprobaciones previas",
+      "transferring": "Transfiriendo discos",
+      "creating_vm": "Creando la VM",
+      "configuring": "Configurando la VM",
+      "pending": "Pendiente"
+    },
     "shared": {
       "detailTitle": "Tarea de migración",
       "startedBy": "Iniciada por {name}",
@@ -3693,6 +3716,9 @@
       "cancelConfirmLeftovers": "Los volúmenes ya copiados y un VMID creado parcialmente pueden permanecer en el nodo de destino. Límpielos manualmente si no los necesita.",
       "cancelConfirmKeep": "Seguir migrando",
       "cancelling": "Cancelando...",
+      "diskOf": "Disco {n} de {m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "~{eta} restante",
       "cancelFailed": "No se pudo cancelar la migración"
     },
     "types": {
@@ -4135,6 +4161,10 @@
       "noJobFoundDesc": "Modifica los filtros o crea un nuevo trabajo de replicación.",
       "selectJob": "Selecciona un trabajo para ver los detalles."
     },
+    "jobs": {
+      "failedOver": "Conmutado",
+      "failedOverTooltip": "La copia DR de este job ahora es producción. Reanudar la replicación la sobrescribiría — primero failback."
+    },
     "plans": {
       "planName": "Plan",
       "sourceDestination": "Origen / Destino",
@@ -4148,12 +4178,21 @@
       "tierImportant": "Importante",
       "tierStandard": "Estándar",
       "executionHistory": "Historial de ejecución",
+      "clearHistory": "Vaciar el historial",
+      "clearHistoryConfirm": "¿Eliminar todas las ejecuciones pasadas de este plan? Las capturas de arranque se eliminarán con ellas. La ejecución de prueba activa se conserva.",
       "actions": "Acciones",
       "testFailover": "Probar failover",
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Eliminar plan de recuperación",
-      "deletePlanConfirm": "¿Seguro que quieres eliminar este plan de recuperación? Esta acción no se puede deshacer."
+      "deletePlanConfirm": "¿Seguro que quieres eliminar este plan de recuperación? Esta acción no se puede deshacer.",
+      "cleanupPending": "Limpieza pendiente",
+      "testRunning": "Failover de prueba en curso",
+      "testActiveTooltip": "Hay un failover de prueba activo en el sitio DR. Ejecuta la limpieza antes de iniciar una nueva prueba.",
+      "failedOverTooltip": "Plan conmutado — solo es posible el failback.",
+      "statusFailingBack": "Failback en curso",
+      "openFailback": "Abrir failback",
+      "failingBackTooltip": "Cancele el failback antes de eliminar este plan."
     },
     "rpoTargetLabel": "RPO objetivo",
     "createJob": {
@@ -4191,6 +4230,11 @@
       "sshFailed": "La conexión SSH directa ha fallado",
       "sshRequirement": "SSH sin contraseña debe estar configurado entre los clústeres origen y destino. Asegúrate de que root pueda hacer SSH desde el origen al destino sin solicitud de contraseña.",
       "sshRetry": "Reintentar",
+      "snapshotRetention": "Retención de snapshots",
+      "snapshotRetentionHelp": "Snapshots espejo conservados por disco tras cada sincronización (mínimo 2).",
+      "retentionSource": "Conservar en origen",
+      "retentionTarget": "Conservar en destino (DR)",
+      "retentionTargetHelp": "Más snapshots en el lado DR significa más puntos de restauración, a costa de la capacidad de Ceph.",
       "vmidPrefix": "Prefijo VMID",
       "vmidPrefixHelp": "Prefijo añadido a los IDs de VM en el clúster destino (p. ej., prefijo 9 + VM 100 = 9100). Déjalo vacío o en 0 para conservar el mismo VMID.",
       "engine": "Motor de replicación",
@@ -4271,7 +4315,49 @@
       "cleanupDone": "Limpieza completada",
       "stopped": "detenida",
       "disksRolledBack": "disco(s) RBD revertido(s)",
-      "jobsResumed": "trabajo(s) de replicación reanudado(s)"
+      "jobsResumed": "trabajo(s) de replicación reanudado(s)",
+      "testActiveBanner": "Un failover de prueba iniciado el {date} está esperando limpieza. Las VMs de prueba pueden seguir ejecutándose en el sitio DR.",
+      "testConflict": "Ya hay un failover de prueba activo para este plan. Límpialo primero.",
+      "restorePoint": "Punto de restauración",
+      "restorePointLatest": "Más reciente (predeterminado)",
+      "restorePointChoose": "Elegir el punto de restauración",
+      "restorePointsHelp": "Cada VM arrancará desde el snapshot replicado seleccionado.",
+      "restorePointsNone": "Sin puntos de restauración",
+      "restorePointsLoadFailed": "No se pudieron cargar los puntos de restauración, se usará el último estado replicado.",
+      "restorePointRebaseWarning": "Hacer failover a un punto de restauración más antiguo elimina permanentemente los snapshots DR más recientes de esa VM.",
+      "step": {
+        "fencing": "Deteniendo la VM de origen",
+        "restoring": "Restaurando al punto de restauración elegido",
+        "starting": "Iniciando en el sitio DR",
+        "fencing_dr": "Deteniendo la VM DR",
+        "final_sync": "Aplicando el delta final",
+        "starting_source": "Iniciando en el sitio de origen",
+        "reprotect": "Reprotegiendo"
+      },
+      "completeTitle": "Failover completado",
+      "completeVMs": "VM ahora activas en el sitio DR",
+      "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá."
+    },
+    "failback": {
+      "phase1Title": "Replicación inversa en curso",
+      "colLastSync": "Última sincronización inversa",
+      "colTransferred": "Transferido",
+      "phase1Help": "La replicación inversa se ejecuta mientras las VM DR siguen en línea. Inicie el cutover cuando la última sincronización sea lo bastante reciente.",
+      "neverSynced": "Aún sin sincronización inversa",
+      "cutoverNotReady": "Esperando la primera sincronización inversa de cada VM",
+      "cutover": "Cutover",
+      "cutoverConfirm": "¿Detener las VM DR, aplicar el delta final e iniciar las VM de origen?",
+      "cancelFailback": "Cancelar el failback",
+      "cancelConfirm": "¿Detener la replicación inversa y devolver el plan a failed over? No se modifica nada en las VM.",
+      "completeTitle": "Failback completado",
+      "completeReprotected": "Las VM de origen están en ejecución y la replicación vuelve a protegerlas en la dirección original."
+    },
+    "screenshots": {
+      "view": "Ver la captura de arranque",
+      "capturedAt": "Capturada a las",
+      "stepBoot": "Iniciando las VM",
+      "stepStabilize": "Estabilizando los invitados",
+      "stepCapture": "Capturando pantallas de arranque"
     },
     "emergencyDR": {
       "title": "DR de emergencia",
@@ -4850,6 +4936,13 @@
     "vmIdOutOfRange": "El VMID debe estar dentro de su rango {start}-{end}",
     "fullCopyDescription": "Crea una copia completa e independiente del disco",
     "migrateTitle": "Migrar: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "Conflicto de afinidad HA",
+      "conflictBlocked": "PVE rechazará esta migración: {peer} se ejecuta en {node} y la regla \"{rule}\" exige mantenerlo separado de esta VM.",
+      "conflictStopped": "{peer} está asignado a {node} (actualmente detenido) y la regla \"{rule}\" exige mantenerlo separado de esta VM. El gestor HA aún puede rechazar esta migración.",
+      "nodeTooltip": "Afinidad HA negativa con {peers}",
+      "positiveInfo": "Esta VM tiene afinidad HA positiva con {peers} (se mantienen juntas): el gestor HA también las migrará."
+    },
     "currentNode": "Nodo actual:",
     "noNodeAvailable": "No hay otro nodo disponible en el clúster para la migración.",
     "targetStorageLabel": "Almacenamiento de destino:",

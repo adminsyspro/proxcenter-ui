@@ -2096,6 +2096,12 @@
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
       "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅<link>温迁移节点准备指南</link>。",
+      "warmCbtFallbackTitle": "CBT 不可用：本次温迁移将使用校验和回退方式",
+      "warmCbtFallbackReasonSnapshot": "源虚拟机存在 VMware 快照，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackReasonHwVersion": "源虚拟机的虚拟硬件版本低于 vmx-07，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackReasonDiskMode": "源虚拟机存在独立磁盘或多写入（multi-writer）磁盘，因此无法使用变更块跟踪（CBT）。",
+      "warmCbtFallbackDowntime": "使用校验和回退时，源虚拟机会在复制开始时关机，并在整个传输期间保持关机状态：停机时间随磁盘总大小增长。",
+      "warmCbtFallbackSnapshotHint": "在开始前删除或整合 VMware 快照，可让虚拟机保持在线，直到最后的短暂切换。",
       "migrationTypeSshfsBoot": "SSHFS 启动（实验性）",
       "migrationTypeSshfsBootDesc": "近零停机：虚拟机在数秒内从远程 ESXi 磁盘启动到 Proxmox。实验性：Guest 必须能在目标控制器上无人值守地启动；可能在 EFI Windows 或需要驱动注入的 Guest 上失败。生产环境请优先使用 Live 或离线迁移。",
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 启动是实验性功能，仅当 Guest 能在目标上无需驱动适配而正确启动时才有效。对于 EFI Windows、来自 vCenter 的虚拟机或任何关键生产场景，请使用 Live 或离线模式。",
@@ -3645,6 +3651,23 @@
       "completed": "已完成",
       "cancelled": "已取消"
     },
+    "steps": {
+      "planning": "规划中",
+      "enabling_cbt": "正在启用 CBT",
+      "preparing_disks": "正在准备目标磁盘",
+      "full_copy": "全量复制",
+      "delta": "增量同步",
+      "source_shutdown": "正在关闭源虚拟机",
+      "awaiting_cutover": "等待切换决定",
+      "cutover": "切换",
+      "verify": "校验中",
+      "converting_disks": "正在转换磁盘",
+      "preflight": "预检",
+      "transferring": "正在传输磁盘",
+      "creating_vm": "正在创建虚拟机",
+      "configuring": "正在配置虚拟机",
+      "pending": "等待中"
+    },
     "shared": {
       "detailTitle": "迁移任务",
       "startedBy": "由 {name} 发起",
@@ -3654,6 +3677,9 @@
       "cancelConfirmLeftovers": "已复制的卷和部分创建的 VMID 可能会留在目标节点上。如果不需要，请手动清理。",
       "cancelConfirmKeep": "继续迁移",
       "cancelling": "正在取消...",
+      "diskOf": "磁盘 {n}/{m}",
+      "gbProgress": "{done} / {total} GB",
+      "eta": "预计剩余 {eta}",
       "cancelFailed": "取消迁移失败"
     },
     "types": {
@@ -4096,6 +4122,10 @@
       "noJobFoundDesc": "修改您的过滤条件或创建新的复制任务。",
       "selectJob": "选择一个任务以查看详情。"
     },
+    "jobs": {
+      "failedOver": "已故障转移",
+      "failedOverTooltip": "此任务的 DR 副本现已成为生产环境。恢复复制将覆盖它——请先执行故障回复。"
+    },
     "plans": {
       "planName": "计划",
       "sourceDestination": "源 / 目标",
@@ -4109,12 +4139,21 @@
       "tierImportant": "重要",
       "tierStandard": "标准",
       "executionHistory": "执行历史",
+      "clearHistory": "清空历史记录",
+      "clearHistoryConfirm": "删除此计划的所有历史执行记录？启动截图将一并删除。当前活动的测试执行将被保留。",
       "actions": "操作",
       "testFailover": "测试故障转移",
       "failover": "故障转移",
       "failback": "故障回切",
       "deletePlan": "删除恢复计划",
-      "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。"
+      "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。",
+      "cleanupPending": "待清理",
+      "testRunning": "测试故障转移进行中",
+      "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。",
+      "failedOverTooltip": "计划已故障转移——只能执行故障回复。",
+      "statusFailingBack": "故障回复进行中",
+      "openFailback": "打开故障回复",
+      "failingBackTooltip": "删除此计划前请先取消故障回复。"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {
@@ -4152,6 +4191,11 @@
       "sshFailed": "直连 SSH 连接失败",
       "sshRequirement": "必须在源集群和目标集群之间配置免密 SSH。确保 root 用户可以从源免密 SSH 连接到目标。",
       "sshRetry": "重试",
+      "snapshotRetention": "快照保留",
+      "snapshotRetentionHelp": "每次同步后每个磁盘保留的镜像快照数量（最少 2 个）。",
+      "retentionSource": "源端保留数量",
+      "retentionTarget": "目标端（灾备）保留数量",
+      "retentionTargetHelp": "灾备端保留更多快照意味着更多恢复点，但会占用更多 Ceph 容量。",
       "vmidPrefix": "VMID 前缀",
       "vmidPrefixHelp": "添加到目标集群 VM ID 的前缀（例如前缀 9 + VM 100 = 9100）。留空或填 0 以保持相同 VMID。",
       "engine": "复制引擎",
@@ -4232,7 +4276,49 @@
       "cleanupDone": "清理完成",
       "stopped": "已停止",
       "disksRolledBack": "RBD 磁盘已回滚",
-      "jobsResumed": "复制任务已恢复"
+      "jobsResumed": "复制任务已恢复",
+      "testActiveBanner": "于 {date} 启动的测试故障转移正在等待清理。测试 VM 可能仍在灾备站点上运行。",
+      "testConflict": "此计划已有一个测试故障转移正在进行。请先清理它。",
+      "restorePoint": "恢复点",
+      "restorePointLatest": "最新（默认）",
+      "restorePointChoose": "选择恢复点",
+      "restorePointsHelp": "每个 VM 将从所选的复制快照启动。",
+      "restorePointsNone": "无恢复点",
+      "restorePointsLoadFailed": "无法加载恢复点，将使用最新的复制状态。",
+      "restorePointRebaseWarning": "故障转移到更早的恢复点将永久删除该 VM 更新的灾备快照。",
+      "step": {
+        "fencing": "正在停止源虚拟机",
+        "restoring": "正在回滚到所选恢复点",
+        "starting": "正在 DR 站点上启动",
+        "fencing_dr": "正在停止 DR 虚拟机",
+        "final_sync": "正在应用最终增量",
+        "starting_source": "正在源站点上启动",
+        "reprotect": "正在重新保护"
+      },
+      "completeTitle": "故障转移完成",
+      "completeVMs": "虚拟机现已在 DR 站点运行",
+      "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。"
+    },
+    "failback": {
+      "phase1Title": "反向复制进行中",
+      "colLastSync": "上次反向同步",
+      "colTransferred": "已传输",
+      "phase1Help": "反向复制正在运行，DR 虚拟机保持在线。当最后一次同步足够新时，即可执行切换。",
+      "neverSynced": "尚无反向同步",
+      "cutoverNotReady": "正在等待每台虚拟机完成首次反向同步",
+      "cutover": "切换",
+      "cutoverConfirm": "停止 DR 虚拟机，应用最终增量并启动源虚拟机？",
+      "cancelFailback": "取消故障回复",
+      "cancelConfirm": "停止反向复制并将计划恢复为已故障转移状态？虚拟机不会有任何更改。",
+      "completeTitle": "故障回复完成",
+      "completeReprotected": "源虚拟机正在运行，复制已恢复原方向的保护。"
+    },
+    "screenshots": {
+      "view": "查看启动截图",
+      "capturedAt": "截图时间",
+      "stepBoot": "正在启动虚拟机",
+      "stepStabilize": "等待系统稳定",
+      "stepCapture": "正在捕获启动截图"
     },
     "emergencyDR": {
       "title": "紧急灾难恢复",
@@ -4811,6 +4897,13 @@
     "vmIdOutOfRange": "VMID 必须在租户范围 {start}-{end} 内",
     "fullCopyDescription": "创建磁盘的完整独立副本",
     "migrateTitle": "迁移：{vmName}（{vmid}）",
+    "haAffinity": {
+      "conflictTitle": "HA 亲和性冲突",
+      "conflictBlocked": "PVE 将拒绝此迁移:{peer} 正在 {node} 上运行,规则\"{rule}\"要求其与此虚拟机保持分离。",
+      "conflictStopped": "{peer} 已分配到 {node}(当前已停止),规则\"{rule}\"要求其与此虚拟机保持分离。HA 管理器仍可能拒绝此迁移。",
+      "nodeTooltip": "与 {peers} 存在负 HA 亲和性",
+      "positiveInfo": "此虚拟机与 {peers} 存在正 HA 亲和性(保持在一起):HA 管理器会将它们一并迁移。"
+    },
     "currentNode": "当前节点：",
     "noNodeAvailable": "集群中没有其他可用节点进行迁移。",
     "targetStorageLabel": "目标存储：",

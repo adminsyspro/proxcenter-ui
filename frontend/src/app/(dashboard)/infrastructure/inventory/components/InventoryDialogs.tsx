@@ -40,6 +40,8 @@ import {
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
+// Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
+import { cbtEligibility } from '@/lib/vmware/cbt-eligibility'
 
 // Dynamic imports for HardwareModals (code-split, loaded on demand)
 const AddDiskDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.AddDiskDialog })), { ssr: false })
@@ -585,33 +587,64 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     }
   }, [migTargetConn, setVcenterPreflight])
 
-  // Source datastore pre-flight: detect vSAN-backed source disks for direct-ESXi sources so
-  // we can block the migration upfront with a clear message rather than letting the user fill
-  // the form and hit submit before the backend throws. vCenter/Hyper-V/Nutanix sources go
-  // through v2v-pipeline which uses NFC and handles vSAN natively, so we skip the check for them.
+  // Source detail pre-flight, two consumers off one fetch:
+  // - vSAN detection (direct ESXi only): block the migration upfront with a clear
+  //   message rather than letting the user fill the form and hit submit before the
+  //   backend throws. vCenter goes through v2v/NFC which handles vSAN natively, so
+  //   its datastores are deliberately NOT collected (vSAN never blocks vCenter).
+  // - CBT-fallback inputs (direct ESXi AND vCenter): snapshotCount, vmxVersion and
+  //   the per-disk diskMode/sharing feed the warm-migration fallback warning below.
+  // Hyper-V/Nutanix sources are not VMware — no fetch at all for them.
   const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
   const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
+  const [sourceVmDetail, setSourceVmDetail] = useState<{ snapshotCount: number; vmxVersion: string; disks: { diskMode?: string; sharing?: string }[] } | null>(null)
   React.useEffect(() => {
-    if (!esxiMigrateVm) { setSourceDatastores([]); return }
-    if (esxiMigrateVm.hostType === 'vcenter' || esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') {
+    if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); return }
+    if (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') {
       setSourceDatastores([])
+      setSourceVmDetail(null)
       return
     }
+    const isVcenterSource = esxiMigrateVm.hostType === 'vcenter'
     setSourceDatastoresLoading(true)
     fetch(`/api/v1/vmware/${esxiMigrateVm.connId}/vms/${esxiMigrateVm.vmid}`)
       .then(r => r.json())
       .then(d => {
-        const disks = (d?.data?.disks || []) as { fileName?: string }[]
-        const names = [...new Set(disks
-          .map(disk => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
-          .filter((n): n is string => !!n))]
-        setSourceDatastores(names)
+        const detail = d?.data
+        const disks = (detail?.disks || []) as { fileName?: string; diskMode?: string; sharing?: string }[]
+        if (isVcenterSource) {
+          setSourceDatastores([])
+        } else {
+          const names = [...new Set(disks
+            .map(disk => (disk.fileName || '').match(/^\[([^\]]+)\]/)?.[1])
+            .filter((n): n is string => !!n))]
+          setSourceDatastores(names)
+        }
+        setSourceVmDetail(detail ? {
+          snapshotCount: Number(detail.snapshotCount) || 0,
+          vmxVersion: String(detail.vmxVersion || ''),
+          disks,
+        } : null)
       })
-      .catch(() => setSourceDatastores([]))
+      .catch(() => { setSourceDatastores([]); setSourceVmDetail(null) })
       .finally(() => setSourceDatastoresLoading(false))
   }, [esxiMigrateVm?.connId, esxiMigrateVm?.vmid, esxiMigrateVm?.hostType])
   const sourceVsanDatastores = sourceDatastores.filter(n => n.toLowerCase().includes('vsan'))
   const vsanBlocksMigration = sourceVsanDatastores.length > 0
+
+  // Warm CBT-fallback verdict (only meaningful when migType === 'warm'): mirrors
+  // runWarmMigration's planning-time decision (`useCbt = eligible && snapshotCount
+  // === 0`). When CBT is unavailable the engine falls back to the checksum
+  // block-diff, which shuts the source down BEFORE the copy — the user must know
+  // that before launching, not from the job log at minute 0. Warning only; the
+  // launch stays enabled.
+  const warmCbtFallbackCause = React.useMemo<'Snapshot' | 'HwVersion' | 'DiskMode' | null>(() => {
+    if (!sourceVmDetail) return null
+    if (sourceVmDetail.snapshotCount > 0) return 'Snapshot'
+    const elig = cbtEligibility({ hwVersion: sourceVmDetail.vmxVersion || '', disks: sourceVmDetail.disks })
+    if (elig.eligible) return null
+    return (elig.reason || '').startsWith('hardware version') ? 'HwVersion' : 'DiskMode'
+  }, [sourceVmDetail])
 
   // Warm migration go/no-go. Probes the chosen target node for the VDDK runtime
   // the engine needs (nbdkit + vddk plugin + nbd-client + the Broadcom VDDK),
@@ -2361,6 +2394,30 @@ return
                         </Typography>
                       </Alert>
                     )
+                  )}
+
+                  {/* CBT-fallback warning: the source VM cannot use CBT (pre-existing
+                      snapshot / old hardware version / independent or multi-writer disk),
+                      so warm falls back to the checksum block-diff, which shuts the
+                      source DOWN at the start of the copy. Warning only — never blocks
+                      the launch (the fallback is lossless, just not low-downtime). */}
+                  {migType === 'warm' && warmCbtFallbackCause && (
+                    <Alert severity="warning" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                      <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                        {t('inventoryPage.esxiMigration.warmCbtFallbackTitle')}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>
+                        {t(`inventoryPage.esxiMigration.warmCbtFallbackReason${warmCbtFallbackCause}`)}
+                      </Typography>
+                      <Typography variant="body2">
+                        {t('inventoryPage.esxiMigration.warmCbtFallbackDowntime')}
+                      </Typography>
+                      {warmCbtFallbackCause === 'Snapshot' && (
+                        <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', mt: 0.5 }}>
+                          {t('inventoryPage.esxiMigration.warmCbtFallbackSnapshotHint')}
+                        </Typography>
+                      )}
+                    </Alert>
                   )}
 
                   {/* sshfs not installed warning */}

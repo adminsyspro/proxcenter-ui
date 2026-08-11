@@ -61,7 +61,7 @@ interface EmergencyDRTabProps {
   plans: RecoveryPlan[]
   loading: boolean
   connections: Array<{ id: string; name: string }>
-  vmNameMap: Record<number, string>
+  vmNamesByConn: Record<string, Record<number, string>>
   onStartVM: (vmId: number, targetCluster: string, jobId: string) => Promise<void>
   onExecuteFailover: (planId: string) => void
   onExecuteFailback: (planId: string) => void
@@ -69,7 +69,7 @@ interface EmergencyDRTabProps {
 }
 
 export default function EmergencyDRTab({
-  jobs, plans, loading, connections, vmNameMap, onStartVM, onExecuteFailover, onExecuteFailback, onDeletePlan
+  jobs, plans, loading, connections, vmNamesByConn, onStartVM, onExecuteFailover, onExecuteFailback, onDeletePlan
 }: EmergencyDRTabProps) {
   const t = useTranslations('siteRecovery')
   const tc = useTranslations('common')
@@ -93,7 +93,7 @@ export default function EmergencyDRTab({
       for (const vmId of (job.vm_ids || [])) {
         allDRVMs.push({
           vmId,
-          vmName: vmNameMap[vmId] || `VM ${vmId}`,
+          vmName: vmNamesByConn[job.source_cluster]?.[vmId] || `VM ${vmId}`,
           targetVmId: destinationVMID(job.vmid_prefix, vmId),
           sourceCluster: job.source_cluster,
           targetCluster: job.target_cluster,
@@ -110,7 +110,7 @@ export default function EmergencyDRTab({
     for (const plan of plans) {
       for (const pvm of (plan.vms || [])) {
         vmInPlan.add(pvm.vm_id)
-        const drvm = allDRVMs.find(v => v.vmId === pvm.vm_id)
+        const drvm = allDRVMs.find(v => v.vmId === pvm.vm_id && v.sourceCluster === plan.source_cluster)
         if (drvm) {
           drvm.planId = plan.id
           drvm.planName = plan.name
@@ -140,7 +140,7 @@ export default function EmergencyDRTab({
     }
 
     return { planVMs: pVMs, standaloneVMs: sVMs, planGroups: groups }
-  }, [jobs, plans, vmNameMap])
+  }, [jobs, plans, vmNamesByConn])
 
   const totalDR = planVMs.length + standaloneVMs.length
   const healthyJobs = jobs.filter(j => j.status === 'synced' || j.status === 'syncing').length

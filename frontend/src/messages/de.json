@@ -4302,6 +4302,7 @@
     "failback": {
       "phase1Help": "Die umgekehrte Replikation läuft, während die DR-VMs online bleiben. Starten Sie das Cutover, wenn der letzte Sync aktuell genug ist.",
       "neverSynced": "Noch kein Reverse-Sync",
+      "cutoverNotReady": "Warten auf den ersten Reverse-Sync jeder VM",
       "cutover": "Cutover",
       "cutoverConfirm": "DR-VMs stoppen, letztes Delta anwenden und Quell-VMs starten?",
       "cancelFailback": "Failback abbrechen",

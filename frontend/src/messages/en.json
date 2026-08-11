@@ -4340,6 +4340,7 @@
     "failback": {
       "phase1Help": "Reverse replication is running while the DR VMs stay online. Trigger the cutover when the last sync is fresh enough.",
       "neverSynced": "No reverse sync yet",
+      "cutoverNotReady": "Waiting for the first reverse sync of every VM",
       "cutover": "Cutover",
       "cutoverConfirm": "Stop the DR VMs, apply the final delta and start the source VMs?",
       "cancelFailback": "Cancel failback",

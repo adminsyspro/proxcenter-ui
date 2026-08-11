@@ -316,6 +316,59 @@ describe('FailoverDialog failback reverse-sync monitor (issue #664 failback)', (
     expect(screen.getByText('disk offline')).toBeInTheDocument()
   })
 
+  it('shows a Close button during reverse_sync (issue: dialog unclosable for days) and calls onClose when clicked', async () => {
+    const { onClose } = renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+        ],
+      }),
+    })
+
+    const closeButton = screen.getByRole('button', { name: 'Close' })
+    expect(closeButton).toBeInTheDocument()
+    await userEvent.click(closeButton)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('disables Cutover while any VM has not completed a reverse sync yet', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+          { vm_id: 200, vm_name: 'web-02', status: 'running', progress_percent: 0 },
+        ],
+      }),
+    })
+
+    expect(screen.getByRole('button', { name: 'Cutover' })).toBeDisabled()
+  })
+
+  it('enables Cutover once every VM has completed at least one reverse sync', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+          { vm_id: 200, vm_name: 'web-02', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:05:00Z' },
+        ],
+      }),
+    })
+
+    expect(screen.getByRole('button', { name: 'Cutover' })).not.toBeDisabled()
+  })
+
   it('opens a confirm dialog before calling onFailbackCutover, passing the plan id', async () => {
     const onFailbackCutover = vi.fn()
     renderDialog({

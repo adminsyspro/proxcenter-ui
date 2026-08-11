@@ -85,6 +85,11 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   // dialog shows a dedicated per-VM sync table (not the generic progress
   // rows) and its own Cutover/Cancel actions instead of the default ones.
   const isReverseSyncPhase = type === 'failback' && !!execution && execution.phase === 'reverse_sync'
+  // Cutover must never fence a VM that has not completed even one reverse
+  // sync yet (backend guard: ExecuteFailbackCutover refuses it outright) —
+  // disable the button rather than let the operator hit that failure.
+  const cutoverNotReady = isReverseSyncPhase
+    && (execution?.vm_results || []).some(vm => vm.status !== 'completed' && !vm.last_reverse_sync_at)
 
   const typeConfig = {
     test: {
@@ -113,7 +118,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const config = typeConfig[type]
 
   return (
-    <Dialog open={open} onClose={isExecuting ? undefined : onClose} maxWidth='sm' fullWidth>
+    <Dialog open={open} onClose={isExecuting && !isReverseSyncPhase ? undefined : onClose} maxWidth='sm' fullWidth>
       <DialogTitle sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className={config.icon} />
         {config.title}
@@ -513,12 +518,17 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
         )}
         {isReverseSyncPhase && (
           <>
+            <Button onClick={onClose}>{t('common.close')}</Button>
             <Button variant='outlined' onClick={() => setConfirmCancelFailback(true)}>
               {t('siteRecovery.failback.cancelFailback')}
             </Button>
-            <Button variant='contained' color='warning' onClick={() => setConfirmCutover(true)}>
-              {t('siteRecovery.failback.cutover')}
-            </Button>
+            <Tooltip title={t('siteRecovery.failback.cutoverNotReady')} disableHoverListener={!cutoverNotReady} arrow>
+              <span>
+                <Button variant='contained' color='warning' onClick={() => setConfirmCutover(true)} disabled={cutoverNotReady}>
+                  {t('siteRecovery.failback.cutover')}
+                </Button>
+              </span>
+            </Tooltip>
           </>
         )}
         {execution && execution.status !== 'running' && (

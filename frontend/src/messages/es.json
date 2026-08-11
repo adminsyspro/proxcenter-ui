@@ -4317,7 +4317,10 @@
     },
     "screenshots": {
       "view": "Ver la captura de arranque",
-      "capturedAt": "Capturada a las"
+      "capturedAt": "Capturada a las",
+      "stepBoot": "Iniciando las VM",
+      "stepStabilize": "Estabilizando los invitados",
+      "stepCapture": "Capturando pantallas de arranque"
     },
     "emergencyDR": {
       "title": "DR de emergencia",

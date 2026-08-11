@@ -4,12 +4,14 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { getTenantConnectionIds } from "@/lib/tenant"
 
 /**
- * Tenant-scope guard for execution-scoped routes: resolves the execution,
+ * Tenant-scope guard for execution-scoped routes: fetches the execution,
  * traces back to its plan and verifies the plan's clusters belong to the
- * current tenant (same rules as the execution detail route). Returns the
- * denial response to send, or null when access is allowed.
+ * current tenant (same rules as the execution detail route). Returns both
+ * the fetched execution and the denial response to send (or null when
+ * access is allowed), so callers that also need the execution body — the
+ * detail route — don't have to fetch it a second time.
  */
-export async function denyExecutionOutsideTenant(executionId: string): Promise<NextResponse | null> {
+export async function checkExecutionTenantScope(executionId: string): Promise<{ denied: NextResponse | null; execution: any }> {
   const client = getOrchestratorClient()
   const response = await client.getExecution(executionId)
   const execution = response.data
@@ -25,7 +27,7 @@ export async function denyExecutionOutsideTenant(executionId: string): Promise<N
         ((plan.source_cluster && !tenantConnectionIds.has(plan.source_cluster)) ||
         (plan.target_cluster && !tenantConnectionIds.has(plan.target_cluster)))
       ) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 })
+        return { denied: NextResponse.json({ error: "Not found" }, { status: 404 }), execution }
       }
     } catch {
       // Plan may have been deleted; keep the execution visible, consistent
@@ -36,8 +38,8 @@ export async function denyExecutionOutsideTenant(executionId: string): Promise<N
     ((execution.source_cluster && !tenantConnectionIds.has(execution.source_cluster)) ||
     (execution.target_cluster && !tenantConnectionIds.has(execution.target_cluster)))
   ) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return { denied: NextResponse.json({ error: "Not found" }, { status: 404 }), execution }
   }
 
-  return null
+  return { denied: null, execution }
 }

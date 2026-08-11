@@ -4317,7 +4317,10 @@
     },
     "screenshots": {
       "view": "부팅 스크린샷 보기",
-      "capturedAt": "캡처 시각"
+      "capturedAt": "캡처 시각",
+      "stepBoot": "VM 시작 중",
+      "stepStabilize": "게스트 안정화 대기 중",
+      "stepCapture": "부팅 스크린샷 캡처 중"
     },
     "emergencyDR": {
       "title": "긴급 DR",

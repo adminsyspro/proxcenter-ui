@@ -173,3 +173,36 @@ describe('FailoverDialog restore-point selection (issue #664)', () => {
     expect(screen.getByText(/Restore points could not be loaded/)).toBeInTheDocument()
   })
 })
+
+describe('FailoverDialog boot screenshot step checklist (issue #664 follow-up)', () => {
+  const runningVMResults = [
+    { vm_id: 100, vm_name: 'web-01', status: 'completed' as const, progress_percent: 100 },
+  ]
+
+  it('shows the stabilize step spinning while the execution phase is stabilizing', () => {
+    renderDialog({
+      execution: execution({ status: 'running', phase: 'stabilizing', vm_results: runningVMResults }),
+    })
+
+    const label = screen.getByText('Letting guests settle')
+    const row = label.closest('div')
+
+    expect(row?.querySelector('.ri-loader-4-line')).toBeInTheDocument()
+  })
+
+  it('shows the capture step spinning while the execution phase is capturing', () => {
+    renderDialog({
+      execution: execution({ status: 'running', phase: 'capturing', vm_results: runningVMResults }),
+    })
+
+    const label = screen.getByText('Capturing boot screenshots')
+    const row = label.closest('div')
+
+    expect(row?.querySelector('.ri-loader-4-line')).toBeInTheDocument()
+
+    // The stabilize step is done by the time we're capturing.
+    const stabilizeRow = screen.getByText('Letting guests settle').closest('div')
+
+    expect(stabilizeRow?.querySelector('.ri-check-line')).toBeInTheDocument()
+  })
+})

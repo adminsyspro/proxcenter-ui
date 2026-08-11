@@ -4279,7 +4279,10 @@
     },
     "screenshots": {
       "view": "Boot-Screenshot ansehen",
-      "capturedAt": "Aufgenommen um"
+      "capturedAt": "Aufgenommen um",
+      "stepBoot": "VMs werden gestartet",
+      "stepStabilize": "Warten auf Stabilisierung",
+      "stepCapture": "Boot-Screenshots werden aufgenommen"
     },
     "emergencyDR": {
       "title": "Notfall-DR",

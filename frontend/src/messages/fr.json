@@ -4309,7 +4309,7 @@
       "testConflict": "Un test de bascule est déjà actif pour ce plan. Nettoyez-le d'abord.",
       "restorePoint": "Point de restauration",
       "restorePointLatest": "Le plus récent (défaut)",
-      "restorePointChoose": "Choisir le point de rétention",
+      "restorePointChoose": "Choisir le point de restauration",
       "restorePointsHelp": "Chaque VM démarrera depuis le snapshot répliqué sélectionné.",
       "restorePointsNone": "Aucun point de restauration",
       "restorePointsLoadFailed": "Les points de restauration n'ont pas pu être chargés, le dernier état répliqué sera utilisé.",
@@ -4317,7 +4317,10 @@
     },
     "screenshots": {
       "view": "Voir la capture au boot",
-      "capturedAt": "Capturée à"
+      "capturedAt": "Capturée à",
+      "stepBoot": "Démarrage des VM",
+      "stepStabilize": "Stabilisation des invités",
+      "stepCapture": "Capture des écrans de boot"
     },
     "emergencyDR": {
       "title": "DR d'urgence",

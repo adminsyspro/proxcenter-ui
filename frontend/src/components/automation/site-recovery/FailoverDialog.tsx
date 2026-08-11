@@ -222,6 +222,17 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                             </IconButton>
                           </Tooltip>
                         )}
+                        {type === 'test' && (() => {
+                          const shot = screenshots.find(s => s.vm_id === vm.vm_id)
+                          if (!shot) return null
+                          return (
+                            <Tooltip title={t('siteRecovery.screenshots.view')}>
+                              <IconButton size='small' onClick={() => setScreenshotPreview(shot)} sx={{ color: 'text.secondary' }}>
+                                <i className='ri-camera-line' />
+                              </IconButton>
+                            </Tooltip>
+                          )
+                        })()}
                       </Box>
                     )
                   })}
@@ -338,6 +349,45 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                   </Box>
                 ))}
               </Stack>
+              {type === 'test' && (() => {
+                const allTerminal = (execution.vm_results || []).length > 0
+                  && (execution.vm_results || []).every((vm: RecoveryVMResult) => vm.status === 'completed' || vm.status === 'failed')
+                const steps = [
+                  {
+                    key: 'boot',
+                    label: t('siteRecovery.screenshots.stepBoot'),
+                    state: (execution.phase === 'stabilizing' || execution.phase === 'capturing' || allTerminal) ? 'done' : 'active'
+                  },
+                  {
+                    key: 'stabilize',
+                    label: t('siteRecovery.screenshots.stepStabilize'),
+                    state: execution.phase === 'capturing' ? 'done' : execution.phase === 'stabilizing' ? 'active' : 'pending'
+                  },
+                  {
+                    key: 'capture',
+                    label: t('siteRecovery.screenshots.stepCapture'),
+                    state: execution.phase === 'capturing' ? 'active' : 'pending'
+                  }
+                ] as const
+                return (
+                  <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+                    {steps.map(step => {
+                      const stepIcon = step.state === 'done' ? { icon: 'ri-check-line', color: 'success.main' }
+                        : step.state === 'active' ? { icon: 'ri-loader-4-line', color: 'primary.main' }
+                        : { icon: 'ri-time-line', color: 'text.disabled' }
+                      return (
+                        <Box key={step.key} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 16, textAlign: 'center', color: stepIcon.color, fontSize: 14, display: 'inline-flex', justifyContent: 'center' }}>
+                            <i className={stepIcon.icon} style={{ animation: stepIcon.icon === 'ri-loader-4-line' ? 'spin 1.5s linear infinite' : 'none' }} />
+                            <Box sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+                          </Box>
+                          <Typography variant='caption' sx={{ color: 'text.secondary' }}>{step.label}</Typography>
+                        </Box>
+                      )
+                    })}
+                  </Stack>
+                )
+              })()}
             </Box>
           )}
         </Stack>

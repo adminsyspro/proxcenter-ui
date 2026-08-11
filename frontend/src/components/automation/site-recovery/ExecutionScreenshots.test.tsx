@@ -13,9 +13,13 @@ afterEach(() => {
 
 // Distinct execution ids per test: SWR caches by key across renders.
 function stubList(shots: unknown[]) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+  const fetchMock = vi.fn().mockResolvedValue(
     new Response(JSON.stringify(shots), { status: 200, headers: { 'content-type': 'application/json' } })
-  ))
+  )
+
+  vi.stubGlobal('fetch', fetchMock)
+
+  return fetchMock
 }
 
 describe('ExecutionScreenshots', () => {
@@ -45,12 +49,20 @@ describe('ExecutionScreenshots', () => {
   })
 
   it('renders nothing when the execution has no screenshots', async () => {
-    stubList([])
+    const fetchMock = stubList([])
 
-    const { container } = renderWithProviders(<ExecutionScreenshots executionId='exec-empty' />)
+    const { container } = renderWithProviders(
+      // Same override as above: renderWithProviders disables revalidateOnMount,
+      // so without this the fetch never fires and the assertion below would
+      // pass for the wrong reason (never-fetched, not empty-after-fetch).
+      <SWRConfig value={{ revalidateOnMount: true }}>
+        <ExecutionScreenshots executionId='exec-empty' />
+      </SWRConfig>
+    )
 
-    // Give SWR a tick to resolve, then assert emptiness.
-    await new Promise(r => setTimeout(r, 10))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
     expect(container.innerHTML).toBe('')
   })
 })

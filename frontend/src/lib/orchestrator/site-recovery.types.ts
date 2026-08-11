@@ -182,6 +182,11 @@ export interface RecoveryExecution {
   started_at: string
   completed_at?: string
   vm_results: RecoveryVMResult[]
+  // Fine-grained progress marker for a running test failover, set past VM
+  // boot as the post-boot screenshot pipeline advances: 'booting',
+  // 'stabilizing', 'capturing', then cleared once it's done. Only ever set
+  // for type === 'test'.
+  phase?: string
 }
 
 // ============================================

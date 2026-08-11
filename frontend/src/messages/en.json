@@ -4317,7 +4317,10 @@
     },
     "screenshots": {
       "view": "View boot screenshot",
-      "capturedAt": "Captured at"
+      "capturedAt": "Captured at",
+      "stepBoot": "Starting VMs",
+      "stepStabilize": "Letting guests settle",
+      "stepCapture": "Capturing boot screenshots"
     },
     "emergencyDR": {
       "title": "Emergency DR",

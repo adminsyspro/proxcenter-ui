@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
-import { denyExecutionOutsideTenant } from "@/lib/orchestrator/executionScope"
+import { checkExecutionTenantScope } from "@/lib/orchestrator/executionScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const scopeDenied = await denyExecutionOutsideTenant(id)
+    const { denied: scopeDenied } = await checkExecutionTenantScope(id)
 
     if (scopeDenied) return scopeDenied
 

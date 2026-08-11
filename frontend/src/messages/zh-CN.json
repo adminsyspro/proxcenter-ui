@@ -4278,7 +4278,10 @@
     },
     "screenshots": {
       "view": "查看启动截图",
-      "capturedAt": "截图时间"
+      "capturedAt": "截图时间",
+      "stepBoot": "正在启动虚拟机",
+      "stepStabilize": "等待系统稳定",
+      "stepCapture": "正在捕获启动截图"
     },
     "emergencyDR": {
       "title": "紧急灾难恢复",

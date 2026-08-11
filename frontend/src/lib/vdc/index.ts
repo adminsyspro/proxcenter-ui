@@ -11,6 +11,7 @@ import { decryptSecret } from '@/lib/crypto/secret'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
+import { clearVdcScopeCache } from './scope'
 
 import type {
   Vdc,
@@ -272,13 +273,45 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   }
   const tenantSlug = tenantRow.slug
 
-  // 2. Check slug uniqueness within tenant + connection
+  // 1bis. Business rule: max one vDC per (tenant, connection). The DB
+  // unique (tenant_id, connection_id) is the real invariant (races land
+  // there as P2002); this guard only provides the friendly message.
+  const existingOnConnection = await prisma.vdc.findFirst({
+    where: { tenantId: input.tenantId, connectionId: input.connectionId },
+    select: { id: true, name: true },
+  })
+  if (existingOnConnection) {
+    throw new Error(
+      `Tenant already has a vDC on this cluster ("${existingOnConnection.name}"). ` +
+      `One vDC per tenant per cluster.`
+    )
+  }
+
+  // 2. Check slug uniqueness tenant-wide (all connections). The default PBS
+  // namespace derives from the slug (pbsOrchestrator), and PBS binding
+  // tuples are globally unique — two same-name clusters would collide.
   const existing = await prisma.vdc.findFirst({
-    where: { tenantId: input.tenantId, connectionId: input.connectionId, slug: input.slug },
+    where: { tenantId: input.tenantId, slug: input.slug },
     select: { id: true },
   })
   if (existing) {
-    throw new Error(`A vDC with slug "${input.slug}" already exists for this tenant/connection`)
+    throw new Error(
+      `A vDC with slug "${input.slug}" already exists for this tenant ` +
+      `(two clusters with the same display name? rename one connection)`
+    )
+  }
+
+  // 2bis. vDCs may only slice provider-pool connections (IaaS/MSP
+  // exclusivity). The FK to provider_connections would reject the insert
+  // anyway, but only after the PVE pool was created — refuse up front.
+  const poolMembership = await prisma.providerConnection.findUnique({
+    where: { connectionId: input.connectionId },
+    select: { connectionId: true },
+  })
+  if (!poolMembership) {
+    throw new Error(
+      `Connection ${input.connectionId} is not in the provider pool — vDCs can only be created on provider-pool connections`
+    )
   }
 
   // 3. Allocate vDC id (needed for zone generation)
@@ -408,6 +441,8 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     console.warn(`[vdc] applySdn failed after creating zone "${sdnZoneName}": ${err?.message}`)
   }
 
+  clearVdcScopeCache(input.tenantId)
+
   return (await getVdcById(id))!
 }
 
@@ -417,7 +452,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
 
 export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcWithDetails> {
   // Verify vDC exists
-  const existing = await prisma.vdc.findUnique({ where: { id }, select: { id: true } })
+  const existing = await prisma.vdc.findUnique({ where: { id }, select: { id: true, tenantId: true } })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
   }
@@ -485,6 +520,8 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
       })
     }
   })
+
+  clearVdcScopeCache(existing.tenantId)
 
   return (await getVdcById(id))!
 }
@@ -645,6 +682,8 @@ export async function deleteVdc(id: string): Promise<void> {
 
     await tx.vdc.delete({ where: { id } })
   })
+
+  clearVdcScopeCache(vdc.tenantId)
 }
 
 // ---------------------------------------------------------------------------

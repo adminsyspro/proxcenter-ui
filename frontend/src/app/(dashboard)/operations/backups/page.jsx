@@ -904,11 +904,11 @@ return () => clearTimeout(timer)
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-              {/* PBS picker is hidden in tenant (vDC) mode — a tenant
-                  always sees a single PBS connection (the one their vDC
-                  is bound to), so a 1-option dropdown is just noise.
-                  Provider keeps the picker for cross-PBS browsing. */}
-              {!isVdcTenant && (
+              {/* PBS server picker: providers always see it; tenant-vDC users
+                  see it only when their scope spans several PBS servers
+                  (multi-vDC/multi-PBS tenants). Single-PBS tenants keep the
+                  auto-selected pbsConnections[0] with no picker. */}
+              {(!isVdcTenant || pbsConnections.length > 1) && (
                 <FormControl size='small' sx={{ minWidth: 200 }}>
                   <InputLabel>{t('backups.pbsServer')}</InputLabel>
                   <Select

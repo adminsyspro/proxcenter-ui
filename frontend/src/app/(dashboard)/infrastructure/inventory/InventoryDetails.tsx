@@ -93,6 +93,8 @@ import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, R
 import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { useMyVdcs } from '@/hooks/useMyVdcs'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useRouter } from 'next/navigation'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import RootInventoryView from './RootInventoryView'
@@ -214,6 +216,24 @@ export default function InventoryDetails({
   // setups. Same gate is used to funnel tenants through the template
   // catalogue instead of the bare-metal Create VM dialog.
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
+  // connectionId → vDC name (tenant IaaS): powers the vDC chip and the vDC
+  // column. Bijective per the DB unique (tenant_id, connection_id).
+  const { vdcs: myVdcs } = useMyVdcs()
+  const vdcNameByConn = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false && v.connectionId) m.set(v.connectionId, v.name)
+    }
+    return m
+  }, [myVdcs])
+  // vDC column: tenant IaaS with several vDCs, union view only — in a
+  // precise vDC context the column is a constant, so it's hidden (§3.6).
+  // Only a cookie matching one of OUR active vDCs counts as a context: an
+  // invalid/foreign cookie fails open to the union server-side, and the
+  // column must not vanish precisely when it carries information.
+  const ctxCookie = readVdcContextCookie()
+  const ctxIsActiveVdc = !!ctxCookie && myVdcs.some((v) => v.id === ctxCookie && v.enabled !== false)
+  const showVdcColumn = !isFullClusterView && vdcNameByConn.size > 1 && !ctxIsActiveVdc
   const allowLxc = !tenantLoading && (currentTenant === null || isFullClusterView)
   const allowBlankVm = allowLxc
   const router = useRouter()
@@ -2647,6 +2667,7 @@ return vm?.isCluster ?? false
                       isCluster: vm.isCluster,
                       osInfo: vm.osInfo,
                       lock: vm.lock,
+                      vdcName: vdcNameByConn.get(vm.connId),
                     }))}
                     expanded
                     showNode
@@ -2669,6 +2690,7 @@ return vm?.isCluster ?? false
                     onToggleFavorite={toggleFavorite}
                     migratingVmIds={migratingVmIds}
                     defaultHiddenColumns={['node', 'ha']}
+                    showVdcColumn={showVdcColumn}
                   />
                 </Box>
               </CardContent>
@@ -2699,6 +2721,8 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            showVdcColumn={showVdcColumn}
+            vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'pools' && pools.length > 0 ? (
@@ -2719,6 +2743,8 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            showVdcColumn={showVdcColumn}
+            vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'tags' && tags.length > 0 ? (
@@ -2740,6 +2766,8 @@ return vm?.isCluster ?? false
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             migratingVmIds={migratingVmIds}
+            showVdcColumn={showVdcColumn}
+            vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
           />
         ) : viewMode === 'templates' ? (
@@ -2938,6 +2966,18 @@ return vm?.isCluster ?? false
                         sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
                       />
                     </MuiTooltip>
+                  )}
+                  {/* vDC chip — tenant mirror of the provider node chip:
+                      the vDC is the only placement info a tenant sees. */}
+                  {!isFullClusterView && vdcNameByConn.get(connId) && (
+                    <Chip
+                      size="small"
+                      icon={<i className="ri-cloud-line" style={{ fontSize: 12, marginLeft: 6 }} />}
+                      label={vdcNameByConn.get(connId)}
+                      color="primary"
+                      variant="outlined"
+                      sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
+                    />
                   )}
                   {/* Node chip — provider/MSP only. vDC tenants see a vDC
                       abstraction where the underlying PVE node is an

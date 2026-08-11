@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { getSessionPrisma } from "@/lib/tenant"
+import { prisma as globalPrisma } from "@/lib/db/prisma"
+import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 export const runtime = "nodejs"
@@ -20,14 +23,43 @@ function extractHostname(baseUrl: string): string {
 // GET /api/v1/orchestrator/jobs - List all jobs (rolling updates, future: DRS, migrations, etc.)
 export async function GET(req: Request) {
   try {
-    const prisma = await getSessionPrisma()
+    // Gates the "Task Center" page (menuData permissions: ['tasks.view']).
+    const denied = await checkPermission(PERMISSIONS.TASKS_VIEW)
+    if (denied) return denied
+
     const { searchParams } = new URL(req.url)
     const type = searchParams.get("type") // filter by type: rolling_update, drs, migration, etc.
     const status = searchParams.get("status") // filter by status: running, completed, failed, etc.
     const limit = searchParams.get("limit") || "50"
 
-    // Build connection lookup maps: id → hostname, name → hostname
-    const connections = await prisma.connection.findMany({ select: { id: true, name: true, baseUrl: true } })
+    // The orchestrator (rolling-updates, drs/migrations, replication/jobs,
+    // replication/plans) is NOT tenant-aware: it returns fleet-wide rows with
+    // a raw connection_id / source_cluster / target_cluster field, so all
+    // scoping happens here.
+    //
+    // Connection perimeter for the LIST: provider sees the whole fleet
+    // (unchanged); msp/iaas ownership uses the tenant union
+    // (getTenantConnectionIds); iaas additionally narrows to the active vDC
+    // view context (Task 12 class rule — same pattern as /api/v1/changes and
+    // /api/v1/tasks/running). getSessionPrisma() was wrong here: it only
+    // returns connections owned DIRECTLY by the tenant, which is empty for
+    // iaas tenants (provider-pool connections via vDC binding) and
+    // under-inclusive for the provider (excludes MSP-owned connections).
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    const vdcScope = maskingScope(infra)
+    const tenantConnectionIds = await getTenantConnectionIds()
+    const perimeterConnectionIds = vdcScope ? vdcScope.connectionIds : tenantConnectionIds
+
+    // Build connection lookup maps: id → hostname, name → hostname. Uses the
+    // global client (not tenant-scoped) restricted to the perimeter above,
+    // since vDC-bound connections are provider-owned rows.
+    const connections = perimeterConnectionIds.size > 0
+      ? await globalPrisma.connection.findMany({
+          where: { id: { in: Array.from(perimeterConnectionIds) } },
+          select: { id: true, name: true, baseUrl: true },
+        })
+      : []
     const connById = new Map<string, string>()
     const connByName = new Map<string, string>()
 
@@ -274,13 +306,26 @@ export async function GET(req: Request) {
       }
     }
 
-    // Filter all jobs by tenant connections
+    // Filter all jobs by tenant connections. Provider keeps the unfiltered
+    // fleet view; every non-provider caller is deny-by-default: a job whose
+    // metadata carries NONE of connectionId/sourceCluster/targetCluster is
+    // EXCLUDED (never "no key = pass"), and a job is kept only if EVERY
+    // connection ref it carries resolves (by id or by name) inside the
+    // perimeter built above — a multi-cluster job (replication, failover,
+    // cross-cluster migration) with one endpoint outside the perimeter would
+    // otherwise leak the foreign cluster's name and per-VM results.
     const tenantConnIds = new Set(connections.map((c: any) => c.id))
-    const tenantJobs = jobs.filter((j: any) =>
-      !j.metadata?.connectionId || tenantConnIds.has(j.metadata.connectionId)
-    ).filter((j: any) =>
-      !j.metadata?.sourceCluster || tenantConnIds.has(j.metadata.sourceCluster) || connByName.has(j.metadata.sourceCluster)
-    )
+    const jobConnectionRefs = (j: any): string[] =>
+      [j.metadata?.connectionId, j.metadata?.sourceCluster, j.metadata?.targetCluster].filter(Boolean)
+    const inPerimeter = (ref: string) => tenantConnIds.has(ref) || connByName.has(ref)
+
+    const tenantJobs = infra.kind === "provider"
+      ? jobs
+      : jobs.filter((j: any) => {
+          const refs = jobConnectionRefs(j)
+          if (refs.length === 0) return false
+          return refs.every(inPerimeter)
+        })
 
     // Apply filters
     let filtered = tenantJobs

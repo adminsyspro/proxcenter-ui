@@ -295,7 +295,8 @@ export async function getPbsConnectionById(id: string, tenantId?: string): Promi
       }
     } else {
       const { getVdcScope } = await import('@/lib/vdc/scope')
-      const scope = await getVdcScope(resolvedTenantId)
+      // Ownership check on direct PBS access: full union, not the view context.
+      const scope = await getVdcScope(resolvedTenantId, { ignoreVdcContext: true })
       if (!scope || !scope.pbsConnectionIds.has(id)) {
         throw new Error(`PBS Connection not found: ${id}`)
       }

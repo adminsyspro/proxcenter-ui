@@ -18,7 +18,9 @@ import { getAllowedJobPools, isJobOwnedByTenantPools, validateTenantJobBody, val
  */
 async function loadJobForTenant(conn: any, connectionId: string, jobId: string) {
   const tenantId = await getCurrentTenantId()
-  const scope = maskingScope(await getTenantInfrastructureScope(tenantId))
+  // Object route (design ruling §5): full union — a deep link to another
+  // vDC's resource must keep working in any view context.
+  const scope = maskingScope(await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true }))
   const allowedPools = await getAllowedJobPools(tenantId, connectionId)
   let job: any
   try {

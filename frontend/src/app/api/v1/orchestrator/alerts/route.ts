@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 
 import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
+import { DEFAULT_TENANT_ID, getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
 import { buildOrchestratorFingerprint } from '@/lib/alerts/orchestratorFingerprint'
 
 export const runtime = 'nodejs'
@@ -180,12 +181,30 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get('connection_id') || undefined
 
+    // Task 12 Step 5 (confirmed): the orchestrator's clearAll has no tenant
+    // concept -- omitting connection_id wipes the ENTIRE fleet's active
+    // alerts. A non-provider caller must supply a connection_id in their own
+    // perimeter; the provider keeps the unrestricted fleet-wide clear.
+    const tenantId = await getCurrentTenantId()
+    if (tenantId !== DEFAULT_TENANT_ID && !connectionId) {
+      return NextResponse.json({ error: 'connection_id is required' }, { status: 400 })
+    }
+
     // Verify connection belongs to tenant if specified
     if (connectionId) {
       const tenantConnectionIds = await getTenantConnectionIds()
       if (!tenantConnectionIds.has(connectionId)) {
         return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
       }
+    }
+
+    // Non-provider: the orchestrator's clearAll(connection) has no tenant
+    // concept — on a shared cluster it would wipe the neighbours' alerts
+    // too. Clear only the alerts this caller can actually see, one by one.
+    if (tenantId !== DEFAULT_TENANT_ID) {
+      const cleared = await clearVisibleTenantAlerts(connectionId)
+
+      return NextResponse.json({ cleared })
     }
 
     const response = await alertsApi.clearAll(connectionId)

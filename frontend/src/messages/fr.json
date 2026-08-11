@@ -229,6 +229,7 @@
     "horizontalLayout": "Disposition horizontale",
     "verticalLayout": "Disposition verticale",
     "switchTenant": "Changer de tenant",
+    "switchVdc": "Changer de vDC",
     "searchTenants": "Rechercher un tenant"
   },
   "pxcore": {
@@ -5381,6 +5382,8 @@
     "limitedToTag": "Limité aux VMs avec un tag spécifique",
     "poolScope": "Pool",
     "limitedToPool": "Limité aux VMs d'un pool spécifique",
+    "vdcScope": "vDC",
+    "limitedToVdc": "Limité à un datacenter virtuel",
     "tagUsedByVms": "{count} VM(s)",
     "poolContainsVms": "{count} VM(s)",
     "tags": "tags",
@@ -7080,6 +7083,7 @@
     "edit": "Modifier le vDC",
     "delete": "Supprimer le vDC",
     "name": "Nom",
+    "nameHelper": "Optionnel. Laissez vide pour utiliser le nom par défaut (tenant — cluster).",
     "slug": "Slug",
     "slugHelp": "Lettres minuscules, chiffres et tirets uniquement. Un pool PVE sera créé automatiquement.",
     "description": "Description",
@@ -7172,12 +7176,17 @@
     "pbsCancel": "Annuler",
     "pbsCreate": "Créer",
     "pbsClose": "Fermer",
-    "tenantHasVdcs": "Ce tenant possède déjà {count, plural, =1 {un vDC : {names}} other {# vDCs : {names}}}. Modifiez le vDC existant pour effectuer des changements — un seul vDC par tenant est autorisé.",
+    "tenantHasVdcs": "Ce tenant possède déjà {count, plural, =1 {un vDC : {names}} other {# vDCs : {names}}}. Vous pouvez en créer un autre sur un cluster non encore couvert.",
+    "tenantAllClustersUsed": "Ce tenant possède déjà un vDC sur chaque cluster disponible.",
     "tenantUsers": "Utilisateurs du tenant"
   },
   "myVdc": {
     "title": "Mon datacenter",
     "selectVdc": "Sélectionner un vDC",
+    "allVdcs": "Tous les vDCs",
+    "currentContext": "Contexte actuel",
+    "vmCount": "{count, plural, =1 {# VM} other {# VMs}}",
+    "backToVdcList": "Tous les Virtual Datacenters",
     "noVdcs": "Aucun datacenter virtuel n'est assigné à votre tenant.",
     "nodes": "Nœuds",
     "storages": "Stockages",

@@ -19,7 +19,14 @@ export type InfraScope =
  * Resolve a tenant's infrastructure scope. Uses the global prisma client
  * (operatingModel + ownership are not tenant-scoped lookups).
  */
-export async function getTenantInfrastructureScope(tenantId: string): Promise<InfraScope> {
+export async function getTenantInfrastructureScope(
+  tenantId: string,
+  opts?: {
+    /** Forwarded to getVdcScope. Object routes (design ruling §5) and API
+     *  token paths resolve the FULL union, never the vDC view context. */
+    ignoreVdcContext?: boolean
+  }
+): Promise<InfraScope> {
   if (tenantId === DEFAULT_TENANT_ID) return { kind: "provider" }
 
   const tenant = await prisma.tenant.findUnique({
@@ -35,7 +42,7 @@ export async function getTenantInfrastructureScope(tenantId: string): Promise<In
     return { kind: "msp", connectionIds: new Set(conns.map((c) => c.id)) }
   }
 
-  const vdcScope = await getVdcScope(tenantId)
+  const vdcScope = await getVdcScope(tenantId, opts)
   return { kind: "iaas", vdcScope: vdcScope as VdcScope }
 }
 

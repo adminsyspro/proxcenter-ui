@@ -4,7 +4,8 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { assertVdcPbsAccess } from "@/lib/vdc/scope"
+import { assertVdcPbsAccess, getVdcScope } from "@/lib/vdc/scope"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -28,6 +29,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const access = await assertVdcPbsAccess(id)
     if (access instanceof Response) return access
 
+    // Union verdict stays the outer authorization bound; the DISPLAYED data
+    // follows the active vDC view context. Intersecting can only REMOVE
+    // entries, never add ones the union didn't authorise. No-op without a
+    // view context (narrowed == union). These session-only routes have no
+    // token principal: cookie-less callers carry no context by construction.
+    let effectiveAllowed: ReadonlyArray<{ datastore: string; namespace: string }> = []
+    if (access.kind === 'tenant') {
+      const tenantId = await getCurrentTenantId()
+      const narrowed = await getVdcScope(tenantId)
+      const narrowedNs = narrowed?.pbsNamespacesByConnection.get(id) ?? []
+      const narrowedSet = new Set(narrowedNs.map(p => `${p.datastore}|${p.namespace}`))
+      effectiveAllowed = access.allowed.filter(a => narrowedSet.has(`${a.datastore}|${a.namespace}`))
+    }
+
     const url = new URL(req.url)
     const days = Math.min(Number.parseInt(url.searchParams.get('days') || '30', 10), 90)
 
@@ -40,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     // For vDC tenants, restrict to bound (datastore, namespace) tuples.
     const allowedNsByStore = access.kind === 'tenant'
-      ? access.allowed.reduce((acc, a) => {
+      ? effectiveAllowed.reduce((acc, a) => {
           const set = acc.get(a.datastore) ?? new Set<string>()
           set.add(a.namespace)
           acc.set(a.datastore, set)

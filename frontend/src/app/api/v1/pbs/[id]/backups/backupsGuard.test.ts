@@ -16,7 +16,7 @@ import type { CachedBackup } from '@/lib/cache/pbsBackupCache'
 const {
   checkPermissionMock, assertVdcPbsAccessMock, getPbsConnectionByIdMock,
   getPbsConnectionByIdUnscopedMock, getAllBackupsMock, vdcPbsNamespaceFindManyMock,
-  cookiesMock, currentPrincipal,
+  cookiesMock, currentPrincipal, getVdcScopeMock,
 } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn<(...a: any[]) => Promise<Response | null>>(),
   assertVdcPbsAccessMock: vi.fn<(id: string) => Promise<any>>(),
@@ -26,6 +26,7 @@ const {
   vdcPbsNamespaceFindManyMock: vi.fn<(...a: any[]) => Promise<any[]>>(),
   cookiesMock: vi.fn<() => Promise<any>>(),
   currentPrincipal: { value: undefined as Principal | undefined },
+  getVdcScopeMock: vi.fn<(...a: any[]) => Promise<any>>(),
 }))
 
 // Same pass-through convention as reusedRoutesGuard.test.ts: the guard's own
@@ -46,7 +47,7 @@ vi.mock('@/lib/rbac', () => ({
 
 vi.mock('@/lib/vdc/scope', () => ({
   assertVdcPbsAccess: assertVdcPbsAccessMock,
-  getVdcScope: vi.fn().mockResolvedValue(null),
+  getVdcScope: getVdcScopeMock,
 }))
 
 vi.mock('@/lib/connections/getConnection', () => ({
@@ -120,6 +121,7 @@ beforeEach(() => {
   getPbsConnectionByIdUnscopedMock.mockResolvedValue(CONN)
   vdcPbsNamespaceFindManyMock.mockResolvedValue([])
   cookiesMock.mockResolvedValue({ get: () => undefined })
+  getVdcScopeMock.mockResolvedValue(null)
   // Every fixture backup already carries a vmName, so the /cluster/resources
   // enrichment fan-out (blankNames branch) never runs -- irrelevant to what
   // this file is proving.
@@ -166,5 +168,56 @@ describe('GET /api/v1/pbs/[id]/backups session invariance', () => {
     const res = await callRoute(GET, { params: { id: 'pbs-1' } })
     expect(res.status).toBe(403)
     expect(assertVdcPbsAccessMock).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// P1<->P1.5 seam: the union access verdict must stay untouched, but the
+// DISPLAYED namespaces follow the active vDC view context.
+// ---------------------------------------------------------------------------
+describe('GET /api/v1/pbs/[id]/backups — context-narrowed display', () => {
+  const UNION_ALLOWED = [
+    { datastore: 'store1', namespace: '' },
+    { datastore: 'store1', namespace: 'ns-b' },
+  ]
+
+  beforeEach(() => {
+    assertVdcPbsAccessMock.mockResolvedValue({ kind: 'tenant', allowed: UNION_ALLOWED })
+    getAllBackupsMock.mockResolvedValue({
+      data: [
+        backup({ id: 'root-1', namespace: '', vmName: 'web-01' }),
+        backup({ id: 'nsb-1', namespace: 'ns-b', backupId: '101', vmName: 'db-01' }),
+      ],
+      warnings: [],
+      fromCache: true,
+    })
+  })
+
+  it('a context-narrowed scope only returns the narrowed namespaces, not the full union', async () => {
+    getVdcScopeMock.mockResolvedValue({
+      pbsNamespacesByConnection: new Map([['pbs-1', [{ datastore: 'store1', namespace: '' }]]]),
+      connectionIds: new Set(),
+    })
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { params: { id: 'pbs-1' } })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data.backups).toHaveLength(1)
+    expect(body.data.backups[0].namespace).toBe('')
+  })
+
+  it('a token caller resolves the scope with { ignoreVdcContext: true } (never depends on the cookie)', async () => {
+    currentPrincipal.value = TOKEN_PRINCIPAL
+    getVdcScopeMock.mockResolvedValue({
+      pbsNamespacesByConnection: new Map([['pbs-1', UNION_ALLOWED]]),
+      connectionIds: new Set(),
+    })
+    const { GET } = await import('./route')
+    const res = await callRoute(GET, { params: { id: 'pbs-1' } })
+    expect(res.status).toBe(200)
+    expect(getVdcScopeMock).toHaveBeenCalledWith('default', { ignoreVdcContext: true })
+    const body = await readJson<any>(res)
+    // token = union: no entries removed by the (no-op) intersection
+    expect(body.data.backups).toHaveLength(2)
   })
 })

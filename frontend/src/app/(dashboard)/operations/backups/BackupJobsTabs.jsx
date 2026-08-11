@@ -228,10 +228,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   // Tenant mode: load the vDC list scoped to the selected connection.
   // We pull the PBS binding's namespace alongside the pool so the
   // job-create dialog can auto-fill every PBS-side field (storage,
-  // namespace) and the PVE pool from a single "vDC" pick. Schema allows
-  // multiple vDCs per (tenant, connection) but the product invariant is
-  // 1-per-cluster — if we ever see N>1 we log a warning and pick the
-  // first deterministically.
+  // namespace) and the PVE pool from a single "vDC" pick.
+  // The DB now enforces 1 vDC per (tenant, connection) — the N>1 branch
+  // below is pure defense against legacy rows.
   useEffect(() => {
     if (!isVdcTenant || !selectedConnection) { setTenantPools([]); return }
     let cancelled = false
@@ -256,8 +255,8 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
           })
           .filter(p => !!p.poolName)
         if (onConn.length > 1) {
-          // Defensive: schema allows N vDCs per (tenant, connection),
-          // product invariant is 1. Warn but don't fail — pick [0].
+          // Defensive against legacy rows only — the DB enforces
+          // 1 vDC per (tenant, connection). Warn but don't fail — pick [0].
           console.warn(`[BackupJobsTabs] tenant has ${onConn.length} vDCs on connection ${selectedConnection}; using "${onConn[0].vdcName}".`)
         }
         setTenantPools(onConn)
@@ -544,10 +543,11 @@ return '—'
     <Box>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
-        {/* PVE cluster picker hidden for tenant-vDC users — they always
-            map to a single cluster (the one their vDC lives on). The
-            connection is auto-selected from pveConnections[0]. */}
-        {!isVdcTenant ? (
+        {/* PVE cluster picker: providers always see it; tenant-vDC users
+            see it only when their scope spans several clusters (multi-vDC
+            tenants). Single-cluster tenants keep the auto-selected
+            pveConnections[0] with no picker. */}
+        {(!isVdcTenant || pveConnections.length > 1) ? (
           <FormControl size="small" sx={{ minWidth: 250 }}>
             <InputLabel>{t('backups.pveCluster')}</InputLabel>
             <Select

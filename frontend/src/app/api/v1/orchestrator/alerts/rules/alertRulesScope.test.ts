@@ -27,7 +27,9 @@ const {
   }
 })
 
-vi.mock("@/lib/tenant/infraScope", () => ({
+// Keep real maskingScope; only mock getTenantInfrastructureScope
+vi.mock("@/lib/tenant/infraScope", async (orig) => ({
+  ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
 }))
 
@@ -215,5 +217,63 @@ describe("POST /api/v1/orchestrator/alerts/rules -- MSP autofill scope", () => {
     // getSessionPrisma must NOT have been called for the provider
     expect(getSessionPrismaMock).not.toHaveBeenCalled()
     expect(orchestratorFetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// GET -- vDC scope filtering
+// ---------------------------------------------------------------------------
+
+describe("GET /api/v1/orchestrator/alerts/rules -- vDC view context filtering", () => {
+  // No connection_id -> tenant-global rule, always visible once ownership
+  // passes (ruleVisibleToTenant is mocked to always return true here).
+  const RULE_GLOBAL = { id: "r-global", name: "Global rule" }
+  const RULE_C1 = { id: "r-c1", name: "Rule on c1", connection_id: PVE_CONN_ID }
+  const RULE_C2 = { id: "r-c2", name: "Rule on c2 (other vDC)", connection_id: "conn-pve-2" }
+
+  beforeEach(() => {
+    orchestratorFetchMock.mockResolvedValue([RULE_GLOBAL, RULE_C1, RULE_C2])
+  })
+
+  it("provider: sees every rule regardless of connection_id (no vDC masking)", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    expect(body.map((r) => r.id)).toEqual(["r-global", "r-c1", "r-c2"])
+  })
+
+  it("msp: sees every owned-ownership rule regardless of connection_id (no vDC masking)", async () => {
+    getCurrentTenantIdMock.mockResolvedValue(MSP_TENANT_ID)
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set([PVE_CONN_ID, "conn-pve-2"]) })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    expect(body.map((r) => r.id)).toEqual(["r-global", "r-c1", "r-c2"])
+  })
+
+  it("iaas: keeps the global rule and the narrowed-connection rule, excludes the rule on a connection present only in the union (another vDC on a shared cluster)", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("iaas-tenant-1")
+    const vdcScope = {
+      connectionIds: new Set([PVE_CONN_ID]),
+      pbsConnectionIds: new Set<string>(),
+      nodesByConnection: new Map<string, Set<string>>(),
+      poolsByConnection: new Map<string, Set<string>>(),
+    }
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    const ids = body.map((r) => r.id)
+    expect(ids).toContain("r-global")
+    expect(ids).toContain("r-c1")
+    expect(ids).not.toContain("r-c2")
   })
 })

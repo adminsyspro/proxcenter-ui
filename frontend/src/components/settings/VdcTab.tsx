@@ -435,6 +435,15 @@ export default function VdcTab() {
     return cSlug ? `${tSlug}-${cSlug}` : tSlug
   }
 
+  // Display name mirrors the slug derivation: with multi-vDC tenants, a
+  // bare tenant name would make the vDCs indistinguishable in every list.
+  const computeVdcName = (tenant: any | null, connectionId: string): string => {
+    if (!tenant) return ''
+    const base = tenant.name || tenant.id || ''
+    const conn = connections.find((c) => c.id === connectionId)
+    return conn?.name ? `${base} — ${conn.name}` : base
+  }
+
   // ------- Handlers -------
 
   const handleCreate = () => {
@@ -535,9 +544,16 @@ export default function VdcTab() {
       }
 
       if (editingVdc) {
-        // PUT - update
+        // PUT - update. An emptied Name field falls back to the derived
+        // name (renaming a vDC back to default) and — as a last resort, if
+        // `tenants` wasn't loaded — to the vDC's current name so we never
+        // submit an empty string.
+        const resolvedName = form.name.trim() ||
+          computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, editingVdc.connectionId) ||
+          editingVdc.name
+
         const body: any = {
-          name: form.name,
+          name: resolvedName,
           description: form.description || undefined,
           nodes: nodesPayload,
           primaryStorage: form.primaryStorage,
@@ -556,11 +572,15 @@ export default function VdcTab() {
           throw new Error(err.error || t('vdc.failedSave'))
         }
       } else {
-        // POST - create
+        // POST - create. An empty Name field falls back to the derived
+        // "tenant — cluster" name (see computeVdcName).
+        const resolvedName = form.name.trim() ||
+          computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, form.connectionId)
+
         const body = {
           tenantId: form.tenantId,
           connectionId: form.connectionId,
-          name: form.name,
+          name: resolvedName,
           slug: form.slug,
           description: form.description || undefined,
           nodes: nodesPayload,
@@ -1128,13 +1148,21 @@ export default function VdcTab() {
     (!form.unlimitedRam && exceeds(form.maxRamGb, clusterRamGbTotal)) ||
     (!form.unlimitedStorage && exceeds(form.maxStorageGb, clusterStorageGbTotal))
 
-  // 1 tenant = 1 vDC business rule (UI-side). When the picked tenant
-  // already owns a vDC, lock the Cluster picker and surface a warning so
-  // the admin edits the existing vDC instead of creating another one.
+  // One vDC per (tenant, connection): the Cluster picker only offers
+  // clusters the tenant doesn't cover yet. Enforced server-side by
+  // createVdc + a DB unique; here we just shape the picker options.
   const existingTenantVdcs = !editingVdc && form.tenantId
     ? vdcs.filter((v: any) => v.tenantId === form.tenantId)
     : []
   const tenantHasExistingVdc = existingTenantVdcs.length > 0
+  const occupiedConnectionIds = new Set(existingTenantVdcs.map((v: any) => v.connectionId))
+  // vDCs may only slice provider-pool connections (IaaS/MSP exclusivity) —
+  // an MSP-owned connection can appear in `connections` (it's still a `pve`
+  // connection) but must never be offered as a cluster to carve a vDC from.
+  const poolConnections = connections.filter((c: any) => c.inProviderPool)
+  const allClustersUsed =
+    tenantHasExistingVdc && poolConnections.length > 0 &&
+    poolConnections.every((c) => occupiedConnectionIds.has(c.id))
 
   return (
     <Box>
@@ -1235,16 +1263,21 @@ export default function VdcTab() {
             getOptionLabel={(o) => o.name || o.slug || o.id}
             value={tenants.find((t) => t.id === form.tenantId) || null}
             onChange={(_, v) => {
-              setForm((f) => {
-                if (!v) return { ...f, tenantId: '' }
-                if (editingVdc) return { ...f, tenantId: v.id }
-                return {
-                  ...f,
-                  tenantId: v.id,
-                  name: v.name || v.id,
-                  slug: computeVdcSlug(v, f.connectionId),
-                }
-              })
+              if (!v) { setForm((f) => ({ ...f, tenantId: '' })); return }
+              if (editingVdc) { setForm((f) => ({ ...f, tenantId: v.id })); return }
+              // If the picked tenant already occupies the currently selected
+              // cluster, drop that selection — its option is hidden below.
+              const occupied = !!form.connectionId &&
+                vdcs.some((x: any) => x.tenantId === v.id && x.connectionId === form.connectionId)
+              const connectionId = occupied ? '' : form.connectionId
+              setForm((f) => ({
+                ...f,
+                tenantId: v.id,
+                connectionId,
+                ...(occupied ? { nodes: [], primaryStorage: '' } : {}),
+                slug: computeVdcSlug(v, connectionId),
+              }))
+              if (occupied) setAvailableResources(null)
             }}
             disabled={!!editingVdc}
             renderInput={(params) => (
@@ -1265,15 +1298,35 @@ export default function VdcTab() {
             )}
           />
 
-          {/* Existing-vDC blocker for the picked tenant. Business rule:
-              1 tenant = 1 vDC. The Cluster picker below is disabled while
-              this is shown. */}
+          {/* Name — optional; leaving it empty falls back to the derived
+              "tenant — cluster" name at submit time (see handleSave). The
+              placeholder previews that derived name so an empty field reads
+              as an obvious, safe default rather than a mistake. */}
+          <TextField
+            label={t('vdc.name')}
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder={computeVdcName(tenants.find((tn) => tn.id === form.tenantId) ?? null, form.connectionId)}
+            helperText={t('vdc.nameHelper')}
+            fullWidth
+          />
+
+          {/* Informational: lists the tenant's existing vDCs (with their
+              clusters). Turns into a warning when every cluster is taken —
+              in that state nothing is selectable below. */}
           {tenantHasExistingVdc && (
-            <Alert severity="warning">
-              {t('vdc.tenantHasVdcs', {
-                count: existingTenantVdcs.length,
-                names: existingTenantVdcs.map((v: any) => v.name).join(', '),
-              })}
+            <Alert severity={allClustersUsed ? 'warning' : 'info'}>
+              {allClustersUsed
+                ? t('vdc.tenantAllClustersUsed')
+                : t('vdc.tenantHasVdcs', {
+                    count: existingTenantVdcs.length,
+                    names: existingTenantVdcs
+                      .map((v: any) => {
+                        const conn = connections.find((c: any) => c.id === v.connectionId)
+                        return conn?.name ? `${v.name} (${conn.name})` : v.name
+                      })
+                      .join(', '),
+                  })}
             </Alert>
           )}
 
@@ -1289,7 +1342,7 @@ export default function VdcTab() {
 
           {/* Connection / Cluster */}
           <Autocomplete
-            options={connections}
+            options={editingVdc ? connections : poolConnections.filter((c) => !occupiedConnectionIds.has(c.id))}
             getOptionLabel={(o) => o.name || o.id}
             value={connections.find((c) => c.id === form.connectionId) || null}
             onChange={(_, v) => {
@@ -1297,10 +1350,12 @@ export default function VdcTab() {
                 if (editingVdc) {
                   return { ...f, connectionId: v?.id || '', nodes: [], primaryStorage: '' }
                 }
-                // Re-derive slug now that the connection is known —
-                // see computeVdcSlug for the format. Without this, a
-                // tenant with two vDCs across clusters would hit the
-                // (tenant_id, slug) UNIQUE on save.
+                // Re-derive the slug now that the connection is known — see
+                // computeVdcSlug. The slug must be unique per tenant (DB:
+                // unique(tenant_id, slug)), which the cluster suffix provides
+                // across clusters. `name` is left alone: it's user-editable
+                // (see the Name field above) and only falls back to the
+                // derived name at submit time (see handleSave).
                 const tenant = tenants.find((tn) => tn.id === f.tenantId) || null
                 return {
                   ...f,
@@ -1312,7 +1367,7 @@ export default function VdcTab() {
               })
               setAvailableResources(null)
             }}
-            disabled={!!editingVdc || tenantHasExistingVdc}
+            disabled={!!editingVdc}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -1659,9 +1714,9 @@ export default function VdcTab() {
               (!editingVdc && pbsDraft.enabled && (
                 !pbsDraft.pbsConnectionId || !pbsDraft.datastore || !pbsDraft.namespace
               )) ||
-              // 1 tenant = 1 vDC: the Cluster picker is also disabled in
-              // this case, so this is mainly defense-in-depth.
-              tenantHasExistingVdc
+              // One vDC per (tenant, connection): unreachable through the
+              // filtered picker — defense-in-depth only.
+              occupiedConnectionIds.has(form.connectionId)
             }
           >
             {saving ? t('vdc.saving') : editingVdc ? t('common.update') : t('common.create')}

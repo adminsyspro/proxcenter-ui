@@ -111,7 +111,12 @@ export async function GET() {
     // empty for them — same bug as /changes and /orchestrator/alerts.
     const tenantConnectionIds = await getTenantConnectionIds()
 
-    if (tenantConnectionIds.size === 0) {
+    // iaas: the LIST perimeter follows the vDC view context (narrowed
+    // connection set — missing key = deny). The union set only backs
+    // provider/msp and ownership verdicts elsewhere.
+    const perimeterConnectionIds = vdcScope ? vdcScope.connectionIds : tenantConnectionIds
+
+    if (perimeterConnectionIds.size === 0) {
       return NextResponse.json({ data: [], count: 0 })
     }
 
@@ -119,7 +124,7 @@ export async function GET() {
     // are owned by the provider tenant; we still safety-filter against the
     // reachable set above.
     const connections = await prisma.connection.findMany({
-      where: { type: 'pve', id: { in: Array.from(tenantConnectionIds) } },
+      where: { type: 'pve', id: { in: Array.from(perimeterConnectionIds) } },
     })
 
     if (connections.length === 0) {

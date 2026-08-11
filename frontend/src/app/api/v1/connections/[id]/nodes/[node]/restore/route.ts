@@ -55,7 +55,9 @@ export async function POST(
     // allow-list. RBAC was already checked above (BACKUP at node-resource
     // granularity); this layer adds the vDC contract.
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Object route (design ruling §5): full union — a deep link to another
+    // vDC's resource must keep working in any view context.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     // Non-default tenants still go through the PBS-access + pool-placement
     // blocks below (assertVdcPbsAccess and the vDC pool lookup both handle MSP
     // correctly: MSP gets admin PBS access on owned connections and has no vDC

@@ -71,15 +71,22 @@ type CacheResult =
   | { status: 'stale'; data: CachedInventory }
   | { status: 'miss' }
 
+/** Composite cache key: `${tenantId}::${vdcContext ?? 'all'}`. The vDC view
+ *  context is part of the identity of a cached payload — a narrowed
+ *  inventory must never be served to the union view (or vice-versa). */
+function cacheKey(tenantId: string, vdcContext: string | null = null): string {
+  return `${tenantId}::${vdcContext ?? 'all'}`
+}
+
 /**
  * Returns the cached inventory with its freshness status.
  *   - `fresh`  → data is recent, no revalidation needed
  *   - `stale`  → data is usable but should be revalidated in background
  *   - `miss`   → no usable data, blocking fetch required
  */
-export function getInventoryFromCache(tenantId = 'default'): CacheResult {
+export function getInventoryFromCache(tenantId = 'default', vdcContext: string | null = null): CacheResult {
   const store = getCacheStore()
-  const entry = store.get(tenantId)
+  const entry = store.get(cacheKey(tenantId, vdcContext))
   if (!entry) return { status: 'miss' }
 
   // Invalidate cache entries missing required fields (e.g. storages added later)
@@ -98,15 +105,36 @@ export function getInventoryFromCache(tenantId = 'default'): CacheResult {
   return { status: 'miss' }
 }
 
-export function setCachedInventory(data: CachedInventory, tenantId = 'default'): void {
+export function setCachedInventory(data: CachedInventory, tenantId = 'default', vdcContext: string | null = null): void {
   const store = getCacheStore()
-  store.set(tenantId, { data, timestamp: Date.now() })
+  store.set(cacheKey(tenantId, vdcContext), { data, timestamp: Date.now() })
+}
+
+/**
+ * Every cached inventory of a tenant across all vDC contexts, freshest
+ * first (fresh-or-stale only). For consumers whose derived data is
+ * context-independent (per-VM meta): a narrowed entry holds a subset of
+ * the tenant's guests, so merging entries adds coverage and can never
+ * leak across tenants (the prefix is tenant-scoped).
+ */
+export function getTenantInventoriesFromCache(tenantId: string): CachedInventory[] {
+  const prefix = `${tenantId}::`
+  const hits: Array<{ entry: CacheEntry }> = []
+  for (const [key, entry] of getCacheStore()) {
+    if (!key.startsWith(prefix)) continue
+    if (Date.now() - entry.timestamp > STALE_TTL_MS) continue
+    hits.push({ entry })
+  }
+  return hits.sort((a, b) => b.entry.timestamp - a.entry.timestamp).map(h => h.entry.data)
 }
 
 export function invalidateInventoryCache(tenantId?: string): void {
   const store = getCacheStore()
   if (tenantId) {
-    store.delete(tenantId)
+    const prefix = `${tenantId}::`
+    for (const key of store.keys()) {
+      if (key.startsWith(prefix)) store.delete(key)
+    }
   } else {
     store.clear()
   }
@@ -117,15 +145,16 @@ export function invalidateInventoryCache(tenantId?: string): void {
  * or null if the caller should start a new fetch.
  * This prevents multiple simultaneous requests from all hitting Proxmox.
  */
-export function getInflightFetch(tenantId = 'default'): Promise<CachedInventory> | null {
-  return getInflightStore().get(tenantId) ?? null
+export function getInflightFetch(tenantId = 'default', vdcContext: string | null = null): Promise<CachedInventory> | null {
+  return getInflightStore().get(cacheKey(tenantId, vdcContext)) ?? null
 }
 
-export function setInflightFetch(p: Promise<CachedInventory> | null, tenantId = 'default'): void {
+export function setInflightFetch(p: Promise<CachedInventory> | null, tenantId = 'default', vdcContext: string | null = null): void {
   const store = getInflightStore()
+  const key = cacheKey(tenantId, vdcContext)
   if (p !== null) {
-    store.set(tenantId, p)
+    store.set(key, p)
   } else {
-    store.delete(tenantId)
+    store.delete(key)
   }
 }

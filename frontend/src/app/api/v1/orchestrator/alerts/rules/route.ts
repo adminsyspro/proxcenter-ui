@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getTenantConnectionIds, getSessionPrisma, DEFAULT_TENANT_ID } from '@/lib/tenant'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { ruleVisibleToTenant, setRuleOwner } from '@/lib/alerts/ruleOwners'
 import { injectVdcNodeScope } from '@/lib/alerts/ruleScope'
@@ -32,9 +32,18 @@ export async function GET(req: Request) {
     // doesn't carry tenant_id on rules, so this local map is the only
     // source of truth for "who created this rule".
     const allRules = Array.isArray(rules) ? rules : ((rules as any)?.data || [])
-    const filtered = Array.isArray(allRules)
+    const ownershipFiltered = Array.isArray(allRules)
       ? (await Promise.all(allRules.map(async (r: any) => ({ r, visible: await ruleVisibleToTenant(r.id, tenantId) })))).filter(x => x.visible).map(x => x.r)
       : allRules
+
+    // iaas: the LIST perimeter follows the vDC view context (narrowed
+    // connection set — missing key = deny). The union set only backs
+    // provider/msp and ownership verdicts elsewhere. Rules with no
+    // connection_id are tenant-global (not vDC-bound) and stay visible.
+    const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
+    const filtered = vdcScope && Array.isArray(ownershipFiltered)
+      ? ownershipFiltered.filter((r: any) => !r.connection_id || vdcScope.connectionIds.has(r.connection_id))
+      : ownershipFiltered
 
     return NextResponse.json(filtered)
   } catch (error: any) {

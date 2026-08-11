@@ -35,9 +35,11 @@ export async function GET(
     // isolation on shared clusters.
     const tenantId = await getCurrentTenantId()
     const tenantConnectionIds = await getTenantConnectionIds()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Object route (design ruling §5): a deep link to an alert of another
+    // vDC must keep working in any view context — resolve the full union.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const vdcScope = maskingScope(infra)
-    const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
+    const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId, { ignoreVdcContext: true }) : undefined
     if (!(await isAlertVisibleToTenant(alert as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }
@@ -76,9 +78,11 @@ export async function DELETE(
     const alertRes = await alertsApi.getAlert(id)
     const tenantId = await getCurrentTenantId()
     const tenantConnectionIds = await getTenantConnectionIds()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Object route (design ruling §5): a deep link to an alert of another
+    // vDC must keep working in any view context — resolve the full union.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const vdcScope = maskingScope(infra)
-    const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
+    const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId, { ignoreVdcContext: true }) : undefined
     if (!(await isAlertVisibleToTenant(alertRes.data as any, { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }))) {
       return NextResponse.json({ error: 'Alert not found' }, { status: 404 })
     }

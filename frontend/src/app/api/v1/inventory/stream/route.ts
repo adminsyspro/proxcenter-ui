@@ -15,6 +15,7 @@ import {
   setCachedInventory,
 } from "@/lib/cache/inventoryCache"
 import { applyVdcFilter, type VdcScope } from "@/lib/vdc/scope"
+import { getVdcContext } from "@/lib/vdc/context"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
@@ -557,10 +558,14 @@ export async function GET(request: NextRequest) {
 
   const prisma = await getSessionPrisma()
   const tenantId = await getCurrentTenantId()
+  // Resolved BEFORE the cache read below: this route is session-only (not
+  // in the API-token allowlist, cf. allowlist.ts), so the view cookie always
+  // applies — no isTokenPrincipal opt-out needed here (unlike inventory/route.ts).
+  const vdcContext = await getVdcContext(tenantId)
   const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
 
   // Check cache first — if fresh, send everything at once (fast path)
-  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId)
+  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId, vdcContext)
 
   const encoder = new TextEncoder()
 
@@ -806,7 +811,7 @@ export async function GET(request: NextRequest) {
           externalHypervisors: externalConnections,
           storages: allStorages,
           stats,
-        }, tenantId)
+        }, tenantId, vdcContext)
 
         console.log(`[inventory-stream] Streamed all data in ${Date.now() - startTime}ms`)
         send('done', { stats })

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentTenantId } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, getAccessibleResources, getRBACContext, PERMISSIONS } from '@/lib/rbac'
+import { filterVisibleVdcs, type VdcVisibilityGrant } from '@/lib/rbac/vdcVisibility'
 import { listVdcs, refreshVdcUsage } from '@/lib/vdc'
 
 export const runtime = 'nodejs'
@@ -19,7 +20,24 @@ export async function GET() {
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
-    let vdcs = await listVdcs(tenantId)
+
+    // §3.8a — visibility filter: the switcher/landing only list the vDCs the
+    // user holds a mappable grant on. Admins, API tokens (their principal
+    // carries NO userId — getRBACContext returns { isAdmin, tenantId,
+    // principal } for kind 'token', VERIFIED) and any resolver error keep
+    // the full list (null = fail-open; no right is extended, and a token
+    // seeing [] would break integrations).
+    let visibilityGrants: VdcVisibilityGrant[] | null = null
+    try {
+      const rbacCtx = await getRBACContext()
+      if (rbacCtx && !rbacCtx.isAdmin && rbacCtx.userId) {
+        visibilityGrants = await getAccessibleResources(rbacCtx.userId, PERMISSIONS.VM_VIEW, rbacCtx.tenantId)
+      }
+    } catch {
+      visibilityGrants = null
+    }
+
+    let vdcs = filterVisibleVdcs(await listVdcs(tenantId), visibilityGrants)
 
     const now = Date.now()
     const stale = vdcs.filter((v) => {
@@ -31,7 +49,7 @@ export async function GET() {
 
     if (stale.length > 0) {
       await Promise.allSettled(stale.map((v) => refreshVdcUsage(v.id)))
-      vdcs = await listVdcs(tenantId)
+      vdcs = filterVisibleVdcs(await listVdcs(tenantId), visibilityGrants)
     }
 
     return NextResponse.json({ data: vdcs })

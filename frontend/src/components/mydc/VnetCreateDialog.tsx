@@ -12,6 +12,7 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import {
   parseCidr, gatewayValidForCidr, usableHostCount, ipToInt, intToIp,
 } from '@/lib/vdc/network'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 interface VdcOption { id: string; name: string }
 
@@ -30,8 +31,15 @@ const NAME_REGEX = /^[a-z][a-z0-9-]{0,19}$/
 
 export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, onCreated }: Props) {
   const t = useTranslations()
+  // Default vDC: the caller-supplied one wins if valid; otherwise the vDC
+  // context (if the tenant is scoped to one) beats the arbitrary "first in
+  // the list" — a tenant creating a VNet while browsing vDC B shouldn't
+  // land the picker on vDC A. A cookie pointing outside `vdcs` (foreign,
+  // stale, or the "all vDCs" state) fails open to vdcs[0], same as before.
   const initialVdc = useMemo(() => {
     if (defaultVdcId && vdcs.some(v => v.id === defaultVdcId)) return defaultVdcId
+    const ctxVdcId = readVdcContextCookie()
+    if (ctxVdcId && vdcs.some(v => v.id === ctxVdcId)) return ctxVdcId
     return vdcs[0]?.id ?? ''
   }, [vdcs, defaultVdcId])
 

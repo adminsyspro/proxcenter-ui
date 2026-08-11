@@ -228,6 +228,7 @@
     "horizontalLayout": "水平布局",
     "verticalLayout": "垂直布局",
     "switchTenant": "Switch tenant",
+    "switchVdc": "切换 vDC",
     "searchTenants": "Search tenants"
   },
   "pxcore": {
@@ -5339,6 +5340,8 @@
     "limitedToTag": "限定到具有特定标签的 VM",
     "poolScope": "资源池",
     "limitedToPool": "限定到特定资源池中的 VM",
+    "vdcScope": "vDC",
+    "limitedToVdc": "仅限一个虚拟数据中心",
     "tagUsedByVms": "{count} 个 VM",
     "poolContainsVms": "{count} 个 VM",
     "tags": "标签",
@@ -7003,6 +7006,10 @@
   "myVdc": {
     "title": "我的数据中心",
     "selectVdc": "选择 vDC",
+    "allVdcs": "所有 vDC",
+    "currentContext": "当前上下文",
+    "vmCount": "{count} 个 VM",
+    "backToVdcList": "所有 Virtual Datacenter",
     "noVdcs": "您的租户未分配任何虚拟数据中心。",
     "nodes": "节点",
     "storages": "存储",
@@ -7134,6 +7141,7 @@
     }
   },
   "vdc": {
+    "nameHelper": "可选。留空则使用默认名称（租户 — 集群）。",
     "createNeedsTenant": "请先创建一个非 default 租户。vDC 不能在 provider 租户上创建。",
     "primaryStorageTitle": "主存储",
     "primaryStorageHint": "承载此 vDC 所有虚拟机磁盘的单个共享存储。本地存储和仅 ISO/备份的存储已自动过滤。",
@@ -7164,7 +7172,8 @@
     "pbsClose": "关闭",
     "storage": "存储",
     "backups": "备份",
-    "tenantHasVdcs": "该租户已有 {count, plural, =1 {1 个 vDC：{names}} other {# 个 vDC：{names}}}。请编辑现有 vDC 进行修改 — 每个租户仅允许一个 vDC。",
+    "tenantHasVdcs": "该租户已拥有 {count, plural, =1 {一个 vDC:{names}} other {# 个 vDC:{names}}}。您可以在尚未覆盖的集群上再创建一个。",
+    "tenantAllClustersUsed": "该租户在每个可用集群上都已拥有 vDC。",
     "tenantUsers": "租户用户"
   },
   "sdn": {

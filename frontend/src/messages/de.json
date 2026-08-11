@@ -228,6 +228,7 @@
     "horizontalLayout": "Horizontales Layout",
     "verticalLayout": "Vertikales Layout",
     "switchTenant": "Switch tenant",
+    "switchVdc": "vDC wechseln",
     "searchTenants": "Search tenants"
   },
   "pxcore": {
@@ -5337,6 +5338,8 @@
     "limitedToTag": "Begrenzt auf VMs mit einem bestimmten Tag",
     "poolScope": "Pool",
     "limitedToPool": "Begrenzt auf VMs in einem bestimmten Pool",
+    "vdcScope": "vDC",
+    "limitedToVdc": "Auf ein virtuelles Datacenter beschränkt",
     "tagUsedByVms": "{count} VM(s)",
     "poolContainsVms": "{count} VM(s)",
     "tags": "Tags",
@@ -7001,6 +7004,10 @@
   "myVdc": {
     "title": "Mein Datacenter",
     "selectVdc": "vDC auswählen",
+    "allVdcs": "Alle vDCs",
+    "currentContext": "Aktueller Kontext",
+    "vmCount": "{count, plural, =1 {# VM} other {# VMs}}",
+    "backToVdcList": "Alle Virtual Datacenters",
     "noVdcs": "Ihrem Mandanten ist kein virtuelles Datacenter zugewiesen.",
     "nodes": "Knoten",
     "storages": "Speicher",
@@ -7132,6 +7139,7 @@
     }
   },
   "vdc": {
+    "nameHelper": "Optional. Leer lassen, um den Standardnamen zu verwenden (Tenant — Cluster).",
     "primaryStorageTitle": "Hauptspeicher",
     "primaryStorageHint": "Einzelner Shared-Storage, der alle VM-Disks dieser vDC trägt. Lokale und ISO/Backup-only Speicher werden automatisch ausgefiltert.",
     "primaryStorageLabel": "Speicher",
@@ -7161,7 +7169,8 @@
     "pbsClose": "Schließen",
     "storage": "Speicher",
     "backups": "Backups",
-    "tenantHasVdcs": "Dieser Tenant hat bereits {count, plural, =1 {ein vDC: {names}} other {# vDCs: {names}}}. Bearbeiten Sie das bestehende vDC, um Änderungen vorzunehmen — nur ein vDC pro Tenant ist erlaubt.",
+    "tenantHasVdcs": "Dieser Tenant besitzt bereits {count, plural, =1 {ein vDC: {names}} other {# vDCs: {names}}}. Sie können ein weiteres auf einem noch nicht abgedeckten Cluster anlegen.",
+    "tenantAllClustersUsed": "Dieser Tenant besitzt bereits auf jedem verfügbaren Cluster ein vDC.",
     "tenantUsers": "Tenant-Benutzer"
   },
   "sdn": {

@@ -149,10 +149,14 @@ describe('loadPublicFleetView', () => {
     // Exact-arity match: forceRefresh (3rd arg) MUST be false — `true`
     // would defeat the whole point of the cache wrapper and hammer the
     // hypervisor on every 15s scrape. nonBlocking (4th arg) MUST be true —
-    // D12: a scrape must also never wait on a cold-cache fan-out.
+    // D12: a scrape must also never wait on a cold-cache fan-out. vdcContext
+    // (5th arg) MUST be null — the token path always reads the union cache
+    // key, never a view-context-narrowed one.
     // toHaveBeenCalledWith fails on any extra, missing, or wrong argument.
-    expect(getInventorySWRMock).toHaveBeenCalledWith('default', { kind: 'provider' }, false, true)
+    expect(getInventorySWRMock).toHaveBeenCalledWith('default', { kind: 'provider' }, false, true, null)
     expect(getInventorySWRMock).toHaveBeenCalledTimes(1)
+    // Union infra, never the view context, for an API-token caller.
+    expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('default', { ignoreVdcContext: true })
   })
 
   it('works for a session caller with no principal', async () => {

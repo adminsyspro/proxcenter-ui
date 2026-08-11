@@ -30,6 +30,7 @@ import {
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useTenant } from '@/contexts/TenantContext'
 import { formatDateTime } from '@/lib/i18n/date'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 interface BackupRef {
   /** Full PVE volid, e.g. `pbs:backup/vm/100/2025-04-01T10:00:00Z`.
@@ -96,6 +97,8 @@ export default function RestoreVmDialog({
   const callerLocksNode = !!nodeProp
   const [pickedConnectionId, setPickedConnectionId] = useState<string>('')
   const [pickedNode, setPickedNode] = useState<string>('')
+  const [tenantVdcs, setTenantVdcs] = useState<any[]>([])
+  const [pickedVdcId, setPickedVdcId] = useState<string>('')
   const connectionId = callerLocksConn ? connectionIdProp! : pickedConnectionId
   const node = callerLocksNode ? nodeProp! : pickedNode
 
@@ -147,10 +150,19 @@ export default function RestoreVmDialog({
   // "create new" submission.
   useEffect(() => { setAwaitingConfirm(false) }, [restoreAsNew])
 
-  // Tenant mode + cross-PVE caller (no locked connection) → auto-resolve
-  // the target from the tenant's first active vDC. This keeps the simple-
-  // mode UI (just a Name field) usable from /operations/backups even when
-  // the cluster/node weren't passed in.
+  const applyVdc = (v: any) => {
+    setPickedVdcId(v.id)
+    if (!callerLocksConn) setPickedConnectionId(v.connectionId)
+    if (!callerLocksNode && Array.isArray(v.nodes) && v.nodes.length > 0) {
+      setPickedNode(v.nodes[0])
+    }
+  }
+
+  // Tenant mode + cross-PVE caller (no locked connection) → resolve the
+  // target vDC. Single-vDC tenants keep the silent auto-pick; multi-vDC
+  // tenants get a selector (rendered below), defaulted to the vDC whose
+  // PBS binding matches the backup's (pbsId, datastore, namespace) so a
+  // Paris backup doesn't restore to Frankfurt by default.
   useEffect(() => {
     if (!open || !isVdcTenant) return
     if (callerLocksConn && callerLocksNode) return
@@ -161,14 +173,24 @@ export default function RestoreVmDialog({
         if (cancelled) return
         if (r.ok) {
           const j = await r.json()
-          const list: any[] = Array.isArray(j?.data) ? j.data : []
-          const first = list.find((v) => v.connectionId)
-          if (first) {
-            if (!callerLocksConn) setPickedConnectionId(first.connectionId)
-            if (!callerLocksNode && Array.isArray(first.nodes) && first.nodes.length > 0) {
-              setPickedNode(first.nodes[0])
-            }
-          }
+          const list: any[] = (Array.isArray(j?.data) ? j.data : []).filter(
+            (v) => v.connectionId && v.enabled !== false
+          )
+          setTenantVdcs(list)
+          const byBinding = list.find((v) =>
+            Array.isArray(v.pbsBindings) && v.pbsBindings.some((b: any) =>
+              (!backup.pbsId || b.pbsConnectionId === backup.pbsId) &&
+              (!backup.datastore || b.datastore === backup.datastore) &&
+              (backup.namespace === undefined || b.namespace === (backup.namespace || ''))
+            )
+          )
+          // Precise vDC context (header switcher): it wins over the PBS
+          // binding heuristic — the visible backups are already narrowed to
+          // that vDC server-side, so target and source always agree.
+          const ctxVdcId = readVdcContextCookie()
+          const byContext = ctxVdcId ? list.find((v) => v.id === ctxVdcId) : undefined
+          const target = byContext || byBinding || list[0]
+          if (target) applyVdc(target)
         }
       } catch { /* ignore — falls through to the normal pickers, which we hide anyway */ }
     })()
@@ -490,6 +512,25 @@ export default function RestoreVmDialog({
                 label={t('inventory.pbsRestoreOverrideName')}
               />
             </Box>
+          )}
+
+          {isVdcTenant && !callerLocksConn && tenantVdcs.length > 1 &&
+            !(readVdcContextCookie() && pickedVdcId === readVdcContextCookie()) && (
+            <FormControl fullWidth size="small">
+              <InputLabel>{t('myVdc.selectVdc')}</InputLabel>
+              <Select
+                value={pickedVdcId}
+                label={t('myVdc.selectVdc')}
+                onChange={(e) => {
+                  const v = tenantVdcs.find((x) => x.id === e.target.value)
+                  if (v) applyVdc(v)
+                }}
+              >
+                {tenantVdcs.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>{v.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           )}
 
           {/* Name field is meaningful only when we're spawning a NEW VM

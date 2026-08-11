@@ -32,7 +32,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // vdcs.connection_id, PBS via vdc_pbs_namespaces). Mutations stay
     // tenant-scoped via getSessionPrisma() in PATCH/DELETE below.
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // Object route (design ruling §5): full union — a deep link to another
+    // vDC's resource must keep working in any view context.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
     const vdcScope = maskingScope(infra)
 
     const connection = await globalPrisma.connection.findUnique({

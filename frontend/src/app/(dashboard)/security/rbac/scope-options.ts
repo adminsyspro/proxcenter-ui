@@ -105,6 +105,35 @@ export function buildScopeOptions(inventory: any, scopeType: string, t: any): Sc
 }
 
 /**
+ * "vDC" scope options (UI sugar — design §3.8b): one option per vDC of the
+ * targeted tenant, whose id IS the vDC's pvePoolName. The dialog stores the
+ * assignment as scope_type='pool' + that pool name: enforcement, inventory
+ * visibility and deleteVdc cleanup are the existing pool path, unchanged.
+ * Unlike the inventory-derived pool options, a vDC with zero VMs is listed.
+ */
+export function buildVdcScopeOptions(
+  vdcs: Array<{ tenantId: string; pvePoolName: string; name: string; enabled?: boolean }>,
+  tenantId: string,
+): Array<{ id: string; label: string; sublabel: string; icon: string }> {
+  return vdcs
+    .filter((v) => v.tenantId === tenantId && v.enabled !== false)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((v) => ({
+      id: v.pvePoolName,
+      label: v.name,
+      sublabel: v.pvePoolName,
+      icon: 'ri-cloud-line',
+    }))
+}
+
+/** pvePoolName → vDC display name, for rendering pool targets as "vDC: <name>". */
+export function buildVdcNameByPool(
+  vdcs: Array<{ pvePoolName: string; name: string }>,
+): Map<string, string> {
+  return new Map(vdcs.map((v) => [v.pvePoolName, v.name]))
+}
+
+/**
  * Resolve a stored scope target back to its human-readable label (issue #383).
  * connection/node/vm targets are opaque ids, so they are looked up in the live
  * inventory; tag/pool targets are already the display name. Falls back to the

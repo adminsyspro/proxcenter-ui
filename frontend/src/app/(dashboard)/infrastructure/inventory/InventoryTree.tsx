@@ -57,6 +57,8 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { useMyVdcs } from '@/hooks/useMyVdcs'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -460,6 +462,37 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // cluster view like the provider, not the vDC abstraction.
   const isMspTenant = !tenantLoading && currentTenant?.operatingModel === 'msp'
   const isFullClusterView = isProviderTenant || isMspTenant
+  // connectionId → vDC (tenant IaaS only): drives the per-vDC root nodes.
+  // Bijective thanks to the DB unique (tenant_id, connection_id). Empty for
+  // provider/MSP (their /api/v1/vdcs list is empty or unused) — fail-open to
+  // the current tree shape when the fetch errors.
+  const { vdcs: myVdcs } = useMyVdcs()
+  const vdcByConnId = useMemo(() => {
+    const m = new Map<string, { id: string; name: string }>()
+    if (!isFullClusterView) {
+      for (const v of myVdcs) {
+        if (v.enabled !== false && v.connectionId) m.set(v.connectionId, { id: v.id, name: v.name })
+      }
+    }
+    return m
+  }, [myVdcs, isFullClusterView])
+  // vDC context filter — Network/Backup tenant tree sections (Task 14). A
+  // cookie matching one of OUR active vDCs narrows those sections to just
+  // that vDC; anything else (unset, foreign, or a disabled vDC) fails open
+  // to the union. Same contract as Task 7's InventoryDetails vDC column.
+  const ctxCookie = readVdcContextCookie()
+  const ctxIsActiveVdc = !isFullClusterView && !!ctxCookie && myVdcs.some((v) => v.id === ctxCookie && v.enabled !== false)
+  // Active vDC count, gates the per-vDC group headers in union view: below
+  // 2 there is nothing to disambiguate, so grouping stays off everywhere.
+  const activeVdcCount = isFullClusterView ? 0 : myVdcs.filter((v) => v.enabled !== false).length
+  // Task 16 — single shared gate for the collapsible vDC nodes across all
+  // three surfaces (guests / network / backup): aggregated view only (no
+  // active precise context) AND at least 2 vDCs to disambiguate. Provider/
+  // MSP (`isFullClusterView`), a precise vDC context (`ctxIsActiveVdc`), or
+  // a mono-vDC tenant all fall through to the plain pre-vDC-chantier shape
+  // on every surface — computed once here and reused everywhere so the
+  // three surfaces can never drift apart.
+  const showVdcNodes = !isFullClusterView && !ctxIsActiveVdc && activeVdcCount >= 2
   // Expand/collapse persistence is scoped per tenant. In MSP mode each tenant
   // owns different clusters (different connIds), so the persisted expand IDs
   // (`cluster:<connId>`, `node:<connId>:<n>`, ...) of one tenant never match
@@ -558,6 +591,27 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Sections collapsed (pour les modes hosts, pools, tags)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['storage', 'pbs', 'migrate-ext']))
 
+  // Task 16 — per-vDC collapse state for the guest list's vDC group nodes
+  // (`showVdcNodes`). Expanded by default; persisted per tenant like the
+  // other expand/collapse buckets below.
+  const [collapsedVdcs, setCollapsedVdcs] = useState<Set<string>>(new Set())
+
+  // Task 16 (round 2) — Network/Backup vDC group nodes (`tvnetgrp:`/
+  // `pbsvdcgrp:`) live inside a *controlled* SimpleTreeView, where absence
+  // from `expandedItems` means collapsed. A vDC group must render expanded
+  // by default, so these two sets are the real source of truth for "the
+  // user explicitly collapsed this vDC group" — independent of
+  // `networkTreeExpandedItems`/`backupExpandedItems` below, which only ever
+  // track manual expand/collapse of regular (non-vDC-group) nodes. See
+  // `effectiveNetworkExpanded`/`effectiveBackupExpanded` further down: they
+  // union the manual state with "every current vDC group id not in this
+  // collapse set," which is immune to `myVdcs` (SWR) reference churn —
+  // unlike a once-per-mount "seed expandedItems" effect, which would
+  // re-fire and silently re-expand a group the user just collapsed (the
+  // Task 6 regression this deliberately avoids repeating).
+  const [collapsedNetworkVdcs, setCollapsedNetworkVdcs] = useState<Set<string>>(new Set())
+  const [collapsedBackupVdcs, setCollapsedBackupVdcs] = useState<Set<string>>(new Set())
+
   // Storage tree expanded items (persisted)
   const [storageExpandedItems, setStorageExpandedItems] = useState<string[]>([])
 
@@ -590,6 +644,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       } else {
         next.add(key)
       }
+      return next
+    })
+  }
+
+  const toggleVdcCollapsed = (vdcId: string) => {
+    setCollapsedVdcs(prev => {
+      const next = new Set(prev)
+      if (next.has(vdcId)) next.delete(vdcId)
+      else next.add(vdcId)
       return next
     })
   }
@@ -648,6 +711,24 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       }
       const savedNetTreeExpanded = localStorage.getItem(k('inventoryNetworkTreeExpandedItems'))
       if (savedNetTreeExpanded) setNetworkTreeExpandedItems(JSON.parse(savedNetTreeExpanded))
+
+      const savedVdcCollapsed = localStorage.getItem(k('inventoryVdcCollapsed'))
+      if (savedVdcCollapsed) {
+        const parsed = JSON.parse(savedVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedVdcs(new Set(parsed))
+      }
+
+      const savedNetVdcCollapsed = localStorage.getItem(k('inventoryVdcNetCollapsed'))
+      if (savedNetVdcCollapsed) {
+        const parsed = JSON.parse(savedNetVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedNetworkVdcs(new Set(parsed))
+      }
+
+      const savedBackupVdcCollapsed = localStorage.getItem(k('inventoryVdcBackupCollapsed'))
+      if (savedBackupVdcCollapsed) {
+        const parsed = JSON.parse(savedBackupVdcCollapsed)
+        if (Array.isArray(parsed)) setCollapsedBackupVdcs(new Set(parsed))
+      }
     } catch {}
     setIsHydrated(true)
   }, [tenantLoading, tenantScope])
@@ -666,6 +747,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   useEffect(() => {
     if (isHydrated) localStorage.setItem(`inventoryCollapsedSections::${tenantScope}`, JSON.stringify([...collapsedSections]))
   }, [collapsedSections, isHydrated, tenantScope])
+
+  // Persist collapsedVdcs (Task 16)
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcCollapsed::${tenantScope}`, JSON.stringify([...collapsedVdcs]))
+  }, [collapsedVdcs, isHydrated, tenantScope])
+
+  // Persist collapsedNetworkVdcs / collapsedBackupVdcs (Task 16 round 2)
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcNetCollapsed::${tenantScope}`, JSON.stringify([...collapsedNetworkVdcs]))
+  }, [collapsedNetworkVdcs, isHydrated, tenantScope])
+  useEffect(() => {
+    if (isHydrated) localStorage.setItem(`inventoryVdcBackupCollapsed::${tenantScope}`, JSON.stringify([...collapsedBackupVdcs]))
+  }, [collapsedBackupVdcs, isHydrated, tenantScope])
 
   // Persist storageExpandedItems
   useEffect(() => {
@@ -1941,7 +2035,7 @@ return null
         items.push(`node:${clu.connId}:${n.node}`)
       })
     })
-    
+
 return items
   }, [filteredClusters, search])
 
@@ -2296,10 +2390,228 @@ return favorites.has(vmKey)
   const [tenantVnets, setTenantVnets] = useState<TenantVnetItem[]>([])
   const [tenantVnetsLoading, setTenantVnetsLoading] = useState(false)
   const tenantVnetsFetchedRef = useRef(false)
+  // Task 14 — context filter: a precise vDC context narrows the tenant VNet
+  // view to just that vDC's tvnets, same as the server already does for
+  // the guest list. Union view (no active context) keeps every tvnet.
+  const visibleTenantVnets = useMemo(
+    () => (ctxIsActiveVdc ? tenantVnets.filter((v) => v.vdcId === ctxCookie) : tenantVnets),
+    [tenantVnets, ctxIsActiveVdc, ctxCookie]
+  )
+  // Union view, ≥2 active vDCs (`showVdcNodes`): group the visible tvnets
+  // under a collapsible vDC node per vDC, including an empty group for a
+  // vDC that owns no VNet yet — a tenant should see every vDC they hold,
+  // not just the ones already populated. Gated off (flat list, exactly as
+  // before) in a precise context or for a mono-vDC tenant.
+  const tenantVnetGrouping = useMemo(() => {
+    if (!showVdcNodes) return null
+    const byVdc = new Map<string, { vdcId: string; vdcName: string; vnets: TenantVnetItem[] }>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false) byVdc.set(v.id, { vdcId: v.id, vdcName: v.name, vnets: [] })
+    }
+    const unmapped: TenantVnetItem[] = []
+    for (const vnet of visibleTenantVnets) {
+      const g = byVdc.get(vnet.vdcId)
+      if (g) g.vnets.push(vnet)
+      else unmapped.push(vnet) // defensive: vDC no longer in myVdcs (stale fetch/race)
+    }
+    for (const g of byVdc.values()) g.vnets.sort((a, b) => a.displayName.localeCompare(b.displayName))
+    const groups = [...byVdc.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
+    return { groups, unmapped }
+  }, [showVdcNodes, myVdcs, visibleTenantVnets])
+  // Shared leaf renderer for a single tenant VNet — used by both the flat
+  // list (mono-vDC / precise context) and the per-vDC grouped tree below.
+  const renderTvnetLeaf = useCallback((v: TenantVnetItem) => (
+    <TreeItem
+      key={`tvnet:${v.vdcId}:${v.displayName}`}
+      itemId={`tvnet:${v.vdcId}:${v.displayName}`}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+          <i className="ri-git-branch-line" style={{ fontSize: 14, opacity: 0.55 }} />
+          <Typography variant="body2" sx={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {v.displayName}
+          </Typography>
+          {v.subnet && (
+            <span style={{ opacity: 0.45, fontSize: 11 }}>{v.subnet.cidr}</span>
+          )}
+        </Box>
+      }
+    />
+  ), [])
+  // Per-vDC attribution for the BACKUP tree (Task 14) — the union payload
+  // (`pbsServers`) carries no vDC identity, unlike the Network tree's
+  // tvnets. Context narrowing already happens server-side (a precise vDC
+  // context returns only its own PBS namespaces), so this only matters for
+  // the union view: a client-side join of each vDC's `pbsBindings`
+  // (pbsConnectionId + datastore) against the payload's PBS servers /
+  // datastores. Gated on the shared `showVdcNodes` — below 2 active vDCs,
+  // in a precise context, or for provider/MSP, grouping stays off and the
+  // tree renders exactly as before.
+  type PbsVdcEntry = { pbs: TreePbsServer; datastore: TreePbsDatastore }
+  const pbsVdcGrouping = useMemo(() => {
+    if (!showVdcNodes) return null
+    // (pbsConnectionId, datastore) -> vDCs bound to it. A datastore can be
+    // bound by more than one vDC (shared PBS target) — it will appear
+    // under every one of them below.
+    const boundVdcsByKey = new Map<string, Array<{ id: string; name: string }>>()
+    for (const v of myVdcs) {
+      if (v.enabled === false) continue
+      for (const b of v.pbsBindings ?? []) {
+        const key = `${b.pbsConnectionId}::${b.datastore}`
+        const list = boundVdcsByKey.get(key)
+        if (list) list.push({ id: v.id, name: v.name })
+        else boundVdcsByKey.set(key, [{ id: v.id, name: v.name }])
+      }
+    }
+    const groups = new Map<string, { vdcId: string; vdcName: string; entries: PbsVdcEntry[] }>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false) groups.set(v.id, { vdcId: v.id, vdcName: v.name, entries: [] })
+    }
+    const unmapped: PbsVdcEntry[] = []
+    for (const pbs of pbsServers) {
+      for (const datastore of pbs.datastores) {
+        const boundVdcs = boundVdcsByKey.get(`${pbs.connId}::${datastore.name}`)
+        if (!boundVdcs || boundVdcs.length === 0) {
+          unmapped.push({ pbs, datastore }) // defensive: not bound to any vDC
+          continue
+        }
+        for (const bv of boundVdcs) {
+          const g = groups.get(bv.id)
+          if (g) g.entries.push({ pbs, datastore })
+          else unmapped.push({ pbs, datastore }) // defensive: binding's vDC no longer in myVdcs
+        }
+      }
+    }
+    const sortedGroups = [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))
+    return { groups: sortedGroups, unmapped }
+  }, [showVdcNodes, myVdcs, pbsServers])
+
+  // Task 16 (round 2) — same "absence = expanded" union as the Network tree
+  // (see `effectiveNetworkExpanded` above), for `pbsvdcgrp:<vdcId>` groups.
+  const effectiveBackupExpanded = useMemo(() => {
+    if (!pbsVdcGrouping) return backupExpandedItems
+    const groupIds = pbsVdcGrouping.groups
+      .map(g => `pbsvdcgrp:${g.vdcId}`)
+      .filter(id => !collapsedBackupVdcs.has(id.slice('pbsvdcgrp:'.length)))
+    return [...new Set([...backupExpandedItems, ...groupIds])]
+  }, [backupExpandedItems, pbsVdcGrouping, collapsedBackupVdcs])
+
+  const handleBackupExpandedChange = useCallback((_event: React.SyntheticEvent | null, itemIds: string[]) => {
+    if (!isHydrated) return
+    const prevEffective = new Set(effectiveBackupExpanded)
+    const nextSet = new Set(itemIds)
+    const newlyCollapsed = [...prevEffective].filter(id => id.startsWith('pbsvdcgrp:') && !nextSet.has(id))
+    const newlyExpanded = [...nextSet].filter(id => id.startsWith('pbsvdcgrp:') && !prevEffective.has(id))
+    if (newlyCollapsed.length || newlyExpanded.length) {
+      setCollapsedBackupVdcs(prev => {
+        const next = new Set(prev)
+        for (const id of newlyCollapsed) next.add(id.slice('pbsvdcgrp:'.length))
+        for (const id of newlyExpanded) next.delete(id.slice('pbsvdcgrp:'.length))
+        return next
+      })
+    }
+    setBackupExpandedItems(itemIds.filter(id => !id.startsWith('pbsvdcgrp:')))
+    expandingRef.current = true
+    requestAnimationFrame(() => { expandingRef.current = false })
+  }, [isHydrated, effectiveBackupExpanded])
+  // Shared PBS server / datastore label renderers — used by the plain flat
+  // tree (unchanged rendering) and, when grouping (Task 14), both by the
+  // per-vDC groups and the ungrouped tail, so the visual result stays
+  // identical in every branch.
+  const renderPbsLabel = useCallback((pbs: TreePbsServer) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+        <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 16 }} />
+        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: pbs.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
+      </Box>
+      <span style={{ fontSize: 13 }}>{pbs.name}</span>
+      <span style={{ opacity: 0.5, fontSize: 11 }}>
+        ({pbs.stats.backupCount} backups)
+      </span>
+    </Box>
+  ), [])
+  const renderDatastoreLabel = useCallback((ds: TreePbsDatastore) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <i className='ri-database-2-line' style={{ opacity: 0.6, fontSize: 14 }} />
+      <span style={{ fontSize: 13 }}>{ds.name}</span>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          ml: 'auto',
+          opacity: 0.6
+        }}
+      >
+        <Box
+          sx={{
+            width: 40,
+            height: 4,
+            bgcolor: 'divider',
+            borderRadius: 1,
+            overflow: 'hidden'
+          }}
+        >
+          <Box
+            sx={{
+              width: `${ds.usagePercent}%`,
+              height: '100%',
+              bgcolor: ds.usagePercent > 90 ? 'error.main' : ds.usagePercent > 70 ? 'warning.main' : 'success.main',
+            }}
+          />
+        </Box>
+        <span style={{ fontSize: 10 }}>{ds.usagePercent}%</span>
+      </Box>
+      <span style={{ opacity: 0.5, fontSize: 11 }}>
+        ({ds.backupCount})
+      </span>
+    </Box>
+  ), [])
   // Network sub-items: inverted logic — collapsed by default, expanded when added to this set
   const [expandedNetSections, setExpandedNetSections] = useState<Set<string>>(new Set())
   // Network tree expanded items (not persisted — data is lazy-loaded)
   const [networkTreeExpandedItems, setNetworkTreeExpandedItems] = useState<string[]>([])
+
+  // Task 16 (round 2) — "absence = expanded" for the vDC group level: union
+  // the user's manually-expanded regular nodes with every current
+  // `tvnetgrp:<vdcId>` that isn't in `collapsedNetworkVdcs`. `tenantVnetGrouping`
+  // is `null` outside the aggregated ≥2-vDC view, so this degrades to
+  // `networkTreeExpandedItems` unchanged everywhere else (provider tree,
+  // mono-vDC, precise context) — immune to `myVdcs` (SWR) reference churn
+  // since the collapse set, not a re-fired seed effect, is the source of
+  // truth for "did the user collapse this group."
+  const effectiveNetworkExpanded = useMemo(() => {
+    if (!tenantVnetGrouping) return networkTreeExpandedItems
+    const groupIds = tenantVnetGrouping.groups
+      .map(g => `tvnetgrp:${g.vdcId}`)
+      .filter(id => !collapsedNetworkVdcs.has(id.slice('tvnetgrp:'.length)))
+    return [...new Set([...networkTreeExpandedItems, ...groupIds])]
+  }, [networkTreeExpandedItems, tenantVnetGrouping, collapsedNetworkVdcs])
+
+  // Routes a user's expand/collapse toggle to the right store: a
+  // `tvnetgrp:` id goes to `collapsedNetworkVdcs` (the vDC-group source of
+  // truth), everything else to `networkTreeExpandedItems` as before. Shared
+  // by both the tenant (tvnetgrp-aware) and provider network SimpleTreeViews
+  // — for the provider tree no itemId ever starts with `tvnetgrp:`, so the
+  // extra filtering is a no-op there.
+  const handleNetworkExpandedChange = useCallback((_event: React.SyntheticEvent | null, itemIds: string[]) => {
+    if (!isHydrated) return
+    const prevEffective = new Set(effectiveNetworkExpanded)
+    const nextSet = new Set(itemIds)
+    const newlyCollapsed = [...prevEffective].filter(id => id.startsWith('tvnetgrp:') && !nextSet.has(id))
+    const newlyExpanded = [...nextSet].filter(id => id.startsWith('tvnetgrp:') && !prevEffective.has(id))
+    if (newlyCollapsed.length || newlyExpanded.length) {
+      setCollapsedNetworkVdcs(prev => {
+        const next = new Set(prev)
+        for (const id of newlyCollapsed) next.add(id.slice('tvnetgrp:'.length))
+        for (const id of newlyExpanded) next.delete(id.slice('tvnetgrp:'.length))
+        return next
+      })
+    }
+    setNetworkTreeExpandedItems(itemIds.filter(id => !id.startsWith('tvnetgrp:')))
+    expandingRef.current = true
+    requestAnimationFrame(() => { expandingRef.current = false })
+  }, [isHydrated, effectiveNetworkExpanded])
+
   const toggleNetSection = useCallback((key: string) => {
     setExpandedNetSections(prev => {
       const next = new Set(prev)
@@ -2607,12 +2919,46 @@ return favorites.has(vmKey)
     onExternalHypervisorsChange?.(externalHypervisors)
   }, [externalHypervisors, onExternalHypervisorsChange])
 
+  type VdcHeaderRow = { __vdcHeader: { vdcId: string; vdcName: string; count: number } }
+
+  // Per-vDC guest grouping for the flat list tenants actually see (`vms`
+  // mode — `tree` is unreachable to them, forced by useRBACScopeProfile; the
+  // vDC root nodes that used to live in the tree arm were dead code for that
+  // population). One collapsible header row per active vDC in `myVdcs`,
+  // including vDCs with no cluster in inventory yet — they still render,
+  // with "(0)" (the OVH / PVE-STORE-GRA4 case from the QA pass). Gated on
+  // the shared `showVdcNodes` (aggregated view, ≥2 vDCs, no active precise
+  // context) — below that, or if `useMyVdcs` failed/is still loading, this
+  // is `null` and `flatItems` falls back to the plain flat list exactly as
+  // before the vDC chantier, which is naturally fail-open.
+  const vmsGroupedRows = useMemo(() => {
+    if (!showVdcNodes) return null
+    const groups = new Map<string, { vdcId: string; vdcName: string; vms: typeof displayVms }>()
+    for (const v of myVdcs) {
+      if (v.enabled !== false) groups.set(v.id, { vdcId: v.id, vdcName: v.name, vms: [] })
+    }
+    const unmapped: typeof displayVms = []
+    for (const vm of displayVms) {
+      const vdc = vdcByConnId.get(vm.connId)
+      const g = vdc ? groups.get(vdc.id) : undefined
+      if (g) g.vms.push(vm)
+      else unmapped.push(vm) // defensive: stale/unmapped connId — still shown, ungrouped
+    }
+    const rows: (VdcHeaderRow | (typeof displayVms)[number])[] = []
+    for (const g of [...groups.values()].sort((a, b) => a.vdcName.localeCompare(b.vdcName))) {
+      rows.push({ __vdcHeader: { vdcId: g.vdcId, vdcName: g.vdcName, count: g.vms.length } })
+      if (!collapsedVdcs.has(g.vdcId)) rows.push(...g.vms)
+    }
+    rows.push(...unmapped)
+    return rows
+  }, [showVdcNodes, myVdcs, vdcByConnId, displayVms, collapsedVdcs])
+
   const flatItems = useMemo(() => {
-    if (viewMode === 'vms') return displayVms
+    if (viewMode === 'vms') return (vmsGroupedRows ?? displayVms) as typeof displayVms
     if (viewMode === 'favorites') return favoritesList
     if (viewMode === 'templates') return filteredVms.filter(vm => vm.template)
     return null
-  }, [viewMode, displayVms, favoritesList, filteredVms])
+  }, [viewMode, vmsGroupedRows, displayVms, favoritesList, filteredVms])
 
   const virtualizer = useVirtualizer({
     count: flatItems?.length ?? 0,
@@ -2844,7 +3190,7 @@ return favorites.has(vmKey)
               </Typography>
             </Box>
           )}
-          {displayVms.length === 0 ? (
+          {flatItems!.length === 0 ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant='body2' sx={{ opacity: 0.6 }}>
                 {search.trim() ? `${t('common.noResults')} "${search}"` : t('common.noResults')}
@@ -2853,7 +3199,66 @@ return favorites.has(vmKey)
           ) : (
             <Box sx={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualRow => {
-                const vm = flatItems![virtualRow.index]
+                const row = flatItems![virtualRow.index] as unknown as (VdcHeaderRow | (typeof displayVms)[number])
+
+                if ('__vdcHeader' in row) {
+                  const { vdcId, vdcName, count } = row.__vdcHeader
+                  const isVdcCollapsed = collapsedVdcs.has(vdcId)
+                  const isVdcEmpty = count === 0
+                  return (
+                    <Box
+                      key={virtualRow.key}
+                      ref={virtualizer.measureElement}
+                      data-index={virtualRow.index}
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {/* Per-vDC collapsible group node (Task 16) — +1 node level
+                          above the guests, same collapse affordance/icon vocabulary
+                          as the other section and host-row headers in this file
+                          (ri-add-line closed / ri-subtract-line open). Toggling
+                          omits/re-includes this vDC's VM rows from `flatItems`;
+                          the virtualizer already remeasures on that change.
+                          When `count === 0` (Task 19) there is nothing to expand:
+                          no chevron, no click affordance — just a spacer to keep
+                          the cloud icon/label aligned with non-empty vDC rows. */}
+                      <Box
+                        onClick={isVdcEmpty ? undefined : () => toggleVdcCollapsed(vdcId)}
+                        sx={{
+                          // Plain indented tree-node row — no filled banner, matching
+                          // the tvnetgrp/pbsvdcgrp vDC nodes in NETWORK/BACKUP (native
+                          // TreeItem rows have no background/border of their own).
+                          // `pl: 0.75` sits shallower than the VM rows below it
+                          // (`px: 1.5`), so the vDC node reads as +1 level ABOVE its
+                          // guests — same parent/child relationship as a tvnetgrp
+                          // TreeItem sitting above its (unindented-by-us, natively
+                          // nested) tvnet leaves.
+                          display: 'flex', alignItems: 'center', gap: 1, pl: 0.75, pr: 1.5, py: 0.5,
+                          ...(isVdcEmpty ? {} : { cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }),
+                        }}
+                      >
+                        {isVdcEmpty ? (
+                          <Box component="span" sx={{ width: 14, flexShrink: 0 }} />
+                        ) : (
+                          <Box component="i" className={isVdcCollapsed ? 'ri-add-line' : 'ri-subtract-line'} sx={{ fontSize: 14, opacity: 0.7 }} />
+                        )}
+                        <Box component="i" className="ri-cloud-line" sx={{ fontSize: 14, opacity: 0.7 }} />
+                        {/* Match the tvnetgrp/pbsvdcgrp label exactly (full
+                            text.primary, weight 700, size 13) — only the
+                            count stays muted, same as the other sections. */}
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{vdcName}</Typography>
+                        <span style={{ opacity: 0.5, fontSize: 11 }}>({count})</span>
+                      </Box>
+                    </Box>
+                  )
+                }
+
+                const vm = row
                 const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                 return (
                   <Box
@@ -3413,6 +3818,65 @@ return (
           }}
         >
         {filteredClusters.map(clu => {
+          // Shared VM leaf for the tenant-facing flat non-admin branch below
+          // (it used to also serve a per-vDC tree root, removed — the vDC
+          // grouping now lives in the `vms` view those tenants actually see,
+          // see the per-vDC header rows further down). Carries showVmId/lock
+          // like the provider/cluster branches.
+          const renderTenantVmLeaf = (
+            clu: TreeCluster,
+            n: TreeCluster['nodes'][number],
+            vm: TreeCluster['nodes'][number]['vms'][number]
+          ) => {
+            const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
+            const isMigrating = isVmMigrating(clu.connId, vm.vmid)
+            const vmContent = (
+              <TreeItem
+                key={vmKey}
+                itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
+                disabled={isMigrating}
+                onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template, clu.sshEnabled)}
+                sx={{
+                  opacity: isMigrating ? 0.5 : 1,
+                  '& > .MuiTreeItem-content': {
+                    cursor: isMigrating ? 'not-allowed' : 'pointer',
+                  }
+                }}
+                label={
+                  <VmItem
+                    vmKey={vmKey}
+                    connId={clu.connId}
+                    connName={clu.name}
+                    node={n.node}
+                    vmType={vm.type}
+                    vmid={vm.vmid}
+                    name={vm.name}
+                    status={vm.status}
+                    cpu={vm.cpu}
+                    mem={vm.mem}
+                    maxmem={vm.maxmem}
+                    template={vm.template}
+                    isCluster={clu.isCluster}
+                    isSelected={false}
+                    isMigrating={isMigrating}
+                    isPendingAction={isVmPendingAction(clu.connId, vm.vmid)}
+                    isFavorite={favorites.has(vmKey)}
+                    onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
+                    onClick={() => {}}
+                    onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
+                    onContextMenu={() => {}}
+                    variant="tree"
+                    t={t}
+                    tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+                    showVmId={showVmId}
+                    lock={vm.lock}
+                  />
+                }
+              />
+            )
+            return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
+          }
+
           // Flatten when only 1 node is visible (standalone host, or tenant
           // scoped to a single node of a cluster) — no intermediate cluster
           // root in either case.
@@ -3525,53 +3989,7 @@ return (
                   </Tooltip>
                 }
               >
-                {n.vms.map(vm => {
-                  const vmKey = `${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`
-                  const isMigrating = isVmMigrating(clu.connId, vm.vmid)
-                  const vmContent = (
-                  <TreeItem
-                    key={vmKey}
-                    itemId={`vm:${clu.connId}:${n.node}:${vm.type}:${vm.vmid}`}
-                    disabled={isMigrating}
-                    onContextMenu={(e) => !isMigrating && handleContextMenu(e, clu.connId, n.node, vm.type, vm.vmid, vm.name, vm.status, clu.isCluster, vm.template, clu.sshEnabled)}
-                    sx={{
-                      opacity: isMigrating ? 0.5 : 1,
-                      '& > .MuiTreeItem-content': {
-                        cursor: isMigrating ? 'not-allowed' : 'pointer',
-                      }
-                    }}
-                    label={
-                      <VmItem
-                        vmKey={vmKey}
-                        connId={clu.connId}
-                        connName={clu.name}
-                        node={n.node}
-                        vmType={vm.type}
-                        vmid={vm.vmid}
-                        name={vm.name}
-                        status={vm.status}
-                        cpu={vm.cpu}
-                        mem={vm.mem}
-                        maxmem={vm.maxmem}
-                        template={vm.template}
-                        isCluster={clu.isCluster}
-                        isSelected={false}
-                        isMigrating={isMigrating}
-                        isPendingAction={isVmPendingAction(clu.connId, vm.vmid)}
-                        isFavorite={favorites.has(vmKey)}
-                        onFavoriteToggle={() => toggleFavorite(clu.connId, n.node, vm.type, vm.vmid, vm.name)}
-                        onClick={() => {}}
-                        onDoubleClick={() => openConsoleWindow(clu.connId, n.node, vm.type, vm.vmid)}
-                        onContextMenu={() => {}}
-                        variant="tree"
-                        t={t}
-                        tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      />
-                    }
-                  />
-                  )
-                  return isMigrating ? <Tooltip key={vmKey} title={t('audit.actions.migrate') + "..."} placement="right">{vmContent}</Tooltip> : vmContent
-                })}
+                {n.vms.map(vm => renderTenantVmLeaf(clu, n, vm))}
               </TreeItem>
             ))
           }
@@ -3868,9 +4286,9 @@ return (
                 ({new Set(networkSdnVnets.map(v => v.vnet)).size} VNets)
               </Typography>
             )}
-            {!isFullClusterView && tenantVnets.length > 0 && (
+            {!isFullClusterView && visibleTenantVnets.length > 0 && (
               <Typography variant="caption" sx={{ opacity: 0.5 }}>
-                ({tenantVnets.length} VNet{tenantVnets.length > 1 ? 's' : ''})
+                ({visibleTenantVnets.length} VNet{visibleTenantVnets.length > 1 ? 's' : ''})
               </Typography>
             )}
           </Box>
@@ -3884,7 +4302,7 @@ return (
                   <CircularProgress size={16} />
                   <Typography variant="caption" sx={{ ml: 1, opacity: 0.5 }}>Loading VNets...</Typography>
                 </Box>
-              ) : tenantVnets.length === 0 && tenantVnetsFetchedRef.current ? (
+              ) : !tenantVnetGrouping && visibleTenantVnets.length === 0 && tenantVnetsFetchedRef.current ? (
                 <Box sx={{ py: 2, textAlign: 'center' }}>
                   <Typography variant="caption" sx={{ opacity: 0.4 }}>No VNets yet</Typography>
                 </Box>
@@ -3893,13 +4311,8 @@ return (
                   expansionTrigger="iconContainer"
                   slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
                   selectedItems={selectedItemId || ''}
-                  expandedItems={networkTreeExpandedItems}
-                  onExpandedItemsChange={(_event, itemIds) => {
-                    if (!isHydrated) return
-                    setNetworkTreeExpandedItems(itemIds)
-                    expandingRef.current = true
-                    requestAnimationFrame(() => { expandingRef.current = false })
-                  }}
+                  expandedItems={effectiveNetworkExpanded}
+                  onExpandedItemsChange={handleNetworkExpandedChange}
                   onSelectedItemsChange={(_event, ids) => {
                     if (expandingRef.current) return
                     const picked = Array.isArray(ids) ? ids[0] : ids
@@ -3908,23 +4321,28 @@ return (
                     if (sel) onSelect(sel)
                   }}
                 >
-                  {tenantVnets.map((v) => (
-                    <TreeItem
-                      key={`tvnet:${v.vdcId}:${v.displayName}`}
-                      itemId={`tvnet:${v.vdcId}:${v.displayName}`}
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
-                          <i className="ri-git-branch-line" style={{ fontSize: 14, opacity: 0.55 }} />
-                          <Typography variant="body2" sx={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {v.displayName}
-                          </Typography>
-                          {v.subnet && (
-                            <span style={{ opacity: 0.45, fontSize: 11 }}>{v.subnet.cidr}</span>
-                          )}
-                        </Box>
-                      }
-                    />
-                  ))}
+                  {tenantVnetGrouping ? (
+                    <>
+                      {tenantVnetGrouping.groups.map((g) => (
+                        <TreeItem
+                          key={`tvnetgrp:${g.vdcId}`}
+                          itemId={`tvnetgrp:${g.vdcId}`}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+                              <i className="ri-cloud-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                              <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{g.vdcName}</Typography>
+                              <span style={{ opacity: 0.5, fontSize: 11 }}>({g.vnets.length})</span>
+                            </Box>
+                          }
+                        >
+                          {g.vnets.map((v) => renderTvnetLeaf(v))}
+                        </TreeItem>
+                      ))}
+                      {tenantVnetGrouping.unmapped.map((v) => renderTvnetLeaf(v))}
+                    </>
+                  ) : (
+                    visibleTenantVnets.map((v) => renderTvnetLeaf(v))
+                  )}
                 </SimpleTreeView>
               )
             ) : networkLoading ? (
@@ -3941,13 +4359,8 @@ return (
                 expansionTrigger="iconContainer"
             slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
                 selectedItems={selectedItemId || ''}
-                expandedItems={networkTreeExpandedItems}
-                onExpandedItemsChange={(_event, itemIds) => {
-                  if (!isHydrated) return
-                  setNetworkTreeExpandedItems(itemIds)
-                  expandingRef.current = true
-                  requestAnimationFrame(() => { expandingRef.current = false })
-                }}
+                expandedItems={effectiveNetworkExpanded}
+                onExpandedItemsChange={handleNetworkExpandedChange}
                 onSelectedItemsChange={(_event, ids) => {
                   if (expandingRef.current) return
                   const picked = Array.isArray(ids) ? ids[0] : ids
@@ -4151,13 +4564,8 @@ return (
             expansionTrigger="iconContainer"
             slots={{ expandIcon: () => <i className="ri-add-line" style={{ fontSize: 14, opacity: 0.5 }} />, collapseIcon: () => <i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} /> }}
             selectedItems={selectedItemId || ''}
-            expandedItems={backupExpandedItems}
-            onExpandedItemsChange={(_event, itemIds) => {
-              if (!isHydrated) return
-              setBackupExpandedItems(itemIds)
-              expandingRef.current = true
-              requestAnimationFrame(() => { expandingRef.current = false })
-            }}
+            expandedItems={effectiveBackupExpanded}
+            onExpandedItemsChange={handleBackupExpandedChange}
             onSelectedItemsChange={(_event, ids) => {
               if (expandingRef.current) return
               const picked = Array.isArray(ids) ? ids[0] : ids
@@ -4166,69 +4574,81 @@ return (
               if (sel) onSelect(sel)
             }}
           >
-          {pbsServers.map(pbs => (
-            <TreeItem
-              key={`pbs:${pbs.connId}`}
-              itemId={`pbs:${pbs.connId}`}
-              label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box component="span" sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
-                    <i className='ri-hard-drive-2-fill' style={{ opacity: 0.8, fontSize: 16 }} />
-                    <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: pbs.status === 'online' ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
-                  </Box>
-                  <span style={{ fontSize: 13 }}>{pbs.name}</span>
-                  <span style={{ opacity: 0.5, fontSize: 11 }}>
-                    ({pbs.stats.backupCount} backups)
-                  </span>
-                </Box>
-              }
-            >
-              {/* Datastores du serveur PBS */}
-              {pbs.datastores.map(ds => (
+          {pbsVdcGrouping ? (
+            <>
+              {pbsVdcGrouping.groups.map((g) => (
                 <TreeItem
-                  key={`datastore:${pbs.connId}:${ds.name}`}
-                  itemId={`datastore:${pbs.connId}:${ds.name}`}
+                  key={`pbsvdcgrp:${g.vdcId}`}
+                  itemId={`pbsvdcgrp:${g.vdcId}`}
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <i className='ri-database-2-line' style={{ opacity: 0.6, fontSize: 14 }} />
-                      <span style={{ fontSize: 13 }}>{ds.name}</span>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          ml: 'auto',
-                          opacity: 0.6
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: 40,
-                            height: 4,
-                            bgcolor: 'divider',
-                            borderRadius: 1,
-                            overflow: 'hidden'
-                          }}
-                        >
-                          <Box
-                            sx={{
-                              width: `${ds.usagePercent}%`,
-                              height: '100%',
-                              bgcolor: ds.usagePercent > 90 ? 'error.main' : ds.usagePercent > 70 ? 'warning.main' : 'success.main',
-                            }}
-                          />
-                        </Box>
-                        <span style={{ fontSize: 10 }}>{ds.usagePercent}%</span>
-                      </Box>
-                      <span style={{ opacity: 0.5, fontSize: 11 }}>
-                        ({ds.backupCount})
-                      </span>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, py: 0.25 }}>
+                      <i className="ri-cloud-line" style={{ fontSize: 14, opacity: 0.7 }} />
+                      <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>{g.vdcName}</Typography>
+                      <span style={{ opacity: 0.5, fontSize: 11 }}>({g.entries.length})</span>
                     </Box>
                   }
-                />
+                >
+                  {/* A datastore bound by ≥2 vDCs (shared PBS target) is
+                      listed under each — the count shown stays the
+                      tenant-scope total for that datastore, the payload has
+                      no per-vDC breakdown (accepted caveat). The vdcId
+                      suffix only disambiguates the itemId across groups;
+                      selectionFromItemId/helpers.ts still split on the
+                      first two segments (connId, datastore name). */}
+                  {g.entries.map(({ pbs, datastore: ds }) => (
+                    <TreeItem
+                      key={`datastore:${pbs.connId}:${ds.name}:${g.vdcId}`}
+                      itemId={`datastore:${pbs.connId}:${ds.name}:${g.vdcId}`}
+                      label={renderDatastoreLabel(ds)}
+                    />
+                  ))}
+                </TreeItem>
               ))}
-            </TreeItem>
-          ))}
+              {/* Datastores present in the payload but bound to no vDC
+                  (defensive — e.g. a legacy PBS namespace never attached to
+                  a vDC): kept in an ungrouped tail, as today. */}
+              {(() => {
+                const tailByPbs = new Map<string, { pbs: TreePbsServer; datastores: TreePbsDatastore[] }>()
+                for (const { pbs, datastore } of pbsVdcGrouping.unmapped) {
+                  const entry = tailByPbs.get(pbs.connId)
+                  if (entry) entry.datastores.push(datastore)
+                  else tailByPbs.set(pbs.connId, { pbs, datastores: [datastore] })
+                }
+                return [...tailByPbs.values()].map(({ pbs, datastores }) => (
+                  <TreeItem
+                    key={`pbs:${pbs.connId}`}
+                    itemId={`pbs:${pbs.connId}`}
+                    label={renderPbsLabel(pbs)}
+                  >
+                    {datastores.map((ds) => (
+                      <TreeItem
+                        key={`datastore:${pbs.connId}:${ds.name}`}
+                        itemId={`datastore:${pbs.connId}:${ds.name}`}
+                        label={renderDatastoreLabel(ds)}
+                      />
+                    ))}
+                  </TreeItem>
+                ))
+              })()}
+            </>
+          ) : (
+            pbsServers.map(pbs => (
+              <TreeItem
+                key={`pbs:${pbs.connId}`}
+                itemId={`pbs:${pbs.connId}`}
+                label={renderPbsLabel(pbs)}
+              >
+                {/* Datastores du serveur PBS */}
+                {pbs.datastores.map(ds => (
+                  <TreeItem
+                    key={`datastore:${pbs.connId}:${ds.name}`}
+                    itemId={`datastore:${pbs.connId}:${ds.name}`}
+                    label={renderDatastoreLabel(ds)}
+                  />
+                ))}
+              </TreeItem>
+            ))
+          )}
           </SimpleTreeView>
           </Collapse>
         </>

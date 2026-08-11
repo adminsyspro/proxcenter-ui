@@ -37,7 +37,11 @@ export async function injectVdcNodeScope(
   if (tenantId === DEFAULT_TENANT_ID) return
   if (!body.connection_id) return
 
-  const vdcScope = await getVdcScope(tenantId)
+  // Enforcement surface: node-pinning must see the tenant's FULL union —
+  // a client-controlled view cookie must never disarm cross-tenant
+  // isolation (a conn-B rule created while browsing context A would
+  // otherwise skip pinning and fire on other tenants' nodes).
+  const vdcScope = await getVdcScope(tenantId, { ignoreVdcContext: true })
   const allowedNodes = vdcScope?.nodesByConnection.get(body.connection_id)
   if (!allowedNodes || allowedNodes.size === 0) return
 

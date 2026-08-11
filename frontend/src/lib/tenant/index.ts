@@ -343,7 +343,9 @@ export async function getTenantConnectionIds(): Promise<Set<string>> {
   // tenant -> vdc only at call time (vdc/scope.ts depends on this module
   // for DEFAULT_TENANT_ID, so a top-level import would cycle).
   const { getVdcScope } = await import('@/lib/vdc/scope')
-  const scope = await getVdcScope(tenantId)
+  // Authorization surface (firewall/orchestrator object routes, API-token
+  // scoping): always the full tenant union, never the vDC view context.
+  const scope = await getVdcScope(tenantId, { ignoreVdcContext: true })
   if (scope) {
     for (const cid of scope.connectionIds) ids.add(cid)
     for (const cid of scope.pbsConnectionIds) ids.add(cid)
@@ -364,7 +366,8 @@ export async function verifyConnectionOwnership(connectionId: string): Promise<R
   // Fall back to vDC scope so vDC tenants can reach provider-owned PVE/PBS
   // referenced by their bindings (mirror of the bypass used by getConnectionById).
   const { getVdcScope } = await import('@/lib/vdc/scope')
-  const scope = await getVdcScope(await getCurrentTenantId())
+  // Ownership check: full union, not the vDC view context.
+  const scope = await getVdcScope(await getCurrentTenantId(), { ignoreVdcContext: true })
   if (scope && (scope.connectionIds.has(connectionId) || scope.pbsConnectionIds.has(connectionId))) {
     return null
   }

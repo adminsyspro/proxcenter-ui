@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -22,7 +22,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widgetRegistry'
 import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
-import { formatScopeTarget } from './scope-options'
+import { formatScopeTarget, buildVdcScopeOptions, buildVdcNameByPool } from './scope-options'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -313,7 +313,7 @@ return n })}>
 }
 
 // Assignment Dialog avec sélection dynamique des ressources
-function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenants = [], enableTenantMgmt = false, currentTenantId = 'default', onSave, t }) {
+function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenants = [], enableTenantMgmt = false, currentTenantId = 'default', vdcs = [], onSave, t }) {
   const [user, setUser] = useState(null)
   const [roleId, setRoleId] = useState('')
   // Provider view: tenant defaults to the session tenant ('default'), but the
@@ -370,8 +370,29 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
     }
   }, [tenantId, roleId])
 
+  // vdc options are tenant-scoped — a tenant switch invalidates them, so a
+  // 'vdc' selection must not survive a tenant change (it would otherwise
+  // leave a blank Select value plus stale targets from the old tenant).
+  // Keyed on tenantId only (not scopeType) so picking 'vdc' itself doesn't
+  // immediately re-trigger this reset.
+  useEffect(() => {
+    setScopeType(prev => {
+      if (prev !== 'vdc') return prev
+      setSelectedTargets([])
+
+      return 'inherit'
+    })
+  }, [tenantId])
+
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
+    // vDC = sugar over pool; options come from the vDC list, NOT from the
+    // inventory guests (an empty vDC must be assignable), so this case must
+    // run before the inventory guard below can starve it.
+    if (scopeType === 'vdc') {
+      return buildVdcScopeOptions(vdcs, tenantId)
+    }
+
     if (!inventory?.clusters) return []
 
     switch (scopeType) {
@@ -479,7 +500,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
       default:
         return []
     }
-  }, [inventory, scopeType])
+  }, [inventory, scopeType, vdcs, tenantId])
 
   // Conflict detection: the backend already rejects duplicates and second
   // roles per tenant, but surfacing them client-side lets the operator fix the
@@ -573,7 +594,10 @@ return
           body: JSON.stringify({
             user_id: user.id,
             role_id: roleId,
-            scope_type: scopeType,
+            // 'vdc' is UI sugar (design §3.8b): it stores as scope_type='pool'
+            // + the vDC's pvePoolName as target — the wire format and DB never
+            // learn about vDCs, only about the pool they're backed by.
+            scope_type: scopeType === 'vdc' ? 'pool' : scopeType,
             scope_target: target,
             // tenant_id is honored server-side only when the caller is in the
             // provider tenant. Sending it from any other context is harmless
@@ -753,6 +777,17 @@ return
                 </Box>
               </Box>
             </MenuItem>
+            {buildVdcScopeOptions(vdcs, tenantId).length > 0 && (
+              <MenuItem value='vdc'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-cloud-line' style={{ color: '#0ea5e9' }} />
+                  <Box>
+                    <Typography variant='body2'>{t('rbacPage.vdcScope')}</Typography>
+                    <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToVdc')}</Typography>
+                  </Box>
+                </Box>
+              </MenuItem>
+            )}
           </Select>
         </FormControl>
 
@@ -1091,10 +1126,13 @@ return }
 }
 
 // Assignments Tab avec regroupement par utilisateur/rôle/tenant/scope_type
-function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantMgmt = false, currentTenantId = 'default', onRefresh, t }) {
+function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantMgmt = false, currentTenantId = 'default', vdcs = [], onRefresh, t }) {
   const dateLocale = getDateLocale(useLocale())
   const { data: session } = useSession()
   const currentUserId = session?.user?.id
+  // pvePoolName -> vDC name, so pool-scoped assignments that are really a
+  // vDC (the RBAC UI sugar) render "vDC: <name>" instead of the raw pool.
+  const vdcNameByPool = useMemo(() => buildVdcNameByPool(vdcs), [vdcs])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [toEdit, setToEdit] = useState<any>(null)
@@ -1197,19 +1235,22 @@ return groupedAssignments.filter(a =>
       const icon = row.scope_type === 'tag' ? 'ri-price-tag-3-line' : 'ri-folder-shared-line'
 
       if (count === 1) {
+        const target = row.scope_targets[0]
+        const vdcName = row.scope_type === 'pool' ? vdcNameByPool.get(target) : undefined
+
         return (
           <Chip
-            icon={<i className={icon} style={{ fontSize: 14, color }} />}
-            label={row.scope_targets[0]}
+            icon={<i className={vdcName ? 'ri-cloud-line' : icon} style={{ fontSize: 14, color: vdcName ? '#0ea5e9' : color }} />}
+            label={vdcName ? `vDC: ${vdcName}` : target}
             size='small'
             variant='outlined'
-            sx={{ height: 22, fontSize: '0.75rem', borderColor: color, color }}
+            sx={{ height: 22, fontSize: '0.75rem', borderColor: vdcName ? '#0ea5e9' : color, color: vdcName ? '#0ea5e9' : color }}
           />
         )
       }
 
       return (
-        <Tooltip title={row.scope_targets.join(', ')}>
+        <Tooltip title={row.scope_targets.map((tgt: string) => row.scope_type === 'pool' && vdcNameByPool.get(tgt) ? `vDC: ${vdcNameByPool.get(tgt)}` : tgt).join(', ')}>
           <Chip
             icon={<i className={icon} style={{ fontSize: 14, color }} />}
             label={`${count} ${row.scope_type === 'tag' ? t('rbacPage.tags') : t('rbacPage.pools')}`}
@@ -1354,8 +1395,8 @@ return (
           }} 
         />
       </Box>
-      <AssignmentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} roles={roles} users={availableUsers} assignments={assignments} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} onSave={onRefresh} t={t} />
-      <EditAssignmentDialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} assignmentGroup={toEdit} roles={roles} enableTenantMgmt={enableTenantMgmt} onSave={onRefresh} t={t} />
+      <AssignmentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} roles={roles} users={availableUsers} assignments={assignments} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} onSave={onRefresh} t={t} />
+      <EditAssignmentDialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} assignmentGroup={toEdit} roles={roles} enableTenantMgmt={enableTenantMgmt} vdcs={vdcs} onSave={onRefresh} t={t} />
       <DeleteDialog
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
@@ -1370,13 +1411,23 @@ return (
 }
 
 // Edit Assignment Dialog avec multi-sélection (travaille sur un groupe d'assignations)
-function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTenantMgmt = false, onSave, t }) {
+function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTenantMgmt = false, vdcs = [], onSave, t }) {
   const [roleId, setRoleId] = useState('')
   const [scopeType, setScopeType] = useState('global')
   const [selectedTargets, setSelectedTargets] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
+
+  // pvePoolName -> vDC name, used both to reopen a vDC-backed pool assignment
+  // as the 'vdc' pseudo-scope below and to gate the 'vdc' MenuItem.
+  const vdcNameByPool = useMemo(() => buildVdcNameByPool(vdcs), [vdcs])
+  // Read the LATEST map from the init effect without depending on it — the
+  // vdcs fetch is async and can resolve after the operator has already
+  // opened the dialog and started editing; depending on vdcNameByPool would
+  // re-fire the init effect and wipe their in-progress role/target changes.
+  const vdcNameByPoolRef = useRef(vdcNameByPool)
+  vdcNameByPoolRef.current = vdcNameByPool
   
   // Inventory data
   const [inventory, setInventory] = useState<any>(null)
@@ -1398,7 +1449,19 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
   useEffect(() => {
     if (assignmentGroup && open) {
       setRoleId(assignmentGroup.role.id)
-      setScopeType(assignmentGroup.scope_type)
+      // Existing pool assignments whose every target is a vDC pool reopen as
+      // the "vDC" pseudo-scope (pure display — the wire type stays 'pool').
+      // Accepted tradeoff: if the dialog opens before the vdcs fetch
+      // resolves, an all-vDC pool assignment initially shows as 'pool' —
+      // pure display sugar, degrades gracefully, and avoids a re-init here
+      // (via a vdcNameByPool dependency) that could clobber in-progress edits.
+      const initialScopeType =
+        assignmentGroup.scope_type === 'pool' &&
+        assignmentGroup.scope_targets.length > 0 &&
+        assignmentGroup.scope_targets.every((tgt: string) => vdcNameByPoolRef.current.has(tgt))
+          ? 'vdc'
+          : assignmentGroup.scope_type
+      setScopeType(initialScopeType)
       setSelectedTargets(assignmentGroup.scope_targets || [])
       setSearchFilter('')
       setError('')
@@ -1407,6 +1470,13 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
 
   // Construire les options selon le scope type
   const scopeOptions = useMemo(() => {
+    // vDC = sugar over pool; options come from the vDC list, NOT from the
+    // inventory guests (an empty vDC must be assignable), so this case must
+    // run before the inventory guard below can starve it.
+    if (scopeType === 'vdc') {
+      return buildVdcScopeOptions(vdcs, assignmentGroup?.tenant_id || 'default')
+    }
+
     if (!inventory?.clusters) return []
 
     switch (scopeType) {
@@ -1514,7 +1584,7 @@ function EditAssignmentDialog({ open, onClose, assignmentGroup, roles, enableTen
       default:
         return []
     }
-  }, [inventory, scopeType])
+  }, [inventory, scopeType, vdcs, assignmentGroup])
 
   // Toggle sélection d'un élément
   const toggleTarget = (id: string) => {
@@ -1651,7 +1721,9 @@ return
           body: JSON.stringify({
             user_id: assignmentGroup.user.id,
             role_id: roleId,
-            scope_type: scopeType,
+            // 'vdc' is UI sugar (design §3.8b): stored as scope_type='pool' +
+            // the vDC's pvePoolName target.
+            scope_type: scopeType === 'vdc' ? 'pool' : scopeType,
             scope_target: target,
             ...tenantPayload,
           })
@@ -1831,6 +1903,17 @@ return
                 </Box>
               </Box>
             </MenuItem>
+            {buildVdcScopeOptions(vdcs, assignmentGroup?.tenant_id || 'default').length > 0 && (
+              <MenuItem value='vdc'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-cloud-line' style={{ color: '#0ea5e9' }} />
+                  <Box>
+                    <Typography variant='body2'>{t('rbacPage.vdcScope')}</Typography>
+                    <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('rbacPage.limitedToVdc')}</Typography>
+                  </Box>
+                </Box>
+              </MenuItem>
+            )}
           </Select>
         </FormControl>
 
@@ -1966,6 +2049,20 @@ export default function RBACPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  // vDCs for the "vDC" assignment scope (sugar over pool). Provider admins
+  // get every tenant's vDCs; a tenant-scoped admin gets 403 on the admin
+  // endpoint and falls back to their own tenant's list. Errors degrade to
+  // [] — the vDC scope option simply doesn't show.
+  const [vdcs, setVdcs] = useState<any[]>([])
+
+  useEffect(() => {
+    const url = enableTenantMgmt ? '/api/v1/admin/vdcs' : '/api/v1/vdcs'
+    fetch(url)
+      .then(res => (res.ok ? res.json() : { data: [] }))
+      .then(data => setVdcs(Array.isArray(data?.data) ? data.data : []))
+      .catch(() => setVdcs([]))
+  }, [enableTenantMgmt])
+
   const { setPageInfo } = usePageTitle()
 
   useEffect(() => {
@@ -2017,7 +2114,7 @@ return () => setPageInfo('', '', '')
         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {loading ? <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, p: 2 }}><CardsSkeleton count={3} columns={3} /><TableSkeleton rows={4} columns={5} /></Box> : (
             <>
-              {tab === 0 && <AssignmentsTab assignments={assignments} roles={roles} users={users} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} onRefresh={loadData} t={t} />}
+              {tab === 0 && <AssignmentsTab assignments={assignments} roles={roles} users={users} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} onRefresh={loadData} t={t} />}
               {tab === 1 && <RolesTab roles={roles} categories={categories} onRefresh={loadData} t={t} />}
               {tab === 2 && (
                 <Box>

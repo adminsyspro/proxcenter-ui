@@ -105,6 +105,6 @@ describe("getTenantConnectionIds", () => {
     expect(ids).toEqual(new Set(["p1", "p2", "pbs1"]))
     expect(findManySessionMock).toHaveBeenCalled()
     expect(findManyGlobalMock).not.toHaveBeenCalled()
-    expect(getVdcScopeMock).toHaveBeenCalledWith("iaas-1")
+    expect(getVdcScopeMock).toHaveBeenCalledWith("iaas-1", { ignoreVdcContext: true })
   })
 })

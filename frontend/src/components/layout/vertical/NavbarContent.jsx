@@ -52,6 +52,9 @@ import CommandPalette from '@components/layout/shared/CommandPalette'
 // Tenant Switcher
 import TenantSwitcher from '@components/layout/shared/TenantSwitcher'
 
+// vDC context switcher (IaaS tenants with several vDCs)
+import VdcSwitcher from '@components/layout/shared/VdcSwitcher'
+
 // Page Title Context
 import { usePageTitle } from '@/contexts/PageTitleContext'
 
@@ -722,6 +725,9 @@ return () => window.removeEventListener('keydown', onKeyDown)
               <i className={targetLayout === 'vertical' ? 'ri-layout-left-line' : 'ri-layout-top-line'} />
             </IconButton>
           </Tooltip>
+
+          {/* vDC context switcher */}
+          <VdcSwitcher />
 
           {/* Tenant Switcher */}
           <TenantSwitcher />

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { getSessionPrisma, getTenantConnectionIds } from "@/lib/tenant"
+import { getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
@@ -18,9 +19,16 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const connectionId = searchParams.get("connection_id")
 
-    // Verify connection belongs to tenant if specified
+    // iaas: the LIST perimeter follows the vDC view context (narrowed
+    // connection set — missing key = deny). The union set only backs
+    // provider/msp and ownership verdicts elsewhere.
     const tenantConnectionIds = await getTenantConnectionIds()
-    if (connectionId && !tenantConnectionIds.has(connectionId)) {
+    const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
+    const vdcScope = maskingScope(infra)
+    const perimeterConnectionIds = vdcScope ? vdcScope.connectionIds : tenantConnectionIds
+
+    // Verify connection belongs to the caller's current view if specified
+    if (connectionId && !perimeterConnectionIds.has(connectionId)) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
@@ -42,10 +50,14 @@ export async function GET(req: Request) {
       )
     }
 
-    // Filter results by tenant connections
+    // Filter results by the caller's current view. Deny-by-default: a row
+    // with no connection_id is provider-only (never "no key = pass"), same
+    // rule as the jobs and changes feeds.
     const items = Array.isArray(data) ? data : (data?.data || data)
     if (Array.isArray(items)) {
-      const filtered = items.filter((ru: any) => !ru.connection_id || tenantConnectionIds.has(ru.connection_id))
+      const filtered = items.filter((ru: any) =>
+        ru.connection_id ? perimeterConnectionIds.has(ru.connection_id) : infra.kind === "provider"
+      )
       return NextResponse.json({ data: filtered })
     }
 

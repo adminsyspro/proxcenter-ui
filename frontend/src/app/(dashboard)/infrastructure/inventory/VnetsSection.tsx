@@ -22,8 +22,10 @@ import VnetCreateDialog from '@/components/mydc/VnetCreateDialog'
 import VnetEditDialog from '@/components/mydc/VnetEditDialog'
 import VnetDeleteDialog from '@/components/mydc/VnetDeleteDialog'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
+import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { useTenant } from '@/contexts/TenantContext'
 
-interface Vdc { id: string; name: string; connectionId?: string }
+interface Vdc { id: string; name: string; connectionId?: string; enabled?: boolean }
 
 interface SubnetView {
   cidr: string
@@ -62,8 +64,14 @@ interface Props {
 export default function VnetsSection({ connectionIds }: Props) {
   const t = useTranslations()
   const theme = useTheme()
+  const { isFullClusterView } = useTenant()
   const [vdcs, setVdcs] = useState<Vdc[]>([])
   const [rows, setRows] = useState<VnetRow[]>([])
+  // vDC column (Task 14): visible only for a multi-vDC tenant browsing the
+  // union view — a precise vDC context makes every row share the same vDC,
+  // so the column would be a constant (mirrors InventoryDetails' vDC
+  // column). Provider/MSP explicitly excluded, same as the Network tree.
+  const [showVdcColumn, setShowVdcColumn] = useState(false)
   const [loading, setLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editVnet, setEditVnet] = useState<{ row: VnetRow } | null>(null)
@@ -86,9 +94,19 @@ export default function VnetsSection({ connectionIds }: Props) {
       const vdcsRes = await fetch('/api/v1/vdcs')
       const vdcsJson = await vdcsRes.json()
       const allVdcs: Vdc[] = Array.isArray(vdcsJson?.data) ? vdcsJson.data : []
+
+      // vDC context filter (Task 14): a cookie matching one of the tenant's
+      // own active vDCs narrows the table to just that vDC — same
+      // fail-open contract as the Network tree (Task 7/14): an unset,
+      // foreign, or disabled-vDC cookie leaves the union untouched.
+      const ctxCookie = readVdcContextCookie()
+      const ctxIsActiveVdc = !isFullClusterView && !!ctxCookie && allVdcs.some(v => v.id === ctxCookie && v.enabled !== false)
+      const scopedVdcs = ctxIsActiveVdc ? allVdcs.filter(v => v.id === ctxCookie) : allVdcs
+      setShowVdcColumn(!isFullClusterView && !ctxIsActiveVdc && allVdcs.filter(v => v.enabled !== false).length > 1)
+
       const visibleVdcs = connFilter.size === 0
-        ? allVdcs
-        : allVdcs.filter(v => !v.connectionId || connFilter.has(v.connectionId))
+        ? scopedVdcs
+        : scopedVdcs.filter(v => !v.connectionId || connFilter.has(v.connectionId))
       setVdcs(visibleVdcs)
 
       const all: VnetRow[] = []
@@ -131,7 +149,7 @@ export default function VnetsSection({ connectionIds }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [connFilter])
+  }, [connFilter, isFullClusterView])
 
   useEffect(() => { void reload() }, [reload])
 
@@ -179,6 +197,9 @@ export default function VnetsSection({ connectionIds }: Props) {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700, fontSize: 12, opacity: 0.65, py: 1 }}>{t('myVdc.vnetName')}</TableCell>
+                    {showVdcColumn && (
+                      <TableCell sx={{ fontWeight: 700, fontSize: 12, opacity: 0.65, py: 1 }}>{t('myVdc.vnetVdc')}</TableCell>
+                    )}
                     <TableCell sx={{ fontWeight: 700, fontSize: 12, opacity: 0.65, py: 1 }}>{t('myVdc.subnetColumn')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 12, opacity: 0.65, py: 1 }}>{t('myVdc.subnetGateway')}</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 12, opacity: 0.65, py: 1 }}>{t('myVdc.subnetDns')}</TableCell>
@@ -202,6 +223,9 @@ export default function VnetsSection({ connectionIds }: Props) {
                           <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
                         </Tooltip>
                       </TableCell>
+                      {showVdcColumn && (
+                        <TableCell sx={{ py: 1, fontSize: 12, opacity: 0.85 }}>{r.vdcName}</TableCell>
+                      )}
                       <TableCell sx={{ py: 1, fontSize: 12 }}>
                         {sn?.cidr ?? <span style={{ opacity: 0.45 }}>—</span>}
                       </TableCell>

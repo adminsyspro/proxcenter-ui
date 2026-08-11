@@ -46,7 +46,7 @@ describe("getTenantInfrastructureScope", () => {
     expect(infra.kind).toBe("iaas")
     expect(pveConnectionFilter(infra)).toEqual(new Set(["p1"]))
     expect(maskingScope(infra)).toBe(vdcScope)
-    expect(getVdcScopeMock).toHaveBeenCalledWith("t-iaas")
+    expect(getVdcScopeMock).toHaveBeenCalledWith("t-iaas", undefined)
   })
 })
 

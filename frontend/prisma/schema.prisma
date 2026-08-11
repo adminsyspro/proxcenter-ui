@@ -709,6 +709,8 @@ model Vdc {
   ipam          VdcIpamAllocation[]
   pbsNamespaces VdcPbsNamespace[]
 
+  @@unique([tenantId, connectionId])
+  @@unique([tenantId, slug])
   @@unique([tenantId, connectionId, slug])
   @@unique([connectionId, sdnZoneName], map: "idx_vdcs_sdn_zone_name")
   @@index([tenantId])

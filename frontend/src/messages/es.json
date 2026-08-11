@@ -4173,6 +4173,8 @@
       "tierImportant": "Importante",
       "tierStandard": "Estándar",
       "executionHistory": "Historial de ejecución",
+      "clearHistory": "Vaciar el historial",
+      "clearHistoryConfirm": "¿Eliminar todas las ejecuciones pasadas de este plan? Las capturas de arranque se eliminarán con ellas. La ejecución de prueba activa se conserva.",
       "actions": "Acciones",
       "testFailover": "Probar failover",
       "failover": "Failover",

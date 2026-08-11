@@ -4173,6 +4173,8 @@
       "tierImportant": "Important",
       "tierStandard": "Standard",
       "executionHistory": "Historique d'exécution",
+      "clearHistory": "Vider l'historique",
+      "clearHistoryConfirm": "Supprimer toutes les exécutions passées de ce plan ? Les captures de boot seront supprimées avec. L'exécution de test active est conservée.",
       "actions": "Actions",
       "testFailover": "Test de failover",
       "failover": "Failover",

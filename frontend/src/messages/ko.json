@@ -4173,6 +4173,8 @@
       "tierImportant": "중요",
       "tierStandard": "표준",
       "executionHistory": "실행 기록",
+      "clearHistory": "기록 지우기",
+      "clearHistoryConfirm": "이 플랜의 지난 실행 기록을 모두 삭제하시겠습니까? 부팅 스크린샷도 함께 삭제됩니다. 활성 테스트 실행은 유지됩니다.",
       "actions": "작업",
       "testFailover": "테스트 페일오버",
       "failover": "페일오버",

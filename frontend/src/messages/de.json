@@ -4135,6 +4135,8 @@
       "tierImportant": "Wichtig",
       "tierStandard": "Standard",
       "executionHistory": "Execution Verlauf",
+      "clearHistory": "Verlauf leeren",
+      "clearHistoryConfirm": "Alle bisherigen Ausführungen dieses Plans löschen? Boot-Screenshots werden mit gelöscht. Die aktive Testausführung bleibt erhalten.",
       "actions": "Aktionen",
       "testFailover": "Failover testen",
       "failover": "Failover",

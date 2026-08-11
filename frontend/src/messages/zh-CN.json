@@ -4134,6 +4134,8 @@
       "tierImportant": "重要",
       "tierStandard": "标准",
       "executionHistory": "执行历史",
+      "clearHistory": "清空历史记录",
+      "clearHistoryConfirm": "删除此计划的所有历史执行记录？启动截图将一并删除。当前活动的测试执行将被保留。",
       "actions": "操作",
       "testFailover": "测试故障转移",
       "failover": "故障转移",

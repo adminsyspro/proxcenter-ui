@@ -4173,6 +4173,8 @@
       "tierImportant": "Important",
       "tierStandard": "Standard",
       "executionHistory": "Execution History",
+      "clearHistory": "Clear history",
+      "clearHistoryConfirm": "Delete all past executions of this plan? Boot screenshots are deleted with them. The active test execution is kept.",
       "actions": "Actions",
       "testFailover": "Test Failover",
       "failover": "Failover",

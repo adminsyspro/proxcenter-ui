@@ -79,7 +79,7 @@ export default function SiteRecoveryPage() {
   const { data: jobs, isLoading: jobsLoading, mutate: mutateJobs } = useReplicationJobs(isEnterprise)
   const { data: plans, isLoading: plansLoading, mutate: mutatePlans } = useRecoveryPlans(isEnterprise)
   const { data: jobLogs, isLoading: logsLoading } = useReplicationJobLogs(selectedJobId, !!selectedJobId)
-  const { data: planHistory, isLoading: historyLoading } = useRecoveryHistory(selectedPlanId)
+  const { data: planHistory, isLoading: historyLoading, mutate: mutateHistory } = useRecoveryHistory(selectedPlanId)
 
   // Real data: PVE connections and all VMs
   const { data: connectionsData } = useSWR<{ data: any[] }>('/api/v1/connections?type=pve', fetcher)
@@ -471,6 +471,7 @@ export default function SiteRecoveryPage() {
             onFailback={(id) => openFailoverDialog(id, 'failback')}
             onDeletePlan={handleDeletePlan}
             onCleanupTest={(id) => openFailoverDialog(id, 'test')}
+            onHistoryCleared={() => mutateHistory()}
             connections={connections}
           />
         )}

@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Collapse, Divider, Drawer,
+  Alert, Box, Button, Card, CardContent, Chip, Collapse, Dialog, DialogActions, DialogContent,
+  DialogContentText, DialogTitle, Divider, Drawer,
   IconButton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
@@ -152,19 +153,21 @@ interface RecoveryPlansTabProps {
   onFailback: (id: string) => void
   onDeletePlan: (id: string) => void
   onCleanupTest: (id: string) => void
+  onHistoryCleared?: () => void
   connections?: Array<{ id: string; name: string }>
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
-  onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest,
+  onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest, onHistoryCleared,
   connections
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
   const theme = useTheme()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
 
   const selected = useMemo(() => (plans || []).find(p => p.id === selectedPlanId), [plans, selectedPlanId])
 
@@ -192,6 +195,15 @@ export default function RecoveryPlansTab({
 
       return next
     })
+  }
+
+  const handleClearHistory = async () => {
+    setConfirmClearHistory(false)
+
+    if (!selected) return
+
+    await fetch(`/api/v1/orchestrator/replication/plans/${selected.id}/history`, { method: 'DELETE' })
+    onHistoryCleared?.()
   }
 
   if (loading) {
@@ -316,9 +328,20 @@ export default function RecoveryPlansTab({
                 {history && history.length > 0 && (
                   <>
                     <Divider sx={{ my: 2 }} />
-                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
-                      {t('siteRecovery.plans.executionHistory')}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
+                        {t('siteRecovery.plans.executionHistory')}
+                      </Typography>
+                      <IconButton
+                        size='small'
+                        color='inherit'
+                        aria-label={t('siteRecovery.plans.clearHistory')}
+                        onClick={() => setConfirmClearHistory(true)}
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+                      >
+                        <i className='ri-delete-bin-line' />
+                      </IconButton>
+                    </Box>
                     <Stack spacing={0.5}>
                       {history.slice(0, 10).map(exec => (
                         <Box key={exec.id} sx={{
@@ -418,6 +441,20 @@ export default function RecoveryPlansTab({
           )}
         </Box>
       </Drawer>
+
+      {/* Clear history confirmation */}
+      <Dialog open={confirmClearHistory} onClose={() => setConfirmClearHistory(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.plans.clearHistory')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('siteRecovery.plans.clearHistoryConfirm')}</DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmClearHistory(false)}>{t('common.cancel')}</Button>
+          <Button variant='contained' color='error' onClick={handleClearHistory}>
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

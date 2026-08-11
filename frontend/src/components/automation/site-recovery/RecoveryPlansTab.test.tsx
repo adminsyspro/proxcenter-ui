@@ -10,10 +10,10 @@
 
 import { useState } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, waitFor } from '@testing-library/react'
 
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
-import type { RecoveryPlan } from '@/lib/orchestrator/site-recovery.types'
+import type { RecoveryExecution, RecoveryPlan } from '@/lib/orchestrator/site-recovery.types'
 
 import RecoveryPlansTab from './RecoveryPlansTab'
 
@@ -41,12 +41,16 @@ function plan(overrides: Partial<RecoveryPlan> = {}): RecoveryPlan {
 // harness plays the parent's role so clicking a row actually opens the drawer.
 function Harness({
   plans,
+  history = [],
   onTestFailover,
   onCleanupTest,
+  onHistoryCleared,
 }: {
   plans: RecoveryPlan[]
+  history?: RecoveryExecution[]
   onTestFailover: (id: string) => void
   onCleanupTest: (id: string) => void
+  onHistoryCleared?: () => void
 }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
@@ -54,7 +58,7 @@ function Harness({
     <RecoveryPlansTab
       plans={plans}
       loading={false}
-      history={[]}
+      history={history}
       historyLoading={false}
       selectedPlanId={selectedPlanId}
       onSelectPlan={setSelectedPlanId}
@@ -63,23 +67,42 @@ function Harness({
       onFailback={vi.fn()}
       onDeletePlan={vi.fn()}
       onCleanupTest={onCleanupTest}
+      onHistoryCleared={onHistoryCleared}
       connections={[]}
     />
   )
 }
 
-function renderTab(plans: RecoveryPlan[]) {
+function renderTab(plans: RecoveryPlan[], history: RecoveryExecution[] = []) {
   const onTestFailover = vi.fn()
   const onCleanupTest = vi.fn()
+  const onHistoryCleared = vi.fn()
 
   renderWithProviders(
-    <Harness plans={plans} onTestFailover={onTestFailover} onCleanupTest={onCleanupTest} />,
+    <Harness
+      plans={plans}
+      history={history}
+      onTestFailover={onTestFailover}
+      onCleanupTest={onCleanupTest}
+      onHistoryCleared={onHistoryCleared}
+    />,
   )
 
-  return { onTestFailover, onCleanupTest }
+  return { onTestFailover, onCleanupTest, onHistoryCleared }
 }
 
 const openDrawer = async () => userEvent.click(screen.getByText('Prod DR'))
+
+function execution(overrides: Partial<RecoveryExecution> = {}): RecoveryExecution {
+  return {
+    id: 'exec-1',
+    plan_id: 'plan-1',
+    type: 'failover',
+    status: 'completed',
+    started_at: '2026-01-02T00:00:00Z',
+    ...overrides,
+  }
+}
 
 describe('RecoveryPlansTab — cleanup pending indicators', () => {
   it('shows the "Cleanup pending" chip and a disabled Test Failover + Cleanup button when a test is active', async () => {
@@ -117,5 +140,53 @@ describe('RecoveryPlansTab — cleanup pending indicators', () => {
 
     expect(screen.getByRole('button', { name: 'Test Failover' })).not.toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Cleanup test' })).not.toBeInTheDocument()
+  })
+})
+
+describe('RecoveryPlansTab — clear execution history', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the clear-history button when history has entries', async () => {
+    renderTab([plan()], [execution()])
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Clear history' })).toBeInTheDocument()
+  })
+
+  it('hides the clear-history button when history is empty', async () => {
+    renderTab([plan()], [])
+
+    await openDrawer()
+
+    expect(screen.queryByRole('button', { name: 'Clear history' })).not.toBeInTheDocument()
+  })
+
+  it('opens a confirm dialog on click', async () => {
+    renderTab([plan()], [execution()])
+
+    await openDrawer()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear history' }))
+
+    expect(screen.getByText(/Delete all past executions of this plan/)).toBeInTheDocument()
+  })
+
+  it('calls DELETE on the plan history endpoint and notifies the parent on confirm', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify({ deleted: 2 }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const { onHistoryCleared } = renderTab([plan()], [execution()])
+
+    await openDrawer()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear history' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/orchestrator/replication/plans/plan-1/history',
+      { method: 'DELETE' },
+    )
+    await waitFor(() => expect(onHistoryCleared).toHaveBeenCalled())
   })
 })

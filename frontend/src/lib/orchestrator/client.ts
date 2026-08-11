@@ -534,6 +534,10 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.get<any[]>(`/replication/plans/${planId}/history`)
   }
 
+  clearRecoveryHistory(planId: string) {
+    return this.delete<any>(`/replication/plans/${planId}/history`)
+  }
+
   getExecution(id: string) {
     return this.get<any>(`/replication/executions/${id}`)
   }

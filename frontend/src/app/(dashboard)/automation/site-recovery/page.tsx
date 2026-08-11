@@ -68,6 +68,7 @@ export default function SiteRecoveryPage() {
 
   // Execution tracking
   const [activeExecution, setActiveExecution] = useState<RecoveryExecution | null>(null)
+  const [failoverError, setFailoverError] = useState<string | null>(null)
 
   // Cleanup state
   const [cleanupLoading, setCleanupLoading] = useState(false)
@@ -78,11 +79,27 @@ export default function SiteRecoveryPage() {
   const { data: jobs, isLoading: jobsLoading, mutate: mutateJobs } = useReplicationJobs(isEnterprise)
   const { data: plans, isLoading: plansLoading, mutate: mutatePlans } = useRecoveryPlans(isEnterprise)
   const { data: jobLogs, isLoading: logsLoading } = useReplicationJobLogs(selectedJobId, !!selectedJobId)
-  const { data: planHistory, isLoading: historyLoading } = useRecoveryHistory(selectedPlanId)
+  const { data: planHistory, isLoading: historyLoading, mutate: mutateHistory } = useRecoveryHistory(selectedPlanId)
 
   // Real data: PVE connections and all VMs
   const { data: connectionsData } = useSWR<{ data: any[] }>('/api/v1/connections?type=pve', fetcher)
   const { data: allVMsData } = useSWR<{ data: { vms: any[] } }>('/api/v1/vms', fetcher)
+
+  // Restore points for the plan currently open in the failover dialog (test/failover only — failback has no selector)
+  const { data: restorePoints, error: restorePointsError, isLoading: restorePointsLoading, mutate: mutateRestorePoints } = useSWR(
+    failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback'
+      ? `/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/restore-points`
+      : null,
+    (url: string) => fetch(url).then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+  )
+
+  // Drop the cached list on every dialog open: RBD snapshots move with each
+  // sync, and a reopened dialog must never offer points from a previous look.
+  useEffect(() => {
+    if (failoverDialog.open && failoverDialog.planId && failoverDialog.type !== 'failback') {
+      mutateRestorePoints(undefined, { revalidate: true })
+    }
+  }, [failoverDialog.open, failoverDialog.planId, failoverDialog.type, mutateRestorePoints])
 
   // Page title
   useEffect(() => {
@@ -128,10 +145,14 @@ export default function SiteRecoveryPage() {
     }))
   , [allVMsData])
 
-  // VM name map for display (vmid → name)
-  const vmNameMap = useMemo(() => {
-    const m: Record<number, string> = {}
-    for (const vm of allVMs) if (vm.vmid && vm.name) m[vm.vmid] = vm.name
+  // VM names scoped per connection (connId → vmid → name): the same VMID can
+  // exist on both sites, so a flat map resolves nondeterministically.
+  const vmNamesByConn = useMemo(() => {
+    const m: Record<string, Record<number, string>> = {}
+    for (const vm of allVMs) {
+      if (!vm.vmid || !vm.name || !vm.connId) continue
+      ;(m[vm.connId] ??= {})[vm.vmid] = vm.name
+    }
     return m
   }, [allVMs])
 
@@ -236,15 +257,45 @@ export default function SiteRecoveryPage() {
     setActiveExecution(null)
     setCleanupResult(null)
     setCleanupLoading(false)
-  }, [])
+    setFailoverError(null)
 
-  const handleFailoverConfirm = useCallback(async () => {
+    // Rehydration: a test failover started before a reload has no in-memory
+    // `activeExecution` — refetch it from its id on the plan so the dialog
+    // can land directly on the Cleanup block instead of showing "confirm".
+    if (type === 'test') {
+      const plan = (plans || []).find((p: RecoveryPlan) => p.id === planId)
+      if (plan?.active_test_execution_id) {
+        fetch(`/api/v1/orchestrator/replication/executions/${plan.active_test_execution_id}`)
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => { if (data) setActiveExecution(data) })
+          .catch(() => { /* ignore — dialog shows the warning banner instead */ })
+      }
+    }
+
+    // Same rehydration for a failback in progress: a failing_back plan
+    // carries the running execution's id so reopening the dialog (or
+    // reloading the page) lands back on the reverse-sync/cutover view
+    // instead of the initial confirm screen.
+    if (type === 'failback') {
+      const plan = (plans || []).find((p: RecoveryPlan) => p.id === planId)
+      if (plan?.active_failback_execution_id) {
+        fetch(`/api/v1/orchestrator/replication/executions/${plan.active_failback_execution_id}`)
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => { if (data) setActiveExecution(data) })
+          .catch(() => { /* ignore — dialog shows the initial confirm screen instead */ })
+      }
+    }
+  }, [plans])
+
+  const handleFailoverConfirm = useCallback(async (options?: { restorePoints?: Record<number, string> }) => {
     if (!failoverDialog.planId) return
     const endpoint = failoverDialog.type === 'test' ? 'test-failover' : failoverDialog.type
 
     const body = failoverDialog.type === 'test'
-      ? JSON.stringify({ network_isolated: true })
-      : undefined
+      ? JSON.stringify({ network_isolated: true, ...(options?.restorePoints ? { restore_points: options.restorePoints } : {}) })
+      : failoverDialog.type === 'failover'
+        ? (options?.restorePoints ? JSON.stringify({ restore_points: options.restorePoints }) : undefined)
+        : undefined
 
     try {
       const res = await fetch(`/api/v1/orchestrator/replication/plans/${failoverDialog.planId}/${endpoint}`, {
@@ -252,14 +303,19 @@ export default function SiteRecoveryPage() {
         headers: body ? { 'Content-Type': 'application/json' } : {},
         body
       })
-      const data = await res.json()
-
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFailoverError(data?.error || t('siteRecovery.failover.testConflict'))
+        mutatePlans()
+        return
+      }
+      setFailoverError(null)
       setActiveExecution(data)
       mutatePlans()
     } catch (e) {
       console.error('Failed to execute:', e)
     }
-  }, [failoverDialog, mutatePlans])
+  }, [failoverDialog, mutatePlans, t])
 
   const handleCleanupTest = useCallback(async () => {
     if (!failoverDialog.planId) return
@@ -276,6 +332,47 @@ export default function SiteRecoveryPage() {
       setCleanupLoading(false)
     }
   }, [failoverDialog.planId, mutateJobs, mutatePlans])
+
+  const handleFailbackCutover = useCallback(async (planId: string) => {
+    try {
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cutover`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFailoverError(data?.error || 'Failed to execute failback cutover')
+        mutatePlans()
+        return
+      }
+      setFailoverError(null)
+      // Refetch the execution so the dialog picks up the 'cutover' phase
+      // right away instead of waiting for the next poll tick.
+      if (activeExecution) {
+        const execRes = await fetch(`/api/v1/orchestrator/replication/executions/${activeExecution.id}`)
+        const execData = await execRes.json().catch(() => null)
+        if (execData) setActiveExecution(execData)
+      }
+      mutatePlans()
+    } catch (e) {
+      console.error('Failed to execute failback cutover:', e)
+    }
+  }, [activeExecution, mutatePlans])
+
+  const handleFailbackCancel = useCallback(async (planId: string) => {
+    try {
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cancel`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFailoverError(data?.error || 'Failed to cancel failback')
+        mutatePlans()
+        return
+      }
+      setFailoverError(null)
+      setActiveExecution(null)
+      setFailoverDialog({ open: false, planId: null, type: 'test' })
+      mutatePlans()
+    } catch (e) {
+      console.error('Failed to cancel failback:', e)
+    }
+  }, [mutatePlans])
 
   const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string) => {
     const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
@@ -391,7 +488,7 @@ export default function SiteRecoveryPage() {
 
         {/* Tab Content */}
         {tab === 0 && hasEnoughCephClusters && (
-          <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} vmNameMap={vmNameMap} onSyncJob={handleSyncJob} />
+          <DashboardTab health={health} loading={healthLoading} jobs={jobs || []} connections={connections} vmNamesByConn={vmNamesByConn} onSyncJob={handleSyncJob} />
         )}
 
         {tab === 1 && hasEnoughCephClusters && (
@@ -401,7 +498,7 @@ export default function SiteRecoveryPage() {
             logs={jobLogs || []}
             logsLoading={logsLoading}
             connections={connections}
-            vmNameMap={vmNameMap}
+            vmNamesByConn={vmNamesByConn}
             onSyncJob={handleSyncJob}
             onPauseJob={handlePauseJob}
             onResumeJob={handleResumeJob}
@@ -413,7 +510,7 @@ export default function SiteRecoveryPage() {
         )}
 
         {tab === 2 && hasEnoughCephClusters && (
-          <SnapshotsTab connections={connections} vmNameMap={vmNameMap} />
+          <SnapshotsTab connections={connections} vmNamesByConn={vmNamesByConn} />
         )}
 
         {tab === 3 && hasEnoughCephClusters && (
@@ -428,6 +525,8 @@ export default function SiteRecoveryPage() {
             onFailover={(id) => openFailoverDialog(id, 'failover')}
             onFailback={(id) => openFailoverDialog(id, 'failback')}
             onDeletePlan={handleDeletePlan}
+            onCleanupTest={(id) => openFailoverDialog(id, 'test')}
+            onHistoryCleared={() => mutateHistory()}
             connections={connections}
           />
         )}
@@ -438,7 +537,7 @@ export default function SiteRecoveryPage() {
             plans={plans || []}
             loading={jobsLoading || plansLoading}
             connections={connections}
-            vmNameMap={vmNameMap}
+            vmNamesByConn={vmNamesByConn}
             onStartVM={handleStartDRVM}
             onExecuteFailover={(planId) => openFailoverDialog(planId, 'failover')}
             onExecuteFailback={(planId) => openFailoverDialog(planId, 'failback')}
@@ -485,9 +584,15 @@ export default function SiteRecoveryPage() {
           cleanupLoading={cleanupLoading}
           cleanupResult={cleanupResult}
           execution={activeExecution}
+          errorMessage={failoverError}
           targetConnId={failoverPlan?.target_cluster}
           connections={connections}
-          vmNameMap={vmNameMap}
+          vmNameMap={failoverPlan ? vmNamesByConn[failoverPlan.source_cluster] : undefined}
+          restorePoints={restorePoints}
+          restorePointsLoading={restorePointsLoading}
+          restorePointsError={!!restorePointsError}
+          onFailbackCutover={handleFailbackCutover}
+          onFailbackCancel={handleFailbackCancel}
         />
       </Box>
     </EnterpriseGuard>

@@ -4122,6 +4122,10 @@
       "noJobFoundDesc": "Ändern Sie Ihre Filter oder erstellen Sie einen neuen Replikationsjob.",
       "selectJob": "Wählen Sie einen Job, um Details anzuzeigen."
     },
+    "jobs": {
+      "failedOver": "Umgeschaltet",
+      "failedOverTooltip": "Die DR-Kopie dieses Jobs ist jetzt produktiv. Eine Fortsetzung der Replikation würde sie überschreiben — zuerst Failback."
+    },
     "plans": {
       "planName": "Plan",
       "sourceDestination": "Quelle / Ziel",
@@ -4135,12 +4139,21 @@
       "tierImportant": "Wichtig",
       "tierStandard": "Standard",
       "executionHistory": "Execution Verlauf",
+      "clearHistory": "Verlauf leeren",
+      "clearHistoryConfirm": "Alle bisherigen Ausführungen dieses Plans löschen? Boot-Screenshots werden mit gelöscht. Die aktive Testausführung bleibt erhalten.",
       "actions": "Aktionen",
       "testFailover": "Failover testen",
       "failover": "Failover",
       "failback": "Failback",
       "deletePlan": "Wiederherstellungsplan löschen",
-      "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+      "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
+      "cleanupPending": "Bereinigung ausstehend",
+      "testRunning": "Test-Failover läuft",
+      "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten.",
+      "failedOverTooltip": "Plan ist umgeschaltet — nur Failback ist möglich.",
+      "statusFailingBack": "Failback läuft",
+      "openFailback": "Failback öffnen",
+      "failingBackTooltip": "Failback abbrechen, bevor dieser Plan gelöscht wird."
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
@@ -4178,6 +4191,11 @@
       "sshFailed": "Direct SSH connection fehlgeschlagen",
       "sshRequirement": "Passwortloses SSH muss zwischen Quell- und Ziel-Cluster konfiguriert sein. Stellen Sie sicher, dass Root sich ohne Passwortabfrage per SSH vom Quell- zum Ziel-Cluster verbinden kann.",
       "sshRetry": "Wiederholen",
+      "snapshotRetention": "Snapshot-Aufbewahrung",
+      "snapshotRetentionHelp": "Anzahl der pro Datenträger nach jeder Synchronisierung aufbewahrten Spiegel-Snapshots (mindestens 2).",
+      "retentionSource": "Aufbewahren auf der Quelle",
+      "retentionTarget": "Aufbewahren auf dem Ziel (DR)",
+      "retentionTargetHelp": "Mehr Snapshots auf der DR-Seite bedeuten mehr Wiederherstellungspunkte, kosten aber mehr Ceph-Kapazität.",
       "vmidPrefix": "VMID-Präfix",
       "vmidPrefixHelp": "Präfix für VM-IDs auf dem Ziel-Cluster (z.B. Präfix 9 + VM 100 = 9100). Leer oder 0 lassen, um die gleiche VMID beizubehalten.",
       "engine": "Replikation Engine",
@@ -4258,7 +4276,49 @@
       "cleanupDone": "Cleanup abgeschlossen",
       "stopped": "Gestoppt",
       "disksRolledBack": "RBD-Festplatte(n) zurückgesetzt",
-      "jobsResumed": "Replikation job(s) resumed"
+      "jobsResumed": "Replikation job(s) resumed",
+      "testActiveBanner": "Ein am {date} gestarteter Test-Failover wartet auf die Bereinigung. Test-VMs könnten noch auf dem DR-Standort laufen.",
+      "testConflict": "Für diesen Plan ist bereits ein Test-Failover aktiv. Bereinigen Sie ihn zuerst.",
+      "restorePoint": "Wiederherstellungspunkt",
+      "restorePointLatest": "Neuester (Standard)",
+      "restorePointChoose": "Wiederherstellungspunkt wählen",
+      "restorePointsHelp": "Jede VM startet vom ausgewählten replizierten Snapshot.",
+      "restorePointsNone": "Keine Wiederherstellungspunkte",
+      "restorePointsLoadFailed": "Wiederherstellungspunkte konnten nicht geladen werden, der neueste replizierte Zustand wird verwendet.",
+      "restorePointRebaseWarning": "Ein Failover auf einen älteren Wiederherstellungspunkt löscht dauerhaft die neueren DR-Snapshots dieser VM.",
+      "step": {
+        "fencing": "Quell-VM wird gestoppt",
+        "restoring": "Zurücksetzen auf den gewählten Wiederherstellungspunkt",
+        "starting": "Start auf dem DR-Standort",
+        "fencing_dr": "DR-VM wird gestoppt",
+        "final_sync": "Letztes Delta wird angewendet",
+        "starting_source": "Start am Quellstandort",
+        "reprotect": "Schutz wird wiederhergestellt"
+      },
+      "completeTitle": "Failover abgeschlossen",
+      "completeVMs": "VM(s) laufen jetzt am DR-Standort",
+      "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück."
+    },
+    "failback": {
+      "phase1Title": "Umgekehrte Replikation läuft",
+      "colLastSync": "Letzter Reverse-Sync",
+      "colTransferred": "Übertragen",
+      "phase1Help": "Die umgekehrte Replikation läuft, während die DR-VMs online bleiben. Starten Sie das Cutover, wenn der letzte Sync aktuell genug ist.",
+      "neverSynced": "Noch kein Reverse-Sync",
+      "cutoverNotReady": "Warten auf den ersten Reverse-Sync jeder VM",
+      "cutover": "Cutover",
+      "cutoverConfirm": "DR-VMs stoppen, letztes Delta anwenden und Quell-VMs starten?",
+      "cancelFailback": "Failback abbrechen",
+      "cancelConfirm": "Umgekehrte Replikation stoppen und den Plan auf failed over zurücksetzen? An den VMs ändert sich nichts.",
+      "completeTitle": "Failback abgeschlossen",
+      "completeReprotected": "Die Quell-VMs laufen und die Replikation schützt sie wieder in der ursprünglichen Richtung."
+    },
+    "screenshots": {
+      "view": "Boot-Screenshot ansehen",
+      "capturedAt": "Aufgenommen um",
+      "stepBoot": "VMs werden gestartet",
+      "stepStabilize": "Warten auf Stabilisierung",
+      "stepCapture": "Boot-Screenshots werden aufgenommen"
     },
     "emergencyDR": {
       "title": "Notfall-DR",

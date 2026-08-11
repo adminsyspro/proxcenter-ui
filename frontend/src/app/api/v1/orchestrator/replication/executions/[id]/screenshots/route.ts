@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkExecutionTenantScope } from "@/lib/orchestrator/executionScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 
@@ -12,18 +13,20 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const { denied: scopeDenied, execution } = await checkExecutionTenantScope(id)
+    const { denied: scopeDenied } = await checkExecutionTenantScope(id)
 
     if (scopeDenied) return scopeDenied
 
-    return NextResponse.json(execution)
+    const response = await getOrchestratorClient().getExecutionScreenshots(id)
+
+    return NextResponse.json(response.data ?? [])
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error fetching execution:", e)
+      console.error("Error listing execution screenshots:", e)
     }
 
     return NextResponse.json(
-      { error: e?.message || "Failed to fetch execution" },
+      { error: e?.message || "Failed to list screenshots" },
       { status: 500 }
     )
   }

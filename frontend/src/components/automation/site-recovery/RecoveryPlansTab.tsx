@@ -4,11 +4,14 @@ import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Collapse, Divider, Drawer,
-  IconButton, Stack, Typography, alpha, useTheme
+  Alert, Box, Button, Card, CardContent, Chip, Collapse, Dialog, DialogActions, DialogContent,
+  DialogContentText, DialogTitle, Divider, Drawer,
+  IconButton, Stack, Tooltip, Typography, alpha, useTheme
 } from '@mui/material'
 
 import EmptyState from '@/components/EmptyState'
+
+import ExecutionScreenshots from './ExecutionScreenshots'
 
 import type { RecoveryPlan, RecoveryExecution, RecoveryPlanStatus } from '@/lib/orchestrator/site-recovery.types'
 
@@ -29,12 +32,14 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
     executing: { color: 'info' },
     failed: { color: 'error' },
     not_ready: { color: 'default' },
-    failed_over: { color: 'error' }
+    failed_over: { color: 'error' },
+    failing_back: { color: 'info' }
   }
 
   const c = config[status] || config.not_ready
+  const label = status === 'failing_back' ? t('siteRecovery.plans.statusFailingBack') : t(`siteRecovery.planStatus.${status}`)
 
-  return <Chip size='small' label={t(`siteRecovery.planStatus.${status}`)} color={c.color} />
+  return <Chip size='small' label={label} color={c.color} />
 }
 
 const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
@@ -110,6 +115,24 @@ const PlanRow = ({ plan, onClick, t, connName }: { plan: RecoveryPlan; onClick: 
         )}
       </Box>
 
+      {/* Active test: while the plan is executing the test is still running;
+          once it finishes, active_test_execution_id alone means cleanup is due */}
+      {plan.active_test_execution_id && (
+        <Box sx={{ flex: '0 0 auto' }}>
+          {plan.status === 'executing' ? (
+            <Chip size='small' color='info' variant='outlined'
+              icon={<i className='ri-test-tube-line' />}
+              label={t('siteRecovery.plans.testRunning')}
+              sx={{ height: 22, fontSize: '0.65rem' }} />
+          ) : (
+            <Chip size='small' color='warning' variant='outlined'
+              icon={<i className='ri-eraser-line' />}
+              label={t('siteRecovery.plans.cleanupPending')}
+              sx={{ height: 22, fontSize: '0.65rem' }} />
+          )}
+        </Box>
+      )}
+
       {/* Status */}
       <Box sx={{ flex: '0 0 auto' }}>
         <PlanStatusBadge status={plan.status} t={t} />
@@ -131,19 +154,22 @@ interface RecoveryPlansTabProps {
   onFailover: (id: string) => void
   onFailback: (id: string) => void
   onDeletePlan: (id: string) => void
+  onCleanupTest: (id: string) => void
+  onHistoryCleared?: () => void
   connections?: Array<{ id: string; name: string }>
 }
 
 export default function RecoveryPlansTab({
   plans, loading, history, historyLoading,
   selectedPlanId, onSelectPlan,
-  onTestFailover, onFailover, onFailback, onDeletePlan,
+  onTestFailover, onFailover, onFailback, onDeletePlan, onCleanupTest, onHistoryCleared,
   connections
 }: RecoveryPlansTabProps) {
   const t = useTranslations()
   const theme = useTheme()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
 
   const selected = useMemo(() => (plans || []).find(p => p.id === selectedPlanId), [plans, selectedPlanId])
 
@@ -171,6 +197,15 @@ export default function RecoveryPlansTab({
 
       return next
     })
+  }
+
+  const handleClearHistory = async () => {
+    setConfirmClearHistory(false)
+
+    if (!selected) return
+
+    await fetch(`/api/v1/orchestrator/replication/plans/${selected.id}/history`, { method: 'DELETE' })
+    onHistoryCleared?.()
   }
 
   if (loading) {
@@ -295,13 +330,23 @@ export default function RecoveryPlansTab({
                 {history && history.length > 0 && (
                   <>
                     <Divider sx={{ my: 2 }} />
-                    <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, display: 'block' }}>
-                      {t('siteRecovery.plans.executionHistory')}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant='overline' sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
+                        {t('siteRecovery.plans.executionHistory')}
+                      </Typography>
+                      <IconButton
+                        size='small'
+                        color='inherit'
+                        aria-label={t('siteRecovery.plans.clearHistory')}
+                        onClick={() => setConfirmClearHistory(true)}
+                        sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+                      >
+                        <i className='ri-delete-bin-line' />
+                      </IconButton>
+                    </Box>
                     <Stack spacing={0.5}>
                       {history.slice(0, 10).map(exec => (
                         <Box key={exec.id} sx={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           py: 0.75, px: 1, borderRadius: 1,
                           bgcolor: alpha(
                             exec.status === 'completed' ? theme.palette.success.main :
@@ -309,20 +354,28 @@ export default function RecoveryPlansTab({
                             theme.palette.info.main, 0.05
                           )
                         }}>
-                          <Box>
-                            <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'capitalize' }}>
-                              {exec.type}
-                            </Typography>
-                            <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
-                              {new Date(exec.started_at).toLocaleString()}
-                            </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Box>
+                              <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'capitalize' }}>
+                                {exec.type}
+                              </Typography>
+                              <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+                                {new Date(exec.started_at).toLocaleString()}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              size='small'
+                              label={exec.status}
+                              color={exec.status === 'completed' ? 'success' : exec.status === 'failed' ? 'error' : 'info'}
+                              sx={{ height: 20, fontSize: '0.65rem' }}
+                            />
                           </Box>
-                          <Chip
-                            size='small'
-                            label={exec.status}
-                            color={exec.status === 'completed' ? 'success' : exec.status === 'failed' ? 'error' : 'info'}
-                            sx={{ height: 20, fontSize: '0.65rem' }}
-                          />
+                          {exec.type === 'test' && (
+                            <ExecutionScreenshots
+                              executionId={exec.id}
+                              vmNameMap={Object.fromEntries((selected.vms || []).map(v => [v.vm_id, v.vm_name]))}
+                            />
+                          )}
                         </Box>
                       ))}
                     </Stack>
@@ -336,40 +389,108 @@ export default function RecoveryPlansTab({
                   {t('siteRecovery.plans.actions')}
                 </Typography>
                 <Stack spacing={1}>
-                  <Button
-                    variant='outlined' size='small' fullWidth
-                    startIcon={<i className='ri-test-tube-line' />}
-                    onClick={() => onTestFailover(selected.id)}
-                  >
-                    {t('siteRecovery.plans.testFailover')}
-                  </Button>
-                  <Button
-                    variant='contained' size='small' color='warning' fullWidth
-                    startIcon={<i className='ri-shield-star-line' />}
-                    onClick={() => onFailover(selected.id)}
-                  >
-                    {t('siteRecovery.plans.failover')}
-                  </Button>
-                  <Button
-                    variant='outlined' size='small' fullWidth
-                    startIcon={<i className='ri-arrow-go-back-line' />}
-                    onClick={() => onFailback(selected.id)}
-                  >
-                    {t('siteRecovery.plans.failback')}
-                  </Button>
-                  <Button
-                    variant='outlined' size='small' color='error' fullWidth
-                    startIcon={<i className='ri-delete-bin-line' />}
-                    onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
-                  >
-                    {t('common.delete')}
-                  </Button>
+                  {selected.status === 'failing_back' ? (
+                    <>
+                      <Button
+                        variant='contained' size='small' color='info' fullWidth
+                        startIcon={<i className='ri-arrow-go-back-line' />}
+                        onClick={() => onFailback(selected.id)}
+                      >
+                        {t('siteRecovery.plans.openFailback')}
+                      </Button>
+                      <Tooltip title={t('siteRecovery.plans.failingBackTooltip')} arrow>
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='outlined' size='small' color='error' fullWidth
+                            startIcon={<i className='ri-delete-bin-line' />}
+                            disabled
+                          >
+                            {t('common.delete')}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </>
+                  ) : (
+                    <>
+                      {/* Cleanup only once the test finished — the orchestrator
+                          refuses it while the plan is still executing */}
+                      {selected.active_test_execution_id && selected.status !== 'executing' && (
+                        <Button
+                          variant='contained' size='small' color='warning' fullWidth
+                          startIcon={<i className='ri-eraser-line' />}
+                          onClick={() => onCleanupTest(selected.id)}
+                        >
+                          {t('siteRecovery.failover.cleanup')}
+                        </Button>
+                      )}
+                      <Tooltip
+                        title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
+                        disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
+                        arrow
+                      >
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='outlined' size='small' fullWidth
+                            startIcon={<i className='ri-test-tube-line' />}
+                            onClick={() => onTestFailover(selected.id)}
+                            disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
+                          >
+                            {t('siteRecovery.plans.testFailover')}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={t('siteRecovery.plans.failedOverTooltip')}
+                        disableHoverListener={selected.status !== 'failed_over'}
+                        arrow
+                      >
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='contained' size='small' color='warning' fullWidth
+                            startIcon={<i className='ri-shield-star-line' />}
+                            onClick={() => onFailover(selected.id)}
+                            disabled={selected.status === 'failed_over'}
+                          >
+                            {t('siteRecovery.plans.failover')}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Button
+                        variant='outlined' size='small' fullWidth
+                        startIcon={<i className='ri-arrow-go-back-line' />}
+                        onClick={() => onFailback(selected.id)}
+                      >
+                        {t('siteRecovery.plans.failback')}
+                      </Button>
+                      <Button
+                        variant='outlined' size='small' color='error' fullWidth
+                        startIcon={<i className='ri-delete-bin-line' />}
+                        onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
+                      >
+                        {t('common.delete')}
+                      </Button>
+                    </>
+                  )}
                 </Stack>
               </Box>
             </>
           )}
         </Box>
       </Drawer>
+
+      {/* Clear history confirmation */}
+      <Dialog open={confirmClearHistory} onClose={() => setConfirmClearHistory(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.plans.clearHistory')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('siteRecovery.plans.clearHistoryConfirm')}</DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmClearHistory(false)}>{t('common.cancel')}</Button>
+          <Button variant='contained' color='error' onClick={handleClearHistory}>
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

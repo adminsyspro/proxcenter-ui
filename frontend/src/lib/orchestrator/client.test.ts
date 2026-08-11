@@ -215,4 +215,109 @@ describe('OrchestratorClient axios-style wrapper', () => {
     const [url] = fetchMock.mock.calls[0]
     expect(url).toBe('http://localhost:8080/api/v1/drs/recommendations?validate=true')
   })
+
+  it('getPlanRestorePoints hits /replication/plans/<id>/restore-points with GET', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ vms: [] }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().getPlanRestorePoints('plan-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/plans/plan-1/restore-points')
+    expect(init.method).toBe('GET')
+  })
+
+  it('executeFailover forwards the restore_points body on POST', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'exec-1' }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().executeFailover('plan-1', { restore_points: { 100: 'snap-1' } })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/plans/plan-1/failover')
+    expect(init.method).toBe('POST')
+    expect(init.body).toBe(JSON.stringify({ restore_points: { 100: 'snap-1' } }))
+  })
+
+  it('failbackCutover hits /replication/plans/<id>/failback-cutover with POST', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'cutover_started' }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().failbackCutover('plan-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/plans/plan-1/failback-cutover')
+    expect(init.method).toBe('POST')
+  })
+
+  it('failbackCancel hits /replication/plans/<id>/failback-cancel with POST', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'cancelled' }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().failbackCancel('plan-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/plans/plan-1/failback-cancel')
+    expect(init.method).toBe('POST')
+  })
+
+  it('clearRecoveryHistory hits /replication/plans/<id>/history with DELETE', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ deleted: 3 }))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().clearRecoveryHistory('plan-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/plans/plan-1/history')
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('getExecutionScreenshots hits /replication/executions/<id>/screenshots with GET', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().getExecutionScreenshots('exec-1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/executions/exec-1/screenshots')
+    expect(init.method).toBe('GET')
+  })
+})
+
+describe('parseOrchestratorError', () => {
+  it('returns null when the error message does not match the Orchestrator <status>: <body> shape', async () => {
+    const { parseOrchestratorError } = await import('./client')
+
+    expect(parseOrchestratorError(new Error('TLS handshake failed'))).toBeNull()
+    expect(parseOrchestratorError('a plain string')).toBeNull()
+    expect(parseOrchestratorError(undefined)).toBeNull()
+  })
+
+  it('extracts the status and message from a JSON error body', async () => {
+    const { parseOrchestratorError } = await import('./client')
+    const error = new Error(`Orchestrator 409: ${JSON.stringify({ error: 'a failback is already in progress' })}`)
+
+    expect(parseOrchestratorError(error)).toEqual({ status: 409, message: 'a failback is already in progress' })
+  })
+
+  it('falls back to the raw body text when the JSON has no error field', async () => {
+    const { parseOrchestratorError } = await import('./client')
+    const error = new Error(`Orchestrator 500: ${JSON.stringify({ code: 'internal' })}`)
+
+    expect(parseOrchestratorError(error)).toEqual({ status: 500, message: JSON.stringify({ code: 'internal' }) })
+  })
+
+  it('falls back to the raw body text when the body is not JSON', async () => {
+    const { parseOrchestratorError } = await import('./client')
+    const error = new Error('Orchestrator 502: bad gateway upstream')
+
+    expect(parseOrchestratorError(error)).toEqual({ status: 502, message: 'bad gateway upstream' })
+  })
+
+  it('falls back to a generic message when the body is empty', async () => {
+    const { parseOrchestratorError } = await import('./client')
+    const error = new Error('Orchestrator 503: ')
+
+    expect(parseOrchestratorError(error)).toEqual({ status: 503, message: 'Orchestrator error 503' })
+  })
 })

@@ -28,12 +28,12 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const response = await client.executeFailback(id)
+    const response = await client.failbackCancel(id)
 
     return NextResponse.json(response.data)
   } catch (e: any) {
     if ((e as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
-      console.error("Error executing failback:", e)
+      console.error("Error cancelling failback:", e)
     }
 
     const upstream = parseOrchestratorError(e)
@@ -43,7 +43,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     }
 
     return NextResponse.json(
-      { error: e?.message || "Failed to execute failback" },
+      { error: e?.message || "Failed to cancel failback" },
       { status: 500 }
     )
   }

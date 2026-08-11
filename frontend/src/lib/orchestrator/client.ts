@@ -86,6 +86,38 @@ export async function orchestratorFetch<T>(
   }
 }
 
+/**
+ * Extract the upstream HTTP status and error message from an Error thrown by
+ * orchestratorFetch on a non-OK response (message shape:
+ * `Orchestrator ${status}: ${rawBody}`). Route handlers use this to pass an
+ * upstream conflict/validation response (e.g. 409 `{error: "..."}`) straight
+ * through instead of collapsing everything to a generic 500.
+ *
+ * Returns null when the error doesn't match that shape (timeouts, connection
+ * failures, etc.) — callers should fall back to a 500 in that case.
+ */
+export function parseOrchestratorError(error: unknown): { status: number; message: string } | null {
+  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+  const match = /^Orchestrator (\d+): ([\s\S]*)$/.exec(raw)
+
+  if (!match) return null
+
+  const status = Number(match[1])
+  const body = match[2].trim()
+
+  try {
+    const parsed = JSON.parse(body)
+
+    if (parsed && typeof parsed.error === 'string' && parsed.error) {
+      return { status, message: parsed.error }
+    }
+  } catch {
+    // Not JSON — fall through to the raw body text below
+  }
+
+  return { status, message: body || `Orchestrator error ${status}` }
+}
+
 // ============================================
 // Types DRS
 // ============================================
@@ -516,6 +548,14 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
 
   executeFailback(planId: string) {
     return this.post<any>(`/replication/plans/${planId}/failback`)
+  }
+
+  failbackCutover(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/failback-cutover`)
+  }
+
+  failbackCancel(planId: string) {
+    return this.post<any>(`/replication/plans/${planId}/failback-cancel`)
   }
 
   cleanupTestFailover(planId: string) {

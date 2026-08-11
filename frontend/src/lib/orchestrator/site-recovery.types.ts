@@ -91,7 +91,7 @@ export interface ReplicationJobLog {
 // Recovery Plans
 // ============================================
 
-export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready' | 'failed_over'
+export type RecoveryPlanStatus = 'ready' | 'degraded' | 'executing' | 'failed' | 'not_ready' | 'failed_over' | 'failing_back'
 
 export interface RecoveryPlanVM {
   vm_id: number
@@ -112,6 +112,7 @@ export interface RecoveryPlan {
   last_test: string | null
   last_failover: string | null
   active_test_execution_id?: string | null
+  active_failback_execution_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -171,11 +172,19 @@ export interface RecoveryVMResult {
   error?: string
   target_node?: string
   target_vmid?: number
-  // Fine-grained machine code for where a REAL failover currently stands for
-  // this VM: 'fencing', 'restoring', 'starting'. Cleared ("") once the VM
-  // reaches 'completed'; left in place on failure. Never set for a test
-  // failover. The UI maps the code to translated prose (siteRecovery.failover.step.*).
+  // Fine-grained machine code for where a REAL failover or an in-progress
+  // failback currently stands for this VM: 'fencing', 'restoring', 'starting'
+  // (failover), or a reverse-sync/cutover step code (failback). Cleared ("")
+  // once the VM reaches 'completed'; left in place on failure. Never set for
+  // a test failover. The UI maps the code to translated prose
+  // (siteRecovery.failover.step.*).
   step?: string
+  // Reverse-sync progress for a failback in phase 'reverse_sync': when this
+  // VM's per-disk delta was last transferred back to the source, and how
+  // many bytes it carried. Absent until the first reverse-sync pass for the
+  // VM completes.
+  last_reverse_sync_at?: string
+  last_reverse_sync_bytes?: number
 }
 
 export interface RecoveryExecution {
@@ -187,10 +196,12 @@ export interface RecoveryExecution {
   started_at: string
   completed_at?: string
   vm_results: RecoveryVMResult[]
-  // Fine-grained progress marker for a running test failover, set past VM
-  // boot as the post-boot screenshot pipeline advances: 'booting',
-  // 'stabilizing', 'capturing', then cleared once it's done. Only ever set
-  // for type === 'test'.
+  // Fine-grained progress marker for a running execution. For type === 'test',
+  // set past VM boot as the post-boot screenshot pipeline advances: 'booting',
+  // 'stabilizing', 'capturing', then cleared once it's done. For
+  // type === 'failback', tracks the two-phase flow: 'reverse_sync' (ongoing
+  // convergence loop back to source) then 'cutover' (operator-triggered
+  // switchback), cleared once the failback completes.
   phase?: string
   // Deadline for the current 'stabilizing' phase (ISO timestamp), so the
   // frontend can show a live countdown instead of an indefinite spinner.

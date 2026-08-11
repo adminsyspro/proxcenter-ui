@@ -4320,7 +4320,15 @@
       "restorePointsHelp": "Chaque VM démarrera depuis le snapshot répliqué sélectionné.",
       "restorePointsNone": "Aucun point de restauration",
       "restorePointsLoadFailed": "Les points de restauration n'ont pas pu être chargés, le dernier état répliqué sera utilisé.",
-      "restorePointRebaseWarning": "Basculer vers un point de restauration plus ancien supprime définitivement les snapshots DR plus récents de cette VM."
+      "restorePointRebaseWarning": "Basculer vers un point de restauration plus ancien supprime définitivement les snapshots DR plus récents de cette VM.",
+      "step": {
+        "fencing": "Arrêt de la VM source",
+        "restoring": "Retour au point de restauration choisi",
+        "starting": "Démarrage sur le site DR"
+      },
+      "completeTitle": "Failover terminé",
+      "completeVMs": "VM désormais actives sur le site DR",
+      "completeLocked": "La réplication est verrouillée et le plan est basculé — le failback fera le retour."
     },
     "screenshots": {
       "view": "Voir la capture au boot",

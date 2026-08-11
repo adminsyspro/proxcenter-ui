@@ -4282,7 +4282,15 @@
       "restorePointsHelp": "Jede VM startet vom ausgewählten replizierten Snapshot.",
       "restorePointsNone": "Keine Wiederherstellungspunkte",
       "restorePointsLoadFailed": "Wiederherstellungspunkte konnten nicht geladen werden, der neueste replizierte Zustand wird verwendet.",
-      "restorePointRebaseWarning": "Ein Failover auf einen älteren Wiederherstellungspunkt löscht dauerhaft die neueren DR-Snapshots dieser VM."
+      "restorePointRebaseWarning": "Ein Failover auf einen älteren Wiederherstellungspunkt löscht dauerhaft die neueren DR-Snapshots dieser VM.",
+      "step": {
+        "fencing": "Quell-VM wird gestoppt",
+        "restoring": "Zurücksetzen auf den gewählten Wiederherstellungspunkt",
+        "starting": "Start auf dem DR-Standort"
+      },
+      "completeTitle": "Failover abgeschlossen",
+      "completeVMs": "VM(s) laufen jetzt am DR-Standort",
+      "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück."
     },
     "screenshots": {
       "view": "Boot-Screenshot ansehen",

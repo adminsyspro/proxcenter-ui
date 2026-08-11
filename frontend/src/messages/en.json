@@ -4320,7 +4320,15 @@
       "restorePointsHelp": "Each VM will boot from the selected replicated snapshot.",
       "restorePointsNone": "No restore points",
       "restorePointsLoadFailed": "Restore points could not be loaded, the latest replicated state will be used.",
-      "restorePointRebaseWarning": "Failing over to an older restore point permanently deletes the newer DR snapshots of that VM."
+      "restorePointRebaseWarning": "Failing over to an older restore point permanently deletes the newer DR snapshots of that VM.",
+      "step": {
+        "fencing": "Stopping the source VM",
+        "restoring": "Rolling back to the selected restore point",
+        "starting": "Starting on the DR site"
+      },
+      "completeTitle": "Failover complete",
+      "completeVMs": "VM(s) now running on the DR site",
+      "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home."
     },
     "screenshots": {
       "view": "View boot screenshot",

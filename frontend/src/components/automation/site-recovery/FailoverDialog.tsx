@@ -262,7 +262,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           )}
 
           {/* Confirm field for destructive operations */}
-          {isDestructive && !isExecuting && (
+          {isDestructive && !isExecuting && !execution && (
             <Box>
               <Typography variant='body2' sx={{ mb: 1 }}>
                 {t('siteRecovery.failover.typeToConfirm', { name: plan.name })}
@@ -298,6 +298,27 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             )
           })()}
 
+          {/* Failover completion summary */}
+          {execution && execution.status === 'completed' && type === 'failover' && (() => {
+            const results = execution.vm_results || []
+            const total = results.length
+            const okCount = results.filter(r => r.status === 'completed').length
+            const allOk = total > 0 && okCount === total
+            return (
+              <Alert severity={allOk ? 'success' : 'warning'}>
+                <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
+                  {t('siteRecovery.failover.completeTitle')}
+                </Typography>
+                <Typography variant='caption' component='div'>
+                  {okCount}/{total} {t('siteRecovery.failover.completeVMs')}
+                </Typography>
+                <Typography variant='caption' component='div'>
+                  {t('siteRecovery.failover.completeLocked')}
+                </Typography>
+              </Alert>
+            )
+          })()}
+
           {/* Execution progress */}
           {isExecuting && execution && (
             <Box>
@@ -326,6 +347,12 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                       />
                       {vm.error && (
                         <Typography variant='caption' sx={{ color: 'error.main', fontSize: '0.65rem' }}>{vm.error}</Typography>
+                      )}
+                      {!vm.error && vm.status === 'running' && vm.step && t.has(`siteRecovery.failover.step.${vm.step}`) && (
+                        <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <i className='ri-loader-4-line' style={{ fontSize: 11, animation: 'spin 1.5s linear infinite' }} />
+                          {t(`siteRecovery.failover.step.${vm.step}`)}
+                        </Typography>
                       )}
                     </Box>
                     {type === 'test' && targetConnId && vm.target_node && vm.target_vmid != null &&

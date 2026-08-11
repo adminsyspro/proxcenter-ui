@@ -242,6 +242,40 @@ describe('FailoverDialog stabilization countdown (issue #664 follow-up)', () => 
   })
 })
 
+describe('FailoverDialog real-failover per-VM steps and completion summary (issue #664 follow-up)', () => {
+  it('shows the translated step caption while a failover VM is running a known step', () => {
+    renderDialog({
+      type: 'failover',
+      execution: execution({
+        type: 'failover',
+        status: 'running',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 40, step: 'fencing' },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Stopping the source VM')).toBeInTheDocument()
+  })
+
+  it('shows a completion summary alert and hides the confirm input once a failover execution has completed', () => {
+    renderDialog({
+      type: 'failover',
+      execution: execution({
+        type: 'failover',
+        status: 'completed',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100 },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Failover complete')).toBeInTheDocument()
+    expect(screen.getByText(/1\/1/)).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Prod DR')).not.toBeInTheDocument()
+  })
+})
+
 describe('FailoverDialog camera button on rehydrated results (issue #664 follow-up)', () => {
   it('shows the camera button in the Plan Summary rows for a rehydrated (non-running) execution, and opens the preview dialog on click', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(

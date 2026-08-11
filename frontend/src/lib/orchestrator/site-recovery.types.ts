@@ -171,6 +171,11 @@ export interface RecoveryVMResult {
   error?: string
   target_node?: string
   target_vmid?: number
+  // Fine-grained machine code for where a REAL failover currently stands for
+  // this VM: 'fencing', 'restoring', 'starting'. Cleared ("") once the VM
+  // reaches 'completed'; left in place on failure. Never set for a test
+  // failover. The UI maps the code to translated prose (siteRecovery.failover.step.*).
+  step?: string
 }
 
 export interface RecoveryExecution {

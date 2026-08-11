@@ -4320,7 +4320,15 @@
       "restorePointsHelp": "Cada VM arrancará desde el snapshot replicado seleccionado.",
       "restorePointsNone": "Sin puntos de restauración",
       "restorePointsLoadFailed": "No se pudieron cargar los puntos de restauración, se usará el último estado replicado.",
-      "restorePointRebaseWarning": "Hacer failover a un punto de restauración más antiguo elimina permanentemente los snapshots DR más recientes de esa VM."
+      "restorePointRebaseWarning": "Hacer failover a un punto de restauración más antiguo elimina permanentemente los snapshots DR más recientes de esa VM.",
+      "step": {
+        "fencing": "Deteniendo la VM de origen",
+        "restoring": "Restaurando al punto de restauración elegido",
+        "starting": "Iniciando en el sitio DR"
+      },
+      "completeTitle": "Failover completado",
+      "completeVMs": "VM ahora activas en el sitio DR",
+      "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá."
     },
     "screenshots": {
       "view": "Ver la captura de arranque",

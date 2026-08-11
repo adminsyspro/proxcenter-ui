@@ -4281,7 +4281,15 @@
       "restorePointsHelp": "每个 VM 将从所选的复制快照启动。",
       "restorePointsNone": "无恢复点",
       "restorePointsLoadFailed": "无法加载恢复点，将使用最新的复制状态。",
-      "restorePointRebaseWarning": "故障转移到更早的恢复点将永久删除该 VM 更新的灾备快照。"
+      "restorePointRebaseWarning": "故障转移到更早的恢复点将永久删除该 VM 更新的灾备快照。",
+      "step": {
+        "fencing": "正在停止源虚拟机",
+        "restoring": "正在回滚到所选恢复点",
+        "starting": "正在 DR 站点上启动"
+      },
+      "completeTitle": "故障转移完成",
+      "completeVMs": "虚拟机现已在 DR 站点运行",
+      "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。"
     },
     "screenshots": {
       "view": "查看启动截图",

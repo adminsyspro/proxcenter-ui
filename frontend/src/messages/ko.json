@@ -4875,6 +4875,13 @@
     "vmIdOutOfRange": "VMID는 테넌트 범위 {start}-{end} 내에 있어야 합니다",
     "fullCopyDescription": "디스크의 완전하고 독립적인 복사본을 생성합니다",
     "migrateTitle": "마이그레이션: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "HA 어피니티 충돌",
+      "conflictBlocked": "PVE가 이 마이그레이션을 거부합니다: {peer}이(가) {node}에서 실행 중이며 규칙 \"{rule}\"에 따라 이 VM과 분리되어야 합니다.",
+      "conflictStopped": "{peer}이(가) {node}에 할당되어 있으며(현재 중지됨) 규칙 \"{rule}\"에 따라 이 VM과 분리되어야 합니다. HA 관리자가 이 마이그레이션을 거부할 수 있습니다.",
+      "nodeTooltip": "{peers}와(과) 부정적 HA 어피니티",
+      "positiveInfo": "이 VM은 {peers}와(과) 긍정적 HA 어피니티(함께 유지) 관계입니다. HA 관리자가 함께 마이그레이션합니다."
+    },
     "currentNode": "현재 노드:",
     "noNodeAvailable": "클러스터에 마이그레이션 가능한 다른 노드가 없습니다.",
     "targetStorageLabel": "대상 스토리지:",

@@ -4875,6 +4875,13 @@
     "vmIdOutOfRange": "El VMID debe estar dentro de su rango {start}-{end}",
     "fullCopyDescription": "Crea una copia completa e independiente del disco",
     "migrateTitle": "Migrar: {vmName} ({vmid})",
+    "haAffinity": {
+      "conflictTitle": "Conflicto de afinidad HA",
+      "conflictBlocked": "PVE rechazará esta migración: {peer} se ejecuta en {node} y la regla \"{rule}\" exige mantenerlo separado de esta VM.",
+      "conflictStopped": "{peer} está asignado a {node} (actualmente detenido) y la regla \"{rule}\" exige mantenerlo separado de esta VM. El gestor HA aún puede rechazar esta migración.",
+      "nodeTooltip": "Afinidad HA negativa con {peers}",
+      "positiveInfo": "Esta VM tiene afinidad HA positiva con {peers} (se mantienen juntas): el gestor HA también las migrará."
+    },
     "currentNode": "Nodo actual:",
     "noNodeAvailable": "No hay otro nodo disponible en el clúster para la migración.",
     "targetStorageLabel": "Almacenamiento de destino:",

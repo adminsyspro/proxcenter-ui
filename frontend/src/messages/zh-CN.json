@@ -4836,6 +4836,13 @@
     "vmIdOutOfRange": "VMID 必须在租户范围 {start}-{end} 内",
     "fullCopyDescription": "创建磁盘的完整独立副本",
     "migrateTitle": "迁移：{vmName}（{vmid}）",
+    "haAffinity": {
+      "conflictTitle": "HA 亲和性冲突",
+      "conflictBlocked": "PVE 将拒绝此迁移:{peer} 正在 {node} 上运行,规则\"{rule}\"要求其与此虚拟机保持分离。",
+      "conflictStopped": "{peer} 已分配到 {node}(当前已停止),规则\"{rule}\"要求其与此虚拟机保持分离。HA 管理器仍可能拒绝此迁移。",
+      "nodeTooltip": "与 {peers} 存在负 HA 亲和性",
+      "positiveInfo": "此虚拟机与 {peers} 存在正 HA 亲和性(保持在一起):HA 管理器会将它们一并迁移。"
+    },
     "currentNode": "当前节点：",
     "noNodeAvailable": "集群中没有其他可用节点进行迁移。",
     "targetStorageLabel": "目标存储：",

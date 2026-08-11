@@ -4338,6 +4338,9 @@
       "completeLocked": "La réplication est verrouillée et le plan est basculé — le failback fera le retour."
     },
     "failback": {
+      "phase1Title": "Réplication inverse en cours",
+      "colLastSync": "Dernier sync inversé",
+      "colTransferred": "Volume",
       "phase1Help": "La réplication inverse tourne pendant que les VM DR restent en ligne. Lancez le cutover quand le dernier sync est assez frais.",
       "neverSynced": "Aucun sync inverse encore",
       "cutoverNotReady": "En attente du premier sync inverse de chaque VM",

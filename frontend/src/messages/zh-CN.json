@@ -4299,6 +4299,9 @@
       "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。"
     },
     "failback": {
+      "phase1Title": "反向复制进行中",
+      "colLastSync": "上次反向同步",
+      "colTransferred": "已传输",
       "phase1Help": "反向复制正在运行，DR 虚拟机保持在线。当最后一次同步足够新时，即可执行切换。",
       "neverSynced": "尚无反向同步",
       "cutoverNotReady": "正在等待每台虚拟机完成首次反向同步",

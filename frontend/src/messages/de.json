@@ -4300,6 +4300,9 @@
       "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück."
     },
     "failback": {
+      "phase1Title": "Umgekehrte Replikation läuft",
+      "colLastSync": "Letzter Reverse-Sync",
+      "colTransferred": "Übertragen",
       "phase1Help": "Die umgekehrte Replikation läuft, während die DR-VMs online bleiben. Starten Sie das Cutover, wenn der letzte Sync aktuell genug ist.",
       "neverSynced": "Noch kein Reverse-Sync",
       "cutoverNotReady": "Warten auf den ersten Reverse-Sync jeder VM",

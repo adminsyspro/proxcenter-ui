@@ -4338,6 +4338,9 @@
       "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다."
     },
     "failback": {
+      "phase1Title": "역방향 복제 진행 중",
+      "colLastSync": "마지막 역방향 동기화",
+      "colTransferred": "전송량",
       "phase1Help": "DR VM이 온라인 상태를 유지하는 동안 역방향 복제가 실행됩니다. 마지막 동기화가 충분히 최신일 때 컷오버를 시작하세요.",
       "neverSynced": "아직 역방향 동기화 없음",
       "cutoverNotReady": "모든 VM의 첫 역방향 동기화를 기다리는 중",

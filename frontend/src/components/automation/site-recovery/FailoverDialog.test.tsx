@@ -299,6 +299,68 @@ describe('FailoverDialog failback reverse-sync monitor (issue #664 failback)', (
     expect(screen.getByRole('button', { name: 'Cutover' })).toBeInTheDocument()
   })
 
+  it('shows the phase1Title heading and the table header row instead of the generic "Operation in progress" text', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Reverse replication in progress')).toBeInTheDocument()
+    expect(screen.queryByText('Operation in progress...')).not.toBeInTheDocument()
+    expect(screen.getByText('VM')).toBeInTheDocument()
+    expect(screen.getByText('Last reverse sync')).toBeInTheDocument()
+    expect(screen.getByText('Transferred')).toBeInTheDocument()
+  })
+
+  it('renders the animated data-flow banner with the DR and source endpoint labels', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+        ],
+      }),
+    })
+
+    // No `connections` prop passed here, so both endpoints fall back to
+    // their generic labels ("DR" / "Source") rather than a resolved cluster
+    // name — covered separately below.
+    const banner = screen.getByTestId('failback-flow-banner')
+    expect(banner).toBeInTheDocument()
+    expect(banner).toHaveTextContent('DR')
+    expect(banner).toHaveTextContent('Source')
+  })
+
+  it('resolves the DR and source endpoint labels from the connections list when available', () => {
+    renderDialog({
+      type: 'failback',
+      plan: plan({ source_cluster: 'src', target_cluster: 'dst' }),
+      connections: [{ id: 'src', name: 'Paris-Prod' }, { id: 'dst', name: 'Lyon-DR' }],
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z' },
+        ],
+      }),
+    })
+
+    const banner = screen.getByTestId('failback-flow-banner')
+    expect(banner).toHaveTextContent('Lyon-DR')
+    expect(banner).toHaveTextContent('Paris-Prod')
+  })
+
   it('shows "No reverse sync yet" for a VM that has not synced back, and its error caption when set', () => {
     renderDialog({
       type: 'failback',

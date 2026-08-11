@@ -90,6 +90,12 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   // disable the button rather than let the operator hit that failure.
   const cutoverNotReady = isReverseSyncPhase
     && (execution?.vm_results || []).some(vm => vm.status !== 'completed' && !vm.last_reverse_sync_at)
+  // Endpoint labels for the reverse-sync flow banner: DR (plan's target
+  // cluster) on the left, source on the right — the reverse of
+  // CreateJobDialog's source→target connector, since failback copies data
+  // back from the DR site to the original source.
+  const drClusterName = connections?.find(c => c.id === plan.target_cluster)?.name || 'DR'
+  const sourceClusterName = connections?.find(c => c.id === plan.source_cluster)?.name || t('siteRecovery.protection.source')
 
   const typeConfig = {
     test: {
@@ -354,8 +360,66 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           {isExecuting && execution && isReverseSyncPhase && (
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1.5 }}>
-                {t('siteRecovery.failover.inProgress')}
+                {t('siteRecovery.failback.phase1Title')}
               </Typography>
+
+              {/* Animated data-flow banner — a purely visual cue (no
+                  byte-level telemetry backs it): DR on the left, source on
+                  the right, with an animated dashed line flowing between
+                  them. Reuses the exact dashed-flow CSS technique from
+                  CreateJobDialog's SSH connectivity connector
+                  (repeating-linear-gradient + a backgroundPosition
+                  keyframe), just relabeled endpoints — DR → source here,
+                  the reverse of that dialog's source → target. */}
+              <Box
+                data-testid='failback-flow-banner'
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  height: 48, px: 1.5, mb: 1.5,
+                  borderRadius: 1, border: '1px solid', borderColor: 'divider',
+                  bgcolor: 'action.hover'
+                }}
+              >
+                <Typography
+                  variant='caption'
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 600, fontSize: '0.7rem', flexShrink: 0, maxWidth: '35%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  <i className='ri-server-line' style={{ fontSize: 15, opacity: 0.75 }} />
+                  {drClusterName}
+                </Typography>
+                <Box sx={{
+                  flex: 1, height: 2, borderRadius: 1, minWidth: 24,
+                  background: theme => `repeating-linear-gradient(90deg, ${theme.palette.warning.main} 0 6px, transparent 6px 12px)`,
+                  backgroundSize: '12px 2px',
+                  animation: 'failbackFlow 1.2s linear infinite',
+                  '@keyframes failbackFlow': {
+                    '0%': { backgroundPosition: '0 0' },
+                    '100%': { backgroundPosition: '12px 0' },
+                  },
+                }} />
+                <i className='ri-arrow-right-line' style={{ fontSize: 15, opacity: 0.6, flexShrink: 0 }} />
+                <Typography
+                  variant='caption'
+                  sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 600, fontSize: '0.7rem', flexShrink: 0, maxWidth: '35%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {sourceClusterName}
+                  <i className='ri-server-line' style={{ fontSize: 15, opacity: 0.75 }} />
+                </Typography>
+              </Box>
+
+              {/* Header row */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 0.75, pb: 0.5 }}>
+                <Typography variant='caption' sx={{ flex: 1, minWidth: 0, color: 'text.secondary', fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase' }}>
+                  {t('siteRecovery.snapshots.vm')}
+                </Typography>
+                <Typography variant='caption' sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase', textAlign: 'right' }}>
+                  {t('siteRecovery.failback.colLastSync')}
+                </Typography>
+                <Typography variant='caption' sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase', textAlign: 'right', minWidth: 70 }}>
+                  {t('siteRecovery.failback.colTransferred')}
+                </Typography>
+              </Box>
+
               <Stack spacing={1}>
                 {(execution.vm_results || []).map((vm: RecoveryVMResult) => (
                   <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -370,11 +434,11 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                     <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', textAlign: 'right' }}>
                       {vm.last_reverse_sync_at ? new Date(vm.last_reverse_sync_at).toLocaleString() : t('siteRecovery.failback.neverSynced')}
                     </Typography>
-                    {typeof vm.last_reverse_sync_bytes === 'number' && vm.last_reverse_sync_bytes > 0 && (
-                      <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', minWidth: 70, textAlign: 'right' }}>
-                        {formatBytes(vm.last_reverse_sync_bytes)}
-                      </Typography>
-                    )}
+                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', minWidth: 70, textAlign: 'right' }}>
+                      {typeof vm.last_reverse_sync_bytes === 'number' && vm.last_reverse_sync_bytes > 0
+                        ? formatBytes(vm.last_reverse_sync_bytes)
+                        : '—'}
+                    </Typography>
                   </Box>
                 ))}
               </Stack>

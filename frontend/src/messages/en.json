@@ -4338,6 +4338,9 @@
       "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home."
     },
     "failback": {
+      "phase1Title": "Reverse replication in progress",
+      "colLastSync": "Last reverse sync",
+      "colTransferred": "Transferred",
       "phase1Help": "Reverse replication is running while the DR VMs stay online. Trigger the cutover when the last sync is fresh enough.",
       "neverSynced": "No reverse sync yet",
       "cutoverNotReady": "Waiting for the first reverse sync of every VM",

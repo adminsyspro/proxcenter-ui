@@ -4122,6 +4122,10 @@
       "noJobFoundDesc": "Ändern Sie Ihre Filter oder erstellen Sie einen neuen Replikationsjob.",
       "selectJob": "Wählen Sie einen Job, um Details anzuzeigen."
     },
+    "jobs": {
+      "failedOver": "Umgeschaltet",
+      "failedOverTooltip": "Die DR-Kopie dieses Jobs ist jetzt produktiv. Eine Fortsetzung der Replikation würde sie überschreiben — zuerst Failback."
+    },
     "plans": {
       "planName": "Plan",
       "sourceDestination": "Quelle / Ziel",
@@ -4145,7 +4149,8 @@
       "deletePlanConfirm": "Sind Sie sicher, dass Sie diesen Wiederherstellungsplan löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
       "cleanupPending": "Bereinigung ausstehend",
       "testRunning": "Test-Failover läuft",
-      "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten."
+      "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten.",
+      "failedOverTooltip": "Plan ist umgeschaltet — nur Failback ist möglich."
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {

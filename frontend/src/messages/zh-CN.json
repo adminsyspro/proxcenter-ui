@@ -4121,6 +4121,10 @@
       "noJobFoundDesc": "修改您的过滤条件或创建新的复制任务。",
       "selectJob": "选择一个任务以查看详情。"
     },
+    "jobs": {
+      "failedOver": "已故障转移",
+      "failedOverTooltip": "此任务的 DR 副本现已成为生产环境。恢复复制将覆盖它——请先执行故障回复。"
+    },
     "plans": {
       "planName": "计划",
       "sourceDestination": "源 / 目标",
@@ -4144,7 +4148,8 @@
       "deletePlanConfirm": "确定要删除此恢复计划吗？此操作不可撤销。",
       "cleanupPending": "待清理",
       "testRunning": "测试故障转移进行中",
-      "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。"
+      "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。",
+      "failedOverTooltip": "计划已故障转移——只能执行故障回复。"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {

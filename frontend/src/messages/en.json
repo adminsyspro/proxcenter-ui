@@ -4160,6 +4160,10 @@
       "noJobFoundDesc": "Modify your filters or create a new replication job.",
       "selectJob": "Select a job to view details."
     },
+    "jobs": {
+      "failedOver": "Failed over",
+      "failedOverTooltip": "This job's DR copy is now production. Resuming replication would overwrite it — failback first."
+    },
     "plans": {
       "planName": "Plan",
       "sourceDestination": "Source / Destination",
@@ -4183,7 +4187,8 @@
       "deletePlanConfirm": "Are you sure you want to delete this recovery plan? This action cannot be undone.",
       "cleanupPending": "Cleanup pending",
       "testRunning": "Test failover in progress",
-      "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test."
+      "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test.",
+      "failedOverTooltip": "Plan is failed over — only failback is possible."
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {

@@ -399,8 +399,8 @@ export default function RecoveryPlansTab({
                     </Button>
                   )}
                   <Tooltip
-                    title={t('siteRecovery.plans.testActiveTooltip')}
-                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing')}
+                    title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
+                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
                     arrow
                   >
                     <span style={{ display: 'block' }}>
@@ -408,19 +408,28 @@ export default function RecoveryPlansTab({
                         variant='outlined' size='small' fullWidth
                         startIcon={<i className='ri-test-tube-line' />}
                         onClick={() => onTestFailover(selected.id)}
-                        disabled={!!selected.active_test_execution_id || selected.status === 'executing'}
+                        disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
                       >
                         {t('siteRecovery.plans.testFailover')}
                       </Button>
                     </span>
                   </Tooltip>
-                  <Button
-                    variant='contained' size='small' color='warning' fullWidth
-                    startIcon={<i className='ri-shield-star-line' />}
-                    onClick={() => onFailover(selected.id)}
+                  <Tooltip
+                    title={t('siteRecovery.plans.failedOverTooltip')}
+                    disableHoverListener={selected.status !== 'failed_over'}
+                    arrow
                   >
-                    {t('siteRecovery.plans.failover')}
-                  </Button>
+                    <span style={{ display: 'block' }}>
+                      <Button
+                        variant='contained' size='small' color='warning' fullWidth
+                        startIcon={<i className='ri-shield-star-line' />}
+                        onClick={() => onFailover(selected.id)}
+                        disabled={selected.status === 'failed_over'}
+                      >
+                        {t('siteRecovery.plans.failover')}
+                      </Button>
+                    </span>
+                  </Tooltip>
                   <Button
                     variant='outlined' size='small' fullWidth
                     startIcon={<i className='ri-arrow-go-back-line' />}

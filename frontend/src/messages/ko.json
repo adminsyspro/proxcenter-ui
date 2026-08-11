@@ -4160,6 +4160,10 @@
       "noJobFoundDesc": "필터를 수정하거나 새 복제 작업을 생성하세요.",
       "selectJob": "상세 정보를 보려면 작업을 선택하세요."
     },
+    "jobs": {
+      "failedOver": "페일오버됨",
+      "failedOverTooltip": "이 작업의 DR 복제본이 이제 프로덕션입니다. 복제를 재개하면 덮어씁니다 — 먼저 페일백하세요."
+    },
     "plans": {
       "planName": "계획",
       "sourceDestination": "소스 / 대상",
@@ -4183,7 +4187,8 @@
       "deletePlanConfirm": "이 복구 계획을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
       "cleanupPending": "정리 대기 중",
       "testRunning": "테스트 페일오버 진행 중",
-      "testActiveTooltip": "DR 사이트에서 테스트 페일오버가 진행 중입니다. 새 테스트를 시작하기 전에 정리를 실행하세요."
+      "testActiveTooltip": "DR 사이트에서 테스트 페일오버가 진행 중입니다. 새 테스트를 시작하기 전에 정리를 실행하세요.",
+      "failedOverTooltip": "플랜이 페일오버되었습니다 — 페일백만 가능합니다."
     },
     "rpoTargetLabel": "RPO 목표",
     "createJob": {

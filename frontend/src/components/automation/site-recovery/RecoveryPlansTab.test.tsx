@@ -143,6 +143,29 @@ describe('RecoveryPlansTab — cleanup pending indicators', () => {
   })
 })
 
+describe('RecoveryPlansTab — failed-over lockdown', () => {
+  it('disables Test Failover and Failover but keeps Failback enabled and Delete present', async () => {
+    renderTab([plan({ status: 'failed_over' })])
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Test Failover' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Failover' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Failback' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  })
+
+  it('leaves Test Failover and Failover enabled for a ready plan', async () => {
+    renderTab([plan({ status: 'ready' })])
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Test Failover' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Failover' })).not.toBeDisabled()
+  })
+})
+
 describe('RecoveryPlansTab — clear execution history', () => {
   afterEach(() => {
     vi.unstubAllGlobals()

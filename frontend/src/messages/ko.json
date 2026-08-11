@@ -4188,7 +4188,10 @@
       "cleanupPending": "정리 대기 중",
       "testRunning": "테스트 페일오버 진행 중",
       "testActiveTooltip": "DR 사이트에서 테스트 페일오버가 진행 중입니다. 새 테스트를 시작하기 전에 정리를 실행하세요.",
-      "failedOverTooltip": "플랜이 페일오버되었습니다 — 페일백만 가능합니다."
+      "failedOverTooltip": "플랜이 페일오버되었습니다 — 페일백만 가능합니다.",
+      "statusFailingBack": "페일백 진행 중",
+      "openFailback": "페일백 열기",
+      "failingBackTooltip": "플랜을 삭제하기 전에 페일백을 취소하세요."
     },
     "rpoTargetLabel": "RPO 목표",
     "createJob": {
@@ -4324,11 +4327,25 @@
       "step": {
         "fencing": "소스 VM 중지 중",
         "restoring": "선택한 복원 지점으로 롤백 중",
-        "starting": "DR 사이트에서 시작 중"
+        "starting": "DR 사이트에서 시작 중",
+        "fencing_dr": "DR VM 중지 중",
+        "final_sync": "최종 델타 적용 중",
+        "starting_source": "소스 사이트에서 시작 중",
+        "reprotect": "재보호 중"
       },
       "completeTitle": "페일오버 완료",
       "completeVMs": "VM이 DR 사이트에서 실행 중",
       "completeLocked": "복제가 잠기고 플랜이 페일오버되었습니다 — 페일백으로 복구합니다."
+    },
+    "failback": {
+      "phase1Help": "DR VM이 온라인 상태를 유지하는 동안 역방향 복제가 실행됩니다. 마지막 동기화가 충분히 최신일 때 컷오버를 시작하세요.",
+      "neverSynced": "아직 역방향 동기화 없음",
+      "cutover": "컷오버",
+      "cutoverConfirm": "DR VM을 중지하고 최종 델타를 적용한 후 소스 VM을 시작하시겠습니까?",
+      "cancelFailback": "페일백 취소",
+      "cancelConfirm": "역방향 복제를 중지하고 플랜을 페일오버 상태로 되돌리시겠습니까? VM은 변경되지 않습니다.",
+      "completeTitle": "페일백 완료",
+      "completeReprotected": "소스 VM이 실행 중이며 복제가 원래 방향으로 다시 보호합니다."
     },
     "screenshots": {
       "view": "부팅 스크린샷 보기",

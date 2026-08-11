@@ -4149,7 +4149,10 @@
       "cleanupPending": "待清理",
       "testRunning": "测试故障转移进行中",
       "testActiveTooltip": "灾备站点上有一个测试故障转移正在进行。请先运行清理，然后再开始新的测试。",
-      "failedOverTooltip": "计划已故障转移——只能执行故障回复。"
+      "failedOverTooltip": "计划已故障转移——只能执行故障回复。",
+      "statusFailingBack": "故障回复进行中",
+      "openFailback": "打开故障回复",
+      "failingBackTooltip": "删除此计划前请先取消故障回复。"
     },
     "rpoTargetLabel": "RPO 目标",
     "createJob": {
@@ -4285,11 +4288,25 @@
       "step": {
         "fencing": "正在停止源虚拟机",
         "restoring": "正在回滚到所选恢复点",
-        "starting": "正在 DR 站点上启动"
+        "starting": "正在 DR 站点上启动",
+        "fencing_dr": "正在停止 DR 虚拟机",
+        "final_sync": "正在应用最终增量",
+        "starting_source": "正在源站点上启动",
+        "reprotect": "正在重新保护"
       },
       "completeTitle": "故障转移完成",
       "completeVMs": "虚拟机现已在 DR 站点运行",
       "completeLocked": "复制已锁定，计划已故障转移——故障回复将恢复原状。"
+    },
+    "failback": {
+      "phase1Help": "反向复制正在运行，DR 虚拟机保持在线。当最后一次同步足够新时，即可执行切换。",
+      "neverSynced": "尚无反向同步",
+      "cutover": "切换",
+      "cutoverConfirm": "停止 DR 虚拟机，应用最终增量并启动源虚拟机？",
+      "cancelFailback": "取消故障回复",
+      "cancelConfirm": "停止反向复制并将计划恢复为已故障转移状态？虚拟机不会有任何更改。",
+      "completeTitle": "故障回复完成",
+      "completeReprotected": "源虚拟机正在运行，复制已恢复原方向的保护。"
     },
     "screenshots": {
       "view": "查看启动截图",

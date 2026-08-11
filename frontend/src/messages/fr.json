@@ -4188,7 +4188,10 @@
       "cleanupPending": "Nettoyage en attente",
       "testRunning": "Test failover en cours",
       "testActiveTooltip": "Un test de bascule est actif sur le site de secours. Lancez le nettoyage avant de démarrer un nouveau test.",
-      "failedOverTooltip": "Plan basculé — seul le failback est possible."
+      "failedOverTooltip": "Plan basculé — seul le failback est possible.",
+      "statusFailingBack": "Retour en cours",
+      "openFailback": "Ouvrir le failback",
+      "failingBackTooltip": "Annulez le failback avant de supprimer ce plan."
     },
     "rpoTargetLabel": "RPO cible",
     "createJob": {
@@ -4324,11 +4327,25 @@
       "step": {
         "fencing": "Arrêt de la VM source",
         "restoring": "Retour au point de restauration choisi",
-        "starting": "Démarrage sur le site DR"
+        "starting": "Démarrage sur le site DR",
+        "fencing_dr": "Arrêt de la VM DR",
+        "final_sync": "Application du delta final",
+        "starting_source": "Démarrage sur le site source",
+        "reprotect": "Re-protection"
       },
       "completeTitle": "Failover terminé",
       "completeVMs": "VM désormais actives sur le site DR",
       "completeLocked": "La réplication est verrouillée et le plan est basculé — le failback fera le retour."
+    },
+    "failback": {
+      "phase1Help": "La réplication inverse tourne pendant que les VM DR restent en ligne. Lancez le cutover quand le dernier sync est assez frais.",
+      "neverSynced": "Aucun sync inverse encore",
+      "cutover": "Cutover",
+      "cutoverConfirm": "Arrêter les VM DR, appliquer le delta final et démarrer les VM source ?",
+      "cancelFailback": "Annuler le failback",
+      "cancelConfirm": "Arrêter la réplication inverse et remettre le plan en failed over ? Rien n'est modifié sur les VM.",
+      "completeTitle": "Failback terminé",
+      "completeReprotected": "Les VM source tournent et la réplication les protège de nouveau dans le sens d'origine."
     },
     "screenshots": {
       "view": "Voir la capture au boot",

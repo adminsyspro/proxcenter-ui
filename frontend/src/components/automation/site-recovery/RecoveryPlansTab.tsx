@@ -32,12 +32,14 @@ const PlanStatusBadge = ({ status, t }: { status: RecoveryPlanStatus; t: any }) 
     executing: { color: 'info' },
     failed: { color: 'error' },
     not_ready: { color: 'default' },
-    failed_over: { color: 'error' }
+    failed_over: { color: 'error' },
+    failing_back: { color: 'info' }
   }
 
   const c = config[status] || config.not_ready
+  const label = status === 'failing_back' ? t('siteRecovery.plans.statusFailingBack') : t(`siteRecovery.planStatus.${status}`)
 
-  return <Chip size='small' label={t(`siteRecovery.planStatus.${status}`)} color={c.color} />
+  return <Chip size='small' label={label} color={c.color} />
 }
 
 const TierSummary = ({ vms, t }: { vms: RecoveryPlan['vms']; t: any }) => {
@@ -387,63 +389,88 @@ export default function RecoveryPlansTab({
                   {t('siteRecovery.plans.actions')}
                 </Typography>
                 <Stack spacing={1}>
-                  {/* Cleanup only once the test finished — the orchestrator
-                      refuses it while the plan is still executing */}
-                  {selected.active_test_execution_id && selected.status !== 'executing' && (
-                    <Button
-                      variant='contained' size='small' color='warning' fullWidth
-                      startIcon={<i className='ri-eraser-line' />}
-                      onClick={() => onCleanupTest(selected.id)}
-                    >
-                      {t('siteRecovery.failover.cleanup')}
-                    </Button>
-                  )}
-                  <Tooltip
-                    title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
-                    disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
-                    arrow
-                  >
-                    <span style={{ display: 'block' }}>
+                  {selected.status === 'failing_back' ? (
+                    <>
+                      <Button
+                        variant='contained' size='small' color='info' fullWidth
+                        startIcon={<i className='ri-arrow-go-back-line' />}
+                        onClick={() => onFailback(selected.id)}
+                      >
+                        {t('siteRecovery.plans.openFailback')}
+                      </Button>
+                      <Tooltip title={t('siteRecovery.plans.failingBackTooltip')} arrow>
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='outlined' size='small' color='error' fullWidth
+                            startIcon={<i className='ri-delete-bin-line' />}
+                            disabled
+                          >
+                            {t('common.delete')}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    </>
+                  ) : (
+                    <>
+                      {/* Cleanup only once the test finished — the orchestrator
+                          refuses it while the plan is still executing */}
+                      {selected.active_test_execution_id && selected.status !== 'executing' && (
+                        <Button
+                          variant='contained' size='small' color='warning' fullWidth
+                          startIcon={<i className='ri-eraser-line' />}
+                          onClick={() => onCleanupTest(selected.id)}
+                        >
+                          {t('siteRecovery.failover.cleanup')}
+                        </Button>
+                      )}
+                      <Tooltip
+                        title={selected.status === 'failed_over' ? t('siteRecovery.plans.failedOverTooltip') : t('siteRecovery.plans.testActiveTooltip')}
+                        disableHoverListener={!(selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over')}
+                        arrow
+                      >
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='outlined' size='small' fullWidth
+                            startIcon={<i className='ri-test-tube-line' />}
+                            onClick={() => onTestFailover(selected.id)}
+                            disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
+                          >
+                            {t('siteRecovery.plans.testFailover')}
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={t('siteRecovery.plans.failedOverTooltip')}
+                        disableHoverListener={selected.status !== 'failed_over'}
+                        arrow
+                      >
+                        <span style={{ display: 'block' }}>
+                          <Button
+                            variant='contained' size='small' color='warning' fullWidth
+                            startIcon={<i className='ri-shield-star-line' />}
+                            onClick={() => onFailover(selected.id)}
+                            disabled={selected.status === 'failed_over'}
+                          >
+                            {t('siteRecovery.plans.failover')}
+                          </Button>
+                        </span>
+                      </Tooltip>
                       <Button
                         variant='outlined' size='small' fullWidth
-                        startIcon={<i className='ri-test-tube-line' />}
-                        onClick={() => onTestFailover(selected.id)}
-                        disabled={!!selected.active_test_execution_id || selected.status === 'executing' || selected.status === 'failed_over'}
+                        startIcon={<i className='ri-arrow-go-back-line' />}
+                        onClick={() => onFailback(selected.id)}
                       >
-                        {t('siteRecovery.plans.testFailover')}
+                        {t('siteRecovery.plans.failback')}
                       </Button>
-                    </span>
-                  </Tooltip>
-                  <Tooltip
-                    title={t('siteRecovery.plans.failedOverTooltip')}
-                    disableHoverListener={selected.status !== 'failed_over'}
-                    arrow
-                  >
-                    <span style={{ display: 'block' }}>
                       <Button
-                        variant='contained' size='small' color='warning' fullWidth
-                        startIcon={<i className='ri-shield-star-line' />}
-                        onClick={() => onFailover(selected.id)}
-                        disabled={selected.status === 'failed_over'}
+                        variant='outlined' size='small' color='error' fullWidth
+                        startIcon={<i className='ri-delete-bin-line' />}
+                        onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
                       >
-                        {t('siteRecovery.plans.failover')}
+                        {t('common.delete')}
                       </Button>
-                    </span>
-                  </Tooltip>
-                  <Button
-                    variant='outlined' size='small' fullWidth
-                    startIcon={<i className='ri-arrow-go-back-line' />}
-                    onClick={() => onFailback(selected.id)}
-                  >
-                    {t('siteRecovery.plans.failback')}
-                  </Button>
-                  <Button
-                    variant='outlined' size='small' color='error' fullWidth
-                    startIcon={<i className='ri-delete-bin-line' />}
-                    onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
-                  >
-                    {t('common.delete')}
-                  </Button>
+                    </>
+                  )}
                 </Stack>
               </Box>
             </>

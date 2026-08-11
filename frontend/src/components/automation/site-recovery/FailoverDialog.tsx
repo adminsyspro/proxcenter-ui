@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
   IconButton, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material'
 
 import { ScreenshotPreviewDialog, useExecutionScreenshots, type ScreenshotMeta } from './ExecutionScreenshots'
+
+import { formatBytes } from '@/utils/format'
 
 import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
@@ -31,9 +33,11 @@ interface FailoverDialogProps {
   restorePoints?: PlanRestorePoints | null
   restorePointsLoading?: boolean
   restorePointsError?: boolean
+  onFailbackCutover?: (planId: string) => void
+  onFailbackCancel?: (planId: string) => void
 }
 
-export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap, restorePoints, restorePointsLoading, restorePointsError }: FailoverDialogProps) {
+export default function FailoverDialog({ open, onClose, plan, type, onConfirm, onCleanup, cleanupLoading, cleanupResult, execution, errorMessage, targetConnId, connections, vmNameMap, restorePoints, restorePointsLoading, restorePointsError, onFailbackCutover, onFailbackCancel }: FailoverDialogProps) {
   const t = useTranslations()
   const [confirmText, setConfirmText] = useState('')
   const [selectedPoints, setSelectedPoints] = useState<Record<number, string>>({})
@@ -42,11 +46,15 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
   const [stabilizeRemainingSeconds, setStabilizeRemainingSeconds] = useState<number | null>(null)
+  const [confirmCancelFailback, setConfirmCancelFailback] = useState(false)
+  const [confirmCutover, setConfirmCutover] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setConfirmText('')
       setSelectedPoints({})
+      setConfirmCancelFailback(false)
+      setConfirmCutover(false)
     }
   }, [open])
 
@@ -73,6 +81,10 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   // failed. Block a second test-failover attempt until it resolves.
   const testActiveUnresolved = type === 'test' && !!plan.active_test_execution_id && !execution
   const canConfirm = (!isDestructive || confirmText === confirmRequired) && !testActiveUnresolved
+  // The two-phase failback flow: while reverse replication converges, the
+  // dialog shows a dedicated per-VM sync table (not the generic progress
+  // rows) and its own Cutover/Cancel actions instead of the default ones.
+  const isReverseSyncPhase = type === 'failback' && !!execution && execution.phase === 'reverse_sync'
 
   const typeConfig = {
     test: {
@@ -319,8 +331,54 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             )
           })()}
 
+          {/* Failback completion summary */}
+          {execution && execution.status === 'completed' && type === 'failback' && (
+            <Alert severity='success'>
+              <Typography variant='body2' sx={{ fontWeight: 600, mb: 0.5 }}>
+                {t('siteRecovery.failback.completeTitle')}
+              </Typography>
+              <Typography variant='caption' component='div'>
+                {t('siteRecovery.failback.completeReprotected')}
+              </Typography>
+            </Alert>
+          )}
+
+          {/* Failback reverse-sync monitor — dedicated per-VM sync table
+              instead of the generic progress rows below, since there is no
+              percent/step progress to show while the loop just converges */}
+          {isExecuting && execution && isReverseSyncPhase && (
+            <Box>
+              <Typography variant='subtitle2' sx={{ mb: 1.5 }}>
+                {t('siteRecovery.failover.inProgress')}
+              </Typography>
+              <Stack spacing={1}>
+                {(execution.vm_results || []).map((vm: RecoveryVMResult) => (
+                  <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem' }}>
+                        {vmNameMap?.[vm.vm_id] || vm.vm_name}
+                      </Typography>
+                      {vm.error && (
+                        <Typography variant='caption' sx={{ color: 'error.main', fontSize: '0.65rem' }}>{vm.error}</Typography>
+                      )}
+                    </Box>
+                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', textAlign: 'right' }}>
+                      {vm.last_reverse_sync_at ? new Date(vm.last_reverse_sync_at).toLocaleString() : t('siteRecovery.failback.neverSynced')}
+                    </Typography>
+                    {typeof vm.last_reverse_sync_bytes === 'number' && vm.last_reverse_sync_bytes > 0 && (
+                      <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', minWidth: 70, textAlign: 'right' }}>
+                        {formatBytes(vm.last_reverse_sync_bytes)}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+              <Alert severity='info' sx={{ mt: 1.5 }}>{t('siteRecovery.failback.phase1Help')}</Alert>
+            </Box>
+          )}
+
           {/* Execution progress */}
-          {isExecuting && execution && (
+          {isExecuting && execution && !isReverseSyncPhase && (
             <Box>
               <Typography variant='subtitle2' sx={{ mb: 1.5 }}>
                 {t('siteRecovery.failover.inProgress')}
@@ -453,6 +511,16 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             </Button>
           </>
         )}
+        {isReverseSyncPhase && (
+          <>
+            <Button variant='outlined' onClick={() => setConfirmCancelFailback(true)}>
+              {t('siteRecovery.failback.cancelFailback')}
+            </Button>
+            <Button variant='contained' color='warning' onClick={() => setConfirmCutover(true)}>
+              {t('siteRecovery.failback.cutover')}
+            </Button>
+          </>
+        )}
         {execution && execution.status !== 'running' && (
           <>
             {type === 'test' && onCleanup && !cleanupResult && (
@@ -473,6 +541,43 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
           </>
         )}
       </DialogActions>
+
+      {/* Nested confirm: cancel failback */}
+      <Dialog open={confirmCancelFailback} onClose={() => setConfirmCancelFailback(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.failback.cancelFailback')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('siteRecovery.failback.cancelConfirm')}</DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmCancelFailback(false)}>{t('common.cancel')}</Button>
+          <Button
+            variant='contained'
+            color='error'
+            onClick={() => { setConfirmCancelFailback(false); onFailbackCancel?.(plan.id) }}
+          >
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Nested confirm: cutover */}
+      <Dialog open={confirmCutover} onClose={() => setConfirmCutover(false)} maxWidth='sm' fullWidth>
+        <DialogTitle>{t('siteRecovery.failback.cutover')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>{t('siteRecovery.failback.cutoverConfirm')}</DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmCutover(false)}>{t('common.cancel')}</Button>
+          <Button
+            variant='contained'
+            color='warning'
+            onClick={() => { setConfirmCutover(false); onFailbackCutover?.(plan.id) }}
+          >
+            {t('common.confirm')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {execution && (
         <ScreenshotPreviewDialog
           executionId={execution.id}

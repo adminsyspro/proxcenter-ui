@@ -4150,7 +4150,10 @@
       "cleanupPending": "Bereinigung ausstehend",
       "testRunning": "Test-Failover läuft",
       "testActiveTooltip": "Ein Test-Failover ist am DR-Standort aktiv. Führen Sie die Bereinigung aus, bevor Sie einen neuen Test starten.",
-      "failedOverTooltip": "Plan ist umgeschaltet — nur Failback ist möglich."
+      "failedOverTooltip": "Plan ist umgeschaltet — nur Failback ist möglich.",
+      "statusFailingBack": "Failback läuft",
+      "openFailback": "Failback öffnen",
+      "failingBackTooltip": "Failback abbrechen, bevor dieser Plan gelöscht wird."
     },
     "rpoTargetLabel": "RPO-Ziel",
     "createJob": {
@@ -4286,11 +4289,25 @@
       "step": {
         "fencing": "Quell-VM wird gestoppt",
         "restoring": "Zurücksetzen auf den gewählten Wiederherstellungspunkt",
-        "starting": "Start auf dem DR-Standort"
+        "starting": "Start auf dem DR-Standort",
+        "fencing_dr": "DR-VM wird gestoppt",
+        "final_sync": "Letztes Delta wird angewendet",
+        "starting_source": "Start am Quellstandort",
+        "reprotect": "Schutz wird wiederhergestellt"
       },
       "completeTitle": "Failover abgeschlossen",
       "completeVMs": "VM(s) laufen jetzt am DR-Standort",
       "completeLocked": "Die Replikation ist gesperrt und der Plan ist umgeschaltet — Failback bringt ihn zurück."
+    },
+    "failback": {
+      "phase1Help": "Die umgekehrte Replikation läuft, während die DR-VMs online bleiben. Starten Sie das Cutover, wenn der letzte Sync aktuell genug ist.",
+      "neverSynced": "Noch kein Reverse-Sync",
+      "cutover": "Cutover",
+      "cutoverConfirm": "DR-VMs stoppen, letztes Delta anwenden und Quell-VMs starten?",
+      "cancelFailback": "Failback abbrechen",
+      "cancelConfirm": "Umgekehrte Replikation stoppen und den Plan auf failed over zurücksetzen? An den VMs ändert sich nichts.",
+      "completeTitle": "Failback abgeschlossen",
+      "completeReprotected": "Die Quell-VMs laufen und die Replikation schützt sie wieder in der ursprünglichen Richtung."
     },
     "screenshots": {
       "view": "Boot-Screenshot ansehen",

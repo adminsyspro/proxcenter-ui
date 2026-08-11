@@ -271,6 +271,20 @@ export default function SiteRecoveryPage() {
           .catch(() => { /* ignore — dialog shows the warning banner instead */ })
       }
     }
+
+    // Same rehydration for a failback in progress: a failing_back plan
+    // carries the running execution's id so reopening the dialog (or
+    // reloading the page) lands back on the reverse-sync/cutover view
+    // instead of the initial confirm screen.
+    if (type === 'failback') {
+      const plan = (plans || []).find((p: RecoveryPlan) => p.id === planId)
+      if (plan?.active_failback_execution_id) {
+        fetch(`/api/v1/orchestrator/replication/executions/${plan.active_failback_execution_id}`)
+          .then(res => (res.ok ? res.json() : null))
+          .then(data => { if (data) setActiveExecution(data) })
+          .catch(() => { /* ignore — dialog shows the initial confirm screen instead */ })
+      }
+    }
   }, [plans])
 
   const handleFailoverConfirm = useCallback(async (options?: { restorePoints?: Record<number, string> }) => {
@@ -318,6 +332,47 @@ export default function SiteRecoveryPage() {
       setCleanupLoading(false)
     }
   }, [failoverDialog.planId, mutateJobs, mutatePlans])
+
+  const handleFailbackCutover = useCallback(async (planId: string) => {
+    try {
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cutover`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFailoverError(data?.error || 'Failed to execute failback cutover')
+        mutatePlans()
+        return
+      }
+      setFailoverError(null)
+      // Refetch the execution so the dialog picks up the 'cutover' phase
+      // right away instead of waiting for the next poll tick.
+      if (activeExecution) {
+        const execRes = await fetch(`/api/v1/orchestrator/replication/executions/${activeExecution.id}`)
+        const execData = await execRes.json().catch(() => null)
+        if (execData) setActiveExecution(execData)
+      }
+      mutatePlans()
+    } catch (e) {
+      console.error('Failed to execute failback cutover:', e)
+    }
+  }, [activeExecution, mutatePlans])
+
+  const handleFailbackCancel = useCallback(async (planId: string) => {
+    try {
+      const res = await fetch(`/api/v1/orchestrator/replication/plans/${planId}/failback-cancel`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setFailoverError(data?.error || 'Failed to cancel failback')
+        mutatePlans()
+        return
+      }
+      setFailoverError(null)
+      setActiveExecution(null)
+      setFailoverDialog({ open: false, planId: null, type: 'test' })
+      mutatePlans()
+    } catch (e) {
+      console.error('Failed to cancel failback:', e)
+    }
+  }, [mutatePlans])
 
   const handleStartDRVM = useCallback(async (vmId: number, targetCluster: string, jobId: string) => {
     const res = await fetch('/api/v1/orchestrator/replication/emergency/start-vm', {
@@ -536,6 +591,8 @@ export default function SiteRecoveryPage() {
           restorePoints={restorePoints}
           restorePointsLoading={restorePointsLoading}
           restorePointsError={!!restorePointsError}
+          onFailbackCutover={handleFailbackCutover}
+          onFailbackCancel={handleFailbackCancel}
         />
       </Box>
     </EnterpriseGuard>

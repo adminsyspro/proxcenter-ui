@@ -4188,7 +4188,10 @@
       "cleanupPending": "Cleanup pending",
       "testRunning": "Test failover in progress",
       "testActiveTooltip": "A test failover is active on the DR site. Run cleanup before starting a new test.",
-      "failedOverTooltip": "Plan is failed over — only failback is possible."
+      "failedOverTooltip": "Plan is failed over — only failback is possible.",
+      "statusFailingBack": "Failing back",
+      "openFailback": "Open failback",
+      "failingBackTooltip": "Cancel the failback before deleting this plan."
     },
     "rpoTargetLabel": "RPO target",
     "createJob": {
@@ -4324,11 +4327,25 @@
       "step": {
         "fencing": "Stopping the source VM",
         "restoring": "Rolling back to the selected restore point",
-        "starting": "Starting on the DR site"
+        "starting": "Starting on the DR site",
+        "fencing_dr": "Stopping the DR VM",
+        "final_sync": "Applying the final delta",
+        "starting_source": "Starting on the source site",
+        "reprotect": "Re-protecting"
       },
       "completeTitle": "Failover complete",
       "completeVMs": "VM(s) now running on the DR site",
       "completeLocked": "Replication is locked and the plan is failed over — failback will bring it home."
+    },
+    "failback": {
+      "phase1Help": "Reverse replication is running while the DR VMs stay online. Trigger the cutover when the last sync is fresh enough.",
+      "neverSynced": "No reverse sync yet",
+      "cutover": "Cutover",
+      "cutoverConfirm": "Stop the DR VMs, apply the final delta and start the source VMs?",
+      "cancelFailback": "Cancel failback",
+      "cancelConfirm": "Stop reverse replication and return the plan to failed over? Nothing is changed on the VMs.",
+      "completeTitle": "Failback complete",
+      "completeReprotected": "Source VMs are running and replication protects them again in the original direction."
     },
     "screenshots": {
       "view": "View boot screenshot",

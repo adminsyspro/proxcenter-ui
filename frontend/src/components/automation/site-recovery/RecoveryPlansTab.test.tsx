@@ -45,12 +45,14 @@ function Harness({
   onTestFailover,
   onCleanupTest,
   onHistoryCleared,
+  onFailback,
 }: {
   plans: RecoveryPlan[]
   history?: RecoveryExecution[]
   onTestFailover: (id: string) => void
   onCleanupTest: (id: string) => void
   onHistoryCleared?: () => void
+  onFailback?: (id: string) => void
 }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
@@ -64,7 +66,7 @@ function Harness({
       onSelectPlan={setSelectedPlanId}
       onTestFailover={onTestFailover}
       onFailover={vi.fn()}
-      onFailback={vi.fn()}
+      onFailback={onFailback || vi.fn()}
       onDeletePlan={vi.fn()}
       onCleanupTest={onCleanupTest}
       onHistoryCleared={onHistoryCleared}
@@ -163,6 +165,41 @@ describe('RecoveryPlansTab — failed-over lockdown', () => {
 
     expect(screen.getByRole('button', { name: 'Test Failover' })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: 'Failover' })).not.toBeDisabled()
+  })
+})
+
+describe('RecoveryPlansTab — failing-back lockdown (issue #664 failback)', () => {
+  it('shows only the Open failback action (enabled) and a disabled Delete with tooltip', async () => {
+    renderTab([plan({ status: 'failing_back' })])
+
+    expect(screen.getByText('Failing back')).toBeInTheDocument()
+
+    await openDrawer()
+
+    expect(screen.getByRole('button', { name: 'Open failback' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+
+    expect(screen.queryByRole('button', { name: 'Test Failover' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Failover' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Failback' })).not.toBeInTheDocument()
+  })
+
+  it('calls onFailback with the plan id when Open failback is clicked', async () => {
+    const onFailback = vi.fn()
+
+    renderWithProviders(
+      <Harness
+        plans={[plan({ status: 'failing_back' })]}
+        onTestFailover={vi.fn()}
+        onCleanupTest={vi.fn()}
+        onFailback={onFailback}
+      />,
+    )
+
+    await openDrawer()
+    await userEvent.click(screen.getByRole('button', { name: 'Open failback' }))
+
+    expect(onFailback).toHaveBeenCalledWith('plan-1')
   })
 })
 

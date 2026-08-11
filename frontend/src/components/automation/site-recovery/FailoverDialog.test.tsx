@@ -276,6 +276,115 @@ describe('FailoverDialog real-failover per-VM steps and completion summary (issu
   })
 })
 
+describe('FailoverDialog failback reverse-sync monitor (issue #664 failback)', () => {
+  it('renders the per-VM sync table and both action buttons during reverse_sync', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:00:00Z', last_reverse_sync_bytes: 5242880 },
+        ],
+      }),
+    })
+
+    // "web-01" appears both in the Plan Summary list above and in the new
+    // reverse-sync table — assert both are present rather than picking one.
+    expect(screen.getAllByText('web-01').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(new Date('2026-08-10T10:00:00Z').toLocaleString())).toBeInTheDocument()
+    expect(screen.getByText('5 MiB')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel failback' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cutover' })).toBeInTheDocument()
+  })
+
+  it('shows "No reverse sync yet" for a VM that has not synced back, and its error caption when set', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, error: 'disk offline' },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('No reverse sync yet')).toBeInTheDocument()
+    expect(screen.getByText('disk offline')).toBeInTheDocument()
+  })
+
+  it('opens a confirm dialog before calling onFailbackCutover, passing the plan id', async () => {
+    const onFailbackCutover = vi.fn()
+    renderDialog({
+      type: 'failback',
+      execution: execution({ type: 'failback', status: 'running', phase: 'reverse_sync', vm_results: [] }),
+      onFailbackCutover,
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cutover' }))
+    expect(onFailbackCutover).not.toHaveBeenCalled()
+    expect(screen.getByText('Stop the DR VMs, apply the final delta and start the source VMs?')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(onFailbackCutover).toHaveBeenCalledWith('plan-1')
+  })
+
+  it('opens a confirm dialog before calling onFailbackCancel, passing the plan id', async () => {
+    const onFailbackCancel = vi.fn()
+    renderDialog({
+      type: 'failback',
+      execution: execution({ type: 'failback', status: 'running', phase: 'reverse_sync', vm_results: [] }),
+      onFailbackCancel,
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel failback' }))
+    expect(onFailbackCancel).not.toHaveBeenCalled()
+    expect(screen.getByText('Stop reverse replication and return the plan to failed over? Nothing is changed on the VMs.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(onFailbackCancel).toHaveBeenCalledWith('plan-1')
+  })
+})
+
+describe('FailoverDialog failback cutover phase (issue #664 failback)', () => {
+  it('shows the translated step caption for the final_sync step', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'cutover',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 60, step: 'final_sync' },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Applying the final delta')).toBeInTheDocument()
+  })
+})
+
+describe('FailoverDialog failback completion summary (issue #664 failback)', () => {
+  it('shows the failback completion summary once the execution has completed', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'completed',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100 },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Failback complete')).toBeInTheDocument()
+    expect(screen.getByText('Source VMs are running and replication protects them again in the original direction.')).toBeInTheDocument()
+  })
+})
+
 describe('FailoverDialog camera button on rehydrated results (issue #664 follow-up)', () => {
   it('shows the camera button in the Plan Summary rows for a rehydrated (non-running) execution, and opens the preview dialog on click', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(

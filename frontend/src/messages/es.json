@@ -4188,7 +4188,10 @@
       "cleanupPending": "Limpieza pendiente",
       "testRunning": "Failover de prueba en curso",
       "testActiveTooltip": "Hay un failover de prueba activo en el sitio DR. Ejecuta la limpieza antes de iniciar una nueva prueba.",
-      "failedOverTooltip": "Plan conmutado — solo es posible el failback."
+      "failedOverTooltip": "Plan conmutado — solo es posible el failback.",
+      "statusFailingBack": "Failback en curso",
+      "openFailback": "Abrir failback",
+      "failingBackTooltip": "Cancele el failback antes de eliminar este plan."
     },
     "rpoTargetLabel": "RPO objetivo",
     "createJob": {
@@ -4324,11 +4327,25 @@
       "step": {
         "fencing": "Deteniendo la VM de origen",
         "restoring": "Restaurando al punto de restauración elegido",
-        "starting": "Iniciando en el sitio DR"
+        "starting": "Iniciando en el sitio DR",
+        "fencing_dr": "Deteniendo la VM DR",
+        "final_sync": "Aplicando el delta final",
+        "starting_source": "Iniciando en el sitio de origen",
+        "reprotect": "Reprotegiendo"
       },
       "completeTitle": "Failover completado",
       "completeVMs": "VM ahora activas en el sitio DR",
       "completeLocked": "La replicación está bloqueada y el plan está conmutado — el failback lo devolverá."
+    },
+    "failback": {
+      "phase1Help": "La replicación inversa se ejecuta mientras las VM DR siguen en línea. Inicie el cutover cuando la última sincronización sea lo bastante reciente.",
+      "neverSynced": "Aún sin sincronización inversa",
+      "cutover": "Cutover",
+      "cutoverConfirm": "¿Detener las VM DR, aplicar el delta final e iniciar las VM de origen?",
+      "cancelFailback": "Cancelar el failback",
+      "cancelConfirm": "¿Detener la replicación inversa y devolver el plan a failed over? No se modifica nada en las VM.",
+      "completeTitle": "Failback completado",
+      "completeReprotected": "Las VM de origen están en ejecución y la replicación vuelve a protegerlas en la dirección original."
     },
     "screenshots": {
       "view": "Ver la captura de arranque",

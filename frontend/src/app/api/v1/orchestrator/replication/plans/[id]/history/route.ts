@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
+import { checkPlanTenantScope } from "@/lib/orchestrator/planTenantScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -13,22 +13,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const client = getOrchestratorClient()
+    const { denied: scopeDenied } = await checkPlanTenantScope(id)
 
-    // Verify plan ownership
-    const tenantConnectionIds = await getTenantConnectionIds()
-    const planResponse = await client.getRecoveryPlan(id)
-    const plan = planResponse.data
+    if (scopeDenied) return scopeDenied
 
-    if (
-      plan &&
-      ((plan.source_cluster && !tenantConnectionIds.has(plan.source_cluster)) ||
-      (plan.target_cluster && !tenantConnectionIds.has(plan.target_cluster)))
-    ) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
-    }
-
-    const response = await client.getRecoveryHistory(id)
+    const response = await getOrchestratorClient().getRecoveryHistory(id)
 
     return NextResponse.json(response.data || [])
   } catch (e: any) {
@@ -47,22 +36,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (denied) return denied
 
     const { id } = await params
-    const client = getOrchestratorClient()
+    const { denied: scopeDenied } = await checkPlanTenantScope(id)
 
-    // Verify plan ownership
-    const tenantConnectionIds = await getTenantConnectionIds()
-    const planResponse = await client.getRecoveryPlan(id)
-    const plan = planResponse.data
+    if (scopeDenied) return scopeDenied
 
-    if (
-      plan &&
-      ((plan.source_cluster && !tenantConnectionIds.has(plan.source_cluster)) ||
-      (plan.target_cluster && !tenantConnectionIds.has(plan.target_cluster)))
-    ) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
-    }
-
-    const response = await client.clearRecoveryHistory(id)
+    const response = await getOrchestratorClient().clearRecoveryHistory(id)
 
     return NextResponse.json(response.data)
   } catch (e: any) {

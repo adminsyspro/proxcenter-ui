@@ -52,6 +52,24 @@ describe('GET /replication/executions/[id]/screenshots', () => {
     expect(res.status).toBe(404)
     expect(getExecutionScreenshots).not.toHaveBeenCalled()
   })
+
+  it('returns the denied response when permission is refused', async () => {
+    checkPermission.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }))
+
+    const res = await callRoute(listScreenshots, { params: { id: 'exec-1' } })
+
+    expect(res.status).toBe(403)
+    expect(getExecutionScreenshots).not.toHaveBeenCalled()
+  })
+
+  it('returns a 500 with the error message when the orchestrator call fails', async () => {
+    getExecutionScreenshots.mockRejectedValue(new Error('boom'))
+
+    const res = await callRoute(listScreenshots, { params: { id: 'exec-1' } })
+
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'boom' })
+  })
 })
 
 describe('GET /replication/executions/[id]/screenshots/[vmid]', () => {
@@ -83,5 +101,36 @@ describe('GET /replication/executions/[id]/screenshots/[vmid]', () => {
     const res = await callRoute(getScreenshotPng, { params: { id: 'exec-1', vmid: '100' } })
 
     expect(res.status).toBe(404)
+  })
+
+  it('returns the denied response when permission is refused', async () => {
+    checkPermission.mockResolvedValue(new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 }))
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const res = await callRoute(getScreenshotPng, { params: { id: 'exec-1', vmid: '100' } })
+
+    expect(res.status).toBe(403)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('404s when the execution belongs to another tenant', async () => {
+    getRecoveryPlan.mockResolvedValue({ data: { source_cluster: 'foreign', target_cluster: 'conn-dst' } })
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const res = await callRoute(getScreenshotPng, { params: { id: 'exec-1', vmid: '100' } })
+
+    expect(res.status).toBe(404)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns a 500 with the error message when the upstream fetch throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unreachable')))
+
+    const res = await callRoute(getScreenshotPng, { params: { id: 'exec-1', vmid: '100' } })
+
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'network unreachable' })
   })
 })

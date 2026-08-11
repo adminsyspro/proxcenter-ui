@@ -67,4 +67,11 @@ describe('GET /api/v1/orchestrator/replication/plans/[id]/restore-points', () =>
     expect(res.status).toBe(404)
     expect(getPlanRestorePointsMock).not.toHaveBeenCalled()
   })
+
+  it('returns a 500 with the error message when the orchestrator call fails', async () => {
+    getPlanRestorePointsMock.mockRejectedValue(new Error('boom'))
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0], { params: { id: 'plan-1' } })
+    expect(res.status).toBe(500)
+    expect(await readJson(res)).toEqual({ error: 'boom' })
+  })
 })

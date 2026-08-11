@@ -187,6 +187,10 @@ export interface RecoveryExecution {
   // 'stabilizing', 'capturing', then cleared once it's done. Only ever set
   // for type === 'test'.
   phase?: string
+  // Deadline for the current 'stabilizing' phase (ISO timestamp), so the
+  // frontend can show a live countdown instead of an indefinite spinner.
+  // Cleared alongside phase for every other phase/transition.
+  phase_ends_at?: string
 }
 
 // ============================================

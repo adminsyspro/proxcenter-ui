@@ -41,6 +41,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const [screenshotPreview, setScreenshotPreview] = useState<ScreenshotMeta | null>(null)
   const isDestructive = type === 'failover' || type === 'failback'
   const isExecuting = !!execution && execution.status === 'running'
+  const [stabilizeRemainingSeconds, setStabilizeRemainingSeconds] = useState<number | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -48,6 +49,21 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
       setSelectedPoints({})
     }
   }, [open])
+
+  // Live countdown for the 'stabilizing' phase, ticking every second while
+  // it's active — so the ~45-60s post-boot wait shows a deadline instead of
+  // an indefinite spinner.
+  useEffect(() => {
+    if (execution?.phase !== 'stabilizing' || !execution.phase_ends_at) {
+      setStabilizeRemainingSeconds(null)
+      return
+    }
+    const endsAt = new Date(execution.phase_ends_at).getTime()
+    const tick = () => setStabilizeRemainingSeconds(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [execution?.phase, execution?.phase_ends_at])
 
   if (!plan) return null
 
@@ -360,7 +376,9 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                   },
                   {
                     key: 'stabilize',
-                    label: t('siteRecovery.screenshots.stepStabilize'),
+                    label: execution.phase === 'stabilizing' && stabilizeRemainingSeconds != null
+                      ? `${t('siteRecovery.screenshots.stepStabilize')} (${stabilizeRemainingSeconds} s)`
+                      : t('siteRecovery.screenshots.stepStabilize'),
                     state: execution.phase === 'capturing' ? 'done' : execution.phase === 'stabilizing' ? 'active' : 'pending'
                   },
                   {

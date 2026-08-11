@@ -12,13 +12,17 @@
 
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { SWRConfig } from 'swr'
 
 import { renderWithProviders, screen, userEvent, fireEvent } from '@/__tests__/setup/renderWithProviders'
 import type { RecoveryPlan, RecoveryExecution, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 
 import FailoverDialog from './FailoverDialog'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 function plan(overrides: Partial<RecoveryPlan> = {}): RecoveryPlan {
   return {
@@ -204,5 +208,75 @@ describe('FailoverDialog boot screenshot step checklist (issue #664 follow-up)',
     const stabilizeRow = screen.getByText('Letting guests settle').closest('div')
 
     expect(stabilizeRow?.querySelector('.ri-check-line')).toBeInTheDocument()
+  })
+})
+
+describe('FailoverDialog stabilization countdown (issue #664 follow-up)', () => {
+  it('appends a live countdown to the stabilize label when phase_ends_at is set', () => {
+    renderDialog({
+      execution: execution({
+        status: 'running',
+        phase: 'stabilizing',
+        phase_ends_at: new Date(Date.now() + 30500).toISOString(),
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100 },
+        ],
+      }),
+    })
+
+    expect(screen.getByText(/Letting guests settle \(3?\d s\)/)).toBeInTheDocument()
+  })
+
+  it('does not append a countdown when phase_ends_at is absent', () => {
+    renderDialog({
+      execution: execution({
+        status: 'running',
+        phase: 'stabilizing',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100 },
+        ],
+      }),
+    })
+
+    expect(screen.getByText('Letting guests settle')).toBeInTheDocument()
+  })
+})
+
+describe('FailoverDialog camera button on rehydrated results (issue #664 follow-up)', () => {
+  it('shows the camera button in the Plan Summary rows for a rehydrated (non-running) execution, and opens the preview dialog on click', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([
+        { vm_id: 100, target_vmid: 9100, captured_at: '2026-08-11T07:47:35Z' },
+      ]), { status: 200, headers: { 'content-type': 'application/json' } })
+    ))
+
+    renderWithProviders(
+      // renderWithProviders's own SWRConfig sets revalidateOnMount:false; the
+      // camera button depends on the screenshots list SWR fetch actually
+      // resolving, so override it back on here (same pattern as
+      // ExecutionScreenshots.test.tsx).
+      <SWRConfig value={{ revalidateOnMount: true }}>
+        <FailoverDialog
+          open
+          onClose={vi.fn()}
+          plan={plan()}
+          type='test'
+          onConfirm={vi.fn()}
+          execution={execution({
+            status: 'completed',
+            vm_results: [
+              { vm_id: 100, vm_name: 'web-01', status: 'completed', progress_percent: 100, target_node: 'dr-1', target_vmid: 9100 },
+            ],
+          })}
+        />
+      </SWRConfig>,
+    )
+
+    const cameraButton = await screen.findByRole('button', { name: 'View boot screenshot' })
+
+    await userEvent.click(cameraButton)
+
+    const previewImg = await screen.findByRole('img')
+    expect(previewImg).toHaveAttribute('src', '/api/v1/orchestrator/replication/executions/exec-1/screenshots/100')
   })
 })

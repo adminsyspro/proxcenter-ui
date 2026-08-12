@@ -133,11 +133,18 @@ import { UploadDialog } from '@/components/storage/StorageContentBrowser'
 import TemplateDownloadDialog from '@/components/storage/TemplateDownloadDialog'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 
+/**
+ * Rang de l'onglet Sauvegardes d'une VM dans `VmDetailTabs` (Résumé, Matériel,
+ * Options, Historique, Sauvegardes...). À garder aligné sur l'ordre des `Tab`
+ * qui y sont déclarés, comme l'index 7 de la réplication plus bas.
+ */
+const VM_BACKUPS_TAB_INDEX = 4
+
 /* ------------------------------------------------------------------ */
 /* Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function InventoryDetails({ 
+export default function InventoryDetails({
   selection,
   onSelect,
   onBack,
@@ -1125,8 +1132,10 @@ export default function InventoryDetails({
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
     backupsPbsConfigured, setBackupsPbsConfigured,
+    backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
+    backupsScannedForIdRef,
     selectedBackup, setSelectedBackup,
 
     // Node tabs
@@ -1481,7 +1490,17 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     setBackupsError(null)
     setBackupsWarnings([])
     setBackupsPreloaded(false)
+    // Verdicts portés par la réponse précédente : sans ce nettoyage, l'état
+    // vide à trois branches de l'onglet pourrait décrire un balayage effectué
+    // pour un AUTRE guest — « aucune archive sur les stockages du cluster »
+    // alors qu'ils n'ont jamais été interrogés pour celui-ci.
+    setBackupsPbsConfigured(null)
+    setBackupsVzdumpScanned(false)
     // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
+    // Le balayage vzdump, lui, est réarmé ici : son effet ne se redéclenche que
+    // sur changement d'onglet, il ne verrait donc jamais passer une sélection
+    // intermédiaire (nœud, cluster) et resterait muet au retour sur ce guest.
+    backupsScannedForIdRef.current = null
     setGuestInfo(null)
     setHeaderCollapsed(false)
 
@@ -1614,7 +1633,11 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   const canShowRrd = selection && (selection.type === 'node' || selection.type === 'vm') && !data?.isTemplate
 
-  // Charger les backups quand on sélectionne une VM
+  // Précharger les backups quand on sélectionne une VM. Snapshots PBS
+  // uniquement : le balayage des stockages PVE (archives vzdump) coûte
+  // 1 + 1 + N nœuds x M stockages appels à pveproxy, inacceptable à chaque clic
+  // dans l'arbre. Il n'a lieu qu'à l'ouverture de l'onglet Sauvegardes, juste
+  // en dessous.
   useEffect(() => {
     if (selection?.type !== 'vm') {
       backupsLoadedForIdRef.current = null
@@ -1623,12 +1646,35 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
     const currentSelectionId = selection.id
     if (backupsLoadedForIdRef.current === currentSelectionId) return
+
+    // Onglet Sauvegardes déjà ouvert : son propre effet charge la même VM avec
+    // le balayage. Précharger en plus lancerait deux requêtes concurrentes dont
+    // la plus lente écraserait l'autre.
+    if (detailTab === VM_BACKUPS_TAB_INDEX) return
+
     backupsLoadedForIdRef.current = currentSelectionId
 
-    const { connId, type, vmid } = parseVmId(selection.id)
-    loadBackups(vmid, type, connId)
+    const { connId, node, type, vmid } = parseVmId(selection.id)
+    loadBackups(vmid, type, connId, { node })
     setBackupsPreloaded(true)
-  }, [selection?.type, selection?.id, loadBackups])
+  }, [selection?.type, selection?.id, detailTab, loadBackups])
+
+  // Recharger avec le balayage vzdump à l'ouverture de l'onglet Sauvegardes.
+  // Une fois par guest : le ref porte l'id de sélection et l'effet de
+  // réinitialisation le remet à null à chaque changement de sélection, y compris
+  // vers un nœud ou le cluster. Revenir sur l'onglet ne rebalaye donc pas, mais
+  // revenir sur le guest, si.
+  useEffect(() => {
+    if (selection?.type !== 'vm' || detailTab !== VM_BACKUPS_TAB_INDEX) return
+    if (backupsScannedForIdRef.current === selection.id) return
+
+    backupsScannedForIdRef.current = selection.id
+    backupsLoadedForIdRef.current = selection.id
+
+    const { connId, node, type, vmid } = parseVmId(selection.id)
+    loadBackups(vmid, type, connId, { node, scanVzdump: true })
+    setBackupsPreloaded(true)
+  }, [selection?.type, selection?.id, detailTab, loadBackups])
 
   // Note: snapshot preloading is handled inside useSnapshots hook
 
@@ -3430,7 +3476,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'vm' && (
             <VmDetailTabs
               {...{addCephReplicationDialogOpen, addReplicationDialogOpen, availableTargetNodes, backToArchives, backToBackupsList,
-                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, backupsPbsConfigured, balloon,
+                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, backupsPbsConfigured, backupsVzdumpScanned, balloon,
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuFlags, cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,

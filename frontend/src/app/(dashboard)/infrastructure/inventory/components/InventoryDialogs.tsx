@@ -202,7 +202,12 @@ export interface InventoryDialogsProps {
   creatingBackup: boolean
   setCreatingBackup: (v: boolean) => void
   backupStorages: any[]
-  loadBackups: (vmid: string, vmType: string, connId?: string) => void
+  loadBackups: (
+    vmid: string,
+    vmType: string,
+    connId?: string,
+    opts?: { node?: string; scanVzdump?: boolean },
+  ) => void
 
   // Delete VM dialog
   deleteVmDialogOpen: boolean
@@ -1780,11 +1785,13 @@ return
                 showSnackbar(t('backups.backupStarted'), 'success')
                 
                 // Recharger les backups après un délai
+                // La sauvegarde qui vient d'être lancée peut être un vzdump sur
+                // un stockage PVE : on rebalaye, sinon elle n'apparaîtrait pas.
                 setTimeout(() => {
                   if (selection?.type === 'vm') {
-                    const { connId, type: vmType, vmid } = parseVmId(selection.id)
+                    const { connId, node, type: vmType, vmid } = parseVmId(selection.id)
 
-                    loadBackups(vmid, vmType, connId)
+                    loadBackups(vmid, vmType, connId, { node, scanVzdump: true })
                   }
                 }, 5000)
               } catch (e: any) {

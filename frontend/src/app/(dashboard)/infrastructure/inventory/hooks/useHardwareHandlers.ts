@@ -365,8 +365,12 @@ export function useHardwareHandlers({
   const [backupsStats, setBackupsStats] = useState<any>(null)
   const [backupsWarnings, setBackupsWarnings] = useState<string[]>([])
   const [backupsPbsConfigured, setBackupsPbsConfigured] = useState<boolean | null>(null)
+  const [backupsVzdumpScanned, setBackupsVzdumpScanned] = useState<boolean>(false)
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
   const backupsLoadedForIdRef = useRef<string | null>(null) // Track which selection ID backups were loaded for
+  // Idem pour le balayage vzdump, déclenché par la seule ouverture de l'onglet
+  // Sauvegardes. Les deux refs sont réarmées ensemble au changement de sélection.
+  const backupsScannedForIdRef = useRef<string | null>(null)
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
 
   // État pour les onglets node (host standalone)
@@ -569,8 +573,23 @@ export function useHardwareHandlers({
   useSyslogLive(nodeSyslogLive, selection?.type, selection?.id, nodeTab, nodeSystemSubTab, setNodeSyslogData)
   useCephLogLive(nodeCephLogLive, selection?.type, selection?.id, data?.clusterName, setNodeCephData)
 
-  // Charger les sauvegardes d'une VM
-  const loadBackups = useCallback(async (vmid: string, type: string, connId?: string) => {
+  /**
+   * Charger les sauvegardes d'une VM.
+   *
+   * `opts.node` = nœud courant du guest : la route le fait remonter en tête du
+   * balayage vzdump, pour que la troncature au plafond dur n'écarte jamais le
+   * nœud qui porte le plus probablement ses archives.
+   *
+   * `opts.scanVzdump` = balayer les stockages PVE. Coûteux (1 + 1 + N nœuds x
+   * M stockages appels pveproxy) : réservé à l'ouverture réelle de l'onglet
+   * Sauvegardes, jamais au préchargement déclenché par la sélection.
+   */
+  const loadBackups = useCallback(async (
+    vmid: string,
+    type: string,
+    connId?: string,
+    opts?: { node?: string; scanVzdump?: boolean },
+  ) => {
     if (!vmid) return
 
     setBackupsLoading(true)
@@ -579,6 +598,7 @@ export function useHardwareHandlers({
     setBackupsStats(null)
     setBackupsWarnings([])
     setBackupsPbsConfigured(null)
+    setBackupsVzdumpScanned(false)
 
     try {
       const params = new URLSearchParams()
@@ -588,6 +608,8 @@ export function useHardwareHandlers({
       // Pass the guest's PVE connection so the route can tell whether a
       // connected PBS actually backs up this cluster (drives the empty state).
       if (connId) params.set('connectionId', connId)
+      if (opts?.node) params.set('node', opts.node)
+      if (opts?.scanVzdump) params.set('scanVzdump', '1')
 
       const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmid)}/backups?${params}`, { cache: 'no-store' })
       const json = await res.json()
@@ -599,6 +621,7 @@ export function useHardwareHandlers({
         setBackupsStats(json.data?.stats || null)
         setBackupsWarnings(json.data?.warnings || [])
         setBackupsPbsConfigured(json.data?.pbsConfigured ?? null)
+        setBackupsVzdumpScanned(json.data?.vzdumpScanned === true)
       }
     } catch (e: any) {
       setBackupsError(e.message || t('errors.loadingError'))
@@ -1390,8 +1413,10 @@ return explorerFiles.filter((file: any) =>
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
     backupsPbsConfigured, setBackupsPbsConfigured,
+    backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
+    backupsScannedForIdRef,
     selectedBackup, setSelectedBackup,
 
     // Node tabs

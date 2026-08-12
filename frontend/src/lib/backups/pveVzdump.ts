@@ -4,6 +4,7 @@
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { mapWithConcurrency } from "@/lib/inventory/concurrency"
+import { isSharedStorage } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
 
 /**
@@ -66,6 +67,25 @@ function supportsBackupContent(s: VzdumpStorageConfig): boolean {
 }
 
 /**
+ * Partage réel d'un stockage, vu par le cluster.
+ *
+ * `/storage` ne porte `shared` que s'il a été posé explicitement dans
+ * storage.cfg : nfs, cifs et cephfs sont partagés par leur plugin et reviennent
+ * le plus souvent sans le champ. Les lignes `type: 'storage'` de
+ * `/cluster/resources`, elles, portent la valeur calculée par PVE — c'est la
+ * source qui fait foi. Repli sur la config (drapeau explicite, puis type de
+ * backend) quand aucune ligne ne la porte, sinon on interrogerait un stockage
+ * partagé une fois par nœud du cluster.
+ */
+function isStorageShared(s: VzdumpStorageConfig, storageRows: any[]): boolean {
+  const rowsWithFlag = storageRows.filter(r => r?.shared !== undefined && r?.shared !== null)
+
+  if (rowsWithFlag.length > 0) return rowsWithFlag.some(r => Number(r.shared) === 1)
+
+  return isSharedStorage(s)
+}
+
+/**
  * Paires nœud/stockage à interroger pour trouver les archives vzdump d'un guest.
  *
  * Les stockages PBS sont écartés : leurs snapshots remontent déjà par le fan-out
@@ -102,15 +122,16 @@ export function resolveVzdumpScanTargets(
     if ((s.type || '').toLowerCase() === 'pbs') continue
     if (!supportsBackupContent(s)) continue
 
-    const nodesForStorage = (resources || [])
-      .filter(r => r?.type === 'storage' && r?.storage === s.storage)
-      .map(r => String(r.node))
+    const storageRows = (resources || []).filter(
+      r => r?.type === 'storage' && r?.storage === s.storage,
+    )
 
+    const nodesForStorage = storageRows.map(r => String(r.node))
     const candidates = orderedNodes(Array.from(new Set(nodesForStorage)))
 
     if (candidates.length === 0) continue
 
-    if (s.shared === 1) targets.push({ node: candidates[0], storage: s.storage })
+    if (isStorageShared(s, storageRows)) targets.push({ node: candidates[0], storage: s.storage })
     else for (const node of candidates) targets.push({ node, storage: s.storage })
   }
 

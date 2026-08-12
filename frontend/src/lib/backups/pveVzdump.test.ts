@@ -81,6 +81,47 @@ describe('resolveVzdumpScanTargets', () => {
     expect(targets).toEqual([{ node: 'node1', storage: 'nfs-bkp' }])
   })
 
+  it('queries a storage shared only per /cluster/resources exactly once', () => {
+    // PVE n'écrit `shared` dans storage.cfg que s'il a été posé à la main :
+    // un export NFS revient sans le champ, mais /cluster/resources porte la
+    // valeur calculée. Se fier à la config seule = 1 requête par nœud.
+    const { targets } = resolveVzdumpScanTargets(
+      [{ storage: 'nfs-bkp', type: 'nfs', content: 'backup' }],
+      [
+        ...nodes('node1', 'node2', 'node3'),
+        { type: 'storage', storage: 'nfs-bkp', node: 'node1', status: 'available', shared: 1 },
+        { type: 'storage', storage: 'nfs-bkp', node: 'node2', status: 'available', shared: 1 },
+        { type: 'storage', storage: 'nfs-bkp', node: 'node3', status: 'available', shared: 1 },
+      ],
+    )
+    expect(targets).toEqual([{ node: 'node1', storage: 'nfs-bkp' }])
+  })
+
+  it('trusts /cluster/resources over a stale shared flag in the config', () => {
+    // La ligne de ressource dit « pas partagé » : on interroge chaque nœud,
+    // sinon une archive posée sur le nœud non interrogé disparaîtrait.
+    const { targets } = resolveVzdumpScanTargets(
+      [{ storage: 'bkp', type: 'dir', content: 'backup', shared: 1 }],
+      [
+        ...nodes('node1', 'node2'),
+        { type: 'storage', storage: 'bkp', node: 'node1', status: 'available', shared: 0 },
+        { type: 'storage', storage: 'bkp', node: 'node2', status: 'available', shared: 0 },
+      ],
+    )
+    expect(targets).toEqual([
+      { node: 'node1', storage: 'bkp' },
+      { node: 'node2', storage: 'bkp' },
+    ])
+  })
+
+  it('falls back to the backend type when neither source carries a shared flag', () => {
+    const { targets } = resolveVzdumpScanTargets(
+      [{ storage: 'cephfs-bkp', type: 'cephfs', content: 'backup' }],
+      [...nodes('node1', 'node2'), storageRes('cephfs-bkp', 'node1'), storageRes('cephfs-bkp', 'node2')],
+    )
+    expect(targets).toEqual([{ node: 'node1', storage: 'cephfs-bkp' }])
+  })
+
   it('skips offline nodes', () => {
     const { targets } = resolveVzdumpScanTargets(
       [{ storage: 'local', type: 'dir', content: 'backup', shared: 0 }],
@@ -333,6 +374,39 @@ describe('listGuestVzdumpBackups', () => {
     expect(data).toEqual([])
     expect(warnings).toEqual([])
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('lists a resources-only shared storage once instead of once per node', async () => {
+    // Le dédoublonnage masquait le surcoût : ici on compte les appels, pas les
+    // résultats. Un NFS partagé = 1 listing, pas un par nœud en ligne.
+    pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/cluster/resources') {
+        return [
+          { type: 'node', node: 'node1', status: 'online' },
+          { type: 'node', node: 'node2', status: 'online' },
+          { type: 'storage', storage: 'nfs-bkp', node: 'node1', status: 'available', shared: 1 },
+          { type: 'storage', storage: 'nfs-bkp', node: 'node2', status: 'available', shared: 1 },
+        ]
+      }
+      if (path.includes('/content')) {
+        return [{ volid: 'nfs-bkp:backup/vzdump-qemu-111-2026_08_11-15_51_33.vma.zst', ctime: 5, size: 2 }]
+      }
+      return []
+    })
+
+    const { data } = await listGuestVzdumpBackups(CONN, '111', {
+      typeFilter: 'vm',
+      dateLocale: 'en',
+      // Aucun `shared` dans la config : c'est le cas réel d'un export NFS.
+      storages: [{ storage: 'nfs-bkp', type: 'nfs', content: 'backup' }],
+    })
+
+    const contentCalls = pveFetchMock.mock.calls
+      .map(c => String(c[1]))
+      .filter(p => p.includes('/content'))
+
+    expect(contentCalls).toHaveLength(1)
+    expect(data).toHaveLength(1)
   })
 
   it('deduplicates the same archive reported by two nodes', async () => {

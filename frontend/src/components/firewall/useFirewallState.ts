@@ -247,10 +247,12 @@ export function useFirewallState(api: FirewallAPIAdapter) {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', pos.toString())
 
-    setTimeout(() => {
-      const row = e.currentTarget as HTMLElement
+    // React nulls the event's currentTarget as soon as the handler returns,
+    // so the row must be captured before the opacity change is deferred.
+    const draggedRow = e.currentTarget as HTMLElement
 
-      row.style.opacity = '0.5'
+    setTimeout(() => {
+      draggedRow.style.opacity = '0.5'
     }, 0)
   }
 

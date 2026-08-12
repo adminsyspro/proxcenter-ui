@@ -176,7 +176,11 @@ export default function FirewallPolicyTable({
     setDragState({ draggedPos: pos, dragOverPos: null })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', pos.toString())
-    setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
+    // React nulls the event's currentTarget as soon as the handler returns,
+    // so the row must be captured before the opacity change is deferred.
+    const draggedRow = e.currentTarget as HTMLElement
+
+    setTimeout(() => { draggedRow.style.opacity = '0.5' }, 0)
   }
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'

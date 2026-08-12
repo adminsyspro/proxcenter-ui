@@ -2429,7 +2429,12 @@
     "trendsDistribution": "Répartition par type",
     "noPbsConfiguredTitle": "Aucun serveur Proxmox Backup Server configuré",
     "noPbsConfiguredHint": "Aucun Proxmox Backup Server connecté ne sauvegarde le cluster de cette machine. Ajoutez le PBS du cluster comme connexion pour voir ses sauvegardes ici.",
-    "noGuestBackups": "Aucune sauvegarde trouvée pour cette machine."
+    "noGuestBackups": "Aucune sauvegarde trouvée pour cette machine.",
+    "sourceVzdump": "Archive locale",
+    "vzdumpNoBrowsing": "Parcourir les fichiers d'une archive vzdump nécessite un Proxmox Backup Server",
+    "archivesCount": "{count} archives",
+    "noBackupsAnywhereTitle": "Aucune sauvegarde trouvée",
+    "noBackupsAnywhereHint": "Cette instance n'a aucun snapshot sur un Proxmox Backup Server connecté, ni aucune archive vzdump sur les stockages du cluster."
   },
   "backup": {
     "notifAuto": "Auto",

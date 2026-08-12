@@ -2398,7 +2398,12 @@
     "trendsDistribution": "类型分布",
     "noPbsConfiguredTitle": "未配置 Proxmox Backup Server",
     "noPbsConfiguredHint": "没有已连接的 Proxmox Backup Server 备份此机器的集群。请将该集群的 PBS 添加为连接以在此处查看备份。",
-    "noGuestBackups": "未找到此机器的备份。"
+    "noGuestBackups": "未找到此机器的备份。",
+    "sourceVzdump": "本地归档",
+    "vzdumpNoBrowsing": "浏览 vzdump 归档中的文件需要 Proxmox Backup Server",
+    "archivesCount": "{count} 个归档",
+    "noBackupsAnywhereTitle": "未找到备份",
+    "noBackupsAnywhereHint": "该实例在已连接的 Proxmox Backup Server 上没有快照，集群存储上也没有 vzdump 归档。"
   },
   "backup": {
     "notifAuto": "自动",

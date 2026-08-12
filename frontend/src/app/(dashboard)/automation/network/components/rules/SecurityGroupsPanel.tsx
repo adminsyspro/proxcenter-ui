@@ -5,17 +5,18 @@ import { useTranslations } from 'next-intl'
 
 import {
   Avatar, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-  IconButton, Paper, Stack, Switch, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
+  IconButton, Paper, Stack, Table, TableBody, TableCell,
+  TableContainer, TableRow, TextField, Tooltip, Typography,
   useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
-import { formatLogLevel } from '@/components/firewall/logLevels'
 import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
+import RulesTableHead from './shared/RulesTableHead'
+import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
 
@@ -32,22 +33,6 @@ interface SecurityGroupsPanelProps {
 
 // ── Helpers ──
 
-const ActionChip = ({ action }: { action: string }) => {
-  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
-  const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
-}
-
-function formatService(rule: firewallAPI.FirewallRule): string {
-  if (rule.type === 'group') return '-'
-  if (rule.macro) return rule.macro
-  const proto = rule.proto?.toUpperCase() || ''
-  const port = rule.dport || ''
-  if (!proto && !port) return 'any'
-  if (proto && port) return `${proto}/${port}`
-  return proto || port
-}
-
 function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { vmid: number; name: string; node: string }[] {
   const vms: { vmid: number; name: string; node: string }[] = []
   for (const vm of vmFirewallData) {
@@ -56,11 +41,6 @@ function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { v
   }
   return vms
 }
-
-// ── Column header style ──
-// Body cells are all `p: 0.5`; without the same padding here the header
-// labels sit ~12px right of their column's values (MUI's default 16px).
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
 
 // ── Main Component ──
 
@@ -281,33 +261,15 @@ export default function SecurityGroupsPanel({
           '&:active': { cursor: 'grabbing' }
         }}
       >
-        <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
-          <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
-        <TableCell sx={{ p: 0.5, width: 55 }}>
-          <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(section, rule)} size="small" color="success" />
-        </TableCell>
-        <TableCell sx={{ p: 0.5, width: 65 }}>
-          <Chip
-            label={rule.type?.toUpperCase() || 'IN'}
-            size="small"
-            sx={{
-              height: 20, fontSize: 10, fontWeight: 600,
-              bgcolor: rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
-              color: rule.type === 'in' ? '#3b82f6' : '#ec4899'
-            }}
-          />
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, color: rule.source ? 'text.primary' : 'text.disabled' }}>
-          {rule.source || 'any'}
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, color: rule.dest ? 'text.primary' : 'text.disabled' }}>
-          {rule.dest || 'any'}
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
-          {formatService(rule)}
-        </TableCell>
+        {/* A security group cannot itself hold a group rule (PVE forbids
+            nesting), so `isGroupRule` stays off here: no purple chips, no
+            dashed-out source/destination. */}
+        <RuleRowLeadingCells
+          rule={rule}
+          enabled={rule.enable !== 0}
+          onToggleEnable={() => handleToggleEnable(section, rule)}
+        />
+        <RuleTrafficCells rule={rule} />
         <TableCell sx={{ p: 0.5, width: 90 }}>
           <Tooltip
             title={section.appliedTo.length > 0
@@ -322,29 +284,12 @@ export default function SecurityGroupsPanel({
             />
           </Tooltip>
         </TableCell>
-        <TableCell sx={{ p: 0.5, width: 90 }}>
-          <ActionChip action={rule.action || 'ACCEPT'} />
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
-          {formatLogLevel(rule.log)}
-        </TableCell>
-        <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-          <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
-        </TableCell>
-        <TableCell sx={{ p: 0.5, width: 70 }}>
-          <Box sx={{ display: 'flex', gap: 0 }}>
-            <Tooltip title={t('networkPage.edit')}>
-              <IconButton size="small" onClick={() => openEditRule(section.id, rule)}>
-                <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={t('networkPage.delete')}>
-              <IconButton size="small" color="error" onClick={() => setDeleteConfirm({ groupName: section.id, pos: rule.pos })}>
-                <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </TableCell>
+        <RuleActionCell rule={rule} />
+        <RuleLogCommentCells rule={rule} />
+        <RuleRowActionsCell
+          onEdit={() => openEditRule(section.id, rule)}
+          onDelete={() => setDeleteConfirm({ groupName: section.id, pos: rule.pos })}
+        />
       </TableRow>
     )
   }
@@ -514,22 +459,7 @@ export default function SecurityGroupsPanel({
       {filteredSections.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('networkPage.appliedTo')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-                <TableCell sx={{ width: 70 }}></TableCell>
-              </TableRow>
-            </TableHead>
+            <RulesTableHead showAppliedTo />
             <TableBody>
               {filteredSections.map(section => (
                 <Fragment key={section.id}>{renderSectionRow(section)}{renderSGRuleRows(section)}</Fragment>

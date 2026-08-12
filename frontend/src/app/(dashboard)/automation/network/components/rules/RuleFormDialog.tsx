@@ -1,15 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, InputLabel, MenuItem, Select, TextField, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
+import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
 
 export interface RuleFormData {
   type: string
@@ -58,16 +58,7 @@ export default function RuleFormDialog({
     onRuleChange({ ...rule, [field]: value })
   }
 
-  const autocompleteOptions = useMemo(() => {
-    const opts: { label: string; secondary?: string }[] = []
-    for (const a of aliases) {
-      opts.push({ label: a.name, secondary: a.cidr })
-    }
-    for (const s of ipsets) {
-      opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    }
-    return opts
-  }, [aliases, ipsets])
+  const autocompleteOptions = useAliasIpsetOptions(aliases, ipsets)
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -129,47 +120,21 @@ export default function RuleFormDialog({
                 </FormControl>
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <Autocomplete
-                  freeSolo
+                <AliasIpsetAutocomplete
                   options={autocompleteOptions}
-                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                  inputValue={rule.source}
-                  onInputChange={(_, v) => set('source', v)}
-                  renderOption={(props, opt) => (
-                    <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
-                        {typeof opt !== 'string' && opt.secondary && (
-                          <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                        )}
-                      </Box>
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField {...params} fullWidth size="small" label={t('network.source')} placeholder="IP, CIDR, alias..." />
-                  )}
+                  value={rule.source}
+                  onChange={(v) => set('source', v)}
+                  label={t('network.source')}
+                  placeholder="IP, CIDR, alias..."
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <Autocomplete
-                  freeSolo
+                <AliasIpsetAutocomplete
                   options={autocompleteOptions}
-                  getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                  inputValue={rule.dest}
-                  onInputChange={(_, v) => set('dest', v)}
-                  renderOption={(props, opt) => (
-                    <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
-                        {typeof opt !== 'string' && opt.secondary && (
-                          <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                        )}
-                      </Box>
-                    </li>
-                  )}
-                  renderInput={(params) => (
-                    <TextField {...params} fullWidth size="small" label={t('network.destination')} placeholder="IP, CIDR, alias..." />
-                  )}
+                  value={rule.dest}
+                  onChange={(v) => set('dest', v)}
+                  label={t('network.destination')}
+                  placeholder="IP, CIDR, alias..."
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>

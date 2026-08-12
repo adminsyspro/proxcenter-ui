@@ -4,17 +4,18 @@ import { useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Switch,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Table, TableBody, TableCell, TableContainer, TableRow,
   Tooltip, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { formatLogLevel } from '@/components/firewall/logLevels'
 import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
+import RulesTableHead from './shared/RulesTableHead'
+import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
 
@@ -29,29 +30,6 @@ interface FirewallPolicyTableProps {
   ipsets: firewallAPI.IPSet[]
   reload: () => void
 }
-
-// ── Helpers ──
-
-const ActionChip = ({ action }: { action: string }) => {
-  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
-  const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
-}
-
-function formatService(rule: firewallAPI.FirewallRule): string {
-  if (rule.type === 'group') return '-'
-  if (rule.macro) return rule.macro
-  const proto = rule.proto?.toUpperCase() || ''
-  const port = rule.dport || ''
-  if (!proto && !port) return 'any'
-  if (proto && port) return `${proto}/${port}`
-  return proto || port
-}
-
-// ── Column header style ──
-// Body cells are all `p: 0.5`; without the same padding here the header
-// labels sit ~12px right of their column's values (MUI's default 16px).
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
 
 // ── Main Component ──
 
@@ -249,60 +227,16 @@ export default function FirewallPolicyTable({
           '&:active': { cursor: 'grabbing' }
         }}
       >
-        <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
-          <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
-        <TableCell sx={{ p: 0.5, width: 55 }}>
-          <Switch checked={rule.enable !== 0} onChange={() => handleToggleEnable(rule)} size="small" color="success" />
-        </TableCell>
-        <TableCell sx={{ p: 0.5, width: 65 }}>
-          <Chip
-            label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
-            size="small"
-            sx={{
-              height: 20, fontSize: 10, fontWeight: 600,
-              bgcolor: isGroupRule ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
-              color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
-            }}
-          />
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
-          {isGroupRule ? '-' : (rule.source || 'any')}
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
-          {isGroupRule ? '-' : (rule.dest || 'any')}
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
-          {formatService(rule)}
-        </TableCell>
-        <TableCell sx={{ p: 0.5, width: 90 }}>
-          {isGroupRule ? (
-            <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
-          ) : (
-            <ActionChip action={rule.action || 'ACCEPT'} />
-          )}
-        </TableCell>
-        <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
-          {formatLogLevel(rule.log)}
-        </TableCell>
-        <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-          <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
-        </TableCell>
-        <TableCell sx={{ p: 0.5, width: 70 }}>
-          <Box sx={{ display: 'flex', gap: 0 }}>
-            <Tooltip title={t('networkPage.edit')}>
-              <IconButton size="small" onClick={() => openEditRule(rule)}>
-                <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={t('networkPage.delete')}>
-              <IconButton size="small" color="error" onClick={() => setDeleteConfirm({ pos: rule.pos })}>
-                <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </TableCell>
+        <RuleRowLeadingCells
+          rule={rule}
+          isGroupRule={isGroupRule}
+          enabled={rule.enable !== 0}
+          onToggleEnable={() => handleToggleEnable(rule)}
+        />
+        <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />
+        <RuleActionCell rule={rule} isGroupRule={isGroupRule} />
+        <RuleLogCommentCells rule={rule} />
+        <RuleRowActionsCell onEdit={() => openEditRule(rule)} onDelete={() => setDeleteConfirm({ pos: rule.pos })} />
       </TableRow>
     )
   }
@@ -373,21 +307,7 @@ export default function FirewallPolicyTable({
         {/* Cluster Rules Table */}
         <TableContainer>
           <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-                <TableCell sx={{ width: 70 }}></TableCell>
-              </TableRow>
-            </TableHead>
+            <RulesTableHead />
             <TableBody>
               {clusterRules.length > 0 ? (
                 clusterRules.map((rule, idx) => renderRuleRow(rule, idx))

@@ -4854,12 +4854,20 @@ return (
       </Dialog>
       {restoreDialog && selection?.type === 'vm' && (() => {
         const { connId, node, type, vmid } = parseVmId(selection.id)
+
+        // Une archive vzdump sur un stockage non partagé n'est lisible que
+        // depuis le nœud qui la détient : après migration du guest, son nœud
+        // courant n'est pas celui de l'archive.
+        const restoreNode = restoreDialog.backup?.source === 'vzdump' && restoreDialog.backup?.node
+          ? restoreDialog.backup.node
+          : node
+
         return (
           <RestoreVmDialog
             open
             onClose={() => setRestoreDialog(null)}
             connectionId={connId}
-            node={node}
+            node={restoreNode}
             type={(type === 'lxc' ? 'lxc' : 'qemu')}
             backup={restoreDialog.backup}
             sourceVmid={Number(vmid)}

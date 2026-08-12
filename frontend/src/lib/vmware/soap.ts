@@ -241,8 +241,129 @@ export async function soapPowerOffVm(session: SoapSession, vmid: string): Promis
   throw new Error("VM did not power off within 60s")
 }
 
+// ── vSphere task polling ────────────────────────────────────────────────────
+//
+// Every long-running vSphere call hands back a Task MOR that we poll through
+// the PropertyCollector. The three snapshot helpers below each carried their
+// own copy of that loop, all hardcoded to 60 iterations × 2 s = 120 s. That
+// budget is meaningless on real workloads: merging a multi-terabyte delta on
+// vSAN genuinely takes hours. Worse, two of the three copies simply *returned*
+// when the 120 s elapsed — reporting "removed" while vCenter was still
+// consolidating — and the next CreateSnapshot then hit a VM that could not
+// take a snapshot and timed out in turn. Field incident: a 3 TB RHEL warm
+// migration died on two consecutive 120 s stalls (remove gave up silently,
+// then create timed out), leaving an orphan snapshot growing on a production
+// VM. One helper, real budgets, and a give-up that is always visible.
+
+/** Poll interval while a vSphere task is running. */
+export const SOAP_TASK_POLL_MS = 2000
+/** Poll interval used once a task has been running for SOAP_TASK_POLL_BACKOFF_AFTER_MS. */
+export const SOAP_TASK_SLOW_POLL_MS = 10_000
+/** A task still running after this long is a slow one — stop hammering the API. */
+export const SOAP_TASK_POLL_BACKOFF_AFTER_MS = 2 * 60 * 1000
+/** Budget for CreateSnapshot_Task (a busy VM can take minutes to quiesce/stun). */
+export const SNAPSHOT_CREATE_TIMEOUT_MS = 30 * 60 * 1000
+/** Budget for RemoveSnapshot_Task / RemoveAllSnapshots_Task: the delta merge is the slow part. */
+export const SNAPSHOT_REMOVE_TIMEOUT_MS = 4 * 60 * 60 * 1000
+/**
+ * Budget for a removal whose consolidation nothing downstream waits on: the last
+ * snapshot of a run, or failure cleanup. The full 4 h above is only justified
+ * when a FOLLOWING CreateSnapshot would collide with the merge. Everywhere else
+ * the caller is either holding a powered-off source (downtime is ticking) or
+ * reporting a job that already failed, and hanging for hours trades one
+ * regression for another. The task keeps running on vCenter; we stop waiting.
+ */
+export const SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS = 15 * 60 * 1000
+/** Budget for waiting out a consolidation already in flight on a VM. */
+export const CONSOLIDATION_TIMEOUT_MS = 4 * 60 * 60 * 1000
+/** Poll interval for runtime.consolidationNeeded. */
+export const CONSOLIDATION_POLL_MS = 5000
+
+/**
+ * Per-call overrides for the task poll loop. Every field is optional and every
+ * public helper takes this as a trailing parameter, so existing call sites are
+ * unaffected; tests inject tiny values so nothing actually sleeps.
+ */
+export interface SoapTaskWaitOptions {
+  /** Total budget before the helper gives up. */
+  timeoutMs?: number
+  /** Interval between polls during the first `backoffAfterMs`. */
+  pollMs?: number
+  /** Interval between polls after `backoffAfterMs` (never shorter than pollMs). */
+  slowPollMs?: number
+  /** Elapsed time after which the poll interval widens to `slowPollMs`. */
+  backoffAfterMs?: number
+}
+
+/** Render a budget for an error message: "45s", "30min", "4h", "250ms". Pure. */
+export function formatSoapBudget(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}min`
+  const h = ms / 3_600_000
+  return `${Number.isInteger(h) ? h : h.toFixed(1)}h`
+}
+
+/**
+ * Poll a vSphere Task until it reports completion, or the budget elapses.
+ *
+ * Completion detection is deliberately the same loose `includes("success")` /
+ * `includes("error")` test the three inlined loops used before: this helper is
+ * shared by the warm, v2v and cold pipelines and a parsing change must not ride
+ * along with the timeout fix. Callers get the raw response text back and decide
+ * what "error" means for them (create throws, the removals just return).
+ *
+ * Returns the completed task's response text. An elapsed budget always throws,
+ * naming the operation, the object and the real budget: giving up quietly is
+ * the behaviour that caused the incident above, so this helper cannot do it.
+ */
+async function waitForSoapTask(
+  session: SoapSession,
+  taskMor: string,
+  opts: SoapTaskWaitOptions & {
+    timeoutMs: number
+    /** Operation + object, used verbatim in the timeout message. */
+    label: string
+    /** Task properties to retrieve (defaults to info.state only). */
+    paths?: string[]
+  },
+): Promise<{ text: string }> {
+  const pollMs = opts.pollMs ?? SOAP_TASK_POLL_MS
+  const slowPollMs = Math.max(pollMs, opts.slowPollMs ?? SOAP_TASK_SLOW_POLL_MS)
+  const backoffAfterMs = opts.backoffAfterMs ?? SOAP_TASK_POLL_BACKOFF_AFTER_MS
+  const pathTags = (opts.paths ?? ["info.state"]).map(p => `<urn:pathSet>${p}</urn:pathSet>`).join("")
+  const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>Task</urn:type>${pathTags}</urn:propSet>
+        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const started = Date.now()
+  let elapsed = 0
+  while (elapsed < opts.timeoutMs) {
+    // Sleep first, exactly like the loops this replaces: a task is never ready
+    // the instant it is created, and the first poll costs a round trip.
+    await new Promise(r => setTimeout(r, elapsed >= backoffAfterMs ? slowPollMs : pollMs))
+    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
+    if (status.text.includes("success") || status.text.includes("error")) return { text: status.text }
+    elapsed = Date.now() - started
+  }
+  throw new Error(
+    `${opts.label} did not complete within ${formatSoapBudget(opts.timeoutMs)} (vSphere task ${taskMor} is still running). ` +
+    `vCenter may still be working on it — check the source VM before retrying.`,
+  )
+}
+
 /** Create a snapshot on a VM (makes base disks read-only and downloadable while VM runs) */
-export async function soapCreateSnapshot(session: SoapSession, vmid: string, name: string, description = "", quiesce = false): Promise<string> {
+export async function soapCreateSnapshot(session: SoapSession, vmid: string, name: string, description = "", quiesce = false, opts: SoapTaskWaitOptions = {}): Promise<string> {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -266,37 +387,29 @@ export async function soapCreateSnapshot(session: SoapSession, vmid: string, nam
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
   if (!taskMor) throw new Error("No task returned from CreateSnapshot_Task")
 
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000))
-    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
-  <soapenv:Body>
-    <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
-      <urn:specSet>
-        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet><urn:pathSet>info.error</urn:pathSet><urn:pathSet>info.result</urn:pathSet></urn:propSet>
-        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
-      </urn:specSet>
-      <urn:options/>
-    </urn:RetrievePropertiesEx>
-  </soapenv:Body>
-</soapenv:Envelope>`
-    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
-    if (status.text.includes("success")) {
-      // Extract snapshot MOR from result
-      const snapMor = status.text.match(/<val[^>]*type="VirtualMachineSnapshot"[^>]*>([^<]+)<\/val>/)?.[1] || ""
-      return snapMor
-    }
-    if (status.text.includes("error")) {
-      const fault = status.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Unknown error"
-      throw new Error(`Snapshot creation failed: ${fault}`)
-    }
+  const status = await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_CREATE_TIMEOUT_MS,
+    label: `Snapshot creation "${name}" on VM ${vmid}`,
+    paths: ["info.state", "info.error", "info.result"],
+  })
+  if (status.text.includes("success")) {
+    // Extract snapshot MOR from result
+    return status.text.match(/<val[^>]*type="VirtualMachineSnapshot"[^>]*>([^<]+)<\/val>/)?.[1] || ""
   }
-  throw new Error("Snapshot creation timed out after 120s")
+  const fault = status.text.match(/<localizedMessage>([^<]*)<\/localizedMessage>/)?.[1] || "Unknown error"
+  throw new Error(`Snapshot creation failed: ${fault}`)
 }
 
-/** Remove all snapshots from a VM */
-export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string): Promise<void> {
+/**
+ * Remove all snapshots from a VM.
+ *
+ * Waits for the consolidation to actually finish (SNAPSHOT_REMOVE_TIMEOUT_MS by
+ * default) and THROWS when the budget elapses. It used to fall out of a 120 s
+ * loop and return as if the removal had succeeded — see the header comment on
+ * waitForSoapTask for what that silence cost in the field.
+ */
+export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string, opts: SoapTaskWaitOptions = {}): Promise<void> {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -317,24 +430,11 @@ export async function soapRemoveAllSnapshots(session: SoapSession, vmid: string)
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
   if (!taskMor) return
 
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000))
-    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
-  <soapenv:Body>
-    <urn:RetrievePropertiesEx>
-      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
-      <urn:specSet>
-        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet></urn:propSet>
-        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
-      </urn:specSet>
-      <urn:options/>
-    </urn:RetrievePropertiesEx>
-  </soapenv:Body>
-</soapenv:Envelope>`
-    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
-    if (status.text.includes("success") || status.text.includes("error")) return
-  }
+  await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
+    label: `Removal of all snapshots on VM ${vmid}`,
+  })
 }
 
 /**
@@ -373,8 +473,14 @@ export async function soapGetSnapshotQuiesced(session: SoapSession, snapshotMor:
  * live migration path so we don't destroy pre-existing snapshots the user had
  * on the source VM, only the one ProxCenter created for the NFC export.
  * removeChildren=true consolidates any child snapshots into the parent.
+ *
+ * Waits up to SNAPSHOT_REMOVE_TIMEOUT_MS (overridable) for the merge to finish
+ * and THROWS when the budget elapses, instead of the old 120 s loop that
+ * returned as if the snapshot were gone while vCenter was still consolidating.
+ * Callers that treat a removal failure as non-fatal already wrap this in a
+ * `.catch()`; they now get a warning line instead of silence.
  */
-export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: string, removeChildren = true): Promise<void> {
+export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: string, removeChildren = true, opts: SoapTaskWaitOptions = {}): Promise<void> {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -392,28 +498,136 @@ export async function soapRemoveSnapshot(session: SoapSession, snapshotMor: stri
     throw new Error(`Failed to remove snapshot ${snapshotMor}: ${fault}`)
   }
 
-  // Wait for task completion (up to 2 min: merging a large delta can be slow)
+  // Wait for task completion: merging a multi-terabyte delta takes hours, not
+  // the 2 min this used to allow before returning as if it had worked.
   const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
   if (!taskMor) return
 
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000))
-    const statusBody = `<?xml version="1.0" encoding="UTF-8"?>
+  await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
+    label: `Removal of snapshot ${snapshotMor}`,
+  })
+}
+
+/**
+ * Wait until the VM has no pending snapshot consolidation.
+ *
+ * RemoveSnapshot_Task reaching "success" does NOT mean the datastore is done:
+ * vCenter can still be merging the delta, and it flags that on the VM as
+ * runtime.consolidationNeeded. Asking for a new snapshot during that window
+ * produces a CreateSnapshot task that never completes — the exact double stall
+ * that killed a 3 TB warm migration in the field.
+ *
+ * FAIL-OPEN by contract: it never throws and never blocks forever. A VM whose
+ * consolidation flag is set for an unrelated, pre-existing reason must stay
+ * migratable, so the budget elapsing returns false and the caller is expected
+ * to log a warning and carry on. A query error is also treated as "can't tell,
+ * proceed" (returns true) rather than stalling the migration on a blip.
+ *
+ * `onWaitStart` fires once, the first time consolidation is observed pending,
+ * so the caller can log BEFORE a potentially long wait rather than after it.
+ */
+export async function soapWaitForConsolidation(
+  session: SoapSession,
+  vmid: string,
+  timeoutMs: number = CONSOLIDATION_TIMEOUT_MS,
+  pollMs: number = CONSOLIDATION_POLL_MS,
+  onWaitStart?: () => void,
+): Promise<boolean> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:RetrievePropertiesEx>
       <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
       <urn:specSet>
-        <urn:propSet><urn:type>Task</urn:type><urn:pathSet>info.state</urn:pathSet></urn:propSet>
-        <urn:objectSet><urn:obj type="Task">${taskMor}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+        <urn:propSet><urn:type>VirtualMachine</urn:type><urn:pathSet>runtime.consolidationNeeded</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="VirtualMachine">${vmid}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
       </urn:specSet>
       <urn:options/>
     </urn:RetrievePropertiesEx>
   </soapenv:Body>
 </soapenv:Envelope>`
-    const status = await soapRequest(session.baseUrl, statusBody, session.cookie, session.insecureTLS)
-    if (status.text.includes("success") || status.text.includes("error")) return
+
+  const started = Date.now()
+  let announced = false
+  do {
+    let pending: boolean
+    try {
+      const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+      // Absent property (older/ESXi hosts, VM without snapshots) reads as "".
+      pending = extractProp(result.text, "runtime.consolidationNeeded").trim() === "true"
+    } catch {
+      // Can't tell — never turn a transient query failure into a stalled migration.
+      return true
+    }
+    if (!pending) return true
+    if (!announced) { announced = true; onWaitStart?.() }
+    await new Promise(r => setTimeout(r, pollMs))
+  } while (Date.now() - started < timeoutMs)
+  return false
+}
+
+/**
+ * Flatten a VirtualMachine `snapshot` property payload into {name, mor} pairs.
+ *
+ * The payload nests VirtualMachineSnapshotTree entries: each carries its own
+ * `<snapshot type="VirtualMachineSnapshot">snapshot-NNN</snapshot>` followed by
+ * `<name>`, and children hang off `<childSnapshotList>` inside their parent. The
+ * MOR always precedes the name within a node, so one linear scan that pairs each
+ * snapshot reference with the next name walks the whole tree, depth included,
+ * without parsing the nesting. `<currentSnapshot>` is a different element and is
+ * intentionally not matched. Pure — unit-tested.
+ */
+export function parseSnapshotList(snapshotXml: string): Array<{ name: string; mor: string }> {
+  const out: Array<{ name: string; mor: string }> = []
+  if (!snapshotXml) return out
+  // `<snapshot …>` only — `<currentSnapshot>` starts with a different tag name
+  // and is skipped. Attributes are matched loosely so an extra xsi:type or a
+  // different attribute order does not silently disable the orphan recovery.
+  const tokenRe = /<snapshot\b[^>]*type="VirtualMachineSnapshot"[^>]*>([^<]*)<\/snapshot>|<name>([\s\S]*?)<\/name>/g
+  let pendingMor: string | null = null
+  let m: RegExpExecArray | null
+  while ((m = tokenRe.exec(snapshotXml)) !== null) {
+    if (m[1] !== undefined) {
+      pendingMor = m[1].trim()
+    } else if (pendingMor) {
+      out.push({ name: m[2].trim(), mor: pendingMor })
+      pendingMor = null
+    }
   }
+  return out
+}
+
+/**
+ * List the VM's snapshots whose name starts with `prefix`.
+ *
+ * Used to recover from a CreateSnapshot that timed out: vCenter may still land
+ * the snapshot after we gave up waiting, and without its MOR failure cleanup
+ * cannot remove it (the customer is left with a growing orphan delta on a
+ * production VM). Resolving by name is the only handle we have at that point.
+ */
+export async function soapFindSnapshotsByNamePrefix(
+  session: SoapSession,
+  vmid: string,
+  prefix: string,
+): Promise<Array<{ name: string; mor: string }>> {
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>VirtualMachine</urn:type><urn:pathSet>snapshot</urn:pathSet></urn:propSet>
+        <urn:objectSet><urn:obj type="VirtualMachine">${vmid}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+
+  const result = await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS)
+  return parseSnapshotList(extractProp(result.text, "snapshot")).filter(s => s.name.startsWith(prefix))
 }
 
 // ── HttpNfcLease (Export VM) — for downloading disks when snapshots are active ──

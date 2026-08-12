@@ -44,6 +44,7 @@ import {
   soapNfcLeaseAbort,
   soapCreateSnapshot,
   soapRemoveSnapshot,
+  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
   soapGetSnapshotQuiesced,
   soapPowerOffVm,
 } from "@/lib/vmware/soap"
@@ -1843,7 +1844,9 @@ export async function runV2vMigrationPipeline(
           )
         }
         try {
-          await soapRemoveSnapshot(vmwareSession, liveSnapshotMor)
+          // The source is already powered off here: this wait IS guest downtime,
+          // so it stays bounded instead of inheriting the multi-hour merge budget.
+          await soapRemoveSnapshot(vmwareSession, liveSnapshotMor, true, { timeoutMs: SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS })
           await appendLog(jobId, "Source snapshot removed", "success")
           liveSnapshotMor = null
         } catch (snapErr: any) {
@@ -2685,7 +2688,9 @@ export async function runV2vMigrationPipeline(
     // snapshot was either removed at that point or is a harmless leftover).
     if (liveSnapshotMor && vmwareSession && !livePoweredOff) {
       try {
-        await soapRemoveSnapshot(vmwareSession, liveSnapshotMor)
+        // Failure cleanup: the job is already dead, so bound the wait rather
+        // than hold the pipeline open for hours reporting an error.
+        await soapRemoveSnapshot(vmwareSession, liveSnapshotMor, true, { timeoutMs: SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS })
         await appendLog(jobId, "Removed leftover live-migration snapshot on source VM", "info")
       } catch (snapCleanupErr: any) {
         await appendLog(

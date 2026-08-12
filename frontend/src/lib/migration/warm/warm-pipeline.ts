@@ -6,6 +6,8 @@ import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapCreateSnapshot, soapRemoveSnapshot,
+  soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS,
+  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import {
@@ -232,6 +234,122 @@ export function checksumDiskWindows(diskIndex: number, diskCount: number): { sca
   const span = 70 / diskCount
   const scanStart = 10 + span * diskIndex
   return { scanStart, scanEnd: scanStart + 0.3 * span, applyEnd: 10 + span * (diskIndex + 1) }
+}
+
+/**
+ * Snapshot-removal budget for the LAST pass and for failure cleanup.
+ *
+ * The per-pass removal must be waited out in full (SNAPSHOT_REMOVE_TIMEOUT_MS,
+ * 4 h): the next pass creates a snapshot and vCenter cannot do that while it
+ * consolidates. After the cutover pass no snapshot follows, and the target VM
+ * is waiting to be attached and booted — blocking that for hours on a source
+ * that is already powered off would be its own regression. Same on the failure
+ * path: the job has already failed, so cleanup notes what it could not confirm
+ * and moves on. In both cases the removal task keeps running on vCenter; we
+ * simply stop waiting for it.
+ */
+const TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS = SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS
+
+/**
+ * Snapshot budgets for the CUTOVER pass, where the source is already powered
+ * off and every second is guest downtime.
+ *
+ * The generous defaults (30 min to create, 4 h to wait out a consolidation)
+ * are right while the guest is still serving users: spending them buys a
+ * migration that would otherwise die. They are wrong here. The declared
+ * downtime budget for a warm migration defaults to 300 s, so inheriting hours
+ * of patience in this window would silently turn a "few seconds" cutover into
+ * an outage — exactly the promise warm migration exists to keep. Both waits
+ * stay bounded; the consolidation one is fail-open and proceeds regardless.
+ */
+const CUTOVER_SNAPSHOT_CREATE_TIMEOUT_MS = 5 * 60 * 1000
+const CUTOVER_CONSOLIDATION_TIMEOUT_MS = 2 * 60 * 1000
+
+/**
+ * Slice of the consolidation wait between two cancellation checks. The whole
+ * budget is CONSOLIDATION_TIMEOUT_MS (hours); polling it in slices keeps the
+ * job cancellable while it waits.
+ */
+const CONSOLIDATION_SLICE_MS = 60_000
+
+/**
+ * Create a warm snapshot and record its MOR for cleanup — including when the
+ * create fails.
+ *
+ * `ourSnapshots.push(mor)` used to run only after soapCreateSnapshot returned,
+ * so a create that timed out (or succeeded without a parseable MOR) left the
+ * pipeline with no handle on a snapshot vCenter went on to create anyway. That
+ * is how a customer ended up with a growing orphan `proxcenter-warm-delta-1` on
+ * a production VM. On failure we now resolve the snapshot by its exact name and
+ * push whatever we find, so failure cleanup can remove it. The recovery has its
+ * own try/catch: it must never mask the real error, which is always rethrown.
+ */
+export async function createWarmSnapshot(
+  session: SoapSession,
+  vmid: string,
+  snapName: string,
+  ourSnapshots: string[],
+  onRecovered?: (mor: string) => Promise<void> | void,
+  createTimeoutMs?: number,
+): Promise<string> {
+  const recover = async () => {
+    try {
+      for (const s of await soapFindSnapshotsByNamePrefix(session, vmid, snapName)) {
+        if (ourSnapshots.includes(s.mor)) continue
+        ourSnapshots.push(s.mor)
+        await onRecovered?.(s.mor)
+      }
+    } catch { /* a failed recovery must never replace the real error */ }
+  }
+
+  let snapMor: string
+  try {
+    snapMor = await soapCreateSnapshot(session, vmid, snapName, "warm migration", false, { timeoutMs: createTimeoutMs })
+  } catch (err) {
+    await recover()
+    throw err
+  }
+  if (!snapMor) {
+    await recover()
+    throw new Error(`CreateSnapshot (${snapName}) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually`)
+  }
+  ourSnapshots.push(snapMor)
+  return snapMor
+}
+
+/**
+ * Remove every leftover `proxcenter-warm-*` snapshot from the source VM.
+ *
+ * Backstop for the MORs we never learned: a create that timed out can still
+ * land on the source after cleanup ran through `ourSnapshots`. Safe to sweep by
+ * name because the pipeline enforces one warm job per source VM (activeWarmVms),
+ * so no other run owns a snapshot with this prefix. Never throws — cleanup runs
+ * on the failure path and must not add a second failure. Returns how many
+ * snapshots it confirmed removed.
+ */
+export async function sweepWarmSnapshots(
+  session: SoapSession,
+  vmid: string,
+  log: (msg: string) => Promise<void>,
+): Promise<number> {
+  const safeLog = (msg: string) => Promise.resolve().then(() => log(msg)).catch(() => {})
+  let removed = 0
+  let leftovers: Array<{ name: string; mor: string }>
+  try {
+    leftovers = await soapFindSnapshotsByNamePrefix(session, vmid, `${SNAPSHOT_PREFIX}-`)
+  } catch {
+    return 0
+  }
+  for (const s of leftovers) {
+    try {
+      await soapRemoveSnapshot(session, s.mor, false, { timeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS })
+      removed++
+      await safeLog(`Removed leftover warm snapshot "${s.name}" (${s.mor}) from the source VM`)
+    } catch (e: any) {
+      await safeLog(`Leftover warm snapshot "${s.name}" (${s.mor}) could not be confirmed removed (${e?.message || e}); remove it manually if it is still there`)
+    }
+  }
+  return removed
 }
 
 /** One copy pass's slot on the locked progress scale (see scaleWarmProgress). */
@@ -557,11 +675,48 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       }
     }
 
+    /**
+     * Wait out any consolidation still running on the source before asking for
+     * a new snapshot. Root cause of the field incident: RemoveSnapshot_Task
+     * reports success while vCenter keeps merging the delta, and a
+     * CreateSnapshot issued during that window never completes — two 120 s
+     * stalls in a row and a dead 14-hour migration.
+     *
+     * Fail-open: a VM flagged for an unrelated reason must stay migratable, so
+     * an elapsed budget only produces a warning and the pass starts anyway. The
+     * budget is consumed in short slices rather than one long call so a cancel
+     * request is honoured within the slice instead of hours later.
+     */
+    async function waitOutSourceConsolidation(label: string, budgetMs = CONSOLIDATION_TIMEOUT_MS): Promise<void> {
+      const t0 = Date.now()
+      let announced = false
+      const announce = () => {
+        if (announced) return
+        announced = true
+        void appendLog(jobId, `Source is still consolidating a previous snapshot; waiting before the ${label} pass (merging a multi-terabyte delta can take hours). Cancel the job if you would rather stop here.`, "warn").catch(() => {})
+      }
+      let cleared = false
+      while (!cleared && Date.now() - t0 < budgetMs) {
+        if (isCancelled(jobId)) throw new Error("Migration cancelled")
+        cleared = await soapWaitForConsolidation(soapSession!, config.sourceVmId, Math.min(CONSOLIDATION_SLICE_MS, budgetMs), undefined, announce)
+      }
+      const waitedSec = Math.round((Date.now() - t0) / 1000)
+      if (!cleared) {
+        await appendLog(jobId, `Source is STILL consolidating after ${waitedSec}s; starting the ${label} pass anyway — vCenter may reject the snapshot`, "warn")
+      } else if (announced) {
+        await appendLog(jobId, `Source finished consolidating after ${waitedSec}s; starting the ${label} pass`, "info")
+      }
+    }
+
     // Run one CBT pass: snapshot, per-disk query+read+apply, record changeIds, remove the snapshot.
-    async function runCbtPass(label: string, baseline: (deviceKey: number) => string, window: PassWindow): Promise<number> {
-      const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-${label}`, "warm migration", false)
-      if (!snapMor) throw new Error(`CreateSnapshot (${label}) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually`)
-      ourSnapshots.push(snapMor)
+    async function runCbtPass(
+      label: string, baseline: (deviceKey: number) => string, window: PassWindow,
+      passOpts: { removeTimeoutMs?: number; createTimeoutMs?: number; consolidationTimeoutMs?: number } = {},
+    ): Promise<number> {
+      await waitOutSourceConsolidation(label, passOpts.consolidationTimeoutMs)
+      const snapMor = await createWarmSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-${label}`, ourSnapshots,
+        mor => appendLog(jobId, `CreateSnapshot (${label}) failed, but the snapshot ${mor} exists on the source — it is now tracked and will be cleaned up`, "warn"),
+        passOpts.createTimeoutMs)
       let bytes = 0
       try {
         // Query every disk's changed areas up front so the pass has its byte
@@ -601,9 +756,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         }
       } finally {
         // Always remove OUR snapshot, by its specific MOR, never the children (a
-        // user snapshot taken under ours must survive — section 11).
-        await soapRemoveSnapshot(soapSession!, snapMor, false).catch(async () => {
-          await appendLog(jobId, `Warning: could not remove warm snapshot ${snapMor}; remove it manually`, "warn")
+        // user snapshot taken under ours must survive — section 11). Waited out
+        // in full by default: the next pass cannot snapshot a VM that is still
+        // consolidating this one.
+        await soapRemoveSnapshot(soapSession!, snapMor, false, { timeoutMs: passOpts.removeTimeoutMs }).catch(async (e: any) => {
+          await appendLog(jobId, `Warning: warm snapshot ${snapMor} was not confirmed removed (${e?.message || e}); vCenter may still be consolidating it — check the source VM`, "warn")
         })
         const k = ourSnapshots.indexOf(snapMor)
         if (k >= 0) ourSnapshots.splice(k, 1)
@@ -659,7 +816,16 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
         "Cutover: requesting clean guest shutdown (VMware Tools)…")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
-      await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*", { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
+      // Last pass, and the only one that runs on a powered-off source: every
+      // wait here is guest downtime, so all three budgets are the short ones
+      // (see CUTOVER_SNAPSHOT_CREATE_TIMEOUT_MS and TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS).
+      await runCbtPass("cutover", dk => diskState.get(dk)!.currentChangeId || "*",
+        { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 },
+        {
+          removeTimeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS,
+          createTimeoutMs: CUTOVER_SNAPSHOT_CREATE_TIMEOUT_MS,
+          consolidationTimeoutMs: CUTOVER_CONSOLIDATION_TIMEOUT_MS,
+        })
     } else {
       // ── checksum fallback: stop source, full block-diff vs the (zeroed) target ──
       // The early shutdown belongs to the full copy on this path, NOT the cutover:
@@ -670,9 +836,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
         "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…")
       await updateJob(jobId, "full_copy", { progress: 10 })
-      const snapMor = await soapCreateSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, "warm migration", false)
-      if (!snapMor) throw new Error("CreateSnapshot (checksum) returned no snapshot reference; a snapshot may have been created on the source — verify and remove it manually")
-      ourSnapshots.push(snapMor)
+      const snapMor = await createWarmSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, ourSnapshots,
+        mor => appendLog(jobId, `CreateSnapshot (checksum) failed, but the snapshot ${mor} exists on the source — it is now tracked and will be cleaned up`, "warn"))
       try {
         for (let i = 0; i < vmConfig.disks.length; i++) {
           const disk = vmConfig.disks[i]
@@ -728,7 +893,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         // completed; a failure mid loop leaves the volumes unmarked and freeable.
         markVolumesCopied(allocatedVolumes)
       } finally {
-        await soapRemoveSnapshot(soapSession!, snapMor, false).catch(() => {})
+        // Terminal on this path too: the checksum fallback takes exactly one
+        // snapshot, so nothing downstream waits on the consolidation.
+        await soapRemoveSnapshot(soapSession!, snapMor, false, { timeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS }).catch(async (e: any) => {
+          await appendLog(jobId, `Warning: warm snapshot ${snapMor} was not confirmed removed (${e?.message || e}); vCenter may still be consolidating it — check the source VM`, "warn").catch(() => {})
+        })
         const k = ourSnapshots.indexOf(snapMor)
         if (k >= 0) ourSnapshots.splice(k, 1)
       }
@@ -880,7 +1049,14 @@ async function cleanupOnFailure(
     if (nodeIp) await stopVddkReader(config.targetConnectionId, nodeIp, r).catch(() => {})
   }
   if (session) {
-    for (const mor of [...ourSnapshots]) await soapRemoveSnapshot(session, mor, false).catch(() => {})
+    for (const mor of [...ourSnapshots]) {
+      await soapRemoveSnapshot(session, mor, false, { timeoutMs: TERMINAL_SNAPSHOT_REMOVE_TIMEOUT_MS }).catch(() => {})
+    }
+    // Backstop for the MORs we never learned (a create that timed out can still
+    // land afterwards): sweep anything named proxcenter-warm-* off the source.
+    // One warm job per source VM, so nothing else owns these.
+    await sweepWarmSnapshots(session, config.sourceVmId,
+      msg => appendLog(jobId, msg, "warn")).catch(() => {})
   }
   // Unmap RBD + free volumes the VM never referenced (orphans). volumesToFree also
   // covers a volume created by an allocation that reported a failure, and skips the

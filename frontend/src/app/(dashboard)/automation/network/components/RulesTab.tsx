@@ -158,6 +158,7 @@ export default function RulesTab({
       {currentTab === 2 && (
         <VMRulesPanel
           vmFirewallData={vmFirewallData}
+          securityGroups={securityGroups}
           loadingVMRules={loadingVMRules}
           selectedConnection={selectedConnection}
           loadVMFirewallData={loadVMFirewallData}

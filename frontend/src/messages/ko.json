@@ -5952,6 +5952,19 @@
     "sourcePort": "출발지 포트",
     "destPort": "목적지 포트",
     "logLevel": "로그 수준",
+    "membersTitle": "{group} 멤버",
+    "membersAttachLabel": "연결할 게스트",
+    "membersAttach": "연결",
+    "membersDetach": "연결 해제",
+    "membersCurrent": "연결된 게스트",
+    "membersEmpty": "이 그룹을 참조하는 게스트가 아직 없습니다",
+    "membersPartial": "게스트 {count}개를 검사하지 않았으므로 이 개수는 불완전할 수 있습니다",
+    "membersAttached": "{group}을 게스트 {count}개에 연결했습니다",
+    "membersAttachFailed": "연결 실패: {guests}",
+    "membersDetached": "{group}을 {guest}에서 연결 해제했습니다",
+    "membersDetachFailed": "연결 해제 실패: {guests}",
+    "membersScopeCluster": "클러스터 규칙에서 참조됨",
+    "membersScopeNodes": "노드 규칙에서 참조됨: {nodes}",
     "direction": "방향",
     "service": "서비스",
     "typeIn": "IN (인바운드)",
@@ -5980,7 +5993,8 @@
     "vmFirewallCoverage": "VM 방화벽 적용률",
     "protectedLabel": "보호됨",
     "unprotectedLabel": "보호되지 않음",
-    "withSgLabel": "SG 있음"
+    "withSgLabel": "SG 있음",
+    "logLevelShort": "로그"
   },
   "themes": {
     "categories": {

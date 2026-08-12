@@ -5952,6 +5952,19 @@
     "sourcePort": "Puerto de origen",
     "destPort": "Puerto de destino",
     "logLevel": "Nivel de log",
+    "membersTitle": "Miembros de {group}",
+    "membersAttachLabel": "Invitados a asociar",
+    "membersAttach": "Asociar",
+    "membersDetach": "Desasociar",
+    "membersCurrent": "Invitados asociados",
+    "membersEmpty": "Ningún invitado referencia todavía este grupo",
+    "membersPartial": "{count} invitados no se han analizado, este recuento puede estar incompleto",
+    "membersAttached": "{group} asociado a {count} invitado(s)",
+    "membersAttachFailed": "No se pudo asociar: {guests}",
+    "membersDetached": "{group} desasociado de {guest}",
+    "membersDetachFailed": "No se pudo desasociar: {guests}",
+    "membersScopeCluster": "Referenciado por una regla de clúster",
+    "membersScopeNodes": "Referenciado por reglas de nodo: {nodes}",
     "direction": "Dir",
     "service": "Servicio",
     "typeIn": "IN (entrante)",
@@ -5980,7 +5993,8 @@
     "vmFirewallCoverage": "Cobertura de firewall de VM",
     "protectedLabel": "Protegido",
     "unprotectedLabel": "No protegido",
-    "withSgLabel": "Con SG"
+    "withSgLabel": "Con SG",
+    "logLevelShort": "Log"
   },
   "themes": {
     "categories": {

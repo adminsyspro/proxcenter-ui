@@ -23,6 +23,12 @@ import { formatLogLevel } from '@/components/firewall/logLevels'
 // Colour of the ACCEPT/DROP/REJECT chip. Deliberately NOT the ActionChip of
 // `@/components/firewall/shared`: that one is drawn lighter (alpha 0.15/0.3)
 // and belongs to the VM/node firewall tabs. These four tables use 0.22/0.35.
+/**
+ * Font size of the rules tables, shared with RulesTableHead. Was 11px, which
+ * read noticeably smaller than the rest of the page.
+ */
+export const RULE_CELL_FONT_SIZE = 13
+
 const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
@@ -61,7 +67,7 @@ export function RuleRowLeadingCells({ rule, isGroupRule = false, enabled, onTogg
       <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
         <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
       </TableCell>
-      <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
+      <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
       <TableCell sx={{ p: 0.5, width: 55 }}>
         <Switch checked={enabled} onChange={onToggleEnable} size="small" color="success" />
       </TableCell>
@@ -96,13 +102,13 @@ function formatService(rule: firewallAPI.FirewallRule): string {
 export function RuleTrafficCells({ rule, isGroupRule = false }: RuleCellsProps) {
   return (
     <>
-      <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+      <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
         {isGroupRule ? '-' : (rule.source || 'any')}
       </TableCell>
-      <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+      <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
         {isGroupRule ? '-' : (rule.dest || 'any')}
       </TableCell>
-      <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
+      <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, p: 0.5, width: 100 }}>
         {formatService(rule)}
       </TableCell>
     </>
@@ -130,11 +136,11 @@ export function RuleLogCommentCells({ rule }: { rule: firewallAPI.FirewallRule }
 
   return (
     <>
-      <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: logsNothing ? 'text.disabled' : 'text.primary' }}>
+      <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, p: 0.5, width: 80, color: logsNothing ? 'text.disabled' : 'text.primary' }}>
         {logLevel}
       </TableCell>
       <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-        <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
+        <Tooltip title={rule.comment || ''}><span style={{ fontSize: RULE_CELL_FONT_SIZE }}>{rule.comment || '-'}</span></Tooltip>
       </TableCell>
     </>
   )

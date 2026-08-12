@@ -22,6 +22,7 @@ import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpse
 
 interface VMRulesPanelProps {
   vmFirewallData: VMFirewallInfo[]
+  securityGroups: firewallAPI.SecurityGroup[]
   loadingVMRules: boolean
   selectedConnection: string
   loadVMFirewallData: () => Promise<void>
@@ -40,7 +41,7 @@ function getVlanColor(vlanKey: string, index: number): string {
 
 // ── Main Component ──
 
-export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
+export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -518,10 +519,13 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
             <Grid size={{ xs: 6, sm: 2.5 }}>
               <FormControl fullWidth size="small">
                 <InputLabel>Action</InputLabel>
+                {/* PVE carries the security group name in `action` for a GROUP
+                    rule, so offering ACCEPT/DROP/REJECT there could only produce
+                    an invalid rule. Same swap as the host and cluster dialogs. */}
                 <Select value={newVMRule.action} label="Action" onChange={(e) => setNewVMRule(prev => ({ ...prev, action: e.target.value }))}>
-                  <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                  <MenuItem value="DROP">DROP</MenuItem>
-                  <MenuItem value="REJECT">REJECT</MenuItem>
+                  {newVMRule.type === 'group'
+                    ? securityGroups.map(sg => <MenuItem key={sg.group} value={sg.group}>{sg.group}</MenuItem>)
+                    : ['ACCEPT', 'DROP', 'REJECT'].map(a => <MenuItem key={a} value={a}>{a}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>

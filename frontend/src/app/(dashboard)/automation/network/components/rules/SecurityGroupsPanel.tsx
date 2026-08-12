@@ -16,6 +16,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
+import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
@@ -23,12 +24,18 @@ import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeading
 interface SecurityGroupsPanelProps {
   securityGroups: firewallAPI.SecurityGroup[]
   vmFirewallData: VMFirewallInfo[]
+  loadingVMRules: boolean
+  /** Guests the firewall scan left out, so the membership count can say it is partial. */
+  guestsNotScanned: number
+  clusterRules: firewallAPI.FirewallRule[]
+  hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
   firewallMode: firewallAPI.FirewallMode
   selectedConnection: string
   totalRules: number
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
   reload: () => void
+  reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
 }
 
 // ── Helpers ──
@@ -42,11 +49,34 @@ function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { v
   return vms
 }
 
+/**
+ * A security group can also be referenced outside guests: by a cluster rule or
+ * by a node's own rules. Both are supported elsewhere in this UI, and a group
+ * used that way used to read "0 VMs", which reads as "unused" and invites
+ * deleting a group that is in fact enforcing traffic.
+ */
+function computeScopeRefs(
+  sgName: string,
+  clusterRules: firewallAPI.FirewallRule[],
+  hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
+): { cluster: boolean; nodes: string[] } {
+  const referencesGroup = (rules: firewallAPI.FirewallRule[] | undefined) =>
+    (rules || []).some(r => r.type === 'group' && r.action === sgName)
+
+  return {
+    cluster: referencesGroup(clusterRules),
+    nodes: Object.entries(hostRulesByNode || {})
+      .filter(([, rules]) => referencesGroup(rules))
+      .map(([node]) => node)
+      .sort((a, b) => a.localeCompare(b)),
+  }
+}
+
 // ── Main Component ──
 
 export default function SecurityGroupsPanel({
-  securityGroups, vmFirewallData, firewallMode, selectedConnection, totalRules,
-  aliases, ipsets, reload
+  securityGroups, vmFirewallData, loadingVMRules, guestsNotScanned, clusterRules, hostRulesByNode,
+  firewallMode, selectedConnection, totalRules, aliases, ipsets, reload, reloadVMFirewallRules
 }: SecurityGroupsPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -69,6 +99,9 @@ export default function SecurityGroupsPanel({
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<{ groupName: string; pos: number } | null>(null)
+
+  // Members (which guests this group is attached to)
+  const [membersOf, setMembersOf] = useState<string | null>(null)
 
   // Drag & drop
   const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
@@ -274,20 +307,9 @@ export default function SecurityGroupsPanel({
           onToggleEnable={() => handleToggleEnable(section, rule)}
         />
         <RuleTrafficCells rule={rule} />
-        <TableCell sx={{ p: 0.5, width: 90 }}>
-          <Tooltip
-            title={section.appliedTo.length > 0
-              ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-              : t('networkPage.noVmsReferencing')
-            }
-          >
-            <Chip
-              label={t('networkPage.vmCount', { count: section.appliedTo.length })}
-              size="small" variant="outlined"
-              sx={{ height: 20, fontSize: 10, cursor: 'help' }}
-            />
-          </Tooltip>
-        </TableCell>
+        {/* No "Applied to" cell per rule: membership belongs to the group, not
+            to one of its rules, and repeating the same count on every row said
+            nothing. It lives on the group header, next to the members action. */}
         <RuleActionCell rule={rule} />
         <RuleLogCommentCells rule={rule} />
         <RuleRowActionsCell
@@ -313,7 +335,7 @@ export default function SecurityGroupsPanel({
         }}
         onClick={() => toggleSection(section.id)}
       >
-        <TableCell colSpan={12} sx={{ py: 1, px: 2 }}>
+        <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
               <i
@@ -332,22 +354,59 @@ export default function SecurityGroupsPanel({
                 sx={{ height: 20, fontSize: 10, ml: 0.5 }}
               />
               <Tooltip
-                title={section.appliedTo.length > 0
-                  ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                  : t('networkPage.noVmsReferencing')
+                title={loadingVMRules
+                  ? t('networkPage.loading')
+                  : [
+                    section.appliedTo.length > 0
+                      ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
+                      : t('networkPage.noVmsReferencing'),
+                    guestsNotScanned > 0 ? t('firewall.membersPartial', { count: guestsNotScanned }) : '',
+                  ].filter(Boolean).join(' — ')
                 }
               >
                 <Chip
                   icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
-                  label={t('networkPage.vmCount', { count: section.appliedTo.length })}
+                  label={loadingVMRules ? '…' : t('networkPage.vmCount', { count: section.appliedTo.length })}
                   size="small"
                   variant="outlined"
-                  sx={{ height: 20, fontSize: 10, cursor: 'help' }}
+                  onClick={() => setMembersOf(section.id)}
+                  sx={{ height: 20, fontSize: 10 }}
                 />
               </Tooltip>
+              {/* A group can also be attached at cluster or node scope; without
+                  this the chip above would read "0 VMs" on a group that is very
+                  much in use. */}
+              {(() => {
+                const scope = computeScopeRefs(section.id, clusterRules, hostRulesByNode)
+
+                if (!scope.cluster && scope.nodes.length === 0) return null
+
+                const parts = [
+                  scope.cluster ? t('firewall.membersScopeCluster') : '',
+                  scope.nodes.length > 0 ? t('firewall.membersScopeNodes', { nodes: scope.nodes.join(', ') }) : '',
+                ].filter(Boolean)
+
+                return (
+                  <Tooltip title={parts.join(' — ')}>
+                    <Chip
+                      icon={<i className="ri-server-line" style={{ fontSize: 12 }} />}
+                      label={scope.cluster ? t('firewall.cluster') : scope.nodes.length}
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      sx={{ height: 20, fontSize: 10, cursor: 'help' }}
+                    />
+                  </Tooltip>
+                )
+              })()}
             </Box>
 
             <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+              <Tooltip title={t('firewall.membersTitle', { group: section.name })}>
+                <IconButton size="small" onClick={() => setMembersOf(section.id)}>
+                  <i className="ri-links-line" style={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
               <Tooltip title={t('networkPage.addRule')}>
                 <IconButton size="small" onClick={() => openAddRule(section.id)}>
                   <i className="ri-add-line" style={{ fontSize: 16 }} />
@@ -372,7 +431,7 @@ export default function SecurityGroupsPanel({
     if (section.rules.length === 0) {
       return (
         <TableRow key={`empty-${section.id}`}>
-          <TableCell colSpan={12} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+          <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body2">{t('networkPage.noRules')}</Typography>
             <Button size="small" sx={{ mt: 1 }} onClick={() => openAddRule(section.id)}>
               {t('networkPage.addRule')}
@@ -398,7 +457,9 @@ export default function SecurityGroupsPanel({
         </Typography>
         <Box sx={{ p: 3, bgcolor: alpha(theme.palette.divider, 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>{t('network.availableAlternatives')}</Typography>
-          <Stack spacing={1.5} alignItems="flex-start">
+          {/* Centred as a group: the panel is textAlign center, so leaving the
+              rows flex-start gave centred labels above left-anchored rows. */}
+          <Stack spacing={1.5} alignItems="center">
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#8b5cf6', 0.15) }}>
                 <i className="ri-price-tag-3-line" style={{ fontSize: 16, color: '#8b5cf6' }} />
@@ -463,7 +524,7 @@ export default function SecurityGroupsPanel({
       {filteredSections.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <RulesTableHead showAppliedTo />
+            <RulesTableHead />
             <TableBody>
               {filteredSections.map(section => (
                 <Fragment key={section.id}>{renderSectionRow(section)}{renderSGRuleRows(section)}</Fragment>
@@ -494,6 +555,19 @@ export default function SecurityGroupsPanel({
         aliases={aliases}
         ipsets={ipsets}
       />
+
+      {/* Members: which guests carry a rule referencing this group */}
+      {membersOf && (
+        <SecurityGroupMembersDialog
+          open
+          groupName={membersOf}
+          connectionId={selectedConnection}
+          guests={vmFirewallData}
+          guestsNotScanned={guestsNotScanned}
+          onClose={() => setMembersOf(null)}
+          onChanged={touched => { touched.forEach(guest => { reloadVMFirewallRules(guest) }) }}
+        />
+      )}
 
       {/* Create Security Group */}
       <Dialog open={groupDialogOpen} onClose={() => setGroupDialogOpen(false)} maxWidth="sm" fullWidth>

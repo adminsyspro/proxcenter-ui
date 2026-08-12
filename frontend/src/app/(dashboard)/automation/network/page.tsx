@@ -53,7 +53,7 @@ export default function NetworkAutomationPage() {
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
   const {
-    vmFirewallData, loadingVMRules, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
+    vmFirewallData, loadingVMRules, guestsNotScanned, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
 
   const {
@@ -89,10 +89,13 @@ export default function NetworkAutomationPage() {
     }
   }, [firewallMode, activeTab, rulesSubTab])
 
-  // Load VM rules when on Dashboard (tab 0) or Firewalling > VMs (tab 1, subTab 2)
+  // Load VM rules when on Dashboard (tab 0), Firewalling > Cluster/VMs (tab 1,
+  // subTab 0 or 2), or Security Groups (tab 4) — that last tab counts, per
+  // group, the guests whose rules reference it, so without this it showed 0 VMs
+  // everywhere while the data had simply never been fetched.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === 0 || activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
         loadVMFirewallData()
       }
     }
@@ -230,12 +233,17 @@ export default function NetworkAutomationPage() {
             <SecurityGroupsPanel
               securityGroups={securityGroups}
               vmFirewallData={vmFirewallData}
+              loadingVMRules={loadingVMRules}
+              guestsNotScanned={guestsNotScanned}
+              clusterRules={clusterRules}
+              hostRulesByNode={hostRulesByNode}
               firewallMode={firewallMode}
               selectedConnection={selectedConnection}
               totalRules={totalRules}
               aliases={aliases}
               ipsets={ipsets}
               reload={loadFirewallData}
+              reloadVMFirewallRules={reloadVMFirewallRules}
             />
           )}
 

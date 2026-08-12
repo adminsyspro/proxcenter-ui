@@ -2,10 +2,11 @@
  * Component tests for SecurityGroupsPanel.tsx — the security groups rules
  * table.
  *
- * Two things are specific to this panel and asserted here. First, it owns an
- * extra "Applied To" column: the count of guests whose rules reference the
- * group, derived from the VM firewall data rather than given by the caller,
- * so a wrong derivation shows an operator the wrong blast radius. Second, a
+ * Two things are specific to this panel and asserted here. First, membership:
+ * the count of guests whose rules reference the group is derived from the VM
+ * firewall data rather than given by the caller, and it lives on the group
+ * header row — a wrong derivation shows an operator the wrong blast radius.
+ * Second, a
  * security group cannot itself hold a group rule (PVE forbids nesting), so
  * the shared row cells are rendered without `isGroupRule` and a rule that
  * names a group keeps the plain rendering.
@@ -133,10 +134,14 @@ describe('SecurityGroupsPanel', () => {
     expect(screen.queryByText('https in')).not.toBeInTheDocument()
   })
 
-  it('carries an Applied To column the other rules tables do not have', () => {
+  it('keeps membership on the group header, not as a per-rule column', () => {
     renderPanel()
 
-    expect(screen.getByText('Applied To')).toBeInTheDocument()
+    // The count belongs to the group, so repeating it on every rule row said
+    // nothing; the column was dropped and this table now has the same eleven
+    // columns as the other three.
+    expect(screen.queryByText('Applied To')).not.toBeInTheDocument()
+    expect(screen.getByText('1 VMs')).toBeInTheDocument()
   })
 
   it('reveals a group\'s rules, with their log level, when expanded', () => {

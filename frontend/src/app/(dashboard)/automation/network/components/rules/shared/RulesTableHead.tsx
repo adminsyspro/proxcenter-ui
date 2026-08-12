@@ -4,12 +4,14 @@ import { useTranslations } from 'next-intl'
 
 import { TableCell, TableHead, TableRow, useTheme, alpha } from '@mui/material'
 
+import { RULE_CELL_FONT_SIZE } from './RuleTableCells'
+
 // ── Column header style ──
 // Body cells are all `p: 0.5`; without the same padding here the header
 // labels sit ~12px right of their column's values (MUI's default 16px).
 // Single source of truth for the four rules tables (cluster policy, hosts,
 // VMs/CTs and security groups), which used to carry a copy each.
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
+const headCellSx = { fontWeight: 700, fontSize: RULE_CELL_FONT_SIZE, whiteSpace: 'nowrap', p: 0.5 } as const
 
 interface RulesTableHeadProps {
   /**
@@ -44,7 +46,7 @@ export default function RulesTableHead({ showAppliedTo = false }: RulesTableHead
         <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
         {showAppliedTo && <TableCell sx={{ ...headCellSx, width: 90 }}>{t('networkPage.appliedTo')}</TableCell>}
         <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-        <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
+        <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevelShort')}</TableCell>
         <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
         <TableCell sx={{ width: 70 }}></TableCell>
       </TableRow>

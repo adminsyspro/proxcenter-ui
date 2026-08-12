@@ -5952,6 +5952,19 @@
     "sourcePort": "Port source",
     "destPort": "Port destination",
     "logLevel": "Niveau de journalisation",
+    "membersTitle": "Membres de {group}",
+    "membersAttachLabel": "Invités à attacher",
+    "membersAttach": "Attacher",
+    "membersDetach": "Détacher",
+    "membersCurrent": "Invités attachés",
+    "membersEmpty": "Aucun invité ne référence encore ce groupe",
+    "membersPartial": "{count} invités n'ont pas été parcourus, ce compte peut être incomplet",
+    "membersAttached": "{group} attaché à {count} invité(s)",
+    "membersAttachFailed": "Échec de l'attachement : {guests}",
+    "membersDetached": "{group} détaché de {guest}",
+    "membersDetachFailed": "Échec du détachement : {guests}",
+    "membersScopeCluster": "Référencé par une règle de cluster",
+    "membersScopeNodes": "Référencé par des règles de nœud : {nodes}",
     "direction": "Dir",
     "service": "Service",
     "typeIn": "IN (entrant)",
@@ -5980,7 +5993,8 @@
     "vmFirewallCoverage": "Couverture Firewall des VMs",
     "protectedLabel": "Protégées",
     "unprotectedLabel": "Non protégées",
-    "withSgLabel": "Avec SG"
+    "withSgLabel": "Avec SG",
+    "logLevelShort": "Journalisation"
   },
   "themes": {
     "categories": {

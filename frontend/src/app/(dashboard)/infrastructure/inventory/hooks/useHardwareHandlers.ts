@@ -368,6 +368,9 @@ export function useHardwareHandlers({
   const [backupsVzdumpScanned, setBackupsVzdumpScanned] = useState<boolean>(false)
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
   const backupsLoadedForIdRef = useRef<string | null>(null) // Track which selection ID backups were loaded for
+  // Idem pour le balayage vzdump, déclenché par la seule ouverture de l'onglet
+  // Sauvegardes. Les deux refs sont réarmées ensemble au changement de sélection.
+  const backupsScannedForIdRef = useRef<string | null>(null)
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
 
   // État pour les onglets node (host standalone)
@@ -1413,6 +1416,7 @@ return explorerFiles.filter((file: any) =>
     backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
+    backupsScannedForIdRef,
     selectedBackup, setSelectedBackup,
 
     // Node tabs

@@ -1135,6 +1135,7 @@ export default function InventoryDetails({
     backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
+    backupsScannedForIdRef,
     selectedBackup, setSelectedBackup,
 
     // Node tabs
@@ -1489,7 +1490,17 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     setBackupsError(null)
     setBackupsWarnings([])
     setBackupsPreloaded(false)
+    // Verdicts portés par la réponse précédente : sans ce nettoyage, l'état
+    // vide à trois branches de l'onglet pourrait décrire un balayage effectué
+    // pour un AUTRE guest — « aucune archive sur les stockages du cluster »
+    // alors qu'ils n'ont jamais été interrogés pour celui-ci.
+    setBackupsPbsConfigured(null)
+    setBackupsVzdumpScanned(false)
     // Note: backupsLoadedForIdRef est géré dans l'effet de chargement des backups
+    // Le balayage vzdump, lui, est réarmé ici : son effet ne se redéclenche que
+    // sur changement d'onglet, il ne verrait donc jamais passer une sélection
+    // intermédiaire (nœud, cluster) et resterait muet au retour sur ce guest.
+    backupsScannedForIdRef.current = null
     setGuestInfo(null)
     setHeaderCollapsed(false)
 
@@ -1622,9 +1633,6 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
 
   const canShowRrd = selection && (selection.type === 'node' || selection.type === 'vm') && !data?.isTemplate
 
-  // Sélection dont l'onglet Sauvegardes a déjà déclenché son balayage vzdump.
-  const backupsScannedForIdRef = useRef<string | null>(null)
-
   // Précharger les backups quand on sélectionne une VM. Snapshots PBS
   // uniquement : le balayage des stockages PVE (archives vzdump) coûte
   // 1 + 1 + N nœuds x M stockages appels à pveproxy, inacceptable à chaque clic
@@ -1652,8 +1660,10 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   }, [selection?.type, selection?.id, detailTab, loadBackups])
 
   // Recharger avec le balayage vzdump à l'ouverture de l'onglet Sauvegardes.
-  // Une fois par couple (guest, ouverture) : le ref porte l'id de sélection,
-  // donc changer de VM réarme le balayage et rien d'autre ne le redéclenche.
+  // Une fois par guest : le ref porte l'id de sélection et l'effet de
+  // réinitialisation le remet à null à chaque changement de sélection, y compris
+  // vers un nœud ou le cluster. Revenir sur l'onglet ne rebalaye donc pas, mais
+  // revenir sur le guest, si.
   useEffect(() => {
     if (selection?.type !== 'vm' || detailTab !== VM_BACKUPS_TAB_INDEX) return
     if (backupsScannedForIdRef.current === selection.id) return

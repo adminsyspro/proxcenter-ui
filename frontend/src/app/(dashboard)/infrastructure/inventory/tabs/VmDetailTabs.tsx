@@ -1141,7 +1141,9 @@ export default function VmDetailTabs(props: any) {
                                 onClick={() => setCpuFlagsOpen(!cpuFlagsOpen)}
                                 sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
                               >
-                                <Typography variant="body2" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {/* component="div": body2 would render a <p>, and the Chip
+                                    below renders a <div> — invalid nesting, hydration error. */}
+                                <Typography variant="body2" component="div" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <i className="ri-flag-line" style={{ fontSize: 16 }} />
                                   {t('inventory.cpuFlags')}
                                   {activeCount > 0 && (

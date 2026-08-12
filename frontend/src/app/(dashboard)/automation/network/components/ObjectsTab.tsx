@@ -11,7 +11,6 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { monoStyle } from '../types'
 
 interface ObjectsTabProps {
   aliases: firewallAPI.Alias[]
@@ -165,8 +164,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             <TableBody>
               {aliases.map((alias) => (
                 <TableRow key={alias.name} hover>
-                  <TableCell><code style={{ fontSize: 13, background: 'transparent', color: 'inherit' }}>{alias.name}</code></TableCell>
-                  <TableCell><code style={{ fontSize: 13, background: 'transparent', color: 'inherit' }}>{alias.cidr}</code></TableCell>
+                  <TableCell><span style={{ fontSize: 13 }}>{alias.name}</span></TableCell>
+                  <TableCell><span style={{ fontSize: 13 }}>{alias.cidr}</span></TableCell>
                   <TableCell sx={{ color: 'text.secondary', fontSize: 13 }}>{alias.comment || '-'}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -214,7 +213,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
               <Paper key={ipset.name} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, overflow: 'hidden' }}>
                 <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.5) }}>
                   <Box>
-                    <code style={{ background: 'transparent', fontSize: 14, fontWeight: 600, color: 'inherit' }}>{ipset.name}</code>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{ipset.name}</span>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 12, display: 'block' }}>{ipset.comment || t('networkPage.noDescription')}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -240,7 +239,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                       {ipset.members.map((member, idx) => (
                         <Chip
                           key={idx}
-                          label={<code style={{ background: 'transparent', fontSize: 12, color: 'inherit' }}>{member.cidr}</code>}
+                          label={<span style={{ fontSize: 12 }}>{member.cidr}</span>}
                           size="small"
                           variant="outlined"
                           onDelete={() => handleDeleteIPSetEntry(ipset.name, member.cidr)}
@@ -268,8 +267,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.createAliasTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={newAlias.name} onChange={(e) => setNewAlias({ ...newAlias, name: e.target.value })} placeholder="net-mgmt" fullWidth size="small" InputProps={{ sx: monoStyle }} />
-            <TextField label={t('firewall.cidr')} value={newAlias.cidr} onChange={(e) => setNewAlias({ ...newAlias, cidr: e.target.value })} placeholder="10.99.99.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('common.name')} value={newAlias.name} onChange={(e) => setNewAlias({ ...newAlias, name: e.target.value })} placeholder="net-mgmt" fullWidth size="small" />
+            <TextField label={t('firewall.cidr')} value={newAlias.cidr} onChange={(e) => setNewAlias({ ...newAlias, cidr: e.target.value })} placeholder="10.99.99.0/24" fullWidth size="small" />
             <TextField label={t('common.description')} value={newAlias.comment} onChange={(e) => setNewAlias({ ...newAlias, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -284,8 +283,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.editAlias')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={editingAlias?.name || ''} disabled fullWidth size="small" InputProps={{ sx: monoStyle }} />
-            <TextField label={t('firewall.cidr')} value={editingAlias?.cidr || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, cidr: e.target.value } : null)} fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('common.name')} value={editingAlias?.name || ''} disabled fullWidth size="small" />
+            <TextField label={t('firewall.cidr')} value={editingAlias?.cidr || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, cidr: e.target.value } : null)} fullWidth size="small" />
             <TextField label={t('common.description')} value={editingAlias?.comment || ''} onChange={(e) => setEditingAlias(prev => prev ? { ...prev, comment: e.target.value } : null)} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -300,7 +299,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.createIpSetTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={newIPSet.name} onChange={(e) => setNewIPSet({ ...newIPSet, name: e.target.value })} placeholder="trusted-hosts" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('common.name')} value={newIPSet.name} onChange={(e) => setNewIPSet({ ...newIPSet, name: e.target.value })} placeholder="trusted-hosts" fullWidth size="small" />
             <TextField label={t('common.description')} value={newIPSet.comment} onChange={(e) => setNewIPSet({ ...newIPSet, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -315,7 +314,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.editIpSet')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={editingIPSet?.name || ''} disabled fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('common.name')} value={editingIPSet?.name || ''} disabled fullWidth size="small" />
             <TextField label={t('common.description')} value={editingIPSet?.comment || ''} onChange={(e) => setEditingIPSet(prev => prev ? { ...prev, comment: e.target.value } : null)} fullWidth size="small" />
           </Stack>
         </DialogContent>
@@ -330,7 +329,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
         <DialogTitle>{t('networkPage.addToTitle', { name: ipsetEntryDialog.ipsetName })}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('firewall.cidr')} value={newIPSetEntry.cidr} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, cidr: e.target.value })} placeholder="10.0.0.0/24" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('firewall.cidr')} value={newIPSetEntry.cidr} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, cidr: e.target.value })} placeholder="10.0.0.0/24" fullWidth size="small" />
             <TextField label={t('networkPage.comment')} value={newIPSetEntry.comment} onChange={(e) => setNewIPSetEntry({ ...newIPSetEntry, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>

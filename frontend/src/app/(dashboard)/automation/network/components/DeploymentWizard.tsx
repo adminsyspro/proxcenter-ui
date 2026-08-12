@@ -265,7 +265,7 @@ export default function DeploymentWizard({
                   </Box>
                 </TableCell>
                 <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{rule.dport}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{rule.dport}</TableCell>
                 <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell />
@@ -280,7 +280,7 @@ export default function DeploymentWizard({
                   </Box>
                 </TableCell>
                 <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{rule.dport}</TableCell>
+                <TableCell sx={{ fontSize: 12 }}>{rule.dport}</TableCell>
                 <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
                 <TableCell>

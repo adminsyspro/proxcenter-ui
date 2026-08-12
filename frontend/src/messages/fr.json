@@ -5951,6 +5951,7 @@
     "interface": "Interface",
     "sourcePort": "Port source",
     "destPort": "Port destination",
+    "logLevel": "Niveau de journalisation",
     "direction": "Dir",
     "service": "Service",
     "typeIn": "IN (entrant)",

@@ -5883,6 +5883,7 @@
     "interface": "接口",
     "sourcePort": "源端口",
     "destPort": "目标端口",
+    "logLevel": "日志级别",
     "direction": "方向",
     "service": "服务",
     "typeIn": "IN（入站）",

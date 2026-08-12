@@ -35,7 +35,7 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 
 import { useFirewallState } from './firewall/useFirewallState'
-import { LOG_LEVELS, MONO_STYLE, cleanSourceDest } from './firewall/shared'
+import { LOG_LEVELS, DEFAULT_LOG_LEVEL, cleanSourceDest } from './firewall/shared'
 import FirewallRulesTable from './firewall/FirewallRulesTable'
 import FirewallDialogs from './firewall/FirewallDialogs'
 import type { FirewallAPIAdapter, NicInfo, FirewallLogEntry } from './firewall/types'
@@ -130,7 +130,6 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
               if (key === 'model') nic.model = value
             })
 
-
             // If no explicit model, detect from first part
             if (!nic.model) {
               const firstPart = parts[0]
@@ -214,6 +213,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
       dport: fw.newRule.dport || undefined,
       source: cleanSourceDest(fw.newRule.source) || undefined,
       dest: cleanSourceDest(fw.newRule.dest) || undefined,
+      // The dialog always resolves a level, but this payload is built field by
+      // field: without this line the log level picked by the user is dropped.
+      log: fw.newRule.log || DEFAULT_LOG_LEVEL,
       comment: fw.newRule.comment || undefined,
     }
 
@@ -270,9 +272,9 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
                   <TableBody>
                     {nics.map((nic) => (
                       <TableRow key={nic.id}>
-                        <TableCell sx={MONO_STYLE}>{nic.id}</TableCell>
-                        <TableCell sx={MONO_STYLE}>{nic.bridge}</TableCell>
-                        <TableCell sx={MONO_STYLE}>{nic.mac || '-'}</TableCell>
+                        <TableCell>{nic.id}</TableCell>
+                        <TableCell>{nic.bridge}</TableCell>
+                        <TableCell>{nic.mac || '-'}</TableCell>
                         <TableCell>
                           <Chip
                             size="small"

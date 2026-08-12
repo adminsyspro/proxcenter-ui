@@ -5881,6 +5881,7 @@
     "interface": "Schnittstelle",
     "sourcePort": "Quellport",
     "destPort": "Zielport",
+    "logLevel": "Log-Level",
     "direction": "Richt.",
     "service": "Dienst",
     "typeIn": "IN (eingehend)",

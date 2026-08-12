@@ -1,18 +1,23 @@
 'use client'
 
-import { Fragment, useState, useEffect, useMemo } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
-  Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
+  Switch, Table, TableBody, TableCell, TableContainer, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { DEFAULT_RULE, monoStyle } from '../../types'
+import LogLevelSelect from '@/components/firewall/LogLevelSelect'
+import { DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
+import { DEFAULT_RULE } from '../../types'
+import RulesTableHead from './shared/RulesTableHead'
+import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
 
 interface HostRulesPanelProps {
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
@@ -25,26 +30,6 @@ interface HostRulesPanelProps {
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
 }
-
-// ── Helpers ──
-
-const ActionChip = ({ action }: { action: string }) => {
-  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
-  const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
-}
-
-function formatService(rule: firewallAPI.FirewallRule): string {
-  if (rule.type === 'group') return '-'
-  if (rule.macro) return rule.macro
-  const proto = rule.proto?.toUpperCase() || ''
-  const port = rule.dport || ''
-  if (!proto && !port) return 'any'
-  if (proto && port) return `${proto}/${port}`
-  return proto || port
-}
-
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
 
 // ── Main Component ──
 
@@ -90,12 +75,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     !hostSearchQuery || node.toLowerCase().includes(hostSearchQuery.toLowerCase())
   )
 
-  const autocompleteOptions = useMemo(() => {
-    const opts: { label: string; secondary?: string }[] = []
-    for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
-    for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    return opts
-  }, [aliases, ipsets])
+  const autocompleteOptions = useAliasIpsetOptions(aliases, ipsets)
 
   // ── Toggle node firewall ──
   const handleToggleNodeFirewall = async (node: string) => {
@@ -176,7 +156,11 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     setHostDragState({ node, draggedPos: pos, dragOverPos: null })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', pos.toString())
-    setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
+    // React nulls the event's currentTarget as soon as the handler returns,
+    // so the row must be captured before the opacity change is deferred.
+    const draggedRow = e.currentTarget as HTMLElement
+
+    setTimeout(() => { draggedRow.style.opacity = '0.5' }, 0)
   }
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
@@ -245,20 +229,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
       ) : filteredHosts.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-                <TableCell sx={{ width: 70 }}></TableCell>
-              </TableRow>
-            </TableHead>
+            <RulesTableHead />
             <TableBody>
               {filteredHosts.map(node => {
                 const rules = hostRulesByNode[node] || []
@@ -278,15 +249,21 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                       }}
                       onClick={() => setExpandedHosts(prev => { const n = new Set(prev); if (n.has(node)) n.delete(node); else n.add(node); return n })}
                     >
-                      <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
+                      <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                             <i
                               className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                               style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
                             />
-                            <i className="ri-server-line" style={{ fontSize: 16, color: '#f59e0b', flexShrink: 0 }} />
-                            <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{node}</code>
+                            <img
+                              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                              alt=""
+                              width={16}
+                              height={16}
+                              style={{ opacity: 0.8, flexShrink: 0 }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{node}</span>
                             <Chip
                               label={t('firewall.rulesCount', { count: rules.length })}
                               size="small"
@@ -341,71 +318,33 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                             '&:active': { cursor: 'grabbing' }
                           }}
                         >
-                          <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
-                            <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
-                          <TableCell sx={{ p: 0.5, width: 55 }}>
-                            <Switch checked={rule.enable !== 0} onChange={() => handleToggleHostRuleEnable(node, rule)} size="small" color="success" />
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 65 }}>
-                            <Chip
-                              label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
-                              size="small"
-                              sx={{
-                                height: 20, fontSize: 10, fontWeight: 600,
-                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
-                                color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
-                            {isGroupRule ? '-' : (rule.source || 'any')}
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
-                            {isGroupRule ? '-' : (rule.dest || 'any')}
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
-                            {formatService(rule)}
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 90 }}>
-                            {isGroupRule ? (
-                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
-                            ) : (
-                              <ActionChip action={rule.action || 'ACCEPT'} />
-                            )}
-                          </TableCell>
-                          <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-                            <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 70 }}>
-                            <Box sx={{ display: 'flex', gap: 0 }}>
-                              <Tooltip title={t('networkPage.edit')}>
-                                <IconButton size="small" onClick={() => {
-                                  setEditingHostRule({ node, rule, isNew: false })
-                                  setNewHostRule({
-                                    type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
-                                    proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
-                                    source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-                                    iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
-                                  })
-                                  setHostRuleDialogOpen(true)
-                                }}>
-                                  <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('networkPage.delete')}>
-                                <IconButton size="small" color="error" onClick={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}>
-                                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
-                          </TableCell>
+                          <RuleRowLeadingCells
+                            rule={rule}
+                            isGroupRule={isGroupRule}
+                            enabled={rule.enable !== 0}
+                            onToggleEnable={() => handleToggleHostRuleEnable(node, rule)}
+                          />
+                          <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />
+                          <RuleActionCell rule={rule} isGroupRule={isGroupRule} />
+                          <RuleLogCommentCells rule={rule} />
+                          <RuleRowActionsCell
+                            onEdit={() => {
+                              setEditingHostRule({ node, rule, isNew: false })
+                              setNewHostRule({
+                                type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
+                                proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
+                                source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
+                                iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
+                              })
+                              setHostRuleDialogOpen(true)
+                            }}
+                            onDelete={() => setDeleteHostRuleConfirm({ node, pos: rule.pos })}
+                          />
                         </TableRow>
                       )
                     }) : (
                       <TableRow key={`empty-${node}`}>
-                        <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                        <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                           <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
                           <Button size="small" sx={{ mt: 1 }} onClick={() => {
                             setEditingHostRule({ node, rule: null, isNew: true })
@@ -486,47 +425,21 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                   <TextField fullWidth size="small" label={t('firewall.protocol')} value={newHostRule.proto} onChange={(e) => setNewHostRule({ ...newHostRule, proto: e.target.value })} placeholder="tcp, udp, icmp..." />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <Autocomplete
-                    freeSolo
+                  <AliasIpsetAutocomplete
                     options={autocompleteOptions}
-                    getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                    inputValue={newHostRule.source || ''}
-                    onInputChange={(_, v) => setNewHostRule({ ...newHostRule, source: v })}
-                    renderOption={(props, opt) => (
-                      <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
-                          {typeof opt !== 'string' && opt.secondary && (
-                            <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                          )}
-                        </Box>
-                      </li>
-                    )}
-                    renderInput={(params) => (
-                      <TextField {...params} fullWidth size="small" label={t('firewall.source')} placeholder="IP, CIDR, alias..." />
-                    )}
+                    value={newHostRule.source || ''}
+                    onChange={(v) => setNewHostRule({ ...newHostRule, source: v })}
+                    label={t('firewall.source')}
+                    placeholder="IP, CIDR, alias..."
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
-                  <Autocomplete
-                    freeSolo
+                  <AliasIpsetAutocomplete
                     options={autocompleteOptions}
-                    getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                    inputValue={newHostRule.dest || ''}
-                    onInputChange={(_, v) => setNewHostRule({ ...newHostRule, dest: v })}
-                    renderOption={(props, opt) => (
-                      <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
-                          {typeof opt !== 'string' && opt.secondary && (
-                            <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                          )}
-                        </Box>
-                      </li>
-                    )}
-                    renderInput={(params) => (
-                      <TextField {...params} fullWidth size="small" label={t('firewall.destination')} placeholder="IP, CIDR, alias..." />
-                    )}
+                    value={newHostRule.dest || ''}
+                    onChange={(v) => setNewHostRule({ ...newHostRule, dest: v })}
+                    label={t('firewall.destination')}
+                    placeholder="IP, CIDR, alias..."
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
@@ -537,6 +450,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
                   <TextField fullWidth size="small" label={t('firewall.interface')} value={newHostRule.iface} onChange={(e) => setNewHostRule({ ...newHostRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <LogLevelSelect value={newHostRule.log} onChange={(v) => setNewHostRule({ ...newHostRule, log: v })} />
                 </Grid>
               </>
             )}

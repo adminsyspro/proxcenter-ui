@@ -5951,6 +5951,7 @@
     "interface": "인터페이스",
     "sourcePort": "출발지 포트",
     "destPort": "목적지 포트",
+    "logLevel": "로그 수준",
     "direction": "방향",
     "service": "서비스",
     "typeIn": "IN (인바운드)",

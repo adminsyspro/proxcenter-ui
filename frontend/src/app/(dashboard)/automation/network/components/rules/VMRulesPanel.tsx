@@ -4,16 +4,21 @@ import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from 'rea
 import { useTranslations } from 'next-intl'
 
 import {
-  Autocomplete, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
-  Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip,
+  Switch, Table, TableBody, TableCell, TableContainer, TableRow, TextField, Tooltip,
   Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
-import { DEFAULT_RULE, monoStyle } from '../../types'
+import LogLevelSelect from '@/components/firewall/LogLevelSelect'
+import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
+import { DEFAULT_RULE } from '../../types'
+import RulesTableHead from './shared/RulesTableHead'
+import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
 
 interface VMRulesPanelProps {
   vmFirewallData: VMFirewallInfo[]
@@ -26,26 +31,6 @@ interface VMRulesPanelProps {
 }
 
 // ── Helpers ──
-
-const ActionChip = ({ action }: { action: string }) => {
-  const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
-  const color = colors[action] || '#94a3b8'
-  return <Chip size="small" label={action} sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.22), color, border: `1px solid ${alpha(color, 0.35)}`, minWidth: 70 }} />
-}
-
-function formatService(rule: firewallAPI.FirewallRule): string {
-  if (rule.type === 'group') return '-'
-  if (rule.macro) return rule.macro
-  const proto = rule.proto?.toUpperCase() || ''
-  const port = rule.dport || ''
-  if (!proto && !port) return 'any'
-  if (proto && port) return `${proto}/${port}`
-  return proto || port
-}
-
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
-
-const LOG_LEVELS = ['nolog', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug'] as const
 
 const VLAN_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#e11d48']
 function getVlanColor(vlanKey: string, index: number): string {
@@ -94,12 +79,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     })
   }, [filteredVMData])
 
-  const autocompleteOptions = useMemo(() => {
-    const opts: { label: string; secondary?: string }[] = []
-    for (const a of aliases) opts.push({ label: a.name, secondary: a.cidr })
-    for (const s of ipsets) opts.push({ label: `+${s.name}`, secondary: s.comment || `${s.members?.length || 0} entries` })
-    return opts
-  }, [aliases, ipsets])
+  const autocompleteOptions = useAliasIpsetOptions(aliases, ipsets)
 
   // ── Toggle VM firewall (modifies NIC config firewall=0/1) ──
   const handleToggleVMFirewall = async (vm: VMFirewallInfo) => {
@@ -194,7 +174,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
         type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
         proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
         source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-        iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
+        iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
       })
     } else {
       setNewVMRule({ ...DEFAULT_RULE })
@@ -249,7 +229,11 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
     setVmDragState({ vmid, draggedPos: pos, dragOverPos: null })
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', pos.toString())
-    setTimeout(() => { (e.currentTarget as HTMLElement).style.opacity = '0.5' }, 0)
+    // React nulls the event's currentTarget as soon as the handler returns,
+    // so the row must be captured before the opacity change is deferred.
+    const draggedRow = e.currentTarget as HTMLElement
+
+    setTimeout(() => { draggedRow.style.opacity = '0.5' }, 0)
   }
   const handleDragEnd = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.opacity = '1'
@@ -318,20 +302,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
       ) : filteredVMData.length > 0 ? (
         <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Table size="small">
-            <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                <TableCell sx={{ ...headCellSx, width: 30, p: 0.5 }}></TableCell>
-                <TableCell sx={{ ...headCellSx, width: 35 }}>#</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 55 }}>{t('common.active')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 65 }}>{t('firewall.direction')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.source')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
-                <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
-                <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
-                <TableCell sx={{ width: 70 }}></TableCell>
-              </TableRow>
-            </TableHead>
+            <RulesTableHead />
             <TableBody>
               {vlanGroups.map(([vlanKey, vms], vlanIdx) => {
                 const isUntagged = vlanKey === '__untagged__'
@@ -353,7 +324,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                       }}
                       onClick={() => setExpandedVlans(prev => { const n = new Set(prev); if (n.has(vlanKey)) n.delete(vlanKey); else n.add(vlanKey); return n })}
                     >
-                      <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
+                      <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                           <i
                             className={isVlanExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
@@ -383,7 +354,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                             }}
                             onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
                           >
-                            <TableCell colSpan={10} sx={{ py: 1, px: 2, pl: 5 }}>
+                            <TableCell colSpan={11} sx={{ py: 1, px: 2, pl: 5 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                                   <i
@@ -394,7 +365,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                                     className={vm.type === 'qemu' ? 'ri-computer-line' : 'ri-instance-line'}
                                     style={{ fontSize: 16, color: vm.firewallEnabled ? '#22c55e' : theme.palette.text.secondary, flexShrink: 0 }}
                                   />
-                                  <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</code>
+                                  <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</span>
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
                                   <Chip
@@ -478,62 +449,24 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                             '&:active': { cursor: 'grabbing' }
                           }}
                         >
-                          <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
-                            <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 11, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
-                          <TableCell sx={{ p: 0.5, width: 55 }}>
-                            <Switch checked={rule.enable === 1} onChange={() => handleToggleVMRuleEnable(vm, rule)} size="small" color="success" />
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 65 }}>
-                            <Chip
-                              label={isGroupRule ? 'GROUP' : rule.type?.toUpperCase() || 'IN'}
-                              size="small"
-                              sx={{
-                                height: 20, fontSize: 10, fontWeight: 600,
-                                bgcolor: isGroupRule ? alpha('#8b5cf6', 0.22) : rule.type === 'in' ? alpha('#3b82f6', 0.22) : alpha('#ec4899', 0.22),
-                                color: isGroupRule ? '#8b5cf6' : rule.type === 'in' ? '#3b82f6' : '#ec4899'
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
-                            {isGroupRule ? '-' : (rule.source || 'any')}
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
-                            {isGroupRule ? '-' : (rule.dest || 'any')}
-                          </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
-                            {formatService(rule)}
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 90 }}>
-                            {isGroupRule ? (
-                              <Chip icon={<i className="ri-shield-line" style={{ fontSize: 10 }} />} label={rule.action} size="small" sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: alpha('#8b5cf6', 0.22), color: '#8b5cf6', '& .MuiChip-icon': { color: '#8b5cf6' } }} />
-                            ) : (
-                              <ActionChip action={rule.action || 'ACCEPT'} />
-                            )}
-                          </TableCell>
-                          <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
-                            <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
-                          </TableCell>
-                          <TableCell sx={{ p: 0.5, width: 70 }}>
-                            <Box sx={{ display: 'flex', gap: 0 }}>
-                              <Tooltip title={t('networkPage.edit')}>
-                                <IconButton size="small" onClick={() => openVMRuleDialog(vm, rule)}>
-                                  <i className="ri-pencil-line" style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={t('networkPage.delete')}>
-                                <IconButton size="small" color="error" onClick={() => setDeleteVMRuleConfirm({ vm, pos: rule.pos })}>
-                                  <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
-                          </TableCell>
+                          <RuleRowLeadingCells
+                            rule={rule}
+                            isGroupRule={isGroupRule}
+                            enabled={rule.enable === 1}
+                            onToggleEnable={() => handleToggleVMRuleEnable(vm, rule)}
+                          />
+                          <RuleTrafficCells rule={rule} isGroupRule={isGroupRule} />
+                          <RuleActionCell rule={rule} isGroupRule={isGroupRule} />
+                          <RuleLogCommentCells rule={rule} />
+                          <RuleRowActionsCell
+                            onEdit={() => openVMRuleDialog(vm, rule)}
+                            onDelete={() => setDeleteVMRuleConfirm({ vm, pos: rule.pos })}
+                          />
                         </TableRow>
                       )
                     }) : (
                       <TableRow key={`empty-${vm.vmid}`}>
-                        <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                        <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                           <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
                           <Button size="small" sx={{ mt: 1 }} startIcon={<i className="ri-add-line" />} onClick={() => openVMRuleDialog(vm)}>
                             {t('networkPage.addRule')}
@@ -632,71 +565,39 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
               </Box>
             </Grid>
             <Grid size={{ xs: 4, sm: 2 }}>
-              <TextField label="Interface" value={newVMRule.iface || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, iface: e.target.value }))} fullWidth size="small" placeholder="net0" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} />
+              <TextField label="Interface" value={newVMRule.iface || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, iface: e.target.value }))} fullWidth size="small" placeholder="net0" InputProps={{ sx: { fontSize: 13 } }} />
             </Grid>
             <Grid size={{ xs: 8, sm: 5 }}>
-              <Autocomplete
-                freeSolo
+              <AliasIpsetAutocomplete
                 options={autocompleteOptions}
-                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                inputValue={newVMRule.source || ''}
-                onInputChange={(_, v) => setNewVMRule(prev => ({ ...prev, source: v }))}
-                renderOption={(props, opt) => (
-                  <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                      <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
-                      {typeof opt !== 'string' && opt.secondary && (
-                        <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                      )}
-                    </Box>
-                  </li>
-                )}
-                renderInput={(params) => (
-                  <TextField {...params} label="Source" fullWidth size="small" placeholder="192.168.1.0/24, +ipset, alias" InputProps={{ ...params.InputProps, sx: { fontFamily: 'monospace', fontSize: 13 } }} />
-                )}
+                value={newVMRule.source || ''}
+                onChange={(v) => setNewVMRule(prev => ({ ...prev, source: v }))}
+                label="Source"
+                placeholder="192.168.1.0/24, +ipset, alias"
+                inputSx={{ fontSize: 13 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 5 }}>
-              <TextField label="Port source" value={newVMRule.sport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, sport: e.target.value }))} fullWidth size="small" placeholder="80, 1024:65535" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} disabled={!!newVMRule.macro} />
+              <TextField label="Port source" value={newVMRule.sport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, sport: e.target.value }))} fullWidth size="small" placeholder="80, 1024:65535" InputProps={{ sx: { fontSize: 13 } }} disabled={!!newVMRule.macro} />
             </Grid>
             <Grid size={{ xs: 12, sm: 7 }}>
-              <Autocomplete
-                freeSolo
+              <AliasIpsetAutocomplete
                 options={autocompleteOptions}
-                getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.label}
-                inputValue={newVMRule.dest || ''}
-                onInputChange={(_, v) => setNewVMRule(prev => ({ ...prev, dest: v }))}
-                renderOption={(props, opt) => (
-                  <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                      <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
-                      {typeof opt !== 'string' && opt.secondary && (
-                        <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
-                      )}
-                    </Box>
-                  </li>
-                )}
-                renderInput={(params) => (
-                  <TextField {...params} label="Destination" fullWidth size="small" placeholder="10.0.0.0/8, +ipset, alias" InputProps={{ ...params.InputProps, sx: { fontFamily: 'monospace', fontSize: 13 } }} />
-                )}
+                value={newVMRule.dest || ''}
+                onChange={(v) => setNewVMRule(prev => ({ ...prev, dest: v }))}
+                label="Destination"
+                placeholder="10.0.0.0/8, +ipset, alias"
+                inputSx={{ fontSize: 13 }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 5 }}>
-              <TextField label="Port destination" value={newVMRule.dport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, dport: e.target.value }))} fullWidth size="small" placeholder="22, 80, 443, 8000:9000" InputProps={{ sx: { fontFamily: 'monospace', fontSize: 13 } }} disabled={!!newVMRule.macro} />
+              <TextField label="Port destination" value={newVMRule.dport || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, dport: e.target.value }))} fullWidth size="small" placeholder="22, 80, 443, 8000:9000" InputProps={{ sx: { fontSize: 13 } }} disabled={!!newVMRule.macro} />
             </Grid>
             <Grid size={{ xs: 12, sm: 9 }}>
               <TextField label="Commentaire" value={newVMRule.comment || ''} onChange={(e) => setNewVMRule(prev => ({ ...prev, comment: e.target.value }))} fullWidth size="small" />
             </Grid>
             <Grid size={{ xs: 12, sm: 3 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Log level</InputLabel>
-                <Select value={newVMRule.log || 'nolog'} label="Log level" onChange={(e) => setNewVMRule(prev => ({ ...prev, log: e.target.value }))}>
-                  <MenuItem value="nolog">nolog</MenuItem>
-                  <MenuItem value="warning">warning</MenuItem>
-                  <MenuItem value="info">info</MenuItem>
-                  <MenuItem value="debug">debug</MenuItem>
-                </Select>
-              </FormControl>
+              <LogLevelSelect value={newVMRule.log} onChange={(v) => setNewVMRule(prev => ({ ...prev, log: v }))} />
             </Grid>
           </Grid>
         </DialogContent>
@@ -755,7 +656,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
                 <FormControl size="small">
                   <Select
-                    value={logDialog.vm.options?.log_level_in || 'nolog'}
+                    value={logDialog.vm.options?.log_level_in || DEFAULT_LOG_LEVEL}
                     onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_in', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}
@@ -768,7 +669,7 @@ export default function VMRulesPanel({ vmFirewallData, loadingVMRules, selectedC
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log OUT:</Typography>
                 <FormControl size="small">
                   <Select
-                    value={logDialog.vm.options?.log_level_out || 'nolog'}
+                    value={logDialog.vm.options?.log_level_out || DEFAULT_LOG_LEVEL}
                     onChange={(e) => { if (logDialog.vm) handleVMLogLevelChange(logDialog.vm, 'log_level_out', e.target.value) }}
                     sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
                     disabled={!selectedConnection}

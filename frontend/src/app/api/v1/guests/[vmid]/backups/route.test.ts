@@ -37,14 +37,19 @@ beforeEach(() => {
   listVzdumpMock.mockReset().mockResolvedValue({ data: [], warnings: [] })
 })
 
-async function call(connectionId?: string) {
+async function call(connectionId?: string, extra?: Record<string, string>) {
   const { GET } = await import('./route')
+  const searchParams = { ...(connectionId ? { connectionId } : {}), ...(extra || {}) }
   const res = await callRoute(GET as any, {
     params: { vmid: '1105' },
-    searchParams: connectionId ? { connectionId } : undefined,
+    searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
   })
   return readJson<any>(res)
 }
+
+/** Le balayage vzdump est opt-in : l'UI ne le demande qu'à l'ouverture de
+ *  l'onglet Sauvegardes. */
+const callScan = (connectionId?: string) => call(connectionId, { scanVzdump: '1' })
 
 describe('GET /api/v1/guests/[vmid]/backups — pbsConfigured (PBS connection mapped to the cluster)', () => {
   it('is false when no PBS connection exists at all', async () => {
@@ -119,7 +124,7 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
     pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
     listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
 
-    const body = await call('pve-1')
+    const body = await callScan('pve-1')
 
     expect(body.data.backups).toHaveLength(1)
     expect(body.data.backups[0].source).toBe('vzdump')
@@ -145,7 +150,7 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
     })
     listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
 
-    const body = await call('pve-1')
+    const body = await callScan('pve-1')
 
     expect(body.data.backups.map((b: any) => b.source)).toEqual(['pbs', 'vzdump'])
     expect(body.data.stats.total).toBe(2)
@@ -168,7 +173,7 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
     })
     listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
 
-    const body = await call('pve-1')
+    const body = await callScan('pve-1')
 
     expect(body.data.stats.total).toBe(2)
     expect(body.data.stats.verifiedCount).toBe(1)
@@ -177,7 +182,7 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
 
   it('does not scan PVE storages when no connectionId is provided', async () => {
     findManyMock.mockResolvedValue([])
-    const body = await call()
+    const body = await callScan()
 
     expect(listVzdumpMock).not.toHaveBeenCalled()
     expect(body.data.vzdumpScanned).toBe(false)
@@ -192,7 +197,7 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
     pbsFetchMock.mockRejectedValue(new Error('pbs unreachable'))
     listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
 
-    const body = await call('pve-1')
+    const body = await callScan('pve-1')
 
     expect(body.data.backups).toHaveLength(1)
     expect(body.data.warnings.join(' ')).toContain('pbs unreachable')
@@ -211,12 +216,95 @@ describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages'
       return []
     })
 
-    const body = await call('pve-1')
+    const body = await callScan('pve-1')
 
     expect(body.data.backups).toHaveLength(1)
     expect(body.data.backups[0].source).toBe('pbs')
     expect(body.data.pbsConfigured).toBe(true)
     expect(body.data.vzdumpScanned).toBe(false)
     expect(listVzdumpMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/guests/[vmid]/backups — vzdump scan is opt-in', () => {
+  it('does not scan PVE storages without scanVzdump, but still returns PBS snapshots', async () => {
+    // Le préchargement déclenché à chaque clic dans l'arbre passe par ce
+    // chemin : il ne doit coûter aucun appel de contenu à pveproxy.
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path.includes('/snapshots')) {
+        return [{ 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000, size: 10 }]
+      }
+      return []
+    })
+    listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
+
+    const body = await call('pve-1')
+
+    expect(listVzdumpMock).not.toHaveBeenCalled()
+    expect(body.data.vzdumpScanned).toBe(false)
+    expect(body.data.backups).toHaveLength(1)
+    expect(body.data.backups[0].source).toBe('pbs')
+  })
+
+  it('treats scanVzdump=0 as no scan', async () => {
+    findManyMock.mockResolvedValue([])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+
+    const body = await call('pve-1', { scanVzdump: '0' })
+
+    expect(listVzdumpMock).not.toHaveBeenCalled()
+    expect(body.data.vzdumpScanned).toBe(false)
+  })
+
+  it('forwards the guest current node to the vzdump collector', async () => {
+    // Sans ce paramètre, la priorisation du nœud du guest est du code mort et
+    // la troncature au plafond dur peut écarter le nœud qui porte l'archive.
+    findManyMock.mockResolvedValue([])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+    listVzdumpMock.mockResolvedValue({ data: [], warnings: [] })
+
+    await call('pve-1', { scanVzdump: '1', node: 'node2' })
+
+    expect(listVzdumpMock).toHaveBeenCalledTimes(1)
+    expect(listVzdumpMock.mock.calls[0][2]).toMatchObject({ currentNode: 'node2' })
+  })
+})
+
+describe('GET /api/v1/guests/[vmid]/backups — both collections run concurrently', () => {
+  it('starts the PBS fan-out without waiting for the vzdump scan', async () => {
+    // Le scan vzdump ne se débloque que lorsque le fan-out PBS a commencé :
+    // si la route sérialisait les deux, ce test resterait bloqué jusqu'au
+    // timeout au lieu de passer.
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+
+    let releaseVzdump: () => void = () => {}
+    const pbsStarted = new Promise<void>(resolve => { releaseVzdump = resolve })
+
+    listVzdumpMock.mockImplementation(async () => {
+      await pbsStarted
+
+      return { data: [VZDUMP_ENTRY], warnings: [] }
+    })
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      releaseVzdump()
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path.includes('/snapshots')) {
+        return [{ 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000, size: 10 }]
+      }
+
+      return []
+    })
+
+    const body = await callScan('pve-1')
+
+    expect(body.data.backups.map((b: any) => b.source)).toEqual(['pbs', 'vzdump'])
   })
 })

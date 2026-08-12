@@ -570,8 +570,23 @@ export function useHardwareHandlers({
   useSyslogLive(nodeSyslogLive, selection?.type, selection?.id, nodeTab, nodeSystemSubTab, setNodeSyslogData)
   useCephLogLive(nodeCephLogLive, selection?.type, selection?.id, data?.clusterName, setNodeCephData)
 
-  // Charger les sauvegardes d'une VM
-  const loadBackups = useCallback(async (vmid: string, type: string, connId?: string) => {
+  /**
+   * Charger les sauvegardes d'une VM.
+   *
+   * `opts.node` = nœud courant du guest : la route le fait remonter en tête du
+   * balayage vzdump, pour que la troncature au plafond dur n'écarte jamais le
+   * nœud qui porte le plus probablement ses archives.
+   *
+   * `opts.scanVzdump` = balayer les stockages PVE. Coûteux (1 + 1 + N nœuds x
+   * M stockages appels pveproxy) : réservé à l'ouverture réelle de l'onglet
+   * Sauvegardes, jamais au préchargement déclenché par la sélection.
+   */
+  const loadBackups = useCallback(async (
+    vmid: string,
+    type: string,
+    connId?: string,
+    opts?: { node?: string; scanVzdump?: boolean },
+  ) => {
     if (!vmid) return
 
     setBackupsLoading(true)
@@ -590,6 +605,8 @@ export function useHardwareHandlers({
       // Pass the guest's PVE connection so the route can tell whether a
       // connected PBS actually backs up this cluster (drives the empty state).
       if (connId) params.set('connectionId', connId)
+      if (opts?.node) params.set('node', opts.node)
+      if (opts?.scanVzdump) params.set('scanVzdump', '1')
 
       const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmid)}/backups?${params}`, { cache: 'no-store' })
       const json = await res.json()

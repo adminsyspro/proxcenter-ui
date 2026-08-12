@@ -33,6 +33,9 @@ function normalizeHost(s?: string | null): string {
  * 
  * Query params:
  * - type: 'vm' | 'ct' (optionnel, pour filtrer par type)
+ * - connectionId: connexion PVE du guest (optionnel)
+ * - node: nœud courant du guest (optionnel, priorise son balayage)
+ * - scanVzdump: '1' pour balayer les stockages PVE (opt-in, voir plus bas)
  */
 export async function GET(
   req: Request,
@@ -57,6 +60,14 @@ export async function GET(
     const url = new URL(req.url)
     const typeFilter = url.searchParams.get('type') // 'vm' | 'ct'
     const connectionId = url.searchParams.get('connectionId') // the guest's PVE connection
+    const currentNode = url.searchParams.get('node') // the node the guest runs on
+
+    // Le balayage vzdump coûte 1 (/storage) + 1 (/cluster/resources) + N nœuds
+    // x M stockages appels de contenu. Le préchargement déclenché à chaque
+    // sélection de VM dans l'arbre d'inventaire ne le demande pas : seule
+    // l'ouverture effective de l'onglet Sauvegardes l'active.
+    const scanParam = url.searchParams.get('scanVzdump')
+    const scanVzdumpRequested = scanParam !== null && scanParam !== '0' && scanParam !== 'false'
 
     // Récupérer toutes les connexions PBS visibles. Provider sees its own
     // PBS via tenant prisma; vDC tenants reach PBS connections referenced
@@ -121,20 +132,21 @@ export async function GET(
     // Archives vzdump sur les stockages PVE. Les tenants vDC en sont exclus :
     // même règle que /nodes/{node}/storages, où content=backup ne montre que du
     // PBS à un tenant (isolation par namespace PBS = seule voie supportée).
-    let vzdumpScanned = false
+    //
+    // La promesse est lancée ici mais attendue plus bas, avec le fan-out PBS :
+    // les deux collectes sont indépendantes, les sérialiser additionnerait
+    // leurs latences pour rien.
+    const vzdumpPromise =
+      scanVzdumpRequested && pveConn && pveStorages && maskingScope(infra) === null
+        ? listGuestVzdumpBackups(pveConn, String(vmid), {
+            typeFilter,
+            dateLocale,
+            storages: pveStorages,
+            currentNode,
+          })
+        : null
 
-    if (pveConn && pveStorages && maskingScope(infra) === null) {
-      const vz = await listGuestVzdumpBackups(pveConn, String(vmid), {
-        typeFilter,
-        dateLocale,
-        storages: pveStorages,
-        currentNode: url.searchParams.get('node'),
-      })
-
-      vzdumpScanned = true
-      allBackups.push(...vz.data)
-      warnings.push(...vz.warnings)
-    }
+    const vzdumpScanned = vzdumpPromise !== null
 
     // Interroger chaque PBS en parallèle
     const pbsPromises = pbsConnections.map(async (pbs) => {
@@ -272,7 +284,14 @@ return []
       }
     })
 
-    const results = await Promise.all(pbsPromises)
+    const [vz, results] = await Promise.all([vzdumpPromise, Promise.all(pbsPromises)])
+
+    // Ordre de fusion inchangé : vzdump d'abord, PBS ensuite. Le tri final est
+    // stable, deux entrées de même date gardent donc cet ordre.
+    if (vz) {
+      allBackups.push(...vz.data)
+      warnings.push(...vz.warnings)
+    }
 
     results.forEach(backups => allBackups.push(...backups))
 

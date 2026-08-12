@@ -144,9 +144,11 @@ describe("GET /api/v1/guests/[vmid]/backups vzdump tenant isolation", () => {
     })
 
     const { GET } = await import("./route")
+    // Le balayage est explicitement demandé : c'est bien le masquage tenant qui
+    // doit le refuser, pas l'absence du paramètre.
     const res = await callRoute(GET as any, {
       params: { vmid: "1105" },
-      searchParams: { connectionId: "pve-1" },
+      searchParams: { connectionId: "pve-1", scanVzdump: "1" },
     })
 
     // Sans ce contrôle, une exception levée avant la porte de masquage ferait
@@ -161,7 +163,7 @@ describe("GET /api/v1/guests/[vmid]/backups vzdump tenant isolation", () => {
     const { GET } = await import("./route")
     const res = await callRoute(GET as any, {
       params: { vmid: "1105" },
-      searchParams: { connectionId: "pve-1" },
+      searchParams: { connectionId: "pve-1", scanVzdump: "1" },
     })
 
     expect(res.status).toBe(200)

@@ -34,3 +34,87 @@ export function vzdumpBackupTypeFromVolid(volid: string): 'vm' | 'ct' | null {
 
   return null
 }
+
+export interface VzdumpStorageConfig {
+  storage: string
+  type?: string
+  content?: string
+  shared?: number
+}
+
+export interface VzdumpScanTarget {
+  node: string
+  storage: string
+}
+
+/**
+ * Plafond dur du nombre de paires nœud/stockage interrogées par requête. Le
+ * produit nœuds en ligne x stockages de sauvegarde non partagés croît avec la
+ * taille du cluster et l'onglet le réévalue à chaque ouverture.
+ */
+export const VZDUMP_MAX_PAIRS = 32
+
+function supportsBackupContent(s: VzdumpStorageConfig): boolean {
+  return (s.content || '')
+    .split(',')
+    .map(c => c.trim())
+    .includes('backup')
+}
+
+/**
+ * Paires nœud/stockage à interroger pour trouver les archives vzdump d'un guest.
+ *
+ * Les stockages PBS sont écartés : leurs snapshots remontent déjà par le fan-out
+ * PBS, les inclure ici les compterait deux fois. Un stockage partagé n'est
+ * interrogé qu'une fois ; un stockage local l'est sur chaque nœud en ligne,
+ * parce qu'une archive reste sur le nœud qui l'a produite même après migration
+ * du guest.
+ */
+export function resolveVzdumpScanTargets(
+  storages: VzdumpStorageConfig[],
+  resources: any[],
+  currentNode?: string | null,
+): { targets: VzdumpScanTarget[]; truncated: boolean } {
+  const onlineNodes = new Set(
+    (resources || [])
+      .filter(r => r?.type === 'node' && r?.status === 'online')
+      .map(r => String(r.node)),
+  )
+
+  const orderedNodes = (nodesForStorage: string[]) => {
+    const online = nodesForStorage.filter(n => onlineNodes.has(n))
+
+    if (currentNode && online.includes(currentNode)) {
+      return [currentNode, ...online.filter(n => n !== currentNode)]
+    }
+
+    return online
+  }
+
+  const targets: VzdumpScanTarget[] = []
+
+  for (const s of storages || []) {
+    if (!s?.storage) continue
+    if ((s.type || '').toLowerCase() === 'pbs') continue
+    if (!supportsBackupContent(s)) continue
+
+    const nodesForStorage = (resources || [])
+      .filter(r => r?.type === 'storage' && r?.storage === s.storage)
+      .map(r => String(r.node))
+
+    const candidates = orderedNodes(Array.from(new Set(nodesForStorage)))
+
+    if (candidates.length === 0) continue
+
+    if (s.shared === 1) targets.push({ node: candidates[0], storage: s.storage })
+    else for (const node of candidates) targets.push({ node, storage: s.storage })
+  }
+
+  if (currentNode) {
+    targets.sort((a, b) => Number(b.node === currentNode) - Number(a.node === currentNode))
+  }
+
+  const truncated = targets.length > VZDUMP_MAX_PAIRS
+
+  return { targets: truncated ? targets.slice(0, VZDUMP_MAX_PAIRS) : targets, truncated }
+}

@@ -144,11 +144,14 @@ describe("GET /api/v1/guests/[vmid]/backups vzdump tenant isolation", () => {
     })
 
     const { GET } = await import("./route")
-    await callRoute(GET as any, {
+    const res = await callRoute(GET as any, {
       params: { vmid: "1105" },
       searchParams: { connectionId: "pve-1" },
     })
 
+    // Sans ce contrôle, une exception levée avant la porte de masquage ferait
+    // passer le test pour la mauvaise raison : le mock ne serait pas appelé.
+    expect(res.status).toBe(200)
     expect(listVzdumpMock).not.toHaveBeenCalled()
   })
 
@@ -156,11 +159,12 @@ describe("GET /api/v1/guests/[vmid]/backups vzdump tenant isolation", () => {
     getInfraMock.mockResolvedValue({ kind: "provider" })
 
     const { GET } = await import("./route")
-    await callRoute(GET as any, {
+    const res = await callRoute(GET as any, {
       params: { vmid: "1105" },
       searchParams: { connectionId: "pve-1" },
     })
 
+    expect(res.status).toBe(200)
     expect(listVzdumpMock).toHaveBeenCalledTimes(1)
   })
 })

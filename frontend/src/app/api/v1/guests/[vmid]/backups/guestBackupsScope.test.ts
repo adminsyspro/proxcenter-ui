@@ -3,11 +3,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { callRoute } from "../../../../../../__tests__/setup/route-test"
 
 // Hoist mocks
-const { findManyGlobalMock, findManySessionMock, getInfraMock, checkPermissionMock } = vi.hoisted(() => ({
+const {
+  findManyGlobalMock,
+  findManySessionMock,
+  getInfraMock,
+  checkPermissionMock,
+  pveFetchMock,
+  getConnectionByIdMock,
+  listVzdumpMock,
+} = vi.hoisted(() => ({
   findManyGlobalMock: vi.fn(),
   findManySessionMock: vi.fn(),
   getInfraMock: vi.fn(),
   checkPermissionMock: vi.fn(),
+  pveFetchMock: vi.fn(),
+  getConnectionByIdMock: vi.fn(),
+  listVzdumpMock: vi.fn(),
 }))
 
 // Keep REAL inventoryConnectionPlan; only mock getTenantInfrastructureScope
@@ -50,11 +61,18 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined }),
 }))
 
+vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
+vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: getConnectionByIdMock }))
+vi.mock("@/lib/backups/pveVzdump", () => ({ listGuestVzdumpBackups: listVzdumpMock }))
+
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   findManyGlobalMock.mockReset().mockResolvedValue([])
   findManySessionMock.mockReset().mockResolvedValue([])
   getInfraMock.mockReset()
+  pveFetchMock.mockReset().mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+  getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'pve-1', apiToken: 't' })
+  listVzdumpMock.mockReset().mockResolvedValue({ data: [], warnings: [] })
 })
 
 describe("GET /api/v1/guests/[vmid]/backups PBS connection scope", () => {
@@ -115,5 +133,34 @@ describe("GET /api/v1/guests/[vmid]/backups PBS connection scope", () => {
 
     expect(res.status).toBe(200)
     expect(getInfraMock).toHaveBeenCalledWith("tenant-x", { ignoreVdcContext: true })
+  })
+})
+
+describe("GET /api/v1/guests/[vmid]/backups vzdump tenant isolation", () => {
+  it("never scans PVE storages for a vDC tenant", async () => {
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: { pbsConnectionIds: new Set(["pbs-1"]), storagesByConnection: new Map() },
+    })
+
+    const { GET } = await import("./route")
+    await callRoute(GET as any, {
+      params: { vmid: "1105" },
+      searchParams: { connectionId: "pve-1" },
+    })
+
+    expect(listVzdumpMock).not.toHaveBeenCalled()
+  })
+
+  it("scans PVE storages for a provider", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+
+    const { GET } = await import("./route")
+    await callRoute(GET as any, {
+      params: { vmid: "1105" },
+      searchParams: { connectionId: "pve-1" },
+    })
+
+    expect(listVzdumpMock).toHaveBeenCalledTimes(1)
   })
 })

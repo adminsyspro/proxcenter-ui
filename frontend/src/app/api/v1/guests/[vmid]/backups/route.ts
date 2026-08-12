@@ -3,7 +3,8 @@ import { cookies } from "next/headers"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { listGuestVzdumpBackups } from "@/lib/backups/pveVzdump"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -82,14 +83,22 @@ export async function GET(
       }
     })
 
-    if (pbsConnections.length === 0) {
-      return NextResponse.json({
-        data: {
-          backups: [],
-          stats: { total: 0, totalSize: 0, totalSizeFormatted: '0 B' },
-          pbsConfigured: false,
-        }
-      })
+    const allBackups: any[] = []
+    const warnings: string[] = []
+
+    // Config de stockage cluster-wide : sert au test pbsConfigured ET à la
+    // collecte vzdump. Un échec ici reste une panne locale — il ne doit
+    // effacer ni les snapshots PBS ni le repli de pbsConfigured.
+    let pveConn: any = null
+    let pveStorages: any[] | null = null
+
+    if (connectionId) {
+      try {
+        pveConn = await getConnectionById(connectionId)
+        pveStorages = await pveFetch<any[]>(pveConn, '/storage')
+      } catch (e: any) {
+        warnings.push(`cluster storage config: ${e?.message || String(e)}`)
+      }
     }
 
     // Is one of these PBS connections actually the backup target of THIS guest's
@@ -98,26 +107,34 @@ export async function GET(
     // (different host) counts as "no PBS configured" — we cannot read its
     // snapshots — which is what drives the empty-state message.
     let pbsConfigured = pbsConnections.length > 0
-    if (connectionId) {
-      try {
-        const connHosts = new Set(
-          pbsConnections.map(c => normalizeHost(c.baseUrl)).filter(Boolean)
-        )
-        const pveConn = await getConnectionById(connectionId)
-        const pveStorages = await pveFetch<any[]>(pveConn, '/storage')
 
-        pbsConfigured = (pveStorages || []).some(
-          (s: any) => s?.type === 'pbs' && connHosts.has(normalizeHost(s.server))
-        )
-      } catch {
-        // Cannot read the cluster storage config: fall back to "a PBS connection
-        // exists" so we never wrongly claim none is configured.
-        pbsConfigured = pbsConnections.length > 0
-      }
+    if (pveStorages) {
+      const connHosts = new Set(
+        pbsConnections.map(c => normalizeHost(c.baseUrl)).filter(Boolean)
+      )
+
+      pbsConfigured = pveStorages.some(
+        (s: any) => s?.type === 'pbs' && connHosts.has(normalizeHost(s.server))
+      )
     }
 
-    const allBackups: any[] = []
-    const warnings: string[] = []
+    // Archives vzdump sur les stockages PVE. Les tenants vDC en sont exclus :
+    // même règle que /nodes/{node}/storages, où content=backup ne montre que du
+    // PBS à un tenant (isolation par namespace PBS = seule voie supportée).
+    let vzdumpScanned = false
+
+    if (pveConn && pveStorages && maskingScope(infra) === null) {
+      const vz = await listGuestVzdumpBackups(pveConn, String(vmid), {
+        typeFilter,
+        dateLocale,
+        storages: pveStorages,
+        currentNode: url.searchParams.get('node'),
+      })
+
+      vzdumpScanned = true
+      allBackups.push(...vz.data)
+      warnings.push(...vz.warnings)
+    }
 
     // Interroger chaque PBS en parallèle
     const pbsPromises = pbsConnections.map(async (pbs) => {
@@ -185,6 +202,7 @@ export async function GET(
 
                   return {
                     id: `${storeName}/${ns ? ns + '/' : ''}${snap['backup-type']}/${snap['backup-id']}/${snap['backup-time']}`,
+                    source: 'pbs' as const,
 
                     // Infos PBS
                     pbsId: pbs.id,
@@ -259,16 +277,27 @@ return []
     results.forEach(backups => allBackups.push(...backups))
 
     // Trier par date (plus récent en premier)
-    allBackups.sort((a, b) => b.backupTime - a.backupTime)
+    allBackups.sort((a, b) => {
+      const aKnown = a.backupTimeKnown !== false
+      const bKnown = b.backupTimeKnown !== false
+
+      if (aKnown !== bKnown) return aKnown ? -1 : 1
+
+      return (b.backupTime || 0) - (a.backupTime || 0)
+    })
 
     // Stats
     const totalSize = allBackups.reduce((sum, b) => sum + (b.size || 0), 0)
+    const pbsBackups = allBackups.filter(b => b.source === 'pbs')
 
     const stats = {
       total: allBackups.length,
       totalSize,
       totalSizeFormatted: formatBytes(totalSize),
-      verifiedCount: allBackups.filter(b => b.verified).length,
+      // La vérification n'existe que côté PBS : compter les vzdump comme non
+      // vérifiés ferait lire « 1 vérifié sur 3 » comme deux échecs.
+      pbsTotal: pbsBackups.length,
+      verifiedCount: pbsBackups.filter(b => b.verified).length,
       protectedCount: allBackups.filter(b => b.protected).length,
       oldestBackup: allBackups.length > 0 ? allBackups[allBackups.length - 1].backupTimeFormatted : null,
       newestBackup: allBackups.length > 0 ? allBackups[0].backupTimeFormatted : null,
@@ -281,6 +310,7 @@ return []
         stats,
         warnings,
         pbsConfigured,
+        vzdumpScanned,
       }
     })
   } catch (e: any) {

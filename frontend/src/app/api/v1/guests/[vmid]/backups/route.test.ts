@@ -8,6 +8,7 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getVdcScopeMock = vi.fn<(tenantId?: string) => Promise<any>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const findManyMock = vi.fn<(args: any) => Promise<any[]>>()
+const listVzdumpMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({ connection: { findMany: findManyMock } }),
@@ -24,6 +25,7 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { BACKUP_VIEW: 'backup.view' },
 }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => ({ value: 'en' }) }) }))
+vi.mock('@/lib/backups/pveVzdump', () => ({ listGuestVzdumpBackups: listVzdumpMock }))
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
@@ -32,6 +34,7 @@ beforeEach(() => {
   getVdcScopeMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'pve-1', apiToken: 't' })
   findManyMock.mockReset().mockResolvedValue([])
+  listVzdumpMock.mockReset().mockResolvedValue({ data: [], warnings: [] })
 })
 
 async function call(connectionId?: string) {
@@ -90,5 +93,130 @@ describe('GET /api/v1/guests/[vmid]/backups — pbsConfigured (PBS connection ma
     pveFetchMock.mockRejectedValue(new Error('storage unreachable'))
     const body = await call('pve-1')
     expect(body.data.pbsConfigured).toBe(true)
+  })
+})
+
+const VZDUMP_ENTRY = {
+  id: 'node2/local:backup/vzdump-qemu-1105-2026_08_11-15_51_33.vma.zst',
+  source: 'vzdump',
+  volid: 'local:backup/vzdump-qemu-1105-2026_08_11-15_51_33.vma.zst',
+  node: 'node2',
+  storage: 'local',
+  backupType: 'vm',
+  backupTime: 1786000293,
+  backupTimeKnown: true,
+  size: 100,
+  sizeFormatted: '100 B',
+  verified: false,
+  verification: null,
+  protected: false,
+}
+
+describe('GET /api/v1/guests/[vmid]/backups — vzdump archives on PVE storages', () => {
+  it('returns vzdump archives even when no PBS connection exists at all', async () => {
+    // The exact reported case: a cluster with zero PBS, backing up to local.
+    findManyMock.mockResolvedValue([])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+    listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
+
+    const body = await call('pve-1')
+
+    expect(body.data.backups).toHaveLength(1)
+    expect(body.data.backups[0].source).toBe('vzdump')
+    expect(body.data.stats.total).toBe(1)
+    expect(body.data.pbsConfigured).toBe(false)
+    expect(body.data.vzdumpScanned).toBe(true)
+  })
+
+  it('merges both sources and sorts them by date, most recent first', async () => {
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockResolvedValue([
+      { storage: 'PBS_DS', type: 'pbs', server: '10.0.0.1' },
+      { storage: 'local', type: 'dir', content: 'backup' },
+    ])
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path.includes('/snapshots')) {
+        return [{ 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000, size: 10 }]
+      }
+      return []
+    })
+    listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
+
+    const body = await call('pve-1')
+
+    expect(body.data.backups.map((b: any) => b.source)).toEqual(['pbs', 'vzdump'])
+    expect(body.data.stats.total).toBe(2)
+  })
+
+  it('counts only PBS snapshots as verified', async () => {
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path.includes('/snapshots')) {
+        return [{
+          'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000,
+          size: 10, verification: { state: 'ok' },
+        }]
+      }
+      return []
+    })
+    listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
+
+    const body = await call('pve-1')
+
+    expect(body.data.stats.total).toBe(2)
+    expect(body.data.stats.verifiedCount).toBe(1)
+    expect(body.data.stats.pbsTotal).toBe(1)
+  })
+
+  it('does not scan PVE storages when no connectionId is provided', async () => {
+    findManyMock.mockResolvedValue([])
+    const body = await call()
+
+    expect(listVzdumpMock).not.toHaveBeenCalled()
+    expect(body.data.vzdumpScanned).toBe(false)
+    expect(body.data.backups).toEqual([])
+  })
+
+  it('still returns vzdump archives when the PBS fan-out fails', async () => {
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockResolvedValue([{ storage: 'local', type: 'dir', content: 'backup' }])
+    pbsFetchMock.mockRejectedValue(new Error('pbs unreachable'))
+    listVzdumpMock.mockResolvedValue({ data: [VZDUMP_ENTRY], warnings: [] })
+
+    const body = await call('pve-1')
+
+    expect(body.data.backups).toHaveLength(1)
+    expect(body.data.warnings.join(' ')).toContain('pbs unreachable')
+  })
+
+  it('still returns PBS snapshots when the PVE storage config cannot be read', async () => {
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' },
+    ])
+    pveFetchMock.mockRejectedValue(new Error('storage unreachable'))
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path.includes('/snapshots')) {
+        return [{ 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000, size: 10 }]
+      }
+      return []
+    })
+
+    const body = await call('pve-1')
+
+    expect(body.data.backups).toHaveLength(1)
+    expect(body.data.backups[0].source).toBe('pbs')
+    expect(body.data.pbsConfigured).toBe(true)
+    expect(body.data.vzdumpScanned).toBe(false)
+    expect(listVzdumpMock).not.toHaveBeenCalled()
   })
 })

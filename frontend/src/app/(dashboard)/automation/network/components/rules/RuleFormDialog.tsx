@@ -9,7 +9,7 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
-import { monoStyle } from '../../types'
+import LogLevelSelect from '@/components/firewall/LogLevelSelect'
 
 export interface RuleFormData {
   type: string
@@ -138,7 +138,7 @@ export default function RuleFormDialog({
                   renderOption={(props, opt) => (
                     <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                        <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
                         {typeof opt !== 'string' && opt.secondary && (
                           <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
                         )}
@@ -146,7 +146,7 @@ export default function RuleFormDialog({
                     </li>
                   )}
                   renderInput={(params) => (
-                    <TextField {...params} fullWidth size="small" label={t('network.source')} placeholder="IP, CIDR, alias..." InputProps={{ ...params.InputProps, sx: monoStyle }} />
+                    <TextField {...params} fullWidth size="small" label={t('network.source')} placeholder="IP, CIDR, alias..." />
                   )}
                 />
               </Grid>
@@ -160,7 +160,7 @@ export default function RuleFormDialog({
                   renderOption={(props, opt) => (
                     <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                        <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
                         {typeof opt !== 'string' && opt.secondary && (
                           <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
                         )}
@@ -168,18 +168,21 @@ export default function RuleFormDialog({
                     </li>
                   )}
                   renderInput={(params) => (
-                    <TextField {...params} fullWidth size="small" label={t('network.destination')} placeholder="IP, CIDR, alias..." InputProps={{ ...params.InputProps, sx: monoStyle }} />
+                    <TextField {...params} fullWidth size="small" label={t('network.destination')} placeholder="IP, CIDR, alias..." />
                   )}
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label={t('network.destPort')} value={rule.dport} onChange={(e) => set('dport', e.target.value)} placeholder="22, 80, 443..." InputProps={{ sx: monoStyle }} />
+                <TextField fullWidth size="small" label={t('network.destPort')} value={rule.dport} onChange={(e) => set('dport', e.target.value)} placeholder="22, 80, 443..." />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label={t('firewall.sourcePort')} value={rule.sport} onChange={(e) => set('sport', e.target.value)} InputProps={{ sx: monoStyle }} />
+                <TextField fullWidth size="small" label={t('firewall.sourcePort')} value={rule.sport} onChange={(e) => set('sport', e.target.value)} />
               </Grid>
               <Grid size={{ xs: 12, sm: 4 }}>
-                <TextField fullWidth size="small" label={t('firewall.interface')} value={rule.iface} onChange={(e) => set('iface', e.target.value)} placeholder="vmbr0, eth0..." InputProps={{ sx: monoStyle }} />
+                <TextField fullWidth size="small" label={t('firewall.interface')} value={rule.iface} onChange={(e) => set('iface', e.target.value)} placeholder="vmbr0, eth0..." />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <LogLevelSelect value={rule.log} onChange={(v) => set('log', v)} />
               </Grid>
             </>
           )}

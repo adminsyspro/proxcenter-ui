@@ -14,8 +14,6 @@ export const GROUP_COLORS = [
 
 export const getGroupColor = (index: number): string => GROUP_COLORS[index % GROUP_COLORS.length]
 
-export const monoStyle = { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace', fontSize: 13 }
-
 export const DEFAULT_RULE: firewallAPI.CreateRuleRequest = {
   type: 'in', action: 'ACCEPT', enable: 1, proto: '', dport: '', sport: '', source: '', dest: '', macro: '', iface: '', log: 'nolog', comment: ''
 }

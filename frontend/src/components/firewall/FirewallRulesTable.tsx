@@ -21,7 +21,8 @@ import {
 } from '@mui/material'
 
 import type { FirewallRule, SecurityGroup } from './types'
-import { ActionChip, MONO_STYLE, formatService } from './shared'
+import { ActionChip, formatService } from './shared'
+import { formatLogLevel } from './logLevels'
 
 export type TableVariant = 'vm' | 'node'
 
@@ -116,27 +117,31 @@ export default function FirewallRulesTable({
             <TableHead>
               <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.5) }}>
                 <TableCell sx={{ fontWeight: 700, width: 30, p: 0.5 }}></TableCell>
-                <TableCell sx={{ fontWeight: 700, width: 35 }}>#</TableCell>
-                <TableCell sx={{ fontWeight: 700, width: 55 }}>Active</TableCell>
+                <TableCell sx={{ fontWeight: 700, p: 0.5, width: 35 }}>#</TableCell>
+                <TableCell sx={{ fontWeight: 700, p: 0.5, width: 55 }}>Active</TableCell>
                 {variant === 'vm' ? (
                   <>
-                    <TableCell sx={{ fontWeight: 700, width: 70 }}>{t('firewall.direction')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Dest</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 100 }}>{t('firewall.service')}</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 90 }}>{t('firewall.action')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 70 }}>{t('firewall.direction')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5 }}>Source</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5 }}>Dest</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 100 }}>{t('firewall.service')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 90 }}>{t('firewall.action')}</TableCell>
                   </>
                 ) : (
                   <>
-                    <TableCell sx={{ fontWeight: 700, width: 70 }}>Type</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 180 }}>Action</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Dest</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 60 }}>Proto</TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 70 }}>Port</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 70 }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 180 }}>Action</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5 }}>Source</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5 }}>Dest</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 60 }}>Proto</TableCell>
+                    <TableCell sx={{ fontWeight: 700, p: 0.5, width: 70 }}>Port</TableCell>
                   </>
                 )}
-                <TableCell sx={{ fontWeight: 700 }}>{t('network.comment')}</TableCell>
+                {/* Log level + Comment are shared by both variants, so they stay
+                    outside the conditional above — that is what keeps the two
+                    column layouts in step with the body cells. */}
+                <TableCell sx={{ fontWeight: 700, p: 0.5, width: 80 }}>{t('firewall.logLevel')}</TableCell>
+                <TableCell sx={{ fontWeight: 700, p: 0.5 }}>{t('network.comment')}</TableCell>
                 <TableCell sx={{ width: 90 }}></TableCell>
               </TableRow>
             </TableHead>
@@ -208,17 +213,17 @@ export default function FirewallRulesTable({
                         </TableCell>
 
                         {/* Source */}
-                        <TableCell sx={{ ...MONO_STYLE, color: (isGroup || !rule.source) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ color: (isGroup || !rule.source) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.source || 'any')}
                         </TableCell>
 
                         {/* Dest */}
-                        <TableCell sx={{ ...MONO_STYLE, color: (isGroup || !rule.dest) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ color: (isGroup || !rule.dest) ? 'text.disabled' : 'text.primary', fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.dest || 'any')}
                         </TableCell>
 
                         {/* Service (proto+port merged) */}
-                        <TableCell sx={{ ...MONO_STYLE, fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ fontSize: 11, p: 0.5 }}>
                           {formatService(rule)}
                         </TableCell>
 
@@ -281,26 +286,31 @@ export default function FirewallRulesTable({
                         </TableCell>
 
                         {/* Source */}
-                        <TableCell sx={{ ...MONO_STYLE, color: rule.source ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ color: rule.source ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.source || 'any')}
                         </TableCell>
 
                         {/* Dest */}
-                        <TableCell sx={{ ...MONO_STYLE, color: rule.dest ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ color: rule.dest ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.dest || 'any')}
                         </TableCell>
 
                         {/* Proto */}
-                        <TableCell sx={{ ...MONO_STYLE, fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.proto || 'any')}
                         </TableCell>
 
                         {/* Port */}
-                        <TableCell sx={{ ...MONO_STYLE, color: rule.dport ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
+                        <TableCell sx={{ color: rule.dport ? 'text.primary' : 'text.disabled', fontSize: 11, p: 0.5 }}>
                           {isGroup ? '-' : (rule.dport || '-')}
                         </TableCell>
                       </>
                     )}
+
+                    {/* Log level — shared by both variants, like the Comment cell below */}
+                    <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
+                      {formatLogLevel(rule.log)}
+                    </TableCell>
 
                     {/* Comment */}
                     <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>

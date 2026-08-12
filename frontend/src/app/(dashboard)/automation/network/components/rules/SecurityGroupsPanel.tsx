@@ -13,7 +13,8 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
-import { PolicySection, monoStyle } from '../../types'
+import { formatLogLevel } from '@/components/firewall/logLevels'
+import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 
 // ── Props ──
@@ -57,7 +58,9 @@ function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { v
 }
 
 // ── Column header style ──
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+// Body cells are all `p: 0.5`; without the same padding here the header
+// labels sit ~12px right of their column's values (MUI's default 16px).
+const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
 
 // ── Main Component ──
 
@@ -296,13 +299,13 @@ export default function SecurityGroupsPanel({
             }}
           />
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: rule.source ? 'text.primary' : 'text.disabled' }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, color: rule.source ? 'text.primary' : 'text.disabled' }}>
           {rule.source || 'any'}
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: rule.dest ? 'text.primary' : 'text.disabled' }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, color: rule.dest ? 'text.primary' : 'text.disabled' }}>
           {rule.dest || 'any'}
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
           {formatService(rule)}
         </TableCell>
         <TableCell sx={{ p: 0.5, width: 90 }}>
@@ -321,6 +324,9 @@ export default function SecurityGroupsPanel({
         </TableCell>
         <TableCell sx={{ p: 0.5, width: 90 }}>
           <ActionChip action={rule.action || 'ACCEPT'} />
+        </TableCell>
+        <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
+          {formatLogLevel(rule.log)}
         </TableCell>
         <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
           <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
@@ -358,14 +364,14 @@ export default function SecurityGroupsPanel({
         }}
         onClick={() => toggleSection(section.id)}
       >
-        <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
+        <TableCell colSpan={12} sx={{ py: 1, px: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
               <i
                 className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                 style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
               />
-              <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</code>
+              <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</span>
               {section.comment && (
                 <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   — {section.comment}
@@ -417,7 +423,7 @@ export default function SecurityGroupsPanel({
     if (section.rules.length === 0) {
       return (
         <TableRow key={`empty-${section.id}`}>
-          <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+          <TableCell colSpan={12} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body2">{t('networkPage.noRules')}</Typography>
             <Button size="small" sx={{ mt: 1 }} onClick={() => openAddRule(section.id)}>
               {t('networkPage.addRule')}
@@ -519,6 +525,7 @@ export default function SecurityGroupsPanel({
                 <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 90 }}>{t('networkPage.appliedTo')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
                 <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
                 <TableCell sx={{ width: 70 }}></TableCell>
               </TableRow>
@@ -559,7 +566,7 @@ export default function SecurityGroupsPanel({
         <DialogTitle>{t('networkPage.createSgTitle')}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField label={t('common.name')} value={newGroup.group} onChange={e => setNewGroup({ ...newGroup, group: e.target.value })} placeholder="sg-web" fullWidth size="small" InputProps={{ sx: monoStyle }} />
+            <TextField label={t('common.name')} value={newGroup.group} onChange={e => setNewGroup({ ...newGroup, group: e.target.value })} placeholder="sg-web" fullWidth size="small" />
             <TextField label={t('common.description')} value={newGroup.comment} onChange={e => setNewGroup({ ...newGroup, comment: e.target.value })} fullWidth size="small" />
           </Stack>
         </DialogContent>

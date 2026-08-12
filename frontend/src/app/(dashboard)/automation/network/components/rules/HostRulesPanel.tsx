@@ -12,7 +12,9 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { DEFAULT_RULE, monoStyle } from '../../types'
+import LogLevelSelect from '@/components/firewall/LogLevelSelect'
+import { DEFAULT_LOG_LEVEL, formatLogLevel } from '@/components/firewall/logLevels'
+import { DEFAULT_RULE } from '../../types'
 
 interface HostRulesPanelProps {
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
@@ -44,7 +46,9 @@ function formatService(rule: firewallAPI.FirewallRule): string {
   return proto || port
 }
 
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+// Body cells are all `p: 0.5`; without the same padding here the header
+// labels sit ~12px right of their column's values (MUI's default 16px).
+const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
 
 // ── Main Component ──
 
@@ -255,6 +259,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                 <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
                 <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
                 <TableCell sx={{ width: 70 }}></TableCell>
               </TableRow>
@@ -278,15 +283,21 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                       }}
                       onClick={() => setExpandedHosts(prev => { const n = new Set(prev); if (n.has(node)) n.delete(node); else n.add(node); return n })}
                     >
-                      <TableCell colSpan={10} sx={{ py: 1, px: 2 }}>
+                      <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                             <i
                               className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                               style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
                             />
-                            <i className="ri-server-line" style={{ fontSize: 16, color: '#f59e0b', flexShrink: 0 }} />
-                            <code style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{node}</code>
+                            <img
+                              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                              alt=""
+                              width={16}
+                              height={16}
+                              style={{ opacity: 0.8, flexShrink: 0 }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{node}</span>
                             <Chip
                               label={t('firewall.rulesCount', { count: rules.length })}
                               size="small"
@@ -359,13 +370,13 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                               }}
                             />
                           </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+                          <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
                             {isGroupRule ? '-' : (rule.source || 'any')}
                           </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+                          <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
                             {isGroupRule ? '-' : (rule.dest || 'any')}
                           </TableCell>
-                          <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+                          <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
                             {formatService(rule)}
                           </TableCell>
                           <TableCell sx={{ p: 0.5, width: 90 }}>
@@ -374,6 +385,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                             ) : (
                               <ActionChip action={rule.action || 'ACCEPT'} />
                             )}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
+                            {formatLogLevel(rule.log)}
                           </TableCell>
                           <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
                             <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
@@ -387,7 +401,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                                     type: rule.type || 'in', action: rule.action || 'ACCEPT', enable: rule.enable ?? 1,
                                     proto: rule.proto || '', dport: rule.dport || '', sport: rule.sport || '',
                                     source: rule.source || '', dest: rule.dest || '', macro: rule.macro || '',
-                                    iface: rule.iface || '', log: rule.log || 'nolog', comment: rule.comment || ''
+                                    iface: rule.iface || '', log: rule.log || DEFAULT_LOG_LEVEL, comment: rule.comment || ''
                                   })
                                   setHostRuleDialogOpen(true)
                                 }}>
@@ -405,7 +419,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                       )
                     }) : (
                       <TableRow key={`empty-${node}`}>
-                        <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                        <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                           <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
                           <Button size="small" sx={{ mt: 1 }} onClick={() => {
                             setEditingHostRule({ node, rule: null, isNew: true })
@@ -495,7 +509,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                     renderOption={(props, opt) => (
                       <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                          <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
                           {typeof opt !== 'string' && opt.secondary && (
                             <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
                           )}
@@ -517,7 +531,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                     renderOption={(props, opt) => (
                       <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                          <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+                          <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
                           {typeof opt !== 'string' && opt.secondary && (
                             <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
                           )}
@@ -537,6 +551,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                 </Grid>
                 <Grid size={{ xs: 12, sm: 4 }}>
                   <TextField fullWidth size="small" label={t('firewall.interface')} value={newHostRule.iface} onChange={(e) => setNewHostRule({ ...newHostRule, iface: e.target.value })} placeholder="vmbr0, eth0..." />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <LogLevelSelect value={newHostRule.log} onChange={(v) => setNewHostRule({ ...newHostRule, log: v })} />
                 </Grid>
               </>
             )}

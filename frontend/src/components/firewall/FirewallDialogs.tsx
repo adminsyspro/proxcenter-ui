@@ -24,7 +24,7 @@ import {
 } from '@mui/material'
 
 import type { FirewallRule, SecurityGroup } from './types'
-import { MONO_STYLE } from './shared'
+import LogLevelSelect from './LogLevelSelect'
 
 interface AutocompleteOption {
   label: string
@@ -100,7 +100,7 @@ export default function FirewallDialogs({
   const renderAutocompleteOption = (props: React.HTMLAttributes<HTMLLIElement>, opt: string | AutocompleteOption) => (
     <li {...props} key={typeof opt === 'string' ? opt : opt.label}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-        <code style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</code>
+        <span style={{ fontSize: 12 }}>{typeof opt === 'string' ? opt : opt.label}</span>
         {typeof opt !== 'string' && opt.secondary && (
           <span style={{ fontSize: 11, opacity: 0.6, marginLeft: 8 }}>{opt.secondary}</span>
         )}
@@ -133,7 +133,7 @@ export default function FirewallDialogs({
                   size="small"
                   placeholder="IP, CIDR, alias, +ipset"
                   helperText="CIDR, alias, ou +ipset"
-                  InputProps={{ ...params.InputProps, sx: MONO_STYLE }}
+                 
                 />
               )}
             />
@@ -154,7 +154,7 @@ export default function FirewallDialogs({
                   size="small"
                   placeholder="IP, CIDR, alias, +ipset"
                   helperText="CIDR, alias, ou +ipset"
-                  InputProps={{ ...params.InputProps, sx: MONO_STYLE }}
+                 
                 />
               )}
             />
@@ -174,7 +174,7 @@ export default function FirewallDialogs({
             fullWidth
             size="small"
             helperText="CIDR, alias, ou +ipset"
-            InputProps={{ sx: MONO_STYLE }}
+
           />
         </Grid>
         <Grid size={{ xs: 6 }}>
@@ -186,7 +186,7 @@ export default function FirewallDialogs({
             fullWidth
             size="small"
             helperText="CIDR, alias, ou +ipset"
-            InputProps={{ sx: MONO_STYLE }}
+
           />
         </Grid>
       </>
@@ -250,7 +250,7 @@ export default function FirewallDialogs({
                 placeholder="22, 80:443"
                 fullWidth
                 size="small"
-                InputProps={{ sx: MONO_STYLE }}
+
               />
             </Grid>
             {renderSourceDestFields(
@@ -259,6 +259,12 @@ export default function FirewallDialogs({
               (v) => setNewRule((prev: Partial<FirewallRule>) => ({ ...prev, source: v })),
               (v) => setNewRule((prev: Partial<FirewallRule>) => ({ ...prev, dest: v })),
             )}
+            <Grid size={{ xs: 6, sm: 3 }}>
+              <LogLevelSelect
+                value={newRule.log}
+                onChange={(v) => setNewRule((prev: Partial<FirewallRule>) => ({ ...prev, log: v }))}
+              />
+            </Grid>
             <Grid size={{ xs: 12 }}>
               <TextField
                 label={t('network.comment')}
@@ -330,7 +336,6 @@ export default function FirewallDialogs({
                   size="small"
                   disabled
                   InputProps={{
-                    sx: MONO_STYLE,
                     startAdornment: <i className="ri-shield-check-line" style={{ marginRight: 8, color: theme.palette.primary.main }} />
                   }}
                 />
@@ -409,7 +414,7 @@ export default function FirewallDialogs({
                   onChange={(e) => setEditingRule((prev: FirewallRule | null) => prev ? { ...prev, dport: e.target.value } : null)}
                   fullWidth
                   size="small"
-                  InputProps={{ sx: MONO_STYLE }}
+
                 />
               </Grid>
               {renderSourceDestFields(
@@ -418,6 +423,12 @@ export default function FirewallDialogs({
                 (v) => setEditingRule((prev: FirewallRule | null) => prev ? { ...prev, source: v } : null),
                 (v) => setEditingRule((prev: FirewallRule | null) => prev ? { ...prev, dest: v } : null),
               )}
+              <Grid size={{ xs: 6, sm: 3 }}>
+                <LogLevelSelect
+                  value={editingRule?.log}
+                  onChange={(v) => setEditingRule((prev: FirewallRule | null) => prev ? { ...prev, log: v } : null)}
+                />
+              </Grid>
               <Grid size={{ xs: 12 }}>
                 <TextField
                   label={t('network.comment')}

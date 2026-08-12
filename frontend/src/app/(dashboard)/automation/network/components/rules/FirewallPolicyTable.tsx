@@ -12,7 +12,8 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
-import { PolicySection, monoStyle } from '../../types'
+import { formatLogLevel } from '@/components/firewall/logLevels'
+import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 
 // ── Props ──
@@ -48,7 +49,9 @@ function formatService(rule: firewallAPI.FirewallRule): string {
 }
 
 // ── Column header style ──
-const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' } as const
+// Body cells are all `p: 0.5`; without the same padding here the header
+// labels sit ~12px right of their column's values (MUI's default 16px).
+const headCellSx = { fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', p: 0.5 } as const
 
 // ── Main Component ──
 
@@ -264,13 +267,13 @@ export default function FirewallPolicyTable({
             }}
           />
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.source) ? 'text.disabled' : 'text.primary' }}>
           {isGroupRule ? '-' : (rule.source || 'any')}
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, color: (isGroupRule || !rule.dest) ? 'text.disabled' : 'text.primary' }}>
           {isGroupRule ? '-' : (rule.dest || 'any')}
         </TableCell>
-        <TableCell sx={{ ...monoStyle, fontSize: 11, p: 0.5, width: 100 }}>
+        <TableCell sx={{ fontSize: 11, p: 0.5, width: 100 }}>
           {formatService(rule)}
         </TableCell>
         <TableCell sx={{ p: 0.5, width: 90 }}>
@@ -279,6 +282,9 @@ export default function FirewallPolicyTable({
           ) : (
             <ActionChip action={rule.action || 'ACCEPT'} />
           )}
+        </TableCell>
+        <TableCell sx={{ fontSize: 11, p: 0.5, width: 80, color: formatLogLevel(rule.log) === '-' ? 'text.disabled' : 'text.primary' }}>
+          {formatLogLevel(rule.log)}
         </TableCell>
         <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', p: 0.5 }}>
           <Tooltip title={rule.comment || ''}><span style={{ fontSize: 11 }}>{rule.comment || '-'}</span></Tooltip>
@@ -377,6 +383,7 @@ export default function FirewallPolicyTable({
                 <TableCell sx={headCellSx}>{t('network.destination')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 100 }}>{t('firewall.service')}</TableCell>
                 <TableCell sx={{ ...headCellSx, width: 90 }}>{t('firewall.action')}</TableCell>
+                <TableCell sx={{ ...headCellSx, width: 80 }}>{t('firewall.logLevel')}</TableCell>
                 <TableCell sx={headCellSx}>{t('network.comment')}</TableCell>
                 <TableCell sx={{ width: 70 }}></TableCell>
               </TableRow>
@@ -386,7 +393,7 @@ export default function FirewallPolicyTable({
                 clusterRules.map((rule, idx) => renderRuleRow(rule, idx))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={10} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                  <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                     <Typography variant="body2">{t('networkPage.noRules')}</Typography>
                   </TableCell>
                 </TableRow>

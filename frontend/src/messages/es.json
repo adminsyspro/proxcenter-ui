@@ -5951,6 +5951,7 @@
     "interface": "Interfaz",
     "sourcePort": "Puerto de origen",
     "destPort": "Puerto de destino",
+    "logLevel": "Nivel de log",
     "direction": "Dir",
     "service": "Servicio",
     "typeIn": "IN (entrante)",

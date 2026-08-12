@@ -106,12 +106,18 @@ export default function RulesTab({
           }}
         >
           <ToggleButton value={0}>
-            <i className="ri-shield-flash-line" style={{ marginRight: 6, fontSize: 16 }} />
+            <i className="ri-server-line" style={{ marginRight: 6, fontSize: 16 }} />
             {t('networkPage.clusterFirewall')}
             <Chip label={policyRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
           </ToggleButton>
           <ToggleButton value={1}>
-            <i className="ri-server-line" style={{ marginRight: 6, fontSize: 16 }} />
+            <img
+              src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+              alt=""
+              width={16}
+              height={16}
+              style={{ marginRight: 6, opacity: 0.8 }}
+            />
             {t('networkPage.hostRules')}
             <Chip label={hostRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
           </ToggleButton>

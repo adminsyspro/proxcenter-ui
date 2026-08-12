@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import type { FirewallRule, FirewallOptions, SecurityGroup, FirewallAPIAdapter, SnackbarState } from './types'
 import { normalizeRules } from './shared'
+import { DEFAULT_LOG_LEVEL } from './logLevels'
 
 const DEFAULT_NEW_RULE: Partial<FirewallRule> = {
   type: 'in',
@@ -14,6 +15,7 @@ const DEFAULT_NEW_RULE: Partial<FirewallRule> = {
   dport: '',
   source: '',
   dest: '',
+  log: DEFAULT_LOG_LEVEL,
   comment: ''
 }
 

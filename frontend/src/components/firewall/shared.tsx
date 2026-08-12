@@ -8,9 +8,11 @@ import type { FirewallRule } from './types'
    CONSTANTS
 ═══════════════════════════════════════════════════════════════════════════ */
 
-export const LOG_LEVELS = ['nolog', 'emerg', 'alert', 'crit', 'err', 'warning', 'notice', 'info', 'debug']
-
-export const MONO_STYLE = { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace', fontSize: 13 }
+// Log levels live in a React-free module (logLevels.ts) so they can be unit
+// tested; re-exported here because this file is the firewall constants entry
+// point every firewall component already imports from.
+export { LOG_LEVELS, DEFAULT_LOG_LEVEL, resolveLogLevel } from './logLevels'
+export type { LogLevel } from './logLevels'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HELPER COMPONENTS
@@ -19,7 +21,6 @@ export const MONO_STYLE = { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono"
 export const ActionChip = ({ action }: { action: string }) => {
   const colors: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
   const color = colors[action] || '#94a3b8'
-
 
 return (
     <Chip
@@ -40,7 +41,6 @@ return (
 
 export const PolicyChip = ({ policy }: { policy: string }) => {
   const color = policy === 'DROP' ? '#ef4444' : policy === 'REJECT' ? '#f59e0b' : '#22c55e'
-
 
 return (
     <Chip

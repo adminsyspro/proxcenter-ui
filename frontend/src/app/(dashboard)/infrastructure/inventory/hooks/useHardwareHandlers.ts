@@ -365,6 +365,7 @@ export function useHardwareHandlers({
   const [backupsStats, setBackupsStats] = useState<any>(null)
   const [backupsWarnings, setBackupsWarnings] = useState<string[]>([])
   const [backupsPbsConfigured, setBackupsPbsConfigured] = useState<boolean | null>(null)
+  const [backupsVzdumpScanned, setBackupsVzdumpScanned] = useState<boolean>(false)
   const [backupsPreloaded, setBackupsPreloaded] = useState(false)
   const backupsLoadedForIdRef = useRef<string | null>(null) // Track which selection ID backups were loaded for
   const [selectedBackup, setSelectedBackup] = useState<any>(null)
@@ -579,6 +580,7 @@ export function useHardwareHandlers({
     setBackupsStats(null)
     setBackupsWarnings([])
     setBackupsPbsConfigured(null)
+    setBackupsVzdumpScanned(false)
 
     try {
       const params = new URLSearchParams()
@@ -599,6 +601,7 @@ export function useHardwareHandlers({
         setBackupsStats(json.data?.stats || null)
         setBackupsWarnings(json.data?.warnings || [])
         setBackupsPbsConfigured(json.data?.pbsConfigured ?? null)
+        setBackupsVzdumpScanned(json.data?.vzdumpScanned === true)
       }
     } catch (e: any) {
       setBackupsError(e.message || t('errors.loadingError'))
@@ -1390,6 +1393,7 @@ return explorerFiles.filter((file: any) =>
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
     backupsPbsConfigured, setBackupsPbsConfigured,
+    backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
     selectedBackup, setSelectedBackup,

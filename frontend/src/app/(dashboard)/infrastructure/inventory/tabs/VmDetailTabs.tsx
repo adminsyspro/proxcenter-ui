@@ -196,6 +196,7 @@ export default function VmDetailTabs(props: any) {
     backupsStats,
     backupsWarnings,
     backupsPbsConfigured,
+    backupsVzdumpScanned,
     balloon,
     balloonEnabled,
     browseArchive,
@@ -2833,6 +2834,24 @@ return (
                   {/* Liste des backups groupés par PBS/datastore */}
                   {!backupsLoading && !selectedBackup && (() => {
                     if (backups.length === 0) {
+                      // On a aussi balayé les stockages du cluster sans rien
+                      // trouver : dire « pas de PBS » serait trompeur.
+                      if (backupsPbsConfigured === false && backupsVzdumpScanned) {
+                        return (
+                          <Alert severity="info" sx={{ mt: 2 }}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {t('backups.noBackupsAnywhereTitle')}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {t('backups.noBackupsAnywhereHint')}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.7 }}>
+                              {t('backups.noPbsConfiguredHint')}
+                            </Typography>
+                          </Alert>
+                        )
+                      }
+
                       if (backupsPbsConfigured === false) {
                         return (
                           <Alert severity="info" sx={{ mt: 2 }}>

@@ -1125,6 +1125,7 @@ export default function InventoryDetails({
     backupsStats, setBackupsStats,
     backupsWarnings, setBackupsWarnings,
     backupsPbsConfigured, setBackupsPbsConfigured,
+    backupsVzdumpScanned, setBackupsVzdumpScanned,
     backupsPreloaded, setBackupsPreloaded,
     backupsLoadedForIdRef,
     selectedBackup, setSelectedBackup,
@@ -3430,7 +3431,7 @@ return vm?.isCluster ?? false
           {selection?.type === 'vm' && (
             <VmDetailTabs
               {...{addCephReplicationDialogOpen, addReplicationDialogOpen, availableTargetNodes, backToArchives, backToBackupsList,
-                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, backupsPbsConfigured, balloon,
+                backups, backupsError, backupsLoading, backupsPreloaded, backupsStats, backupsWarnings, backupsPbsConfigured, backupsVzdumpScanned, balloon,
                 balloonEnabled, browseArchive, canPreview, canShowRrd, cephClusters, cephClustersLoading,
                 cephReplicationJobs, cephReplicationSchedule, compatibleStorages, cpuCores, cpuLimit,
                 cpuFlags, cpuLimitEnabled, cpuModified, cpuSockets, cpuType, createSnapshot,

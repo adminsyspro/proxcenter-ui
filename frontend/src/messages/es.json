@@ -2432,7 +2432,7 @@
     "noGuestBackups": "No se encontraron backups para este guest.",
     "sourceVzdump": "Archivo local",
     "vzdumpNoBrowsing": "Explorar los archivos de un archivo vzdump requiere un Proxmox Backup Server",
-    "archivesCount": "{count} archivos",
+    "archivesCount": "{count, plural, =1 {# archivo} other {# archivos}}",
     "noBackupsAnywhereTitle": "No se han encontrado copias de seguridad",
     "noBackupsAnywhereHint": "Este huésped no tiene ninguna instantánea en un Proxmox Backup Server conectado, ni ningún archivo vzdump en los almacenamientos del clúster."
   },

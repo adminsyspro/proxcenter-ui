@@ -2401,7 +2401,7 @@
     "noGuestBackups": "未找到此机器的备份。",
     "sourceVzdump": "本地归档",
     "vzdumpNoBrowsing": "浏览 vzdump 归档中的文件需要 Proxmox Backup Server",
-    "archivesCount": "{count} 个归档",
+    "archivesCount": "{count, plural, other {# 个归档}}",
     "noBackupsAnywhereTitle": "未找到备份",
     "noBackupsAnywhereHint": "该实例在已连接的 Proxmox Backup Server 上没有快照，集群存储上也没有 vzdump 归档。"
   },

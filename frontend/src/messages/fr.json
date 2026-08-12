@@ -2432,7 +2432,7 @@
     "noGuestBackups": "Aucune sauvegarde trouvée pour cette machine.",
     "sourceVzdump": "Archive locale",
     "vzdumpNoBrowsing": "Parcourir les fichiers d'une archive vzdump nécessite un Proxmox Backup Server",
-    "archivesCount": "{count} archives",
+    "archivesCount": "{count, plural, =1 {# archive} other {# archives}}",
     "noBackupsAnywhereTitle": "Aucune sauvegarde trouvée",
     "noBackupsAnywhereHint": "Cette instance n'a aucun snapshot sur un Proxmox Backup Server connecté, ni aucune archive vzdump sur les stockages du cluster."
   },

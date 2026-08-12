@@ -2402,7 +2402,7 @@
     "noGuestBackups": "Keine Sicherungen für diese Maschine gefunden.",
     "sourceVzdump": "Lokales Archiv",
     "vzdumpNoBrowsing": "Das Durchsuchen von Dateien in einem vzdump-Archiv erfordert einen Proxmox Backup Server",
-    "archivesCount": "{count} Archive",
+    "archivesCount": "{count, plural, =1 {# Archiv} other {# Archive}}",
     "noBackupsAnywhereTitle": "Keine Sicherungen gefunden",
     "noBackupsAnywhereHint": "Dieser Gast hat weder einen Snapshot auf einem verbundenen Proxmox Backup Server noch ein vzdump-Archiv auf den Speichern des Clusters."
   },

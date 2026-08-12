@@ -21,7 +21,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
-import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import {
@@ -2657,7 +2657,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       } finally {
         // Always remove snapshot after cloning (even on failure)
         await appendLog(jobId, "Removing ESXi snapshot...", "info")
-        await soapRemoveAllSnapshots(soapSession!, config.sourceVmId).catch((e: any) => {
+        // Bounded on purpose: the very next phase powers the source off and
+        // starts counting downtime, so this must not inherit the multi-hour
+        // budget a warm delta pass needs (nothing here waits on the merge).
+        await soapRemoveAllSnapshots(soapSession!, config.sourceVmId, { timeoutMs: SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS }).catch((e: any) => {
           appendLog(jobId, `Warning: failed to remove snapshot: ${e.message}`, "warn")
         })
       }

@@ -104,4 +104,46 @@ describe('resolveVzdumpScanTargets', () => {
     expect(targets).toHaveLength(VZDUMP_MAX_PAIRS)
     expect(targets[0]).toEqual({ node: 'node40', storage: 'local' })
   })
+
+  it('preserves current node pairs across multiple storages when truncating', () => {
+    const many = Array.from({ length: 20 }, (_, i) => `node${i + 1}`)
+    const storages = [
+      { storage: 'local', type: 'dir', content: 'backup', shared: 0 },
+      { storage: 'backup2', type: 'dir', content: 'backup', shared: 0 },
+    ]
+    const resources = [
+      ...nodes(...many),
+      ...many.map(n => storageRes('local', n)),
+      ...many.map(n => storageRes('backup2', n)),
+    ]
+    const { targets, truncated } = resolveVzdumpScanTargets(storages, resources, 'node5')
+    expect(truncated).toBe(true)
+    expect(targets).toHaveLength(VZDUMP_MAX_PAIRS)
+    const firstTwo = new Set([
+      JSON.stringify(targets[0]),
+      JSON.stringify(targets[1]),
+    ])
+    expect(firstTwo).toEqual(
+      new Set([
+        JSON.stringify({ node: 'node5', storage: 'local' }),
+        JSON.stringify({ node: 'node5', storage: 'backup2' }),
+      ]),
+    )
+  })
+
+  it('does not truncate when targets length equals the hard cap', () => {
+    const many = Array.from({ length: 16 }, (_, i) => `node${i + 1}`)
+    const storages = [
+      { storage: 'local', type: 'dir', content: 'backup', shared: 0 },
+      { storage: 'backup2', type: 'dir', content: 'backup', shared: 0 },
+    ]
+    const resources = [
+      ...nodes(...many),
+      ...many.map(n => storageRes('local', n)),
+      ...many.map(n => storageRes('backup2', n)),
+    ]
+    const { targets, truncated } = resolveVzdumpScanTargets(storages, resources)
+    expect(targets).toHaveLength(VZDUMP_MAX_PAIRS)
+    expect(truncated).toBe(false)
+  })
 })

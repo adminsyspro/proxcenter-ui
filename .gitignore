@@ -56,6 +56,7 @@ backend/
 # this repo or in a private one. The Superpowers skill writes its plans
 # and specs under docs/superpowers/; that path is now ignored entirely.
 **/docs/superpowers/
+.superpowers/
 **/docs/internal/
 **/docs/audits/
 **/docs/plans/

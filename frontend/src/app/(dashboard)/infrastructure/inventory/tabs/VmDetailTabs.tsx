@@ -2822,9 +2822,12 @@ return (
                               <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('backups.verified')}</Typography>
                             </Box>
                           )}
+                          {/* Sans PBS, la tuile « Vérifiées » disparaît et
+                              celle-ci jouxte le compteur : deux « Total »
+                              côte à côte ne disent plus lequel est lequel. */}
                           <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ fontWeight: 700 }}>{backupsStats.totalSizeFormatted}</Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>Total</Typography>
+                            <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('common.size')}</Typography>
                           </Box>
                         </Box>
                       </CardContent>

@@ -379,10 +379,14 @@ export default function VmDetailTabs(props: any) {
   const changeTrackingAvailable = hasFeature(Features.CHANGE_TRACKING)
 
   // Namespaces seen in the loaded backup snapshots, sorted alphabetically with
-  // root first. Drives the dropdown above the BACKUP list.
+  // root first. Drives the dropdown above the BACKUP list. vzdump archives live
+  // on a PVE storage and have no namespace, so they never feed the dropdown.
   const availableBackupNamespaces = useMemo<string[]>(() => {
     const set = new Set<string>()
-    for (const b of backups || []) set.add(b.namespace || '')
+    for (const b of backups || []) {
+      if (b.source === 'vzdump') continue
+      set.add(b.namespace || '')
+    }
     return Array.from(set).sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
   }, [backups])
 
@@ -2803,15 +2807,20 @@ return (
                   {!backupsLoading && backupsStats && backupsStats.total > 0 && !selectedBackup && (
                     <Card variant="outlined" sx={{ mb: 2 }}>
                       <CardContent sx={{ pb: '16px !important' }}>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: backupsStats.pbsTotal > 0 ? '1fr 1fr 1fr' : '1fr 1fr', gap: 2 }}>
                           <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ fontWeight: 700, color: primaryColor }}>{backupsStats.total}</Typography>
                             <Typography variant="caption" sx={{ opacity: 0.6 }}>Total</Typography>
                           </Box>
-                          <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main' }}>{backupsStats.verifiedCount || 0}</Typography>
-                            <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('backups.verified')}</Typography>
-                          </Box>
+                          {/* "Verified" only means something for PBS snapshots: a vzdump
+                              archive is never verified, so counting it in would read as
+                              a failed verification. */}
+                          {backupsStats.pbsTotal > 0 && (
+                            <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 700, color: 'success.main' }}>{backupsStats.verifiedCount || 0}</Typography>
+                              <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('backups.verified')}</Typography>
+                            </Box>
+                          )}
                           <Box sx={{ textAlign: 'center', p: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
                             <Typography variant="h6" sx={{ fontWeight: 700 }}>{backupsStats.totalSizeFormatted}</Typography>
                             <Typography variant="caption" sx={{ opacity: 0.6 }}>Total</Typography>
@@ -2846,9 +2855,12 @@ return (
 
                     // Apply the namespace filter before grouping so the rest of
                     // the UI (counts, totals) stays consistent with what is shown.
+                    // vzdump archives have no namespace at all, so they stay
+                    // visible whichever namespace is selected.
                     const visibleBackups = vmBackupNamespaceFilter === 'all'
                       ? backups
-                      : backups.filter((b: any) => (b.namespace || '') === vmBackupNamespaceFilter)
+                      : backups.filter((b: any) =>
+                          b.source === 'vzdump' || (b.namespace || '') === vmBackupNamespaceFilter)
 
                     if (visibleBackups.length === 0) {
                       return (
@@ -2858,10 +2870,15 @@ return (
                       )
                     }
 
-                    // Group by pbsName/datastore
+                    // Group by PBS/datastore for PBS snapshots, by node/storage for
+                    // vzdump archives. The source is part of the key so the two
+                    // families never land in the same group.
                     const groupMap = new Map<string, any[]>()
                     for (const backup of visibleBackups) {
-                      const groupKey = `${backup.pbsName || 'PBS'}/${backup.datastore || 'default'}`
+                      const groupKey = backup.source === 'vzdump'
+                        ? `vzdump|${backup.node}|${backup.storage}`
+                        : `pbs|${backup.pbsName || 'PBS'}|${backup.datastore || 'default'}`
+
                       if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
                       groupMap.get(groupKey)!.push(backup)
                     }
@@ -2881,7 +2898,8 @@ return (
                             const isExpanded = expandedVmBackupGroups.has(groupId)
                             const totalSize = groupBackups.reduce((sum: number, b: any) => sum + (b.size || 0), 0)
                             const verifiedCount = groupBackups.filter((b: any) => b.verified).length
-                            const [pbsName, dsName] = groupId.split('/')
+                            const [groupSource, groupPrimary, groupSecondary] = groupId.split('|')
+                            const isVzdumpGroup = groupSource === 'vzdump'
 
                             return (
                               <Box key={groupId}>
@@ -2907,27 +2925,40 @@ return (
                                   <i className={isExpanded ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 18, opacity: 0.5 }} />
                                   <i className="ri-shield-check-line" style={{ fontSize: 16, color: primaryColor }} />
                                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                                    <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: 12 }}>
-                                      {pbsName}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                                      <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: 12 }}>
+                                        {groupPrimary}
+                                      </Typography>
+                                      <Chip
+                                        size="small"
+                                        label={isVzdumpGroup ? t('backups.sourceVzdump') : 'PBS'}
+                                        sx={{ height: 18, fontSize: 10 }}
+                                      />
+                                    </Box>
                                     <Typography variant="caption" sx={{ opacity: 0.5, fontSize: 10 }}>
-                                      {dsName}
+                                      {groupSecondary}
                                     </Typography>
                                   </Box>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                                     <Typography variant="body2" sx={{ opacity: 0.7, fontSize: 12 }}>
-                                      {groupBackups.length} snapshot{groupBackups.length > 1 ? 's' : ''}
+                                      {isVzdumpGroup
+                                        ? t('backups.archivesCount', { count: groupBackups.length })
+                                        : `${groupBackups.length} snapshot${groupBackups.length > 1 ? 's' : ''}`}
                                     </Typography>
-                                    {verifiedCount === groupBackups.length ? (
-                                      <MuiTooltip title={t('inventory.pbsAllVerified')}>
-                                        <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: '#4caf50' }} />
-                                      </MuiTooltip>
-                                    ) : verifiedCount > 0 ? (
-                                      <MuiTooltip title={`${verifiedCount}/${groupBackups.length}`}>
-                                        <i className="ri-checkbox-circle-line" style={{ fontSize: 16, color: '#ff9800' }} />
-                                      </MuiTooltip>
-                                    ) : (
-                                      <i className="ri-checkbox-blank-circle-line" style={{ fontSize: 16, opacity: 0.3 }} />
+                                    {/* A vzdump archive is never verified: showing the group
+                                        verification state would read as "nothing verified". */}
+                                    {!isVzdumpGroup && (
+                                      verifiedCount === groupBackups.length ? (
+                                        <MuiTooltip title={t('inventory.pbsAllVerified')}>
+                                          <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: '#4caf50' }} />
+                                        </MuiTooltip>
+                                      ) : verifiedCount > 0 ? (
+                                        <MuiTooltip title={`${verifiedCount}/${groupBackups.length}`}>
+                                          <i className="ri-checkbox-circle-line" style={{ fontSize: 16, color: '#ff9800' }} />
+                                        </MuiTooltip>
+                                      ) : (
+                                        <i className="ri-checkbox-blank-circle-line" style={{ fontSize: 16, opacity: 0.3 }} />
+                                      )
                                     )}
                                     <Typography variant="body2" sx={{ opacity: 0.6, minWidth: 70, textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
                                       {formatBytes(totalSize)}
@@ -2951,7 +2982,12 @@ return (
                                       <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10, textAlign: 'center' }}>{t('common.status')}</Typography>
                                       <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.6, fontSize: 10, textAlign: 'center' }}></Typography>
                                     </Box>
-                                    {groupBackups.map((backup: any, idx: number) => (
+                                    {groupBackups.map((backup: any, idx: number) => {
+                                      // A vzdump archive cannot be browsed: the row is inert,
+                                      // only its Restore button stays active.
+                                      const isVzdump = backup.source === 'vzdump'
+
+                                      return (
                                       <Box
                                         key={backup.id || idx}
                                         sx={{
@@ -2961,11 +2997,11 @@ return (
                                           borderBottom: idx < groupBackups.length - 1 ? '1px solid' : 'none',
                                           borderColor: 'divider',
                                           alignItems: 'center',
-                                          cursor: 'pointer',
-                                          '&:hover': { bgcolor: 'action.focus' },
+                                          cursor: isVzdump ? 'default' : 'pointer',
+                                          '&:hover': isVzdump ? undefined : { bgcolor: 'action.focus' },
                                           minHeight: 28,
                                         }}
-                                        onClick={() => {
+                                        onClick={isVzdump ? undefined : () => {
                                           setSelectedBackup(backup)
                                           loadBackupContent(backup)
                                         }}
@@ -2984,7 +3020,7 @@ return (
                                             <MuiTooltip title={t('backups.verified')}>
                                               <i className="ri-checkbox-circle-fill" style={{ fontSize: 15, color: '#4caf50' }} />
                                             </MuiTooltip>
-                                          ) : (
+                                          ) : isVzdump ? null : (
                                             <i className="ri-checkbox-blank-circle-line" style={{ fontSize: 15, opacity: 0.3 }} />
                                           )}
                                           {backup.protected && (
@@ -2994,7 +3030,13 @@ return (
                                           )}
                                         </Box>
                                         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                                          <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.4 }} />
+                                          {isVzdump ? (
+                                            <MuiTooltip title={t('backups.vzdumpNoBrowsing')}>
+                                              <i className="ri-information-line" style={{ fontSize: 15, opacity: 0.4 }} />
+                                            </MuiTooltip>
+                                          ) : (
+                                            <i className="ri-arrow-right-s-line" style={{ fontSize: 16, opacity: 0.4 }} />
+                                          )}
                                         </Box>
                                         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                                           <MuiTooltip title={t('inventory.pbsRestoreVm') ?? 'Restore'}>
@@ -3008,7 +3050,8 @@ return (
                                           </MuiTooltip>
                                         </Box>
                                       </Box>
-                                    ))}
+                                      )
+                                    })}
                                   </Box>
                                 )}
                               </Box>

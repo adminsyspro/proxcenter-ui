@@ -1,11 +1,31 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+let cookieLocale: string | undefined
+let acceptLanguage: string | undefined
+
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === 'NEXT_LOCALE' && cookieLocale !== undefined ? { value: cookieLocale } : undefined,
+  }),
+  headers: async () => ({
+    get: (name: string) =>
+      name.toLowerCase() === 'accept-language' && acceptLanguage !== undefined ? acceptLanguage : null,
+  }),
+}))
 
 import {
   normalizeLocale,
   localeToLanguageName,
   languageInstruction,
   jsonLanguageInstruction,
+  getRequestLocale,
 } from './locale'
+
+beforeEach(() => {
+  cookieLocale = undefined
+  acceptLanguage = undefined
+})
 
 describe('normalizeLocale', () => {
   it('keeps every supported locale as-is', () => {
@@ -74,5 +94,53 @@ describe('jsonLanguageInstruction', () => {
 
   it('falls back to English for an unknown locale', () => {
     expect(jsonLanguageInstruction('it')).toMatch(/value in English/)
+  })
+})
+
+// Resolution order mirrors src/i18n/request.ts, which decides the language
+// of the UI the answer is displayed in. The two must not disagree: a German
+// UI served from Accept-Language with an English AI answer is exactly the
+// symptom #686 is about.
+describe('getRequestLocale', () => {
+  it('prefers the NEXT_LOCALE cookie', async () => {
+    cookieLocale = 'ko'
+    acceptLanguage = 'de-DE,de;q=0.9'
+
+    await expect(getRequestLocale()).resolves.toBe('ko')
+  })
+
+  it('falls back to Accept-Language when the cookie is missing', async () => {
+    acceptLanguage = 'de-DE,de;q=0.9,en;q=0.8'
+
+    await expect(getRequestLocale()).resolves.toBe('de')
+  })
+
+  it('falls back to Accept-Language when the cookie holds an unsupported locale', async () => {
+    cookieLocale = 'it'
+    acceptLanguage = 'es-ES,es;q=0.9'
+
+    await expect(getRequestLocale()).resolves.toBe('es')
+  })
+
+  it('matches a regional tag exactly before trying its prefix', async () => {
+    acceptLanguage = 'zh-CN,zh;q=0.9'
+
+    await expect(getRequestLocale()).resolves.toBe('zh-CN')
+  })
+
+  it('skips languages ProxCenter does not ship', async () => {
+    acceptLanguage = 'it-IT,it;q=0.9,fr;q=0.7'
+
+    await expect(getRequestLocale()).resolves.toBe('fr')
+  })
+
+  it('falls back to English when nothing matches', async () => {
+    acceptLanguage = 'it-IT,it;q=0.9'
+
+    await expect(getRequestLocale()).resolves.toBe('en')
+  })
+
+  it('falls back to English with neither cookie nor header', async () => {
+    await expect(getRequestLocale()).resolves.toBe('en')
   })
 })

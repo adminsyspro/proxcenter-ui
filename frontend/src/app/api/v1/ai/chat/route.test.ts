@@ -47,11 +47,16 @@ vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: vi.fn() }))
 // The route prefers the `locale` field of the body and falls back to the
 // NEXT_LOCALE cookie middleware sets. `undefined` simulates no cookie.
 let cookieLocale: string | undefined
+let acceptLanguage: string | undefined
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) =>
       name === 'NEXT_LOCALE' && cookieLocale !== undefined ? { value: cookieLocale } : undefined,
+  }),
+  headers: async () => ({
+    get: (name: string) =>
+      name.toLowerCase() === 'accept-language' && acceptLanguage !== undefined ? acceptLanguage : null,
   }),
 }))
 
@@ -75,6 +80,7 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   aiSettings = { ...OLLAMA_SETTINGS }
   cookieLocale = 'en'
+  acceptLanguage = undefined
   fetchMock = vi.fn().mockResolvedValue(ollamaReply())
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -180,6 +186,15 @@ describe('POST /api/v1/ai/chat', () => {
       await ask()
 
       expect(sentMessage()).toContain('written in Korean')
+    })
+
+    it('reads Accept-Language when neither the body nor a cookie carries a locale', async () => {
+      cookieLocale = undefined
+      acceptLanguage = 'de-DE,de;q=0.9,en;q=0.8'
+
+      await ask()
+
+      expect(sentMessage()).toContain('written in German')
     })
 
     it('prefers the body locale over the cookie when both are present', async () => {

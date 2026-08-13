@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getRequestLocale, jsonLanguageInstruction } from "@/lib/ai/locale"
+import { getRequestLocale, jsonLanguageInstruction, normalizeLocale } from "@/lib/ai/locale"
 
 export const runtime = "nodejs"
 
@@ -161,20 +161,20 @@ Reply ONLY with valid JSON (no markdown, no backticks, no text before or after) 
   "summary": "A 2-3 sentence summary of the state of the infrastructure",
   "recommendations": [
     {
-      "id": "rec_1",
+      "id": "rec_1, then rec_2, rec_3 ... one distinct id per recommendation",
       "type": "overprovisioned|underused|stopped|prediction|optimization",
       "severity": "high|medium|low|info",
       "title": "Short title",
       "description": "Detailed description",
       "savings": "Potential saving (optional)",
-      "vmName": "Name of the VM concerned (optional)"
+      "vmName": "Name of the VM concerned, copied character for character from the data above (optional)"
     }
   ]
 }
 
 Generate between 3 and 6 relevant recommendations based on the data.
 
-The "id", "type" and "severity" values are enumerations consumed by code: keep them exactly as listed above, in English. Only "summary", "title", "description" and "savings" are read by a human.
+"type" and "severity" are enumerations consumed by code: use one of the listed values, in English. "id" must be unique per recommendation. "vmName" identifies a real guest and must be copied verbatim, never translated. Only "summary", "title", "description" and "savings" are read by a human.
 
 ${jsonLanguageInstruction(locale)}`
 }
@@ -186,19 +186,22 @@ export async function POST(req: Request) {
 
     const body = await req.json()
 
-    const { kpis, topCpuVms, topRamVms } = body as {
+    const { kpis, topCpuVms, topRamVms, locale: bodyLocale } = body as {
       kpis: KpiData
       topCpuVms: TopVm[]
       topRamVms: TopVm[]
+      locale?: string
     }
 
     if (!kpis) {
       return NextResponse.json({ error: "Missing KPI data" }, { status: 400 })
     }
 
-    // Construire le prompt — la langue de réponse suit le cookie NEXT_LOCALE
-    // (le client n'envoie pas de locale, voir useResourceData.runAiAnalysis)
-    const locale = await getRequestLocale()
+    // Same idiom as the two chat routes: the caller's locale when it sends
+    // one, the request's otherwise. `normalizeLocale` narrows a
+    // caller-controlled value to a supported locale before it reaches the
+    // prompt.
+    const locale = bodyLocale ? normalizeLocale(bodyLocale) : await getRequestLocale()
     const prompt = buildPrompt(kpis, topCpuVms || [], topRamVms || [], locale)
     
     // Essayer Ollama, sinon fallback basique

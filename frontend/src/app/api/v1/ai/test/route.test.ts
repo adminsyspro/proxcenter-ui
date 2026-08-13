@@ -13,11 +13,16 @@ vi.mock('@/lib/rbac', () => ({
 // middleware sets. `cookieLocale` lets each test pretend to be a different
 // UI language; `undefined` simulates a request without the cookie.
 let cookieLocale: string | undefined
+let acceptLanguage: string | undefined
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) =>
       name === 'NEXT_LOCALE' && cookieLocale !== undefined ? { value: cookieLocale } : undefined,
+  }),
+  headers: async () => ({
+    get: (name: string) =>
+      name.toLowerCase() === 'accept-language' && acceptLanguage !== undefined ? acceptLanguage : null,
   }),
 }))
 
@@ -26,6 +31,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   cookieLocale = 'en'
+  acceptLanguage = undefined
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
 })

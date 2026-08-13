@@ -161,7 +161,7 @@ async function fetchProxmoxData(connections: any[]) {
 // et impose la langue de la réponse. Les deux diffèrent pour de, es, ko et
 // zh-CN, qui lisent un prompt anglais mais doivent répondre dans leur
 // propre langue (#686).
-async function buildSystemPrompt(lang: string = 'en', locale: string = 'en') {
+async function buildSystemPrompt(lang: string, locale: string) {
   const isFr = lang === 'fr'
   const connections = await getConnections()
   const alerts = await getActiveAlerts()

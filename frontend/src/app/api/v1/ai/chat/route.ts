@@ -224,7 +224,7 @@ const promptStrings = {
 // and drives the language the model must answer in. They differ for de, es,
 // ko and zh-CN, which read an English prompt but must get an answer in
 // their own language (#686).
-async function buildSystemPrompt(lang: string = 'en', locale: string = 'en') {
+async function buildSystemPrompt(lang: string, locale: string) {
   const s = lang === 'fr' ? promptStrings.fr : promptStrings.en
   const connections = await getConnections()
   const alerts = await getActiveAlerts()

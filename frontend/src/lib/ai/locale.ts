@@ -7,7 +7,7 @@
 // (issue #686). Every AI route now derives the language from the UI locale
 // and appends an explicit instruction.
 
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 import { defaultLocale, locales, type Locale } from '@/i18n/config'
 
@@ -60,16 +60,52 @@ export function jsonLanguageInstruction(locale?: string | null): string {
 }
 
 /**
- * UI locale of the current request, read from the NEXT_LOCALE cookie that
- * middleware always sets (see src/middleware.ts). Used by AI routes whose
- * client sends no locale in the body. Falls back to the default locale
- * when the cookie is missing or when there is no request scope at all.
+ * First locale of an Accept-Language header that ProxCenter ships, exact
+ * match first then two-letter prefix ("fr-FR" -> "fr"). Mirrors the
+ * resolution order of src/i18n/request.ts, which is what actually decides
+ * the language of the UI the answer will be displayed in.
+ */
+function localeFromAcceptLanguage(header: string | null): Locale | undefined {
+  if (!header) return undefined
+
+  for (const entry of header.split(',').map(part => part.split(';')[0].trim())) {
+    const exact = locales.find(loc => loc.toLowerCase() === entry.toLowerCase())
+
+    if (exact) return exact
+
+    const prefix = entry.slice(0, 2).toLowerCase()
+    const prefixMatch = locales.find(loc => loc.toLowerCase() === prefix)
+
+    if (prefixMatch) return prefixMatch
+  }
+
+  return undefined
+}
+
+/**
+ * UI locale of the current request, for AI routes whose client sends no
+ * locale in its body. Resolved exactly like src/i18n/request.ts does for
+ * the UI itself: NEXT_LOCALE cookie first, then Accept-Language.
+ *
+ * The header fallback is not decoration. Middleware only sets the cookie on
+ * page requests, so a browser that blocks it, or a client that reaches an
+ * API route without ever loading a page, renders a German UI from
+ * Accept-Language while a cookie-only resolver would answer in English:
+ * the very symptom #686 is about. Falls back to the default locale when
+ * there is no request scope at all.
  */
 export async function getRequestLocale(): Promise<Locale> {
   try {
     const cookieStore = await cookies()
+    const fromCookie = cookieStore.get('NEXT_LOCALE')?.value
 
-    return normalizeLocale(cookieStore.get('NEXT_LOCALE')?.value)
+    if (fromCookie && (locales as readonly string[]).includes(fromCookie)) {
+      return fromCookie as Locale
+    }
+
+    const headerStore = await headers()
+
+    return localeFromAcceptLanguage(headerStore.get('accept-language')) ?? defaultLocale
   } catch {
     return defaultLocale
   }

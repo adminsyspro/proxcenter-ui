@@ -69,7 +69,11 @@ return NextResponse.json({
         body: JSON.stringify({
           model: settings.openaiModel,
           messages: [{ role: 'user', content: probePrompt }],
-          max_tokens: 50
+          // One sentence, but the probe now answers in the caller's
+          // language and Korean or Chinese spend noticeably more tokens on
+          // the same sentence. 50 truncated them mid-word, which reads in
+          // the settings panel like a broken provider.
+          max_tokens: 150
         })
       })
       
@@ -101,7 +105,11 @@ return NextResponse.json({
         body: JSON.stringify({
           model: settings.anthropicModel,
           messages: [{ role: 'user', content: probePrompt }],
-          max_tokens: 50
+          // One sentence, but the probe now answers in the caller's
+          // language and Korean or Chinese spend noticeably more tokens on
+          // the same sentence. 50 truncated them mid-word, which reads in
+          // the settings panel like a broken provider.
+          max_tokens: 150
         })
       })
       

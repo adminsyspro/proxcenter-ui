@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { safeLog } from "@/lib/log/sanitize"
+import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -37,6 +38,16 @@ export async function GET(
   try {
     const params = await ctx.params
     const { connId, type, node, vmid } = parseVmKey(params.vmid)
+
+    // RBAC: vm.view, checked first, before the constant-answer shortcut
+    // below, so this route cannot be used as an unauthenticated oracle either.
+    const denied = await checkPermission(
+      PERMISSIONS.VM_VIEW,
+      "vm",
+      buildVmResourceId(connId, node, type, vmid)
+    )
+
+    if (denied) return denied
 
     const url = new URL(req.url)
     const feature = url.searchParams.get('feature')

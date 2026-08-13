@@ -100,6 +100,14 @@ const publicApiRoutes = [
   "/api/internal", // API internes (proxy WS, etc.)
 ]
 
+// Extensions that make a NON-API path a static file (see isAsset). Anchored at
+// the end of the path on purpose: only the last segment can be a file name.
+// Covers what public/ actually ships: the static console pages (.html), the
+// logos and backgrounds, the worker bundles, plus the usual font and media
+// types a browser asks for directly.
+const STATIC_FILE_EXT =
+  /\.(?:js|mjs|css|map|svg|png|jpe?g|gif|webp|avif|ico|html|json|ya?ml|txt|xml|pdf|woff2?|ttf|otf|eot|wasm|webmanifest|mp4)$/i
+
 // Detect locale from Accept-Language header
 function getLocaleFromHeader(request: NextRequest): string {
   const acceptLanguage = request.headers.get('accept-language')
@@ -243,11 +251,21 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
   const isPublicApiRoute = publicApiRoutes.some(route => pathname.startsWith(route))
 
-  // Assets et fichiers statiques
+  // Assets et fichiers statiques.
+  //
+  // The extension rule used to be a bare pathname.includes("."), which made a
+  // dot ANYWHERE in the path enough to be called an asset, including in an
+  // /api path, which then rode the early return below and reached its route
+  // handler without ever passing the JWT check (GHSA-79j6-v2r5-5pw5). Dots in
+  // an API path are ordinary here, not exotic: Proxmox node names accept them
+  // (assertNodeName, lib/ssh/validate.ts) and the guest routes carry the node
+  // name inside their connId:type:node:vmid segment. Two things changed: /api
+  // is never an asset, and elsewhere only a real trailing file extension from
+  // the list below counts, so a dotted dynamic segment cannot pose as a file.
   const isAsset = pathname.startsWith("/_next") ||
                   pathname.startsWith("/images") ||
                   pathname.startsWith("/favicon") ||
-                  pathname.includes(".")
+                  (!isApiPath && STATIC_FILE_EXT.test(pathname))
 
   // Handle locale detection for non-API routes
   if (!pathname.startsWith("/api/") && !isAsset) {
@@ -313,9 +331,8 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Gesture 3: bounded API-token derogation, placed BEFORE the early return
-  // below on purpose: isAsset includes pathname.includes('.') and an
-  // allowlisted path containing a dot would otherwise skip this gate. The
+  // Gesture 3: bounded API-token derogation, kept BEFORE the early return
+  // below so the OPTIONS 405 and the header stamping always win over it. The
   // middleware never validates the token (edge runtime, no DB): it only
   // matches the path via the shared matcher and stamps the internal headers;
   // hash, license, tenant, scopes and quota live in getPrincipal().
@@ -344,12 +361,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // A Bearer pxc_ outside the allowlist derogates to NOTHING: it must not
-  // even ride the isAsset dot rescue (pathname.includes('.')) below, it falls
-  // through to the existing JWT check and its cookie 401 instead. Cookie
-  // browser requests never carry a Bearer pxc_, so their behavior here is
-  // strictly unchanged.
-  if (isPublicRoute || isPublicApiRoute || (isAsset && !hasApiTokenBearer)) {
+  // A Bearer pxc_ outside the allowlist derogates to NOTHING: it falls through
+  // to the JWT check below and gets the same cookie 401 as anyone else. It no
+  // longer needs to be excluded from the asset branch by hand either: isAsset
+  // and isApiPath are now mutually exclusive by construction, so no /api path
+  // can be rescued as a file.
+  if (isPublicRoute || isPublicApiRoute || isAsset) {
     return NextResponse.next(isApiPath ? { request: { headers: requestHeaders } } : undefined)
   }
 

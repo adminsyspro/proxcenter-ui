@@ -6,6 +6,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRequestLocale, languageInstruction, localeToLanguageName, normalizeLocale } from '@/lib/ai/locale'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -155,8 +156,12 @@ async function fetchProxmoxData(connections: any[]) {
   return allData
 }
 
-// Construire le prompt système
-async function buildSystemPrompt(lang: string = 'en') {
+// Construire le prompt système.
+// `lang` choisit le corps fr/en du prompt; `locale` est la vraie locale UI
+// et impose la langue de la réponse. Les deux diffèrent pour de, es, ko et
+// zh-CN, qui lisent un prompt anglais mais doivent répondre dans leur
+// propre langue (#686).
+async function buildSystemPrompt(lang: string, locale: string) {
   const isFr = lang === 'fr'
   const connections = await getConnections()
   const alerts = await getActiveAlerts()
@@ -224,9 +229,16 @@ async function buildSystemPrompt(lang: string = 'en') {
   }
 
   prompt += `\n=== INSTRUCTIONS ===\n`
+
+  // The answer language, not a literal "English": this English body is what
+  // de, es, ko and zh-CN users get, and saying "Respond in English" here
+  // contradicted the instruction appended just below (#686). The small local
+  // models Ollama usually serves follow contradictory prompts poorly.
   prompt += isFr
     ? `- Réponds en français\n- Utilise les données ci-dessus\n- Cite les noms exacts\n`
-    : `- Respond in English\n- Use the data above\n- Cite exact names\n`
+    : `- Respond in ${localeToLanguageName(locale)}\n- Use the data above\n- Cite exact names\n`
+
+  prompt += `\n${languageInstruction(locale)}\n`
 
   return prompt
 }
@@ -238,7 +250,11 @@ export async function POST(request: Request) {
     if (denied) return denied
 
     const { messages, locale } = await request.json()
-    const lang = locale === 'fr' ? 'fr' : 'en'
+
+    // Le drawer envoie `locale`; repli sur le cookie NEXT_LOCALE pour tout
+    // appelant qui ne le fait pas.
+    const uiLocale = locale ? normalizeLocale(locale) : await getRequestLocale()
+    const lang = uiLocale === 'fr' ? 'fr' : 'en'
     const settings = await getAISettings()
 
     if (!settings.enabled) {
@@ -249,7 +265,7 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    const systemPrompt = await buildSystemPrompt(lang)
+    const systemPrompt = await buildSystemPrompt(lang, uiLocale)
 
     const lastUserMessage = messages[messages.length - 1]
     const contextualizedMessage = `${systemPrompt}
@@ -257,7 +273,9 @@ export async function POST(request: Request) {
 === QUESTION ===
 ${lastUserMessage.content}
 
-${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : 'Respond using ONLY the data above.'}`
+${lang === 'fr' ? 'Réponds en utilisant UNIQUEMENT les données ci-dessus.' : 'Respond using ONLY the data above.'}
+
+${languageInstruction(uiLocale)}`
 
     if (settings.provider === 'ollama') {
       const ollamaMessages = [

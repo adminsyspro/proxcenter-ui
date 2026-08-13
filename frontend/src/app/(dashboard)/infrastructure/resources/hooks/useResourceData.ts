@@ -64,7 +64,9 @@ export function useResourceData(connectionId?: string) {
       const res = await fetch('/api/v1/resources/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kpis, topCpuVms, topRamVms }),
+        // #686: the page already knows its locale, so send it rather than
+        // leaving the route to infer one from request headers.
+        body: JSON.stringify({ kpis, topCpuVms, topRamVms, locale }),
       })
 
       if (!res.ok) throw new Error(t('resources.analysisError'))

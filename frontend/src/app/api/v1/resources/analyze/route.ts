@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRequestLocale, jsonLanguageInstruction, normalizeLocale } from "@/lib/ai/locale"
 
 export const runtime = "nodejs"
 
@@ -124,48 +125,58 @@ return response.ok
   }
 }
 
-function buildPrompt(kpis: KpiData, topCpuVms: TopVm[], topRamVms: TopVm[]): string {
-  return `Tu es un expert en optimisation d'infrastructure Proxmox. Analyse les données suivantes et fournis des recommandations.
+// #686: this prompt used to be written entirely in French, so the summary
+// and recommendations rendered by AiInsightsCard came back in French for
+// every user whatever their UI language. The prompt is now authored in
+// English and carries an explicit language instruction derived from the UI
+// locale. The reply is JSON-parsed below, so the instruction must keep the
+// keys in English and only translate the human-readable values.
+function buildPrompt(kpis: KpiData, topCpuVms: TopVm[], topRamVms: TopVm[], locale: string): string {
+  return `You are an expert in Proxmox infrastructure optimization. Analyze the following data and provide recommendations.
 
-## Données de l'infrastructure
+## Infrastructure data
 
-### KPIs globaux
-- CPU: ${kpis.cpu.used.toFixed(1)}% utilisé (${kpis.cpu.allocated} vCPUs alloués sur ${kpis.cpu.total} disponibles)
-- RAM: ${kpis.ram.used.toFixed(1)}% utilisée (${formatBytes(kpis.ram.allocated)} alloués sur ${formatBytes(kpis.ram.total)} disponibles)
-- Stockage: ${((kpis.storage.used / kpis.storage.total) * 100).toFixed(1)}% utilisé (${formatBytes(kpis.storage.used)} sur ${formatBytes(kpis.storage.total)})
+### Global KPIs
+- CPU: ${kpis.cpu.used.toFixed(1)}% used (${kpis.cpu.allocated} vCPUs allocated out of ${kpis.cpu.total} available)
+- RAM: ${kpis.ram.used.toFixed(1)}% used (${formatBytes(kpis.ram.allocated)} allocated out of ${formatBytes(kpis.ram.total)} available)
+- Storage: ${((kpis.storage.used / kpis.storage.total) * 100).toFixed(1)}% used (${formatBytes(kpis.storage.used)} out of ${formatBytes(kpis.storage.total)})
 - VMs: ${kpis.vms.total} total (${kpis.vms.running} running, ${kpis.vms.stopped} stopped)
-- Score d'efficacité: ${kpis.efficiency}%
+- Efficiency score: ${kpis.efficiency}%
 
-### Tendances
-- CPU: ${kpis.cpu.trend >= 0 ? '+' : ''}${kpis.cpu.trend}% sur 7 jours
-- RAM: ${kpis.ram.trend >= 0 ? '+' : ''}${kpis.ram.trend}% sur 7 jours
-- Stockage: ${kpis.storage.trend >= 0 ? '+' : ''}${kpis.storage.trend}% sur 7 jours
+### Trends
+- CPU: ${kpis.cpu.trend >= 0 ? '+' : ''}${kpis.cpu.trend}% over 7 days
+- RAM: ${kpis.ram.trend >= 0 ? '+' : ''}${kpis.ram.trend}% over 7 days
+- Storage: ${kpis.storage.trend >= 0 ? '+' : ''}${kpis.storage.trend}% over 7 days
 
-### Top 5 VMs consommatrices CPU
+### Top 5 CPU-consuming VMs
 ${topCpuVms.slice(0, 5).map((vm, i) => `${i + 1}. ${vm.name} (${vm.node}): ${vm.cpu}% CPU, ${vm.cpuAllocated} vCPUs`).join('\n')}
 
-### Top 5 VMs consommatrices RAM
+### Top 5 RAM-consuming VMs
 ${topRamVms.slice(0, 5).map((vm, i) => `${i + 1}. ${vm.name} (${vm.node}): ${vm.ram}% RAM, ${formatBytes(vm.ramAllocated)}`).join('\n')}
 
 ## Instructions
 
-Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks, sans texte avant ou après) avec cette structure:
+Reply ONLY with valid JSON (no markdown, no backticks, no text before or after) using this exact structure:
 {
-  "summary": "Un résumé de 2-3 phrases de l'état de l'infrastructure",
+  "summary": "A 2-3 sentence summary of the state of the infrastructure",
   "recommendations": [
     {
-      "id": "rec_1",
+      "id": "rec_1, then rec_2, rec_3 ... one distinct id per recommendation",
       "type": "overprovisioned|underused|stopped|prediction|optimization",
       "severity": "high|medium|low|info",
-      "title": "Titre court",
-      "description": "Description détaillée",
-      "savings": "Économie potentielle (optionnel)",
-      "vmName": "Nom de la VM concernée (optionnel)"
+      "title": "Short title",
+      "description": "Detailed description",
+      "savings": "Potential saving (optional)",
+      "vmName": "Name of the VM concerned, copied character for character from the data above (optional)"
     }
   ]
 }
 
-Génère entre 3 et 6 recommandations pertinentes basées sur les données.`
+Generate between 3 and 6 relevant recommendations based on the data.
+
+"type" and "severity" are enumerations consumed by code: use one of the listed values, in English. "id" must be unique per recommendation. "vmName" identifies a real guest and must be copied verbatim, never translated. Only "summary", "title", "description" and "savings" are read by a human.
+
+${jsonLanguageInstruction(locale)}`
 }
 
 export async function POST(req: Request) {
@@ -175,18 +186,23 @@ export async function POST(req: Request) {
 
     const body = await req.json()
 
-    const { kpis, topCpuVms, topRamVms } = body as {
+    const { kpis, topCpuVms, topRamVms, locale: bodyLocale } = body as {
       kpis: KpiData
       topCpuVms: TopVm[]
       topRamVms: TopVm[]
+      locale?: string
     }
 
     if (!kpis) {
       return NextResponse.json({ error: "Missing KPI data" }, { status: 400 })
     }
 
-    // Construire le prompt
-    const prompt = buildPrompt(kpis, topCpuVms || [], topRamVms || [])
+    // Same idiom as the two chat routes: the caller's locale when it sends
+    // one, the request's otherwise. `normalizeLocale` narrows a
+    // caller-controlled value to a supported locale before it reaches the
+    // prompt.
+    const locale = bodyLocale ? normalizeLocale(bodyLocale) : await getRequestLocale()
+    const prompt = buildPrompt(kpis, topCpuVms || [], topRamVms || [], locale)
     
     // Essayer Ollama, sinon fallback basique
     const ollamaAvailable = await isOllamaAvailable()

@@ -3893,6 +3893,7 @@
     "topNetworkVms": "Top Network VMs",
     "analyze": "Analyze",
     "analyzing": "Analyzing...",
+    "analysisMayTakeAWhile": "A local model can take up to a minute to answer.",
     "refresh": "Refresh",
     "evolutionProjections": "Evolution & Projections",
     "filterAll": "All",

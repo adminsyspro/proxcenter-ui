@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
+import { getRequestLocale, languageInstruction } from "@/lib/ai/locale"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -16,7 +17,16 @@ export async function POST(request) {
     if (denied) return denied
 
     const settings = await request.json()
-    
+
+    // #686: this probe used to be hardcoded in French for Ollama and
+    // Anthropic and in English for OpenAI, so the reply language depended
+    // on the provider instead of the UI language. One English probe for
+    // every provider + an explicit instruction to answer in the caller's
+    // language, derived from the NEXT_LOCALE cookie (the client posts only
+    // the settings object, so the cookie is the sole locale signal here).
+    const locale = await getRequestLocale()
+    const probePrompt = `Reply in one sentence: are you functional?\n${languageInstruction(locale)}`
+
     if (settings.provider === 'ollama') {
       // Test Ollama
       const ollamaBase = await validateAIUrl(settings.ollamaUrl)
@@ -25,7 +35,7 @@ export async function POST(request) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: settings.ollamaModel,
-          prompt: 'Réponds en une phrase: Es-tu fonctionnel ?',
+          prompt: probePrompt,
           stream: false
         })
       })
@@ -58,8 +68,12 @@ return NextResponse.json({
         },
         body: JSON.stringify({
           model: settings.openaiModel,
-          messages: [{ role: 'user', content: 'Reply in one sentence: Are you functional?' }],
-          max_tokens: 50
+          messages: [{ role: 'user', content: probePrompt }],
+          // One sentence, but the probe now answers in the caller's
+          // language and Korean or Chinese spend noticeably more tokens on
+          // the same sentence. 50 truncated them mid-word, which reads in
+          // the settings panel like a broken provider.
+          max_tokens: 150
         })
       })
       
@@ -90,8 +104,12 @@ return NextResponse.json({
         },
         body: JSON.stringify({
           model: settings.anthropicModel,
-          messages: [{ role: 'user', content: 'Réponds en une phrase: Es-tu fonctionnel ?' }],
-          max_tokens: 50
+          messages: [{ role: 'user', content: probePrompt }],
+          // One sentence, but the probe now answers in the caller's
+          // language and Korean or Chinese spend noticeably more tokens on
+          // the same sentence. 50 truncated them mid-word, which reads in
+          // the settings panel like a broken provider.
+          max_tokens: 150
         })
       })
       
@@ -112,7 +130,7 @@ return NextResponse.json({
       })
       
     } else {
-      throw new Error(`Provider inconnu: ${settings.provider}`)
+      throw new Error(`Unknown provider: ${settings.provider}`)
     }
     
   } catch (e) {

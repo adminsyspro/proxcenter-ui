@@ -286,7 +286,8 @@ return newMessages
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [...messages, userMessage]
+            messages: [...messages, userMessage],
+            locale // #686: the fallback used to omit it and always answered in English
           })
         })
         
@@ -317,8 +318,11 @@ return newMessages
       setLoading(false)
       setStreaming(false)
     }
-  }, [messages, loading])
-  
+    // `locale` is a dependency: without it the callback keeps the locale
+    // captured at mount and a language switch mid-conversation would keep
+    // asking the model for the previous language.
+  }, [messages, loading, locale])
+
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()

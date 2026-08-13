@@ -39,6 +39,10 @@ vi.mock('@/lib/api/firewall', () => ({
   deleteSecurityGroupRule: vi.fn(),
   createSecurityGroup: vi.fn(),
   deleteSecurityGroup: vi.fn(),
+
+  // Used by the members dialog this panel opens, not by the panel itself.
+  addVMRule: vi.fn(),
+  deleteVMRule: vi.fn(),
 }))
 
 vi.mock('@/contexts/ToastContext', () => ({
@@ -72,16 +76,26 @@ const WEB_VM: VMFirewallInfo = {
   rules: [{ pos: 0, type: 'group', action: 'sg-web', enable: 1 }],
 }
 
+/** A group rule pointing at `group`, as PVE stores membership. */
+const groupRule = (group: string, pos = 0): firewallAPIType.FirewallRule => ({
+  pos, type: 'group', action: group, enable: 1,
+})
+
 function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPanel>> = {}) {
   return {
     securityGroups: GROUPS,
     vmFirewallData: [WEB_VM],
+    loadingVMRules: false,
+    guestsNotScanned: 0,
+    clusterRules: [] as firewallAPIType.FirewallRule[],
+    hostRulesByNode: {} as Record<string, firewallAPIType.FirewallRule[]>,
     firewallMode: 'cluster' as firewallAPIType.FirewallMode,
     selectedConnection: CONN,
     totalRules: 2,
     aliases: [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }] as firewallAPIType.Alias[],
     ipsets: [] as firewallAPIType.IPSet[],
     reload: vi.fn(),
+    reloadVMFirewallRules: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
 }
@@ -97,6 +111,9 @@ function renderPanel(overrides: Parameters<typeof props>[0] = {}) {
 const expandGroup = (name: string) => fireEvent.click(screen.getByText(name))
 
 const ruleRow = (text: string) => screen.getAllByRole('row').find(r => within(r).queryByText(text))!
+
+/** The header row of a group, which carries the membership chips and actions. */
+const sectionRow = (group: string) => screen.getAllByRole('row').find(r => within(r).queryByText(group))!
 
 /** A Select inside the open rule dialog, found from its rendered label. */
 function selectByLabel(label: string) {
@@ -304,6 +321,89 @@ describe('SecurityGroupsPanel', () => {
     fireEvent.click(dialog.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => expect(api.createSecurityGroup).toHaveBeenCalledWith(CONN, { group: 'sg-new', comment: 'from test' }))
+  })
+
+  it('flags a group a cluster rule references, which the guest count alone would call unused', () => {
+    renderPanel({
+      clusterRules: [
+        { pos: 0, type: 'in', action: 'ACCEPT', enable: 1 },
+        groupRule('sg-web', 1),
+      ],
+    })
+
+    // "1 VMs" is true and yet incomplete: deleting sg-web would also drop a
+    // cluster-wide rule, so the scope is shown next to the count.
+    expect(within(sectionRow('sg-web')).getByText('Cluster')).toBeInTheDocument()
+
+    // sg-db is referenced nowhere, so it carries no scope chip at all.
+    expect(within(sectionRow('sg-db')).queryByText('Cluster')).not.toBeInTheDocument()
+  })
+
+  it('counts the nodes whose own rules reference the group', () => {
+    renderPanel({
+      hostRulesByNode: {
+        pve2: [groupRule('sg-web')],
+        pve1: [groupRule('sg-web')],
+        pve3: [{ pos: 0, type: 'in', action: 'DROP', enable: 1 }],
+      },
+    })
+
+    const section = sectionRow('sg-web')
+
+    // Two nodes reference it, and no cluster rule does: the chip counts nodes.
+    expect(within(section).getByText('2')).toBeInTheDocument()
+
+    // The nodes are named in the tooltip, in a stable order.
+    expect(within(section).getByLabelText('Referenced by node rules: pve1, pve2')).toBeInTheDocument()
+  })
+
+  it('opens the members dialog from the guest chip and refreshes the guests it changed', async () => {
+    api.deleteVMRule.mockResolvedValue(undefined)
+
+    const p = renderPanel()
+
+    fireEvent.click(screen.getByText('1 VMs'))
+
+    await waitFor(() => expect(screen.getByText('Members of sg-web')).toBeInTheDocument())
+
+    const dialog = within(screen.getByRole('dialog'))
+
+    fireEvent.click(dialog.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(api.deleteVMRule).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, 0))
+
+    // Only the guest that actually changed is refetched, not the whole scan.
+    await waitFor(() => expect(p.reloadVMFirewallRules).toHaveBeenCalledWith(WEB_VM))
+    expect(p.reloadVMFirewallRules).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(dialog.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByText('Members of sg-web')).not.toBeInTheDocument())
+  })
+
+  it('opens the same dialog from the group row action, on a group with no member', async () => {
+    renderPanel()
+
+    fireEvent.click(within(sectionRow('sg-db')).getByRole('button', { name: 'Members of sg-db' }))
+
+    await waitFor(() => expect(screen.getByText('No guest references this group yet')).toBeInTheDocument())
+  })
+
+  it('holds the membership count back while the guest scan is still running', () => {
+    renderPanel({ loadingVMRules: true })
+
+    // A "0 VMs" shown mid-scan reads as "unused" on a group that may well be
+    // in use, so the count waits.
+    expect(screen.queryByText('1 VMs')).not.toBeInTheDocument()
+    expect(screen.getAllByText('…')).toHaveLength(GROUPS.length)
+    expect(screen.getAllByRole('button', { name: 'Loading...' })).toHaveLength(GROUPS.length)
+  })
+
+  it('says the membership count is partial when the scan skipped guests', () => {
+    renderPanel({ guestsNotScanned: 3 })
+
+    expect(screen.getByRole('button', {
+      name: 'web-01 (100) — 3 guests were not scanned, this count may be incomplete',
+    })).toBeInTheDocument()
   })
 
   it('explains that security groups need a cluster when the node is standalone', () => {

@@ -196,6 +196,74 @@ describe('SecurityGroupMembersDialog', () => {
     expect(showToast).toHaveBeenCalledWith('sg-web detached from web-02 (140)', 'success')
   })
 
+  it('keeps a member listed when PVE refuses the detach', async () => {
+    const member = guest(141, { name: 'web-03', rules: [groupRule(GROUP, 1)] })
+
+    deleteVMRule.mockRejectedValueOnce(new Error('PVE rejected the delete'))
+
+    const { dialogProps } = renderDialog({ guests: [member] })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith('Could not detach: web-03 (141)', 'error')
+    })
+
+    // Nothing changed on PVE, so the caller has nothing to refetch and the
+    // guest stays in the list rather than disappearing optimistically.
+    expect(dialogProps.onChanged).not.toHaveBeenCalled()
+    expect(screen.getByText('web-03 (141)')).toBeInTheDocument()
+  })
+
+  it('ignores a detach on a group rule PVE returned without a position', async () => {
+    const member = guest(142, {
+      name: 'posless-01',
+      rules: [{ type: 'group', action: GROUP, enable: 1 } as FirewallRule],
+    })
+
+    renderDialog({ guests: [member] })
+
+    // The guest counts as a member — it carries the rule — but the delete
+    // endpoint is addressed by position, so there is nothing to send.
+    expect(screen.getByText('posless-01 (142)')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(showToast).not.toHaveBeenCalled())
+    expect(deleteVMRule).not.toHaveBeenCalled()
+  })
+
+  it('reports a failure without claiming a success when every attach fails', async () => {
+    const first = guest(143, { name: 'down-01' })
+    const second = guest(144, { name: 'down-02' })
+
+    addVMRule.mockRejectedValue(new Error('PVE unreachable'))
+
+    const { dialogProps } = renderDialog({ guests: [first, second] })
+
+    await chooseGuest('down-01 (143)')
+    await chooseGuest('down-02 (144)')
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith('Could not attach: down-01 (143), down-02 (144)', 'error')
+    })
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(dialogProps.onChanged).not.toHaveBeenCalled()
+  })
+
+  it('tells a container member apart from a virtual machine', () => {
+    const vm = guest(145, { name: 'vm-01', rules: [groupRule(GROUP, 0)] })
+    const container = guest(146, { name: 'ct-01', type: 'lxc', rules: [groupRule(GROUP, 0)] })
+
+    renderDialog({ guests: [vm, container] })
+
+    const dialog = screen.getByRole('dialog')
+
+    expect(dialog.querySelectorAll('.ri-computer-line')).toHaveLength(1)
+    expect(dialog.querySelectorAll('.ri-instance-line')).toHaveLength(1)
+  })
+
   it('shows the partial-scan notice only when guests were skipped', () => {
     const initialProps = props({ guestsNotScanned: 12 })
     const { rerender } = renderWithProviders(<SecurityGroupMembersDialog {...initialProps} />)

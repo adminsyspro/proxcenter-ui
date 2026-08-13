@@ -177,6 +177,40 @@ describe('useVMFirewallRules', () => {
     expect(result.current.vmFirewallData.find(item => item.vmid === 301)?.rules).toEqual([])
   })
 
+  it('keeps a guest whose adapter call throws outright, rather than sinking the scan', async () => {
+    mockGuestScan([guest(310), guest(311)])
+    getVMRules.mockImplementation((_connectionId, _node, _type, vmid) => {
+      // Thrown, not rejected: the per-call `.catch()` is never attached, so
+      // only the guest-level guard keeps the other guests from being lost.
+      if (Number(vmid) === 311) throw new Error('adapter unavailable')
+
+      return Promise.resolve([rule(0)])
+    })
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmFirewallData).toHaveLength(2)
+    expect(result.current.vmFirewallData.find(item => item.vmid === 311)).toMatchObject({
+      name: 'guest-311', firewallEnabled: false, rules: [], options: null, vlans: [],
+    })
+  })
+
+  it('names a guest PVE returned without one after its id', async () => {
+    mockGuestScan([guest(320, { name: '' })])
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmFirewallData[0].name).toBe('VM 320')
+  })
+
   it('sorts firewall-enabled guests first, then sorts each tier by rule count', async () => {
     const rulesByGuest: Record<number, FirewallRule[]> = {
       400: [rule(0), rule(1), rule(2)],

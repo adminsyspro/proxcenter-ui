@@ -18,6 +18,23 @@ export async function discoverNodeIps(
     const nodes = await pveFetch<any[]>(connOpts, "/nodes")
     if (!nodes || !Array.isArray(nodes)) return []
 
+    // /cluster/status is the only PVE surface that reports a member's IP even
+    // when that member is offline, so it is the fallback for the per-node
+    // lookup below. Without it a node that just died loses its IP here, and
+    // with it its place in the failover candidate list: the recovery mechanism
+    // would shed candidates exactly as the cluster degrades.
+    const clusterIps = new Map<string, string>()
+    try {
+      const status = await pveFetch<any[]>(connOpts, "/cluster/status")
+      for (const entry of status ?? []) {
+        if (entry?.type === "node" && entry?.name && typeof entry?.ip === "string" && entry.ip) {
+          clusterIps.set(String(entry.name), entry.ip)
+        }
+      }
+    } catch {
+      // Standalone node or a transient failure: the per-node lookup still runs.
+    }
+
     // Resolve management IPs in parallel
     const entries = await Promise.all(
       nodes.map(async (node: any) => {
@@ -28,10 +45,11 @@ export async function discoverNodeIps(
             connOpts,
             `/nodes/${encodeURIComponent(nodeName)}/network`
           ).catch(() => null)
-          const ip = resolveManagementIp(networks) || null
+          // A dead node answers nothing here, hence the cluster-wide fallback.
+          const ip = resolveManagementIp(networks) || clusterIps.get(String(nodeName)) || null
           return { node: nodeName, ip }
         } catch {
-          return { node: nodeName, ip: null }
+          return { node: nodeName, ip: clusterIps.get(String(nodeName)) || null }
         }
       })
     )
@@ -69,7 +87,11 @@ export async function discoverNodeIps(
           liveNodeNames.push(e!.node)
           return prisma.managedHost.upsert({
             where: { connectionId_node: { connectionId, node: e!.node } },
-            update: { ip: e!.ip || null },
+            // A discovery that came back empty leaves the stored IP alone
+            // rather than nulling it. Overwriting a known-good IP with null on
+            // a transient failure removes the node from the failover candidate
+            // list, which is the one moment the list matters.
+            update: e!.ip ? { ip: e!.ip } : {},
             create: { connectionId, node: e!.node, ip: e!.ip || null, tenantId: ownerTenantId },
           })
         })

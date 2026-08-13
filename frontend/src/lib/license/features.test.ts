@@ -60,7 +60,7 @@ describe('registry and edition mapping invariants', () => {
   // enterprise_plus is the higher tier, so it can add features but must never
   // drop one. `white_label` was missing from it while present in `enterprise`,
   // and effectiveHasFeature has no inheritance between editions, so paying more
-  // silently removed white labeling — and with it any hope of branded reports.
+  // silently removed white labeling, and with it any hope of branded reports.
   it('enterprise_plus is a superset of enterprise', () => {
     const missing = EDITION_FEATURES.enterprise.filter(f => !EDITION_FEATURES.enterprise_plus.includes(f))
 

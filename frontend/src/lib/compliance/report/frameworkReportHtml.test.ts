@@ -95,7 +95,7 @@ describe('frameworkReportHtml', () => {
     })
 
     // The literal lives inside a <style> block, and the HTML parser closes that
-    // block on </style> wherever it appears — a CSS string is no shelter.
+    // block on </style> wherever it appears: a CSS string is no shelter.
     it('cannot break out of the style block through the app name', () => {
       const html = frameworkReportHtml(
         a,

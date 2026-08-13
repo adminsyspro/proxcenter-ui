@@ -8,7 +8,9 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  LinearProgress,
   Paper,
+  Skeleton,
   Stack,
   Typography,
   useTheme,
@@ -70,6 +72,52 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
     }
   }
 
+  const pending = Boolean(analysis.loading)
+  const hasContent = Boolean(resolvedSummary || analysis.recommendations.length > 0)
+
+  /**
+   * Placeholder for the very first analysis, shaped like the answer it waits
+   * for: a summary block then recommendation rows. A local model answers in
+   * tens of seconds, and until now the card simply emptied itself for that
+   * whole time — the 16px spinner in the button was the only sign anything
+   * was happening, which reads as a hung page rather than a slow one.
+   */
+  const skeleton = (
+    <Box data-testid="ai-insights-skeleton" aria-busy="true">
+      <Paper sx={{ p: 2.5, mb: 2.5, bgcolor: alpha(COLORS.primary, 0.04), border: '1px solid', borderColor: alpha(COLORS.primary, 0.15), borderRadius: 2 }}>
+        <Stack direction="row" spacing={1.5} alignItems="flex-start">
+          <Skeleton variant="circular" width={20} height={20} sx={{ mt: 0.25, flexShrink: 0 }} />
+          <Box sx={{ flex: 1 }}>
+            <Skeleton variant="text" width="100%" />
+            <Skeleton variant="text" width="92%" />
+            <Skeleton variant="text" width="64%" />
+          </Box>
+        </Stack>
+      </Paper>
+
+      <Skeleton variant="text" width={180} sx={{ mb: 1.5 }} />
+
+      <Stack spacing={1.5}>
+        {[0, 1, 2].map(row => (
+          <Paper key={row} sx={{ p: 2, border: '1px solid', borderColor: alpha(COLORS.primary, 0.12), borderRadius: 2 }}>
+            <Stack direction="row" spacing={1.5} alignItems="flex-start">
+              <Skeleton variant="circular" width={18} height={18} sx={{ flexShrink: 0 }} />
+              <Box sx={{ flex: 1 }}>
+                <Skeleton variant="text" width="45%" />
+                <Skeleton variant="text" width="88%" />
+              </Box>
+              <Skeleton variant="circular" width={18} height={18} sx={{ flexShrink: 0 }} />
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 2.5 }}>
+        {t('resources.analysisMayTakeAWhile')}
+      </Typography>
+    </Box>
+  )
+
   return (
     <Card sx={{ height: '100%', background: `linear-gradient(180deg, ${alpha(COLORS.primary, 0.03)} 0%, transparent 100%)`, border: '1px solid', borderColor: alpha(COLORS.primary, 0.2) }}>
       <CardContent sx={{ p: 3 }}>
@@ -97,6 +145,22 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
         </Stack>
 
         {analysis.error && <Alert severity="error" sx={{ mb: 2 }}>{analysis.error}</Alert>}
+
+        {/* A refresh keeps the previous answer on screen rather than blanking
+            the card: the old figures stay readable while the new ones are
+            computed. The bar says work is in flight, the dimming says what is
+            below it is stale, and pointer events are off so nothing invites a
+            click on a value about to change. */}
+        {pending && hasContent && (
+          <LinearProgress
+            aria-label={t('resources.analyzing')}
+            sx={{ mb: 2, borderRadius: 1, height: 4 }}
+          />
+        )}
+
+        {pending && !hasContent && skeleton}
+
+        <Box sx={pending && hasContent ? { opacity: 0.5, pointerEvents: 'none', transition: 'opacity 0.2s' } : undefined}>
 
         {(resolvedSummary || analysis.summary) && (
           <Paper sx={{ p: 2.5, mb: 2.5, bgcolor: alpha(COLORS.primary, 0.04), border: '1px solid', borderColor: alpha(COLORS.primary, 0.15), borderRadius: 2 }}>
@@ -135,13 +199,15 @@ export default function AiInsightsCard({ analysis, onAnalyze, loading }: { analy
           </Box>
         )}
 
-        {!analysis.loading && !resolvedSummary && analysis.recommendations.length === 0 && (
+        {!pending && !resolvedSummary && analysis.recommendations.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 6 }}>
             <PsychologyIcon sx={{ fontSize: 64, color: alpha(COLORS.primary, 0.2), mb: 2 }} />
             <Typography variant="body1" fontWeight={600}>{t('resources.analyzeInfra')}</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 300, mx: 'auto' }}>{t('resources.aiWillAnalyze')}</Typography>
           </Box>
         )}
+
+        </Box>
       </CardContent>
     </Card>
   )

@@ -3854,6 +3854,7 @@
     "topNetworkVms": "网络流量最高的 VM",
     "analyze": "分析",
     "analyzing": "分析中...",
+    "analysisMayTakeAWhile": "本地模型可能需要长达一分钟才能回答。",
     "refresh": "刷新",
     "evolutionProjections": "趋势与预测",
     "filterAll": "全部",

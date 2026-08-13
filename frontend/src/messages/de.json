@@ -3855,6 +3855,7 @@
     "topNetworkVms": "Top Netzwerk-VMs",
     "analyze": "Analysieren",
     "analyzing": "Wird analysiert...",
+    "analysisMayTakeAWhile": "Ein lokales Modell kann bis zu einer Minute für die Antwort brauchen.",
     "refresh": "Aktualisieren",
     "evolutionProjections": "Entwicklung & Prognosen",
     "filterAll": "Alle",

@@ -10,6 +10,28 @@ export interface ReportMeta {
   brandColor?: string
   logoDataUri?: string
   frameworkLogoDataUri?: string
+
+  /** White-label application name. Defaults to ProxCenter when unset. */
+  appName?: string
+}
+
+/**
+ * Escape a value interpolated into a CSS *string* literal, as in
+ * `content: "..."`. The app name is operator-supplied text, and escapeHtml is
+ * no help inside a stylesheet, so three things are neutralised here:
+ *
+ * - `"` and `\`, which would end the literal and let the rest be read as CSS;
+ * - newlines, which are invalid inside a CSS string;
+ * - `<`, as `\3c`, because the literal sits inside a `<style>` block and the
+ *   HTML parser closes that block on `</style>` wherever it appears, string or
+ *   not. WeasyPrint runs no JavaScript, but a broken style block breaks the
+ *   PDF, and this file's output should not depend on the renderer being inert.
+ */
+function cssString(value: string): string {
+  return value
+    .replace(/[\\"]/g, m => `\\${m}`)
+    .replace(/</g, '\\3c ')
+    .replace(/[\r\n]+/g, ' ')
 }
 
 function scoreColor(score: number | null): string {
@@ -43,7 +65,7 @@ const STATUS_LABEL: Record<string, string> = {
   skip: 'Skip',
 }
 
-function buildCss(primary: string): string {
+function buildCss(primary: string, appName: string): string {
   return `
   :root {
     --primary: ${primary};
@@ -63,7 +85,7 @@ function buildCss(primary: string): string {
     size: A4 portrait;
     margin: 15mm;
     @top-center {
-      content: "ProxCenter  |  Compliance Report";
+      content: "${cssString(appName)}  |  Compliance Report";
       font-family: Inter, sans-serif;
       font-size: 8pt;
       color: var(--slate-500);
@@ -242,6 +264,11 @@ export function frameworkReportHtml(
   // Validate brand color to prevent CSS injection; validated value goes directly into CSS (not escaped).
   const primary = /^#[0-9a-fA-F]{3,8}$/.test(meta.brandColor ?? '') ? meta.brandColor! : '#E57000'
 
+  // #681: this export is a second PDF pipeline and used to write "ProxCenter"
+  // literally, so a white-labelled install got a correctly coloured report
+  // still carrying our name on the cover, the running header and the title.
+  const appName = meta.appName?.trim() || 'ProxCenter'
+
   // Logo: only allow data: URIs. Never escapeHtml a data URI (corrupts base64).
   const safeLogoUri = (meta.logoDataUri && meta.logoDataUri.startsWith('data:')) ? meta.logoDataUri : ''
   const safeFwLogoUri = (meta.frameworkLogoDataUri && meta.frameworkLogoDataUri.startsWith('data:')) ? meta.frameworkLogoDataUri : ''
@@ -264,7 +291,7 @@ export function frameworkReportHtml(
   const cover = `
 <div class="cover">
   <div class="cover-header">
-    <div class="cover-app-name">ProxCenter</div>
+    <div class="cover-app-name">${e(appName)}</div>
     <div class="cover-subtitle">Compliance Assessment Report</div>
   </div>
   <div class="cover-body">
@@ -448,8 +475,8 @@ export function frameworkReportHtml(
 <html lang="${e(meta.locale)}">
 <head>
 <meta charset="utf-8">
-<title>ProxCenter - ${e(def.name)} Compliance Report</title>
-<style>${buildCss(primary)}</style>
+<title>${e(appName)} - ${e(def.name)} Compliance Report</title>
+<style>${buildCss(primary, appName)}</style>
 </head>
 <body>
 ${cover}

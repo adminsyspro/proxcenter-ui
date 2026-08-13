@@ -307,6 +307,82 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     expect(capturedHtml).toContain('data:image/png;base64,')
   })
 
+  // #681: this export is a second PDF pipeline. It already honoured the brand
+  // colour and the logo, but wrote "ProxCenter" literally on the cover, in the
+  // running header and in the document title, so a white-labelled install still
+  // got reports carrying our name.
+  describe('white label app name (#681)', () => {
+    /** Render a report and hand back the HTML sent to the sidecar. */
+    async function renderedHtml(): Promise<string> {
+      let capturedHtml = ''
+
+      renderPdfMock.mockImplementation(async (html: string) => {
+        capturedHtml = html
+        return { ok: true, pdf: Buffer.from([1, 2, 3]) }
+      })
+
+      const { GET } = await import('./route')
+      const res = await callRoute(GET, {
+        params: { frameworkId: 'nist-800-171-r2' },
+        searchParams: { connectionId: 'c1' },
+      })
+
+      expect(res.status).toBe(200)
+
+      return capturedHtml
+    }
+
+    it('names the tenant on the cover, the running header and the title', async () => {
+      getSettingMock.mockResolvedValue({
+        enabled: true,
+        appName: 'ACME Cloud',
+        primaryColor: '#123456',
+      })
+
+      const html = await renderedHtml()
+
+      expect(html).toContain('<div class="cover-app-name">ACME Cloud</div>')
+      expect(html).toContain('content: "ACME Cloud  |  Compliance Report"')
+      expect(html).toContain('<title>ACME Cloud - ')
+      expect(html).not.toContain('ProxCenter')
+    })
+
+    it('keeps ProxCenter when white label is off, even with a name saved', async () => {
+      // The toggle is the master switch, as it already was for the colour.
+      getSettingMock.mockResolvedValue({
+        enabled: false,
+        appName: 'ACME Cloud',
+        primaryColor: '#123456',
+      })
+
+      const html = await renderedHtml()
+
+      expect(html).toContain('<div class="cover-app-name">ProxCenter</div>')
+      expect(html).not.toContain('ACME Cloud')
+    })
+
+    it('keeps ProxCenter when branding carries no name', async () => {
+      getSettingMock.mockResolvedValue({ enabled: true, primaryColor: '#123456' })
+
+      expect(await renderedHtml()).toContain('<div class="cover-app-name">ProxCenter</div>')
+    })
+
+    it('cannot break the stylesheet out of an operator-supplied name', async () => {
+      // The name lands in a CSS string inside a <style> block, where escapeHtml
+      // is no help: the HTML parser closes that block on </style> wherever it
+      // appears, string literal or not.
+      getSettingMock.mockResolvedValue({
+        enabled: true,
+        appName: '</style><script>alert(1)</script>',
+      })
+
+      const html = await renderedHtml()
+
+      expect(html.match(/<\/style>/g)).toHaveLength(1)
+      expect(html).not.toContain('<script>alert(1)</script>')
+    })
+  })
+
   it('still returns 200 when getSetting throws (branding hiccup)', async () => {
     getSettingMock.mockRejectedValue(new Error('DB connection lost'))
     const { GET } = await import('./route')

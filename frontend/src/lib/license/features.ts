@@ -92,6 +92,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'compliance',
     'oidc',
     'change_tracking',
+    'white_label',
     'multi_tenancy',
     'sflow_monitoring',
   ],

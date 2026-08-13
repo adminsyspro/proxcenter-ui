@@ -43,6 +43,74 @@ describe('frameworkReportHtml', () => {
     expect(html).toContain('&lt;b&gt;none&lt;/b&gt;')
   })
 
+  // -- White labeling (#681) --
+
+  // This export is a second PDF pipeline: it already honoured the brand colour
+  // and logo but wrote "ProxCenter" literally on the cover, in the running
+  // header and in the document title, so a white-labelled install still got
+  // reports carrying our name.
+  describe('white label', () => {
+    const meta = { connectionName: 'prod', generatedAt: '2026-06-22', locale: 'en' }
+
+    it('carries the app name on the cover, the running header and the title', () => {
+      const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName: 'ACME Cloud' }, t)
+
+      expect(html).toContain('<div class="cover-app-name">ACME Cloud</div>')
+      expect(html).toContain('content: "ACME Cloud  |  Compliance Report"')
+      expect(html).toContain('<title>ACME Cloud - ')
+      expect(html).not.toContain('ProxCenter')
+    })
+
+    it('keeps ProxCenter when no name is configured, or when it is blank', () => {
+      for (const appName of [undefined, '', '   ']) {
+        const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName }, t)
+
+        expect(html).toContain('<div class="cover-app-name">ProxCenter</div>')
+        expect(html).toContain('content: "ProxCenter  |  Compliance Report"')
+      }
+    })
+
+    it('escapes the app name in HTML, where it is operator-supplied text', () => {
+      const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName: '<script>x</script>' }, t)
+
+      expect(html).not.toContain('<script>x</script>')
+      expect(html).toContain('&lt;script&gt;')
+    })
+
+    // The running header interpolates the name into a CSS string literal, where
+    // escapeHtml is no help: an unescaped quote closes the literal and lets the
+    // rest of the value be parsed as CSS.
+    it('escapes the app name for the CSS string it lands in', () => {
+      const html = frameworkReportHtml(
+        a,
+        getFramework('nist-800-171-r2'),
+        { ...meta, appName: 'Ac"me" }\n@page { size: A5 }' },
+        t,
+      )
+
+      // The quote is escaped, so the injected rule stays inert text inside the
+      // literal instead of becoming a rule of its own.
+      expect(html).toContain('content: "Ac\\"me\\" }')
+      expect(html).not.toMatch(/content: "Ac"/)
+    })
+
+    // The literal lives inside a <style> block, and the HTML parser closes that
+    // block on </style> wherever it appears — a CSS string is no shelter.
+    it('cannot break out of the style block through the app name', () => {
+      const html = frameworkReportHtml(
+        a,
+        getFramework('nist-800-171-r2'),
+        { ...meta, appName: '</style><script>alert(1)</script>' },
+        t,
+      )
+
+      // Exactly one closing style tag: the real one.
+      expect(html.match(/<\/style>/g)).toHaveLength(1)
+      expect(html).not.toContain('<script>alert(1)</script>')
+      expect(html).toContain('\\3c ')
+    })
+  })
+
   // -- Not-assessed hiding --
 
   it('hides not_assessed controls from the control table', () => {

@@ -71,11 +71,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
     // hiccup never crashes the report; falls back to defaults.
     let brandColor = '#E57000'
     let logoDataUri = ''
+    let appName = ''
     try {
       const tenantId = await getCurrentTenantId()
       const branding = await getSetting<any>('branding', tenantId)
       if (branding?.enabled && branding?.primaryColor) {
         brandColor = String(branding.primaryColor)
+      }
+
+      // #681: the colour and the logo were already honoured here, the name was
+      // not, so a white-labelled report still read "ProxCenter" on its cover.
+      if (branding?.enabled && branding?.appName) {
+        appName = String(branding.appName)
       }
 
       const brandingLogoUrl = branding?.enabled ? branding?.logoUrl : ''
@@ -153,6 +160,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
         brandColor,
         logoDataUri,
         frameworkLogoDataUri,
+        appName,
       },
       reportT,
       nodeBreakdown,

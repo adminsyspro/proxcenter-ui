@@ -12,6 +12,15 @@ vi.mock('@/lib/proxmox/client', () => ({
   pveFetch: vi.fn<(...args: any[]) => Promise<any>>(),
 }))
 
+// Permission granted by default: this file covers the route's behaviour, the
+// guard itself (denial, ordering) is covered in guestRoutesGuard.test.ts.
+vi.mock('@/lib/rbac', () => ({
+  checkPermission: vi.fn(async () => null),
+  buildVmResourceId: (connId: string, node: string, type: string, vmid: string) =>
+    `${connId}:${node}:${type}:${vmid}`,
+  PERMISSIONS: { VM_VIEW: 'vm.view', VM_CONFIG: 'vm.config' },
+}))
+
 import { GET } from './route'
 import { getConnectionByIdOrNull } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'

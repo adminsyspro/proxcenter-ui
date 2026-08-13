@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -36,6 +37,17 @@ export async function GET(
   try {
     const params = await ctx.params
     const { connId, type, node, vmid } = parseVmKey(params.vmid)
+
+    // RBAC: vm.view, checked BEFORE the connection is resolved. That
+    // resolution decrypts the Proxmox API token, so it must never run for a
+    // caller who has no right to this guest.
+    const denied = await checkPermission(
+      PERMISSIONS.VM_VIEW,
+      "vm",
+      buildVmResourceId(connId, node, type, vmid)
+    )
+
+    if (denied) return denied
 
     // Use the shared resolver so tenants can reach connections they only
     // access via vDC assignment (not only the ones they own).
@@ -75,6 +87,17 @@ export async function PUT(
   try {
     const params = await ctx.params
     const { connId, type, node, vmid } = parseVmKey(params.vmid)
+
+    // RBAC: vm.config. This writes the guest's description on Proxmox.
+    // Checked before the body is read and before the connection is resolved.
+    const denied = await checkPermission(
+      PERMISSIONS.VM_CONFIG,
+      "vm",
+      buildVmResourceId(connId, node, type, vmid)
+    )
+
+    if (denied) return denied
+
     const body = await req.json()
 
     const { content } = body

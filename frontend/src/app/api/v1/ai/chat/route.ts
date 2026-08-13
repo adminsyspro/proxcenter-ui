@@ -6,6 +6,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRequestLocale, languageInstruction, localeToLanguageName, normalizeLocale } from '@/lib/ai/locale'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -180,7 +181,12 @@ const promptStrings = {
     runningHeader: (total: number, shown: boolean) => `Running VMs/CTs (${total} total${shown ? ', first 20 shown' : ''})`,
     andMore: (n: number) => `... and ${n} more running VMs/CTs`,
     instructions: '=== INSTRUCTIONS ===',
-    respondLang: 'Respond in English concisely',
+    // Takes the answer language rather than hardcoding "English": this
+    // English prompt body is what de, es, ko and zh-CN users get, and a
+    // literal "Respond in English" here contradicted the language
+    // instruction appended below (#686). Contradictory instructions are
+    // followed poorly by the small local models Ollama typically serves.
+    respondLang: (language: string) => `Respond in ${language} concisely`,
     useData: 'Use ONLY the data above',
     citeNames: 'Cite exact VM names and metrics',
     explainActions: 'For actions, explain the procedure but specify you cannot execute it',
@@ -205,14 +211,20 @@ const promptStrings = {
     runningHeader: (total: number, shown: boolean) => `VMs/CTs en cours d'exécution (${total} total${shown ? ', 20 premières affichées' : ''})`,
     andMore: (n: number) => `... et ${n} autres VMs/CTs en cours d'exécution`,
     instructions: '=== INSTRUCTIONS ===',
-    respondLang: 'Réponds en français de manière concise',
+    // The French body is only ever used when the UI locale is `fr`, so the
+    // answer language is already known here.
+    respondLang: () => 'Réponds en français de manière concise',
     useData: 'Utilise UNIQUEMENT les données ci-dessus',
     citeNames: 'Cite les noms exacts des VMs et métriques',
     explainActions: 'Pour les actions, explique la procédure mais précise que tu ne peux pas l\'exécuter',
   }
 }
 
-async function buildSystemPrompt(lang: string = 'en') {
+// `lang` picks the fr/en prompt body above; `locale` is the real UI locale
+// and drives the language the model must answer in. They differ for de, es,
+// ko and zh-CN, which read an English prompt but must get an answer in
+// their own language (#686).
+async function buildSystemPrompt(lang: string = 'en', locale: string = 'en') {
   const s = lang === 'fr' ? promptStrings.fr : promptStrings.en
   const connections = await getConnections()
   const alerts = await getActiveAlerts()
@@ -305,10 +317,12 @@ ${runningVMs.length > 20 ? `\n${s.andMore(runningVMs.length - 20)}` : ''}
 
   prompt += `
 ${s.instructions}
-- ${s.respondLang}
+- ${s.respondLang(localeToLanguageName(locale))}
 - ${s.useData}
 - ${s.citeNames}
 - ${s.explainActions}
+
+${languageInstruction(locale)}
 `
 
   return prompt
@@ -321,7 +335,11 @@ export async function POST(request: Request) {
     if (denied) return denied
 
     const { messages, locale } = await request.json()
-    const lang = locale === 'fr' ? 'fr' : 'en'
+
+    // The drawer sends `locale`; fall back to the NEXT_LOCALE cookie for any
+    // caller that does not (the streaming fallback used to be one of them).
+    const uiLocale = locale ? normalizeLocale(locale) : await getRequestLocale()
+    const lang = uiLocale === 'fr' ? 'fr' : 'en'
     const settings = await getAISettings()
 
     if (!settings.enabled) {
@@ -332,19 +350,23 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    const systemPrompt = await buildSystemPrompt(lang)
+    const systemPrompt = await buildSystemPrompt(lang, uiLocale)
 
     const lastUserMessage = messages[messages.length - 1]
     const userInstruction = lang === 'fr'
       ? 'Réponds en utilisant UNIQUEMENT les données de l\'infrastructure ci-dessus. Cite les noms exacts des VMs et leurs métriques.'
       : 'Respond using ONLY the infrastructure data above. Cite exact VM names and their metrics.'
 
+    // Ollama gets the system prompt inlined in the user message, so the
+    // language instruction is repeated last where models weigh it most.
     const contextualizedMessage = `${systemPrompt}
 
 === ${lang === 'fr' ? 'QUESTION DE L\'UTILISATEUR' : 'USER QUESTION'} ===
 ${lastUserMessage.content}
 
-${userInstruction}`
+${userInstruction}
+
+${languageInstruction(uiLocale)}`
 
     if (settings.provider === 'ollama') {
       // Ollama API - contexte injecté dans le message
@@ -456,7 +478,7 @@ return NextResponse.json({
       })
       
     } else {
-      throw new Error(`Provider inconnu: ${settings.provider}`)
+      throw new Error(`Unknown provider: ${settings.provider}`)
     }
     
   } catch (e: any) {

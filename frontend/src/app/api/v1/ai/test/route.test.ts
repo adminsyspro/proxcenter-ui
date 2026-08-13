@@ -9,13 +9,33 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
 
+// The route derives the probe language from the NEXT_LOCALE cookie that
+// middleware sets. `cookieLocale` lets each test pretend to be a different
+// UI language; `undefined` simulates a request without the cookie.
+let cookieLocale: string | undefined
+
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === 'NEXT_LOCALE' && cookieLocale !== undefined ? { value: cookieLocale } : undefined,
+  }),
+}))
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  cookieLocale = 'en'
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
 })
+
+/** Prompt text actually sent upstream, whatever the provider's body shape. */
+function sentPrompt(callIndex = 0): string {
+  const body = JSON.parse(fetchMock.mock.calls[callIndex][1].body as string)
+
+  return body.prompt ?? body.messages[0].content
+}
 
 async function importHandler() {
   const mod = await import('./route')
@@ -215,7 +235,67 @@ describe('POST /api/v1/ai/test', () => {
     const res = await callRoute(handler, { body: { provider: 'bedrock' } })
 
     expect(res.status).toBe(500)
-    expect((await readJson<any>(res)).error).toMatch(/Provider inconnu: bedrock/)
+    expect((await readJson<any>(res)).error).toMatch(/Unknown provider: bedrock/)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // #686: the probe was hardcoded in French for Ollama and Anthropic and in
+  // English for OpenAI, so an Italian customer on the English UI got a French
+  // "Connection OK!" reply. One English probe for every provider, plus an
+  // explicit instruction to answer in the UI language.
+  describe('probe prompt language (#686)', () => {
+    const providers: Array<[string, Record<string, unknown>, unknown]> = [
+      ['ollama', { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' }, { response: 'ok' }],
+      ['openai', { provider: 'openai', openaiKey: 'sk-test', openaiModel: 'gpt-4.1-nano' }, { choices: [{ message: { content: 'ok' } }] }],
+      ['anthropic', { provider: 'anthropic', anthropicKey: 'sk-ant-test', anthropicModel: 'claude-opus-4-7' }, { content: [{ text: 'ok' }] }],
+    ]
+
+    it.each(providers)('sends the same English probe for %s, never the old French one', async (_name, body, upstream) => {
+      fetchMock.mockResolvedValueOnce(jsonOk(upstream))
+
+      const handler = await importHandler()
+
+      await callRoute(handler, { body: body as any })
+
+      const prompt = sentPrompt()
+
+      expect(prompt).toContain('Reply in one sentence: are you functional?')
+      expect(prompt).not.toMatch(/Réponds|fonctionnel/)
+      expect(prompt).toContain('written in English')
+    })
+
+    it.each([
+      ['de', 'German'],
+      ['es', 'Spanish'],
+      ['zh-CN', 'Simplified Chinese'],
+      ['ko', 'Korean'],
+      ['fr', 'French'],
+    ])('asks for the answer in the NEXT_LOCALE language (%s)', async (locale, language) => {
+      cookieLocale = locale
+      fetchMock.mockResolvedValueOnce(jsonOk({ response: 'ok' }))
+
+      const handler = await importHandler()
+
+      await callRoute(handler, {
+        body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' },
+      })
+
+      expect(sentPrompt()).toContain(`written in ${language}`)
+    })
+
+    it('falls back to English when the cookie is absent or unsupported', async () => {
+      for (const value of [undefined, 'it']) {
+        cookieLocale = value
+        fetchMock.mockResolvedValueOnce(jsonOk({ response: 'ok' }))
+
+        const handler = await importHandler()
+
+        await callRoute(handler, {
+          body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' },
+        })
+
+        expect(sentPrompt(fetchMock.mock.calls.length - 1)).toContain('written in English')
+      }
+    })
   })
 })

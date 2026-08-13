@@ -5884,6 +5884,19 @@
     "sourcePort": "源端口",
     "destPort": "目标端口",
     "logLevel": "日志级别",
+    "membersTitle": "{group} 的成员",
+    "membersAttachLabel": "要附加的实例",
+    "membersAttach": "附加",
+    "membersDetach": "分离",
+    "membersCurrent": "已附加的实例",
+    "membersEmpty": "尚无实例引用此安全组",
+    "membersPartial": "有 {count} 个实例未被扫描，此计数可能不完整",
+    "membersAttached": "已将 {group} 附加到 {count} 个实例",
+    "membersAttachFailed": "附加失败：{guests}",
+    "membersDetached": "已将 {group} 从 {guest} 分离",
+    "membersDetachFailed": "分离失败：{guests}",
+    "membersScopeCluster": "被集群规则引用",
+    "membersScopeNodes": "被节点规则引用：{nodes}",
     "direction": "方向",
     "service": "服务",
     "typeIn": "IN（入站）",
@@ -5912,7 +5925,8 @@
     "vmFirewallCoverage": "VM 防火墙覆盖率",
     "protectedLabel": "受保护",
     "unprotectedLabel": "未保护",
-    "withSgLabel": "有安全组"
+    "withSgLabel": "有安全组",
+    "logLevelShort": "日志"
   },
   "themes": {
     "categories": {

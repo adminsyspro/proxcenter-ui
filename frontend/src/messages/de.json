@@ -5882,6 +5882,19 @@
     "sourcePort": "Quellport",
     "destPort": "Zielport",
     "logLevel": "Log-Level",
+    "membersTitle": "Mitglieder von {group}",
+    "membersAttachLabel": "Gäste zum Zuweisen",
+    "membersAttach": "Zuweisen",
+    "membersDetach": "Entfernen",
+    "membersCurrent": "Zugewiesene Gäste",
+    "membersEmpty": "Noch kein Gast verweist auf diese Gruppe",
+    "membersPartial": "{count} Gäste wurden nicht geprüft, diese Zahl kann unvollständig sein",
+    "membersAttached": "{group} {count} Gast/Gästen zugewiesen",
+    "membersAttachFailed": "Zuweisen fehlgeschlagen: {guests}",
+    "membersDetached": "{group} von {guest} entfernt",
+    "membersDetachFailed": "Entfernen fehlgeschlagen: {guests}",
+    "membersScopeCluster": "Von einer Cluster-Regel referenziert",
+    "membersScopeNodes": "Von Node-Regeln referenziert: {nodes}",
     "direction": "Richt.",
     "service": "Dienst",
     "typeIn": "IN (eingehend)",
@@ -5910,7 +5923,8 @@
     "vmFirewallCoverage": "VM-Firewall-Abdeckung",
     "protectedLabel": "Geschützt",
     "unprotectedLabel": "Ungeschützt",
-    "withSgLabel": "Mit SG"
+    "withSgLabel": "Mit SG",
+    "logLevelShort": "Log"
   },
   "themes": {
     "categories": {

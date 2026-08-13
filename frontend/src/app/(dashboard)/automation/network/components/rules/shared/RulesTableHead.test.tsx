@@ -6,7 +6,9 @@
  * The contract asserted here is the column list itself — labels, order, and
  * the count — because the panels pin `colSpan` on their section and empty
  * rows against it: 11 columns normally, 12 for security groups, whose
- * "Applied to" column sits between Service and Action. Labels come from the
+ * "Applied to" column sits between Service and Action (a capability of the
+ * component: no table opts into it today). The log column carries the short
+ * label, the full one being reserved for the rule dialogs. Labels come from the
  * real English bundle, so a missing translation key fails the test.
  *
  * No automatic RTL cleanup is configured in this repo, hence afterEach.
@@ -21,7 +23,7 @@ import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProvide
 import RulesTableHead from './RulesTableHead'
 
 /** The nine rule columns, framed by the drag-handle and actions columns. */
-const COLUMNS = ['', '#', 'Active', 'Dir', 'Source', 'Destination', 'Service', 'Action', 'Log level', 'Comment', '']
+const COLUMNS = ['', '#', 'Active', 'Dir', 'Source', 'Destination', 'Service', 'Action', 'Log', 'Comment', '']
 
 const headers = () => screen.getAllByRole('columnheader').map(th => th.textContent)
 
@@ -38,7 +40,7 @@ describe('RulesTableHead', () => {
     renderWithProviders(<Table><RulesTableHead showAppliedTo /></Table>)
 
     expect(headers()).toEqual([
-      '', '#', 'Active', 'Dir', 'Source', 'Destination', 'Service', 'Applied To', 'Action', 'Log level', 'Comment', '',
+      '', '#', 'Active', 'Dir', 'Source', 'Destination', 'Service', 'Applied To', 'Action', 'Log', 'Comment', '',
     ])
   })
 

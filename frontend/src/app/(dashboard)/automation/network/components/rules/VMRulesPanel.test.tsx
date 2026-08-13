@@ -89,9 +89,15 @@ const DB: VMFirewallInfo = {
 const ALIASES: firewallAPIType.Alias[] = [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }]
 const IPSETS: firewallAPIType.IPSet[] = [{ name: 'trusted', members: [{ cidr: '1.2.3.4' }] }]
 
+const SECURITY_GROUPS: firewallAPIType.SecurityGroup[] = [
+  { group: 'sg-web', comment: 'front tier', rules: [] },
+  { group: 'sg-db', rules: [] },
+]
+
 function props(overrides: Partial<React.ComponentProps<typeof VMRulesPanel>> = {}) {
   return {
     vmFirewallData: [WEB, DB],
+    securityGroups: SECURITY_GROUPS,
     loadingVMRules: false,
     selectedConnection: CONN,
     loadVMFirewallData: vi.fn().mockResolvedValue(undefined),
@@ -301,6 +307,27 @@ describe('VMRulesPanel', () => {
 
     await waitFor(() => expect(api.addVMRule).toHaveBeenCalledTimes(1))
     expect(api.addVMRule.mock.calls[0][4]).toMatchObject({ log: 'crit', type: 'in', action: 'ACCEPT' })
+  })
+
+  it('swaps the Action choices for the security groups on a GROUP rule', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByText('VLAN 20'))
+    fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Add rule' }))
+    await waitForRuleDialog()
+
+    fireEvent.mouseDown(selectByLabel('Action'))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent))
+      .toEqual(['ACCEPT', 'DROP', 'REJECT'])
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+
+    fireEvent.mouseDown(selectByLabel('Direction'))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'GROUP' }))
+
+    // PVE carries the group name in `action` for a GROUP rule, so offering
+    // ACCEPT/DROP/REJECT there could only produce an invalid rule.
+    fireEvent.mouseDown(selectByLabel('Action'))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent))
+      .toEqual(['sg-web', 'sg-db'])
   })
 
   it('edits the dialog fields, including source through the suggestions', async () => {

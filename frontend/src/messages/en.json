@@ -5952,6 +5952,19 @@
     "sourcePort": "Source port",
     "destPort": "Destination port",
     "logLevel": "Log level",
+    "membersTitle": "Members of {group}",
+    "membersAttachLabel": "Guests to attach",
+    "membersAttach": "Attach",
+    "membersDetach": "Detach",
+    "membersCurrent": "Attached guests",
+    "membersEmpty": "No guest references this group yet",
+    "membersPartial": "{count} guests were not scanned, this count may be incomplete",
+    "membersAttached": "{group} attached to {count} guest(s)",
+    "membersAttachFailed": "Could not attach: {guests}",
+    "membersDetached": "{group} detached from {guest}",
+    "membersDetachFailed": "Could not detach: {guests}",
+    "membersScopeCluster": "Referenced by a cluster rule",
+    "membersScopeNodes": "Referenced by node rules: {nodes}",
     "direction": "Dir",
     "service": "Service",
     "typeIn": "IN (inbound)",
@@ -5980,7 +5993,8 @@
     "vmFirewallCoverage": "VM Firewall Coverage",
     "protectedLabel": "Protected",
     "unprotectedLabel": "Unprotected",
-    "withSgLabel": "With SG"
+    "withSgLabel": "With SG",
+    "logLevelShort": "Log"
   },
   "themes": {
     "categories": {

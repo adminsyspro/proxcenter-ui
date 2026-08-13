@@ -100,6 +100,17 @@ services:
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
       PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
       PG_POOL_MAX: ${PG_POOL_MAX:-}
+      # Session lifetimes, in seconds. Left empty on purpose: the frontend
+      # then applies its defaults, 12 hours of inactivity and 7 days absolute.
+      # A malformed value falls back to those defaults rather than to no limit.
+      # Set the same value on every node, a session must not outlive a failover.
+      SESSION_IDLE_TIMEOUT: ${SESSION_IDLE_TIMEOUT:-}
+      SESSION_ABSOLUTE_TIMEOUT: ${SESSION_ABSOLUTE_TIMEOUT:-}
+      # Shared secret for the first-run setup endpoint, which is reachable
+      # without authentication for as long as no account exists. Empty keeps
+      # the historical behaviour. A converted cluster already has accounts, so
+      # this only matters on a stack built as HA from the start.
+      PROXCENTER_SETUP_TOKEN: ${PROXCENTER_SETUP_TOKEN:-}
       # PROXCENTER_INSTANCE_ID is deliberately unset: with host networking the
       # container inherits the node hostname, which is exactly what the
       # orphaned-migration sweep needs (unique per node, stable across container

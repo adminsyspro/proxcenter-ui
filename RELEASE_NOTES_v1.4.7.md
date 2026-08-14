@@ -15,6 +15,7 @@
 - **Failback.** A plan that has failed over can now fail back: a reverse incremental sync brings the source back up to date, then an operator-driven cutover switches back, with per-VM rollback and re-protect. Failed-over plans and their jobs stay locked until failback completes.
 - **Source fencing on real failover.** A real failover fences the source VMs before starting their replicas, so the same guest cannot run on both sides.
 - **Point-in-time recovery and configurable retention** on replication plans, with per-VM failover steps surfaced on the execution results.
+- **Boot screenshots on a test failover.** Each recovered VM's console is captured while the test runs and kept with the execution, so you can see what a guest actually booted into instead of trusting a power state. The captures are listed and served from the execution view.
 - **The orchestrator survives the loss of its configured node.** It fails over to another node of the cluster instead of dying with the one it was pointed at, and it addresses guest commands to the node that actually owns the guest.
 - **A node that stops answering keeps its IP.** A failover no longer erases the recorded address of the node that went silent.
 

@@ -22,6 +22,9 @@
     "clean": "rm -rf .next",
     "clear": "rm -rf node_modules .next"
   },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",
     "@emotion/cache": "11.14.0",

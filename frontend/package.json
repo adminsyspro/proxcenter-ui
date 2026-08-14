@@ -99,7 +99,7 @@
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "2.31.0",
     "jsdom": "^29.1.1",

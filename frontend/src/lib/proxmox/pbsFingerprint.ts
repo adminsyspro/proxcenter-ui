@@ -1,10 +1,23 @@
+import net from 'net'
 import tls from 'tls'
 import { createHash } from 'crypto'
 
+/**
+ * Splits an https base URL into the host to dial and its port. IPv6 literals
+ * come back unbracketed (`2001:db8::1`, not `[2001:db8::1]`) because both
+ * `net.isIP()` and `tls.connect({ host })` expect the bare address.
+ */
 export function parseHostPort(baseUrl: string): { host: string; port: number } {
-  const m = baseUrl.match(/^https:\/\/([^/:?#]+)(?::(\d+))?/i)
-  if (!m) throw new Error(`Invalid PBS baseUrl (https required): ${baseUrl}`)
-  return { host: m[1], port: m[2] ? Number(m[2]) : 8007 }
+  let url: URL
+  try {
+    url = new URL(baseUrl)
+  } catch {
+    throw new Error(`Invalid PBS baseUrl (https required): ${baseUrl}`)
+  }
+  if (url.protocol !== 'https:' || !url.hostname) {
+    throw new Error(`Invalid PBS baseUrl (https required): ${baseUrl}`)
+  }
+  return { host: url.hostname.replace(/^\[|\]$/g, ''), port: url.port ? Number(url.port) : 8007 }
 }
 
 export function formatFingerprint(hex: string): string {
@@ -18,11 +31,17 @@ export function formatFingerprint(hex: string): string {
  */
 export async function captureFingerprint(baseUrl: string, timeoutMs = 5000): Promise<string> {
   const { host, port } = parseHostPort(baseUrl)
+  // SNI carries a hostname only: RFC 6066 forbids IP literals, and Node 26
+  // turned the long-standing deprecation warning into a hard synchronous
+  // throw (ERR_INVALID_ARG_VALUE) inside tls.connect. PBS is very commonly
+  // declared by IP, so omit servername entirely there rather than let the
+  // capture die before the handshake even starts.
+  const sni = net.isIP(host) === 0 ? { servername: host } : {}
   return await new Promise<string>((resolve, reject) => {
     const socket = tls.connect({
       host,
       port,
-      servername: host,
+      ...sni,
       rejectUnauthorized: false,
       timeout: timeoutMs,
     }, () => {

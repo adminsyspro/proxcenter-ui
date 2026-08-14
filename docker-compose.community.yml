@@ -29,6 +29,17 @@ services:
       # one frontend per stack here; give each instance its own value if you
       # point several at one database.
       - PROXCENTER_INSTANCE_ID=${PROXCENTER_INSTANCE_ID:-proxcenter-frontend}
+      # Session lifetimes, in seconds. Left empty on purpose: the frontend
+      # then applies its defaults, 12 hours of inactivity and 7 days absolute.
+      # A malformed value falls back to those defaults rather than to no limit.
+      - SESSION_IDLE_TIMEOUT=${SESSION_IDLE_TIMEOUT:-}
+      - SESSION_ABSOLUTE_TIMEOUT=${SESSION_ABSOLUTE_TIMEOUT:-}
+      # Shared secret for the first-run setup endpoint, which is reachable
+      # without authentication for as long as no account exists. Empty keeps
+      # the historical behaviour. Set it when the first boot happens on a
+      # network someone else can reach, then send the same value as the
+      # x-setup-token header of the setup request.
+      - PROXCENTER_SETUP_TOKEN=${PROXCENTER_SETUP_TOKEN:-}
       # No ORCHESTRATOR_URL = Community mode
       #
       # Docker Secrets support (Swarm / file-based):

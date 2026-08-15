@@ -4099,13 +4099,14 @@ export default function ClusterTabs(props: any) {
                                         <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={16} height={16} style={{ opacity: node.online ? 0.8 : 0.4 }} />
                                         <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 8, height: 8, borderRadius: '50%', bgcolor: node.maintenance ? '#ff9800' : node.online ? '#4caf50' : '#f44336', border: '1.5px solid', borderColor: 'background.paper' }} />
                                       </Box>
-                                      <Typography variant="body2" fontWeight={node.local ? 700 : 400}>
+                                      {/* component='div': body2 renders a <p>, which cannot hold the Chip's <div> */}
+                                      <Typography variant="body2" component="div" fontWeight={node.local ? 700 : 400}>
                                         {node.name}
                                         {node.local && <Chip size="small" label="local" sx={{ ml: 1, height: 16, fontSize: 9 }} />}
                                       </Typography>
                                     </Box>
                                     <Typography variant="body2">{node.id}</Typography>
-                                    <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body2" component="div" sx={{ display: 'flex', alignItems: 'center' }}>
                                       {node.maintenance ? (
                                         <i className="ri-tools-fill" style={{ fontSize: 16, color: '#ff9800' }} />
                                       ) : node.online ? (

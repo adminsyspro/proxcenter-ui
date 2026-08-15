@@ -638,7 +638,8 @@ return true
                           {securityLevel === 'standard' && <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: theme.palette.primary.main }} />}
                         </Box>
                         <Box sx={{ flex: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {/* component='div': body2 renders a <p>, which cannot hold the Chip's <div> */}
+                          <Typography variant="body2" component="div" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
                             🟢 {t('vmIsolation.standard')}
                             <Chip size="small" label={t('vmIsolation.recommended')} color="success" sx={{ height: 18, fontSize: 10 }} />
                           </Typography>

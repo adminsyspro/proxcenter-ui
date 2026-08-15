@@ -898,7 +898,7 @@ export default function ConnectionDialog({
                       size="small"
                       onClick={() => {
                         const text = isPbs
-                          ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / DatastoreReader --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / DatastoreReader --auth-id 'proxcenter@pbs!proxcenter'`
+                          ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / Admin --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / Admin --auth-id 'proxcenter@pbs!proxcenter'`
                           : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin\npveum role add ProxCenter -privs "Sys.Modify,Sys.PowerMgmt"\npveum aclmod / -user proxcenter@pve -role ProxCenter`
                         void tokenSetupCopy.copy(text)
                       }}
@@ -922,9 +922,10 @@ export default function ConnectionDialog({
                       proxmox-backup-manager user generate-token \{'\n'}
                       {'  '}proxcenter@pbs proxcenter{'\n\n'}
                       <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pbsStep3')}</Box>{'\n'}
-                      proxmox-backup-manager acl update / DatastoreReader \{'\n'}
+                      <Box component="span" sx={{ color: 'grey.500' }}># ({t('settings.pbsStep3Hint')})</Box>{'\n'}
+                      proxmox-backup-manager acl update / Admin \{'\n'}
                       {'  '}--auth-id proxcenter@pbs{'\n'}
-                      proxmox-backup-manager acl update / DatastoreReader \{'\n'}
+                      proxmox-backup-manager acl update / Admin \{'\n'}
                       {'  '}--auth-id &apos;proxcenter@pbs!proxcenter&apos;
                     </>
                   ) : (
@@ -943,6 +944,11 @@ export default function ConnectionDialog({
                     </>
                   )}
                 </Box>
+                {isPbs && (
+                  <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.7 }}>
+                    {t('settings.pbsSetupAdminNote')}
+                  </Typography>
+                )}
               </AccordionDetails>
             </Accordion>
           </>

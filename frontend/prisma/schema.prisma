@@ -541,6 +541,22 @@ model Setting {
   @@map("settings")
 }
 
+/// Per-user UI preferences (issue #696). The colour scheme, display mode and the
+/// rest of the Appearance tab used to live only in a browser cookie, so a
+/// browser set to clear cookies on exit dropped the user back to the default
+/// ProxCenter orange. `appearance` holds that same blob, restricted to the keys
+/// validated by src/lib/appearance/schema.ts. Scoped per tenant like
+/// DashboardLayout, so a user working in two tenants keeps a look per tenant.
+model UserPreference {
+  tenantId   String   @default("default") @map("tenant_id")
+  userId     String   @map("user_id")
+  appearance Json     @db.JsonB
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([tenantId, userId])
+  @@map("user_preferences")
+}
+
 /// Admin-authored banner shown at the top of the dashboard (#607).
 /// `targetIds` is a JSON array of strings: tenant ids when targetKind is
 /// "tenants", RBAC role ids when it is "roles", ignored when it is "all".

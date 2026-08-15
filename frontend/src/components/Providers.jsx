@@ -17,7 +17,8 @@ import { TenantProvider } from '@/contexts/TenantContext'
 // i18n
 
 // Util Imports
-import { getMode, getSettingsFromCookie, getSystemMode } from '@core/utils/serverHelpers'
+import { getMode, getEffectiveSettings, getSystemMode } from '@core/utils/serverHelpers'
+import { getAppearanceHydration } from '@/lib/appearance/server'
 
 const Providers = async props => {
   // Props
@@ -25,7 +26,12 @@ const Providers = async props => {
 
   // Vars
   const mode = await getMode()
-  const settingsCookie = await getSettingsFromCookie()
+
+  // The appearance the user saved wins over their cookie, and it is resolved
+  // here on the server so the right palette is in the very first HTML instead
+  // of replacing the default orange after hydration (issue #696).
+  const initialSettings = await getEffectiveSettings()
+  const appearance = await getAppearanceHydration()
   const systemMode = await getSystemMode()
   const locale = await getLocale()
 
@@ -36,7 +42,13 @@ const Providers = async props => {
           <LocaleProvider initialLocale={locale}>
             <PageTitleProvider>
               <VerticalNavProvider>
-                <SettingsProvider settingsCookie={settingsCookie} mode={mode}>
+                <SettingsProvider
+                  initialSettings={initialSettings}
+                  canPersistAppearance={appearance.authenticated}
+                  hasStoredAppearance={appearance.stored !== null}
+                  appearanceOwner={appearance.userId}
+                  mode={mode}
+                >
                   <ThemeProvider direction={direction} systemMode={systemMode}>
                     <ToastProvider>
                       {children}

@@ -404,7 +404,11 @@ return (
                 <>
                   <Divider sx={{ my: 2 }} />
                   <Box sx={{ mb: 3 }}>
-                    <Typography variant='body2' fontWeight={500} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {/* component='div': body2 renders a <p>, which cannot legally hold the
+                        Chip's <div>. The browser closes the paragraph early and the markup
+                        stops matching what the server sent, which React reports as a
+                        hydration error. */}
+                    <Typography variant='body2' component='div' fontWeight={500} sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                       {t('settings.blurIntensity')}
                       <Chip label='Glassmorphism' size='small' color='info' sx={{ height: 18, fontSize: 10 }} />
                     </Typography>

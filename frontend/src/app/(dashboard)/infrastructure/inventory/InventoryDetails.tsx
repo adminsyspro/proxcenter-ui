@@ -109,6 +109,7 @@ import TagManager from './components/TagManager'
 import EntityTagManager from './components/EntityTagManager'
 import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
+import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import UsageBar from './components/UsageBar'
 import ConsolePreview from './components/ConsolePreview'
 import StatusChip from './components/StatusChip'
@@ -318,14 +319,21 @@ export default function InventoryDetails({
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
-  const [cutoverBusy, setCutoverBusy] = useState(false)
-  const [cutoverConfirm, setCutoverConfirm] = useState<string | null>(null)
-  const triggerCutover = async (jobId: string) => {
-    setCutoverBusy(true)
+  // Cancel from the VM panel. The migrate dialog owns the same control, but it
+  // only exists for a job started from that dialog in the same page session —
+  // a job started through the API (or after a reload) could be cut over from
+  // here and not cancelled, while the operator gate message tells the operator
+  // to do exactly that.
+  const [cancelMigConfirm, setCancelMigConfirm] = useState<string | null>(null)
+  const [cancelMigBusy, setCancelMigBusy] = useState(false)
+  const cancelVmMigration = async (jobId: string) => {
+    setCancelMigBusy(true)
     try {
-      await fetch(`/api/v1/migrations/${jobId}/cutover`, { method: 'POST' })
+      const res = await fetch(`/api/v1/migrations/${jobId}/cancel`, { method: 'POST' })
+      const d = await res.json().catch(() => ({}))
+      if (d.data) setVmMigJob(d.data)
     } finally {
-      setCutoverBusy(false)
+      setCancelMigBusy(false)
     }
   }
   const migLogsRef = useRef<HTMLDivElement>(null)
@@ -347,6 +355,7 @@ export default function InventoryDetails({
     migType, setMigType,
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
+    migManualCutover, setMigManualCutover,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
@@ -1025,13 +1034,28 @@ export default function InventoryDetails({
     if (selection?.type !== 'extvm') { setVmMigJob(null); return }
     const vmid = selection.id.split(':')[1]
     if (!vmid) return
-    // Fetch all jobs and find the latest one for this VM
-    fetch('/api/v1/migrations').then(r => r.json()).then(d => {
+    let stopped = false
+
+    // Resolve the VM's latest job, then keep looking. Resolving once left the
+    // panel frozen on whatever job existed when the VM was selected: a run
+    // started afterwards (from the migrate dialog, or straight through the API)
+    // never appeared, so the panel kept showing the previous run's "Completed"
+    // chip and no cutover button, and only F5 fixed it.
+    const resolve = () => fetch('/api/v1/migrations').then(r => r.json()).then(d => {
+      if (stopped) return
       const jobs = d.data || []
       const match = jobs.find((j: any) => j.sourceVmId === vmid && !['cancelled'].includes(j.status))
-      setVmMigJob(match || null)
+      // Keep the same object while it is the same job, so the detail poller
+      // below is not restarted on every resolution tick.
+      setVmMigJob((prev: any) => (prev?.id === match?.id ? prev : (match || null)))
     }).catch(() => {})
-  }, [selection])
+
+    resolve()
+    const iv = setInterval(resolve, 10000)
+    return () => { stopped = true; clearInterval(iv) }
+    // migJobId: a migration started from the dialog resolves immediately here
+    // instead of waiting for the next tick.
+  }, [selection, migJobId])
 
   // Fetch migration history for external host dashboard
   useEffect(() => {
@@ -3995,6 +4019,12 @@ return vm?.isCluster ?? false
             const memGB = vm.memoryMB ? (vm.memoryMB / 1024).toFixed(1) : '0'
             const diskGB = vm.committed ? (vm.committed / 1073741824).toFixed(1) : '0'
 
+            // A manual-cutover run stays in delta_sync on purpose: it keeps
+            // replicating while it waits for the operator, so the projection
+            // stays fresh. It is a wait all the same, and must read as one
+            // rather than as yet another passing delta step (#443).
+            const migAwaitingOperator = isAwaitingOperator(vmMigJob)
+
             return (
               /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
                  pane below the cards' combined min-height, so every card stays reachable. */
@@ -4065,6 +4095,14 @@ return vm?.isCluster ?? false
                         <i className="ri-swap-line" style={{ fontSize: 16, color: '#E65100' }} />
                         {t('inventoryPage.esxiMigration.migrationToProxmox')}
                       </Typography>
+                      {vmMigJob && (
+                        <Chip
+                          size="small"
+                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : migAwaitingOperator ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                          color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'cancelled' ? 'default' : 'primary'}
+                          sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
+                        />
+                      )}
                     </Box>
 
                     {/* Migration flow visual */}
@@ -4090,6 +4128,61 @@ return vm?.isCluster ?? false
                         <Typography variant="caption" sx={{ display: 'block', opacity: 0.5, fontSize: 9 }}>Target</Typography>
                       </Box>
                     </Box>
+
+                    {/* Operator controls. They live in this card, next to the flow
+                        visual, because the operator gate is a decision about the
+                        migration itself — not a transfer metric. A job parked at
+                        the gate waits for a human, so both the wait and the two
+                        ways out of it have to be visible without scrolling. */}
+                    {vmMigJob && !['completed', 'failed', 'cancelled'].includes(vmMigJob.status) && (() => {
+                      const awaiting = migAwaitingOperator
+                      const canCutover = canRequestCutover(vmMigJob)
+
+                      return (
+                        <Box sx={{ px: 2, pb: 2 }}>
+                          <Box sx={{
+                            display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap',
+                            p: 1.5, borderRadius: 1.5, border: '1px solid',
+                            borderColor: awaiting ? 'primary.main' : 'divider',
+                            bgcolor: awaiting ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                          }}>
+                            <i
+                              className={awaiting ? 'ri-pause-circle-line' : 'ri-loader-4-line'}
+                              style={{ fontSize: 20, color: awaiting ? theme.palette.primary.main : undefined, opacity: awaiting ? 1 : 0.5 }}
+                            />
+                            <Box sx={{ flex: 1, minWidth: 160 }}>
+                              <Typography variant="body2" fontWeight={700}>
+                                {awaiting
+                                  ? t('inventoryPage.esxiMigration.awaitingCutover')
+                                  : (vmMigJob.currentStep || vmMigJob.status).replaceAll('_', ' ')}
+                              </Typography>
+                              {canCutover && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {t('inventoryPage.esxiMigration.estimatedDowntime')} ~{Math.round(vmMigJob.projectedDowntimeSec / 60)} min
+                                </Typography>
+                              )}
+                            </Box>
+                            <WarmCutoverButton job={vmMigJob} />
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              disabled={cancelMigBusy}
+                              onClick={() => {
+                                // Mirrors the migrate dialog: nothing is copied before
+                                // full_copy, so those stages cancel without a confirm.
+                                const hasCopiedData = ['full_copy', 'delta_sync', 'awaiting_cutover', 'cutover', 'verify'].includes(vmMigJob.status)
+                                if (hasCopiedData) setCancelMigConfirm(vmMigJob.id)
+                                else cancelVmMigration(vmMigJob.id)
+                              }}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {t('inventoryPage.esxiMigration.cancelMigration')}
+                            </Button>
+                          </Box>
+                        </Box>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
 
@@ -4101,29 +4194,6 @@ return vm?.isCluster ?? false
                         <i className="ri-line-chart-line" style={{ fontSize: 16, opacity: 0.7 }} />
                         {t('inventoryPage.esxiMigration.transferMetrics')}
                       </Typography>
-                      {vmMigJob && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {['delta_sync', 'awaiting_cutover'].includes(vmMigJob.status) && vmMigJob.projectedDowntimeSec != null && (
-                            <Button
-                              size="small"
-                              variant={vmMigJob.status === 'awaiting_cutover' ? 'contained' : 'outlined'}
-                              color="warning"
-                              disabled={cutoverBusy}
-                              startIcon={<i className="ri-flashlight-line" style={{ fontSize: 14 }} />}
-                              onClick={() => setCutoverConfirm(vmMigJob.id)}
-                              sx={{ height: 24, fontSize: 11, py: 0 }}
-                            >
-                              {t('inventoryPage.esxiMigration.cutoverNow')}
-                            </Button>
-                          )}
-                          <Chip
-                            size="small"
-                            label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : vmMigJob.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
-                            color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'awaiting_cutover' ? 'warning' : 'primary'}
-                            sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
-                          />
-                        </Box>
-                      )}
                     </Box>
                     <Box sx={{ p: 2, flex: 1 }}>
                       {vmMigJob ? (
@@ -4280,48 +4350,46 @@ return vm?.isCluster ?? false
                   </CardContent>
                 </Card>
 
+                {/* Same warning the migrate dialog shows: a target volume holding a
+                    completed copy survives the cancel, so the operator has to know
+                    before firing it. */}
                 <Dialog
-                  open={!!cutoverConfirm}
-                  onClose={() => setCutoverConfirm(null)}
+                  open={!!cancelMigConfirm}
+                  onClose={() => setCancelMigConfirm(null)}
                   maxWidth="xs"
                   fullWidth
                 >
-                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box sx={{
-                      width: 40, height: 40, borderRadius: 2,
-                      bgcolor: alpha(theme.palette.warning.main, 0.12),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      <i className="ri-flashlight-line" style={{ fontSize: 22, color: theme.palette.warning.main }} />
-                    </Box>
-                    {t('inventoryPage.esxiMigration.cutoverConfirmTitle')}
+                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
+                    <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
+                    {t('inventoryPage.esxiMigration.cancelMigrationConfirmTitle')}
                   </DialogTitle>
                   <DialogContent>
-                    <DialogContentText>
-                      {t('inventoryPage.esxiMigration.cutoverConfirmBody', { mins: Math.round((vmMigJob?.projectedDowntimeSec ?? 0) / 60) })}
-                    </DialogContentText>
-                    {vmMigJob?.status === 'awaiting_cutover' && (
-                      <Alert severity="warning" sx={{ mt: 2 }}>
-                        {t('inventoryPage.esxiMigration.cutoverNotConverging')}
-                      </Alert>
-                    )}
+                    <Typography sx={{ mb: 1.5 }}>
+                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmStop')}
+                    </Typography>
+                    <Alert severity="warning" sx={{ mb: 1.5 }}>
+                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmVolumesKept')}
+                    </Alert>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmSourceUntouched')}
+                    </Typography>
                   </DialogContent>
                   <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setCutoverConfirm(null)} color="inherit">
-                      {t('common.cancel')}
+                    <Button onClick={() => setCancelMigConfirm(null)} color="inherit">
+                      {t('inventoryPage.esxiMigration.keepMigrating')}
                     </Button>
                     <Button
                       variant="contained"
-                      color="warning"
-                      disabled={cutoverBusy}
-                      startIcon={cutoverBusy ? <CircularProgress size={16} /> : undefined}
+                      color="error"
+                      disabled={cancelMigBusy}
+                      startIcon={cancelMigBusy ? <CircularProgress size={16} /> : undefined}
                       onClick={async () => {
-                        if (!cutoverConfirm) return
-                        await triggerCutover(cutoverConfirm)
-                        setCutoverConfirm(null)
+                        if (!cancelMigConfirm) return
+                        await cancelVmMigration(cancelMigConfirm)
+                        setCancelMigConfirm(null)
                       }}
                     >
-                      {t('inventoryPage.esxiMigration.cutoverNow')}
+                      {t('inventoryPage.esxiMigration.cancelMigration')}
                     </Button>
                   </DialogActions>
                 </Dialog>
@@ -4481,6 +4549,8 @@ return vm?.isCluster ?? false
         migStartAfter={migStartAfter}
         setMigStartAfter={setMigStartAfter}
         migConvertToQcow2={migConvertToQcow2}
+        migManualCutover={migManualCutover}
+        setMigManualCutover={setMigManualCutover}
         setMigConvertToQcow2={setMigConvertToQcow2}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}

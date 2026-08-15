@@ -101,6 +101,18 @@ export async function POST(req: Request) {
       downtimeBudgetSec = n
     }
 
+    // Who owns the warm switchover. "manual" holds the run in delta_sync,
+    // replicating, until the operator triggers the cutover (#443). Rejected
+    // rather than defaulted on a typo: silently falling back to "auto" would
+    // cut a production VM over in the middle of the day.
+    let cutoverMode: "auto" | "manual" | undefined
+    if (body.cutoverMode !== undefined && body.cutoverMode !== null && body.cutoverMode !== "") {
+      if (body.cutoverMode !== "auto" && body.cutoverMode !== "manual") {
+        return NextResponse.json({ error: 'cutoverMode must be "auto" or "manual"' }, { status: 400 })
+      }
+      cutoverMode = body.cutoverMode
+    }
+
     // Verify connections exist
     const [sourceConn, pveConn] = await Promise.all([
       prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, subType: true, name: true, baseUrl: true } }),
@@ -144,7 +156,7 @@ export async function POST(req: Request) {
         // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }) },
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }) },
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -188,6 +200,7 @@ export async function POST(req: Request) {
           ...(targetVmid !== undefined && { targetVmid }),
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
+          ...(cutoverMode !== undefined && { cutoverMode }),
         }, tenantId)
         return
       }

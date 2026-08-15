@@ -297,6 +297,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     migStartAfter: false,
     setMigStartAfter: vi.fn(),
     migConvertToQcow2: false,
+    migManualCutover: false,
+    setMigManualCutover: () => {},
     setMigConvertToQcow2: vi.fn(),
     migDiskPaths: '',
     setMigDiskPaths: vi.fn(),
@@ -733,6 +735,7 @@ describe('migration dialog options', () => {
   const ZFS = { storage: 'tank', type: 'zfspool', content: 'images', total: 1099511627776, avail: 879609302220 }
   const START_AFTER_LABEL = 'Start VM after migration'
   const QCOW2_LABEL = 'Convert disks to qcow2 after migration (enables Proxmox snapshots)'
+  const AUTO_CUTOVER_LABEL = 'Automatic cutover'
 
   function getSwitch(label: string): HTMLInputElement {
     const labelEl = screen.getByText(label)
@@ -804,6 +807,40 @@ describe('migration dialog options', () => {
     fireEvent.click(screen.getByText('harness-open-single'))
     expect(getSwitch(START_AFTER_LABEL).checked).toBe(false)
     expect(getSwitch(QCOW2_LABEL).checked).toBe(false)
+  })
+
+  // #443: the hold is an option like any other, so it inherits the reset. A
+  // manual cutover left on from an earlier run would park a migration nobody
+  // is watching until someone notices it never finished.
+  it('resets the automatic-cutover switch to ON when the dialog is closed and reopened', async () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm', migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS] }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect(getSwitch(AUTO_CUTOVER_LABEL).checked).toBe(true)
+
+    fireEvent.click(getSwitch(AUTO_CUTOVER_LABEL))
+    expect(getSwitch(AUTO_CUTOVER_LABEL).checked).toBe(false)
+
+    fireEvent.click(screen.getByText('harness-close-single'))
+    await waitFor(() => expect(screen.queryByText(AUTO_CUTOVER_LABEL)).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect(getSwitch(AUTO_CUTOVER_LABEL).checked).toBe(true)
+  })
+
+  it('shows the automatic-cutover switch only for a warm migration', () => {
+    const { unmount } = renderWithProviders(
+      <InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'warm' })} />,
+    )
+    expect(screen.getByText(AUTO_CUTOVER_LABEL)).toBeInTheDocument()
+    unmount()
+
+    renderWithProviders(
+      <InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'cold' })} />,
+    )
+    expect(screen.queryByText(AUTO_CUTOVER_LABEL)).not.toBeInTheDocument()
   })
 
   it('shows the qcow2 switch only when the selected target storage is thick LVM', () => {

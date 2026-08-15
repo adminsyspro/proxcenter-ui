@@ -74,6 +74,43 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(cold).not.toHaveBeenCalled()
   })
 
+  it("forwards a manual cutoverMode to the warm pipeline", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, cutoverMode: "manual" } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ cutoverMode: "manual" })
+    // persisted too, so a retry keeps the hold instead of cutting over on its own
+    expect(h.prisma.migrationJob.create.mock.calls[0][0].data.config).toMatchObject({ cutoverMode: "manual" })
+  })
+
+  it("leaves cutoverMode out of the payload when the caller omits it", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+    expect(warm.mock.calls[0][1]).not.toHaveProperty("cutoverMode")
+  })
+
+  it("rejects an unknown cutoverMode instead of falling back to auto", async () => {
+    // Silently defaulting a typo to "auto" would cut a production VM over in the
+    // middle of the day, which is the opposite of what the caller asked for.
+    const res = await callRoute(POST, { body: { ...body, cutoverMode: "manuel" } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/cutoverMode/i)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(warm).not.toHaveBeenCalled()
+  })
+
   it("rejects a malformed downtimeBudgetSec before creating a job", async () => {
     // validated up front (before the connection lookup), so no source mocks needed
     const res = await callRoute(POST, { body: { ...body, downtimeBudgetSec: "abc" } })

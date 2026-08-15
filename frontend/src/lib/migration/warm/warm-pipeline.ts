@@ -64,6 +64,12 @@ export interface WarmMigrationConfig {
   downtimeBudgetSec?: number
   /** Safety cap on delta passes (default 5). */
   maxPasses?: number
+  /**
+   * Who decides the switchover (default "auto"). "manual" keeps replicating and
+   * waits for the operator's cutover instead of ever deciding on its own, which
+   * is what a migration scheduled inside a maintenance window needs (#443).
+   */
+  cutoverMode?: "auto" | "manual"
 }
 
 // ── Job tracking (per-orchestrator, mirrors the other migration pipelines) ──
@@ -375,6 +381,55 @@ interface PassProgress extends PassWindow {
 const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
 
 /**
+ * Pacing between two delta passes of a manual hold. A converged source yields
+ * empty passes in seconds; without this the hold would snapshot and consolidate
+ * on vCenter in a tight loop for its whole duration, which is exactly the churn
+ * that broke a 3 TB run (#678). Deliberately not configurable: it only changes
+ * how fresh the projection is, and a minute is fresh enough to decide on.
+ */
+const HOLD_PASS_INTERVAL_MS = 60 * 1000
+
+/**
+ * Wait between two hold passes, in slices, so the operator's cutover request is
+ * picked up within a second instead of after the full interval. Returns false
+ * when a cutover was requested (the caller stops replicating and switches over),
+ * true when the wait ran to the end. Throws on cancellation, like every other
+ * wait in this pipeline.
+ */
+async function sleepUnlessCutover(jobId: string, ms: number): Promise<boolean> {
+  const until = Date.now() + ms
+  while (Date.now() < until) {
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    if (isCutoverRequested(jobId)) return false
+    await new Promise(r => setTimeout(r, Math.max(1, Math.min(1000, until - Date.now()))))
+  }
+  return true
+}
+
+/** Test seam: the hold pacing is otherwise only reachable through a full run. */
+export function __sleepUnlessCutoverForTest(jobId: string, ms: number): Promise<boolean> {
+  return sleepUnlessCutover(jobId, ms)
+}
+
+/**
+ * Why the gate was reached, stated from the numbers rather than assumed.
+ *
+ * Every projection carries a fixed floor (shutdown + boot) that no amount of
+ * converging can shave off, so a budget set below that floor can never be met
+ * and the run parks at the gate even when the deltas are empty. Blaming the
+ * source there is simply false — a 0.0 MB delta pass is the opposite of "the
+ * source is changing faster than it converges" — so say which of the two it is.
+ *
+ * Exported for the unit test; `floorSec` unknown (older callers) keeps the
+ * historical wording.
+ */
+export function gateReason(budgetSec: number, floorSec?: number): string {
+  return floorSec != null && budgetSec < floorSec
+    ? `The ${budgetSec}s budget is below the ~${floorSec}s floor every cutover carries (shutdown + boot), so no delta pass can ever meet it.`
+    : "The source is changing faster than it converges."
+}
+
+/**
  * Pause a warm job at the operator gate: persist the estimate, log an actionable
  * message, then wait until the operator requests cutover (resolve), cancels
  * (throw "Migration cancelled"), or the safety timeout elapses (throw). No delta
@@ -382,13 +437,13 @@ const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
  */
 async function awaitOperatorCutover(
   jobId: string, projectedDowntimeSec: number, budgetSec: number, maxPasses: number,
-  opts: { pollMs?: number; timeoutMs?: number } = {},
+  opts: { pollMs?: number; timeoutMs?: number; floorSec?: number } = {},
 ): Promise<void> {
   const pollMs = opts.pollMs ?? 3000
   const timeoutMs = opts.timeoutMs ?? OPERATOR_GATE_TIMEOUT_MS
   await updateJob(jobId, "awaiting_cutover", { currentStep: "awaiting_cutover", projectedDowntimeSec })
   const mins = Math.round(projectedDowntimeSec / 60)
-  await appendLog(jobId, `Reached ${maxPasses} delta passes; projected cutover downtime ~${projectedDowntimeSec}s (~${mins} min) exceeds the ${budgetSec}s budget. The source is changing faster than it converges. Click "Cutover now" to proceed (VM offline ~${mins} min), or cancel and use a cold migration.`, "warn")
+  await appendLog(jobId, `Reached ${maxPasses} delta passes; projected cutover downtime ~${projectedDowntimeSec}s (~${mins} min) exceeds the ${budgetSec}s budget. ${gateReason(budgetSec, opts.floorSec)} Click "Cutover now" to proceed (VM offline ~${mins} min), or cancel and use a cold migration.`, "warn")
   const start = Date.now()
   while (true) {
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -423,6 +478,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
   const budget = config.downtimeBudgetSec ?? 300
   const maxPasses = config.maxPasses ?? 5
+  const cutoverMode = config.cutoverMode === "manual" ? "manual" : "auto"
 
   let soapSession: SoapSession | null = null
   let stopKeepAlive: (() => void) | null = null
@@ -783,8 +839,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await updateJob(jobId, "full_copy", { progress: 80, bytesTransferred: BigInt(fullBytes), transferSpeed: `${(throughput / 1048576).toFixed(0)} MB/s` })
       await appendLog(jobId, `Full copy done: ${(fullBytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
 
-      // ── delta_sync: converge by downtime budget ──
-      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30 }
+      // ── delta_sync: converge by downtime budget, or hold for the operator ──
+      const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, cutoverMode }
+      if (cutoverMode === "manual") {
+        await appendLog(jobId, `Manual cutover: replication will keep running and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
+      }
       let pass = 0
       while (true) {
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -793,10 +852,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}` })
         // Each delta pass advances through an equal slice of the 80→95 delta
         // window; a run that converges before maxPasses jumps to 95 at cutover.
-        const deltaWindow: PassWindow = {
-          status: "delta_sync", currentStep: `delta_${pass + 1}`,
-          rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses,
-        }
+        // A manual hold has no last pass to aim at, so it parks the bar at 90
+        // rather than creeping to 95 and stalling there for hours.
+        const deltaWindow: PassWindow = cutoverMode === "manual"
+          ? { status: "delta_sync", currentStep: `delta_${pass + 1}`, rangeStart: 88, rangeEnd: 90 }
+          : {
+            status: "delta_sync", currentStep: `delta_${pass + 1}`,
+            rangeStart: 80 + (15 * pass) / maxPasses, rangeEnd: 80 + (15 * (pass + 1)) / maxPasses,
+          }
         const deltaBytes = await runCbtPass(`delta-${pass + 1}`, dk => diskState.get(dk)!.currentChangeId || "*", deltaWindow)
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = deltaBytes > 0 ? deltaBytes / dsec : throughput
@@ -805,7 +868,14 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") {
-          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses)
+          await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec })
+          break
+        }
+        // A converged source yields empty passes; without pacing they would
+        // snapshot vCenter in a tight loop for the whole hold. The wait is
+        // sliced so a cutover request is still picked up within a second.
+        if (cutoverMode === "manual" && !(await sleepUnlessCutover(jobId, HOLD_PASS_INTERVAL_MS))) {
+          await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info")
           break
         }
         pass++

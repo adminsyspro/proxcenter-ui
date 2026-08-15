@@ -59,6 +59,9 @@ export function useMigrationOptions({
   // rewrites every migrated disk in the background and transiently doubles
   // the space used on the target storage.
   const [migConvertToQcow2, setMigConvertToQcow2] = useState(false)
+  // Warm only (#443). Off by default: the automatic budget stays the norm, and a
+  // hold left on from an earlier run would park a migration nobody is watching.
+  const [migManualCutover, setMigManualCutover] = useState(false)
 
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
@@ -70,6 +73,7 @@ export function useMigrationOptions({
     setMigType('cold')
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
+    setMigManualCutover(false)
   }, [esxiMigrateVm, bulkMigOpen])
 
   return {
@@ -89,5 +93,7 @@ export function useMigrationOptions({
     setMigTransferMode,
     migConvertToQcow2,
     setMigConvertToQcow2,
+    migManualCutover,
+    setMigManualCutover,
   }
 }

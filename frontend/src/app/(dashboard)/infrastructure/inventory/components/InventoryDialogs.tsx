@@ -65,6 +65,8 @@ import { parseNodeId, parseVmId } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
+import { vsanBlocksMigrationType, warmNeedsBlockStorage } from './migrationGuards'
+import WarmCutoverButton, { isAwaitingOperator } from './WarmCutoverButton'
 import { useToast } from '@/contexts/ToastContext'
 import { copyToClipboard } from '@/lib/clipboard'
 
@@ -255,6 +257,8 @@ export interface InventoryDialogsProps {
   migStartAfter: boolean
   setMigStartAfter: (v: boolean) => void
   migConvertToQcow2: boolean
+  migManualCutover: boolean
+  setMigManualCutover: (v: boolean) => void
   setMigConvertToQcow2: (v: boolean) => void
   migDiskPaths: string
   setMigDiskPaths: (v: string) => void
@@ -403,6 +407,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migTargetVmid, setMigTargetVmid, migTargetVmidStatus, setMigTargetVmidStatus,
     migNetworkBridge, setMigNetworkBridge, migVlanTag, setMigVlanTag, migBridges,
     migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
+    migManualCutover, setMigManualCutover,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
@@ -636,6 +641,9 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   }, [esxiMigrateVm?.connId, esxiMigrateVm?.vmid, esxiMigrateVm?.hostType])
   const sourceVsanDatastores = sourceDatastores.filter(n => n.toLowerCase().includes('vsan'))
   const vsanBlocksMigration = sourceVsanDatastores.length > 0
+  // Only the file-based types are impossible on vSAN; warm reads through VDDK.
+  // See migrationGuards for the why and for the run that proved it.
+  const vsanBlocksSelectedType = vsanBlocksMigrationType(vsanBlocksMigration, migType)
 
   // Warm CBT-fallback verdict (only meaningful when migType === 'warm'): mirrors
   // runWarmMigration's planning-time decision (`useCbt = eligible && snapshotCount
@@ -697,6 +705,12 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // LVM pick can never leak into a run against a storage it doesn't apply to.
   const migTargetIsThickLvm = migStorages.find((s: any) => s.storage === migTargetStorage)?.type === 'lvm'
 
+  // Warm writes the target by byte offset, so a file-based storage is refused by
+  // the engine at planning time. Both dialogs gate on this, since both can start
+  // a warm run against the same storage picker.
+  const migTargetStorageType: string | undefined = migStorages.find((s: any) => s.storage === migTargetStorage)?.type
+  const warmStorageBlocked = warmNeedsBlockStorage(migType, migTargetStorageType)
+
   // Rendered identically by the single-VM and the bulk dialog. Kept as one
   // helper rather than two copies of the same JSX: an identical block repeated
   // in both dialogs is what trips the new-code duplication gate.
@@ -707,6 +721,27 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <Typography variant="body2">{t('inventoryPage.esxiMigration.convertDisksToQcow2')}</Typography>
           <MuiTooltip title={t('inventoryPage.esxiMigration.convertDisksToQcow2Tooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+            <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+          </MuiTooltip>
+        </Box>
+      }
+    />
+  )
+
+  // Single-VM dialog only. A batch held for the operator would need one cutover
+  // click per VM and would keep as many VDDK sessions open as VMs, so the hold
+  // is deliberately not offered in bulk.
+  //
+  // Reads as "Automatic cutover", ON by default, because that is what the engine
+  // does by default; turning it OFF is what parks the run for the operator. The
+  // label always names the active state, never the position.
+  const renderAutomaticCutoverSwitch = () => migType === 'warm' && (
+    <FormControlLabel
+      control={<Switch size="small" checked={!migManualCutover} onChange={(_, v) => setMigManualCutover(!v)} />}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2">{t('inventoryPage.esxiMigration.automaticCutover')}</Typography>
+          <MuiTooltip title={t('inventoryPage.esxiMigration.automaticCutoverTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
             <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
           </MuiTooltip>
         </Box>
@@ -2337,10 +2372,19 @@ return
                       available, HTTPS otherwise). No user-facing selector — the choice is an
                       implementation detail and was confusing in practice. */}
 
-                  {/* vSAN source blocks direct-ESXi migration — requires vCenter (NFC protocol). */}
-                  {vsanBlocksMigration && (
+                  {/* vSAN source: only the file-based modes are blocked. Selecting Warm
+                      clears the alert, because that is the way out it points to. */}
+                  {vsanBlocksSelectedType && (
                     <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
                       {t('inventoryPage.esxiMigration.vsanRequiresVcenter', { datastores: sourceVsanDatastores.join(', ') })}
+                    </Alert>
+                  )}
+
+                  {/* Warm on a file-based target: the engine refuses it at planning
+                      time, so say so while the storage can still be changed. */}
+                  {warmStorageBlocked && (
+                    <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                      {t('inventoryPage.esxiMigration.warmRequiresBlockStorage', { storage: migTargetStorage, type: migTargetStorageType ?? '' })}
                     </Alert>
                   )}
 
@@ -2349,7 +2393,7 @@ return
                       which injects the VirtIO drivers + guest tools during conversion,
                       so no manual install is needed on that path. Live stays on the
                       in-house fast path without injection, hence the reminder. */}
-                  {!vsanBlocksMigration && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (migType === 'live' || migType === 'warm') && (
+                  {!vsanBlocksSelectedType && esxiMigrateVm?.hostType !== 'vcenter' && esxiMigrateVm?.hostType !== 'hyperv' && esxiMigrateVm?.hostType !== 'nutanix' && !!esxiMigrateVm?.guestOS?.toLowerCase().includes('win') && (migType === 'live' || migType === 'warm') && (
                     <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-windows-line" style={{ fontSize: 18 }} />}>
                       {t('inventoryPage.esxiMigration.windowsVirtioNote')}
                     </Alert>
@@ -2737,6 +2781,7 @@ return
                   />
 
                   {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
+                  {renderAutomaticCutoverSwitch()}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
               </Box>
@@ -2896,7 +2941,12 @@ return
                 {migJob.status === 'failed' && <Chip size="small" label={t('inventoryPage.esxiMigration.failed')} color="error" sx={{ fontWeight: 600 }} />}
                 {migJob.status === 'cancelled' && <Chip size="small" label={t('inventoryPage.esxiMigration.cancelled')} color="warning" sx={{ fontWeight: 600 }} />}
                 {!['completed', 'failed', 'cancelled'].includes(migJob.status) && (
-                  <Chip size="small" label={migJob.currentStep?.replaceAll("_", ' ') || migJob.status} color="primary" sx={{ fontWeight: 600 }} />
+                  <Chip
+                    size="small"
+                    label={isAwaitingOperator(migJob) ? t('inventoryPage.esxiMigration.awaitingCutover') : (migJob.currentStep?.replaceAll("_", ' ') || migJob.status)}
+                    color="primary"
+                    sx={{ fontWeight: 600 }}
+                  />
                 )}
                 {migJob.targetVmid && <Typography variant="caption" color="text.secondary">{t('inventoryPage.esxiMigration.targetVmid')}: {migJob.targetVmid}</Typography>}
               </Box>
@@ -3010,8 +3060,11 @@ return
                   // connection and sshfs/pv must be available when those modes selected.
                   if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                   if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
-                  // vSAN source on direct-ESXi: blocked because vSAN objects need NFC via vCenter.
-                  if (vsanBlocksMigration) return true
+                  // vSAN source on direct-ESXi: the file-based types stay blocked, warm
+                  // does not. Until this was fixed, a vSAN VM could only be migrated
+                  // without vCenter through the API.
+                  if (vsanBlocksSelectedType) return true
+                  if (warmStorageBlocked) return true
                   // Warm: require a CURRENT successful readiness check for the selected
                   // node. warmPreflightCurrent is null unless the verdict matches the chosen
                   // target, so this blocks a missing, stale (prior-node), in-flight, or
@@ -3056,6 +3109,10 @@ return
                         // LVM storage was selected never leaks into a run against
                         // a storage the option is hidden for.
                         convertDisksToQcow2: migConvertToQcow2 && migTargetIsThickLvm,
+                        // Warm only, and single-VM only: the switch is hidden
+                        // everywhere else, so the payload is gated on the type too
+                        // rather than trusting the UI state.
+                        ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
                         // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
                         // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
                         ...(migTempStorage !== '/tmp' && {
@@ -3125,6 +3182,10 @@ return
             <>
               {migJob && !['completed', 'failed', 'cancelled'].includes(migJob.status) && (
                 <>
+                  {/* Same control as the VM panel. The operator who started the
+                      run is looking at this dialog, so the switchover has to be
+                      reachable from here and not only from the inventory. */}
+                  <WarmCutoverButton job={migJob} size="medium" />
                   <Button
                     color="error"
                     onClick={() => {
@@ -3450,6 +3511,11 @@ return
                           </Select>
                           {migTargetNode === '__auto__' && <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 1.5 }}>{t('inventoryPage.esxiMigration.sharedStorageHint')}</Typography>}
                         </FormControl>
+                        {warmStorageBlocked && (
+                          <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+                            {t('inventoryPage.esxiMigration.warmRequiresBlockStorage', { storage: migTargetStorage, type: migTargetStorageType ?? '' })}
+                          </Alert>
+                        )}
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 1 }}>
                           <FormControl fullWidth size="small">
                             <InputLabel>{t('inventoryPage.esxiMigration.networkBridge')}</InputLabel>
@@ -4062,6 +4128,10 @@ return
                 variant="outlined"
                 disabled={(() => {
                   if (!migTargetConn || !migTargetNode || !migTargetStorage || bulkMigStarting) return true
+                  // Same block-storage rule as the single-VM dialog: both share this
+                  // storage picker, so a batch could otherwise be launched into the
+                  // engine's refusal one job at a time.
+                  if (warmStorageBlocked) return true
                   const isV2vSource = (bulkMigHostInfo?.hostType === 'vcenter' && migType !== 'warm') || bulkMigHostInfo?.hostType === 'hyperv' || bulkMigHostInfo?.hostType === 'nutanix'
                   if (isV2vSource) {
                     if (vcenterPreflight?.checked) {

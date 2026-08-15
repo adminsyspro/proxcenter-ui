@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest } from "./warm-pipeline"
+import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, cancelWarmMigrationJob, gateReason, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest, __sleepUnlessCutoverForTest } from "./warm-pipeline"
 import { parseDdProgress } from "./dd-progress"
 import { volumesToFree, volumesToKeep, type AllocatedVolume } from "../pvesm-alloc"
 import { prismaTest, truncate } from "../../../__tests__/setup/prisma-test"
@@ -250,5 +250,46 @@ describe("awaitOperatorCutover", () => {
     await expect(
       __awaitOperatorCutoverForTest("gate-2", 2505, 300, 5, { pollMs: 5, timeoutMs: 20 })
     ).rejects.toThrow(/timed out/i)
+  })
+})
+
+describe("sleepUnlessCutover (manual hold pacing)", () => {
+  it("returns early, not after the full interval, when a cutover is requested", async () => {
+    requestWarmCutover("hold-1")
+    const t0 = Date.now()
+
+    await expect(__sleepUnlessCutoverForTest("hold-1", 60_000)).resolves.toBe(false)
+    expect(Date.now() - t0).toBeLessThan(2000)
+  })
+
+  it("runs the wait to the end when nothing is requested", async () => {
+    await expect(__sleepUnlessCutoverForTest("hold-2", 30)).resolves.toBe(true)
+  })
+
+  it("propagates a cancellation like every other wait in the pipeline", async () => {
+    cancelWarmMigrationJob("hold-3")
+    await expect(__sleepUnlessCutoverForTest("hold-3", 60_000)).rejects.toThrow(/cancelled/i)
+  })
+})
+
+describe("gateReason", () => {
+  it("blames the source when the budget is above the fixed floor", () => {
+    // 300s budget, 50s floor: only a source that keeps writing can hold the
+    // projection above the budget, so the historical wording is the true one.
+    expect(gateReason(300, 50)).toMatch(/source is changing faster/i)
+  })
+
+  it("blames the budget when it sits below the floor no pass can beat", () => {
+    // Observed 2026-08-15 on a converged VM (delta passes of 0.0 MB) parked at
+    // the gate by a 30s budget: the old message claimed the source was moving.
+    const msg = gateReason(30, 50)
+
+    expect(msg).not.toMatch(/source is changing/i)
+    expect(msg).toContain("30s budget")
+    expect(msg).toContain("50s floor")
+  })
+
+  it("keeps the historical wording when the floor is unknown", () => {
+    expect(gateReason(30)).toMatch(/source is changing faster/i)
   })
 })

@@ -2154,6 +2154,7 @@
       "automaticCutoverTooltip": "Activé : la migration bascule d'elle-même dès que le downtime projeté tient dans le budget. Désactivé : elle continue de répliquer et attend que vous déclenchiez la bascule, pour une fenêtre de maintenance que vous choisissez.",
       "downtimeBudget": "Budget de downtime",
       "downtimeBudgetTooltip": "Bascule automatiquement dès que le downtime projeté tient dans ce budget. Valeur par défaut : 300 s.",
+      "downtimeBudgetSeconds": "Secondes",
       "windowsVirtioNote": "Guest Windows : la VM va booter sur Proxmox avec un disque SATA et une carte reseau e1000 (drivers natifs Windows). Pour de meilleures performances disque et reseau, installez les drivers VirtIO dans la VM apres le boot. Telechargement : https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — guide d'installation : https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Nécessite SSH configuré sur la connexion ESXi",
       "enterpriseRequired": "Plan Enterprise requis",

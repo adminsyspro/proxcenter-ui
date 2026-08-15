@@ -66,7 +66,7 @@ import { parseNodeId, parseVmId } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
-import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
+import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
 import WarmCutoverButton, { isAwaitingOperator } from './WarmCutoverButton'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './ForcePowerOffButton'
 import { useToast } from '@/contexts/ToastContext'
@@ -778,19 +778,38 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           {formatDowntimeBudget(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
         </Typography>
       </Box>
-      <Slider
-        size="small"
-        value={downtimeBudgetIndex(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
-        onChange={(_, val) => setMigDowntimeBudget(String(DOWNTIME_BUDGET_PRESETS[Math.round(val as number)]))}
-        min={0}
-        max={DOWNTIME_BUDGET_PRESETS.length - 1}
-        step={1}
-        marks={DOWNTIME_BUDGET_MARKS}
-        valueLabelDisplay="auto"
-        valueLabelFormat={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
-        getAriaValueText={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
-        aria-label={t('inventoryPage.esxiMigration.downtimeBudget')}
-      />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        {/* The end marks are centred on their tick, so half of "30 s" and of
+            "24 h" hangs past the track. The padding gives them the room. */}
+        <Box sx={{ flex: 1, px: 2 }}>
+          <Slider
+            size="small"
+            value={downtimeBudgetIndex(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
+            onChange={(_, val) => setMigDowntimeBudget(String(DOWNTIME_BUDGET_PRESETS[Math.round(val as number)]))}
+            min={0}
+            max={DOWNTIME_BUDGET_PRESETS.length - 1}
+            step={1}
+            marks={DOWNTIME_BUDGET_MARKS}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+            getAriaValueText={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+            aria-label={t('inventoryPage.esxiMigration.downtimeBudget')}
+          />
+        </Box>
+        {/* The slider walks a curated scale; this is how a value between two of
+            its stops gets set, and how one arriving from the API is read back. */}
+        <NumericTextField
+          size="small"
+          value={Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC}
+          onChange={n => setMigDowntimeBudget(String(n))}
+          fallback={DOWNTIME_BUDGET_DEFAULT_SEC}
+          min={DOWNTIME_BUDGET_MIN_SEC}
+          max={DOWNTIME_BUDGET_MAX_SEC}
+          error={downtimeBudgetInvalid}
+          label={t('inventoryPage.esxiMigration.downtimeBudgetSeconds')}
+          sx={{ width: 110, flexShrink: 0 }}
+        />
+      </Box>
     </Box>
   )
 

@@ -2154,6 +2154,7 @@
       "automaticCutoverTooltip": "On: the migration switches over on its own as soon as the projected downtime fits the budget. Off: it keeps replicating and waits for you to trigger the cutover, for a maintenance window you choose.",
       "downtimeBudget": "Downtime budget",
       "downtimeBudgetTooltip": "Cut over automatically once the projected downtime fits this budget. The default is 300 s.",
+      "downtimeBudgetSeconds": "Seconds",
       "windowsVirtioNote": "Windows guest: the VM will boot on Proxmox with SATA disk and e1000 NIC (built-in Windows drivers). For better disk and network performance, install the VirtIO drivers inside the VM after it boots. Download: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — install guide: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Requires SSH configured on the ESXi connection",
       "enterpriseRequired": "Enterprise Plan Required",

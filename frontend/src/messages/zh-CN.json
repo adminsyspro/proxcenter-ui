@@ -2123,6 +2123,7 @@
       "automaticCutoverTooltip": "开启：预计停机时间符合预算时，迁移会自行切换。关闭：迁移继续复制并等待你手动触发切换，便于安排在你选择的维护窗口。",
       "downtimeBudget": "停机时间预算",
       "downtimeBudgetTooltip": "预计停机时间符合该预算后自动切换。默认值为 300 秒。",
+      "downtimeBudgetSeconds": "秒",
       "windowsVirtioNote": "Windows 客户机：虚拟机将在 Proxmox 上使用 SATA 磁盘和 e1000 网卡（Windows 内置驱动）启动。为了获得更好的磁盘和网络性能，请在虚拟机启动后在其中安装 VirtIO 驱动程序。下载：https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — 安装指南：https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "需要在 ESXi 连接上配置 SSH",
       "enterpriseRequired": "需要企业版计划",

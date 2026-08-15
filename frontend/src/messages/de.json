@@ -2124,6 +2124,7 @@
       "automaticCutoverTooltip": "Ein: Die Migration schaltet von selbst um, sobald die prognostizierte Ausfallzeit ins Budget passt. Aus: Sie repliziert weiter und wartet darauf, dass Sie umschalten, für ein Wartungsfenster Ihrer Wahl.",
       "downtimeBudget": "Ausfallzeit-Budget",
       "downtimeBudgetTooltip": "Schaltet automatisch um, sobald die prognostizierte Ausfallzeit in dieses Budget passt. Standard: 300 s.",
+      "downtimeBudgetSeconds": "Sekunden",
       "windowsVirtioNote": "Windows-Gast: Die VM bootet auf Proxmox mit SATA-Disk und e1000-NIC (integrierte Windows-Treiber). Fur bessere Disk- und Netzwerk-Performance installieren Sie die VirtIO-Treiber in der VM nach dem Boot. Download: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — Installationsanleitung: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Erfordert SSH-Konfiguration auf der ESXi-Verbindung",
       "enterpriseRequired": "Enterprise-Plan erforderlich",

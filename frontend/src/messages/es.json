@@ -2154,6 +2154,7 @@
       "automaticCutoverTooltip": "Activado: la migración conmuta por sí sola en cuanto el downtime previsto cabe en el presupuesto. Desactivado: sigue replicando y espera a que tú lances la conmutación, para una ventana de mantenimiento que tú eliges.",
       "downtimeBudget": "Presupuesto de downtime",
       "downtimeBudgetTooltip": "Conmuta automáticamente en cuanto el downtime previsto quepa en este presupuesto. Por defecto, 300 s.",
+      "downtimeBudgetSeconds": "Segundos",
       "windowsVirtioNote": "Guest Windows: la VM arrancará en Proxmox con disco SATA y NIC e1000 (drivers integrados de Windows). Para mejorar el rendimiento de disco y red, instala los drivers VirtIO dentro de la VM después del arranque. Descarga: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso — guía de instalación: https://pve.proxmox.com/wiki/Windows_VirtIO_Drivers",
       "requiresLicensedEsxi": "Requiere SSH configurado en la conexión ESXi",
       "enterpriseRequired": "Se requiere plan Enterprise",

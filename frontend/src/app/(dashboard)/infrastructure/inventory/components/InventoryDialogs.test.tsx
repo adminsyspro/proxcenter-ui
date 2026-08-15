@@ -881,6 +881,31 @@ describe('migration dialog options', () => {
     expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toHaveAttribute('aria-valuetext', '5 min')
   })
 
+  it('takes a precise budget from the field, off the slider scale', async () => {
+    // The scale stops at round values; a maintenance window does not.
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
+    )
+    fireEvent.click(screen.getByText('harness-open-single'))
+
+    fireEvent.change(screen.getByLabelText('Seconds'), { target: { value: '500' } })
+
+    // the slider follows, snapped to the nearest stop it can show
+    await waitFor(() => expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toHaveAttribute('aria-valuetext', '10 min'))
+    expect((screen.getByLabelText('Seconds') as HTMLInputElement).value).toBe('500')
+  })
+
+  it('moves the field when the slider moves', async () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
+    )
+    fireEvent.click(screen.getByText('harness-open-single'))
+
+    fireEvent.keyDown(screen.getByRole('slider', { name: BUDGET_LABEL }), { key: 'ArrowRight' })
+
+    await waitFor(() => expect((screen.getByLabelText('Seconds') as HTMLInputElement).value).toBe('600'))
+  })
+
   it('shows the automatic-cutover switch only for a warm migration', () => {
     const { unmount } = renderWithProviders(
       <InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'warm' })} />,

@@ -86,11 +86,25 @@ export function downtimeBudgetIndex(seconds: number): number {
 
 /**
  * Render a budget the way an operator reads a maintenance window: seconds while
- * they still mean something, then minutes, then hours. No decimals, every preset
- * divides cleanly.
+ * they still mean something, then minutes, then hours.
+ *
+ * Never a fraction. The slider only ever produces values that divide cleanly,
+ * but the field next to it takes any number of seconds, and 620 s must read as
+ * "10 min 20 s" rather than "10.333333333333334 min".
  */
 export function formatDowntimeBudget(seconds: number): string {
-  if (seconds < 60) return `${seconds} s`
-  if (seconds < 3600) return `${seconds / 60} min`
-  return `${seconds / 3600} h`
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `${total} s`
+
+  if (total < 3600) {
+    const minutes = Math.floor(total / 60)
+    const rest = total % 60
+
+    return rest ? `${minutes} min ${rest} s` : `${minutes} min`
+  }
+
+  const hours = Math.floor(total / 3600)
+  const restMinutes = Math.round((total % 3600) / 60)
+
+  return restMinutes ? `${hours} h ${restMinutes} min` : `${hours} h`
 }

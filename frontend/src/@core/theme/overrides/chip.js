@@ -58,7 +58,7 @@ const chip = {
               },
               '&.MuiChip-clickable:hover': {
                 backgroundColor: 'var(--mui-palette-primary-main)',
-                color: 'var(--mui-palette-common-white)'
+                color: 'var(--mui-palette-primary-contrastText)'
               }
             }
           },

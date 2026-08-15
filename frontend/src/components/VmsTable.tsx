@@ -1494,7 +1494,7 @@ return (
                     sx={{ 
                       color: 'primary.main',
                       p: 0.5,
-                      '&:hover': { bgcolor: 'primary.main', color: 'white' }
+                      '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' }
                     }}
                   >
                     <i className='ri-file-copy-2-line' style={{ fontSize: 16 }} />
@@ -1682,7 +1682,7 @@ return (
                   sx={{ 
                     color: 'text.secondary',
                     p: 0.5,
-                    '&:hover': { bgcolor: 'primary.main', color: 'white' }
+                    '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' }
                   }}
                 >
                   <i className='ri-eye-line' style={{ fontSize: 16 }} />

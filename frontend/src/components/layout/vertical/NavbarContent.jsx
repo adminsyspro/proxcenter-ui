@@ -742,7 +742,8 @@ return () => window.removeEventListener('keydown', onKeyDown)
                   height: 32,
                   fontSize: '0.75rem',
                   fontWeight: 600,
-                  bgcolor: 'primary.main'
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText'
                 }}
               >
                 {!user?.avatar && getInitials(user?.name, user?.email)}

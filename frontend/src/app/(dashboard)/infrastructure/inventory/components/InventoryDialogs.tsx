@@ -4113,7 +4113,7 @@ return
                                 sx={{
                                   height: 20, fontSize: 10, fontWeight: 700, minWidth: 50,
                                   bgcolor: isDone ? 'success.main' : isFailed ? 'error.main' : isQueued ? 'action.disabled' : 'primary.main',
-                                  color: '#fff',
+                                  color: isDone ? 'success.contrastText' : isFailed ? 'error.contrastText' : isQueued ? 'common.white' : 'primary.contrastText',
                                 }}
                               />
                             </Box>
@@ -4144,7 +4144,7 @@ return
                             size="small"
                             label={t('inventoryPage.esxiMigration.allVms')}
                             onClick={() => setBulkMigLogsFilter(null)}
-                            sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: !bulkMigLogsFilter ? 'primary.main' : 'action.hover', color: !bulkMigLogsFilter ? '#fff' : 'text.secondary' }}
+                            sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: !bulkMigLogsFilter ? 'primary.main' : 'action.hover', color: !bulkMigLogsFilter ? 'primary.contrastText' : 'text.secondary' }}
                           />
                           {bulkMigJobs.filter(j => j.jobId).map(j => (
                             <Chip
@@ -4152,7 +4152,7 @@ return
                               size="small"
                               label={j.name}
                               onClick={() => setBulkMigLogsFilter(bulkMigLogsFilter === j.jobId ? null : j.jobId)}
-                              sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: bulkMigLogsFilter === j.jobId ? 'primary.main' : 'action.hover', color: bulkMigLogsFilter === j.jobId ? '#fff' : 'text.secondary' }}
+                              sx={{ height: 22, fontSize: 10, fontWeight: 600, bgcolor: bulkMigLogsFilter === j.jobId ? 'primary.main' : 'action.hover', color: bulkMigLogsFilter === j.jobId ? 'primary.contrastText' : 'text.secondary' }}
                             />
                           ))}
                         </Box>

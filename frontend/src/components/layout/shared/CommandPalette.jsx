@@ -22,6 +22,7 @@ import { hasInfraScope } from '@/lib/rbac/scopeKinds'
 import { useLicense } from '@/contexts/LicenseContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
+import { commandPaletteRowSx } from './commandPaletteRowSx'
 
 // ---------------------------------------------------------------------------
 // Fuzzy match utility (no external lib)
@@ -467,22 +468,7 @@ const CommandPalette = ({ open, onClose }) => {
                   key={`page-${page.href}`}
                   ref={el => { itemRefs.current[idx] = el }}
                   onClick={() => navigateTo({ ...page, _type: 'page' })}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    px: 2.5,
-                    py: 1,
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mx: 1,
-                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
-                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
-                    '&:hover': {
-                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
-                    },
-                    transition: 'background-color 0.1s'
-                  }}
+                  sx={commandPaletteRowSx(activeIndex === idx)}
                 >
                   <i
                     className={page.icon || 'ri-file-line'}
@@ -526,22 +512,7 @@ const CommandPalette = ({ open, onClose }) => {
                   key={`vm-${vm.vmid}-${vm.node}`}
                   ref={el => { itemRefs.current[idx] = el }}
                   onClick={() => navigateTo({ ...vm, _type: 'vm' })}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    px: 2.5,
-                    py: 1,
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mx: 1,
-                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
-                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
-                    '&:hover': {
-                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
-                    },
-                    transition: 'background-color 0.1s'
-                  }}
+                  sx={commandPaletteRowSx(activeIndex === idx)}
                 >
                   {/* Status dot */}
                   <Box
@@ -643,22 +614,7 @@ const CommandPalette = ({ open, onClose }) => {
                   key={`node-${node.connId}-${node.node}`}
                   ref={el => { itemRefs.current[idx] = el }}
                   onClick={() => navigateTo({ ...node, _type: 'node' })}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    px: 2.5,
-                    py: 1,
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mx: 1,
-                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
-                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
-                    '&:hover': {
-                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
-                    },
-                    transition: 'background-color 0.1s'
-                  }}
+                  sx={commandPaletteRowSx(activeIndex === idx)}
                 >
                   <i
                     className='ri-server-line'
@@ -734,22 +690,7 @@ const CommandPalette = ({ open, onClose }) => {
                   key={`pbs-${pbs.id}`}
                   ref={el => { itemRefs.current[idx] = el }}
                   onClick={() => navigateTo({ ...pbs, _type: 'pbs' })}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    px: 2.5,
-                    py: 1,
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mx: 1,
-                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
-                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
-                    '&:hover': {
-                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
-                    },
-                    transition: 'background-color 0.1s'
-                  }}
+                  sx={commandPaletteRowSx(activeIndex === idx)}
                 >
                   <i
                     className='ri-shield-check-line'
@@ -852,22 +793,7 @@ const CommandPalette = ({ open, onClose }) => {
                   key={`action-${action.href}`}
                   ref={el => { itemRefs.current[idx] = el }}
                   onClick={() => navigateTo({ ...action, _type: 'action' })}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    px: 2.5,
-                    py: 1,
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    mx: 1,
-                    bgcolor: activeIndex === idx ? 'primary.main' : 'transparent',
-                    color: activeIndex === idx ? 'primary.contrastText' : 'text.primary',
-                    '&:hover': {
-                      bgcolor: activeIndex === idx ? 'primary.main' : 'action.hover'
-                    },
-                    transition: 'background-color 0.1s'
-                  }}
+                  sx={commandPaletteRowSx(activeIndex === idx)}
                 >
                   <i
                     className={action.icon}

@@ -20,6 +20,8 @@ import {
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
+import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
+
 // Formatage basique du texte (gras, listes)
 const formatText = (text) => {
   if (!text) return ''
@@ -56,6 +58,7 @@ const MessageBubble = ({ message, isUser, isStreaming, thinkingText }) => {
             height: 32,
             mr: 1,
             bgcolor: theme.palette.primary.main,
+            color: 'primary.contrastText',
             fontSize: 14,
             flexShrink: 0
           }}
@@ -76,7 +79,8 @@ const MessageBubble = ({ message, isUser, isStreaming, thinkingText }) => {
             : theme.palette.action.hover,
           color: isUser 
             ? theme.palette.primary.contrastText 
-            : theme.palette.text.primary
+            : theme.palette.text.primary,
+          ...(isUser ? INHERIT_ON_PRIMARY_SX : {})
         }}
       >
         {isStreaming && !message.content ? (
@@ -374,7 +378,7 @@ return provider
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ bgcolor: theme.palette.primary.main, width: 40, height: 40 }}>
+          <Avatar sx={{ bgcolor: theme.palette.primary.main, color: 'primary.contrastText', width: 40, height: 40 }}>
             <i className='ri-sparkling-2-fill' style={{ fontSize: 22 }} />
           </Avatar>
           <Box>
@@ -432,7 +436,8 @@ return provider
                 height: 64, 
                 mx: 'auto', 
                 mb: 2,
-                bgcolor: theme.palette.primary.main 
+                bgcolor: theme.palette.primary.main,
+                color: 'primary.contrastText'
               }}
             >
               <i className='ri-sparkling-2-fill' style={{ fontSize: 32 }} />

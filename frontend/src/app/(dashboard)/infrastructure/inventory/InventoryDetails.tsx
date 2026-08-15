@@ -3762,7 +3762,7 @@ return vm?.isCluster ?? false
                         {migRunning > 0 && (
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Typography variant="body2" fontSize={12} sx={{ opacity: 0.7 }}>{t('inventoryPage.extDashboard.inProgress')}</Typography>
-                            <Chip size="small" label={migRunning} sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: 'primary.main', color: '#fff', minWidth: 30 }} />
+                            <Chip size="small" label={migRunning} sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: 'primary.main', color: 'primary.contrastText', minWidth: 30 }} />
                           </Box>
                         )}
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3999,7 +3999,7 @@ return vm?.isCluster ?? false
                         sx={{
                           height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0,
                           bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main',
-                          color: '#fff',
+                          color: mig.status === 'completed' ? 'success.contrastText' : mig.status === 'failed' ? 'error.contrastText' : 'primary.contrastText',
                         }}
                       />
                     </Box>

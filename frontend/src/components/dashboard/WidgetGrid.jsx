@@ -15,6 +15,7 @@ import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory, isWidgetVisib
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 import { CardsSkeleton } from '@/components/skeletons'
 import { useWidgetVisibility } from '@/hooks/useWidgetVisibility'
+import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
 
 const GRID_COLS = { lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }
 const ROW_HEIGHT = 40
@@ -54,6 +55,7 @@ function NoContainerWrapper({ config, data, loading, editMode, onRemove, onUpdat
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             px: 1.5, py: 0.5,
             bgcolor: 'primary.main', color: 'primary.contrastText',
+            ...INHERIT_ON_PRIMARY_SX,
             cursor: 'move', flexShrink: 0,
           }}
         >

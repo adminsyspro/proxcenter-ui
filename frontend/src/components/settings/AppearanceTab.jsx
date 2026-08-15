@@ -66,7 +66,7 @@ function ThemePreviewCard({ themeConfig, selected, onSelect, t }) {
     >
       {isSelected && (
         <Box sx={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: '50%', backgroundColor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-          <i className='ri-check-line' style={{ color: '#fff', fontSize: 12 }} />
+          <i className='ri-check-line' style={{ color: 'var(--mui-palette-primary-contrastText)', fontSize: 12 }} />
         </Box>
       )}
 

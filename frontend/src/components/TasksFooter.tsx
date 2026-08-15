@@ -674,7 +674,7 @@ export default function TasksFooter({
                 ProxCenter
                 {pcRunningCount > 0 && (
                   <Box sx={{
-                    bgcolor: 'primary.main', color: '#fff', borderRadius: '50%',
+                    bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: '50%',
                     width: 16, height: 16, fontSize: 10, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', ml: 0.25,
                   }}>

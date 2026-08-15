@@ -175,6 +175,23 @@ describe('frameworkReportHtml', () => {
     expect(html).toContain('--primary: #E57000')
   })
 
+  // #460: the cover header is filled with the brand colour and used to write
+  // its text in a fixed white, so a light brand colour printed an unreadable
+  // cover.
+  it('darkens the cover text when the brand color is light', () => {
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FFD200' }, t)
+    expect(html).toContain('--on-primary: rgba(0, 0, 0, 0.87)')
+    expect(html).toContain('color: var(--on-primary)')
+  })
+
+  it('keeps white cover text on a dark brand color, including the default', () => {
+    const dark = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#7C4DFF' }, t)
+    expect(dark).toContain('--on-primary: #fff')
+
+    const fallback = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    expect(fallback).toContain('--on-primary: #fff')
+  })
+
   // -- Logo --
 
   it('renders logo img when logoDataUri starts with data:', () => {

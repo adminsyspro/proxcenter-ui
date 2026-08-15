@@ -1,20 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-} from '@mui/material'
-import { alpha, useTheme } from '@mui/material/styles'
+import ConfirmActionButton from './ConfirmActionButton'
 
 /**
  * The operator's switchover control, with its confirmation.
@@ -66,78 +54,28 @@ export default function WarmCutoverButton({
   onRequested?: () => void
 }) {
   const t = useTranslations()
-  const theme = useTheme()
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [busy, setBusy] = useState(false)
 
   if (!canRequestCutover(job)) return null
 
   const awaiting = isAwaitingOperator(job)
   const mins = Math.round((job!.projectedDowntimeSec ?? 0) / 60)
 
-  const requestCutover = async () => {
-    setBusy(true)
-    try {
-      await fetch(`/api/v1/migrations/${job!.id}/cutover`, { method: 'POST' })
-      onRequested?.()
-    } finally {
-      setBusy(false)
-      setConfirmOpen(false)
-    }
-  }
-
   return (
-    <>
-      <Button
-        size={size}
-        variant={awaiting ? 'contained' : 'outlined'}
-        color="primary"
-        disabled={busy}
-        startIcon={<i className="ri-flashlight-line" style={{ fontSize: 14 }} />}
-        onClick={() => setConfirmOpen(true)}
-        sx={{ textTransform: 'none' }}
-      >
-        {t('inventoryPage.esxiMigration.cutoverNow')}
-      </Button>
-
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{
-            width: 40, height: 40, borderRadius: 2,
-            bgcolor: alpha(theme.palette.primary.main, 0.12),
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <i className="ri-flashlight-line" style={{ fontSize: 22, color: theme.palette.primary.main }} />
-          </Box>
-          {t('inventoryPage.esxiMigration.cutoverConfirmTitle')}
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {t('inventoryPage.esxiMigration.cutoverConfirmBody', { mins })}
-          </DialogContentText>
-          {/* Only the automatic mode can reach the gate, and only there does the
-              warning hold: a manual hold is waiting on purpose, not diverging. */}
-          {job!.status === 'awaiting_cutover' && (
-            <Alert severity="warning" sx={{ mt: 2 }}>
-              {t('inventoryPage.esxiMigration.cutoverNotConverging')}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setConfirmOpen(false)} color="inherit">
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="contained"
-            color="primary"
-            disabled={busy}
-            startIcon={busy ? <CircularProgress size={16} /> : undefined}
-            onClick={requestCutover}
-          >
-            {t('inventoryPage.esxiMigration.cutoverNow')}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <ConfirmActionButton
+      label={t('inventoryPage.esxiMigration.cutoverNow')}
+      icon="ri-flashlight-line"
+      color="primary"
+      variant={awaiting ? 'contained' : 'outlined'}
+      size={size}
+      title={t('inventoryPage.esxiMigration.cutoverConfirmTitle')}
+      body={t('inventoryPage.esxiMigration.cutoverConfirmBody', { mins })}
+      // Only the automatic mode can reach the gate, and only there does the
+      // warning hold: a manual hold is waiting on purpose, not diverging.
+      alert={job!.status === 'awaiting_cutover' ? t('inventoryPage.esxiMigration.cutoverNotConverging') : undefined}
+      onConfirm={async () => {
+        await fetch(`/api/v1/migrations/${job!.id}/cutover`, { method: 'POST' })
+        onRequested?.()
+      }}
+    />
   )
 }

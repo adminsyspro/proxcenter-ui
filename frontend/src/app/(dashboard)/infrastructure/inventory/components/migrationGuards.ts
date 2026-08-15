@@ -61,3 +61,36 @@ export function isDowntimeBudgetValid(value: string): boolean {
   const n = Number(trimmed)
   return n >= DOWNTIME_BUDGET_MIN_SEC && n <= DOWNTIME_BUDGET_MAX_SEC
 }
+
+/**
+ * Budgets the slider offers, in seconds.
+ *
+ * A linear axis from 30 s to 24 h would spend its whole width on values nobody
+ * picks, so the control walks a curated scale instead: fine where the decision
+ * actually happens (under ten minutes), coarse beyond, and still reaching the
+ * API's ceiling for the rare run that wants it.
+ */
+export const DOWNTIME_BUDGET_PRESETS = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400] as const
+
+/** Pipeline default, and where the slider starts. */
+export const DOWNTIME_BUDGET_DEFAULT_SEC = 300
+
+/** Slider position for a budget, snapped to the nearest offered value. */
+export function downtimeBudgetIndex(seconds: number): number {
+  let best = 0
+  for (let i = 1; i < DOWNTIME_BUDGET_PRESETS.length; i++) {
+    if (Math.abs(DOWNTIME_BUDGET_PRESETS[i] - seconds) < Math.abs(DOWNTIME_BUDGET_PRESETS[best] - seconds)) best = i
+  }
+  return best
+}
+
+/**
+ * Render a budget the way an operator reads a maintenance window: seconds while
+ * they still mean something, then minutes, then hours. No decimals, every preset
+ * divides cleanly.
+ */
+export function formatDowntimeBudget(seconds: number): string {
+  if (seconds < 60) return `${seconds} s`
+  if (seconds < 3600) return `${seconds / 60} min`
+  return `${seconds / 3600} h`
+}

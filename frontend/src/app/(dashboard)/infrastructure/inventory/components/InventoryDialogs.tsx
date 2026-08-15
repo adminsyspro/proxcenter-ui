@@ -28,6 +28,7 @@ import {
   Link,
   MenuItem,
   Select,
+  Slider,
   Snackbar,
   Stack,
   Switch,
@@ -65,7 +66,7 @@ import { parseNodeId, parseVmId } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
-import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC } from './migrationGuards'
+import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
 import WarmCutoverButton, { isAwaitingOperator } from './WarmCutoverButton'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './ForcePowerOffButton'
 import { useToast } from '@/contexts/ToastContext'
@@ -757,20 +758,40 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     />
   )
 
+  // Same shape as the CPU and memory sliders of the VM hardware tab: a label row
+  // carrying the current value, then the slider itself. The explanation lives in
+  // the label's tooltip rather than under the control, where it pushed the rest
+  // of the dialog down for a sentence read once.
+  const DOWNTIME_BUDGET_MARKS = DOWNTIME_BUDGET_PRESETS.map((sec, i) => ({
+    value: i,
+    label: [30, 300, 1800, 21600, 86400].includes(sec) ? formatDowntimeBudget(sec) : undefined,
+  }))
+
   const renderDowntimeBudgetField = () => showDowntimeBudget && (
-    <TextField
-      size="small"
-      label={t('inventoryPage.esxiMigration.downtimeBudget')}
-      value={migDowntimeBudget}
-      onChange={e => setMigDowntimeBudget(e.target.value)}
-      placeholder="300"
-      error={downtimeBudgetInvalid}
-      helperText={downtimeBudgetInvalid
-        ? t('inventoryPage.esxiMigration.downtimeBudgetInvalid', { min: DOWNTIME_BUDGET_MIN_SEC, max: DOWNTIME_BUDGET_MAX_SEC })
-        : t('inventoryPage.esxiMigration.downtimeBudgetHint')}
-      slotProps={{ htmlInput: { inputMode: 'numeric' } }}
-      sx={{ maxWidth: 260 }}
-    />
+    <Box sx={{ px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.downtimeBudget')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.downtimeBudgetTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>
+          {formatDowntimeBudget(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
+        </Typography>
+      </Box>
+      <Slider
+        size="small"
+        value={downtimeBudgetIndex(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
+        onChange={(_, val) => setMigDowntimeBudget(String(DOWNTIME_BUDGET_PRESETS[Math.round(val as number)]))}
+        min={0}
+        max={DOWNTIME_BUDGET_PRESETS.length - 1}
+        step={1}
+        marks={DOWNTIME_BUDGET_MARKS}
+        valueLabelDisplay="auto"
+        valueLabelFormat={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+        getAriaValueText={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+        aria-label={t('inventoryPage.esxiMigration.downtimeBudget')}
+      />
+    </Box>
   )
 
   const startVirtioWinDownload = async () => {

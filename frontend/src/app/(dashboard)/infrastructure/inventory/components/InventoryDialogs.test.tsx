@@ -738,7 +738,7 @@ describe('migration dialog options', () => {
   const START_AFTER_LABEL = 'Start VM after migration'
   const QCOW2_LABEL = 'Convert disks to qcow2 after migration (enables Proxmox snapshots)'
   const AUTO_CUTOVER_LABEL = 'Automatic cutover'
-  const BUDGET_LABEL = 'Downtime budget (seconds)'
+  const BUDGET_LABEL = 'Downtime budget'
 
   function getSwitch(label: string): HTMLInputElement {
     const labelEl = screen.getByText(label)
@@ -841,33 +841,44 @@ describe('migration dialog options', () => {
     )
 
     fireEvent.click(screen.getByText('harness-open-single'))
-    expect(screen.getByLabelText(BUDGET_LABEL)).toBeInTheDocument()
+    expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toBeInTheDocument()
 
     fireEvent.click(getSwitch(AUTO_CUTOVER_LABEL))
-    await waitFor(() => expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('slider', { name: BUDGET_LABEL })).not.toBeInTheDocument())
   })
 
   it('hides the downtime budget outside a warm migration', () => {
     renderWithProviders(
       <InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'cold' })} />,
     )
-    expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument()
+    expect(screen.queryByRole('slider', { name: BUDGET_LABEL })).not.toBeInTheDocument()
   })
 
-  it('resets a typed downtime budget when the dialog is closed and reopened', async () => {
+  it('opens the budget on the pipeline default and spells the value out', () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
+    )
+    fireEvent.click(screen.getByText('harness-open-single'))
+
+    // "5 min" also labels one of the marks, so assert on the thumb's own value.
+    expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toHaveAttribute('aria-valuetext', '5 min')
+  })
+
+  it('resets a moved downtime budget when the dialog is closed and reopened', async () => {
     renderWithProviders(
       <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
     )
 
     fireEvent.click(screen.getByText('harness-open-single'))
-    fireEvent.change(screen.getByLabelText(BUDGET_LABEL), { target: { value: '600' } })
-    expect((screen.getByLabelText(BUDGET_LABEL) as HTMLInputElement).value).toBe('600')
+    const slider = screen.getByRole('slider', { name: BUDGET_LABEL })
+    fireEvent.keyDown(slider, { key: 'ArrowRight' })
+    await waitFor(() => expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toHaveAttribute('aria-valuetext', '10 min'))
 
     fireEvent.click(screen.getByText('harness-close-single'))
-    await waitFor(() => expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('slider', { name: BUDGET_LABEL })).not.toBeInTheDocument())
 
     fireEvent.click(screen.getByText('harness-open-single'))
-    expect((screen.getByLabelText(BUDGET_LABEL) as HTMLInputElement).value).toBe('')
+    expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toHaveAttribute('aria-valuetext', '5 min')
   })
 
   it('shows the automatic-cutover switch only for a warm migration', () => {

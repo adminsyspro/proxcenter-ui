@@ -225,7 +225,11 @@ export default function TaskDetailDialog({ open, task, onClose }) {
                 className={isRunning ? 'ri-loader-4-line' : statusColor === 'success' ? 'ri-check-line' : 'ri-close-line'}
                 style={{
                   fontSize: 20,
-                  color: '#fff',
+                  color: isRunning
+                    ? 'var(--mui-palette-primary-contrastText)'
+                    : statusColor === 'success'
+                      ? 'var(--mui-palette-success-contrastText)'
+                      : 'var(--mui-palette-error-contrastText)',
                   animation: isRunning ? 'spin 1s linear infinite' : 'none'
                 }}
               />

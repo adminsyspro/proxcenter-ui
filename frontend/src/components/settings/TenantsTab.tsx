@@ -714,7 +714,7 @@ export default function TenantsTab() {
                       renderOption={(props, option) => (
                         <li {...props} key={option.id}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem', bgcolor: 'primary.main' }}>
+                            <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
                               {getInitials(option.name, option.email)}
                             </Avatar>
                             <Box>
@@ -771,7 +771,7 @@ export default function TenantsTab() {
                           }
                         >
                           <ListItemAvatar>
-                            <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', bgcolor: 'primary.main' }}>
+                            <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', bgcolor: 'primary.main', color: 'primary.contrastText' }}>
                               {getInitials(user.name, user.email)}
                             </Avatar>
                           </ListItemAvatar>

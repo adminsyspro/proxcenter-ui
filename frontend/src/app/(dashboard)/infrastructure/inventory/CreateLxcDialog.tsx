@@ -36,6 +36,7 @@ import {
 import { alpha } from '@mui/material/styles'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { AllVmItem } from './InventoryTree'
 
@@ -1457,7 +1458,8 @@ return
         icon={<i className="ri-instance-line" style={{ fontSize: 20 }} />}
         sx={{
           bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,150,200,0.15)' : 'primary.light',
-          color: theme.palette.mode === 'dark' ? 'primary.light' : 'primary.contrastText',
+          color:
+            theme.palette.mode === 'dark' ? 'primary.light' : onPrimaryTextColor(theme.palette.primary.light),
           py: 1.5
         }}
       >

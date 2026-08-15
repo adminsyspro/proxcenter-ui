@@ -111,7 +111,7 @@ const UserDropdown = () => {
           src={user?.avatar || undefined}
           onClick={handleDropdownOpen}
           className='cursor-pointer bs-[38px] is-[38px]'
-          sx={{ bgcolor: 'primary.main', fontSize: '0.875rem', fontWeight: 600 }}
+          sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.875rem', fontWeight: 600 }}
         >
           {!user?.avatar && getInitials(user?.name, user?.email)}
         </Avatar>
@@ -138,7 +138,7 @@ const UserDropdown = () => {
                     <Avatar 
                       alt={user?.name || user?.email || 'User'}
                       src={user?.avatar || undefined}
-                      sx={{ bgcolor: 'primary.main', fontSize: '0.875rem', fontWeight: 600 }}
+                      sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.875rem', fontWeight: 600 }}
                     >
                       {!user?.avatar && getInitials(user?.name, user?.email)}
                     </Avatar>

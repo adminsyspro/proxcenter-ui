@@ -663,7 +663,7 @@ return config.excludePatterns.some(pattern =>
                   <Grid size={{ xs: 12, md: 4 }}>
                     <Paper sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.03), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`, height: '100%' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.primary.main, fontSize: 14 }}>1</Avatar>
+                        <Avatar sx={{ width: 28, height: 28, bgcolor: theme.palette.primary.main, color: 'primary.contrastText', fontSize: 14 }}>1</Avatar>
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{t('microseg.gatewayAliases')}</Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary">

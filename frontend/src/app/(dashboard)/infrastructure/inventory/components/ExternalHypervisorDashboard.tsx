@@ -284,7 +284,7 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
                 <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>{'\u2192'} {mig.targetNode}</Typography>
                 <Typography variant="caption" fontSize={10} sx={{ opacity: 0.5, whiteSpace: 'nowrap', flexShrink: 0 }}>{mig.totalBytes ? `${(Number(mig.totalBytes) / 1073741824).toFixed(1)} GB` : '--'}</Typography>
                 {mig.completedAt && <Typography variant="caption" fontSize={10} sx={{ opacity: 0.4, whiteSpace: 'nowrap', flexShrink: 0 }}>{new Date(mig.completedAt).toLocaleDateString()}</Typography>}
-                <Chip size="small" label={mig.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : mig.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : `${mig.progress || 0}%`} sx={{ height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0, bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main', color: '#fff' }} />
+                <Chip size="small" label={mig.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : mig.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : `${mig.progress || 0}%`} sx={{ height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0, bgcolor: mig.status === 'completed' ? 'success.main' : mig.status === 'failed' ? 'error.main' : 'primary.main', color: mig.status === 'completed' ? 'success.contrastText' : mig.status === 'failed' ? 'error.contrastText' : 'primary.contrastText' }} />
               </Box>
             ))}
           </Stack>

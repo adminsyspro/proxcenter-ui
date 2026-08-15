@@ -173,6 +173,7 @@ return
                   fontSize: '2.5rem',
                   fontWeight: 700,
                   bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
                   mb: 2,
                 }}
               >

@@ -2,6 +2,7 @@ import type { FrameworkAssessment } from '../frameworkAssessment'
 import type { FrameworkDef } from '../frameworks/types'
 import type { NodeBreakdown } from '../nodeBreakdown'
 import { escapeHtml } from './escapeHtml'
+import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 
 export interface ReportMeta {
   connectionName: string
@@ -69,6 +70,7 @@ function buildCss(primary: string, appName: string): string {
   return `
   :root {
     --primary: ${primary};
+    --on-primary: ${onPrimaryTextColor(primary)};
     --indigo: #6366f1;
     --green: #22c55e;
     --amber: #f59e0b;
@@ -125,7 +127,7 @@ function buildCss(primary: string, appName: string): string {
     background:
       linear-gradient(135deg, rgba(15,23,42,0), rgba(15,23,42,0.18)),
       var(--primary);
-    color: #fff;
+    color: var(--on-primary);
     padding: 12mm 15mm;
     margin: -15mm -15mm 0 -15mm;
     text-align: center;

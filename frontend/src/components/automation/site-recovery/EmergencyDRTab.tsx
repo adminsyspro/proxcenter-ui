@@ -276,7 +276,7 @@ export default function EmergencyDRTab({
                           size="small"
                           disabled={!vm.planId}
                           onClick={() => vm.planId && onExecuteFailback(vm.planId)}
-                          sx={{ color: 'primary.main', '&:hover': { bgcolor: 'primary.main', color: 'white' } }}
+                          sx={{ color: 'primary.main', '&:hover': { bgcolor: 'primary.main', color: 'primary.contrastText' } }}
                         >
                           <i className="ri-arrow-turn-back-line" style={{ fontSize: 18 }} />
                         </IconButton>

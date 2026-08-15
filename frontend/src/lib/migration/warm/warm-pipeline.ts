@@ -7,7 +7,7 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapCreateSnapshot, soapRemoveSnapshot,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS,
-  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
+  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm,
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import {
@@ -76,6 +76,10 @@ export interface WarmMigrationConfig {
 interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }
 const cancelledJobs = new Set<string>()
 const cutoverRequests = new Set<string>()
+// Same shape as cutoverRequests: an operator decision the running pipeline polls
+// for. Set when the guest refuses to shut down and the operator chooses to stop
+// the source hard rather than wait the deadline out (#614).
+const forcePowerOffRequests = new Set<string>()
 const jobPrisma = new Map<string, any>()
 // At most one warm job per source VM in-flight. Concurrent warm runs against the
 // same VM would interleave snapshots and dd-seek writes (target corruption), so a
@@ -88,6 +92,14 @@ function isCancelled(jobId: string): boolean { return cancelledJobs.has(jobId) }
 
 /** Cooperative "cutover now" signal for a warm job (called by the cutover route). */
 export function requestWarmCutover(jobId: string) { cutoverRequests.add(jobId) }
+
+/** Operator asked to power the source off hard, from the awaiting_power_off wait. */
+export function requestWarmForcePowerOff(jobId: string) { forcePowerOffRequests.add(jobId) }
+
+function isForcePowerOffRequested(jobId: string): boolean { return forcePowerOffRequests.has(jobId) }
+
+/** Test seam, mirrors __isCutoverRequestedForTest. */
+export function __isForcePowerOffRequestedForTest(jobId: string): boolean { return isForcePowerOffRequested(jobId) }
 function isCutoverRequested(jobId: string): boolean { return cutoverRequests.has(jobId) }
 /** @internal test hook */
 export function __isCutoverRequestedForTest(jobId: string): boolean { return isCutoverRequested(jobId) }
@@ -474,6 +486,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
   cutoverRequests.delete(jobId)
+  forcePowerOffRequests.delete(jobId)
 
   const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
   const budget = config.downtimeBudgetSec ?? 300
@@ -884,7 +897,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
       await updateJob(jobId, "cutover", { progress: 95 })
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
-        "Cutover: requesting clean guest shutdown (VMware Tools)…")
+        "Cutover: requesting clean guest shutdown (VMware Tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
       // Last pass, and the only one that runs on a powered-off source: every
       // wait here is guest downtime, so all three budgets are the short ones
@@ -904,7 +917,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // off for the entire transfer (#587 field feedback).
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
       await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
-        "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…")
+        "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…", "full_copy")
       await updateJob(jobId, "full_copy", { progress: 10 })
       const snapMor = await createWarmSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, ourSnapshots,
         mor => appendLog(jobId, `CreateSnapshot (checksum) failed, but the snapshot ${mor} exists on the source — it is now tracked and will be cleaned up`, "warn"))
@@ -1061,6 +1074,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     jobPrisma.delete(jobId)
     cancelledJobs.delete(jobId)
     cutoverRequests.delete(jobId)
+    forcePowerOffRequests.delete(jobId)
     if (acquiredVmLock) activeWarmVms.delete(vmKey)
   }
 }
@@ -1074,12 +1088,72 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
  * BEFORE the copy (VM off for the whole transfer) — one hardcoded "Cutover: …"
  * line misled operators on the fallback path (#587 field feedback).
  */
-async function cleanShutdownAndConfirm(jobId: string, session: SoapSession, vmid: string, announce: string): Promise<void> {
+/**
+ * How long the pipeline waits for a confirmed powered-off source before giving up.
+ *
+ * This wait used to be five minutes and completely silent: no status change, no
+ * notification, no action. A guest that refused the shutdown therefore burnt the
+ * whole run, and on a job that had been copying for hours nobody was watching the
+ * log pane (#587, #614). Now that the wait announces itself and offers a hard
+ * power off, it is long enough for a human to notice and decide, and still
+ * bounded so an unattended job fails cleanly instead of pinning a VDDK session
+ * and a snapshot for ever.
+ */
+const POWER_OFF_WAIT_MS = 30 * 60 * 1000
+/** How often the wait restates itself, with the time left, in the job log. */
+const POWER_OFF_HEARTBEAT_MS = 60 * 1000
+
+async function cleanShutdownAndConfirm(
+  jobId: string,
+  session: SoapSession,
+  vmid: string,
+  announce: string,
+  status: WarmStatus,
+  opts: { waitMs?: number; sliceMs?: number } = {},
+): Promise<void> {
   await appendLog(jobId, announce)
+  let refused = false
   await soapGuestShutdown(session, vmid).catch(async (e: any) => {
-    await appendLog(jobId, `Guest shutdown could not be initiated (${e?.message || e}); waiting for manual/hard power-off`, "warn")
+    refused = true
+    await appendLog(jobId, `Guest shutdown could not be initiated (${e?.message || e})`, "warn")
   })
-  const off = await soapWaitPoweredOff(session, vmid, 300000)
+
+  const waitMs = opts.waitMs ?? POWER_OFF_WAIT_MS
+  const sliceMs = opts.sliceMs ?? 10000
+  const deadline = Date.now() + waitMs
+  // A step of its own, so the UI can say what is happening and offer the way out
+  // instead of showing a migration that looks stuck mid-cutover.
+  await updateJob(jobId, status, { currentStep: "awaiting_power_off" })
+  await appendLog(jobId,
+    `${refused ? "The guest refused the shutdown request. " : ""}Waiting up to ${Math.round(waitMs / 60000)} min for the source to reach a confirmed powered-off state. Shut it down from the guest, or use "Force power off" to stop it now.`,
+    refused ? "warn" : "info")
+
+  let forced = false
+  let nextHeartbeat = Date.now() + POWER_OFF_HEARTBEAT_MS
+  let off = false
+  while (Date.now() < deadline) {
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    if (!forced && isForcePowerOffRequested(jobId)) {
+      forced = true
+      await appendLog(jobId, "Operator requested a hard power off of the source", "warn")
+      // A hard power off makes the final delta crash-consistent, which is why it
+      // is never automatic. If the host refuses it too (an ESXi licence
+      // restriction does, as the cold path already documents), keep waiting: the
+      // operator can still shut the guest down from inside.
+      await soapPowerOffVm(session, vmid).catch(async (e: any) => {
+        await appendLog(jobId, `Hard power off was refused by the source host (${e?.message || e}); still waiting for a powered-off state`, "error")
+      })
+    }
+    if (await soapWaitPoweredOff(session, vmid, Math.max(1, Math.min(sliceMs, deadline - Date.now())))) {
+      off = true
+      break
+    }
+    if (Date.now() >= nextHeartbeat && Date.now() < deadline) {
+      const leftMin = Math.max(1, Math.round((deadline - Date.now()) / 60000))
+      await appendLog(jobId, `Still waiting for the source to power off; ${leftMin} min left before the migration gives up`)
+      nextHeartbeat = Date.now() + POWER_OFF_HEARTBEAT_MS
+    }
+  }
   // Careful with the wording: the CBT path reaches this AFTER the full copy, so a
   // completed copy is kept, but the checksum fallback shuts the source down BEFORE
   // copying anything, and those unmarked volumes are still freed. State the rule,

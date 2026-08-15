@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
+
 /**
  * Minimal shape of the VM the single-migration dialog was opened for. Only the
  * fields the reset logic needs; InventoryDetails' richer esxiMigrateVm state
@@ -62,6 +64,11 @@ export function useMigrationOptions({
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
+  // Warm only, automatic mode only (#663). Seconds, as a string because the
+  // payload builder and the API both speak in seconds and the slider snaps to a
+  // fixed scale. Starts at the pipeline default so the control opens where the
+  // engine would have run anyway.
+  const [migDowntimeBudget, setMigDowntimeBudget] = useState(String(DOWNTIME_BUDGET_DEFAULT_SEC))
 
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
@@ -74,6 +81,7 @@ export function useMigrationOptions({
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
     setMigManualCutover(false)
+    setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
   }, [esxiMigrateVm, bulkMigOpen])
 
   return {
@@ -95,5 +103,7 @@ export function useMigrationOptions({
     setMigConvertToQcow2,
     migManualCutover,
     setMigManualCutover,
+    migDowntimeBudget,
+    setMigDowntimeBudget,
   }
 }

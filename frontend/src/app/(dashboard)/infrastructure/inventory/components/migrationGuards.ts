@@ -40,3 +40,71 @@ export function vsanBlocksMigrationType(hasVsanDisks: boolean, migType: string):
 export function warmNeedsBlockStorage(migType: string, storageType?: string): boolean {
   return migType === 'warm' && !!storageType && isFileBasedStorage(storageType)
 }
+
+/** Bounds the API enforces on `downtimeBudgetSec` (api/v1/migrations). */
+export const DOWNTIME_BUDGET_MIN_SEC = 30
+export const DOWNTIME_BUDGET_MAX_SEC = 86400
+
+/**
+ * Whether the typed downtime budget is one the API would accept.
+ *
+ * Empty is valid and means "use the pipeline default", so clearing the field
+ * behaves like never touching it rather than snapping back to a number the
+ * operator did not choose. Anything else must be a whole number of seconds
+ * inside the API's own range, checked here so a rejected value is caught while
+ * it can still be corrected instead of after a job exists.
+ */
+export function isDowntimeBudgetValid(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed === '') return true
+  if (!/^\d+$/.test(trimmed)) return false
+  const n = Number(trimmed)
+  return n >= DOWNTIME_BUDGET_MIN_SEC && n <= DOWNTIME_BUDGET_MAX_SEC
+}
+
+/**
+ * Budgets the slider offers, in seconds.
+ *
+ * A linear axis from 30 s to 24 h would spend its whole width on values nobody
+ * picks, so the control walks a curated scale instead: fine where the decision
+ * actually happens (under ten minutes), coarse beyond, and still reaching the
+ * API's ceiling for the rare run that wants it.
+ */
+export const DOWNTIME_BUDGET_PRESETS = [30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400] as const
+
+/** Pipeline default, and where the slider starts. */
+export const DOWNTIME_BUDGET_DEFAULT_SEC = 300
+
+/** Slider position for a budget, snapped to the nearest offered value. */
+export function downtimeBudgetIndex(seconds: number): number {
+  let best = 0
+  for (let i = 1; i < DOWNTIME_BUDGET_PRESETS.length; i++) {
+    if (Math.abs(DOWNTIME_BUDGET_PRESETS[i] - seconds) < Math.abs(DOWNTIME_BUDGET_PRESETS[best] - seconds)) best = i
+  }
+  return best
+}
+
+/**
+ * Render a budget the way an operator reads a maintenance window: seconds while
+ * they still mean something, then minutes, then hours.
+ *
+ * Never a fraction. The slider only ever produces values that divide cleanly,
+ * but the field next to it takes any number of seconds, and 620 s must read as
+ * "10 min 20 s" rather than "10.333333333333334 min".
+ */
+export function formatDowntimeBudget(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `${total} s`
+
+  if (total < 3600) {
+    const minutes = Math.floor(total / 60)
+    const rest = total % 60
+
+    return rest ? `${minutes} min ${rest} s` : `${minutes} min`
+  }
+
+  const hours = Math.floor(total / 3600)
+  const restMinutes = Math.round((total % 3600) / 60)
+
+  return restMinutes ? `${hours} h ${restMinutes} min` : `${hours} h`
+}

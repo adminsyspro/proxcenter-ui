@@ -28,6 +28,7 @@ import {
   Link,
   MenuItem,
   Select,
+  Slider,
   Snackbar,
   Stack,
   Switch,
@@ -65,8 +66,9 @@ import { parseNodeId, parseVmId } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
-import { vsanBlocksMigrationType, warmNeedsBlockStorage } from './migrationGuards'
+import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
 import WarmCutoverButton, { isAwaitingOperator } from './WarmCutoverButton'
+import ForcePowerOffButton, { isAwaitingPowerOff } from './ForcePowerOffButton'
 import { useToast } from '@/contexts/ToastContext'
 import { copyToClipboard } from '@/lib/clipboard'
 
@@ -259,6 +261,8 @@ export interface InventoryDialogsProps {
   migConvertToQcow2: boolean
   migManualCutover: boolean
   setMigManualCutover: (v: boolean) => void
+  migDowntimeBudget: string
+  setMigDowntimeBudget: (v: string) => void
   setMigConvertToQcow2: (v: boolean) => void
   migDiskPaths: string
   setMigDiskPaths: (v: string) => void
@@ -408,6 +412,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migNetworkBridge, setMigNetworkBridge, migVlanTag, setMigVlanTag, migBridges,
     migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
+    migDowntimeBudget, setMigDowntimeBudget,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
@@ -710,6 +715,10 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // a warm run against the same storage picker.
   const migTargetStorageType: string | undefined = migStorages.find((s: any) => s.storage === migTargetStorage)?.type
   const warmStorageBlocked = warmNeedsBlockStorage(migType, migTargetStorageType)
+  // #663: the budget only governs the automatic decision, so a run held for the
+  // operator ignores it and the field is hidden rather than shown inert.
+  const showDowntimeBudget = migType === 'warm' && !migManualCutover
+  const downtimeBudgetInvalid = showDowntimeBudget && !isDowntimeBudgetValid(migDowntimeBudget)
 
   // Rendered identically by the single-VM and the bulk dialog. Kept as one
   // helper rather than two copies of the same JSX: an identical block repeated
@@ -747,6 +756,61 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         </Box>
       }
     />
+  )
+
+  // Same shape as the CPU and memory sliders of the VM hardware tab: a label row
+  // carrying the current value, then the slider itself. The explanation lives in
+  // the label's tooltip rather than under the control, where it pushed the rest
+  // of the dialog down for a sentence read once.
+  const DOWNTIME_BUDGET_MARKS = DOWNTIME_BUDGET_PRESETS.map((sec, i) => ({
+    value: i,
+    label: [30, 300, 1800, 21600, 86400].includes(sec) ? formatDowntimeBudget(sec) : undefined,
+  }))
+
+  const renderDowntimeBudgetField = () => showDowntimeBudget && (
+    <Box sx={{ px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.downtimeBudget')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.downtimeBudgetTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>
+          {formatDowntimeBudget(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        {/* The end marks are centred on their tick, so half of "30 s" and of
+            "24 h" hangs past the track. The padding gives them the room. */}
+        <Box sx={{ flex: 1, px: 2 }}>
+          <Slider
+            size="small"
+            value={downtimeBudgetIndex(Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC)}
+            onChange={(_, val) => setMigDowntimeBudget(String(DOWNTIME_BUDGET_PRESETS[Math.round(val as number)]))}
+            min={0}
+            max={DOWNTIME_BUDGET_PRESETS.length - 1}
+            step={1}
+            marks={DOWNTIME_BUDGET_MARKS}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+            getAriaValueText={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
+            aria-label={t('inventoryPage.esxiMigration.downtimeBudget')}
+          />
+        </Box>
+        {/* The slider walks a curated scale; this is how a value between two of
+            its stops gets set, and how one arriving from the API is read back. */}
+        <NumericTextField
+          size="small"
+          value={Number(migDowntimeBudget) || DOWNTIME_BUDGET_DEFAULT_SEC}
+          onChange={n => setMigDowntimeBudget(String(n))}
+          fallback={DOWNTIME_BUDGET_DEFAULT_SEC}
+          min={DOWNTIME_BUDGET_MIN_SEC}
+          max={DOWNTIME_BUDGET_MAX_SEC}
+          error={downtimeBudgetInvalid}
+          label={t('inventoryPage.esxiMigration.downtimeBudgetSeconds')}
+          sx={{ width: 110, flexShrink: 0 }}
+        />
+      </Box>
+    </Box>
   )
 
   const startVirtioWinDownload = async () => {
@@ -2782,6 +2846,7 @@ return
 
                   {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                   {renderAutomaticCutoverSwitch()}
+                  {renderDowntimeBudgetField()}
                   {renderQcow2ConvertSwitch()}
                 </Stack>
               </Box>
@@ -2943,7 +3008,7 @@ return
                 {!['completed', 'failed', 'cancelled'].includes(migJob.status) && (
                   <Chip
                     size="small"
-                    label={isAwaitingOperator(migJob) ? t('inventoryPage.esxiMigration.awaitingCutover') : (migJob.currentStep?.replaceAll("_", ' ') || migJob.status)}
+                    label={isAwaitingPowerOff(migJob) ? t('inventoryPage.esxiMigration.awaitingPowerOff') : isAwaitingOperator(migJob) ? t('inventoryPage.esxiMigration.awaitingCutover') : (migJob.currentStep?.replaceAll("_", ' ') || migJob.status)}
                     color="primary"
                     sx={{ fontWeight: 600 }}
                   />
@@ -3065,6 +3130,7 @@ return
                   // without vCenter through the API.
                   if (vsanBlocksSelectedType) return true
                   if (warmStorageBlocked) return true
+                  if (downtimeBudgetInvalid) return true
                   // Warm: require a CURRENT successful readiness check for the selected
                   // node. warmPreflightCurrent is null unless the verdict matches the chosen
                   // target, so this blocks a missing, stale (prior-node), in-flight, or
@@ -3113,6 +3179,9 @@ return
                         // everywhere else, so the payload is gated on the type too
                         // rather than trusting the UI state.
                         ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
+                        ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
+                          downtimeBudgetSec: Number(migDowntimeBudget.trim()),
+                        }),
                         // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
                         // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
                         ...(migTempStorage !== '/tmp' && {
@@ -3186,6 +3255,7 @@ return
                       run is looking at this dialog, so the switchover has to be
                       reachable from here and not only from the inventory. */}
                   <WarmCutoverButton job={migJob} size="medium" />
+                  <ForcePowerOffButton job={migJob} size="medium" />
                   <Button
                     color="error"
                     onClick={() => {

@@ -110,6 +110,7 @@ import EntityTagManager from './components/EntityTagManager'
 import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
+import ForcePowerOffButton, { isAwaitingPowerOff } from './components/ForcePowerOffButton'
 import UsageBar from './components/UsageBar'
 import ConsolePreview from './components/ConsolePreview'
 import StatusChip from './components/StatusChip'
@@ -356,6 +357,7 @@ export default function InventoryDetails({
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
+    migDowntimeBudget, setMigDowntimeBudget,
   } = useMigrationOptions({ esxiMigrateVm, bulkMigOpen })
   // Shared with InventoryDialogs.tsx — see bulkMigrationConfig.ts. Used here
   // by the queued-job poller below to decide how many slots are free; must
@@ -4024,6 +4026,10 @@ return vm?.isCluster ?? false
             // stays fresh. It is a wait all the same, and must read as one
             // rather than as yet another passing delta step (#443).
             const migAwaitingOperator = isAwaitingOperator(vmMigJob)
+            // The pipeline asked the guest to shut down and is waiting for it. Used
+            // to be a silent five minute poll; it is now a state the operator can
+            // see and act on (#614).
+            const migAwaitingPowerOff = isAwaitingPowerOff(vmMigJob)
 
             return (
               /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
@@ -4098,7 +4104,7 @@ return vm?.isCluster ?? false
                       {vmMigJob && (
                         <Chip
                           size="small"
-                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : migAwaitingOperator ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : migAwaitingPowerOff ? t('inventoryPage.esxiMigration.awaitingPowerOff') : migAwaitingOperator ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
                           color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'cancelled' ? 'default' : 'primary'}
                           sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
                         />
@@ -4135,7 +4141,7 @@ return vm?.isCluster ?? false
                         the gate waits for a human, so both the wait and the two
                         ways out of it have to be visible without scrolling. */}
                     {vmMigJob && !['completed', 'failed', 'cancelled'].includes(vmMigJob.status) && (() => {
-                      const awaiting = migAwaitingOperator
+                      const awaiting = migAwaitingOperator || migAwaitingPowerOff
                       const canCutover = canRequestCutover(vmMigJob)
 
                       return (
@@ -4147,14 +4153,16 @@ return vm?.isCluster ?? false
                             bgcolor: awaiting ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                           }}>
                             <i
-                              className={awaiting ? 'ri-pause-circle-line' : 'ri-loader-4-line'}
+                              className={migAwaitingPowerOff ? 'ri-shut-down-line' : awaiting ? 'ri-pause-circle-line' : 'ri-loader-4-line'}
                               style={{ fontSize: 20, color: awaiting ? theme.palette.primary.main : undefined, opacity: awaiting ? 1 : 0.5 }}
                             />
                             <Box sx={{ flex: 1, minWidth: 160 }}>
                               <Typography variant="body2" fontWeight={700}>
-                                {awaiting
-                                  ? t('inventoryPage.esxiMigration.awaitingCutover')
-                                  : (vmMigJob.currentStep || vmMigJob.status).replaceAll('_', ' ')}
+                                {migAwaitingPowerOff
+                                  ? t('inventoryPage.esxiMigration.awaitingPowerOff')
+                                  : awaiting
+                                    ? t('inventoryPage.esxiMigration.awaitingCutover')
+                                    : (vmMigJob.currentStep || vmMigJob.status).replaceAll('_', ' ')}
                               </Typography>
                               {canCutover && (
                                 <Typography variant="caption" color="text.secondary">
@@ -4163,6 +4171,7 @@ return vm?.isCluster ?? false
                               )}
                             </Box>
                             <WarmCutoverButton job={vmMigJob} />
+                            <ForcePowerOffButton job={vmMigJob} />
                             <Button
                               size="small"
                               variant="outlined"
@@ -4551,6 +4560,8 @@ return vm?.isCluster ?? false
         migConvertToQcow2={migConvertToQcow2}
         migManualCutover={migManualCutover}
         setMigManualCutover={setMigManualCutover}
+        migDowntimeBudget={migDowntimeBudget}
+        setMigDowntimeBudget={setMigDowntimeBudget}
         setMigConvertToQcow2={setMigConvertToQcow2}
         migDiskPaths={migDiskPaths}
         setMigDiskPaths={setMigDiskPaths}

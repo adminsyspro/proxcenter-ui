@@ -67,6 +67,41 @@ export async function soapRetrieveServiceContent(
  * comes through as a string array, so we read the session cookie
  * directly without going through the broken Headers proxy.
  */
+/**
+ * Describe a SOAP fault the way vSphere actually reports it.
+ *
+ * `<faultstring>` alone is a generic vCenter wrapper: the incident in #587 gave
+ * us nothing but "A general system error occurred: Undeclared fault", while the
+ * concrete fault type sat in the `<detail>` block we were throwing away. Every
+ * occurrence then cost another round of reasoning by elimination.
+ *
+ * Returns the faultstring, followed by the fault type declared in `<detail>` and
+ * any localized message found there, so the job log carries what vSphere refused
+ * rather than the wrapper around it. Null when the payload holds no fault.
+ */
+export function describeSoapFault(xml: string): string | null {
+  const faultstring = xml.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1]?.trim()
+  const detail = xml.match(/<detail>([\s\S]*?)<\/detail>/)?.[1]
+  if (!faultstring && !detail) return null
+
+  const parts: string[] = []
+  if (faultstring) parts.push(faultstring)
+
+  if (detail) {
+    // The concrete type is the first child element of <detail>, and vSphere also
+    // repeats it in xsi:type. Prefer the element name, it carries the namespace
+    // prefix stripped and reads the same as the API reference.
+    // `[\s/>]` so a self-closing `<NotSupported/>` is recognised too, which is how
+    // vSphere writes most faults that carry no extra fields.
+    const type = detail.match(/<(?:\w+:)?(\w+)[\s/>]/)?.[1]
+    const localized = detail.match(/<localizedMessage>([\s\S]*?)<\/localizedMessage>/)?.[1]?.trim()
+    if (type && !["faultcause", "localizedmessage"].includes(type.toLowerCase())) parts.push(`fault type: ${type}`)
+    if (localized && localized !== faultstring) parts.push(localized)
+  }
+
+  return parts.length ? parts.join(" | ") : null
+}
+
 export async function soapRequest(
   baseUrl: string,
   body: string,
@@ -94,7 +129,7 @@ export async function soapRequest(
   })
   const text = await res.body.text()
   if (res.statusCode >= 400 && !text.includes("returnval")) {
-    const fault = text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1]
+    const fault = describeSoapFault(text)
     throw new Error(`SOAP error ${res.statusCode}: ${fault || text.substring(0, 500)}`)
   }
   // `request()` returns headers as `Record<string, string | string[]>`

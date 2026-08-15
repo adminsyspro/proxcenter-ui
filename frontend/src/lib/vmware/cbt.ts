@@ -1,5 +1,5 @@
 import type { SoapSession } from "./soap"
-import { soapRequest, soapGetVmConfig, extractProp, parseDiskCbtFields } from "./soap"
+import { soapRequest, soapGetVmConfig, extractProp, parseDiskCbtFields, describeSoapFault } from "./soap"
 
 const ENV = (inner: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`
@@ -51,7 +51,9 @@ export type { CbtEligibilityInput } from "./cbt-eligibility"
 // ---- SOAP callers ----
 
 function faultOf(xml: string): string | null {
-  return xml.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] ?? null
+  // Shared with soapRequest: a refused guest shutdown reports the reason in the
+  // <detail> block, not in the faultstring wrapper (#614).
+  return describeSoapFault(xml)
 }
 
 /** Poll a result-less *_Task to success or error (polls first, then sleeps). */

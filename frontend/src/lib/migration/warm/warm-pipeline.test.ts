@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, cancelWarmMigrationJob, gateReason, __isCutoverRequestedForTest, __awaitOperatorCutoverForTest, __sleepUnlessCutoverForTest } from "./warm-pipeline"
+import { planPasses, buildThickZeroScript, scaleWarmProgress, checksumDiskWindows, ZERO_PARALLEL_CHUNKS, markVolumesCopied, requestWarmCutover, requestWarmForcePowerOff, cancelWarmMigrationJob, gateReason, __isCutoverRequestedForTest, __isForcePowerOffRequestedForTest, __awaitOperatorCutoverForTest, __sleepUnlessCutoverForTest } from "./warm-pipeline"
 import { parseDdProgress } from "./dd-progress"
 import { volumesToFree, volumesToKeep, type AllocatedVolume } from "../pvesm-alloc"
 import { prismaTest, truncate } from "../../../__tests__/setup/prisma-test"
@@ -291,5 +291,23 @@ describe("gateReason", () => {
 
   it("keeps the historical wording when the floor is unknown", () => {
     expect(gateReason(30)).toMatch(/source is changing faster/i)
+  })
+})
+
+describe("requestWarmForcePowerOff", () => {
+  it("records the decision for the job that asked, and only that one", () => {
+    // The pipeline polls this while it waits for a powered-off source; a flag
+    // leaking to another job would stop a VM nobody asked about.
+    requestWarmForcePowerOff("po-1")
+
+    expect(__isForcePowerOffRequestedForTest("po-1")).toBe(true)
+    expect(__isForcePowerOffRequestedForTest("po-2")).toBe(false)
+  })
+
+  it("is independent of the cutover request", () => {
+    requestWarmCutover("po-3")
+
+    expect(__isCutoverRequestedForTest("po-3")).toBe(true)
+    expect(__isForcePowerOffRequestedForTest("po-3")).toBe(false)
   })
 })

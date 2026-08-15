@@ -62,6 +62,10 @@ export function useMigrationOptions({
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
+  // Warm only, automatic mode only (#663). Empty means "use the pipeline
+  // default" (300 s); kept as a string so the field can be cleared instead of
+  // snapping back to a number the operator did not choose.
+  const [migDowntimeBudget, setMigDowntimeBudget] = useState('')
 
   useEffect(() => {
     if (!esxiMigrateVm && !bulkMigOpen) return
@@ -74,6 +78,7 @@ export function useMigrationOptions({
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
     setMigManualCutover(false)
+    setMigDowntimeBudget('')
   }, [esxiMigrateVm, bulkMigOpen])
 
   return {
@@ -95,5 +100,7 @@ export function useMigrationOptions({
     setMigConvertToQcow2,
     migManualCutover,
     setMigManualCutover,
+    migDowntimeBudget,
+    setMigDowntimeBudget,
   }
 }

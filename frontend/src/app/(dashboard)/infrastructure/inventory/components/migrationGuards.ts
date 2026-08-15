@@ -40,3 +40,24 @@ export function vsanBlocksMigrationType(hasVsanDisks: boolean, migType: string):
 export function warmNeedsBlockStorage(migType: string, storageType?: string): boolean {
   return migType === 'warm' && !!storageType && isFileBasedStorage(storageType)
 }
+
+/** Bounds the API enforces on `downtimeBudgetSec` (api/v1/migrations). */
+export const DOWNTIME_BUDGET_MIN_SEC = 30
+export const DOWNTIME_BUDGET_MAX_SEC = 86400
+
+/**
+ * Whether the typed downtime budget is one the API would accept.
+ *
+ * Empty is valid and means "use the pipeline default", so clearing the field
+ * behaves like never touching it rather than snapping back to a number the
+ * operator did not choose. Anything else must be a whole number of seconds
+ * inside the API's own range, checked here so a rejected value is caught while
+ * it can still be corrected instead of after a job exists.
+ */
+export function isDowntimeBudgetValid(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed === '') return true
+  if (!/^\d+$/.test(trimmed)) return false
+  const n = Number(trimmed)
+  return n >= DOWNTIME_BUDGET_MIN_SEC && n <= DOWNTIME_BUDGET_MAX_SEC
+}

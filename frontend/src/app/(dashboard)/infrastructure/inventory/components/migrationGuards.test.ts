@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { vsanBlocksMigrationType, warmNeedsBlockStorage } from "./migrationGuards"
+import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC } from "./migrationGuards"
 
 describe("vsanBlocksMigrationType", () => {
   it("blocks the file-based types on a vSAN source", () => {
@@ -48,5 +48,31 @@ describe("warmNeedsBlockStorage", () => {
     // and a button disabled on missing data reads as broken.
     expect(warmNeedsBlockStorage("warm", undefined)).toBe(false)
     expect(warmNeedsBlockStorage("warm", "")).toBe(false)
+  })
+})
+
+describe("isDowntimeBudgetValid", () => {
+  it("accepts an empty field, which means the pipeline default", () => {
+    // Clearing the field must behave like never touching it, not like an error.
+    expect(isDowntimeBudgetValid("")).toBe(true)
+    expect(isDowntimeBudgetValid("   ")).toBe(true)
+  })
+
+  it("accepts the bounds the API accepts", () => {
+    expect(isDowntimeBudgetValid(String(DOWNTIME_BUDGET_MIN_SEC))).toBe(true)
+    expect(isDowntimeBudgetValid(String(DOWNTIME_BUDGET_MAX_SEC))).toBe(true)
+    expect(isDowntimeBudgetValid("300")).toBe(true)
+  })
+
+  it("refuses what the API would refuse, before a job exists", () => {
+    expect(isDowntimeBudgetValid(String(DOWNTIME_BUDGET_MIN_SEC - 1))).toBe(false)
+    expect(isDowntimeBudgetValid(String(DOWNTIME_BUDGET_MAX_SEC + 1))).toBe(false)
+    expect(isDowntimeBudgetValid("-30")).toBe(false)
+  })
+
+  it("refuses anything that is not a whole number of seconds", () => {
+    for (const value of ["abc", "30.5", "3e2", "30s", "0x1e", "1 000"]) {
+      expect(isDowntimeBudgetValid(value)).toBe(false)
+    }
   })
 })

@@ -299,6 +299,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     migConvertToQcow2: false,
     migManualCutover: false,
     setMigManualCutover: () => {},
+    migDowntimeBudget: '',
+    setMigDowntimeBudget: () => {},
     setMigConvertToQcow2: vi.fn(),
     migDiskPaths: '',
     setMigDiskPaths: vi.fn(),
@@ -736,6 +738,7 @@ describe('migration dialog options', () => {
   const START_AFTER_LABEL = 'Start VM after migration'
   const QCOW2_LABEL = 'Convert disks to qcow2 after migration (enables Proxmox snapshots)'
   const AUTO_CUTOVER_LABEL = 'Automatic cutover'
+  const BUDGET_LABEL = 'Downtime budget (seconds)'
 
   function getSwitch(label: string): HTMLInputElement {
     const labelEl = screen.getByText(label)
@@ -828,6 +831,43 @@ describe('migration dialog options', () => {
 
     fireEvent.click(screen.getByText('harness-open-single'))
     expect(getSwitch(AUTO_CUTOVER_LABEL).checked).toBe(true)
+  })
+
+  // #663: the budget only governs the automatic decision, so it follows the
+  // switch instead of sitting there inert next to a hold.
+  it('shows the downtime budget only while the cutover stays automatic', async () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect(screen.getByLabelText(BUDGET_LABEL)).toBeInTheDocument()
+
+    fireEvent.click(getSwitch(AUTO_CUTOVER_LABEL))
+    await waitFor(() => expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument())
+  })
+
+  it('hides the downtime budget outside a warm migration', () => {
+    renderWithProviders(
+      <InventoryDialogs {...makeProps({ esxiMigrateVm: ESXI_VM, migTargetConn: CONN_ID, migTargetNode: NODE_NAME, migType: 'cold' })} />,
+    )
+    expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument()
+  })
+
+  it('resets a typed downtime budget when the dialog is closed and reopened', async () => {
+    renderWithProviders(
+      <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    fireEvent.change(screen.getByLabelText(BUDGET_LABEL), { target: { value: '600' } })
+    expect((screen.getByLabelText(BUDGET_LABEL) as HTMLInputElement).value).toBe('600')
+
+    fireEvent.click(screen.getByText('harness-close-single'))
+    await waitFor(() => expect(screen.queryByLabelText(BUDGET_LABEL)).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    expect((screen.getByLabelText(BUDGET_LABEL) as HTMLInputElement).value).toBe('')
   })
 
   it('shows the automatic-cutover switch only for a warm migration', () => {

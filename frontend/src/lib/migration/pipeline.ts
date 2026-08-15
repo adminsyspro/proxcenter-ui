@@ -260,15 +260,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     //   - `vmkfstools -i` clone fails ("Function not implemented") — blocks Live mode
     //   - `-flat.vmdk` does not exist as a POSIX file, only the descriptor which references
     //     `vsan://` URIs that neither qemu-img nor HTTP /folder/ can resolve — blocks Cold mode
-    // The only reliable path for vSAN is NFC via vCenter, so we refuse the direct-ESXi flow
-    // and point the user at their vCenter connection.
+    // Both failures are about reading vSAN as FILES, which is what this pipeline does. The
+    // warm path does not: it reads through VDDK, the disk API, and copies vSAN-backed disks
+    // over this very same direct ESXi connection (verified 2026-08-15 against a vsanDatastore
+    // source, full copy + delta passes + verify, no vCenter in the picture). So the error
+    // offers warm first and vCenter second, instead of claiming vSAN needs vCenter at all.
     const vsanDisks = vmConfig.disks.filter(d => d.datastoreName.toLowerCase().includes('vsan'))
     if (vsanDisks.length > 0) {
       const dsNames = [...new Set(vsanDisks.map(d => d.datastoreName))].join(', ')
       throw new Error(
-        `Source VM has disks on vSAN (${dsNames}). vSAN datastores are not supported through a direct ESXi connection ` +
-        `because vSAN objects require the NFC protocol, which is only available via vCenter. ` +
-        `Please add a vCenter connection that manages this ESXi host and run the migration from there.`
+        `Source VM has disks on vSAN (${dsNames}). A cold migration cannot read them through a direct ESXi connection: ` +
+        `vSAN keeps no -flat.vmdk file, and the descriptor points at vsan:// URIs that neither qemu-img nor the HTTPS ` +
+        `datastore endpoint can resolve. Two ways forward: run a warm migration, which reads through VDDK and handles ` +
+        `vSAN on this same ESXi connection, or add a vCenter connection that manages this host and migrate from there.`
       )
     }
 

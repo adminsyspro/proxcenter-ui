@@ -1349,7 +1349,7 @@ export default function NodeTabs(props: any) {
                                         {nodeDisksData.disks.map((disk: any, idx: number) => (
                                           <Fragment key={idx}>
                                             <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => toggleSmart(disk.devpath)}>
-                                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                              <TableCell>
                                                 <i className={smartDisk === disk.devpath ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
                                                 {disk.devpath}
                                               </TableCell>
@@ -1374,13 +1374,13 @@ export default function NodeTabs(props: any) {
                                                 <Typography variant="caption" sx={{ opacity: 0.5 }}>-</Typography>
                                               )}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {disk.size ? `${(disk.size / 1024 / 1024 / 1024).toFixed(1)} GiB` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ fontSize: 12, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {disk.model || '-'}
                                             </TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {disk.serial || '-'}
                                             </TableCell>
                                             <TableCell>
@@ -1480,11 +1480,11 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.lvm.map((vg: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{vg.name}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell>{vg.name}</TableCell>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {vg.size ? `${(vg.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {vg.free ? `${(vg.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'center' }}>{vg.lvcount ?? '-'}</TableCell>
@@ -1531,15 +1531,15 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.lvmthin.map((tp: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{tp.lv}</TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{tp.vg}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell>{tp.lv}</TableCell>
+                                            <TableCell>{tp.vg}</TableCell>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.lv_size ? `${(tp.lv_size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.used !== undefined ? `${tp.used.toFixed(1)}%` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.metadata_size ? `${(tp.metadata_size / 1024 / 1024).toFixed(2)} MiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'right' }}>
@@ -1585,10 +1585,10 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.directory.map((dir: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{dir.path}</TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{dir.device || '-'}</TableCell>
+                                            <TableCell>{dir.path}</TableCell>
+                                            <TableCell>{dir.device || '-'}</TableCell>
                                             <TableCell>{dir.type || '-'}</TableCell>
-                                            <TableCell sx={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir.options || '-'}</TableCell>
+                                            <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir.options || '-'}</TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -1655,19 +1655,19 @@ export default function NodeTabs(props: any) {
                                             <Fragment key={idx}>
                                               <TableRow hover sx={{ cursor: vdevs.length > 0 ? 'pointer' : 'default' }}
                                                 onClick={() => setExpandedPool(open ? null : pool.name)}>
-                                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                                <TableCell>
                                                   {vdevs.length > 0 && (
                                                     <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
                                                   )}
                                                   {pool.name}
                                                 </TableCell>
-                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                <TableCell sx={{ textAlign: 'right' }}>
                                                   {pool.size ? `${(pool.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                                 </TableCell>
-                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                <TableCell sx={{ textAlign: 'right' }}>
                                                   {pool.alloc ? `${(pool.alloc / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                                 </TableCell>
-                                                <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                                <TableCell sx={{ textAlign: 'right' }}>
                                                   {pool.free ? `${(pool.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                                 </TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
@@ -1677,8 +1677,8 @@ export default function NodeTabs(props: any) {
                                                     color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
                                                     sx={{ height: 20, fontSize: 10 }} />
                                                 </TableCell>
-                                                <TableCell sx={{ fontSize: 12 }}>{pool.state || '-'}</TableCell>
-                                                <TableCell sx={{ fontSize: 11, color: scan.hasErrors ? 'error.main' : undefined, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                <TableCell>{pool.state || '-'}</TableCell>
+                                                <TableCell sx={{ color: scan.hasErrors ? 'error.main' : undefined, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                   {scan.label || t('inventory.zfsNeverScrubbed')}
                                                 </TableCell>
                                               </TableRow>

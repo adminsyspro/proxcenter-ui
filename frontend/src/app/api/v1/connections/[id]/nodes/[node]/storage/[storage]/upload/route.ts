@@ -4,6 +4,7 @@ import http from "node:http"
 import { randomUUID } from "node:crypto"
 
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { getPrincipal } from "@/lib/auth/principal"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardTenantStorageWrite } from "@/lib/vdc/scope"
 import { setProgress, clearProgress } from "@/lib/upload-progress"
@@ -105,7 +106,13 @@ async function handleChunk(
         ? new https.Agent({ rejectUnauthorized: false })
         : undefined
 
-      setProgress(uploadId, { bytesSent: 0, totalBytes: totalSize, status: "transferring" })
+      // Stamp the owner on the entry the first chunk creates: the progress
+      // route hands the counters back to that user and to nobody else (#699).
+      // Resolved here only, the per-chunk updates below inherit it.
+      const principalResult = await getPrincipal()
+      const ownerId = principalResult.ok ? principalResult.principal?.userId || null : null
+
+      setProgress(uploadId, { bytesSent: 0, totalBytes: totalSize, status: "transferring" }, ownerId)
 
       let resolveResult: any
       let rejectResult: any

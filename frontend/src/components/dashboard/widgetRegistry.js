@@ -29,6 +29,9 @@ const QuickStatsWidget = dynamic(() => import('./widgets/QuickStatsWidget'), { s
 // Infrastructure Global Chart (per-node CPU/RAM)
 const InfraGlobalChartWidget = dynamic(() => import('./widgets/InfraGlobalChartWidget'), { ssr: false })
 
+// ZFS ARC (per-node ARC memory usage)
+const ZfsArcWidget = dynamic(() => import('./widgets/ZfsArcWidget'), { ssr: false })
+
 // VM Heatmap (CPU/RAM utilization grid)
 const VmHeatmapWidget = dynamic(() => import('./widgets/VmHeatmapWidget'), { ssr: false })
 
@@ -309,6 +312,19 @@ export const WIDGET_REGISTRY = {
     noContainer: true,
     requiresInfraScope: true,
     component: InfraGlobalChartWidget,
+  },
+  'zfs-arc': {
+    type: 'zfs-arc',
+    name: 'ZFS ARC',
+    description: 'Per-node ZFS ARC memory usage (PVE 9+)',
+    icon: 'ri-ram-2-line',
+    category: 'resources',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 20 },
+    noContainer: true,
+    requiresInfraScope: true,
+    component: ZfsArcWidget,
   },
   'vm-heatmap': {
     type: 'vm-heatmap',

@@ -472,6 +472,7 @@
       "vmStatusWaffle": "客户机状态（华夫图）",
       "resourceTrends": "资源趋势",
       "infraGlobalChart": "基础设施 CPU/RAM",
+      "zfsArc": "ZFS ARC",
       "vmHeatmap": "客户机热力图",
       "drsStatus": "DRS 状态",
       "siteRecovery": "站点恢复"
@@ -500,6 +501,7 @@
       "vmStatusWaffle": "按集群和状态的客户机华夫图",
       "resourceTrends": "1小时、24小时或7天的 CPU/RAM 变化趋势",
       "infraGlobalChart": "所有基础设施中每个节点的 CPU/RAM",
+      "zfsArc": "各节点的 ZFS ARC 内存占用（PVE 9+）",
       "vmHeatmap": "所有客户机的 CPU/RAM 热力图",
       "drsStatus": "DRS 状态、活跃迁移和建议",
       "siteRecovery": "虚拟机保护、RPO 合规性和复制状态",
@@ -538,6 +540,9 @@
       "jobs": "任务",
       "syncing": "同步中",
       "errors": "错误"
+    },
+    "widgetArc": {
+      "noData": "无 ZFS ARC 数据。需要 PVE 9 或更高版本，且节点使用 ZFS。"
     }
   },
   "alerts": {

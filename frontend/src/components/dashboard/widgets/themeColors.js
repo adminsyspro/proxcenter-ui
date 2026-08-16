@@ -1,4 +1,15 @@
 /**
+ * Per-node series palette, shared by the chart widgets so a node keeps the same
+ * colour from one chart to the next.
+ */
+export const NODE_COLORS = [
+  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
+  '#ec4899', '#f43f5e', '#ef4444', '#f97316',
+  '#eab308', '#84cc16', '#22c55e', '#14b8a6',
+  '#06b6d4', '#3b82f6', '#2563eb', '#7c3aed',
+]
+
+/**
  * Theme-aware color helpers for dashboard widgets.
  * Usage: const c = widgetColors(isDark)
  */

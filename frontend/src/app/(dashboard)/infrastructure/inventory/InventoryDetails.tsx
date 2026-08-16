@@ -117,6 +117,7 @@ import StatusChip from './components/StatusChip'
 import { AreaPctChart, AreaBpsChart2 } from './components/RrdCharts'
 import GroupedVmsView from './components/GroupedVmsView'
 import InventorySummary from './components/InventorySummary'
+import { useNodeSensors } from './hooks/useNodeSensors'
 import StorageIntermediatePanel from './components/StorageIntermediatePanel'
 import StorageDetailPanel from './components/StorageDetailPanel'
 import ExpandableChart from './components/ExpandableChart'
@@ -210,6 +211,14 @@ export default function InventoryDetails({
   const theme = useTheme()
   const detailConnId = selection?.type === 'cluster' ? selection.id : selection?.type === 'node' ? parseNodeId(selection.id).connId : selection?.type === 'vm' ? parseVmId(selection.id).connId : undefined
   const { getColor: getTagColor, loadConnection } = useTagColors(detailConnId)
+
+  // Node temperatures, fetched once here and shared: the board reading sits in
+  // the header next to the host name, the per-role ones next to their usage bar
+  // in the summary. Only a node selection has anything to read.
+  const { sensors: nodeSensors } = useNodeSensors(
+    selection?.type === 'node' ? parseNodeId(selection.id).connId : undefined,
+    selection?.type === 'node' ? parseNodeId(selection.id).node : undefined,
+  )
 
   // Load PVE tag color overrides for all connections present in allVms
   React.useEffect(() => {
@@ -3472,6 +3481,7 @@ return vm?.isCluster ?? false
             vmNotes={selection?.type === 'vm' ? vmNotes : undefined}
             disksInfo={selection?.type === 'vm' ? data.disksInfo : undefined}
             cpuInfo={selection?.type === 'vm' ? data.cpuInfo : undefined}
+            sensors={nodeSensors}
           />
           </Box>
           </>)}

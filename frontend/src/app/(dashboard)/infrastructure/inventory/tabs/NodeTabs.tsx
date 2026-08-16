@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -75,6 +75,9 @@ import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdo
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import EntityTagManager from '../components/EntityTagManager'
+import { flattenVdevs } from '@/lib/disks/zfsTree'
+import { summarizeScan } from '@/lib/disks/normalize'
+import SmartDetail from '@/components/hardware/SmartDetail'
 
 /**
  * Renders a Ceph config-style text verbatim (indentation preserved) with light
@@ -316,6 +319,71 @@ export default function NodeTabs(props: any) {
   const [nodeCephOsdFlags, setNodeCephOsdFlags] = useState<string[]>([])
   const [nodeCephOsdFlagsLoading, setNodeCephOsdFlagsLoading] = useState(false)
   const [nodeCephFlagToggling, setNodeCephFlagToggling] = useState<string | null>(null)
+
+  // ZFS pool row expansion (Disks tab)
+  const [expandedPool, setExpandedPool] = useState<string | null>(null)
+
+  const [smartDisk, setSmartDisk] = useState<string | null>(null)
+  const [smartData, setSmartData] = useState<any>(null)
+  const [smartLoading, setSmartLoading] = useState(false)
+
+  // Tags the in-flight SMART request so a stale reply (from a disk expanded
+  // before the current one, or from a node we already navigated away from)
+  // never lands under the wrong row and never clears the loading flag for a
+  // request that is still running.
+  const smartRequestRef = useRef<{ id: number; devpath: string } | null>(null)
+
+  // NodeTabs is mounted once per node TYPE, not per node: InventoryDetails
+  // renders it without a `key`, so it survives a plain node-to-node
+  // selection change. Reset the SMART/ZFS expansion state here or the new
+  // node's list renders with the previous node's row still expanded,
+  // showing its serials and error counters under the new node.
+  useEffect(() => {
+    setSmartDisk(null)
+    setSmartData(null)
+    setSmartLoading(false)
+    setExpandedPool(null)
+    smartRequestRef.current = null
+  }, [selection?.id])
+
+  // Lazy on purpose: smartctl spins up a sleeping disk, so only fetch on expand.
+  const toggleSmart = async (devpath: string) => {
+    if (smartDisk === devpath) {
+      setSmartDisk(null)
+      smartRequestRef.current = null
+
+      return
+    }
+
+    const request = { id: (smartRequestRef.current?.id ?? 0) + 1, devpath }
+
+    smartRequestRef.current = request
+
+    setSmartDisk(devpath)
+    setSmartData(null)
+    setSmartLoading(true)
+
+    const { connId, node } = parseNodeId(selection?.id || '')
+
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks?section=disks&disk=${encodeURIComponent(devpath)}`,
+        { cache: 'no-store' },
+      )
+
+      const smart = res.ok ? (await res.json())?.data?.smart ?? null : null
+
+      // A newer toggle (another disk, or a node change) superseded this
+      // request while it was in flight. Discard the reply.
+      if (smartRequestRef.current !== request) return
+
+      setSmartData(smart)
+    } catch {
+      if (smartRequestRef.current === request) setSmartData(null)
+    } finally {
+      if (smartRequestRef.current === request) setSmartLoading(false)
+    }
+  }
 
   const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : ''
   const nodeNodeName = selection?.type === 'node' ? parseNodeId(selection.id).node : ''
@@ -1279,21 +1347,25 @@ export default function NodeTabs(props: any) {
                                       </TableHead>
                                       <TableBody>
                                         {nodeDisksData.disks.map((disk: any, idx: number) => (
-                                          <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{disk.devpath}</TableCell>
+                                          <Fragment key={idx}>
+                                            <TableRow hover sx={{ cursor: 'pointer' }} onClick={() => toggleSmart(disk.devpath)}>
+                                              <TableCell>
+                                                <i className={smartDisk === disk.devpath ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
+                                                {disk.devpath}
+                                              </TableCell>
                                             <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={disk.type?.toUpperCase() || 'HDD'} 
+                                              <Chip
+                                                size="small"
+                                                label={disk.type?.toUpperCase() || 'HDD'}
                                                 color={disk.type === 'nvme' || disk.type === 'ssd' ? 'info' : 'default'}
                                                 sx={{ height: 20, fontSize: 10 }}
                                               />
                                             </TableCell>
                                             <TableCell>
                                               {disk.used ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.used} 
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.used}
                                                   color={disk.used === 'unused' ? 'default' : 'primary'}
                                                   variant="outlined"
                                                   sx={{ height: 20, fontSize: 10 }}
@@ -1302,21 +1374,25 @@ export default function NodeTabs(props: any) {
                                                 <Typography variant="caption" sx={{ opacity: 0.5 }}>-</Typography>
                                               )}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {disk.size ? `${(disk.size / 1024 / 1024 / 1024).toFixed(1)} GiB` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ fontSize: 12, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {disk.model || '-'}
                                             </TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 11, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                               {disk.serial || '-'}
                                             </TableCell>
                                             <TableCell>
                                               {disk.health ? (
-                                                <Chip 
-                                                  size="small" 
-                                                  label={disk.health} 
-                                                  color={disk.health === 'PASSED' ? 'success' : disk.health === 'FAILED' ? 'error' : 'warning'}
+                                                <Chip
+                                                  size="small"
+                                                  label={disk.health}
+                                                  color={
+                                                    ['OK', 'PASSED'].includes(String(disk.health).toUpperCase())
+                                                      ? 'success'
+                                                      : String(disk.health).toUpperCase() === 'FAILED' ? 'error' : 'warning'
+                                                  }
                                                   sx={{ height: 20, fontSize: 10 }}
                                                 />
                                               ) : (
@@ -1324,30 +1400,46 @@ export default function NodeTabs(props: any) {
                                               )}
                                             </TableCell>
                                             <TableCell>
-                                              {disk.wearout !== undefined && disk.wearout !== null ? (
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                  <LinearProgress
-                                                    variant="determinate"
-                                                    value={100 - (disk.wearout || 0)}
-                                                    sx={{
-                                                      width: 50,
-                                                      height: 14,
-                                                      borderRadius: 0,
-                                                      bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
-                                                      '& .MuiLinearProgress-bar': {
-                                                        borderRadius: 0,
-                                                        background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
-                                                        backgroundSize: (100 - (disk.wearout || 0)) > 0 ? `${(100 / (100 - (disk.wearout || 0))) * 100}% 100%` : '100% 100%',
-                                                      }
-                                                    }}
-                                                  />
-                                                  <Typography variant="caption">{100 - (disk.wearout || 0)}%</Typography>
-                                                </Box>
-                                              ) : (
-                                                <Typography variant="caption" sx={{ opacity: 0.5 }}>N/A</Typography>
-                                              )}
+                                              {(() => {
+                                                const wearoutRaw = disk.wearout
+                                                const wearoutNum = Number(wearoutRaw)
+                                                const isValidWearout = wearoutRaw !== null && wearoutRaw !== '' && Number.isFinite(wearoutNum)
+
+                                                if (!isValidWearout) {
+                                                  return <Typography variant="caption" sx={{ opacity: 0.5 }}>N/A</Typography>
+                                                }
+
+                                                const pct = 100 - wearoutNum
+
+                                                return (
+                                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <LinearProgress
+                                                      variant="determinate"
+                                                      value={pct}
+                                                      sx={{
+                                                        width: 50, height: 14, borderRadius: 0,
+                                                        bgcolor: (theme) => theme.palette.mode === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)',
+                                                        '& .MuiLinearProgress-bar': {
+                                                          borderRadius: 0,
+                                                          background: 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)',
+                                                          backgroundSize: pct > 0 ? `${(100 / pct) * 100}% 100%` : '100% 100%',
+                                                        },
+                                                      }}
+                                                    />
+                                                    <Typography variant="caption">{pct}%</Typography>
+                                                  </Box>
+                                                )
+                                              })()}
                                             </TableCell>
-                                          </TableRow>
+                                            </TableRow>
+                                            {smartDisk === disk.devpath && (
+                                              <TableRow>
+                                                <TableCell colSpan={8} sx={{ bgcolor: 'action.hover', py: 0 }}>
+                                                  <SmartDetail smart={smartData} loading={smartLoading} />
+                                                </TableCell>
+                                              </TableRow>
+                                            )}
+                                          </Fragment>
                                         ))}
                                       </TableBody>
                                     </Table>
@@ -1388,11 +1480,11 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.lvm.map((vg: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{vg.name}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell>{vg.name}</TableCell>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {vg.size ? `${(vg.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {vg.free ? `${(vg.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'center' }}>{vg.lvcount ?? '-'}</TableCell>
@@ -1439,15 +1531,15 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.lvmthin.map((tp: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{tp.lv}</TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{tp.vg}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell>{tp.lv}</TableCell>
+                                            <TableCell>{tp.vg}</TableCell>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.lv_size ? `${(tp.lv_size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.used !== undefined ? `${tp.used.toFixed(1)}%` : '-'}
                                             </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
+                                            <TableCell sx={{ textAlign: 'right' }}>
                                               {tp.metadata_size ? `${(tp.metadata_size / 1024 / 1024).toFixed(2)} MiB` : '-'}
                                             </TableCell>
                                             <TableCell sx={{ textAlign: 'right' }}>
@@ -1493,10 +1585,10 @@ export default function NodeTabs(props: any) {
                                       <TableBody>
                                         {nodeDisksData.directory.map((dir: any, idx: number) => (
                                           <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{dir.path}</TableCell>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{dir.device || '-'}</TableCell>
+                                            <TableCell>{dir.path}</TableCell>
+                                            <TableCell>{dir.device || '-'}</TableCell>
                                             <TableCell>{dir.type || '-'}</TableCell>
-                                            <TableCell sx={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir.options || '-'}</TableCell>
+                                            <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{dir.options || '-'}</TableCell>
                                           </TableRow>
                                         ))}
                                       </TableBody>
@@ -1519,8 +1611,21 @@ export default function NodeTabs(props: any) {
                                 <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Typography variant="subtitle2" fontWeight={700}>ZFS Pools</Typography>
                                   <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}>Reload</Button>
-                                    <Button size="small" variant="outlined" disabled startIcon={<i className="ri-eye-line" style={{ fontSize: 14 }} />}>Detail</Button>
+                                    <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" style={{ fontSize: 14 }} />}
+                                      onClick={async () => {
+                                        setNodeDisksLoading(true)
+                                        const { connId, node } = parseNodeId(selection?.id || '')
+                                        try {
+                                          const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks?section=zfs`, { cache: 'no-store' })
+                                          if (res.ok) {
+                                            const json = await res.json()
+                                            setNodeDisksData((prev: any) => ({ ...prev, zfs: json.data?.zfs || [] }))
+                                          }
+                                        } finally {
+                                          setNodeDisksLoading(false)
+                                        }
+                                      }}
+                                    >{t('inventory.reload')}</Button>
                                     <Button size="small" variant="outlined" disabled startIcon={<i className="ri-add-line" style={{ fontSize: 14 }} />}>Create: ZFS</Button>
                                   </Box>
                                 </Box>
@@ -1536,33 +1641,78 @@ export default function NodeTabs(props: any) {
                                           <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Frag</TableCell>
                                           <TableCell sx={{ fontWeight: 700, textAlign: 'center' }}>Dedup</TableCell>
                                           <TableCell sx={{ fontWeight: 700 }}>Health</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.zfsState')}</TableCell>
+                                          <TableCell sx={{ fontWeight: 700 }}>{t('inventory.zfsScrub')}</TableCell>
                                         </TableRow>
                                       </TableHead>
                                       <TableBody>
-                                        {nodeDisksData.zfs.map((pool: any, idx: number) => (
-                                          <TableRow key={idx} hover>
-                                            <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{pool.name}</TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.size ? `${(pool.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.alloc ? `${(pool.alloc / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'right', fontFamily: 'monospace', fontSize: 12 }}>
-                                              {pool.free ? `${(pool.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
-                                            <TableCell sx={{ textAlign: 'center' }}>{pool.dedup ?? '-'}</TableCell>
-                                            <TableCell>
-                                              <Chip 
-                                                size="small" 
-                                                label={pool.health || 'UNKNOWN'} 
-                                                color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
-                                                sx={{ height: 20, fontSize: 10 }}
-                                              />
-                                            </TableCell>
-                                          </TableRow>
-                                        ))}
+                                        {nodeDisksData.zfs.map((pool: any, idx: number) => {
+                                          const scan = summarizeScan(pool.scan, pool.errors)
+                                          const vdevs = flattenVdevs(pool.children)
+                                          const open = expandedPool === pool.name
+
+                                          return (
+                                            <Fragment key={idx}>
+                                              <TableRow hover sx={{ cursor: vdevs.length > 0 ? 'pointer' : 'default' }}
+                                                onClick={() => setExpandedPool(open ? null : pool.name)}>
+                                                <TableCell>
+                                                  {vdevs.length > 0 && (
+                                                    <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 14, marginRight: 4 }} />
+                                                  )}
+                                                  {pool.name}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right' }}>
+                                                  {pool.size ? `${(pool.size / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right' }}>
+                                                  {pool.alloc ? `${(pool.alloc / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right' }}>
+                                                  {pool.free ? `${(pool.free / 1024 / 1024 / 1024).toFixed(2)} GiB` : '-'}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>{pool.frag ?? '-'}</TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>{pool.dedup ?? '-'}</TableCell>
+                                                <TableCell>
+                                                  <Chip size="small" label={pool.health || 'UNKNOWN'}
+                                                    color={pool.health === 'ONLINE' ? 'success' : pool.health === 'DEGRADED' ? 'warning' : pool.health === 'FAULTED' ? 'error' : 'default'}
+                                                    sx={{ height: 20, fontSize: 10 }} />
+                                                </TableCell>
+                                                <TableCell>{pool.state || '-'}</TableCell>
+                                                <TableCell sx={{ color: scan.hasErrors ? 'error.main' : undefined, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                  {scan.label || t('inventory.zfsNeverScrubbed')}
+                                                </TableCell>
+                                              </TableRow>
+                                              {open && vdevs.length > 0 && (
+                                                <TableRow>
+                                                  <TableCell colSpan={9} sx={{ bgcolor: 'action.hover', py: 1 }}>
+                                                    <Table size="small">
+                                                      <TableHead>
+                                                        <TableRow>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('inventory.zfsVdev')}</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11 }}>{t('inventory.zfsState')}</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Read</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Write</TableCell>
+                                                          <TableCell sx={{ fontWeight: 700, fontSize: 11, textAlign: 'right' }}>Cksum</TableCell>
+                                                        </TableRow>
+                                                      </TableHead>
+                                                      <TableBody>
+                                                        {vdevs.map((v, vi) => (
+                                                          <TableRow key={vi}>
+                                                            <TableCell sx={{ fontSize: 11, pl: 1 + v.depth * 2 }}>{v.name}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11 }}>{v.state || '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.read ?? '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.write ?? '-'}</TableCell>
+                                                            <TableCell sx={{ fontSize: 11, textAlign: 'right' }}>{v.cksum ?? '-'}</TableCell>
+                                                          </TableRow>
+                                                        ))}
+                                                      </TableBody>
+                                                    </Table>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )}
+                                            </Fragment>
+                                          )
+                                        })}
                                       </TableBody>
                                     </Table>
                                   </TableContainer>

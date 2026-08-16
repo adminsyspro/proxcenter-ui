@@ -35,9 +35,19 @@ export interface CallRouteOptions {
   url?: string
 }
 
+/**
+ * Route handlers in this codebase declare their params as
+ * `Promise<{ id: string }> | { id: string }`, because Next 15 made params a
+ * promise and the handlers accept both shapes. They also type their params
+ * object with concrete keys rather than a `Record`. A handler is contravariant
+ * in its parameters, so a narrow `Promise<Record<string, string>>` here rejects
+ * every one of them: this signature accounted for roughly thirty `tsc` errors
+ * across the route test suite, all of them false. Accepting the union and any
+ * params shape makes the harness match what it is actually called with.
+ */
 type RouteHandler = (
   req: Request,
-  ctx: { params: Promise<Record<string, string>> },
+  ctx: { params: Promise<any> | any },
 ) => Promise<Response>
 
 /**

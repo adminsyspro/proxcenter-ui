@@ -6,7 +6,7 @@ import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/t
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -28,6 +28,9 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url)
     const typeFilter = url.searchParams.get('type') // 'pve' | 'pbs' | null
+    // Provisioning wizards ask for the guest-derived perimeter on top of the
+    // strict one (see the widening below).
+    const guestScoped = url.searchParams.get('includeGuestScoped') === '1'
     const hasCephFilter = url.searchParams.get('hasCeph') // 'true' | null
 
     const where: any = {}
@@ -134,7 +137,20 @@ export async function GET(req: Request) {
     // provider branch where clause is not touched (preserves existing behaviour
     // for admin/null scope). filterVisibleConnections is a no-op when rbacScope
     // is null (admin or unrestricted user).
-    const visibleConnections = filterVisibleConnections(connections, rbacScope)
+    const visibleIds = new Set(filterVisibleConnections(connections, rbacScope).map(c => c.id))
+
+    // Opt-in widening for the provisioning wizards (issue #262). A flat-scoped
+    // caller (vm/tag/pool) is deliberately absent from this list: they get no
+    // topology (issue #633). But Create VM / Create LXC cannot offer a
+    // placement target without a cluster, so when the caller asks for it we add
+    // back the connections that already host one of their guests. The inventory
+    // stream reveals exactly that much to them, so nothing new leaks here.
+    if (guestScoped && rbacScope?.guestDerived && rbacCtx?.userId) {
+      const guestConnIds = await getGuestVisibleConnectionIds(rbacCtx.userId, rbacCtx.tenantId)
+      for (const connId of guestConnIds) visibleIds.add(connId)
+    }
+
+    const visibleConnections = connections.filter(c => visibleIds.has(c.id))
 
     // Calculer sshConfigured en mémoire sans N+1 queries
     const connectionsWithSSHStatus = visibleConnections.map((conn) => {

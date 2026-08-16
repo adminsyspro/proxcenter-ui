@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
+import { checkPermission, guestPerimeterAllows, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -26,9 +26,13 @@ export async function GET(req: Request, ctx: RouteContext) {
     // the endpoint only returns names a tenant is already authorised to
     // attach to (their vDC VNets + shared bridges). node.network would gate
     // real network-management operations, not this read-only helper.
+    // A flat-scoped caller (vm/tag/pool) matches no node resource either, so
+    // the Network tab of the creation wizard used to 403 (issue #262). Their
+    // guests on this cluster are what opens it.
     const resourceId = buildNodeResourceId(connId, node)
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "node", resourceId)
-    if (denied) return denied
+
+    if (denied && !(await guestPerimeterAllows(connId, PERMISSIONS.CONNECTION_VIEW))) return denied
 
     const tenantId = await getCurrentTenantId()
     const infra = await getTenantInfrastructureScope(tenantId)

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma } from "@/lib/db/prisma"
@@ -26,8 +26,12 @@ export async function GET(
   try {
     const { id, node, storage } = await ctx.params
 
+    // Flat-scoped callers (vm/tag/pool) never match a connection resource, so
+    // the ISO picker of the creation wizard used to 403 (issue #262). The vDC
+    // storage mask below still applies to them unchanged.
     const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)
-    if (denied) return denied
+
+    if (denied && !(await guestPerimeterAllows(id, PERMISSIONS.VM_VIEW))) return denied
 
     // Tenants may browse content (mainly ISOs for the VM create picker) ONLY
     // on storages assigned to their vDC — super admins are unrestricted

@@ -152,6 +152,9 @@ function CreateVmDialog({
   const [networks, setNetworks] = useState<any[]>([])
   const [bridges, setBridges] = useState<any[]>([])
   const [pools, setPools] = useState<any[]>([])
+  // True when the API narrowed the list to the caller's own pools: the guest
+  // must land in one of them, so the picker is shown even to a non-admin.
+  const [poolsRestricted, setPoolsRestricted] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   
   // Formulaire - Général
@@ -453,6 +456,7 @@ function CreateVmDialog({
   useEffect(() => {
     if (!open || !selectedConnection) {
       setPools([])
+      setPoolsRestricted(false)
       return
     }
 
@@ -463,10 +467,17 @@ function CreateVmDialog({
 
         if (json.data && Array.isArray(json.data)) {
           setPools(json.data.map((p: any) => ({ poolid: p.poolid, comment: p.comment })))
+
+          // Pool-scoped caller: the list is their whole scope and the guest has
+          // to land in it, so preselect when there is only one candidate
+          // instead of showing a one-option dropdown (issue #262).
+          setPoolsRestricted(!!json.restricted)
+          if (json.restricted && json.data.length === 1) setResourcePool(json.data[0].poolid)
         }
       } catch (e) {
         console.error('Error loading pools:', e)
         setPools([])
+        setPoolsRestricted(false)
       }
     }
 
@@ -541,7 +552,10 @@ return
 
     try {
       // 1. Charger les connexions
-      const connRes = await fetch('/api/v1/connections?type=pve')
+      // includeGuestScoped: a tag/pool scoped user is absent from the plain
+      // connection list, which would leave the Node picker empty and block the
+      // wizard on its first tab (issue #262).
+      const connRes = await fetch('/api/v1/connections?type=pve&includeGuestScoped=1')
       const connJson = await connRes.json()
       const connectionsList = connJson.data || []
 
@@ -1069,12 +1083,14 @@ return
               </Select>
             </FormControl>
             )}
-            {/* Resource pool selector — hidden for vDC tenants (pool assigned automatically) */}
-            {isAdmin && (
+            {/* Resource pool selector, hidden for vDC tenants (pool assigned
+                automatically). Pool-scoped callers keep it: the list is their
+                own scope and the guest has to land inside it (issue #262). */}
+            {(isAdmin || poolsRestricted) && (
               <FormControl fullWidth size="small">
                 <InputLabel>{t('inventory.createVm.resourcePool')}</InputLabel>
                 <Select value={resourcePool} onChange={(e) => setResourcePool(e.target.value)} label={t('inventory.createVm.resourcePool')}>
-                  <MenuItem value="">({t('common.none')})</MenuItem>
+                  {!poolsRestricted && <MenuItem value="">({t('common.none')})</MenuItem>}
                   {pools.map((p) => (
                     <MenuItem key={p.poolid} value={p.poolid}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

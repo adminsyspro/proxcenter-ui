@@ -2,14 +2,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../__tests__/setup/route-test"
 
-const { findManyGlobalMock, findManySessionMock, getInfraMock, checkPermissionMock, getRBACContextMock, getRbacInfraScopeMock } = vi.hoisted(() => ({
+const { findManyGlobalMock, findManySessionMock, getInfraMock, checkPermissionMock, getRBACContextMock, getRbacInfraScopeMock, getGuestVisibleConnectionIdsMock } = vi.hoisted(() => ({
   findManyGlobalMock: vi.fn(),
   findManySessionMock: vi.fn(),
   getInfraMock: vi.fn(),
   checkPermissionMock: vi.fn(),
   getRBACContextMock: vi.fn(),
   getRbacInfraScopeMock: vi.fn(),
+  getGuestVisibleConnectionIdsMock: vi.fn(),
 }))
+
+/** Minimal connection row, only the columns the route selects. */
+const connRow = (id: string) => ({
+  id, name: id, type: "pve", tenantId: null, baseUrl: "", behindProxy: false, insecureTLS: false,
+  hasCeph: false, latitude: null, longitude: null, locationLabel: null, country: null,
+  fingerprint: null, sshEnabled: false, sshPort: 22, sshUser: "root", sshAuthMethod: null,
+  sshUseSudo: false, sshKeyEnc: null, sshPassEnc: null, createdAt: new Date(), updatedAt: new Date(),
+  hosts: [],
+})
 
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: async () => ({ connection: { findMany: findManySessionMock } }),
@@ -24,6 +34,7 @@ vi.mock("@/lib/rbac", () => ({
   PERMISSIONS: { CONNECTION_VIEW: "connection.view", CONNECTION_MANAGE: "connection.manage" },
   getRBACContext: () => getRBACContextMock(),
   getRbacInfraScope: (...a: any[]) => getRbacInfraScopeMock(...a),
+  getGuestVisibleConnectionIds: (...a: any[]) => getGuestVisibleConnectionIdsMock(...a),
   filterVisibleConnections: (list: Array<{ id: string }>, scope: any) => {
     if (scope === null) return list
     return list.filter((item: { id: string }) => {
@@ -48,6 +59,7 @@ beforeEach(() => {
   // Default: no RBAC context (unauthenticated / unrestricted path)
   getRBACContextMock.mockReset().mockResolvedValue(null)
   getRbacInfraScopeMock.mockReset().mockResolvedValue(null)
+  getGuestVisibleConnectionIdsMock.mockReset().mockResolvedValue(new Set<string>())
 })
 
 describe("GET /api/v1/connections scope", () => {
@@ -100,6 +112,50 @@ describe("GET /api/v1/connections scope", () => {
     expect(body.data[0].id).toBe("connA")
     // provider where clause must not have an id filter (prisma query is untouched)
     expect(findManyGlobalMock.mock.calls[0][0].where?.id).toBeUndefined()
+  })
+
+  // Issue #262: the wizards ask for the guest-derived perimeter on top of the
+  // strict one, otherwise a pool-scoped user gets no cluster to create on.
+  it("guest-derived scope: hidden by default, added back with includeGuestScoped", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "user-pool", isAdmin: false, tenantId: "tenant-x" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map(),
+      guestDerived: true,
+    })
+    getGuestVisibleConnectionIdsMock.mockResolvedValue(new Set(["connB"]))
+    findManyGlobalMock.mockResolvedValue([connRow("connA"), connRow("connB")])
+
+    const { GET } = await import("./route")
+
+    const strict = await callRoute(GET, { method: "GET" })
+    expect((await strict.json()).data).toHaveLength(0)
+    expect(getGuestVisibleConnectionIdsMock).not.toHaveBeenCalled()
+
+    const widened = await callRoute(GET, { method: "GET", searchParams: { includeGuestScoped: "1" } })
+    const body = await widened.json()
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].id).toBe("connB")
+  })
+
+  it("includeGuestScoped is inert for an infra-scoped user", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getRBACContextMock.mockResolvedValue({ userId: "user-node", isAdmin: false, tenantId: "tenant-x" })
+    getRbacInfraScopeMock.mockResolvedValue({
+      fullConnections: new Set(["connA"]),
+      nodesByConnection: new Map(),
+      guestDerived: false,
+    })
+    findManyGlobalMock.mockResolvedValue([connRow("connA"), connRow("connB")])
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET", searchParams: { includeGuestScoped: "1" } })
+    const body = await res.json()
+
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].id).toBe("connA")
+    expect(getGuestVisibleConnectionIdsMock).not.toHaveBeenCalled()
   })
 
   it("provider + admin: full list returned, getRbacInfraScope not consulted", async () => {

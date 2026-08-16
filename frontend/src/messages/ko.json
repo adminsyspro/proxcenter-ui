@@ -482,6 +482,7 @@
       "vmStatusWaffle": "게스트 상태 (와플)",
       "resourceTrends": "리소스 추세",
       "infraGlobalChart": "인프라 CPU/RAM",
+      "zfsArc": "ZFS ARC",
       "vmHeatmap": "게스트 히트맵",
       "drsStatus": "DRS 상태",
       "siteRecovery": "사이트 복구",
@@ -513,6 +514,7 @@
       "vmStatusWaffle": "클러스터 및 상태별 게스트 와플 뷰",
       "resourceTrends": "1시간, 24시간, 7일간의 CPU/RAM 추이",
       "infraGlobalChart": "전체 인프라의 노드별 CPU/RAM",
+      "zfsArc": "노드별 ZFS ARC 메모리 사용량 (PVE 9 이상)",
       "vmHeatmap": "모든 게스트의 CPU/RAM 히트맵",
       "drsStatus": "DRS 상태, 진행 중인 마이그레이션 및 권장 사항",
       "siteRecovery": "VM 보호, RPO 준수 및 복제 상태",
@@ -551,6 +553,9 @@
       "jobs": "작업",
       "syncing": "동기화 중",
       "errors": "오류"
+    },
+    "widgetArc": {
+      "noData": "ZFS ARC 데이터가 없습니다. ZFS를 사용하는 노드에서 PVE 9 이상이 필요합니다."
     }
   },
   "alerts": {

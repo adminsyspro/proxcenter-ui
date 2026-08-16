@@ -472,6 +472,7 @@
       "vmStatusWaffle": "Guest-Status (Waffle)",
       "resourceTrends": "Ressourcentrends",
       "infraGlobalChart": "Infra CPU/RAM",
+      "zfsArc": "ZFS ARC",
       "vmHeatmap": "Guest-Heatmap",
       "drsStatus": "DRS-Status",
       "siteRecovery": "Site Recovery"
@@ -500,6 +501,7 @@
       "vmStatusWaffle": "Waffle-Ansicht der Guests nach Cluster und Status",
       "resourceTrends": "CPU/RAM-Verlauf über 1h, 24h oder 7d",
       "infraGlobalChart": "CPU/RAM pro Node über die gesamte Infrastruktur",
+      "zfsArc": "ZFS-ARC-Speichernutzung pro Node (PVE 9+)",
       "vmHeatmap": "CPU/RAM-Heatmap aller Guests",
       "drsStatus": "DRS-Status, aktive Migrationen und Empfehlungen",
       "siteRecovery": "VM-Schutz, RPO-Compliance und Replikationsstatus",
@@ -538,6 +540,9 @@
       "jobs": "Aufträge",
       "syncing": "Synchronisierung",
       "errors": "Fehlers"
+    },
+    "widgetArc": {
+      "noData": "Keine ZFS-ARC-Daten. Erfordert PVE 9 oder neuer auf einem Node mit ZFS."
     }
   },
   "alerts": {

@@ -34,8 +34,11 @@ import { lighten } from '@mui/material/styles'
 import DOMPurify from 'dompurify'
 import { formatBytes } from '@/utils/format'
 
+import type { NodeSensors } from '@/lib/sensors/hwmon'
+
 import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
 import { formatBps, formatUptime } from '../helpers'
+import { SensorTemp } from './SensorTemp'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
@@ -228,7 +231,9 @@ function InventorySummary({
   vmNotes,
   disksInfo,
   cpuInfo,
+  sensors,
 }: {
+  sensors?: NodeSensors | null
   kindLabel: string
   status: Status
   subtitle?: string
@@ -561,7 +566,14 @@ return `${mins}m`
                 bgcolor: 'background.paper',
               }}
             >
-              <UsageBar themeColor={primaryColor} label="CPU usage" used={cpuNowPct} capacity={100} mode="pct" />
+              <UsageBar
+                themeColor={primaryColor}
+                label="CPU usage"
+                used={cpuNowPct}
+                capacity={100}
+                mode="pct"
+                extra={<SensorTemp sensors={sensors} role="cpu" />}
+              />
               {hostInfo.loadAvg ? (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -573,9 +585,31 @@ return `${mins}m`
                   <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary' }}>{hostInfo.loadAvg}</Typography>
                 </Box>
               ) : null}
-              <UsageBar themeColor={primaryColor} label={hostInfo.ksmSharing != null ? `RAM usage (KSM: ${formatBytes(hostInfo.ksmSharing)})` : "RAM usage"} used={memUsed} capacity={memCap} mode="bytes" />
+              <UsageBar
+                themeColor={primaryColor}
+                label={hostInfo.ksmSharing != null ? `RAM usage (KSM: ${formatBytes(hostInfo.ksmSharing)})` : "RAM usage"}
+                used={memUsed}
+                capacity={memCap}
+                mode="bytes"
+                extra={<SensorTemp sensors={sensors} role="memory" />}
+              />
               {swapCap > 0 ? (
                 <UsageBar themeColor={primaryColor} label="SWAP usage" used={swapUsed} capacity={swapCap} mode="bytes" />
+              ) : null}
+              {/* Proxmox fills a node's disk/maxdisk from df('/'), so this is the
+                  host root filesystem and NOT the datastores listed in the tree.
+                  Labelled explicitly: calling it "Storage" is what made a customer
+                  read a root-filesystem alert as a datastore filling up. */}
+              {diskCap > 0 ? (
+                <UsageBar
+                  themeColor={primaryColor}
+                  label="Root FS usage"
+                  icon="ri-hard-drive-2-line"
+                  used={diskUsed}
+                  capacity={diskCap}
+                  mode="bytes"
+                  extra={<SensorTemp sensors={sensors} role="disk" />}
+                />
               ) : null}
 
             </Box>
@@ -584,6 +618,8 @@ return `${mins}m`
             <Box
               sx={{
                 flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 2,
@@ -593,7 +629,10 @@ return `${mins}m`
                 bgcolor: 'background.paper',
               }}
             >
-              <Stack spacing={2.5}>
+              {/* The usage-bar column sets the row height, so these rows spread to
+                  fill it instead of stacking at the top over dead space. spacing
+                  stays the floor when there is nothing extra to distribute. */}
+              <Stack spacing={2.5} sx={{ flex: 1, justifyContent: 'space-between' }}>
                 {hostInfo.cpuModel ? (
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                     <i className="ri-cpu-line" style={{ fontSize: 14, color: primaryColor, marginTop: 2 }} />

@@ -16,7 +16,8 @@ vi.mock("@/lib/proxmox/client", () => ({
 }))
 
 import { POST } from "./route"
-import { callRoute, readJson } from "@/__tests__/setup/route-test"
+import { checkPermission } from "@/lib/rbac"
+import { callRoute, readJson, deniedPermissionResponse } from "@/__tests__/setup/route-test"
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -77,5 +78,107 @@ describe("POST /api/v1/connections/[id]/nodes/trends — ZFS ARC (#617)", () => 
 
     expect(points[0].arc).toBe(2 * GIB)
     expect(points[0].arcPct).toBeNull()
+  })
+})
+
+describe("POST /api/v1/connections/[id]/nodes/trends — shape and guards", () => {
+  it("keeps the CPU ratio inside 0 to 100 whatever the RRD reports", async () => {
+    const points = await trendsFor([
+      { time: 1_700_000_000, cpu: 1.4, mem: GIB, maxmem: 4 * GIB },
+    ])
+
+    expect(points[0].cpu).toBe(100)
+  })
+
+  it("labels a week point with its date, an hour point with its time only", async () => {
+    pveFetch.mockResolvedValue([{ time: 1_700_000_000, cpu: 0.5, mem: GIB, maxmem: 4 * GIB }])
+
+    const res = await callRoute(POST, {
+      params: { id: "c1" },
+      body: { items: [{ node: "pve1" }], timeframe: "week" },
+    })
+
+    const json = await readJson<{ data: Record<string, { t: string }[]> }>(res)
+
+    expect(json?.data["node:pve1"][0].t).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/)
+  })
+
+  it("downsamples an hour series to the point budget of the chart", async () => {
+    const rrd = Array.from({ length: 400 }, (_, i) => ({
+      time: 1_700_000_000 + i * 60, cpu: 0.1, mem: GIB, maxmem: 4 * GIB,
+    }))
+
+    pveFetch.mockResolvedValue(rrd)
+
+    const res = await callRoute(POST, {
+      params: { id: "c1" },
+      body: { items: [{ node: "pve1" }], timeframe: "hour" },
+    })
+
+    const json = await readJson<{ data: Record<string, unknown[]> }>(res)
+
+    expect(json?.data["node:pve1"]).toHaveLength(70)
+  })
+
+  it("answers with an empty map when no node is asked for", async () => {
+    const res = await callRoute(POST, { params: { id: "c1" }, body: { items: [] } })
+
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual({ data: {} })
+    expect(pveFetch).not.toHaveBeenCalled()
+  })
+
+  it("answers with an empty map when the body is not JSON", async () => {
+    const res = await callRoute(POST, { params: { id: "c1" }, body: "not json" })
+
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual({ data: {} })
+  })
+
+  it("rejects a call without a connection id", async () => {
+    const res = await callRoute(POST, { params: {}, body: { items: [{ node: "pve1" }] } })
+
+    expect(res.status).toBe(400)
+  })
+
+  it("passes the permission refusal straight through", async () => {
+    vi.mocked(checkPermission).mockResolvedValueOnce(deniedPermissionResponse() as never)
+
+    const res = await callRoute(POST, {
+      params: { id: "c1" },
+      body: { items: [{ node: "pve1" }] },
+    })
+
+    expect(res.status).toBe(403)
+    expect(pveFetch).not.toHaveBeenCalled()
+  })
+
+  it("keeps the other nodes when one of them fails to answer", async () => {
+    pveFetch.mockImplementation(async (_conn: unknown, path: string) => {
+      if (path.includes("pve1")) throw new Error("unreachable")
+
+      return [{ time: 1_700_000_000, cpu: 0.2, mem: GIB, maxmem: 4 * GIB }]
+    })
+
+    const res = await callRoute(POST, {
+      params: { id: "c1" },
+      body: { items: [{ node: "pve1" }, { node: "pve2" }] },
+    })
+
+    const json = await readJson<{ data: Record<string, unknown[]> }>(res)
+
+    expect(json?.data["node:pve1"]).toEqual([])
+    expect(json?.data["node:pve2"]).toHaveLength(1)
+  })
+
+  it("tolerates an RRD payload that is not a series", async () => {
+    pveFetch.mockResolvedValue({ unexpected: true } as never)
+
+    const res = await callRoute(POST, {
+      params: { id: "c1" },
+      body: { items: [{ node: "pve1" }] },
+    })
+
+    expect(await readJson(res)).toEqual({ data: { "node:pve1": [] } })
   })
 })

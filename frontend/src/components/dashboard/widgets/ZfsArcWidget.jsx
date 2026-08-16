@@ -20,14 +20,14 @@ const METRICS = ['arc', 'arcPct']
 // metric reads the same way in both places.
 const ARC_ACCENT = '#8b5cf6'
 
-const formatValue = (metric, value) => {
+export const formatValue = (metric, value) => {
   if (value == null) return '-'
 
   return metric === 'arcPct' ? `${value}%` : formatBytes(value)
 }
 
 // ─── Custom Tooltip ──────────────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label, metric, isDark }) {
+export function ChartTooltip({ active, payload, label, metric, isDark }) {
   if (!active || !payload?.length) return null
   const c = widgetColors(isDark)
   const time = formatTime(payload) || label

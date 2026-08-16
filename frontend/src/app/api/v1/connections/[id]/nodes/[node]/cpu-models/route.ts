@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, buildNodeResourceId, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -16,9 +16,12 @@ export async function GET(
   try {
     const { id, node } = await ctx.params
 
+    // Flat-scoped callers (vm/tag/pool) match no node resource, which used to
+    // 403 the CPU tab of the creation wizard (issue #262).
     const resourceId = buildNodeResourceId(id, node)
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", resourceId)
-    if (denied) return denied
+
+    if (denied && !(await guestPerimeterAllows(id, PERMISSIONS.NODE_VIEW))) return denied
 
     const conn = await getConnectionById(id)
 

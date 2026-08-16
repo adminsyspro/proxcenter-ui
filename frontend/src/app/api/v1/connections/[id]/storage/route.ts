@@ -4,7 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
@@ -20,8 +20,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // connection.view (not storage.view) so tenant admins can see the list.
     // The endpoint already filters results by vDC scope below, so a tenant
     // only sees the storages actually assigned to their vDC.
+    //
+    // Flat-scoped callers (vm/tag/pool) never match a connection-scoped check,
+    // so they used to 403 here and the Create VM wizard showed an empty
+    // Storage dropdown (issue #262). They come in through the guest-derived
+    // perimeter instead, and the payload is narrowed to it further down.
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
-    if (denied) return denied
+    const perimeter = denied ? await getRequestGuestScopePerimeter(id) : null
+
+    if (denied && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
 
     const conn = await getConnectionById(id)
 
@@ -191,6 +198,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       } else {
         result = []
       }
+    }
+
+    // RBAC narrowing for flat-scoped callers (vm/tag/pool). A PVE storage
+    // belongs to no pool, so filtering by pool membership would return an
+    // empty list and leave the Create VM wizard with nothing to pick
+    // (issue #262). Return the shared storages, usable from anywhere on the
+    // cluster, plus the local ones sitting on a node that already hosts one of
+    // their guests. Everything else stays hidden.
+    if (perimeter?.restricted) {
+      result = result.filter((s: any) => {
+        if (s.shared) return true
+        const nodes: string[] = Array.isArray(s.nodes) ? s.nodes : s.node ? [s.node] : []
+        return nodes.some(n => perimeter.nodes.has(n))
+      })
     }
 
     // Trier: partagés d'abord, puis par utilisation décroissante

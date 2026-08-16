@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { getAllowedBridgesForTenant, resolveSubnetForBridge, parseBridgeFromNet } from "@/lib/vdc/vnets"
@@ -56,8 +56,15 @@ export async function POST(
       return NextResponse.json({ error: "Type must be 'qemu' or 'lxc'" }, { status: 400 })
     }
 
+    // Flat-scoped creators (vm/tag/pool) never match a connection-scoped check
+    // and used to 403 here, so the wizard failed on submit even once its
+    // dropdowns were populated (issue #262). They come in through the
+    // guest-derived perimeter, and the pool guard below keeps their new guest
+    // inside their own scope.
     const denied = await checkPermission(PERMISSIONS.VM_CREATE, "connection", id)
-    if (denied) return denied
+    const perimeter = denied ? await getRequestGuestScopePerimeter(id, PERMISSIONS.VM_CREATE) : null
+
+    if (denied && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
 
     const conn = await getConnectionById(id)
     const body = await req.json()
@@ -65,6 +72,23 @@ export async function POST(
     // Valider les champs requis
     if (!body.vmid) {
       return NextResponse.json({ error: "vmid is required" }, { status: 400 })
+    }
+
+    // Pool containment for flat-scoped creators: a guest created outside their
+    // pools would be invisible to them the moment it exists. A single
+    // accessible pool is applied implicitly, mirroring the vDC forcing below.
+    if (perimeter?.restricted) {
+      const requestedPool = typeof body.pool === 'string' ? body.pool.trim() : ''
+
+      if (requestedPool) {
+        if (!perimeter.pools.has(requestedPool)) {
+          return NextResponse.json({ error: "Resource pool outside your scope" }, { status: 403 })
+        }
+      } else if (perimeter.pools.size === 1) {
+        body.pool = [...perimeter.pools][0]
+      } else {
+        return NextResponse.json({ error: "A resource pool within your scope is required" }, { status: 400 })
+      }
     }
 
     // vDC quota enforcement

@@ -12,6 +12,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db/prisma"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { resolveVmMeta } from "@/lib/cache/vmMetaCache"
+import { getTenantInventoriesFromCache } from "@/lib/cache/inventoryCache"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import {
   deriveRbacInfraScope,
@@ -849,4 +850,219 @@ export async function loadGuestVisibilityCheck(
       pool: guest.pool || undefined,
     })
   }
+}
+
+/**
+ * Scope kinds that carry an infrastructure perimeter. Holding one of them
+ * outranks any flat (vm/tag/pool) narrowing: an operator scoped to a whole
+ * cluster keeps seeing every pool of that cluster, even when they also hold a
+ * pool grant elsewhere (issue #262 acceptance criteria: no regression for
+ * Global and Cluster/Connection scopes).
+ */
+const INFRA_GRANT_SCOPES = new Set(["global", "connection", "node"])
+
+export type GuestScopePerimeter = {
+  /**
+   * True when the caller only holds flat scopes (vm/tag/pool), so everything a
+   * connection-level route returns must be narrowed to what their guests
+   * justify. False for admins, tokens and any infra-level grant: no narrowing.
+   */
+  restricted: boolean
+  /** The caller holds `permission` on at least one grant, whatever its scope. */
+  holdsPermission: boolean
+  /** At least one guest currently hosted on this connection is visible. */
+  hasVisibleGuests: boolean
+  /** Pools the caller may see on this connection. Only set when `restricted`. */
+  pools: Set<string>
+  /** Nodes hosting at least one visible guest. Only set when `restricted`. */
+  nodes: Set<string>
+}
+
+/**
+ * Resolve what a flat-scoped caller (vm/tag/pool) may legitimately see on ONE
+ * connection, derived from the guests they can already see there.
+ *
+ * `scopeMatches` can never satisfy a `"connection"` resource check for such a
+ * caller (a connection carries no tag and no pool), so every connection-scoped
+ * read route 403s on them, including the two the Create VM wizard needs
+ * (issue #262). The perimeter below is what those routes use instead: let the
+ * caller through when they hold the permission AND own a guest on the cluster,
+ * then narrow the payload to `pools` / `nodes`.
+ *
+ * Nothing here widens what the user already knows: the inventory stream
+ * already sends them their guests along with the cluster and node hosting them
+ * (issue #633, guest-derived perimeter). It only stops the same routes from
+ * answering with the whole cluster.
+ *
+ * Fails closed: an inventory cache miss yields `hasVisibleGuests: false`, so
+ * the caller keeps the 403 rather than receiving an unnarrowed payload.
+ */
+export async function getGuestScopePerimeter(
+  principalOrUserId: string | Principal,
+  connId: string,
+  permission: string = PERMISSIONS.CONNECTION_VIEW,
+  tenantId?: string,
+): Promise<GuestScopePerimeter> {
+  const unrestricted: GuestScopePerimeter = {
+    restricted: false,
+    holdsPermission: true,
+    hasVisibleGuests: false,
+    pools: new Set<string>(),
+    nodes: new Set<string>(),
+  }
+
+  // A token carries flat scope permissions plus a connection perimeter, never
+  // a pool grant. checkTokenPermission already decided; nothing to widen.
+  if (asTokenPrincipal(principalOrUserId)) return unrestricted
+
+  const userId = toUserId(principalOrUserId)
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
+  const grants = await loadUserGrants(userId, tid)
+  if (grants.superAdmin) return unrestricted
+
+  let holdsPermission = false
+  const grantedPools = new Set<string>()
+  for (const g of grants.byScope) {
+    const carries = g.permissions.has(permission)
+    if (carries) holdsPermission = true
+    if (carries && INFRA_GRANT_SCOPES.has(g.scopeType)) {
+      return { ...unrestricted, holdsPermission: true }
+    }
+    if (g.scopeType === "pool" && g.scopeTarget) grantedPools.add(g.scopeTarget)
+  }
+
+  // Guest-derived half: the pools and nodes the caller's own guests sit in.
+  // Covers tag scopes too, which have no pool grant to read from.
+  const isVisible = await loadGuestVisibilityCheck(principalOrUserId, PERMISSIONS.VM_VIEW, tid)
+  const found = scanVisibleGuests(tid, isVisible, connId).get(connId)
+  const pools = new Set<string>(grantedPools)
+
+  for (const pool of found?.pools ?? []) pools.add(pool)
+
+  return {
+    restricted: true,
+    holdsPermission,
+    hasVisibleGuests: !!found,
+    pools,
+    nodes: found?.nodes ?? new Set<string>(),
+  }
+}
+
+/**
+ * Walk the cached inventory and collect, per connection, the nodes and pools
+ * holding a guest the caller can see. Connections without a single visible
+ * guest are absent from the map, which is what makes it usable as a gate.
+ *
+ * Reads the cache only: on a miss the caller is treated as seeing nothing,
+ * which keeps every consumer fail-closed.
+ */
+function scanVisibleGuests(
+  tenantId: string,
+  isVisible: GuestVisibilityCheck,
+  onlyConnId?: string,
+): Map<string, { nodes: Set<string>; pools: Set<string> }> {
+  const byConnection = new Map<string, { nodes: Set<string>; pools: Set<string> }>()
+
+  for (const inventory of getTenantInventoriesFromCache(tenantId)) {
+    for (const cluster of (inventory.clusters ?? []) as any[]) {
+      const connId = cluster?.id
+      if (!connId) continue
+      if (onlyConnId !== undefined && connId !== onlyConnId) continue
+      for (const node of (cluster.nodes ?? []) as any[]) {
+        for (const guest of (node?.guests ?? []) as any[]) {
+          if (
+            !isVisible({
+              connId,
+              node: node.node,
+              type: guest.type,
+              vmid: guest.vmid,
+              tags: guest.tags,
+              pool: guest.pool,
+            })
+          ) {
+            continue
+          }
+          let entry = byConnection.get(connId)
+          if (!entry) {
+            entry = { nodes: new Set<string>(), pools: new Set<string>() }
+            byConnection.set(connId, entry)
+          }
+          if (node.node) entry.nodes.add(node.node)
+          if (guest.pool) entry.pools.add(guest.pool)
+        }
+      }
+    }
+  }
+
+  return byConnection
+}
+
+/**
+ * Connections currently hosting at least one guest the caller can see.
+ *
+ * Companion of `filterVisibleConnections`, which stays strict on purpose: a
+ * flat-scoped user has no business enumerating connections in the inventory.
+ * Provisioning is the exception, since a VM cannot be created without naming a
+ * cluster and a node, hence a separate opt-in helper rather than a relaxation
+ * of the default perimeter.
+ */
+export async function getGuestVisibleConnectionIds(
+  principalOrUserId: string | Principal,
+  tenantId?: string,
+): Promise<Set<string>> {
+  if (asTokenPrincipal(principalOrUserId)) return new Set<string>()
+  const tid = resolveGrantTenantId(principalOrUserId, tenantId)
+  const isVisible = await loadGuestVisibilityCheck(principalOrUserId, PERMISSIONS.VM_VIEW, tid)
+  return new Set(scanVisibleGuests(tid, isVisible).keys())
+}
+
+/**
+ * Pools a caller may see on one connection. `restricted: false` means no
+ * narrowing at all (admin, token, or an infra-level grant), so the caller
+ * keeps the full list the connection exposes.
+ *
+ * Thin read of {@link getGuestScopePerimeter}; use that one directly when the
+ * node perimeter or the gate decision is needed too.
+ */
+export async function getAccessiblePools(
+  principalOrUserId: string | Principal,
+  connId: string,
+  tenantId?: string,
+): Promise<{ restricted: boolean; pools: Set<string> }> {
+  const perimeter = await getGuestScopePerimeter(
+    principalOrUserId,
+    connId,
+    PERMISSIONS.CONNECTION_VIEW,
+    tenantId,
+  )
+  return { restricted: perimeter.restricted, pools: perimeter.pools }
+}
+
+/**
+ * Request-scoped wrapper over {@link getGuestScopePerimeter}: resolves the
+ * caller from the session first. Returns null when there is no session user
+ * (unauthenticated, or a token principal, which never holds a pool grant), so
+ * a route can simply keep its 403 in that case.
+ */
+export async function getRequestGuestScopePerimeter(
+  connId: string,
+  permission: string = PERMISSIONS.CONNECTION_VIEW,
+): Promise<GuestScopePerimeter | null> {
+  const ctx = await getRBACContext()
+  if (!ctx?.userId) return null
+  return getGuestScopePerimeter(ctx.userId, connId, permission, ctx.tenantId)
+}
+
+/**
+ * Boolean form of {@link getRequestGuestScopePerimeter} for the routes that
+ * only need the gate, not the perimeter: connection-level facts (bridges, CPU
+ * models, storage contents) a flat-scoped caller must be able to read to fill
+ * in the creation wizard. Placement is cluster-wide by design, so the node in
+ * the URL is not required to already host one of their guests.
+ *
+ * Use as `if (denied && !(await guestPerimeterAllows(id, PERMISSIONS.X))) return denied`.
+ */
+export async function guestPerimeterAllows(connId: string, permission: string): Promise<boolean> {
+  const perimeter = await getRequestGuestScopePerimeter(connId, permission)
+  return !!(perimeter?.holdsPermission && perimeter.hasVisibleGuests)
 }

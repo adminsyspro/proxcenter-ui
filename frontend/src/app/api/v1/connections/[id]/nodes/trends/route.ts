@@ -57,7 +57,14 @@ function toTrendPoints(rrd: any[], timeframe: string) {
     const memTotal = Number(p.maxmem ?? p.memtotal ?? 0)
     const ramPct = memTotal > 0 ? Math.round(clampPct((memUsed / memTotal) * 100)) : 0
 
-    return { ts: p.time, t: formatTimestamp(d, timeframe), cpu: cpuPct, ram: ramPct }
+    // ZFS ARC: the `arcsize` column only exists in the node RRD schema of PVE 9+,
+    // and a node without ZFS reports 0. Both stay null so the consumer can drop
+    // the node from the series instead of drawing a flat zero line.
+    const arcRaw = Number(p.arcsize)
+    const arc = Number.isFinite(arcRaw) && arcRaw > 0 ? arcRaw : null
+    const arcPct = arc != null && memTotal > 0 ? Math.round(clampPct((arc / memTotal) * 100) * 10) / 10 : null
+
+    return { ts: p.time, t: formatTimestamp(d, timeframe), cpu: cpuPct, ram: ramPct, arc, arcPct }
   })
 }
 

@@ -652,7 +652,11 @@
     "snapshotAge": "过期快照",
     "snapshotAgeDesc": "当快照超过此天数时发出警报",
     "snapshotDays": "天",
-    "snapshotDisabled": "已禁用"
+    "snapshotDisabled": "已禁用",
+    "recoveryTitle": "告警恢复",
+    "recoveryDesc": "指标需要回落到什么程度才宣告告警已解决，避免波动的数值每分钟发送一次触发和恢复邮件",
+    "recoveryMargin": "低于警告阈值的百分点",
+    "recoveryConfirmations": "低于该余量的连续检测次数"
   },
   "inventory": {
     "alertsDialog": {

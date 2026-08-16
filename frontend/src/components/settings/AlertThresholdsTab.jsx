@@ -26,6 +26,8 @@ const DEFAULTS = {
   storage_warning: 80,
   storage_critical: 90,
   snapshot_max_age_days: 7,
+  recovery_margin: 5,
+  recovery_confirmations: 3,
 }
 
 export default function AlertThresholdsTab() {
@@ -177,6 +179,42 @@ export default function AlertThresholdsTab() {
             ) : (
               <Typography variant='body2' color='text.disabled' sx={{ mt: 2 }}>{t('alerts.snapshotDisabled')}</Typography>
             )}
+          </CardContent>
+        </Card>
+
+        <Card variant='outlined' sx={{ borderRadius: 2 }}>
+          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <i className='ri-heart-pulse-line' style={{ fontSize: 18, opacity: 0.6 }} />
+              <Typography variant='subtitle2' fontWeight={700}>{t('alerts.recoveryTitle')}</Typography>
+            </Box>
+            <Typography variant='caption' color='text.secondary'>{t('alerts.recoveryDesc')}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
+              <NumericTextField
+                type='number'
+                size='small'
+                value={thresholds.recovery_margin}
+                onChange={(points) => setThresholds(th => ({ ...th, recovery_margin: Math.min(50, Math.max(0, points)) }))}
+                fallback={0}
+                min={0}
+                slotProps={{ htmlInput: { min: 0, max: 50 } }}
+                sx={{ width: 80 }}
+              />
+              <Typography variant='body2' color='text.secondary'>{t('alerts.recoveryMargin')}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1.5 }}>
+              <NumericTextField
+                type='number'
+                size='small'
+                value={thresholds.recovery_confirmations}
+                onChange={(checks) => setThresholds(th => ({ ...th, recovery_confirmations: Math.min(10, Math.max(1, Math.trunc(checks))) }))}
+                fallback={1}
+                min={1}
+                slotProps={{ htmlInput: { min: 1, max: 10 } }}
+                sx={{ width: 80 }}
+              />
+              <Typography variant='body2' color='text.secondary'>{t('alerts.recoveryConfirmations')}</Typography>
+            </Box>
           </CardContent>
         </Card>
       </Box>

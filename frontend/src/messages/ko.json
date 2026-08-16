@@ -680,7 +680,11 @@
     "snapshotAge": "오래된 스냅샷",
     "snapshotAgeDesc": "VM 스냅샷이 이 기간을 초과하면 알림",
     "snapshotDays": "일",
-    "snapshotDisabled": "비활성화됨"
+    "snapshotDisabled": "비활성화됨",
+    "recoveryTitle": "알림 해제",
+    "recoveryDesc": "불안정한 값이 매분 발생 및 해제 메일을 보내지 않도록, 알림을 해제로 선언하기 전에 지표가 얼마나 안정되어야 하는지 정합니다",
+    "recoveryMargin": "경고 임계값보다 낮은 포인트",
+    "recoveryConfirmations": "여유 값 미만인 연속 확인 횟수"
   },
   "inventory": {
     "alertsDialog": {

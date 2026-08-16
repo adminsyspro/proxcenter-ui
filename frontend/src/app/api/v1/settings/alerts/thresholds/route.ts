@@ -17,6 +17,12 @@ const DEFAULT_THRESHOLDS = {
   storage_warning: 80,
   storage_critical: 90,
   snapshot_max_age_days: 7,
+  // Hysteresis before an alert is declared resolved (#551): how far below the
+  // warning threshold the metric must fall, and for how many consecutive
+  // collections. Without it, a value oscillating around the threshold emits a
+  // firing and a recovery notification every minute.
+  recovery_margin: 5,
+  recovery_confirmations: 3,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS

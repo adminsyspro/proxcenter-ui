@@ -686,6 +686,10 @@ export interface AlertThresholds {
   storage_warning: number
   storage_critical: number
   snapshot_max_age_days: number
+  /** Points below the warning threshold before a recovery is counted (#551). */
+  recovery_margin: number
+  /** Consecutive collections below the margin before the alert resolves. */
+  recovery_confirmations: number
 }
 
 export interface AlertsResponse {

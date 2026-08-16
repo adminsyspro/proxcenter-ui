@@ -15,6 +15,9 @@ const DEFAULT_THRESHOLDS = {
   storage_warning: 80,
   storage_critical: 90,
   snapshot_max_age_days: 7,
+  // Recovery hysteresis (#551) — see the settings route for the rationale.
+  recovery_margin: 5,
+  recovery_confirmations: 3,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS
@@ -22,7 +25,10 @@ type Thresholds = typeof DEFAULT_THRESHOLDS
 // Fields the Go orchestrator decodes as int (see backend AlertThresholds).
 // A fractional value here makes the configsync JSON decode fail and the worker
 // rejects the entire payload, leaving thresholds and silences silently stale.
-const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set(['snapshot_max_age_days'])
+const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
+  'snapshot_max_age_days',
+  'recovery_confirmations',
+])
 
 function coerceThresholds(raw: unknown): Thresholds {
   const t = { ...DEFAULT_THRESHOLDS }

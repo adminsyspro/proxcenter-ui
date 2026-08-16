@@ -652,7 +652,11 @@
     "snapshotAge": "Veraltete Snapshots",
     "snapshotAgeDesc": "Warnung wenn Snapshots dieses Alter überschreiten",
     "snapshotDays": "Tage",
-    "snapshotDisabled": "Deaktiviert"
+    "snapshotDisabled": "Deaktiviert",
+    "recoveryTitle": "Alarm-Entwarnung",
+    "recoveryDesc": "Wie weit eine Metrik zurückgehen muss, bevor ihr Alarm als behoben gilt, damit ein schwankender Wert nicht jede Minute eine Auslösung und eine Entwarnung verschickt",
+    "recoveryMargin": "Punkte unter dem Warnschwellenwert",
+    "recoveryConfirmations": "aufeinanderfolgende Prüfungen unter dem Abstand"
   },
   "inventory": {
     "alertsDialog": {

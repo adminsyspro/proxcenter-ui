@@ -680,7 +680,11 @@
     "snapshotAge": "Snapshots obsolètes",
     "snapshotAgeDesc": "Alerter quand les snapshots dépassent cet âge",
     "snapshotDays": "jours",
-    "snapshotDisabled": "Désactivé"
+    "snapshotDisabled": "Désactivé",
+    "recoveryTitle": "Retour à la normale",
+    "recoveryDesc": "Jusqu'où une métrique doit redescendre avant que son alerte soit déclarée résolue, pour éviter qu'une valeur instable envoie un mail de déclenchement et de résolution chaque minute",
+    "recoveryMargin": "points sous le seuil d'avertissement",
+    "recoveryConfirmations": "relevés consécutifs sous la marge"
   },
   "inventory": {
     "alertsDialog": {

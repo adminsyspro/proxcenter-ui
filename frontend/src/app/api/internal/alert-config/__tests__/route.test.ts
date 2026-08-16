@@ -104,6 +104,35 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.memory_warning).toBe(90)
   })
 
+  it('ships the recovery hysteresis to the orchestrator, confirmations as int', async () => {
+    // #551: the orchestrator only sends a "resolved" email once the metric has
+    // stayed below the margin for N consecutive collections. Dropping these two
+    // keys here would silently pin the worker to its own defaults, and a
+    // fractional confirmation count would break the whole payload decode.
+    getSettingMock.mockResolvedValueOnce({
+      recovery_margin: 7.5,
+      recovery_confirmations: 4.6,
+    })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.thresholds.recovery_margin).toBe(7.5)
+    expect(body.thresholds.recovery_confirmations).toBe(4)
+    expect(Number.isInteger(body.thresholds.recovery_confirmations)).toBe(true)
+  })
+
+  it('falls back to the default hysteresis when the setting predates it', async () => {
+    getSettingMock.mockResolvedValueOnce({ memory_warning: 90 })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    const body = await res.json()
+    expect(body.thresholds.recovery_margin).toBe(5)
+    expect(body.thresholds.recovery_confirmations).toBe(3)
+  })
+
   it('honors X-Tenant-ID by scoping the query', async () => {
     getSettingMock.mockResolvedValueOnce({})
     findManyMock.mockResolvedValueOnce([])

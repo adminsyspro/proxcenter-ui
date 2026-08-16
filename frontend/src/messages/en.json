@@ -680,7 +680,11 @@
     "snapshotAge": "Stale Snapshots",
     "snapshotAgeDesc": "Alert when VM snapshots exceed this age",
     "snapshotDays": "days",
-    "snapshotDisabled": "Disabled"
+    "snapshotDisabled": "Disabled",
+    "recoveryTitle": "Alert recovery",
+    "recoveryDesc": "How far a metric must settle back down before its alert is declared resolved, so an unstable value does not email a firing and a recovery every minute",
+    "recoveryMargin": "points below the warning threshold",
+    "recoveryConfirmations": "consecutive checks below the margin"
   },
   "inventory": {
     "alertsDialog": {

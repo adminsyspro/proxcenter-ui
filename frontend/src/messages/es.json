@@ -680,7 +680,11 @@
     "snapshotAge": "Snapshots obsoletos",
     "snapshotAgeDesc": "Alertar cuando los snapshots de VM superen esta antigüedad",
     "snapshotDays": "días",
-    "snapshotDisabled": "Deshabilitado"
+    "snapshotDisabled": "Deshabilitado",
+    "recoveryTitle": "Recuperación de alertas",
+    "recoveryDesc": "Cuánto debe bajar una métrica antes de declarar resuelta su alerta, para evitar que un valor inestable envíe un aviso y una recuperación cada minuto",
+    "recoveryMargin": "puntos por debajo del umbral de advertencia",
+    "recoveryConfirmations": "comprobaciones consecutivas por debajo del margen"
   },
   "inventory": {
     "alertsDialog": {

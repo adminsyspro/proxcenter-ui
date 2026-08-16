@@ -1,24 +1,18 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useState } from 'react'
 
 import { useTranslations } from 'next-intl'
-import {
-  Box, Checkbox, CircularProgress, IconButton, ListItemText, Menu, MenuItem,
-  Tooltip, Typography, useTheme,
-} from '@mui/material'
+import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
-import { widgetColors } from './themeColors'
-import { mapTimeRange, formatTime } from './timeRangeUtils'
+import { NODE_COLORS, widgetColors } from './themeColors'
+import { formatTime } from './timeRangeUtils'
+import ConnectionFilter from './ConnectionFilter'
+import { useNodeTrends } from './useNodeTrends'
 
-const NODE_COLORS = [
-  '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
-  '#ec4899', '#f43f5e', '#ef4444', '#f97316',
-  '#eab308', '#84cc16', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6', '#2563eb', '#7c3aed',
-]
+const METRICS = ['cpu', 'ram']
 
 // ─── Custom Tooltip ──────────────────────────────────────────────────────────
 function ChartTooltip({ active, payload, label, metric, isDark }) {
@@ -46,51 +40,6 @@ return (
   )
 }
 
-// ─── Connection Filter ───────────────────────────────────────────────────────
-function ConnectionFilter({ connections, selected, onChange, t }) {
-  const [anchorEl, setAnchorEl] = useState(null)
-  const allSelected = !selected || selected.length === 0
-
-  const handleToggle = (id) => {
-    if (allSelected) {
-      onChange([id])
-    } else if (selected.includes(id)) {
-      const next = selected.filter(k => k !== id)
-
-      onChange(next.length === 0 ? [] : next)
-    } else {
-      onChange([...selected, id])
-    }
-  }
-
-  return (
-    <>
-      <Tooltip title={t('common.filter')}>
-        <IconButton size='small' onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget) }} sx={{ p: 0.25 }}>
-          <i className='ri-filter-3-line' style={{ fontSize: '1rem', opacity: allSelected ? 0.65 : 1 }} />
-        </IconButton>
-      </Tooltip>
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)} slotProps={{ paper: { sx: { maxHeight: 300 } } }}>
-        <MenuItem dense onClick={() => { onChange([]); setAnchorEl(null) }}>
-          <Checkbox size='small' checked={allSelected} sx={{ p: 0, mr: 1 }} />
-          <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{t('common.all')}</ListItemText>
-        </MenuItem>
-        {connections.map(c => {
-          const checked = allSelected || selected.includes(c.id)
-
-          
-return (
-            <MenuItem key={c.id} dense onClick={() => handleToggle(c.id)}>
-              <Checkbox size='small' checked={checked} sx={{ p: 0, mr: 1 }} />
-              <ListItemText primaryTypographyProps={{ fontSize: '0.8571rem' }}>{c.name}</ListItemText>
-            </MenuItem>
-          )
-        })}
-      </Menu>
-    </>
-  )
-}
-
 // ─── Main Widget ─────────────────────────────────────────────────────────────
 function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpdateSettings, timeRange }) {
   const t = useTranslations()
@@ -98,143 +47,15 @@ function InfraGlobalChartWidget({ data, loading: dashboardLoading, config, onUpd
   const isDark = theme.palette.mode === 'dark'
   const c = widgetColors(isDark)
   const [metric, setMetric] = useState('ram')
-  const [trendsData, setTrendsData] = useState(null)
-  const [nodeNames, setNodeNames] = useState([])
-  const [loading, setLoading] = useState(false)
-
   const selectedConnections = config?.settings?.selectedConnections || []
 
   const handleFilterChange = (newSelected) => {
     if (onUpdateSettings) onUpdateSettings({ selectedConnections: newSelected })
   }
 
-  // All connections for filter (try clusters first, fallback to unique connections from nodes)
-  const allConnections = useMemo(() => {
-    const clusters = (data?.clusters || []).map(c => ({ id: c.id, name: c.name }))
-
-    if (clusters.length > 0) return clusters
-    const seen = new Set()
-
-    return (data?.nodes || []).reduce((acc, n) => {
-      const id = n.connectionId || n.connId
-
-      if (id && !seen.has(id)) { seen.add(id); acc.push({ id, name: n.connection || id }) }
-
-      return acc
-    }, [])
-  }, [data?.clusters, data?.nodes])
-
-  // Stable key for nodes
-  const nodesStableKey = (data?.nodes || []).map(n => `${n.connectionId || n.connId}:${n.name}`).join(',')
-  const selectedKey = selectedConnections.join(',')
-
-  // Group nodes by connection, filtered
-  const nodesByConnection = useMemo(() => {
-    const nodes = data?.nodes || []
-    const grouped = {}
-    const validConnIds = new Set(nodes.map(n => n.connectionId || n.connId).filter(Boolean))
-
-    // If selectedConnections references IDs that don't exist, ignore the filter
-    const effectiveFilter = selectedConnections.length > 0 && selectedConnections.some(id => validConnIds.has(id))
-      ? selectedConnections : []
-
-    nodes.forEach((node) => {
-      const connId = node.connectionId || node.connId
-
-      if (!connId) return
-      if (effectiveFilter.length > 0 && !effectiveFilter.includes(connId)) return
-      if (!grouped[connId]) grouped[connId] = []
-      grouped[connId].push({ node: node.node || node.name })
-    })
-
-    return grouped
-  }, [nodesStableKey, selectedKey]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch trends
-  useEffect(() => {
-    const fetchTrends = async () => {
-      const connIds = Object.keys(nodesByConnection)
-
-      if (connIds.length === 0) return
-
-      // Only show full loading on first fetch, not on refresh
-      if (!trendsData) setLoading(true)
-
-      try {
-        const results = await Promise.all(
-          connIds.map(async (connId) => {
-            const items = nodesByConnection[connId]
-
-            const res = await fetch(`/api/v1/connections/${connId}/nodes/trends`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ items, timeframe: mapTimeRange(timeRange).trendsTimeframe }),
-            })
-
-            if (!res.ok) return {}
-            const json = await res.json()
-
-            
-return json.data || {}
-          })
-        )
-
-        const allNodeNames = new Set()
-        const timeMap = new Map()
-
-        results.forEach((connData) => {
-          Object.entries(connData).forEach(([nodeKey, nodePoints]) => {
-            const nodeName = nodeKey.replace(/^node:/, '')
-
-            allNodeNames.add(nodeName)
-            if (!Array.isArray(nodePoints)) return
-            nodePoints.forEach((point) => {
-              const key = point.ts || point.t
-
-              if (!timeMap.has(key)) timeMap.set(key, { ts: point.ts || 0, t: point.t })
-              const entry = timeMap.get(key)
-
-              entry[`${nodeName}_cpu`] = point.cpu || 0
-              entry[`${nodeName}_ram`] = point.ram || 0
-            })
-          })
-        })
-
-        const aggregated = Array.from(timeMap.values()).sort((a, b) => a.ts - b.ts)
-        const sortedNames = [...allNodeNames].sort((a, b) => a.localeCompare(b))
-        const keys = sortedNames.flatMap(name => [`${name}_cpu`, `${name}_ram`])
-        const lastKnown = {}
-
-        for (const slot of aggregated) {
-          for (const key of keys) {
-            if (slot[key] != null) lastKnown[key] = slot[key]
-            else if (lastKnown[key] != null) slot[key] = lastKnown[key]
-          }
-        }
-
-        const firstKnown = {}
-
-        for (let i = aggregated.length - 1; i >= 0; i--) {
-          const slot = aggregated[i]
-
-          for (const key of keys) {
-            if (slot[key] != null) firstKnown[key] = slot[key]
-            else if (firstKnown[key] != null) slot[key] = firstKnown[key]
-          }
-        }
-
-        setNodeNames(sortedNames)
-        setTrendsData(aggregated)
-      } catch (e) {
-        console.error('Failed to fetch infra trends:', e)
-        setTrendsData([])
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchTrends()
-  }, [nodesStableKey, selectedKey, timeRange]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { trendsData, nodeNames, loading, allConnections } = useNodeTrends({
+    data, selectedConnections, timeRange, metrics: METRICS,
+  })
 
   if (dashboardLoading || loading) {
     return (

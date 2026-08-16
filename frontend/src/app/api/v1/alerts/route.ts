@@ -111,6 +111,12 @@ return NextResponse.json({ error: error?.message || 'Server error' }, { status: 
 export async function POST(req: Request) {
   try {
     const prisma = await getSessionPrisma()
+    // Same permission as PATCH, DELETE and /alerts/sync: writing an alert is a
+    // management action, and this handler was the only one on the resource
+    // without a check of its own (#699).
+    const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
+    if (permError) return permError
+
     const rawBody = await req.json()
     const parseResult = createAlertSchema.safeParse(rawBody)
 

@@ -23,8 +23,10 @@ describe('settings.apiTokens i18n parity across the 6 served locales', () => {
   it('declares the required keys in en.json', () => {
     for (const key of [
       'tabLabel', 'title', 'subtitle', 'newToken', 'columns.prefix', 'columns.name',
-      'columns.tenant', 'columns.scopes', 'columns.expires', 'columns.lastUsed', 'never', 'revoke',
-      'revoked', 'revokeConfirm', 'revokeSuccess', 'loadError', 'createError',
+      'columns.tenant', 'columns.scopes', 'columns.expires', 'columns.lastUsed', 'never', 'delete',
+      // `revoked` stays: nothing writes revoked_at any more, but the grid still
+      // has to chip the legacy rows that existing databases carry.
+      'revoked', 'deleteConfirm', 'deleteSuccess', 'loadError', 'createError',
       'dialog.title', 'dialog.name', 'dialog.description', 'dialog.expiration',
       'dialog.expirationNone', 'dialog.expiration30', 'dialog.expiration90',
       'dialog.expiration365', 'dialog.expirationCustom', 'dialog.customDays',

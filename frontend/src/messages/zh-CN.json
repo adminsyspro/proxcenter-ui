@@ -2618,13 +2618,15 @@
         "tenant": "租户",
         "scopes": "权限范围",
         "expires": "到期时间",
-        "lastUsed": "最近使用"
+        "lastUsed": "最近使用",
+        "createdBy": "创建者"
       },
       "never": "从未",
-      "revoke": "撤销",
+      "unknownCreator": "未知",
+      "delete": "删除",
       "revoked": "已撤销",
-      "revokeConfirm": "撤销此令牌?使用它的集成将立即停止工作。",
-      "revokeSuccess": "令牌已撤销",
+      "deleteConfirm": "删除此令牌？使用它的集成会立即停止工作，且该操作不可撤销。",
+      "deleteSuccess": "令牌已删除",
       "loadError": "加载 API 令牌失败",
       "createError": "创建 API 令牌失败",
       "dialog": {
@@ -5630,7 +5632,17 @@
     "passwordManagedByIdp": "密码由身份提供商管理 (OIDC / LDAP)。",
     "emailLabel": "电子邮件",
     "emailHeader": "电子邮件",
-    "authHeader": "认证"
+    "authHeader": "认证",
+    "apiTokens": {
+      "title": "API 令牌",
+      "disableWarning": "该账户创建了 {count} 个有效的 API 令牌。停用账户不会使其失效：令牌独立完成认证。",
+      "deleteWarning": "该账户创建了 {count} 个有效的 API 令牌。删除账户后它们依然有效：令牌独立完成认证。",
+      "deleteCheckbox": "同时删除这些令牌",
+      "deleteHint": "使用它们的所有集成会立即停止工作。该操作不可撤销。",
+      "loadError": "无法加载该用户的 API 令牌",
+      "neverUsed": "从未使用",
+      "deleted": "已删除 {count} 个 API 令牌"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "功能正在开发中",

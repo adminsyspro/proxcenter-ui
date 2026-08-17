@@ -29,6 +29,11 @@ export const TOKEN_VIEW_SELECT = {
   lastUsedIp: true,
   rateLimitPerMin: true,
   createdByUserId: true,
+  // Frozen copy of the creator's email (#632). createdByUserId goes NULL when
+  // the account is deleted while the token stays valid, so it cannot answer
+  // "who minted this credential" on its own -- and the audit row only
+  // answers it for as long as audit retention keeps it.
+  createdByEmail: true,
   createdAt: true,
 } as const
 

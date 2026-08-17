@@ -2649,13 +2649,15 @@
         "tenant": "Tenant",
         "scopes": "Ámbitos",
         "expires": "Caduca",
-        "lastUsed": "Último uso"
+        "lastUsed": "Último uso",
+        "createdBy": "Creado por"
       },
       "never": "Nunca",
-      "revoke": "Revocar",
+      "unknownCreator": "Desconocido",
+      "delete": "Eliminar",
       "revoked": "Revocado",
-      "revokeConfirm": "¿Revocar este token? Las integraciones que lo usan dejan de funcionar de inmediato.",
-      "revokeSuccess": "Token revocado",
+      "deleteConfirm": "¿Eliminar este token? Las integraciones que lo usan dejan de funcionar de inmediato y la operación es irreversible.",
+      "deleteSuccess": "Token eliminado",
       "loadError": "No se pudieron cargar los tokens de API",
       "createError": "No se pudo crear el token de API",
       "dialog": {
@@ -5698,7 +5700,17 @@
     "tenantsHelper": "El usuario será miembro de cada tenant seleccionado",
     "tenantsRequired": "Seleccione al menos un tenant",
     "rolesMixed": "{count} roles",
-    "rolesDivergentWarning": "Los roles difieren entre los tenants de este usuario. Guardar un rol aquí sobrescribirá cada asignación por tenant."
+    "rolesDivergentWarning": "Los roles difieren entre los tenants de este usuario. Guardar un rol aquí sobrescribirá cada asignación por tenant.",
+    "apiTokens": {
+      "title": "Tokens de API",
+      "disableWarning": "Esta cuenta creó {count} token(s) de API activo(s). Desactivar la cuenta no los detiene: un token se autentica por sí mismo.",
+      "deleteWarning": "Esta cuenta creó {count} token(s) de API activo(s). Sobreviven a la eliminación: un token se autentica por sí mismo.",
+      "deleteCheckbox": "Eliminar también estos tokens",
+      "deleteHint": "Cualquier integración que los use deja de funcionar de inmediato. La operación es irreversible.",
+      "loadError": "No se pudieron cargar los tokens de API de este usuario",
+      "neverUsed": "Nunca usado",
+      "deleted": "{count} token(s) de API eliminado(s)"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "Función en desarrollo activo",

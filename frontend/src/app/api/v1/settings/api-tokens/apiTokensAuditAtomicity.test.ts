@@ -1,5 +1,5 @@
-// Fix round 1, findings 1 and 2: the token/revocation state change and its
-// audit row must be one transaction. Proven here with a REAL forced audit
+// Fix round 1, findings 1 and 2: the token row change (its creation, and now
+// its removal) and its audit row must be one transaction. Proven here with a REAL forced audit
 // insert failure (a primary-key collision on audit_logs.id, a real Postgres
 // constraint), not a mocked throw — @/lib/audit itself is NOT mocked in
 // this file, only the admin-side guard (@/lib/rbac, @/lib/tenant) and the
@@ -98,8 +98,12 @@ describe('POST create: token row and audit row are one transaction', () => {
   })
 })
 
-describe('DELETE revoke: revoked_at and audit row are one transaction', () => {
-  it('leaves revoked_at unset when the audit insert fails', async () => {
+// Now that the DELETE removes the row instead of stamping it, the stake of
+// this atomicity is higher than it was for revocation: a credential vanishing
+// with no journal entry to show for it leaves nothing, anywhere, to say the
+// token ever existed. So the rollback assertion is "the row is STILL THERE".
+describe('DELETE: the row removal and the audit row are one transaction', () => {
+  it('leaves the token row in place when the audit insert fails', async () => {
     const { id } = await seedApiToken()
     // The only nanoid() call on this path is audit()'s own row id.
     nanoidMock.mockReturnValueOnce('colliding-audit-id-2')
@@ -110,10 +114,11 @@ describe('DELETE revoke: revoked_at and audit row are one transaction', () => {
 
     expect(res.status).toBe(500)
     const row = await prismaTest.apiToken.findUnique({ where: { id } })
-    expect(row?.revokedAt).toBeNull()
+    expect(row).not.toBeNull()
+    expect(row?.id).toBe(id)
   })
 
-  it('sets revoked_at when the audit insert succeeds (control case)', async () => {
+  it('removes the row when the audit insert succeeds (control case)', async () => {
     const { id } = await seedApiToken()
     nanoidMock.mockReturnValueOnce('audit-id-ok-2')
 
@@ -122,8 +127,8 @@ describe('DELETE revoke: revoked_at and audit row are one transaction', () => {
 
     expect(res.status).toBe(200)
     const row = await prismaTest.apiToken.findUnique({ where: { id } })
-    expect(row?.revokedAt).not.toBeNull()
+    expect(row).toBeNull()
     const auditRow = await prismaTest.auditLog.findUnique({ where: { id: 'audit-id-ok-2' } })
-    expect(auditRow?.action).toBe('apitoken.revoke')
+    expect(auditRow?.action).toBe('apitoken.delete')
   })
 })

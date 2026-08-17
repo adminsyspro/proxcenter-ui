@@ -51,7 +51,6 @@ const SCOPE_ICONS: Record<string, string> = {
   'automation:read': 'ri-robot-line',
   'alerts:read': 'ri-alarm-warning-line',
   'reports:read': 'ri-file-list-3-line',
-  'compliance:read': 'ri-shield-check-line',
 }
 const DEFAULT_SCOPE_ICON = 'ri-key-line'
 

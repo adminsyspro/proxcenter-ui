@@ -4,8 +4,9 @@
 //      other response (GET list, DELETE);
 //   B. a created token actually authenticates through the REAL getPrincipal
 //      (Task 9), proving the stored hash matches the returned secret;
-//   C. revoking a token makes that same, previously-working token fail the
-//      REAL getPrincipal check;
+//   C. deleting a token makes that same, previously-working token fail the
+//      REAL getPrincipal check (the legacy soft-revoked row is the other half
+//      of that guarantee and is covered in src/lib/auth/principal.test.ts);
 //   D. POST is refused without api_access while GET and DELETE still work
 //      (D6 asymmetric gating).
 //
@@ -110,8 +111,8 @@ describe('self-review A: secret is revealed once, nowhere else', () => {
   })
 })
 
-describe('self-review B/C: the returned secret really authenticates, and revocation really breaks it', () => {
-  it('authenticates via the real getPrincipal, then stops authenticating once revoked', async () => {
+describe('self-review B/C: the returned secret really authenticates, and deletion really breaks it', () => {
+  it('authenticates via the real getPrincipal, then stops authenticating once deleted', async () => {
     const { POST } = await import('./route')
     const { DELETE } = await import('./[id]/route')
 
@@ -129,10 +130,13 @@ describe('self-review B/C: the returned secret really authenticates, and revocat
     expect(before.principal?.kind).toBe('token')
     expect(before.principal?.tokenId).toBe(tokenId)
 
-    // C: revoke through the route under test, then replay the identical
-    // request — the same secret must now be rejected.
-    const revokeRes = await callRoute(DELETE, { method: 'DELETE', params: { id: tokenId } })
-    expect(revokeRes.status).toBe(200)
+    // C: delete through the route under test, then replay the identical
+    // request — the same secret must now be rejected. The row is gone, so the
+    // rejection comes from the prefix lookup finding nothing, and it must be
+    // the same undifferentiated 401 as a wrong hash (no oracle).
+    const deleteRes = await callRoute(DELETE, { method: 'DELETE', params: { id: tokenId } })
+    expect(deleteRes.status).toBe(200)
+    expect(await prismaTest.apiToken.findUnique({ where: { id: tokenId } })).toBeNull()
 
     headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
     const after = await getPrincipal()
@@ -161,7 +165,8 @@ describe('self-review D: asymmetric licence gating (D6)', () => {
 
     const deleteRes = await callRoute(DELETE, { method: 'DELETE', params: { id: seeded.id } })
     expect(deleteRes.status).toBe(200)
-    const row = await prismaTest.apiToken.findUnique({ where: { id: seeded.id } })
-    expect(row?.revokedAt).not.toBeNull()
+    // `row?.revokedAt` would have gone on passing here for the wrong reason
+    // once the route started removing the row -- assert the removal itself.
+    expect(await prismaTest.apiToken.findUnique({ where: { id: seeded.id } })).toBeNull()
   })
 })

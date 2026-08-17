@@ -8,11 +8,13 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert,
+  AlertTitle,
   Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -122,6 +124,138 @@ return <Chip size='small' label={t('usersPage.localAuth')} variant='outlined' ic
 }
 
 /* --------------------------------
+   API tokens outliving their creator (issue #632)
+
+   A pxc_ token authenticates on its own: it keeps working after the
+   account that created it is disabled or deleted. That is deliberate — a
+   token driving Prometheus must not die with the admin who created it —
+   but nothing in the UI used to connect the two facts, so an operator
+   disabled an account and believed the access was cut.
+
+   These two helpers surface the surviving tokens at the exact two moments
+   it matters (disable, delete) and offer deletion as an explicit opt-in.
+   Never delete implicitly: the checkbox is unchecked by default and the
+   `deleteApiTokens` flag is only ever sent when the operator ticked it.
+
+   Deletion, not revocation: "delete a token" removes the row here exactly
+   as it does from the tokens table, so the product has one verb and one
+   outcome. The journal entry is what survives.
+-------------------------------- */
+
+// Live tokens created by `userId`. GET /users/[id]/api-tokens is guarded by
+// admin.users — the same permission as this page — so no extra gating here.
+// Fails soft: a load error never blocks the dialog, it only raises
+// `loadFailed` so the caller can mention it discreetly. Warning the operator
+// is best-effort; it must never stand between them and disabling an account.
+function useCreatorApiTokens(userId, active) {
+  const [tokens, setTokens] = useState([])
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  useEffect(() => {
+    if (!active || !userId) {
+      // Dialogs stay mounted between opens — clear the previous target's
+      // tokens so they can never be attributed to the next one.
+      setTokens([])
+      setLoadFailed(false)
+
+      return
+    }
+
+    let cancelled = false
+
+    setLoadFailed(false)
+
+    fetch(`/api/v1/users/${userId}/api-tokens`)
+      .then(async res => {
+        if (!res.ok) throw new Error('load failed')
+
+        return res.json()
+      })
+      .then(body => {
+        if (cancelled) return
+        setTokens(Array.isArray(body?.data) ? body.data : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setTokens([])
+        setLoadFailed(true)
+      })
+
+    return () => { cancelled = true }
+  }, [userId, active])
+
+  return { tokens, loadFailed }
+}
+
+// The warning block shared by the disable (UserDialog) and delete paths.
+// `warningKey` swaps the sentence; everything else — the token listing and
+// the opt-in checkbox — is identical on both sides.
+function ApiTokenOffboardingWarning({ tokens, warningKey, fallbackWarning, deleteTokens, onDeleteTokensChange, t }) {
+  const count = tokens.length
+
+  return (
+    <Alert severity='warning' icon={<i className='ri-key-2-line' />} sx={{ mt: 2, mb: 1 }}>
+      <AlertTitle sx={{ mb: 0.5 }}>{t ? t('usersPage.apiTokens.title') : 'API tokens'}</AlertTitle>
+      {/* Typography never inherits its container's colour — spell out
+          `inherit` so the text follows the Alert's warning palette. */}
+      <Typography variant='body2' sx={{ color: 'inherit' }}>
+        {t ? t(warningKey, { count }) : fallbackWarning}
+      </Typography>
+      <Box component='ul' sx={{ m: 0, mt: 1, pl: 2.5 }}>
+        {tokens.map(token => (
+          <Box component='li' key={token.id} sx={{ mb: 0.25 }}>
+            {/* No monospace on the prefix — project-wide convention. */}
+            <Typography variant='caption' component='div' sx={{ color: 'inherit' }}>
+              <strong>{token.name}</strong>
+              {' · '}
+              {token.token_prefix}
+              {' · '}
+              {token.last_used_at
+                ? `${t ? t('settings.apiTokens.columns.lastUsed') : 'Last used'}: ${timeAgo(token.last_used_at, t)}`
+                : (t ? t('usersPage.apiTokens.neverUsed') : 'Never used')}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+      <FormControlLabel
+        sx={{ mt: 0.5, alignItems: 'flex-start' }}
+        control={
+          <Checkbox
+            size='small'
+            color='warning'
+            checked={deleteTokens}
+            onChange={e => onDeleteTokensChange(e.target.checked)}
+            sx={{ pt: 0.25 }}
+          />
+        }
+        label={
+          <Box component='span' sx={{ display: 'block' }}>
+            <Typography variant='body2' component='span' sx={{ color: 'inherit', display: 'block' }}>
+              {t ? t('usersPage.apiTokens.deleteCheckbox') : 'Delete these tokens as well'}
+            </Typography>
+            <Typography variant='caption' component='span' sx={{ color: 'inherit', opacity: 0.85, display: 'block' }}>
+              {t
+                ? t('usersPage.apiTokens.deleteHint')
+                : 'Any integration using them stops working immediately. This cannot be undone.'}
+            </Typography>
+          </Box>
+        }
+      />
+    </Alert>
+  )
+}
+
+// Load failures are reported inline and unobtrusively — see the fail-soft
+// note on useCreatorApiTokens.
+function ApiTokenLoadError({ t }) {
+  return (
+    <Typography variant='caption' sx={{ display: 'block', mt: 1, color: 'warning.main' }}>
+      {t ? t('usersPage.apiTokens.loadError') : 'Failed to load the API tokens of this user'}
+    </Typography>
+  )
+}
+
+/* --------------------------------
    User Dialog - Création/Modification
 -------------------------------- */
 
@@ -159,6 +293,9 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // Opt-in deletion of the tokens this account created (issue #632).
+  // Unchecked by default, and only honoured while the warning is on screen.
+  const [deleteApiTokens, setDeleteApiTokens] = useState(false)
 
   const isEdit = !!user
   // Password is owned by the external IdP for SSO/LDAP accounts — never let the
@@ -175,6 +312,18 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const rolesAreDivergent = isEdit && Array.isArray(user?.roles)
     ? new Set(user.roles.map(r => r.id).filter(Boolean)).size > 1
     : false
+
+  // Tokens the target created, loaded whenever the dialog edits somebody
+  // else. Self-edits cannot reach the Enabled switch at all (see isSelf).
+  const { tokens: creatorTokens, loadFailed: tokensLoadFailed } = useCreatorApiTokens(
+    user?.id,
+    open && isEdit && !isSelf
+  )
+
+  // Only warn on the transition active → inactive. An account that was
+  // already disabled when the dialog opened teaches the operator nothing
+  // new here, and a dialog opened to rename somebody must stay quiet.
+  const showTokenWarning = isEdit && !isSelf && creatorTokens.length > 0 && !enabled && !!user?.enabled
 
   useEffect(() => {
     if (user) {
@@ -202,6 +351,7 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
     }
 
     setError('')
+    setDeleteApiTokens(false)
   }, [user, open])
 
   // Clear the role state when the selected tenants make the current role
@@ -281,6 +431,10 @@ return
             ...(enableTenantMgmt && showRbac && !isSelf && (selectedRole?.id ?? null) !== initialRoleId
               ? { roleId: selectedRole?.id ?? null }
               : {}),
+            // Gated on showTokenWarning, not on the checkbox alone: ticking
+            // the box then switching the account back on must not smuggle a
+            // deletion through with a save that no longer disables anyone.
+            ...(showTokenWarning && deleteApiTokens ? { deleteApiTokens: true } : {}),
           }
         : {
             email,
@@ -517,6 +671,19 @@ return
           />
         )}
 
+        {isEdit && !isSelf && tokensLoadFailed && <ApiTokenLoadError t={t} />}
+
+        {showTokenWarning && (
+          <ApiTokenOffboardingWarning
+            tokens={creatorTokens}
+            warningKey='usersPage.apiTokens.disableWarning'
+            fallbackWarning={`This account created ${creatorTokens.length} active API token(s). Disabling the account does not stop them: a token authenticates on its own.`}
+            deleteTokens={deleteApiTokens}
+            onDeleteTokensChange={setDeleteApiTokens}
+            t={t}
+          />
+        )}
+
         {enableTenantMgmt && (
           <Autocomplete
             multiple
@@ -568,15 +735,36 @@ return
 function DeleteDialog({ open, onClose, user, onConfirm, currentUserId, t }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Opt-in deletion of the tokens this account created (issue #632).
+  const [deleteApiTokens, setDeleteApiTokens] = useState(false)
 
   const isSelf = user?.id === currentUserId
+
+  const { tokens: creatorTokens, loadFailed: tokensLoadFailed } = useCreatorApiTokens(
+    user?.id,
+    open && !isSelf
+  )
+
+  const showTokenWarning = !isSelf && creatorTokens.length > 0
+
+  // The dialog is never unmounted between two targets — start every delete
+  // from an unticked box so a previous decision cannot ride along.
+  useEffect(() => {
+    setDeleteApiTokens(false)
+  }, [user, open])
 
   const handleDelete = async () => {
     setLoading(true)
     setError('')
 
     try {
-      const res = await fetch(`/api/v1/users/${user.id}`, { method: 'DELETE' })
+      // The query flag is opt-in: without it the backend deletes the account
+      // and leaves the tokens live, which is the historical behaviour.
+      const url = showTokenWarning && deleteApiTokens
+        ? `/api/v1/users/${user.id}?deleteApiTokens=true`
+        : `/api/v1/users/${user.id}`
+
+      const res = await fetch(url, { method: 'DELETE' })
       const data = await res.json()
 
       if (!res.ok) {
@@ -615,6 +803,17 @@ return
             <Typography variant='body2' sx={{ mt: 1, color: 'warning.main' }}>
               {t ? t('usersPage.deleteWarning') : 'This action is irreversible. All role assignments will also be deleted.'}
             </Typography>
+            {tokensLoadFailed && <ApiTokenLoadError t={t} />}
+            {showTokenWarning && (
+              <ApiTokenOffboardingWarning
+                tokens={creatorTokens}
+                warningKey='usersPage.apiTokens.deleteWarning'
+                fallbackWarning={`This account created ${creatorTokens.length} active API token(s). They survive the deletion: a token authenticates on its own.`}
+                deleteTokens={deleteApiTokens}
+                onDeleteTokensChange={setDeleteApiTokens}
+                t={t}
+              />
+            )}
           </>
         )}
       </DialogContent>

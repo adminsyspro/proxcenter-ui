@@ -83,6 +83,10 @@ export type AuditAction =
 
   // API tokens
   | "apitoken.create"
+  // Deleting a token removes the row outright; "apitoken.revoke" is KEPT
+  // because journal entries written before that change still carry it, and an
+  // audit vocabulary may never lose a term it has already published.
+  | "apitoken.delete"
   | "apitoken.revoke"
   | "apitoken.denied"
 

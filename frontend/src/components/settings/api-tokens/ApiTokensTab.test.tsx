@@ -25,6 +25,11 @@ import en from '@/messages/en.json'
 // ever equal CONFIRM_SENTINEL.
 const CONFIRM_SENTINEL = '__CONFIRM_SENTINEL__'
 
+// renderWithProviders always renders the English bundle, so the labels the
+// component emits are exactly these -- sourcing them from the bundle keeps the
+// selectors honest through the revoke -> delete key rename.
+const enTokens = (en as any).settings.apiTokens
+
 function messagesWithSentinelConfirm() {
   const base = en as any
   return {
@@ -57,7 +62,35 @@ const TOKEN_ROW = {
   lastUsedIp: '203.0.113.9',
   rateLimitPerMin: 600,
   createdByUserId: 'admin-1',
+  createdByEmail: 'admin@example.com',
   createdAt: '2026-07-01T10:00:00.000Z',
+}
+
+// #632: a token minted before the frozen-email column existed, whose creator
+// account has since been deleted -- both provenance fields are null. Kept out
+// of the default fixture on purpose: a permanent second row would make the
+// single-row queries the other tests rely on (tenant name, delete button)
+// ambiguous, so only the creator-column test opts into it.
+const ORPHANED_TOKEN_ROW = {
+  ...TOKEN_ROW,
+  id: 'tok-orphan',
+  name: 'legacy-exporter',
+  tokenPrefix: 'pxc_Zz99Yy88',
+  createdByUserId: null,
+  createdByEmail: null,
+}
+
+// A row soft-revoked back when the delete button wrote revoked_at instead of
+// removing the row. Nothing produces these any more, but existing databases
+// hold them, so the grid still has to handle them -- see the dedicated test at
+// the bottom of this file. Also kept out of the default fixture to preserve
+// the single-row queries above.
+const LEGACY_REVOKED_TOKEN_ROW = {
+  ...TOKEN_ROW,
+  id: 'tok-legacy-revoked',
+  name: 'retired-exporter',
+  tokenPrefix: 'pxc_Rr77Vv66',
+  revokedAt: '2026-03-01T09:00:00.000Z',
 }
 
 // Fix round 1, finding 1: tenant + connection plumbing fixtures. Mutable so
@@ -65,6 +98,7 @@ const TOKEN_ROW = {
 // in beforeEach).
 let tenantsFetchOk = true
 let connectionsFetchOk = true
+let tokensFixture: any[] = []
 let tenantsFixture: any[] = []
 let vdcsFixture: any[] = []
 let connectionsFixture: any[] = []
@@ -72,6 +106,7 @@ let connectionsFixture: any[] = []
 function resetFixtures() {
   tenantsFetchOk = true
   connectionsFetchOk = true
+  tokensFixture = [TOKEN_ROW]
   tenantsFixture = [
     { id: 'default', name: 'Provider', enabled: true },
     { id: 'tenant-a', name: 'Tenant A', enabled: true },
@@ -91,7 +126,7 @@ beforeEach(() => {
   resetFixtures()
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/v1/settings/api-tokens' && (!init || init.method === undefined)) {
-      return new Response(JSON.stringify({ data: [TOKEN_ROW] }), { status: 200 })
+      return new Response(JSON.stringify({ data: tokensFixture }), { status: 200 })
     }
     if (url === '/api/v1/settings/api-tokens' && init?.method === 'POST') {
       return new Response(
@@ -100,7 +135,12 @@ beforeEach(() => {
       )
     }
     if (url.startsWith('/api/v1/settings/api-tokens/') && init?.method === 'DELETE') {
-      return new Response(JSON.stringify({ data: { id: 'tok-1', revokedAt: '2026-07-28T11:00:00.000Z' } }), { status: 200 })
+      // The route no longer answers with a revocation stamp: the row is gone.
+      // Echo back the id from the path so a test can delete any row it likes.
+      return new Response(
+        JSON.stringify({ data: { id: url.slice('/api/v1/settings/api-tokens/'.length), deleted: true } }),
+        { status: 200 },
+      )
     }
     if (url === '/api/v1/tenants') {
       return tenantsFetchOk
@@ -166,6 +206,26 @@ describe('ApiTokensTab', () => {
     expect(row.querySelector('i.ri-key-2-line')).not.toBeNull()
   })
 
+  // #632 (offboarding): the grid used to show no provenance at all, so an
+  // admin processing a departure could not tie a live credential to a person.
+  // Both halves of the new column are covered here: the frozen creator email,
+  // and the fallback for rows that never captured one (pre-fix tokens whose
+  // creator account is gone, or tokens minted without a user session).
+  it('shows the creator email, falling back to the unknown label when it is null', async () => {
+    tokensFixture = [TOKEN_ROW, ORPHANED_TOKEN_ROW]
+    renderWithProviders(<ApiTokensTab />)
+
+    const namedRow = (await screen.findByText('pxc_Ab12Cd34')).closest('.MuiDataGrid-row') as HTMLElement
+    expect(screen.getByText(enTokens.columns.createdBy)).toBeInTheDocument()
+    expect(within(namedRow).getByText('admin@example.com')).toBeInTheDocument()
+
+    // Empty cell would be the regression: the row must carry the explicit
+    // "unknown" label, and must not borrow the other row's email.
+    const orphanedRow = screen.getByText('pxc_Zz99Yy88').closest('.MuiDataGrid-row') as HTMLElement
+    expect(within(orphanedRow).getByText(enTokens.unknownCreator)).toBeInTheDocument()
+    expect(within(orphanedRow).queryByText('admin@example.com')).not.toBeInTheDocument()
+  })
+
   it('shows the add-on upsell instead of the list when the option is missing', async () => {
     useLicenseMock.mockReturnValue({ hasFeature: () => false, loading: false })
     renderWithProviders(<ApiTokensTab />)
@@ -179,10 +239,10 @@ describe('ApiTokensTab', () => {
     expect(screen.queryByText('pxc_Ab12Cd34')).not.toBeInTheDocument()
   })
 
-  it('revokes a token after confirmation', async () => {
+  it('deletes a token after confirmation', async () => {
     renderWithProviders(<ApiTokensTab />, { messages: messagesWithSentinelConfirm() })
     await screen.findByText('pxc_Ab12Cd34')
-    await userEvent.click(screen.getByRole('button', { name: /revoke/i }))
+    await userEvent.click(screen.getByRole('button', { name: enTokens.delete }))
     await userEvent.click(screen.getByRole('button', { name: CONFIRM_SENTINEL }))
     await waitFor(() => {
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
@@ -337,7 +397,6 @@ describe('ApiTokensTab', () => {
       'automation:read': 'ri-robot-line',
       'alerts:read': 'ri-alarm-warning-line',
       'reports:read': 'ri-file-list-3-line',
-      'compliance:read': 'ri-shield-check-line',
     }
 
     const rows = Object.entries(scopeIcons).map(([scope, iconClass]) => {
@@ -382,6 +441,41 @@ describe('ApiTokensTab', () => {
 
     await waitFor(() => {
       expect(lastPostBody().connectionIds).toEqual(['conn-x', 'conn-y'])
+    })
+  })
+
+  // Owner-reported regression: the actions cell rendered the "Revoked" chip
+  // INSTEAD of the delete button, so a legacy soft-revoked row was stuck in the
+  // grid with no way to remove it -- while the backend deletes such a row
+  // happily. Both halves are asserted: the chip stays (the row really is dead
+  // and the grid must keep saying so) and the button is there TOO.
+  //
+  // Two rows on purpose, one revoked and one live: every delete button is
+  // reached through its own row (found by prefix) the way the tests above do,
+  // so an ambiguous screen-wide selector cannot pass this by accident.
+  it('offers the delete button on a legacy revoked row, alongside the Revoked chip', async () => {
+    tokensFixture = [TOKEN_ROW, LEGACY_REVOKED_TOKEN_ROW]
+    renderWithProviders(<ApiTokensTab />, { messages: messagesWithSentinelConfirm() })
+
+    const revokedRow = (await screen.findByText('pxc_Rr77Vv66')).closest('.MuiDataGrid-row') as HTMLElement
+    const liveRow = screen.getByText('pxc_Ab12Cd34').closest('.MuiDataGrid-row') as HTMLElement
+
+    // The chip belongs to the revoked row and to it alone.
+    expect(within(revokedRow).getByText(enTokens.revoked)).toBeInTheDocument()
+    expect(within(liveRow).queryByText(enTokens.revoked)).not.toBeInTheDocument()
+
+    // ...and the action is offered on BOTH rows.
+    const revokedRowButton = within(revokedRow).getByRole('button', { name: enTokens.delete })
+    expect(within(liveRow).getByRole('button', { name: enTokens.delete })).toBeInTheDocument()
+
+    // And it actually works: the DELETE goes to the revoked row's own id.
+    await userEvent.click(revokedRowButton)
+    await userEvent.click(screen.getByRole('button', { name: CONFIRM_SENTINEL }))
+    await waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        '/api/v1/settings/api-tokens/tok-legacy-revoked',
+        expect.objectContaining({ method: 'DELETE' }),
+      )
     })
   })
 })

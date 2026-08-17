@@ -116,3 +116,68 @@ describe('getInventorySWR', () => {
     expect(setCachedInventoryMock).toHaveBeenCalled()
   })
 })
+
+/** Returns the promise the code under test parked in the shared in-flight slot. */
+function storedInflightPromise() {
+  const call = setInflightFetchMock.mock.calls.find(([p]: any[]) => p !== null && p !== undefined)
+  expect(call, 'expected a promise to be stored in the in-flight slot').toBeDefined()
+
+  return (call as any[])[0] as Promise<any>
+}
+
+// Regression suite for the intermittent 500 on GET /api/v1/inventory
+// ("TypeError: Cannot read properties of undefined (reading 'clusters')"),
+// observed in the field on the first inventory call after a server start.
+//
+// blockingFetch hands the shared in-flight promise straight back to its
+// callers, so whatever triggerBackgroundRevalidation parks there IS what a
+// concurrent blocking caller receives. It used to park a Promise<void> (the
+// .then returned nothing, the .catch swallowed), through an `as any` that
+// defeated the slot's own Promise<CachedInventory> type. The piggybacking
+// caller got `undefined` and died dereferencing it.
+//
+// The window is NOT limited to startup: the stale branch triggers a
+// revalidation on every TTL expiry, so a polling monitor could hit this at
+// any time.
+describe('background revalidation shares a usable promise (inventory 500 regression)', () => {
+  it('parks a promise that resolves to the inventory, not to undefined', async () => {
+    getInventoryFromCacheMock.mockReturnValue({ status: 'stale', data: RAW })
+
+    await getInventorySWR('default', { kind: 'provider' } as any)
+
+    // THE load-bearing assertion: this awaited to `undefined` before the fix.
+    await expect(storedInflightPromise()).resolves.toEqual(RAW)
+  })
+
+  it('a blocking caller piggybacking on a running revalidation receives the inventory', async () => {
+    // 1) A stale read triggers the revalidation and parks its promise.
+    getInventoryFromCacheMock.mockReturnValue({ status: 'stale', data: RAW })
+    await getInventorySWR('default', { kind: 'provider' } as any)
+    const parked = storedInflightPromise()
+
+    // 2) A second caller finds a cold cache while that revalidation is still
+    //    in flight — the exact production sequence, where /api/v1/vms warmed
+    //    the cache non-blockingly and /api/v1/inventory arrived right behind.
+    getInventoryFromCacheMock.mockReturnValue({ status: 'miss' })
+    getInflightFetchMock.mockReturnValue(parked)
+
+    const out = await getInventorySWR('default', { kind: 'provider' } as any)
+
+    expect(out.raw, 'the piggybacking caller must never receive undefined').toBeDefined()
+    // The dereference that produced the 500 in the route handler.
+    expect(out.raw.clusters).toEqual([])
+  })
+
+  it('a FAILING revalidation rejects for the piggybacking caller instead of resolving undefined', async () => {
+    getSessionPrismaMock.mockRejectedValue(new Error('proxmox unreachable'))
+    getInventoryFromCacheMock.mockReturnValue({ status: 'stale', data: RAW })
+
+    await getInventorySWR('default', { kind: 'provider' } as any)
+
+    // Rejecting is the honest answer: it surfaces the real cause instead of a
+    // bogus TypeError further down. The detached handler in
+    // triggerBackgroundRevalidation is what keeps this from also becoming an
+    // unhandled rejection for the fire-and-forget caller.
+    await expect(storedInflightPromise()).rejects.toThrow('proxmox unreachable')
+  })
+})

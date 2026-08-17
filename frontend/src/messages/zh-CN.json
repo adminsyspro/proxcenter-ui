@@ -558,6 +558,21 @@
     "resolve": "解决",
     "resolveAll": "全部解决",
     "viewAll": "查看所有告警",
+    "detail": {
+      "title": "告警详情",
+      "severity": "严重级别",
+      "message": "消息",
+      "source": "来源",
+      "sourceType": "来源类型",
+      "entity": "实体",
+      "entityType": "实体类型",
+      "metric": "指标",
+      "currentValue": "当前值",
+      "threshold": "阈值",
+      "time": "检测时间",
+      "goToEntity": "前往实体",
+      "close": "关闭"
+    },
     "messages": {
       "nodeOffline": "节点 {node}: 离线",
       "ramCritical": "节点 {node}: 内存严重 ({value}%)",
@@ -656,7 +671,18 @@
     "recoveryTitle": "告警恢复",
     "recoveryDesc": "指标需要回落到什么程度才宣告告警已解决，避免波动的数值每分钟发送一次触发和恢复邮件",
     "recoveryMargin": "低于警告阈值的百分点",
-    "recoveryConfirmations": "低于该余量的连续检测次数"
+    "recoveryConfirmations": "低于该余量的连续检测次数",
+    "performanceReplication": "性能与复制",
+    "osdLatency": "Ceph OSD 延迟",
+    "osdLatencyDesc": "当 Ceph OSD 持续慢于这些数值时告警，用户会感觉磁盘变慢",
+    "osdLatencyWarning": "ms (警告)",
+    "osdLatencyCritical": "ms (严重)",
+    "replicationRpo": "复制 RPO",
+    "replicationRpoDesc": "当复制任务上次成功同步的滞后超过其自身的 RPO 目标加上此余量时告警",
+    "replicationRpoGrace": "% 相对任务 RPO 目标的容忍上限",
+    "replicationFailures": "复制失败",
+    "replicationFailuresDesc": "当复制任务出错时告警，与其 RPO 无关",
+    "replicationFailuresEscalation": "先为警告，重试次数用尽后升为严重"
   },
   "inventory": {
     "alertsDialog": {

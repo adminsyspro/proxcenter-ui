@@ -28,6 +28,10 @@ const DEFAULTS = {
   snapshot_max_age_days: 7,
   recovery_margin: 5,
   recovery_confirmations: 3,
+  osd_latency_warning: 0,
+  osd_latency_critical: 250,
+  replication_rpo_grace_percent: 25,
+  replication_failure_alerts: 1,
 }
 
 export default function AlertThresholdsTab() {
@@ -139,48 +143,80 @@ export default function AlertThresholdsTab() {
       </Box>
 
       <Typography variant='overline' color='text.secondary' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <i className='ri-timer-flash-line' style={{ fontSize: 16 }} />
+        {t('alerts.performanceReplication')}
+      </Typography>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2, mb: 4 }}>
+        <ThresholdCard
+          icon='ri-speed-line'
+          label={t('alerts.osdLatency')}
+          warning={thresholds.osd_latency_warning || 100}
+          critical={thresholds.osd_latency_critical}
+          onChange={(w, c) => setThresholds(th => ({ ...th, osd_latency_warning: w, osd_latency_critical: c }))}
+          tWarning={t('alerts.warning')}
+          tCritical={t('alerts.critical')}
+          min={10}
+          max={Math.max(500, thresholds.osd_latency_critical || 0)}
+          step={5}
+          unit=' ms'
+          enabled={thresholds.osd_latency_warning > 0}
+          onToggle={(checked) => setThresholds(th => (checked
+            ? { ...th, osd_latency_warning: 100, osd_latency_critical: Math.max(100, th.osd_latency_critical) }
+            : { ...th, osd_latency_warning: 0 }
+          ))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
+
+        <SingleThresholdCard
+          icon='ri-timer-flash-line'
+          label={t('alerts.replicationRpo')}
+          description={t('alerts.replicationRpoDesc')}
+          value={thresholds.replication_rpo_grace_percent || 25}
+          onChange={(pct) => setThresholds(th => ({ ...th, replication_rpo_grace_percent: pct }))}
+          min={5}
+          max={Math.max(200, thresholds.replication_rpo_grace_percent || 0)}
+          step={5}
+          enabled={thresholds.replication_rpo_grace_percent > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, replication_rpo_grace_percent: checked ? 25 : 0 }))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
+
+        <ToggleCard
+          icon='ri-file-copy-2-line'
+          label={t('alerts.replicationFailures')}
+          description={t('alerts.replicationFailuresDesc')}
+          detail={t('alerts.replicationFailuresEscalation')}
+          enabled={thresholds.replication_failure_alerts > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, replication_failure_alerts: checked ? 1 : 0 }))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
+      </Box>
+
+      <Typography variant='overline' color='text.secondary' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <i className='ri-tools-line' style={{ fontSize: 16 }} />
         {t('alerts.maintenance')}
       </Typography>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
-        <Card variant='outlined' sx={{ borderRadius: 2 }}>
-          <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <i className='ri-camera-line' style={{ fontSize: 18, opacity: 0.6 }} />
-                <Typography variant='subtitle2' fontWeight={700}>{t('alerts.snapshotAge')}</Typography>
-              </Box>
-              <Switch
-                size='small'
-                checked={thresholds.snapshot_max_age_days > 0}
-                onChange={(_, checked) => setThresholds(th => ({ ...th, snapshot_max_age_days: checked ? 7 : 0 }))}
-              />
-            </Box>
-            <Typography variant='caption' color='text.secondary'>{t('alerts.snapshotAgeDesc')}</Typography>
-            {thresholds.snapshot_max_age_days > 0 ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
-                {/* The Math.max stays on the commit: this whole field is only
-                    rendered while snapshot_max_age_days > 0, so writing a 0
-                    mid-keystroke would unmount the input under the cursor and
-                    flip the Switch off. min={1} still clamps on blur. */}
-                <NumericTextField
-                  type='number'
-                  size='small'
-                  value={thresholds.snapshot_max_age_days}
-                  onChange={(days) => setThresholds(th => ({ ...th, snapshot_max_age_days: Math.max(1, days) }))}
-                  fallback={1}
-                  min={1}
-                  slotProps={{ htmlInput: { min: 1, max: 365 } }}
-                  sx={{ width: 80 }}
-                />
-                <Typography variant='body2' color='text.secondary'>{t('alerts.snapshotDays')}</Typography>
-              </Box>
-            ) : (
-              <Typography variant='body2' color='text.disabled' sx={{ mt: 2 }}>{t('alerts.snapshotDisabled')}</Typography>
-            )}
-          </CardContent>
-        </Card>
+        <SingleThresholdCard
+          icon='ri-camera-line'
+          label={t('alerts.snapshotAge')}
+          description={t('alerts.snapshotAgeDesc')}
+          value={thresholds.snapshot_max_age_days || 7}
+          onChange={(days) => setThresholds(th => ({ ...th, snapshot_max_age_days: days }))}
+          min={1}
+          step={1}
+          /* The ceiling follows any value already stored above it: the field
+             used to accept up to 365 days, and a fixed max would let MUI clamp
+             such a setting down the first time the card rendered. */
+          max={Math.max(90, thresholds.snapshot_max_age_days || 0)}
+          formatValue={(v) => `${v} ${t('alerts.snapshotDays')}`}
+          markFormat={(v) => `${v}`}
+          enabled={thresholds.snapshot_max_age_days > 0}
+          onToggle={(checked) => setThresholds(th => ({ ...th, snapshot_max_age_days: checked ? 7 : 0 }))}
+          tDisabled={t('alerts.snapshotDisabled')}
+        />
 
         <Card variant='outlined' sx={{ borderRadius: 2 }}>
           <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
@@ -233,32 +269,132 @@ export default function AlertThresholdsTab() {
   )
 }
 
-function ThresholdCard({ icon, label, warning, critical, onChange, tWarning, tCritical }) {
+// Edge marks would otherwise be centred on the thumb and clipped by the card.
+const edgeMarkSx = {
+  mt: 2,
+  '& .MuiSlider-markLabel[data-index="0"]': { left: '6% !important' },
+  '& .MuiSlider-markLabel[data-index="2"]': { left: '94% !important' },
+}
+
+function CardShell({ icon, label, enabled, onToggle, children }) {
   return (
     <Card variant='outlined' sx={{ borderRadius: 2 }}>
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <i className={icon} style={{ fontSize: 18, opacity: 0.6 }} />
-          <Typography variant='subtitle2' fontWeight={700}>{label}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <i className={icon} style={{ fontSize: 18, opacity: 0.6 }} />
+            <Typography variant='subtitle2' fontWeight={700}>{label}</Typography>
+          </Box>
+          {onToggle ? <Switch size='small' checked={enabled} onChange={(_, checked) => onToggle(checked)} /> : null}
         </Box>
-        <Typography variant='caption' color='text.secondary' sx={{ fontFamily: 'JetBrains Mono, monospace' }}>
-          {tWarning}: {warning}% · {tCritical}: {critical}%
-        </Typography>
-        <Slider
-          value={[warning, critical]}
-          onChange={(_, v) => { const [w, c] = v; onChange(w, c) }}
-          valueLabelDisplay='auto'
-          valueLabelFormat={(v) => `${v}%`}
-          min={50}
-          max={100}
-          marks={[
-            { value: 50, label: '50%' },
-            { value: 75, label: '75%' },
-            { value: 100, label: '100%' },
-          ]}
-          sx={{ mt: 2, '& .MuiSlider-markLabel[data-index="0"]': { left: '6% !important' }, '& .MuiSlider-markLabel[data-index="2"]': { left: '94% !important' } }}
-        />
+        {children}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Two-thumb warning/critical card. Defaults to the percentage scale the
+ * resource cards have always used; the Ceph latency card passes a millisecond
+ * scale so every threshold on the tab is set the same way, by dragging.
+ *
+ * `onToggle` is optional: a card that can be switched off renders the disabled
+ * caption in place of its slider, exactly like the stale-snapshot card.
+ */
+function ThresholdCard({
+  icon, label, warning, critical, onChange, tWarning, tCritical,
+  min = 50, max = 100, step = 1, unit = '%', marks,
+  enabled = true, onToggle, tDisabled,
+}) {
+  const format = (v) => `${v}${unit}`
+  const scale = marks || [
+    { value: min, label: format(min) },
+    { value: Math.round((min + max) / 2), label: format(Math.round((min + max) / 2)) },
+    { value: max, label: format(max) },
+  ]
+
+  return (
+    <CardShell icon={icon} label={label} enabled={enabled} onToggle={onToggle}>
+      {enabled ? (
+        <>
+          <Typography variant='caption' color='text.secondary'>
+            {tWarning}: {format(warning)} · {tCritical}: {format(critical)}
+          </Typography>
+          <Slider
+            value={[warning, critical]}
+            onChange={(_, v) => { const [w, c] = v; onChange(w, c) }}
+            valueLabelDisplay='auto'
+            valueLabelFormat={format}
+            min={min}
+            max={max}
+            step={step}
+            marks={scale}
+            disableSwap
+            sx={edgeMarkSx}
+          />
+        </>
+      ) : (
+        <Typography variant='body2' color='text.disabled' sx={{ mt: 2 }}>{tDisabled}</Typography>
+      )}
+    </CardShell>
+  )
+}
+
+/**
+ * Single-thumb variant, for a setting that has no critical tier of its own.
+ *
+ * `markFormat` exists because a long unit reads well on the value line but
+ * overflows the three mark labels under the track: "7 days" above, bare
+ * numbers below.
+ */
+function SingleThresholdCard({
+  icon, label, description, value, onChange,
+  min, max, step = 1, unit = '%', formatValue, markFormat,
+  enabled, onToggle, tDisabled,
+}) {
+  const format = formatValue || ((v) => `${v}${unit}`)
+  const mark = markFormat || format
+  const mid = Math.round((min + max) / 2)
+
+  return (
+    <CardShell icon={icon} label={label} enabled={enabled} onToggle={onToggle}>
+      {enabled ? (
+        <>
+          <Typography variant='caption' color='text.secondary' display='block'>{description}</Typography>
+          <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 0.5 }}>
+            {format(value)}
+          </Typography>
+          <Slider
+            value={value}
+            onChange={(_, v) => onChange(v)}
+            valueLabelDisplay='auto'
+            valueLabelFormat={format}
+            min={min}
+            max={max}
+            step={step}
+            marks={[
+              { value: min, label: mark(min) },
+              { value: mid, label: mark(mid) },
+              { value: max, label: mark(max) },
+            ]}
+            sx={edgeMarkSx}
+          />
+        </>
+      ) : (
+        <Typography variant='body2' color='text.disabled' sx={{ mt: 2 }}>{tDisabled}</Typography>
+      )}
+    </CardShell>
+  )
+}
+
+/** On/off only, for a condition that is binary and has nothing to tune. */
+function ToggleCard({ icon, label, description, detail, enabled, onToggle, tDisabled }) {
+  return (
+    <CardShell icon={icon} label={label} enabled={enabled} onToggle={onToggle}>
+      <Typography variant='caption' color='text.secondary'>{description}</Typography>
+      <Typography variant='body2' color={enabled ? 'text.secondary' : 'text.disabled'} sx={{ mt: 2 }}>
+        {enabled ? detail : tDisabled}
+      </Typography>
+    </CardShell>
   )
 }

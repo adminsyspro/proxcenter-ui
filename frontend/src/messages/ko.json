@@ -684,7 +684,18 @@
     "recoveryTitle": "알림 해제",
     "recoveryDesc": "불안정한 값이 매분 발생 및 해제 메일을 보내지 않도록, 알림을 해제로 선언하기 전에 지표가 얼마나 안정되어야 하는지 정합니다",
     "recoveryMargin": "경고 임계값보다 낮은 포인트",
-    "recoveryConfirmations": "여유 값 미만인 연속 확인 횟수"
+    "recoveryConfirmations": "여유 값 미만인 연속 확인 횟수",
+    "performanceReplication": "성능 및 복제",
+    "osdLatency": "Ceph OSD 지연 시간",
+    "osdLatencyDesc": "Ceph OSD가 이 값보다 계속 느릴 때 알림을 보냅니다. 사용자는 디스크가 느려진 것으로 체감합니다",
+    "osdLatencyWarning": "ms (경고)",
+    "osdLatencyCritical": "ms (심각)",
+    "replicationRpo": "복제 RPO",
+    "replicationRpoDesc": "복제 작업의 마지막 성공 동기화가 해당 작업의 RPO 목표에 이 여유를 더한 값보다 더 뒤처질 때 알림을 보냅니다",
+    "replicationRpoGrace": "작업의 RPO 목표를 초과해 허용하는 비율(%)",
+    "replicationFailures": "복제 실패",
+    "replicationFailuresDesc": "RPO와 무관하게 복제 작업이 오류로 끝나면 알립니다",
+    "replicationFailuresEscalation": "경고로 시작하여 재시도가 모두 소진되면 심각으로 올립니다"
   },
   "inventory": {
     "alertsDialog": {

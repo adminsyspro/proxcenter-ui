@@ -501,7 +501,11 @@ export const EXTRA_MOCKS: MockDataMap = {
   // --- Orchestrator Alerts (for /operations/alerts page) ---
   get 'GET:/api/v1/orchestrator/alerts'() {
     const now = Date.now()
-    const severities = ['critical', 'warning', 'warning', 'info', 'critical', 'warning', 'info', 'warning']
+    // Parallel arrays rather than index ternaries: the tail entries (#721 added
+    // the Ceph OSD latency and replication families) need their own entity type,
+    // metric and status, which the previous `i < 5 ? ... : ...` chains could not
+    // express without silently mislabelling every new row as a resolved VM alert.
+    const severities = ['critical', 'warning', 'warning', 'info', 'critical', 'warning', 'info', 'warning', 'critical', 'warning', 'critical']
     const messages = [
       'Node pve-node-03: RAM usage critical (94%)',
       'Node pve-node-07: CPU usage high (82%)',
@@ -511,34 +515,45 @@ export const EXTRA_MOCKS: MockDataMap = {
       'Node pve-node-11: Storage pool local-zfs usage 87%',
       'PBS datastore backup-main: GC completed',
       'VM web-prod-01: High network packet loss detected',
+      'Ceph osd.3 on pve-node-02: apply latency 412ms (critical above 250ms)',
+      'Replication job 102-0 (db-master to pve-dr-02): last sync 41min ago, past its 30min RPO target',
+      'Replication job 118-0 (mail-relay to pve-dr-02) failed: connection reset by peer',
     ]
-    const sources = ['pve-node-03','pve-node-07','pve-node-01','pve-node-05','pve-dr-02','pve-node-11','PBS-MASTER','pve-node-01']
+    const sources = ['pve-node-03','pve-node-07','pve-node-01','pve-node-05','pve-dr-02','pve-node-11','PBS-MASTER','pve-node-01','pve-node-02','pve-node-01','pve-node-05']
+    const types = ['memory','cpu','custom','event','node_down','storage','event','custom','osd_latency','replication_rpo','replication_failed']
+    const entityTypes = ['node','node','vm','vm','osd','vm','vm','vm','osd','replication','replication']
+    const entityNames = [...sources.slice(0, 8), 'osd.3', '102-0', '118-0']
+    const metrics = ['ram','cpu','disk_io',null,null,null,null,null,'osd_apply_latency','replication_lag',null]
+    const currentValues = [94, 82, null, null, null, 87, null, null, 412, 41, null]
+    const alertThresholds = [90, 80, null, null, null, 85, null, null, 250, 30, null]
+    const statuses = ['active','active','active','active','active','resolved','resolved','resolved','active','active','active']
     return {
       data: messages.map((msg, i) => ({
         id: `alert-demo-${i}`,
         fingerprint: `fp-${i}`,
+        type: types[i],
         severity: severities[i],
         message: msg,
         source: sources[i],
         sourceType: 'pve',
-        entityType: i < 2 ? 'node' : i === 4 ? 'osd' : 'vm',
-        entityName: sources[i],
-        metric: i === 0 ? 'ram' : i === 1 ? 'cpu' : i === 2 ? 'disk_io' : null,
-        currentValue: i === 0 ? 94 : i === 1 ? 82 : i === 5 ? 87 : null,
-        threshold: i === 0 ? 90 : i === 1 ? 80 : i === 5 ? 85 : null,
-        status: i < 5 ? 'active' : 'resolved',
+        entityType: entityTypes[i],
+        entityName: entityNames[i],
+        metric: metrics[i],
+        currentValue: currentValues[i],
+        threshold: alertThresholds[i],
+        status: statuses[i],
         occurrences: 1 + Math.floor(Math.random() * 10),
         firstSeenAt: new Date(now - (i + 1) * 3600000).toISOString(),
         lastSeenAt: new Date(now - i * 600000).toISOString(),
         acknowledgedAt: i === 2 ? new Date(now - 1800000).toISOString() : null,
         acknowledgedBy: i === 2 ? 'admin' : null,
-        resolvedAt: i >= 5 ? new Date(now - i * 300000).toISOString() : null,
+        resolvedAt: statuses[i] === 'resolved' ? new Date(now - i * 300000).toISOString() : null,
       })),
       total: messages.length,
     }
   },
   'GET:/api/v1/orchestrator/alerts/summary': {
-    data: { total: 8, active: 5, acknowledged: 1, resolved: 3, critical: 2, warning: 4, info: 2 },
+    data: { total: 11, active: 8, acknowledged: 1, resolved: 3, critical: 4, warning: 5, info: 2 },
   },
   get 'GET:/api/v1/orchestrator/alerts/rules'() {
     return {
@@ -551,11 +566,25 @@ export const EXTRA_MOCKS: MockDataMap = {
       ],
     }
   },
+  // Every key of DEFAULT_THRESHOLDS must appear here: a missing one renders its
+  // card at the component default in demo mode, which reads as a feature that
+  // silently forgot its own setting.
+  //
+  // The values are a demo tenant's choices, not the shipped defaults. The Ceph
+  // latency check ships at 0, i.e. disabled, because no latency threshold suits
+  // every disk; the demo turns it on so its card shows a configured state and
+  // matches the osd_latency alert listed above.
   'GET:/api/v1/settings/alerts/thresholds': {
     cpu_warning: 80, cpu_critical: 90,
     memory_warning: 80, memory_critical: 90,
     storage_warning: 80, storage_critical: 90,
     snapshot_max_age_days: 7,
+    recovery_margin: 5,
+    recovery_confirmations: 3,
+    osd_latency_warning: 100,
+    osd_latency_critical: 250,
+    replication_rpo_grace_percent: 25,
+    replication_failure_alerts: 1,
   },
   get 'GET:/api/v1/audit'() {
     const actions = [

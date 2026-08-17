@@ -531,7 +531,13 @@ export function getMetricIcon(label: string): string {
   if (l.includes('storage') || l.includes('stockage') || l.includes('hd') || l.includes('disk')) return 'ri-hard-drive-2-line'
   if (l.includes('swap')) return 'ri-swap-line'
   if (l.includes('load')) return 'ri-dashboard-3-line'
+  // Before the `io` test on purpose: "replication" itself contains "io", so
+  // the generic I/O branch would swallow every replication metric.
+  if (l.includes('rpo') || l.includes('replic')) return 'ri-timer-flash-line'
   if (l.includes('io')) return 'ri-time-line'
+  // After the `io` test on purpose: an "IO latency" label keeps the historical
+  // I/O icon, while a Ceph "OSD latency" (no "io" substring) lands here.
+  if (l.includes('osd') || l.includes('latency')) return 'ri-speed-line'
 
 return 'ri-bar-chart-line'
 }

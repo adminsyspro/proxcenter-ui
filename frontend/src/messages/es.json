@@ -684,7 +684,18 @@
     "recoveryTitle": "Recuperación de alertas",
     "recoveryDesc": "Cuánto debe bajar una métrica antes de declarar resuelta su alerta, para evitar que un valor inestable envíe un aviso y una recuperación cada minuto",
     "recoveryMargin": "puntos por debajo del umbral de advertencia",
-    "recoveryConfirmations": "comprobaciones consecutivas por debajo del margen"
+    "recoveryConfirmations": "comprobaciones consecutivas por debajo del margen",
+    "performanceReplication": "Rendimiento y replicación",
+    "osdLatency": "Latencia de los OSD de Ceph",
+    "osdLatencyDesc": "Alertar cuando un OSD de Ceph se mantiene más lento que estos valores, algo que los usuarios perciben como discos lentos",
+    "osdLatencyWarning": "ms (advertencia)",
+    "osdLatencyCritical": "ms (crítico)",
+    "replicationRpo": "RPO de replicación",
+    "replicationRpoDesc": "Alertar cuando la última sincronización correcta de un trabajo de replicación se retrasa más que su propio objetivo de RPO, más este margen",
+    "replicationRpoGrace": "% tolerado por encima del objetivo de RPO del trabajo",
+    "replicationFailures": "Fallos de replicación",
+    "replicationFailuresDesc": "Alertar cuando una tarea de replicación falla, con independencia de su RPO",
+    "replicationFailuresEscalation": "Advertencia y luego crítico cuando se agotan los reintentos"
   },
   "inventory": {
     "alertsDialog": {

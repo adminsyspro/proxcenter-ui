@@ -13,7 +13,7 @@
  * instead of in production.
  */
 
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isAlertVisibleToTenant, type AlertVisibilityCtx } from './visibility'
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
@@ -168,6 +168,72 @@ describe('isAlertVisibleToTenant — tenant isolation contract', () => {
       ctx(PROVIDER, { vdcScope: null, infraKind: 'provider' as const }),
     )
     expect(typeof result).toBe('boolean')
+  })
+
+  describe('cluster-wide infrastructure alerts (osd / replication)', () => {
+    // The orchestrator emits `osd_latency` on `resource_type='osd'` and
+    // `replication_rpo` / `replication_failed` on `resource_type='replication'`.
+    // Both describe shared cluster hardware / a cluster-wide DR job, so they
+    // are SYSTEM alerts: a vDC tenant must never see them, and the denial must
+    // come from the system-resource gate, not from the VM-identification gate,
+    // whose `cannot_identify_vm` reason would be misleading here.
+    const CASES = [
+      { name: 'osd_latency',          type: 'osd_latency',          resource_type: 'osd',         resource: 'osd.2' },
+      { name: 'replication_rpo',      type: 'replication_rpo',      resource_type: 'replication', resource: 'job-100-0' },
+      { name: 'replication_failed',   type: 'replication_failed',   resource_type: 'replication', resource: 'job-100-0' },
+    ] as const
+
+    // resource_id 100 is INSIDE the tenant's vDC vmid set and node pve1 is in
+    // scope: every later gate would pass, so a denial can only be the system
+    // gate firing.
+    const alertFor = (c: (typeof CASES)[number], extra: Record<string, unknown> = {}) => ({
+      type: c.type,
+      connection_id: CONN_SHARED,
+      resource_type: c.resource_type,
+      resource: c.resource,
+      resource_id: 100,
+      node: 'pve1',
+      ...extra,
+    })
+
+    for (const c of CASES) {
+      it(`${c.name} is denied to a vDC tenant even when it owns the rule`, async () => {
+        expect(await isAlertVisibleToTenant(alertFor(c, { rule_id: 'rule-a' }), ctx(TENANT_A))).toBe(false)
+      })
+
+      it(`${c.name} is visible to the provider`, async () => {
+        expect(
+          await isAlertVisibleToTenant(alertFor(c), ctx(PROVIDER, { vdcScope: null, infraKind: 'provider' as const })),
+        ).toBe(true)
+      })
+    }
+
+    it('denies with the system-alert reason, never cannot_identify_vm', async () => {
+      // The denial reason is only observable through the DEBUG_ALERTS_VISIBILITY
+      // logger, and the module reads that flag once at load time, hence the
+      // reset + dynamic re-import (same pattern as requireEnterprise.test.ts).
+      vi.resetModules()
+      vi.stubEnv('DEBUG_ALERTS_VISIBILITY', '1')
+      const reasons: string[] = []
+      const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        const payload = args[1] as { reason?: string } | undefined
+        if (payload?.reason) reasons.push(payload.reason)
+      })
+
+      try {
+        const { isAlertVisibleToTenant: freshIsAlertVisibleToTenant } = await import('./visibility')
+        for (const c of CASES) {
+          expect(await freshIsAlertVisibleToTenant(alertFor(c, { rule_id: 'rule-a' }), ctx(TENANT_A))).toBe(false)
+        }
+      } finally {
+        spy.mockRestore()
+        vi.unstubAllEnvs()
+        vi.resetModules()
+      }
+
+      expect(reasons).toEqual(CASES.map(() => 'system_resource_type'))
+      expect(reasons).not.toContain('cannot_identify_vm')
+    })
   })
 
   describe('MSP tenant visibility', () => {

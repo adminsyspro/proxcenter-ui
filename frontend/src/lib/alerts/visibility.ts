@@ -60,7 +60,19 @@ interface OrchestratorAlertLike {
   event_id?: string
 }
 
-const SYSTEM_RESOURCE_TYPES = new Set(['node', 'storage', 'license', 'cluster', 'system'])
+/**
+ * Resource types that describe cluster-wide infrastructure and must never
+ * reach a vDC-scoped tenant, whoever owns the rule.
+ *
+ * `osd` (Ceph OSD latency) and `replication` (DR replication job RPO /
+ * failure) belong here for the same reason as `node` and `storage`: an OSD
+ * is shared Ceph hardware and a replication job spans a whole cluster, so
+ * neither maps to a single tenant's VM. Listing them here also fixes the
+ * denial reason: without it they fall through to the VM-identification
+ * gate and get denied as `cannot_identify_vm`, which is misleading when
+ * debugging visibility.
+ */
+const SYSTEM_RESOURCE_TYPES = new Set(['node', 'storage', 'license', 'cluster', 'system', 'osd', 'replication'])
 
 const DEBUG = process.env.DEBUG_ALERTS_VISIBILITY === '1'
 

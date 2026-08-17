@@ -23,6 +23,18 @@ const DEFAULT_THRESHOLDS = {
   // firing and a recovery notification every minute.
   recovery_margin: 5,
   recovery_confirmations: 3,
+  // Ceph OSD commit/apply latency in milliseconds (#721). 0 disables the whole
+  // OSD latency check, mirroring the snapshot_max_age_days convention.
+  osd_latency_warning: 0,
+  osd_latency_critical: 250,
+  // Tolerance above a replication job's own RPO target before its last
+  // successful sync is considered late, as a percentage of that target (#721).
+  // 0 disables the replication alerts.
+  replication_rpo_grace_percent: 25,
+  // Alert when a replication job errors out (#721). 0 disables, 1 enables.
+  // Independent from the RPO grace above: an operator can want to hear about a
+  // job that failed outright without hearing about one that merely drifted.
+  replication_failure_alerts: 1,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS

@@ -684,7 +684,18 @@
     "recoveryTitle": "Retour à la normale",
     "recoveryDesc": "Jusqu'où une métrique doit redescendre avant que son alerte soit déclarée résolue, pour éviter qu'une valeur instable envoie un mail de déclenchement et de résolution chaque minute",
     "recoveryMargin": "points sous le seuil d'avertissement",
-    "recoveryConfirmations": "relevés consécutifs sous la marge"
+    "recoveryConfirmations": "relevés consécutifs sous la marge",
+    "performanceReplication": "Performances et réplication",
+    "osdLatency": "Latence des OSD Ceph",
+    "osdLatencyDesc": "Alerter quand un OSD Ceph reste plus lent que ces valeurs, ce que les utilisateurs ressentent comme des disques poussifs",
+    "osdLatencyWarning": "ms (avertissement)",
+    "osdLatencyCritical": "ms (critique)",
+    "replicationRpo": "RPO de réplication",
+    "replicationRpoDesc": "Alerter quand la dernière synchronisation réussie d'une tâche de réplication accuse un retard supérieur à son propre objectif RPO, majoré de cette marge",
+    "replicationRpoGrace": "% toléré au-delà de l'objectif RPO de la tâche",
+    "replicationFailures": "Échecs de réplication",
+    "replicationFailuresDesc": "Alerter quand une tâche de réplication tombe en erreur, indépendamment de son RPO",
+    "replicationFailuresEscalation": "Avertissement, puis critique une fois les tentatives épuisées"
   },
   "inventory": {
     "alertsDialog": {

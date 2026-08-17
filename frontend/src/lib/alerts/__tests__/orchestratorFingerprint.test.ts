@@ -15,6 +15,14 @@ describe('buildOrchestratorFingerprint (canonical contract)', () => {
     { name: 'vector4 storage on node',           input: { connection_id: 'conn-abc123', type: 'storage', severity: 'warning',  resource_type: 'node',  resource: 'pve-node-1' }, expected: 'a5a9f0d7ba8311b6dfbb879d0c3b50c3' },
     { name: 'vector5 event with rule',           input: { connection_id: 'conn-abc123', type: 'event',   severity: 'warning',  resource_type: 'event', resource: '100', rule_id: 'rule-uuid-xyz' },   expected: '381423f2e2a93b55a890900ea01503c4' },
     { name: 'vector6 event with different rule', input: { connection_id: 'conn-abc123', type: 'event',   severity: 'warning',  resource_type: 'event', resource: '100', rule_id: 'rule-uuid-OTHER' }, expected: '619999b15c20bc06ce993bf9042de5f3' },
+    // Ceph OSD latency + DR replication (issue #721). `resource` is the OSD /
+    // replication job name; the carrying host or target cluster travels in
+    // `resource_name`, which is NOT part of the fingerprint.
+    { name: 'vector7 osd latency warning',       input: { connection_id: 'conn-abc123', type: 'osd_latency',        severity: 'warning',  resource_type: 'osd',         resource: 'osd.2' },     expected: 'ede9a1e69ce7d4f48ec92a8d85296c73' },
+    { name: 'vector8 osd latency critical',      input: { connection_id: 'conn-abc123', type: 'osd_latency',        severity: 'critical', resource_type: 'osd',         resource: 'osd.2' },     expected: '28be3689a7f61ff9f462e72b983acb6c' },
+    { name: 'vector9 replication rpo warning',   input: { connection_id: 'conn-abc123', type: 'replication_rpo',    severity: 'warning',  resource_type: 'replication', resource: 'job-100-0' }, expected: '698910286e988fd1d9017dc6ad3e18ac' },
+    { name: 'vector10 replication failed',       input: { connection_id: 'conn-abc123', type: 'replication_failed', severity: 'critical', resource_type: 'replication', resource: 'job-100-0' }, expected: '1d3239c572b2a2a698973e189033ded7' },
+    { name: 'vector11 replication rpo with rule',input: { connection_id: 'conn-abc123', type: 'replication_rpo',    severity: 'warning',  resource_type: 'replication', resource: 'job-100-0', rule_id: 'rule-uuid-xyz' }, expected: '833b8ed1117866c1a3667724e3024194' },
   ] as const
 
   for (const v of vectors) {

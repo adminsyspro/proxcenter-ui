@@ -133,6 +133,52 @@ describe('GET /api/v1/internal/alert-config', () => {
     expect(body.thresholds.recovery_confirmations).toBe(3)
   })
 
+  it('ships the OSD latency and replication RPO grace to the orchestrator, unrounded', async () => {
+    // #721: the Ceph OSD latency and replication RPO checks live in the Go
+    // worker, which reads all three as float64. Dropping them here would pin
+    // the worker to its own defaults, and truncating them would quietly coarsen
+    // a sub-millisecond latency budget into a no-op.
+    getSettingMock.mockResolvedValueOnce({
+      osd_latency_warning: 12.5,
+      osd_latency_critical: 300.5,
+      replication_rpo_grace_percent: 12.5,
+    })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.thresholds.osd_latency_warning).toBe(12.5)
+    expect(body.thresholds.osd_latency_critical).toBe(300.5)
+    expect(body.thresholds.replication_rpo_grace_percent).toBe(12.5)
+  })
+
+  it('falls back to the default OSD latency and RPO grace when the setting predates them', async () => {
+    getSettingMock.mockResolvedValueOnce({ memory_warning: 90 })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    const body = await res.json()
+    expect(body.thresholds.osd_latency_warning).toBe(0)
+    expect(body.thresholds.osd_latency_critical).toBe(250)
+    expect(body.thresholds.replication_rpo_grace_percent).toBe(25)
+  })
+
+  it('preserves an explicit 0 for the disable-the-check convention', async () => {
+    // 0 means "check disabled" for both families, exactly like
+    // snapshot_max_age_days. A falsy-guarded merge would silently re-enable them.
+    getSettingMock.mockResolvedValueOnce({
+      osd_latency_warning: 0,
+      replication_rpo_grace_percent: 0,
+    })
+    findManyMock.mockResolvedValueOnce([])
+
+    const res = await GET(makeReq({ 'X-API-Key': 'secret-key' }))
+    const body = await res.json()
+    expect(body.thresholds.osd_latency_warning).toBe(0)
+    expect(body.thresholds.replication_rpo_grace_percent).toBe(0)
+  })
+
   it('honors X-Tenant-ID by scoping the query', async () => {
     getSettingMock.mockResolvedValueOnce({})
     findManyMock.mockResolvedValueOnce([])

@@ -644,7 +644,18 @@ export default orchestratorClient
 export interface Alert {
   id: string
   connection_id: string
-  type: 'cpu' | 'memory' | 'storage' | 'node_down' | 'vm_down' | 'custom'
+  type:
+    | 'cpu'
+    | 'memory'
+    | 'storage'
+    | 'node_down'
+    | 'vm_down'
+    | 'event'
+    | 'snapshot_stale'
+    | 'osd_latency'
+    | 'replication_rpo'
+    | 'replication_failed'
+    | 'custom'
   severity: 'info' | 'warning' | 'critical'
   status: 'active' | 'acknowledged' | 'resolved' | 'silenced'
   resource: string
@@ -690,6 +701,17 @@ export interface AlertThresholds {
   recovery_margin: number
   /** Consecutive collections below the margin before the alert resolves. */
   recovery_confirmations: number
+  /** Ceph OSD latency in ms that raises a warning (#721). 0 disables the check. */
+  osd_latency_warning: number
+  /** Ceph OSD latency in ms that raises a critical alert (#721). */
+  osd_latency_critical: number
+  /**
+   * Tolerance above a replication job's own RPO target, in percent, before its
+   * last successful sync counts as late (#721). 0 disables replication alerts.
+   */
+  replication_rpo_grace_percent: number
+  /** Alert on a failed replication job (#721). 0 disables, 1 enables. */
+  replication_failure_alerts: number
 }
 
 export interface AlertsResponse {

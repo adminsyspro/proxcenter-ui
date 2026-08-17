@@ -558,6 +558,21 @@
     "resolve": "Beheben",
     "resolveAll": "Alle beheben",
     "viewAll": "View all Warnmeldungen",
+    "detail": {
+      "title": "Warnungsdetails",
+      "severity": "Schweregrad",
+      "message": "Nachricht",
+      "source": "Quelle",
+      "sourceType": "Quellentyp",
+      "entity": "Objekt",
+      "entityType": "Objekttyp",
+      "metric": "Metrik",
+      "currentValue": "Aktueller Wert",
+      "threshold": "Schwellenwert",
+      "time": "Erkannt am",
+      "goToEntity": "Zum Objekt",
+      "close": "Schließen"
+    },
     "messages": {
       "nodeOffline": "Node {node}: OFFLINE",
       "ramCritical": "Node {node}: RAM kritisch ({value}%)",
@@ -656,7 +671,18 @@
     "recoveryTitle": "Alarm-Entwarnung",
     "recoveryDesc": "Wie weit eine Metrik zurückgehen muss, bevor ihr Alarm als behoben gilt, damit ein schwankender Wert nicht jede Minute eine Auslösung und eine Entwarnung verschickt",
     "recoveryMargin": "Punkte unter dem Warnschwellenwert",
-    "recoveryConfirmations": "aufeinanderfolgende Prüfungen unter dem Abstand"
+    "recoveryConfirmations": "aufeinanderfolgende Prüfungen unter dem Abstand",
+    "performanceReplication": "Leistung und Replikation",
+    "osdLatency": "Ceph-OSD-Latenz",
+    "osdLatencyDesc": "Warnen, wenn ein Ceph-OSD dauerhaft langsamer als diese Werte bleibt, was Benutzer als träge Datenträger wahrnehmen",
+    "osdLatencyWarning": "ms (Warnung)",
+    "osdLatencyCritical": "ms (kritisch)",
+    "replicationRpo": "Replikations-RPO",
+    "replicationRpoDesc": "Warnen, wenn die letzte erfolgreiche Synchronisierung eines Replikationsauftrags weiter zurückliegt als dessen eigenes RPO-Ziel zuzüglich dieser Marge",
+    "replicationRpoGrace": "% Toleranz über dem RPO-Ziel des Auftrags",
+    "replicationFailures": "Replikationsfehler",
+    "replicationFailuresDesc": "Warnen, wenn eine Replikationsaufgabe fehlschlägt, unabhängig von ihrem RPO",
+    "replicationFailuresEscalation": "Warnung, dann kritisch, sobald die Versuche aufgebraucht sind"
   },
   "inventory": {
     "alertsDialog": {

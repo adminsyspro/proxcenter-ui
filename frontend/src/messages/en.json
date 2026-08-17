@@ -684,7 +684,18 @@
     "recoveryTitle": "Alert recovery",
     "recoveryDesc": "How far a metric must settle back down before its alert is declared resolved, so an unstable value does not email a firing and a recovery every minute",
     "recoveryMargin": "points below the warning threshold",
-    "recoveryConfirmations": "consecutive checks below the margin"
+    "recoveryConfirmations": "consecutive checks below the margin",
+    "performanceReplication": "Performance & replication",
+    "osdLatency": "Ceph OSD latency",
+    "osdLatencyDesc": "Alert when a Ceph OSD stays slower than these values, which users feel as sluggish disks",
+    "osdLatencyWarning": "ms (warning)",
+    "osdLatencyCritical": "ms (critical)",
+    "replicationRpo": "Replication RPO",
+    "replicationRpoDesc": "Alert when a replication job's last successful sync falls further behind than its own RPO target, plus this margin",
+    "replicationRpoGrace": "% tolerated above the job's RPO target",
+    "replicationFailures": "Replication failures",
+    "replicationFailuresDesc": "Alert when a replication job errors out, independently of its RPO",
+    "replicationFailuresEscalation": "Warning, then critical once the retries are spent"
   },
   "inventory": {
     "alertsDialog": {

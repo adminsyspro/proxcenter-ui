@@ -18,6 +18,12 @@ const DEFAULT_THRESHOLDS = {
   // Recovery hysteresis (#551) — see the settings route for the rationale.
   recovery_margin: 5,
   recovery_confirmations: 3,
+  // Ceph OSD latency and replication RPO grace (#721), see the settings route.
+  // All three are float64 on the Go side, so they must NOT be truncated below.
+  osd_latency_warning: 0,
+  osd_latency_critical: 250,
+  replication_rpo_grace_percent: 25,
+  replication_failure_alerts: 1,
 }
 
 type Thresholds = typeof DEFAULT_THRESHOLDS

@@ -38,6 +38,7 @@ import { alpha } from '@mui/material/styles'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { usedVmidsOnConnection } from '@/components/hardware/utils'
 import { AllVmItem } from './InventoryTree'
 
 function CreateLxcDialog({
@@ -145,9 +146,10 @@ function CreateLxcDialog({
   const [cpuAdvancedExpanded, setCpuAdvancedExpanded] = useState(false)
   const [netAdvancedExpanded, setNetAdvancedExpanded] = useState(false)
 
-  // Client-side fallback — range-aware (see CreateVmDialog.fallbackNextVmid)
-  const fallbackNextCtid = (scopedVms: typeof allVms) => {
-    const usedIds = new Set(scopedVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
+  // Client-side fallback, range-aware (see CreateVmDialog.fallbackNextVmid) and
+  // scoped to the target connection (#724).
+  const fallbackNextCtid = (connId?: string) => {
+    const usedIds = new Set(usedVmidsOnConnection(allVms, connId))
     const startId = tenantVmidRange ? tenantVmidRange.start : 100
     const maxId = tenantVmidRange ? tenantVmidRange.end : 999999999
     let nextId = startId
@@ -180,13 +182,13 @@ function CreateLxcDialog({
     } catch (e) {
       console.error('Error loading next CT ID from API:', e)
     }
-    fallbackNextCtid(allVms.filter(vm => vm.connId === connId))
+    fallbackNextCtid(connId)
   }
 
-  // Calculer le prochain CTID disponible (global sur toutes les VMs)
+  // Pré-remplissage du CTID, sur la connexion sélectionnée quand il y en a une
   useEffect(() => {
     if (allVms.length > 0) {
-      fallbackNextCtid(allVms)
+      fallbackNextCtid(selectedConnection)
     }
   }, [allVms])
 
@@ -221,7 +223,9 @@ return
       return
     }
 
-    const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === ctidNum)
+    // Sur la connexion cible uniquement: le même id sur un autre cluster ne
+    // gêne pas cette création (#724).
+    const isUsed = usedVmidsOnConnection(allVms, selectedConnection).includes(ctidNum)
 
     if (isUsed) {
       setCtidError(t('inventory.createLxc.ctIdInUse', { id: ctidNum }))
@@ -238,7 +242,7 @@ return
       void loadNextCtid(selectedConnection)
       return
     }
-    fallbackNextCtid(allVms)
+    fallbackNextCtid()
   }
 
   // Charger toutes les connexions et tous leurs nodes

@@ -53,6 +53,30 @@ export const formatMemory = (bytes?: number): string => {
 return `${gb.toFixed(1)} GB`
 }
 
+// Minimal shape of an inventory guest for VMID accounting. The inventory list
+// merges every connection, hence the connId.
+export type VmidOwner = { connId?: string; vmid: number | string }
+
+// VMIDs already taken on `connId`. Guests on the OTHER connections are left out
+// on purpose: Proxmox only requires a VMID to be unique inside its own cluster,
+// and neither a clone nor a create ever crosses a connection. Feeding the whole
+// inventory to a dialog made it refuse ids that were free on the target cluster
+// (#724). Falls back to every connection while none is selected, which is the
+// best guess available at that point.
+export const usedVmidsOnConnection = <T extends VmidOwner>(vms: T[], connId?: string): number[] =>
+  (connId ? vms.filter(vm => vm.connId === connId) : vms)
+    .map(vm => Number.parseInt(String(vm.vmid), 10))
+    .filter(id => Number.isInteger(id) && id > 0)
+
+// Client-side estimate of the next free VMID on `connId`, used only as a seed
+// or when the server suggestion is unavailable.
+export const nextVmidOnConnection = <T extends VmidOwner>(vms: T[], connId?: string): number => {
+  const used = usedVmidsOnConnection(vms, connId)
+  const highest = used.length === 0 ? 0 : Math.max(...used)
+
+  return Math.max(100, highest + 1)
+}
+
 // Cluster-wide next free VMID from PVE (/cluster/nextid). Returns null when the
 // endpoint fails or yields something below the 100 floor, so callers can fall
 // back to their own estimate. Used by CloneVmDialog (both its open-effect and

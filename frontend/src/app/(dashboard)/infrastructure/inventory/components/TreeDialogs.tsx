@@ -32,6 +32,7 @@ import {
 import EntityTagManager from './EntityTagManager'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
+import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import { NodeIcon, ClusterIcon, getVmIcon } from './TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
@@ -794,8 +795,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           vmName={cloneTarget.name || `VM ${cloneTarget.vmid}`}
           vmid={cloneTarget.vmid}
           vmType={cloneTarget.type}
-          nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
-          existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
+          nextVmid={nextVmidOnConnection(allVms, cloneTarget.connId)}
+          existingVmids={usedVmidsOnConnection(allVms, cloneTarget.connId)}
           pools={[]}
         />
       )}

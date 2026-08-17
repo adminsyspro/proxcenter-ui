@@ -344,6 +344,21 @@ describe('CreateVmDialog - form inputs', () => {
     expect(screen.getByText(/VM ID 200 is already in use/i)).toBeInTheDocument()
   })
 
+  it('VM ID used on ANOTHER connection does not block the create (#724)', async () => {
+    // Same id, but the guest lives on a second cluster. Proxmox only requires
+    // uniqueness inside a cluster, so the target connection is free to use 200.
+    renderWithProviders(
+      <CreateVmDialog
+        {...makeProps({ allVms: [{ vmid: '200', connId: 'conn-2', node: 'other-node' } as any] })}
+      />,
+    )
+    await waitForDataLoad()
+
+    const vmidInput = screen.getByLabelText('VM ID') as HTMLInputElement
+    fireEvent.change(vmidInput, { target: { value: '200' } })
+    expect(screen.queryByText(/VM ID 200 is already in use/i)).not.toBeInTheDocument()
+  })
+
   it('expanding Boot and Shutdown section shows the Start at boot toggle', async () => {
     renderWithProviders(<CreateVmDialog {...makeProps()} />)
     await waitForDataLoad()

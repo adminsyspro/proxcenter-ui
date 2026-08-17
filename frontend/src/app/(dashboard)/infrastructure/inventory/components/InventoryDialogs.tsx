@@ -40,6 +40,7 @@ import {
 
 import { NodeRow, BulkAction } from '@/components/NodesTable'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
 import { cbtEligibility } from '@/lib/vmware/cbt-eligibility'
@@ -1366,8 +1367,8 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               vmName={data?.name || `VM ${vmid}`}
               vmid={vmid}
               vmType={type}
-              nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
-              existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
+              nextVmid={nextVmidOnConnection(allVms, connId)}
+              existingVmids={usedVmidsOnConnection(allVms, connId)}
               pools={[]}
             />
           </>
@@ -1402,8 +1403,8 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           vmName={tableCloneVm.name}
           vmid={tableCloneVm.vmid}
           vmType={tableCloneVm.type}
-          nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
-          existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
+          nextVmid={nextVmidOnConnection(allVms, tableCloneVm.connId)}
+          existingVmids={usedVmidsOnConnection(allVms, tableCloneVm.connId)}
           pools={[]}
         />
       )}

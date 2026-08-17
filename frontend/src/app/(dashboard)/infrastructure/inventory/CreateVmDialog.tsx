@@ -46,6 +46,7 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 import NumericTextField from '@/components/ui/NumericTextField'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
+import { usedVmidsOnConnection } from '@/components/hardware/utils'
 import { formatBytes } from '@/utils/format'
 import { AllVmItem } from './InventoryTree'
 
@@ -224,7 +225,7 @@ function CreateVmDialog({
   // Client-side fallback when the nextid API is unreachable — range-aware so
   // it never proposes an out-of-range VMID for MSP tenants.
   const fallbackNextVmid = () => {
-    const usedVmids = new Set(allVms.map(vm => Number.parseInt(String(vm.vmid), 10)))
+    const usedVmids = new Set(usedVmidsOnConnection(allVms, selectedConnection))
     const startId = tenantVmidRange ? tenantVmidRange.start : 100
     const maxId = tenantVmidRange ? tenantVmidRange.end : 999999999
     let nextId = startId
@@ -525,8 +526,9 @@ return
       return
     }
 
-    // Vérifier si le VMID est déjà utilisé
-    const isUsed = allVms.some(vm => Number.parseInt(String(vm.vmid), 10) === vmidNum)
+    // Vérifier si le VMID est déjà utilisé, sur la connexion cible uniquement:
+    // le même id sur un autre cluster ne gêne pas cette création (#724).
+    const isUsed = usedVmidsOnConnection(allVms, selectedConnection).includes(vmidNum)
 
     if (isUsed) {
       setVmidError(t('inventory.createVm.vmIdInUse', { id: vmidNum }))

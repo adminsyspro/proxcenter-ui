@@ -111,6 +111,14 @@ export async function POST(req: Request) {
 
   const generated = generateApiToken()
 
+  // Denormalised provenance (#632): read the creator's email once, here, and
+  // freeze it on the row. Resolving it at display time through the FK would
+  // return nothing precisely in the case that matters, after the account has
+  // been deleted.
+  const creator = ctx.userId
+    ? await prisma.user.findUnique({ where: { id: ctx.userId }, select: { email: true } })
+    : null
+
   // Atomic with the audit row (fix round 1, finding 1): if the audit insert
   // fails, the token creation must roll back too. Otherwise a caller could
   // get an error response while an active, unlogged credential (with its
@@ -131,6 +139,7 @@ export async function POST(req: Request) {
           expiresAt,
           rateLimitPerMin,
           createdByUserId: ctx.userId ?? null,
+          createdByEmail: creator?.email ?? null,
         },
         select: TOKEN_VIEW_SELECT,
       })

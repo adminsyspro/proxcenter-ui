@@ -2619,13 +2619,15 @@
         "tenant": "Mandant",
         "scopes": "Berechtigungen",
         "expires": "Ablauf",
-        "lastUsed": "Zuletzt verwendet"
+        "lastUsed": "Zuletzt verwendet",
+        "createdBy": "Erstellt von"
       },
       "never": "Nie",
-      "revoke": "Widerrufen",
+      "unknownCreator": "Unbekannt",
+      "delete": "Löschen",
       "revoked": "Widerrufen",
-      "revokeConfirm": "Diesen Token widerrufen? Integrationen, die ihn verwenden, funktionieren sofort nicht mehr.",
-      "revokeSuccess": "Token widerrufen",
+      "deleteConfirm": "Dieses Token löschen? Integrationen, die es verwenden, funktionieren sofort nicht mehr, und der Vorgang ist unwiderruflich.",
+      "deleteSuccess": "Token gelöscht",
       "loadError": "API-Token konnten nicht geladen werden",
       "createError": "API-Token konnte nicht erstellt werden",
       "dialog": {
@@ -5628,7 +5630,17 @@
     "passwordManagedByIdp": "Das Passwort wird vom Identitätsanbieter verwaltet (OIDC / LDAP).",
     "emailLabel": "E-Mail",
     "emailHeader": "E-Mail",
-    "authHeader": "Auth"
+    "authHeader": "Auth",
+    "apiTokens": {
+      "title": "API-Token",
+      "disableWarning": "Dieses Konto hat {count} aktive(s) API-Token erstellt. Das Deaktivieren des Kontos stoppt sie nicht: Ein Token authentifiziert sich eigenständig.",
+      "deleteWarning": "Dieses Konto hat {count} aktive(s) API-Token erstellt. Sie überleben die Löschung: Ein Token authentifiziert sich eigenständig.",
+      "deleteCheckbox": "Diese Token ebenfalls löschen",
+      "deleteHint": "Jede Integration, die sie verwendet, funktioniert sofort nicht mehr. Der Vorgang ist unwiderruflich.",
+      "loadError": "Die API-Token dieses Benutzers konnten nicht geladen werden",
+      "neverUsed": "Nie verwendet",
+      "deleted": "{count} API-Token gelöscht"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "Feature under aktiv development",

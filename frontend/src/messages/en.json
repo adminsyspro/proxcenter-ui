@@ -2649,13 +2649,15 @@
         "tenant": "Tenant",
         "scopes": "Scopes",
         "expires": "Expires",
-        "lastUsed": "Last used"
+        "lastUsed": "Last used",
+        "createdBy": "Created by"
       },
       "never": "Never",
-      "revoke": "Revoke",
+      "unknownCreator": "Unknown",
+      "delete": "Delete",
       "revoked": "Revoked",
-      "revokeConfirm": "Revoke this token? Integrations using it stop working immediately.",
-      "revokeSuccess": "Token revoked",
+      "deleteConfirm": "Delete this token? Integrations using it stop working immediately, and this cannot be undone.",
+      "deleteSuccess": "Token deleted",
       "loadError": "Failed to load API tokens",
       "createError": "Failed to create the API token",
       "dialog": {
@@ -5698,7 +5700,17 @@
     "tenantsHelper": "The user will be a member of every selected tenant",
     "tenantsRequired": "Select at least one tenant",
     "rolesMixed": "{count} roles",
-    "rolesDivergentWarning": "Roles differ across this user's tenants. Saving a role here will overwrite every per-tenant assignment."
+    "rolesDivergentWarning": "Roles differ across this user's tenants. Saving a role here will overwrite every per-tenant assignment.",
+    "apiTokens": {
+      "title": "API tokens",
+      "disableWarning": "This account created {count} active API token(s). Disabling the account does not stop them: a token authenticates on its own.",
+      "deleteWarning": "This account created {count} active API token(s). They survive the deletion: a token authenticates on its own.",
+      "deleteCheckbox": "Delete these tokens as well",
+      "deleteHint": "Any integration using them stops working immediately. This cannot be undone.",
+      "loadError": "Failed to load the API tokens of this user",
+      "neverUsed": "Never used",
+      "deleted": "{count} API token(s) deleted"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "Feature under active development",

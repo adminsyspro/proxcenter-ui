@@ -67,7 +67,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const session = await getServerSession(authOptions)
     const { id } = await params
     const body = await req.json()
-    const { name, enabled, password, tenantIds, roleId } = body
+    const { name, enabled, password, tenantIds, roleId, deleteApiTokens } = body
 
     const isSelf = session?.user?.id === id
     const selfServiceFields = new Set(["name", "password"])
@@ -300,11 +300,47 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged) {
+    const wantsTokenDeletion = deleteApiTokens === true
+
+    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion) {
       return NextResponse.json({ error: "Aucune modification fournie" }, { status: 400 })
     }
 
     if (Object.keys(data).length > 0) data.updatedAt = new Date()
+
+    // Offboarding (#632). A pxc_ token created by this user keeps
+    // authenticating after the account is disabled — that is decision D3 of
+    // the token spec, so that a departure never silently takes monitoring
+    // down. The admin who disables the account is the one who gets to
+    // decide, and the disable dialog now shows them the live tokens and
+    // asks. When they say yes, we act here.
+    //
+    // Ordered BEFORE prisma.user.update on purpose. The invariant that
+    // matters is: this request never disables the account while leaving the
+    // tokens live. A failing deletion therefore has to abort before the
+    // `enabled` write, not after it — the reverse order would answer 500 to
+    // an admin whose account edit went through, and they would reasonably
+    // read the disabled account as proof the tokens died with it.
+    //
+    // Scope of that guarantee, precisely: only the `data` update below. The
+    // tenantIds reconciliation and the roleId propagation above have already
+    // committed by the time we get here, so a PATCH combining those with
+    // deleteApiTokens can still fail with memberships and RBAC grants
+    // changed. Widening the guarantee would mean wrapping the whole handler
+    // in one transaction, which is a bigger change than this issue calls
+    // for; the security-relevant pairing (disable + delete) is the one that
+    // is held.
+    let tokensDeleted: { count: number; tokens: { id: string; name: string; tokenPrefix: string }[] } | null = null
+    if (wantsTokenDeletion) {
+      const { deleteTokensCreatedBy } = await import("@/lib/api-tokens/creatorTokens")
+
+      // A tenant-scoped admin only reaches the tokens of the tenant they
+      // are acting from; the provider view reaches every one of them.
+      tokensDeleted = await deleteTokensCreatedBy(id, isProviderView ? undefined : tenantId)
+      if (tokensDeleted.count > 0) {
+        console.log(`[api-tokens] deleted ${tokensDeleted.count} token(s) created by ${safeLog(id)}`)
+      }
+    }
 
     const updated = Object.keys(data).length > 0
       ? await prisma.user.update({ where: { id }, data })
@@ -340,6 +376,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (rolesChanged) {
       changes.role = rolesChanged
     }
+    if (tokensDeleted) {
+      // Prefixes, never secrets: the prefix is the public half already shown
+      // in the tokens table, and it is what an operator reads to recognise
+      // which integration just lost its credential.
+      changes.apiTokensDeleted = {
+        count: tokensDeleted.count,
+        prefixes: tokensDeleted.tokens.map(t => t.tokenPrefix),
+      }
+    }
 
     await audit({
       action: "update",
@@ -363,6 +408,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         last_login_at: updated.lastLoginAt?.toISOString() ?? null,
         created_at: updated.createdAt.toISOString(),
         updated_at: updated.updatedAt.toISOString(),
+        api_tokens_deleted: tokensDeleted?.count ?? 0,
       },
     })
   } catch (error: any) {
@@ -403,6 +449,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         { error: "Vous ne pouvez pas supprimer votre propre compte" },
         { status: 400 }
       )
+    }
+
+    // Offboarding (#632), opt-in through ?deleteApiTokens=true. This MUST run
+    // before the account delete: `created_by_user_id` is ON DELETE SET NULL,
+    // so once the account is gone the tokens it created can no longer be
+    // found by creator and the chance to act on them is lost for good.
+    //
+    // Without the flag the tokens are LEFT ALIVE, which is the documented
+    // behaviour (spec D3) and is why `created_by_email` exists — provenance
+    // has to outlive the account for every token the operator chose to keep.
+    let tokensDeleted: { count: number; tokens: { id: string; name: string; tokenPrefix: string }[] } | null = null
+    if (new URL(req.url).searchParams.get("deleteApiTokens") === "true") {
+      const { deleteTokensCreatedBy } = await import("@/lib/api-tokens/creatorTokens")
+
+      tokensDeleted = await deleteTokensCreatedBy(id, isProviderView ? undefined : tenantId)
+      if (tokensDeleted.count > 0) {
+        console.log(`[api-tokens] deleted ${tokensDeleted.count} token(s) created by ${safeLog(id)}`)
+      }
     }
 
     if (isProviderView) {
@@ -452,11 +516,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       resourceType: "user",
       resourceId: id,
       resourceName: user.email,
-      details: {},
+      details: tokensDeleted
+        ? { apiTokensDeleted: { count: tokensDeleted.count, prefixes: tokensDeleted.tokens.map(t => t.tokenPrefix) } }
+        : {},
       status: "success",
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, api_tokens_deleted: tokensDeleted?.count ?? 0 })
   } catch (error: any) {
     console.error("Erreur DELETE user:", error)
     return NextResponse.json({ error: error?.message || "Erreur serveur" }, { status: 500 })

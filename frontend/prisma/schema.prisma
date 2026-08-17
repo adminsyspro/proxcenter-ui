@@ -416,6 +416,12 @@ model ApiToken {
   lastUsedIp      String?   @map("last_used_ip")
   rateLimitPerMin Int       @default(600) @map("rate_limit_per_min")
   createdByUserId String?   @map("created_by_user_id")
+  // Denormalised on purpose (#632): createdByUserId is SetNull, so deleting
+  // the account erases "who minted this credential" from the row while the
+  // token itself keeps working. The email is a frozen copy of the creator at
+  // creation time, never refreshed — it answers a provenance question about
+  // the past, not "who is this account today".
+  createdByEmail  String?   @map("created_by_email")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -423,6 +429,8 @@ model ApiToken {
   creator User?  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
+  // Offboarding lists "tokens created by this user" (#632).
+  @@index([createdByUserId])
   @@map("api_tokens")
 }
 

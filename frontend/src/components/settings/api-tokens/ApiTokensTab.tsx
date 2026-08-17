@@ -28,6 +28,10 @@ type ApiTokenView = {
   lastUsedAt: string | null
   lastUsedIp: string | null
   rateLimitPerMin: number
+  // Frozen copy of the creator's email (TOKEN_VIEW_SELECT). Null on tokens
+  // minted before the column existed, and on tokens created without a user
+  // session -- the grid falls back to the "unknown" label for those.
+  createdByEmail?: string | null
   createdAt: string
 }
 
@@ -38,7 +42,7 @@ function ApiTokensPanel() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
-  const [revoking, setRevoking] = useState<ApiTokenView | null>(null)
+  const [deletingToken, setDeletingToken] = useState<ApiTokenView | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,17 +62,17 @@ function ApiTokensPanel() {
     load()
   }, [load])
 
-  async function confirmRevoke() {
-    if (!revoking) return
+  async function confirmDelete() {
+    if (!deletingToken) return
     try {
-      const res = await fetch(`/api/v1/settings/api-tokens/${revoking.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/v1/settings/api-tokens/${deletingToken.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setSuccess(t('revokeSuccess'))
+      setSuccess(t('deleteSuccess'))
       await load()
     } catch {
       setError(t('loadError'))
     } finally {
-      setRevoking(null)
+      setDeletingToken(null)
     }
   }
 
@@ -127,19 +131,43 @@ function ApiTokensPanel() {
       },
     },
     {
+      field: 'createdByEmail',
+      headerName: t('columns.createdBy'),
+      flex: 1,
+      minWidth: 200,
+      // Offboarding (#632): without this the grid never says who minted a
+      // credential, so an admin cannot tie a live token to a departing
+      // person. Plain text like the tenant column -- an email is a name,
+      // not an identifier, so no monospace.
+      renderCell: params => (params.value ? (params.value as string) : t('unknownCreator')),
+    },
+    {
       field: 'actions',
       headerName: '',
-      width: 120,
+      width: 170,
       sortable: false,
       renderCell: params => {
         const row = params.row as ApiTokenView
-        if (row.revokedAt) return <Chip label={t('revoked')} size='small' color='warning' variant='outlined' />
+
+        // The action deletes the row outright, so nothing writes revokedAt any
+        // more. The chip is kept for LEGACY rows: databases created before the
+        // change still hold tokens that were soft-revoked, they are still
+        // refused at authentication, and the grid has to keep saying so.
+        //
+        // The delete button shows for those rows TOO, and that is the point.
+        // Rendering the chip *instead of* the button left a legacy revoked
+        // token permanently stuck in the table with no way to remove it -- the
+        // backend deletes it happily, only the UI refused to ask. A row the
+        // operator cannot act on is worse than one that is merely dead.
         return (
-          <Tooltip title={t('revoke')} slotProps={tooltipSlotProps}>
-            <IconButton size='small' aria-label={t('revoke')} onClick={() => setRevoking(row)}>
-              <i className='ri-delete-bin-line' />
-            </IconButton>
-          </Tooltip>
+          <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
+            {row.revokedAt && <Chip label={t('revoked')} size='small' color='warning' variant='outlined' />}
+            <Tooltip title={t('delete')} slotProps={tooltipSlotProps}>
+              <IconButton size='small' aria-label={t('delete')} onClick={() => setDeletingToken(row)}>
+                <i className='ri-delete-bin-line' />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         )
       },
     },
@@ -181,14 +209,14 @@ function ApiTokensPanel() {
 
       <CreateTokenDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
 
-      <Dialog open={!!revoking} onClose={() => setRevoking(null)}>
-        <DialogTitle>{t('revoke')}</DialogTitle>
+      <Dialog open={!!deletingToken} onClose={() => setDeletingToken(null)}>
+        <DialogTitle>{t('delete')}</DialogTitle>
         <DialogContent>
-          <Typography variant='body2'>{t('revokeConfirm')}</Typography>
+          <Typography variant='body2'>{t('deleteConfirm')}</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRevoking(null)}>{t('dialog.cancel')}</Button>
-          <Button color='error' variant='contained' onClick={confirmRevoke}>{t('dialog.confirm')}</Button>
+          <Button onClick={() => setDeletingToken(null)}>{t('dialog.cancel')}</Button>
+          <Button color='error' variant='contained' onClick={confirmDelete}>{t('dialog.confirm')}</Button>
         </DialogActions>
       </Dialog>
     </Box>

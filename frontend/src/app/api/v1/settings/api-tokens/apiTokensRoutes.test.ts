@@ -287,16 +287,19 @@ describe('POST /api/v1/settings/api-tokens', () => {
 })
 
 describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
-  it('soft-revokes and keeps the row', async () => {
-    const { id } = await seedApiToken()
+  // Owner arbitration: the row is REMOVED, it is no longer stamped with
+  // revoked_at. The audit entry is what remains, carrying the prefix -- the
+  // only identifier that survives the row.
+  it('deletes the row outright and journals apitoken.delete with the prefix', async () => {
+    const { id, prefix } = await seedApiToken()
     const { DELETE } = await import('./[id]/route')
     const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
     expect(res.status).toBe(200)
+    expect(await readJson<any>(res)).toEqual({ data: { id, deleted: true } })
     const row = await prismaTest.apiToken.findUnique({ where: { id } })
-    expect(row).not.toBeNull()
-    expect(row?.revokedAt).not.toBeNull()
+    expect(row).toBeNull()
     expect(auditMock).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'apitoken.revoke' }),
+      expect.objectContaining({ action: 'apitoken.delete', details: { tokenPrefix: prefix } }),
       expect.anything(),
     )
   })
@@ -310,14 +313,15 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     expect((await callRoute(DELETE, { method: 'DELETE', params: { id } })).status).toBe(404)
   })
 
-  it('denies revocation when admin.apitokens is missing', async () => {
+  it('denies deletion when admin.apitokens is missing', async () => {
     checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 403 }))
     const { id } = await seedApiToken()
     const { DELETE } = await import('./[id]/route')
     const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
     expect(res.status).toBe(403)
-    const row = await prismaTest.apiToken.findUnique({ where: { id } })
-    expect(row?.revokedAt).toBeNull()
+    // On a hard delete the survival of the row is the whole assertion: reading
+    // `row?.revokedAt` would pass just as happily on a row that was removed.
+    expect(await prismaTest.apiToken.findUnique({ where: { id } })).not.toBeNull()
   })
 
   it('400s when params.id is missing entirely', async () => {
@@ -327,26 +331,44 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     expect(await readJson<any>(res)).toEqual({ error: 'Missing params.id' })
   })
 
-  it('is idempotent: revoking an already-revoked token keeps the original revokedAt and never re-enters the transaction', async () => {
+  // The route is deliberately NOT idempotent any more, unlike the revocation
+  // it replaces (which answered 200 forever). Once the row is gone 404 is the
+  // honest answer, and the only caller reloads the list rather than reading
+  // this response.
+  it('answers 404 on a second DELETE of the same id, and journals nothing the second time', async () => {
+    const { id } = await seedApiToken()
+    const { DELETE } = await import('./[id]/route')
+
+    const first = await callRoute(DELETE, { method: 'DELETE', params: { id } })
+    expect(first.status).toBe(200)
+    expect(auditMock).toHaveBeenCalledTimes(1)
+
+    const second = await callRoute(DELETE, { method: 'DELETE', params: { id } })
+    expect(second.status).toBe(404)
+    expect(await readJson<any>(second)).toEqual({ error: 'API token not found' })
+    // The lookup fails before the transaction, so no second journal entry.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+  })
+
+  // A legacy row still carrying revoked_at from the soft-revocation era is
+  // deletable like any other: the route keys on the row, not on its state.
+  it('deletes a legacy already-revoked row instead of refusing it', async () => {
     const { id } = await seedApiToken({ revokedAt: new Date('2026-01-01T00:00:00.000Z') })
     const { DELETE } = await import('./[id]/route')
     const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
     expect(res.status).toBe(200)
-    const body = await readJson<any>(res)
-    expect(body.data.revokedAt).toBe('2026-01-01T00:00:00.000Z')
-    // No second audit row: the transaction (and its audit() call) never runs
-    // again for a token that is already revoked.
-    expect(auditMock).not.toHaveBeenCalled()
+    expect(await readJson<any>(res)).toEqual({ data: { id, deleted: true } })
+    expect(await prismaTest.apiToken.findUnique({ where: { id } })).toBeNull()
   })
 
-  it('falls back to a generic 500 message when the revoke transaction failure carries no message', async () => {
+  it('falls back to a generic 500 message when the delete transaction failure carries no message', async () => {
     auditMock.mockRejectedValueOnce({})
     const { id } = await seedApiToken()
     const { DELETE } = await import('./[id]/route')
     const res = await callRoute(DELETE, { method: 'DELETE', params: { id } })
     expect(res.status).toBe(500)
     expect(await readJson<any>(res)).toEqual({ error: 'Internal server error' })
-    const row = await prismaTest.apiToken.findUnique({ where: { id } })
-    expect(row?.revokedAt).toBeNull()
+    // Rolled back with the audit insert: the credential is still there.
+    expect(await prismaTest.apiToken.findUnique({ where: { id } })).not.toBeNull()
   })
 })

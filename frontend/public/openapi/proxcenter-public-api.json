@@ -368,9 +368,6 @@
       ],
       "reports:read": [
         "reports.view"
-      ],
-      "compliance:read": [
-        "admin.compliance"
       ]
     }
   },

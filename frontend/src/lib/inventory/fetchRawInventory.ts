@@ -555,17 +555,44 @@ export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScop
   if (getInflightFetch(tenantId, vdcContext) !== null) return
 
   const startTime = Date.now()
+
+  // This promise goes into the SHARED in-flight slot, which blockingFetch
+  // hands straight back to its callers. So it must resolve to the inventory
+  // and reject on failure, exactly like blockingFetch's own promise does.
+  //
+  // It used to do neither. The `.then` returned nothing and the `.catch`
+  // swallowed the error, making this a Promise<void> stored through an
+  // `as any` — the slot is typed Promise<CachedInventory>, so the cast was
+  // the only reason it compiled. Any request that reached the blocking path
+  // while a background revalidation was running got that promise, awaited it,
+  // and received `undefined`, which then died on `raw.clusters` as a 500.
+  // Reproduced on the first inventory call after a server start, but the same
+  // window opens on EVERY stale revalidation, so under a polling monitor it
+  // was an intermittent 500 with no explanation.
   const revalidation = fetchRawInventory(infra)
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
       setCachedInventory(result, tenantId, vdcContext)
       setInflightFetch(null, tenantId, vdcContext)
+
+      return result
     })
     .catch(err => {
       console.error('[inventory] Background revalidation failed:', err?.message)
       setInflightFetch(null, tenantId, vdcContext)
+      // Rethrow so a piggybacking blockingFetch caller learns the fetch
+      // failed. Answering it with `undefined` is what produced the bogus
+      // TypeError instead of the real cause.
+      throw err
     })
-  setInflightFetch(revalidation as any, tenantId, vdcContext)
+
+  setInflightFetch(revalidation, tenantId, vdcContext)
+
+  // Fire-and-forget for THIS caller: the rethrow above is for whoever awaits
+  // the shared slot, and without a detached handler it would surface as an
+  // unhandled rejection. Attached after the slot is set, and deliberately on
+  // a separate handler chain so the promise stored above still rejects.
+  revalidation.catch(() => {})
 }
 
 /** All-empty shape, same fields as a real RawInventory, served on a cold

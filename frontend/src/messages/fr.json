@@ -2649,13 +2649,15 @@
         "tenant": "Tenant",
         "scopes": "Périmètres",
         "expires": "Expiration",
-        "lastUsed": "Dernière utilisation"
+        "lastUsed": "Dernière utilisation",
+        "createdBy": "Créé par"
       },
       "never": "Jamais",
-      "revoke": "Révoquer",
+      "unknownCreator": "Inconnu",
+      "delete": "Supprimer",
       "revoked": "Révoqué",
-      "revokeConfirm": "Révoquer ce jeton ? Les intégrations qui l'utilisent s'arrêtent immédiatement.",
-      "revokeSuccess": "Jeton révoqué",
+      "deleteConfirm": "Supprimer ce jeton ? Les intégrations qui l'utilisent s'arrêtent immédiatement, et l'opération est irréversible.",
+      "deleteSuccess": "Jeton supprimé",
       "loadError": "Échec du chargement des jetons API",
       "createError": "Échec de la création du jeton API",
       "dialog": {
@@ -5698,7 +5700,17 @@
     "tenantsHelper": "L'utilisateur sera membre de chaque tenant sélectionné",
     "tenantsRequired": "Sélectionner au moins un tenant",
     "rolesMixed": "{count} rôles",
-    "rolesDivergentWarning": "Les rôles diffèrent entre les tenants de cet utilisateur. Enregistrer un rôle ici écrasera chaque affectation per-tenant."
+    "rolesDivergentWarning": "Les rôles diffèrent entre les tenants de cet utilisateur. Enregistrer un rôle ici écrasera chaque affectation per-tenant.",
+    "apiTokens": {
+      "title": "Jetons d'API",
+      "disableWarning": "Ce compte a créé {count} jeton(s) d'API actif(s). Désactiver le compte ne les arrête pas : un jeton s'authentifie tout seul.",
+      "deleteWarning": "Ce compte a créé {count} jeton(s) d'API actif(s). Ils survivent à la suppression : un jeton s'authentifie tout seul.",
+      "deleteCheckbox": "Supprimer aussi ces jetons",
+      "deleteHint": "Toute intégration qui les utilise cesse de fonctionner immédiatement. L'opération est irréversible.",
+      "loadError": "Impossible de charger les jetons d'API de cet utilisateur",
+      "neverUsed": "Jamais utilisé",
+      "deleted": "{count} jeton(s) d'API supprimé(s)"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "Fonctionnalité en cours de développement",

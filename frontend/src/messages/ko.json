@@ -2649,13 +2649,15 @@
         "tenant": "테넌트",
         "scopes": "범위",
         "expires": "만료",
-        "lastUsed": "마지막 사용"
+        "lastUsed": "마지막 사용",
+        "createdBy": "생성자"
       },
       "never": "없음",
-      "revoke": "취소",
+      "unknownCreator": "알 수 없음",
+      "delete": "삭제",
       "revoked": "취소됨",
-      "revokeConfirm": "이 토큰을 취소하시겠습니까? 이를 사용하는 통합은 즉시 작동을 멈춥니다.",
-      "revokeSuccess": "토큰이 취소되었습니다",
+      "deleteConfirm": "이 토큰을 삭제하시겠습니까? 이 토큰을 사용하는 연동이 즉시 중단되며 되돌릴 수 없습니다.",
+      "deleteSuccess": "토큰이 삭제되었습니다",
       "loadError": "API 토큰을 불러오지 못했습니다",
       "createError": "API 토큰을 생성하지 못했습니다",
       "dialog": {
@@ -5698,7 +5700,17 @@
     "tenantsHelper": "사용자는 선택한 모든 테넌트의 구성원이 됩니다",
     "tenantsRequired": "테넌트를 하나 이상 선택하세요",
     "rolesMixed": "역할 {count}개",
-    "rolesDivergentWarning": "이 사용자의 테넌트별 역할이 서로 다릅니다. 여기서 역할을 저장하면 모든 테넌트별 할당을 덮어씁니다."
+    "rolesDivergentWarning": "이 사용자의 테넌트별 역할이 서로 다릅니다. 여기서 역할을 저장하면 모든 테넌트별 할당을 덮어씁니다.",
+    "apiTokens": {
+      "title": "API 토큰",
+      "disableWarning": "이 계정이 활성 API 토큰 {count}개를 생성했습니다. 계정을 비활성화해도 토큰은 중지되지 않습니다. 토큰은 스스로 인증합니다.",
+      "deleteWarning": "이 계정이 활성 API 토큰 {count}개를 생성했습니다. 계정을 삭제해도 토큰은 남습니다. 토큰은 스스로 인증합니다.",
+      "deleteCheckbox": "이 토큰도 함께 삭제",
+      "deleteHint": "이 토큰을 사용하는 모든 연동이 즉시 중단됩니다. 되돌릴 수 없습니다.",
+      "loadError": "이 사용자의 API 토큰을 불러오지 못했습니다",
+      "neverUsed": "사용된 적 없음",
+      "deleted": "API 토큰 {count}개가 삭제되었습니다"
+    }
   },
   "networkPage": {
     "devNoticeTitle": "활발히 개발 중인 기능",

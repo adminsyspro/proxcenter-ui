@@ -56,7 +56,7 @@ describe('audit, token attribution (D13)', () => {
   })
 
   it('accepts an explicit entry.apiTokenId without any header lookup', async () => {
-    const auditId = await audit({ action: 'apitoken.revoke', category: 'api_tokens', apiTokenId: 'tok_explicit' })
+    const auditId = await audit({ action: 'apitoken.delete', category: 'api_tokens', apiTokenId: 'tok_explicit' })
     const row = await prismaTest.auditLog.findUnique({ where: { id: auditId } })
     expect(row?.apiTokenId).toBe('tok_explicit')
   })

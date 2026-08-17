@@ -4308,6 +4308,7 @@
     "anthropicCloudOption": "Claude Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows en ejecución LLMs locally. Sin data is sent externally.",
     "ollamaUrlLabel": "URL URL",
+    "ollamaToolModelHelp": "El asistente consulta su infraestructura mediante herramientas, por lo que necesita un modelo compatible con llamadas a herramientas. llama3.1:8b lo admite; mistral:7b no, y qwen2.5:7b responde de memoria en lugar de consultar.",
     "modelLabel": "Modelo",
     "testingConnection": "Probando...",
     "testConnection": "Probar conexión",

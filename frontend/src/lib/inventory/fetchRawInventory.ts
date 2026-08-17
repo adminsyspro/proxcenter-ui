@@ -32,6 +32,8 @@ export type NodeData = {
   node: string
   status: string
   cpu?: number
+  /** Physical cores the host exposes, straight from /nodes. */
+  maxcpu?: number
   mem?: number
   maxmem?: number
   disk?: number
@@ -65,6 +67,8 @@ export type GuestData = {
   status: string
   node: string
   cpu?: number
+  /** vCPUs *assigned* to the guest (cores x sockets), not the usage ratio. */
+  maxcpu?: number
   mem?: number
   maxmem?: number
   disk?: number
@@ -357,6 +361,7 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
           status: g.status || 'unknown',
           node: g.node,
           cpu: g.cpu,
+          maxcpu: g.maxcpu,
           mem: g.mem,
           maxmem: g.maxmem,
           disk: g.disk,

@@ -4308,6 +4308,7 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows running LLMs locally. No data is sent externally.",
     "ollamaUrlLabel": "Ollama URL",
+    "ollamaToolModelHelp": "The assistant queries your infrastructure through tools, so it needs a model that supports tool calling. llama3.1:8b does; mistral:7b does not, and qwen2.5:7b answers from memory instead of querying.",
     "modelLabel": "Model",
     "testingConnection": "Testing...",
     "testConnection": "Test connection",

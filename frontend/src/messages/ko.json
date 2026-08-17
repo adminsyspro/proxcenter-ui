@@ -4308,6 +4308,7 @@
     "anthropicCloudOption": "Anthropic Claude (클라우드)",
     "ollamaInfo": "<b>Ollama</b>를 사용하면 LLM을 로컬에서 실행할 수 있습니다. 데이터가 외부로 전송되지 않습니다.",
     "ollamaUrlLabel": "Ollama URL",
+    "ollamaToolModelHelp": "어시스턴트는 도구를 통해 인프라를 조회하므로 도구 호출을 지원하는 모델이 필요합니다. llama3.1:8b는 지원하지만 mistral:7b는 지원하지 않으며, qwen2.5:7b는 조회하지 않고 기억에 의존해 답합니다.",
     "modelLabel": "모델",
     "testingConnection": "테스트 중...",
     "testConnection": "연결 테스트",

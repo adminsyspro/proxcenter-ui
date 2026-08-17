@@ -12,7 +12,12 @@ const DEFAULT_AI_SETTINGS = {
   enabled: false,
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
-  ollamaModel: 'mistral:7b',
+  // The assistant is agentic (#459), so the default has to be a model that can
+  // actually call tools. Measured against the real prompt on Ollama 0.14.1:
+  // llama3.1:8b picks the right tool for 4 questions out of 4, qwen2.5:7b for 0
+  // out of 4 and invents the figures instead, and mistral:7b, the previous
+  // default, has no tool support at all.
+  ollamaModel: 'llama3.1:8b',
   openaiKey: '',
   openaiModel: 'gpt-4.1-nano',
   anthropicKey: '',

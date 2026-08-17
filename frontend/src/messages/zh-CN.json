@@ -4308,6 +4308,7 @@
     "anthropicCloudOption": "Anthropic Claude（云端）",
     "ollamaInfo": "<b>Ollama</b> 允许在本地运行大语言模型。不会向外部发送任何数据。",
     "ollamaUrlLabel": "Ollama URL",
+    "ollamaToolModelHelp": "助手通过工具查询您的基础设施，因此需要支持工具调用的模型。llama3.1:8b 支持；mistral:7b 不支持，而 qwen2.5:7b 会凭记忆作答而不去查询。",
     "modelLabel": "模型",
     "testingConnection": "测试中...",
     "testConnection": "测试连接",

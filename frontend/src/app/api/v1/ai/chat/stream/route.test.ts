@@ -17,7 +17,13 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
+  getRBACContext: async () => ({ isAdmin: true, tenantId: 'tenant-1', userId: 'u1', principal: { kind: 'user' } }),
+  getRbacInfraScope: async () => null,
+  filterVmsByPermission: async (_p: unknown, vms: unknown[]) => vms,
+  applyRbacInfraFilter: (cluster: unknown) => cluster,
+  filterCandidateConnections: (clusters: unknown) => clusters,
+  pruneEmptyConnections: (clusters: unknown) => clusters,
 }))
 
 let aiSettings: Record<string, unknown>
@@ -29,13 +35,39 @@ vi.mock('@/lib/db/settings', () => ({
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: async () => 'tenant-1',
   getSessionPrisma: async () => ({
-    connection: { findMany: async () => [] },
     alert: { findMany: async () => [] },
   }),
 }))
 
-vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
-vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: vi.fn() }))
+let inventory: any
+
+vi.mock('@/lib/inventory/fetchRawInventory', () => ({
+  getInventorySWR: async () => ({ raw: inventory, cached: false }),
+}))
+
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: async () => ({ kind: 'provider' }),
+  maskingScope: () => null,
+}))
+
+vi.mock('@/lib/vdc/context', () => ({ getVdcContext: async () => null }))
+vi.mock('@/lib/vdc/scope', () => ({ applyVdcFilter: (cluster: unknown) => cluster }))
+
+const rankToolExecute = vi.fn(
+  async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
+)
+
+vi.mock('@/lib/ai/tools/registry', () => ({
+  AI_TOOLS: [
+    {
+      name: 'rank_guest_hardware',
+      description: 'Rank guests by assigned hardware.',
+      parameters: { type: 'object', properties: { metric: { type: 'string', description: 'metric' } } },
+      execute: rankToolExecute,
+    },
+  ],
+  buildToolContext: (snapshot: unknown, tenantId: string, locale: string) => ({ snapshot, tenantId, locale }),
+}))
 
 let cookieLocale: string | undefined
 let acceptLanguage: string | undefined
@@ -76,11 +108,73 @@ function ollamaStream(chunks: string[]): Response {
   return new Response(body, { status: 200 })
 }
 
+/**
+ * A streaming reply cut at arbitrary byte offsets, NOT on line boundaries.
+ *
+ * This is what the network actually does, and the reader has to buffer across
+ * reads or it silently drops every JSON object that straddles two chunks.
+ */
+function ollamaStreamSplitAt(chunks: string[], pieces: number): Response {
+  const ndjson = chunks.map(c => `${JSON.stringify({ message: { content: c } })}\n`).join('')
+  const size = Math.ceil(ndjson.length / pieces)
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder()
+
+      for (let i = 0; i < ndjson.length; i += size) {
+        controller.enqueue(encoder.encode(ndjson.slice(i, i + size)))
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(body, { status: 200 })
+}
+
+/** A streamed turn in which the model asks for a tool instead of answering. */
+function ollamaStreamToolCall(name: string, args: Record<string, unknown> = {}): Response {
+  const line = JSON.stringify({
+    message: { role: 'assistant', content: '', tool_calls: [{ function: { name, arguments: args } }] },
+  })
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`${line}\n`))
+      controller.close()
+    },
+  })
+
+  return new Response(body, { status: 200 })
+}
+
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
   cookieLocale = 'en'
   acceptLanguage = undefined
+  inventory = {
+    clusters: [{
+      id: 'conn-1',
+      name: 'prod',
+      type: 'pve',
+      isCluster: true,
+      status: 'online',
+      nodes: [{
+        node: 'pve1',
+        status: 'online',
+        maxcpu: 32,
+        mem: 64 * 1024 ** 3,
+        maxmem: 128 * 1024 ** 3,
+        guests: [{ vmid: 101, name: 'db-01', type: 'qemu', status: 'running', node: 'pve1', maxcpu: 16 }],
+      }],
+    }],
+    pbsServers: [],
+    externalHypervisors: [],
+    storages: [],
+    stats: {},
+  }
   fetchMock = vi.fn().mockResolvedValue(ollamaStream(['ok']))
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -139,6 +233,128 @@ describe('POST /api/v1/ai/chat/stream', () => {
     await ask()
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).stream).toBe(true)
+  })
+
+  it('reassembles an NDJSON object split across two network reads', async () => {
+    // The previous reader split each chunk on newlines in isolation, so a JSON
+    // object straddling two reads was dropped and its tokens never reached the
+    // browser. Cutting the payload into many small pieces reproduces that.
+    fetchMock.mockResolvedValueOnce(ollamaStreamSplitAt(['pve', '1 ', 'is busiest'], 9))
+
+    const res = await ask()
+
+    expect(await res.text()).toBe('pve1 is busiest')
+  })
+
+  it('rejects a non-Ollama provider before gathering any infrastructure data', async () => {
+    aiSettings = { ...OLLAMA_SETTINGS, provider: 'openai' }
+
+    const res = await ask()
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  describe('agentic tools (#459)', () => {
+    it('offers the read-only tools on the streamed turn', async () => {
+      await ask()
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+      expect(body.tools).toHaveLength(1)
+      expect(body.tools[0]).toMatchObject({ type: 'function', function: { name: 'rank_guest_hardware' } })
+    })
+
+    it('runs the requested tool and streams the answer of the next turn', async () => {
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['db-01', ' has 16 vCPUs']))
+
+      const res = await ask()
+
+      expect(await res.text()).toBe('db-01 has 16 vCPUs')
+      expect(rankToolExecute).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+
+      // The follow-up turn must carry the assistant turn and the tool result.
+      const second = JSON.parse(fetchMock.mock.calls[1][1].body as string)
+      const roles = second.messages.map((m: any) => m.role)
+
+      expect(roles).toContain('assistant')
+      expect(roles).toContain('tool')
+      expect(JSON.stringify(second.messages)).toContain('db-01')
+    })
+
+    /*
+     * The leak seen in recette on llama3.1:8b. Ollama only lifts a call out of
+     * the output when the call IS the whole output, so a model that writes
+     * "Voici la réponse :" before its `{"name": ..., "parameters": {...}}` has
+     * the raw JSON handed back as ordinary content. Relayed token by token, it
+     * printed verbatim in the chat window and there was no taking it back.
+     */
+    it('never prints a tool call the model wrote as prose', async () => {
+      const leak = 'Voici la réponse :\n\n{"name": "rank_guest_hardware", "parameters": {"metric": "vcpus"}}'
+
+      fetchMock
+        .mockResolvedValueOnce(ollamaStream([leak]))
+        .mockResolvedValueOnce(ollamaStream(['db-01, avec 16 vCPU.']))
+
+      const res = await ask()
+      const body = await res.text()
+
+      expect(body).toBe('db-01, avec 16 vCPU.')
+      expect(body).not.toContain('"name"')
+      expect(body).not.toContain('parameters')
+      expect(body).not.toContain('Voici la réponse')
+
+      // Recovered as a real call, not merely swallowed.
+      expect(rankToolExecute).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+    })
+
+    it('holds a tool-bearing turn back, and relays the closing turn live', async () => {
+      // A turn that carries tool definitions cannot be relayed as it arrives,
+      // because it might still turn out to be a text-form call.
+      fetchMock.mockResolvedValueOnce(ollamaStream(['Vous avez ', '12 invités.']))
+
+      const res = await ask()
+
+      expect(await res.text()).toBe('Vous avez 12 invités.')
+      // One call only: a prose turn must not cost a second generation.
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves JSON that is not a call to one of our tools alone', async () => {
+      // A model quoting unrelated JSON must not be mistaken for a tool call.
+      const quoted = 'Exemple de configuration : {"name": "vmbr0", "parameters": {"mtu": 9000}}'
+
+      fetchMock.mockResolvedValueOnce(ollamaStream([quoted]))
+
+      const res = await ask()
+
+      expect(await res.text()).toBe(quoted)
+      expect(rankToolExecute).not.toHaveBeenCalled()
+    })
+
+    it('stops asking for tools once the round budget is spent', async () => {
+      // A model stuck in a tool loop must still stop, and the closing turn must
+      // withhold the tools so it answers from what it already gathered.
+      fetchMock.mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body as string)
+
+        return body.tools
+          ? ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' })
+          : ollamaStream(['best effort answer'])
+      })
+
+      const res = await ask()
+
+      expect(await res.text()).toBe('best effort answer')
+
+      const lastBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)
+
+      expect(lastBody.tools).toBeUndefined()
+    })
   })
 
   describe('answer language (#686)', () => {

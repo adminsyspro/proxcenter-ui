@@ -30,7 +30,7 @@ const defaultSettings: AISettingsState = {
   enabled: false,
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
-  ollamaModel: 'mistral:7b',
+  ollamaModel: 'llama3.1:8b',
   openaiKey: '',
   openaiBaseUrl: '',
   openaiModel: 'gpt-4.1-nano',

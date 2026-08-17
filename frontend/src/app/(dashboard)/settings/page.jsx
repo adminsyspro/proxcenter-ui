@@ -26,6 +26,7 @@ import {
   MenuItem,
   Select,
   FormControl,
+  FormHelperText,
   InputLabel,
   Switch,
   Tab,
@@ -1981,12 +1982,13 @@ function AITab() {
                           <MenuItem key={m} value={m}>{m}</MenuItem>
                         ))
                         : [
-                          <MenuItem key='mistral:7b' value='mistral:7b'>mistral:7b ({t('settings.recommended')})</MenuItem>,
-                          <MenuItem key='llama3.1:8b' value='llama3.1:8b'>llama3.1:8b</MenuItem>,
+                          <MenuItem key='llama3.1:8b' value='llama3.1:8b'>llama3.1:8b ({t('settings.recommended')})</MenuItem>,
                           <MenuItem key='qwen2.5:7b' value='qwen2.5:7b'>qwen2.5:7b</MenuItem>,
+                          <MenuItem key='mistral:7b' value='mistral:7b'>mistral:7b</MenuItem>,
                           <MenuItem key='phi3:14b' value='phi3:14b'>phi3:14b</MenuItem>,
                         ]}
                     </Select>
+                    <FormHelperText>{t('settings.ollamaToolModelHelp')}</FormHelperText>
                   </FormControl>
 
                   {loadingModels && <LinearProgress sx={{ mb: 2 }} />}

@@ -3,11 +3,14 @@ import { NextResponse } from 'next/server'
 
 import { getSetting } from '@/lib/db/settings'
 import { openAiSecrets } from '@/lib/ai/settingsSecrets'
-import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
-import { pveFetch } from '@/lib/proxmox/client'
-import { decryptSecret } from '@/lib/crypto/secret'
+import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getRequestLocale, languageInstruction, localeToLanguageName, normalizeLocale } from '@/lib/ai/locale'
+import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
+import { validateAIUrl } from '@/lib/ai/url-guard'
+import { buildAiSystemPrompt } from '@/lib/ai/context'
+import { AI_TOOLS, buildToolContext } from '@/lib/ai/tools/registry'
+import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
+import { runToolRounds, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -24,310 +27,8 @@ async function getAISettings() {
     enabled: false,
     provider: 'ollama',
     ollamaUrl: 'http://localhost:11434',
-    ollamaModel: 'mistral:7b'
+    ollamaModel: 'llama3.1:8b'
   }
-}
-
-// Récupérer les connexions PVE via Prisma
-async function getConnections() {
-  try {
-    const prisma = await getSessionPrisma()
-    const connections = await prisma.connection.findMany({
-      where: { type: 'pve' },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        baseUrl: true,
-        apiTokenEnc: true,
-        insecureTLS: true,
-      }
-    })
-
-    return connections
-  } catch (e) {
-    console.error('Failed to get connections:', e)
-    
-return []
-  }
-}
-
-// Récupérer les alertes actives via Prisma
-async function getActiveAlerts() {
-  try {
-    const prisma = await getSessionPrisma()
-    const alerts = await prisma.alert.findMany({
-      where: { status: 'active' },
-      orderBy: { lastSeenAt: 'desc' },
-      take: 10,
-      select: {
-        severity: true,
-        message: true,
-        entityName: true,
-        entityType: true,
-        metric: true,
-        currentValue: true,
-        threshold: true,
-      }
-    })
-
-    
-return alerts
-  } catch (e) {
-    console.error('Failed to get alerts:', e)
-    
-return []
-  }
-}
-
-// Récupérer les données live de Proxmox
-async function fetchProxmoxData(connections: any[]) {
-  const allData: any = {
-    clusters: [],
-    nodes: [],
-    vms: [],
-    summary: {
-      totalVMs: 0,
-      runningVMs: 0,
-      stoppedVMs: 0,
-      totalNodes: 0,
-      onlineNodes: 0
-    }
-  }
-
-  for (const conn of connections) {
-    try {
-      // Décrypter le token avec la fonction du projet
-      const token = decryptSecret(conn.apiTokenEnc)
-
-      // Utiliser pveFetch pour les requêtes Proxmox (gère HTTPS et certificats auto-signés)
-      const resources = await pveFetch<any[]>(
-        {
-          baseUrl: conn.baseUrl,
-          apiToken: token,
-          insecureDev: conn.insecureTLS
-        },
-        '/cluster/resources'
-      )
-      
-      // Process nodes
-      const nodes = resources.filter((r: any) => r.type === 'node')
-
-      nodes.forEach((n: any) => {
-        allData.nodes.push({
-          name: n.node,
-          status: n.status,
-          cpu: n.cpu ? (n.cpu * 100).toFixed(1) : 0,
-          mem: n.mem && n.maxmem ? ((n.mem / n.maxmem) * 100).toFixed(1) : 0,
-          memUsed: n.mem ? (n.mem / 1024 / 1024 / 1024).toFixed(1) : 0,
-          memTotal: n.maxmem ? (n.maxmem / 1024 / 1024 / 1024).toFixed(1) : 0,
-          cluster: conn.name
-        })
-        allData.summary.totalNodes++
-        if (n.status === 'online') allData.summary.onlineNodes++
-      })
-      
-      // Process VMs (qemu) and Containers (lxc)
-      const vms = resources.filter((r: any) => r.type === 'qemu' || r.type === 'lxc')
-
-      vms.forEach((vm: any) => {
-        allData.vms.push({
-          vmid: vm.vmid,
-          name: vm.name || `VM ${vm.vmid}`,
-          type: vm.type === 'lxc' ? 'CT' : 'VM',
-          status: vm.status,
-          cpu: vm.cpu ? (vm.cpu * 100).toFixed(1) : 0,
-          mem: vm.mem && vm.maxmem ? ((vm.mem / vm.maxmem) * 100).toFixed(1) : 0,
-          memUsed: vm.mem ? (vm.mem / 1024 / 1024 / 1024).toFixed(2) : 0,
-          memTotal: vm.maxmem ? (vm.maxmem / 1024 / 1024 / 1024).toFixed(2) : 0,
-          node: vm.node,
-          cluster: conn.name
-        })
-        allData.summary.totalVMs++
-        if (vm.status === 'running') allData.summary.runningVMs++
-        else allData.summary.stoppedVMs++
-      })
-      
-      allData.clusters.push({
-        name: conn.name,
-        nodes: nodes.length,
-        vms: vms.length
-      })
-    } catch (e) {
-      console.error(`Failed to fetch data from ${conn.name}:`, e)
-    }
-  }
-  
-  return allData
-}
-
-// Bilingual prompt strings
-const promptStrings = {
-  en: {
-    intro: 'You are the AI assistant of ProxCenter, a Proxmox infrastructure management platform.',
-    noActions: 'IMPORTANT: You CANNOT execute actions. You can only analyze and suggest. If the user asks for an action, explain what needs to be done but specify they must do it manually via the ProxCenter or Proxmox interface.',
-    stateHeader: '=== CURRENT INFRASTRUCTURE STATE (live data) ===',
-    summary: 'Global summary',
-    totalVMs: (t: number, r: number, s: number) => `${t} VMs/CTs total (${r} running, ${s} stopped)`,
-    hosts: (t: number, o: number) => `${t} host(s) (${o} online)`,
-    clusters: (n: number, names: string) => `${n} cluster(s) configured: ${names || 'none'}`,
-    hostsHeader: 'Proxmox hosts status',
-    online: 'Online', offline: 'Offline',
-    on: 'on',
-    topCpu: 'Top 10 VMs/CTs by CPU usage',
-    topRam: 'Top 10 VMs/CTs by RAM usage',
-    stoppedHeader: (n: number) => `STOPPED VMs/CTs - FULL LIST (${n} total)`,
-    stoppedCluster: (name: string, n: number) => `[${name}] (${n} stopped)`,
-    alertsActive: (n: number) => `Active alerts (${n})`,
-    noAlerts: 'No active alerts.',
-    runningHeader: (total: number, shown: boolean) => `Running VMs/CTs (${total} total${shown ? ', first 20 shown' : ''})`,
-    andMore: (n: number) => `... and ${n} more running VMs/CTs`,
-    instructions: '=== INSTRUCTIONS ===',
-    // Takes the answer language rather than hardcoding "English": this
-    // English prompt body is what de, es, ko and zh-CN users get, and a
-    // literal "Respond in English" here contradicted the language
-    // instruction appended below (#686). Contradictory instructions are
-    // followed poorly by the small local models Ollama typically serves.
-    respondLang: (language: string) => `Respond in ${language} concisely`,
-    useData: 'Use ONLY the data above',
-    citeNames: 'Cite exact VM names and metrics',
-    explainActions: 'For actions, explain the procedure but specify you cannot execute it',
-  },
-  fr: {
-    intro: 'Tu es l\'assistant IA de ProxCenter, une plateforme de gestion d\'infrastructure Proxmox.',
-    noActions: 'IMPORTANT: Tu ne peux PAS exécuter d\'actions. Tu peux uniquement analyser et suggérer. Si l\'utilisateur demande une action, explique ce qu\'il faudrait faire mais précise qu\'il doit le faire manuellement via l\'interface ProxCenter ou Proxmox.',
-    stateHeader: '=== ÉTAT ACTUEL DE L\'INFRASTRUCTURE (données en temps réel) ===',
-    summary: 'Résumé global',
-    totalVMs: (t: number, r: number, s: number) => `${t} VMs/CTs au total (${r} en cours d'exécution, ${s} arrêtées)`,
-    hosts: (t: number, o: number) => `${t} hôte(s) (${o} en ligne)`,
-    clusters: (n: number, names: string) => `${n} cluster(s) configuré(s): ${names || 'aucun'}`,
-    hostsHeader: 'État des hôtes Proxmox',
-    online: 'En ligne', offline: 'Hors ligne',
-    on: 'sur',
-    topCpu: 'Top 10 VMs/CTs par utilisation CPU',
-    topRam: 'Top 10 VMs/CTs par utilisation RAM',
-    stoppedHeader: (n: number) => `VMs/CTs ARRÊTÉES - LISTE COMPLÈTE (${n} total)`,
-    stoppedCluster: (name: string, n: number) => `[${name}] (${n} arrêtées)`,
-    alertsActive: (n: number) => `Alertes actives (${n})`,
-    noAlerts: 'Aucune alerte active.',
-    runningHeader: (total: number, shown: boolean) => `VMs/CTs en cours d'exécution (${total} total${shown ? ', 20 premières affichées' : ''})`,
-    andMore: (n: number) => `... et ${n} autres VMs/CTs en cours d'exécution`,
-    instructions: '=== INSTRUCTIONS ===',
-    // The French body is only ever used when the UI locale is `fr`, so the
-    // answer language is already known here.
-    respondLang: () => 'Réponds en français de manière concise',
-    useData: 'Utilise UNIQUEMENT les données ci-dessus',
-    citeNames: 'Cite les noms exacts des VMs et métriques',
-    explainActions: 'Pour les actions, explique la procédure mais précise que tu ne peux pas l\'exécuter',
-  }
-}
-
-// `lang` picks the fr/en prompt body above; `locale` is the real UI locale
-// and drives the language the model must answer in. They differ for de, es,
-// ko and zh-CN, which read an English prompt but must get an answer in
-// their own language (#686).
-async function buildSystemPrompt(lang: string, locale: string) {
-  const s = lang === 'fr' ? promptStrings.fr : promptStrings.en
-  const connections = await getConnections()
-  const alerts = await getActiveAlerts()
-  const infraData = await fetchProxmoxData(connections)
-
-  const topCpuVMs = [...infraData.vms]
-    .filter((vm: any) => vm.status === 'running')
-    .sort((a: any, b: any) => Number.parseFloat(b.cpu) - Number.parseFloat(a.cpu))
-    .slice(0, 10)
-
-  const topMemVMs = [...infraData.vms]
-    .filter((vm: any) => vm.status === 'running')
-    .sort((a: any, b: any) => Number.parseFloat(b.mem) - Number.parseFloat(a.mem))
-    .slice(0, 10)
-
-  const stoppedVMs = infraData.vms.filter((vm: any) => vm.status !== 'running')
-  const runningVMs = infraData.vms.filter((vm: any) => vm.status === 'running')
-
-  let prompt = `${s.intro}
-
-${s.noActions}
-
-${s.stateHeader}
-
-📊 ${s.summary}:
-- ${s.totalVMs(infraData.summary.totalVMs, infraData.summary.runningVMs, infraData.summary.stoppedVMs)}
-- ${s.hosts(infraData.summary.totalNodes, infraData.summary.onlineNodes)}
-- ${s.clusters(infraData.clusters.length, infraData.clusters.map((c: any) => c.name).join(', '))}
-`
-
-  if (infraData.nodes.length > 0) {
-    prompt += `
-🖥️ ${s.hostsHeader}:
-${infraData.nodes.map((n: any) => `- ${n.name} (${n.cluster}): ${n.status === 'online' ? `✅ ${s.online}` : `❌ ${s.offline}`} | CPU: ${n.cpu}% | RAM: ${n.mem}% (${n.memUsed}/${n.memTotal} GB)`).join('\n')}
-`
-  }
-
-  if (topCpuVMs.length > 0) {
-    prompt += `
-🔥 ${s.topCpu}:
-${topCpuVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
-`
-  }
-
-  if (topMemVMs.length > 0) {
-    prompt += `
-💾 ${s.topRam}:
-${topMemVMs.map((vm: any, i: number) => `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - RAM: ${vm.mem}% (${vm.memUsed}/${vm.memTotal} GB)`).join('\n')}
-`
-  }
-
-  let stoppedVMsSection = ''
-  if (stoppedVMs.length > 0) {
-    const byCluster: Record<string, any[]> = {}
-    stoppedVMs.forEach((vm: any) => {
-      if (!byCluster[vm.cluster]) byCluster[vm.cluster] = []
-      byCluster[vm.cluster].push(vm)
-    })
-    stoppedVMsSection = `
-⏹️ ${s.stoppedHeader(stoppedVMs.length)}:
-${Object.entries(byCluster).map(([cluster, vms]) => {
-  return `
-${s.stoppedCluster(cluster, vms.length)}:
-${vms.map((vm: any) => `  - ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node}`).join('\n')}`
-}).join('\n')}
-`
-  }
-
-  if (alerts.length > 0) {
-    prompt += `
-⚠️ ${s.alertsActive(alerts.length)}:
-${alerts.map((a: any) => `- [${a.severity?.toUpperCase()}] ${a.message} (${a.entityName || a.entityType})`).join('\n')}
-`
-  } else {
-    prompt += `
-✅ ${s.noAlerts}
-`
-  }
-
-  if (runningVMs.length > 0) {
-    const vmsToShow = runningVMs.slice(0, 20)
-    prompt += `
-📋 ${s.runningHeader(runningVMs.length, runningVMs.length > 20)}:
-${vmsToShow.map((vm: any) => `- ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - CPU: ${vm.cpu}% | RAM: ${vm.mem}%`).join('\n')}
-${runningVMs.length > 20 ? `\n${s.andMore(runningVMs.length - 20)}` : ''}
-`
-  }
-
-  prompt += stoppedVMsSection
-
-  prompt += `
-${s.instructions}
-- ${s.respondLang(localeToLanguageName(locale))}
-- ${s.useData}
-- ${s.citeNames}
-- ${s.explainActions}
-
-${languageInstruction(locale)}
-`
-
-  return prompt
 }
 
 function stripTrailingSlashes(value: string): string {
@@ -358,12 +59,26 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    const systemPrompt = await buildSystemPrompt(lang, uiLocale)
+    const provider = settings.provider as AiProvider
+
+    if (provider !== 'ollama' && provider !== 'openai' && provider !== 'anthropic') {
+      throw new Error(`Unknown provider: ${settings.provider}`)
+    }
+
+    const tenantId = await getCurrentTenantId()
+
+    // The snapshot is RBAC-scoped and is reused as the tool context, so the
+    // tools can only ever reach what the prompt was already allowed to show.
+    const { prompt: systemPrompt, snapshot } = await buildAiSystemPrompt(lang, uiLocale, {
+      toolsEnabled: true,
+    })
+    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale)
+    const wireTools = toolsForProvider(provider, AI_TOOLS)
 
     const lastUserMessage = messages[messages.length - 1]
     const userInstruction = lang === 'fr'
-      ? 'Réponds en utilisant UNIQUEMENT les données de l\'infrastructure ci-dessus. Cite les noms exacts des VMs et leurs métriques.'
-      : 'Respond using ONLY the infrastructure data above. Cite exact VM names and their metrics.'
+      ? 'Réponds en utilisant les données de l\'infrastructure ci-dessus, ou appelle un outil si la réponse n\'y figure pas. Cite les noms exacts des VMs et leurs métriques.'
+      : 'Respond using the infrastructure data above, or call a tool if the answer is not in it. Cite exact VM names and their metrics.'
 
     // Ollama gets the system prompt inlined in the user message, so the
     // language instruction is repeated last where models weigh it most.
@@ -376,122 +91,165 @@ ${userInstruction}
 
 ${languageInstruction(uiLocale)}`
 
-    if (settings.provider === 'ollama') {
-      // Ollama API - contexte injecté dans le message
-      const ollamaMessages = [
-        ...messages.slice(0, -1), // Messages précédents sans le dernier
-        { role: 'user', content: contextualizedMessage }
+    let send: SendTurn
+    let initialMessages: any[]
+    let model: string
+
+    /**
+     * The tool fields for one turn, per mode.
+     *
+     * `none` keeps the declaration and forbids new calls, because a thread that
+     * already holds tool blocks is rejected by Anthropic (and by several
+     * OpenAI-compatible gateways) when the `tools` field disappears. Only `off`
+     * omits it, and the loop restricts that to a thread with no tool turn yet.
+     */
+    const toolFields = (mode: ToolMode) => {
+      if (mode === 'off') return {}
+      if (mode === 'auto') return { tools: wireTools }
+
+      if (provider === 'anthropic') return { tools: wireTools, tool_choice: { type: 'none' } }
+      if (provider === 'openai') return { tools: wireTools, tool_choice: 'none' }
+
+      // Ollama has no tool_choice, and does not validate tool blocks against a
+      // declaration, so withholding the field is enough to close the loop.
+      return {}
+    }
+
+    if (provider === 'ollama') {
+      // The SSRF guard's own contract requires every AI route that fetches an
+      // operator-supplied base URL to go through it. The chat routes used to
+      // skip it while `ai/test` and `ai/models` honoured it.
+      const ollamaBase = await validateAIUrl(settings.ollamaUrl)
+
+      model = settings.ollamaModel
+      initialMessages = [
+        ...messages.slice(0, -1),
+        { role: 'user', content: contextualizedMessage },
       ]
-      
-      const response = await fetch(`${settings.ollamaUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.ollamaModel,
-          messages: ollamaMessages,
-          stream: false,
-          options: {
-            num_predict: 4096, // Permet des réponses plus longues
-            temperature: 0.3  // Plus déterministe pour les listes
-          }
+
+      send = async (msgs, mode) => {
+        const response = await fetch(`${ollamaBase}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: settings.ollamaModel,
+            messages: msgs,
+            stream: false,
+            ...toolFields(mode),
+            options: {
+              num_predict: 4096, // Permet des réponses plus longues
+              temperature: 0.3  // Plus déterministe pour les listes
+            }
+          })
         })
-      })
-      
-      if (!response.ok) {
-        const text = await response.text()
 
-        throw new Error(`Ollama error: ${text}`)
+        if (!response.ok) {
+          const text = await response.text()
+
+          throw new Error(`Ollama error: ${text}`)
+        }
+
+        return response.json()
       }
-      
-      const json = await response.json()
+    } else if (provider === 'openai') {
+      const openaiBase = stripTrailingSlashes(settings.openaiBaseUrl
+        ? await validateAIUrl(settings.openaiBaseUrl)
+        : 'https://api.openai.com/v1')
 
-      
-return NextResponse.json({ 
-        response: json.message?.content || json.response,
-        provider: 'ollama',
-        model: settings.ollamaModel
-      })
-      
-    } else if (settings.provider === 'openai') {
-      // OpenAI API
-      const openaiMessages = [
+      model = settings.openaiModel
+      initialMessages = [
         { role: 'system', content: systemPrompt },
-        ...messages
+        ...messages,
       ]
-      
-      const openaiBase = stripTrailingSlashes(settings.openaiBaseUrl || 'https://api.openai.com/v1')
-      const response = await fetch(`${openaiBase}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${settings.openaiKey}`
-        },
-        body: JSON.stringify({
-          model: settings.openaiModel,
-          messages: openaiMessages,
-          max_tokens: 1000
+
+      send = async (msgs, mode) => {
+        const response = await fetch(`${openaiBase}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${settings.openaiKey}`
+          },
+          body: JSON.stringify({
+            model: settings.openaiModel,
+            messages: msgs,
+            max_tokens: 1000,
+            ...toolFields(mode),
+          })
         })
-      })
-      
-      if (!response.ok) {
-        const json = await response.json().catch(() => ({}))
 
-        throw new Error(json?.error?.message || `OpenAI error: ${response.status}`)
+        if (!response.ok) {
+          const json = await response.json().catch(() => ({}))
+
+          throw new Error(json?.error?.message || `OpenAI error: ${response.status}`)
+        }
+
+        return response.json()
       }
-      
-      const json = await response.json()
-
-      
-return NextResponse.json({ 
-        response: json.choices?.[0]?.message?.content,
-        provider: 'openai',
-        model: settings.openaiModel
-      })
-      
-    } else if (settings.provider === 'anthropic') {
-      // Anthropic API
-      const anthropicMessages = messages.map((m: any) => ({
+    } else {
+      model = settings.anthropicModel
+      // Only the incoming history is flattened to text. The loop appends its
+      // own turns verbatim, because a tool_use block must be echoed back
+      // unchanged for the matching tool_result to be accepted.
+      initialMessages = messages.map((m: any) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content
       }))
-      
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-api-key': settings.anthropicKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: settings.anthropicModel,
-          system: systemPrompt,
-          messages: anthropicMessages,
-          max_tokens: 1000
+
+      send = async (msgs, mode) => {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': settings.anthropicKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: settings.anthropicModel,
+            system: systemPrompt,
+            messages: msgs,
+            max_tokens: 1000,
+            ...toolFields(mode),
+          })
         })
-      })
-      
-      if (!response.ok) {
-        const json = await response.json().catch(() => ({}))
 
-        throw new Error(json?.error?.message || `Anthropic error: ${response.status}`)
+        if (!response.ok) {
+          const json = await response.json().catch(() => ({}))
+
+          throw new Error(json?.error?.message || `Anthropic error: ${response.status}`)
+        }
+
+        return response.json()
       }
-      
-      const json = await response.json()
-
-      
-return NextResponse.json({ 
-        response: json.content?.[0]?.text,
-        provider: 'anthropic',
-        model: settings.anthropicModel
-      })
-      
-    } else {
-      throw new Error(`Unknown provider: ${settings.provider}`)
     }
-    
+
+    const outcome = await runToolRounds({
+      provider,
+      tools: AI_TOOLS,
+      ctx: toolCtx,
+      messages: initialMessages,
+      send,
+    })
+
+    return NextResponse.json({
+      response: outcome.text,
+      provider,
+      model,
+      // What the assistant consulted, so the drawer can show it and an
+      // operator can tell a tool failure from a model that stayed vague.
+      toolCalls: outcome.trace.map(t => ({
+        name: t.name,
+        ok: t.ok,
+        error: t.error,
+        durationMs: t.durationMs,
+        truncated: t.truncated,
+      })),
+      toolsDisabled: outcome.toolsDisabled,
+      budgetExhausted: outcome.budgetExhausted,
+    })
+
   } catch (e: any) {
     console.error('AI chat failed:', e)
-    
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

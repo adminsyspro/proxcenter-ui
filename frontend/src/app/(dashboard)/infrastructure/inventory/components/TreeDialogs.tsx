@@ -28,23 +28,92 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 
 import EntityTagManager from './EntityTagManager'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
+import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
-import { NodeIcon, ClusterIcon, getVmIcon } from './TreeIcons'
+import { NodeIcon, ClusterIcon, StatusIcon } from './TreeIcons'
 import { useTenant } from '@/contexts/TenantContext'
 
-// RemixIcon replacements used in context menus / dialogs
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const TerminalIcon = (props: any) => <i className="ri-terminal-box-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const DescriptionIcon = (props: any) => <i className="ri-file-text-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+// RemixIcon replacements used in context menus / dialogs.
+// Rendered through Box so `sx={{ color: 'warning.main' }}` resolves against the
+// theme. A bare <i style={{ color: 'warning.main' }}> is an invalid CSS value
+// that browsers drop in silence, which is how several of these icons ended up
+// uncoloured while others carried a raw hex.
+const RemixIcon = ({ name, fontSize, sx, style }: { name: string; fontSize?: string; sx?: any; style?: React.CSSProperties }) => (
+  <Box component="i" className={name} style={style} sx={{ fontSize: fontSize === 'small' ? 18 : 20, lineHeight: 1, ...sx }} />
+)
+
+const PlayArrowIcon = (props: any) => <RemixIcon name="ri-play-fill" {...props} />
+const StopIcon = (props: any) => <RemixIcon name="ri-stop-fill" {...props} />
+const PowerSettingsNewIcon = (props: any) => <RemixIcon name="ri-shut-down-line" {...props} />
+const PauseIcon = (props: any) => <RemixIcon name="ri-pause-fill" {...props} />
+
+// One icon column for every context-menu row: a single size for all of them, and
+// a tone taken from the theme palette rather than the brighter MUI defaults the
+// menu used to mix in.
+const MenuIcon = ({ name, tone = 'text.secondary' }: { name: string; tone?: string }) => (
+  <Box
+    component="i"
+    className={name}
+    sx={{ fontSize: 16, lineHeight: 1, color: tone, width: 16, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}
+  />
+)
+
+// Shared shell for the three context menus: inset rows with a rounded hover, one
+// exact icon gutter, and dividers that separate without cutting the card in two.
+const contextMenuPaperSx = {
+  minWidth: 232,
+  maxWidth: 320,
+  borderRadius: 2,
+  py: 0.5,
+  '& .MuiMenuItem-root': {
+    mx: 0.75,
+    px: 1,
+    py: 0.5,
+    gap: 1.25,
+    minHeight: 34,
+    borderRadius: 1,
+  },
+  '& .MuiListItemIcon-root': { minWidth: 0 },
+  '& .MuiListItemText-primary': { fontSize: '0.8125rem' },
+  '& .MuiDivider-root': { mx: 1, my: 0.5 },
+} as const
+
+// Menu title: the subject of the actions below, not another row to click. Wears
+// the theme accent so the card reads as titled, and sits on the same left edge
+// and icon gutter as the rows underneath. It carries the tint, so no divider.
+const ContextMenuHeader = ({ icon, label, hint }: { icon: React.ReactNode; label?: string; hint?: string }) => (
+  <Box
+    sx={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 1.25,
+      mx: 0.75,
+      mb: 0.5,
+      px: 1,
+      py: 0.75,
+      borderRadius: 1,
+      bgcolor: theme => alpha(theme.palette.primary.main, 0.08),
+    }}
+  >
+    {icon}
+    <Typography
+      noWrap
+      sx={{ minWidth: 0, fontSize: '0.8125rem', fontWeight: 600, color: 'primary.main', letterSpacing: '0.01em' }}
+    >
+      {label}
+    </Typography>
+    {hint && (
+      <Typography sx={{ fontSize: '0.6875rem', color: 'primary.main', opacity: 0.65, ml: 'auto', pl: 1 }}>
+        {hint}
+      </Typography>
+    )}
+  </Box>
+)
 
 // ----- Types used by context menus / dialogs -----
 
@@ -265,22 +334,23 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
             : undefined
         }
-        slotProps={{ paper: { sx: { minWidth: 200, '& .MuiListItemIcon-root': { minWidth: 32 } } } }}
+        slotProps={{ paper: { sx: contextMenuPaperSx } }}
       >
-        {/* Header du menu */}
-        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            {contextMenu && (
-              <i
-                className={getVmIcon(contextMenu.type, contextMenu.template)}
-                style={{ fontSize: 14, opacity: 0.5 }}
-              />
-            )}
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {contextMenu?.name}
-            </Typography>
-          </Box>
-        </Box>
+        {/* Header du menu: le VMID à droite, l'identifiant que porte l'arbre */}
+        <ContextMenuHeader
+          // Same status-dotted icon as the tree row the menu was opened from.
+          icon={contextMenu ? (
+            <StatusIcon
+              type="vm"
+              vmType={contextMenu.type}
+              template={contextMenu.template}
+              status={contextMenu.status}
+              size={16}
+            />
+          ) : null}
+          label={contextMenu?.name}
+          hint={contextMenu?.vmid}
+        />
 
         {/* Menu pour TEMPLATE */}
         {contextMenu?.template && (
@@ -293,7 +363,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy}
           >
             <ListItemIcon>
-              <ContentCopyIcon fontSize="small" sx={{ color: 'primary.main' }} />
+              <MenuIcon name="ri-file-copy-line" tone="primary.main" />
             </ListItemIcon>
             <ListItemText>{t('audit.actions.clone')}</ListItemText>
           </MenuItem>
@@ -308,7 +378,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status === 'running'}
           >
             <ListItemIcon>
-              <i className="ri-play-fill" style={{ fontSize: 18, color: '#4caf50' }} />
+              <MenuIcon name="ri-play-fill" tone="success.main" />
             </ListItemIcon>
             <ListItemText>{contextMenu?.status === 'paused' ? t('vmActions.resume') : t('audit.actions.start')}</ListItemText>
           </MenuItem>,
@@ -319,7 +389,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-pause-fill" style={{ fontSize: 18, color: '#2196f3' }} />
+              <MenuIcon name="ri-pause-fill" tone="info.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.pause')}</ListItemText>
           </MenuItem>,
@@ -330,7 +400,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-zzz-line" style={{ fontSize: 18, color: '#2196f3' }} />
+              <MenuIcon name="ri-zzz-line" tone="info.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.hibernate')}</ListItemText>
           </MenuItem>,
@@ -341,7 +411,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-shut-down-line" style={{ fontSize: 18, color: '#ff9800' }} />
+              <MenuIcon name="ri-shut-down-line" tone="warning.main" />
             </ListItemIcon>
             <ListItemText>{t('inventoryPage.shutdownClean')}</ListItemText>
           </MenuItem>,
@@ -352,7 +422,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-stop-fill" style={{ fontSize: 18, color: '#f44336' }} />
+              <MenuIcon name="ri-stop-fill" tone="error.main" />
             </ListItemIcon>
             <ListItemText>{t('audit.actions.stop')}</ListItemText>
           </MenuItem>,
@@ -363,7 +433,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-restart-line" style={{ fontSize: 18, color: '#ff9800' }} />
+              <MenuIcon name="ri-restart-line" tone="warning.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.reboot')}</ListItemText>
           </MenuItem>,
@@ -374,7 +444,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy || contextMenu?.status !== 'running'}
           >
             <ListItemIcon>
-              <i className="ri-loop-left-line" style={{ fontSize: 18, color: '#f44336' }} />
+              <MenuIcon name="ri-loop-left-line" tone="error.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.reset')}</ListItemText>
           </MenuItem>,
@@ -392,7 +462,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             disabled={actionBusy}
           >
             <ListItemIcon>
-              <ContentCopyIcon fontSize="small" />
+              <MenuIcon name="ri-file-copy-line" />
             </ListItemIcon>
             <ListItemText>{t('audit.actions.clone')}</ListItemText>
           </MenuItem>,
@@ -403,7 +473,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             handleCloseContextMenu()
           }} disabled={actionBusy || contextMenu?.status === 'running'}>
             <ListItemIcon>
-              <DescriptionIcon fontSize="small" />
+              <MenuIcon name="ri-file-copy-fill" />
             </ListItemIcon>
             <ListItemText>{t('templates.convertToTemplate')}</ListItemText>
           </MenuItem>,
@@ -413,14 +483,14 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           /* --- Snapshot / Backup --- */
           <MenuItem key="snapshot" onClick={handleTakeSnapshot} disabled={actionBusy}>
             <ListItemIcon>
-              <i className="ri-camera-line" style={{ fontSize: 20 }} />
+              <MenuIcon name="ri-camera-line" />
             </ListItemIcon>
             <ListItemText>{t('inventory.takeSnapshot')}</ListItemText>
           </MenuItem>,
 
           <MenuItem key="backup" onClick={handleBackupNow} disabled={actionBusy}>
             <ListItemIcon>
-              <i className="ri-save-line" style={{ fontSize: 20 }} />
+              <MenuIcon name="ri-save-line" />
             </ListItemIcon>
             <ListItemText>{t('inventory.backupNow')}</ListItemText>
           </MenuItem>,
@@ -439,7 +509,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
               disabled={actionBusy}
             >
               <ListItemIcon>
-                <MoveUpIcon fontSize="small" />
+                <MenuIcon name="ri-exchange-line" />
               </ListItemIcon>
               <ListItemText>{t('audit.actions.migrate')}</ListItemText>
             </MenuItem>
@@ -447,7 +517,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
 
           <MenuItem key="console" onClick={handleOpenConsole} disabled={actionBusy}>
             <ListItemIcon>
-              <TerminalIcon fontSize="small" />
+              <MenuIcon name="ri-terminal-box-line" />
             </ListItemIcon>
             <ListItemText>{t('inventory.console')}</ListItemText>
           </MenuItem>,
@@ -455,7 +525,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           contextMenu?.sshEnabled ? (
             <MenuItem key="unlock" onClick={handleUnlock} disabled={actionBusy || unlocking}>
               <ListItemIcon>
-                <i className="ri-lock-unlock-line" style={{ fontSize: 20, color: '#f59e0b' }} />
+                <MenuIcon name="ri-lock-unlock-line" tone="warning.main" />
               </ListItemIcon>
               <ListItemText>{t('inventory.unlock')}</ListItemText>
             </MenuItem>
@@ -473,22 +543,18 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             ? { top: clusterContextMenu.mouseY, left: clusterContextMenu.mouseX }
             : undefined
         }
-        slotProps={{ paper: { sx: { minWidth: 200, '& .MuiListItemIcon-root': { minWidth: 32 } } } }}
+        slotProps={{ paper: { sx: contextMenuPaperSx } }}
       >
-        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <ClusterIcon nodes={clusterContextMenu?.nodes || []} size={14} />
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {clusterContextMenu?.name}
-            </Typography>
-          </Box>
-        </Box>
+        <ContextMenuHeader
+          icon={<ClusterIcon nodes={clusterContextMenu?.nodes || []} size={16} />}
+          label={clusterContextMenu?.name}
+        />
         <MenuItem onClick={() => {
           if (clusterContextMenu) openTagDialog('connection', clusterContextMenu.connId, clusterContextMenu.name, undefined, undefined, { clusterNodes: clusterContextMenu.nodes })
           setClusterContextMenu(null)
         }}>
-          <ListItemIcon sx={{ minWidth: 36 }}>
-            <i className="ri-price-tag-3-line" style={{ fontSize: 18 }} />
+          <ListItemIcon>
+            <MenuIcon name="ri-price-tag-3-line" />
           </ListItemIcon>
           <ListItemText>{t('inventory.manageTags', { defaultMessage: 'Manage Tags' })}</ListItemText>
         </MenuItem>
@@ -504,28 +570,24 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             ? { top: nodeContextMenu.mouseY, left: nodeContextMenu.mouseX }
             : undefined
         }
-        slotProps={{ paper: { sx: { minWidth: 200, '& .MuiListItemIcon-root': { minWidth: 32 } } } }}
+        slotProps={{ paper: { sx: contextMenuPaperSx } }}
       >
-        <Box sx={{ px: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <NodeIcon status={(() => {
-              if (!nodeContextMenu) return 'online'
-              const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
-              const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
-              return n?.status || 'online'
-            })()} maintenance={nodeContextMenu?.maintenance} size={14} />
-            <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {nodeContextMenu?.node}
-            </Typography>
-          </Box>
-        </Box>
+        <ContextMenuHeader
+          icon={<NodeIcon status={(() => {
+            if (!nodeContextMenu) return 'online'
+            const clu = clusters.find(c => c.connId === nodeContextMenu.connId)
+            const n = clu?.nodes.find(n => n.node === nodeContextMenu.node)
+            return n?.status || 'online'
+          })()} maintenance={nodeContextMenu?.maintenance} size={16} />}
+          label={nodeContextMenu?.node}
+        />
         {onCreateVm && (
           <MenuItem onClick={() => {
             if (nodeContextMenu) onCreateVm(nodeContextMenu.connId, nodeContextMenu.node)
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-computer-line" style={{ fontSize: 18, color: '#3b82f6' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-computer-line" tone="info.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.createVm.title')}</ListItemText>
           </MenuItem>
@@ -535,8 +597,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             if (nodeContextMenu) onCreateLxc(nodeContextMenu.connId, nodeContextMenu.node)
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-instance-line" style={{ fontSize: 18, color: '#a855f7' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-instance-line" tone="primary.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.createLxc.title')}</ListItemText>
           </MenuItem>
@@ -546,28 +608,28 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             if (nodeContextMenu) handleOpenShell(nodeContextMenu.connId, nodeContextMenu.node)
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-terminal-box-line" style={{ fontSize: 18 }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-terminal-box-line" />
             </ListItemIcon>
             <ListItemText>{t('inventory.tabShell')}</ListItemText>
           </MenuItem>,
           <Divider key="d-bulk" />,
           <MenuItem key="bulk-start" onClick={() => handleBulkActionClick('start-all')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-play-fill" tone="success.main" />
             </ListItemIcon>
             <ListItemText>{t('bulkActions.startAllVms')}</ListItemText>
           </MenuItem>,
           <MenuItem key="bulk-shutdown" onClick={() => handleBulkActionClick('shutdown-all')}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-shut-down-line" tone="warning.main" />
             </ListItemIcon>
             <ListItemText>{t('bulkActions.shutdownAllVms')}</ListItemText>
           </MenuItem>,
           !tenantLoading && isFullClusterView ? (
             <MenuItem key="bulk-migrate" onClick={() => handleBulkActionClick('migrate-all')}>
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                <MoveUpIcon fontSize="small" />
+              <ListItemIcon>
+                <MenuIcon name="ri-exchange-line" />
               </ListItemIcon>
               <ListItemText>{t('bulkActions.migrateAllVms')}</ListItemText>
             </MenuItem>
@@ -577,8 +639,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             if (nodeContextMenu) onNodeAction?.(nodeContextMenu.connId, nodeContextMenu.node, 'reboot')
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-restart-line" style={{ fontSize: 18, color: '#f59e0b' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-restart-line" tone="warning.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.nodeReboot')}</ListItemText>
           </MenuItem>,
@@ -586,8 +648,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             if (nodeContextMenu) onNodeAction?.(nodeContextMenu.connId, nodeContextMenu.node, 'shutdown')
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-shut-down-line" style={{ fontSize: 18, color: '#c62828' }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-shut-down-line" tone="error.main" />
             </ListItemIcon>
             <ListItemText>{t('inventory.nodeShutdown')}</ListItemText>
           </MenuItem>,
@@ -596,20 +658,24 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             key="maintenance"
             onClick={nodeContextMenu?.sshEnabled ? handleMaintenanceClick : undefined}
             disabled={maintenanceBusy || !nodeContextMenu?.sshEnabled}
-            sx={!nodeContextMenu?.sshEnabled ? { opacity: 0.5 } : undefined}
           >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'} style={{ fontSize: 20, color: !nodeContextMenu?.sshEnabled ? undefined : nodeContextMenu?.maintenance ? '#4caf50' : '#ff9800' }} />
+            <ListItemIcon>
+              <MenuIcon
+                name={nodeContextMenu?.maintenance ? 'ri-play-circle-line' : 'ri-tools-fill'}
+                tone={nodeContextMenu?.maintenance ? 'success.main' : 'warning.main'}
+              />
             </ListItemIcon>
             <ListItemText>
               {nodeContextMenu?.maintenance ? t('inventory.exitMaintenance') : t('inventory.enterMaintenance')}
             </ListItemText>
           </MenuItem>,
           !nodeContextMenu?.sshEnabled ? (
-            <Typography key="ssh-hint" variant="caption" sx={{ px: 2, pb: 1, display: 'block', opacity: 0.5 }}>
-              <i className="ri-ssh-line" style={{ fontSize: 12, marginRight: 4, verticalAlign: 'middle' }} />
-              {t('inventory.maintenanceRequiresSsh')}
-            </Typography>
+            <Box key="ssh-hint" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.75, pt: 0.25, pb: 1 }}>
+              <Box component="i" className="ri-ssh-line" sx={{ fontSize: 13, color: 'text.disabled' }} />
+              <Typography sx={{ fontSize: '0.6875rem', color: 'text.disabled' }}>
+                {t('inventory.maintenanceRequiresSsh')}
+              </Typography>
+            </Box>
           ) : null,
           <Divider key="d-tags" />,
           <MenuItem key="tags" onClick={() => {
@@ -620,8 +686,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             }
             handleCloseNodeContextMenu()
           }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <i className="ri-price-tag-3-line" style={{ fontSize: 18 }} />
+            <ListItemIcon>
+              <MenuIcon name="ri-price-tag-3-line" />
             </ListItemIcon>
             <ListItemText>{t('inventory.manageTags', { defaultMessage: 'Manage Tags' })}</ListItemText>
           </MenuItem>,
@@ -713,9 +779,9 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             bgcolor: bulkActionDialog.action === 'start-all' ? 'rgba(76,175,80,0.12)' : bulkActionDialog.action === 'migrate-all' ? 'rgba(33,150,243,0.12)' : 'rgba(255,152,0,0.12)',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
-            {bulkActionDialog.action === 'start-all' && <PlayArrowIcon fontSize="small" sx={{ color: '#4caf50' }} />}
-            {bulkActionDialog.action === 'shutdown-all' && <PowerSettingsNewIcon fontSize="small" sx={{ color: '#ff9800' }} />}
-            {bulkActionDialog.action === 'migrate-all' && <MoveUpIcon fontSize="small" sx={{ color: '#2196f3' }} />}
+            {bulkActionDialog.action === 'start-all' && <PlayArrowIcon fontSize="small" sx={{ color: 'success.main' }} />}
+            {bulkActionDialog.action === 'shutdown-all' && <PowerSettingsNewIcon fontSize="small" sx={{ color: 'warning.main' }} />}
+            {bulkActionDialog.action === 'migrate-all' && <RemixIcon name="ri-exchange-line" fontSize="small" sx={{ color: 'info.main' }} />}
           </Box>
           {bulkActionDialog.action === 'start-all' && t('bulkActions.startAllVms')}
           {bulkActionDialog.action === 'shutdown-all' && t('bulkActions.shutdownAllVms')}
@@ -794,8 +860,8 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           vmName={cloneTarget.name || `VM ${cloneTarget.vmid}`}
           vmid={cloneTarget.vmid}
           vmType={cloneTarget.type}
-          nextVmid={Math.max(100, ...allVms.map(v => Number(v.vmid) || 0)) + 1}
-          existingVmids={allVms.map(v => Number(v.vmid) || 0).filter(id => id > 0)}
+          nextVmid={nextVmidOnConnection(allVms, cloneTarget.connId)}
+          existingVmids={usedVmidsOnConnection(allVms, cloneTarget.connId)}
           pools={[]}
         />
       )}
@@ -808,7 +874,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
         fullWidth
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <DescriptionIcon sx={{ fontSize: 24 }} />
+          <RemixIcon name="ri-file-copy-fill" sx={{ fontSize: 24, color: 'text.secondary' }} />
           {t('templates.convertToTemplate')}
         </DialogTitle>
         <DialogContent>

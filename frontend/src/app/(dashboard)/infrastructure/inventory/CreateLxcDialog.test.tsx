@@ -312,6 +312,19 @@ describe('CreateLxcDialog - form inputs', () => {
     expect(screen.getByText(/CT ID 101 is already in use/i)).toBeInTheDocument()
   })
 
+  it('CT ID used on ANOTHER connection does not block the create (#724)', async () => {
+    renderWithProviders(
+      <CreateLxcDialog
+        {...makeProps({ allVms: [{ vmid: '101', connId: 'conn-2', node: 'other-node' } as any] })}
+      />,
+    )
+    await waitForDataLoad()
+
+    const ctidInput = screen.getByLabelText('CT ID') as HTMLInputElement
+    fireEvent.change(ctidInput, { target: { value: '101' } })
+    expect(screen.queryByText(/CT ID 101 is already in use/i)).not.toBeInTheDocument()
+  })
+
   it('Unprivileged toggle is checked by default after data loads', async () => {
     renderWithProviders(<CreateLxcDialog {...makeProps()} />)
     await waitForDataLoad()

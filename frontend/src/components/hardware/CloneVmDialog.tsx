@@ -415,7 +415,11 @@ return currentScore > bestScore ? current : best
           <FormControl fullWidth size="small">
             <InputLabel>Target node</InputLabel>
             <Select
-              value={targetNode}
+              // The seeded currentNode is not among the options until the async
+              // /nodes fetch lands, and MUI warns loudly about an out-of-range
+              // value. Show nothing until its option exists; the field is
+              // disabled while loading, so the user cannot lose a choice.
+              value={nodes.some(n => n.node === targetNode) ? targetNode : ''}
               onChange={(e) => setTargetNode(e.target.value)}
               label="Target node"
               disabled={nodesLoading}

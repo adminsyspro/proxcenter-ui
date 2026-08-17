@@ -239,6 +239,36 @@ describe('CloneVmDialog - data loads on open', () => {
     expect(comboboxes[0].textContent).toContain(NODE_NAME)
   })
 
+  it('never hands MUI an out-of-range node value while /nodes is in flight', async () => {
+    // The seeded currentNode has no matching option until the fetch lands, which
+    // used to flood the dev console with "out-of-range value pve1". The delay is
+    // what makes the window observable: without it the provider view only paints
+    // once the nodes are already there.
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes`, async () => {
+        await new Promise(resolve => setTimeout(resolve, 60))
+
+        return HttpResponse.json({ data: nodes })
+      }),
+    )
+
+    // MUI raises this one through console.warn, not console.error.
+    const logged: string[] = []
+    const collect = (...args: unknown[]) => { logged.push(args.map(String).join(' ')) }
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(collect)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(collect)
+
+    try {
+      renderWithProviders(<CloneVmDialog {...makeProps()} />)
+      await waitForDataLoad()
+    } finally {
+      warnSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
+
+    expect(logged.filter(line => /out-of-range value/.test(line))).toEqual([])
+  })
+
   it('opens Target node Select and shows seeded node as option', async () => {
     renderWithProviders(<CloneVmDialog {...makeProps()} />)
     await waitForDataLoad()

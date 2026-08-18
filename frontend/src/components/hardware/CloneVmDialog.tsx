@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { VM_DISK_FORMATS, vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { type NodeInfo, calculateNodeScore, formatMemory, fetchNextVmid } from './utils'
 import { useTenant } from '@/contexts/TenantContext'
@@ -68,7 +69,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   const [cloning, setCloning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nodes, setNodes] = useState<NodeInfo[]>([])
-  const [storages, setStorages] = useState<{ storage: string; type: string; avail?: number; total?: number; shared?: number }[]>([])
+  const [storages, setStorages] = useState<{ storage: string; type: string; avail?: number; total?: number; shared?: number; formats?: string[]; defaultFormat?: string }[]>([])
   const [resourcePools, setResourcePools] = useState<{ poolid: string; comment?: string }[]>([])
   const [nodesLoading, setNodesLoading] = useState(false)
   const [storagesLoading, setStoragesLoading] = useState(false)
@@ -84,6 +85,35 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   const [name, setName] = useState('')
   const [targetStorage, setTargetStorage] = useState('')
   const [format, setFormat] = useState('qcow2')
+
+  // A full clone allocates on the target storage, so the format has to be one
+  // that storage accepts: qcow2 on a plain LVM target used to fail outright,
+  // and a PVE 9 LVM storage with snapshot-as-volume-chain does take it
+  // (issue #735). The API answers per storage; older payloads fall back to the
+  // type-based table.
+  const selectedTargetStorageObj = useMemo(
+    () => storages.find(s => s.storage === targetStorage),
+    [storages, targetStorage]
+  )
+  const supportedFormats = useMemo(
+    () => {
+      // No target storage picked yet: the Select is disabled, but its value
+      // still has to be in range or MUI warns.
+      if (!selectedTargetStorageObj) return [...VM_DISK_FORMATS]
+
+      return selectedTargetStorageObj.formats?.length
+        ? selectedTargetStorageObj.formats
+        : vmDiskFormats({ type: selectedTargetStorageObj.type }).formats
+    },
+    [selectedTargetStorageObj]
+  )
+
+  useEffect(() => {
+    if (!selectedTargetStorageObj) return
+
+    setFormat(selectedTargetStorageObj.defaultFormat || vmDiskFormats({ type: selectedTargetStorageObj.type }).defaultFormat)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetStorage, selectedTargetStorageObj])
   const [pool, setPool] = useState('')
   const [fullClone, setFullClone] = useState(true)
 
@@ -204,7 +234,9 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
               type: s.type,
               avail: s.avail,
               total: s.total,
-              shared: s.shared
+              shared: s.shared,
+              formats: s.formats,
+              defaultFormat: s.defaultFormat
             }))
 
           setStorages(diskStorages)
@@ -553,12 +585,14 @@ return currentScore > bestScore ? current : best
           />
 
           {/* Format */}
-          <FormControl fullWidth size="small" disabled={!targetStorage}>
+          <FormControl fullWidth size="small" disabled={!targetStorage || supportedFormats.length < 2}>
             <InputLabel>Format</InputLabel>
             <Select value={format} onChange={(e) => setFormat(e.target.value)} label="Format">
-              <MenuItem value="qcow2">QEMU image format (qcow2)</MenuItem>
-              <MenuItem value="raw">Raw disk image (raw)</MenuItem>
-              <MenuItem value="vmdk">VMware image format (vmdk)</MenuItem>
+              {supportedFormats.map(fmt => (
+                <MenuItem key={fmt} value={fmt}>
+                  {fmt === 'qcow2' ? 'QEMU image format (qcow2)' : fmt === 'raw' ? 'Raw disk image (raw)' : 'VMware image format (vmdk)'}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
 

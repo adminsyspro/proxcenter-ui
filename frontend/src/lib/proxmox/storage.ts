@@ -7,6 +7,71 @@ export function isFileBasedStorage(type: string): boolean {
   return FILE_BASED_STORAGE_TYPES.includes(type as any)
 }
 
+/**
+ * Disk image formats every storage plugin accepts, transcribed from the
+ * `plugindata` tables of PVE 9 (`/usr/share/perl5/PVE/Storage/*Plugin.pm`).
+ * A type missing from this map falls back to raw only, which is what the base
+ * `get_formats` does when a plugin declares no format list: lvmthin, rbd,
+ * iscsi, iscsidirect, zfs over iSCSI. `subvol` is container-only.
+ */
+const STORAGE_FORMATS: Record<string, { valid: string[]; defaultFormat: string }> = {
+  dir: { valid: ['raw', 'qcow2', 'vmdk', 'subvol'], defaultFormat: 'raw' },
+  nfs: { valid: ['raw', 'qcow2', 'vmdk'], defaultFormat: 'raw' },
+  cifs: { valid: ['raw', 'qcow2', 'vmdk'], defaultFormat: 'raw' },
+  zfspool: { valid: ['raw', 'subvol'], defaultFormat: 'raw' },
+  btrfs: { valid: ['raw', 'subvol'], defaultFormat: 'raw' },
+  lvm: { valid: ['raw'], defaultFormat: 'raw' },
+}
+
+/** Formats a UI may offer for a VM disk: `subvol` only ever holds a container. */
+export const VM_DISK_FORMATS = ['raw', 'qcow2', 'vmdk'] as const
+
+export type StorageFormatSupport = { formats: string[]; defaultFormat: string }
+
+function optionEnabled(value: unknown): boolean {
+  return value === 1 || value === '1' || value === true
+}
+
+/**
+ * Image formats a storage really accepts, mirroring `get_formats` in PVE 9.
+ * Feed it the cluster storage config (`GET /storage`), not the per-node status,
+ * which carries neither the format pin nor the LVM option.
+ *
+ * Deducing this from the storage TYPE alone stopped being correct in PVE 9:
+ * an LVM storage with `snapshot-as-volume-chain` holds qcow2 volumes so it can
+ * take snapshots as volume chains, and qcow2 is then its default format
+ * (`LVMPlugin.pm` overrides `get_formats` for exactly that). Issue #735.
+ */
+export function storageFormats(cfg: { type?: string; format?: string; [key: string]: any } | null | undefined): StorageFormatSupport {
+  const type = String(cfg?.type ?? '')
+
+  if (type === 'lvm') {
+    return optionEnabled(cfg?.['snapshot-as-volume-chain'])
+      ? { formats: ['raw', 'qcow2'], defaultFormat: 'qcow2' }
+      : { formats: ['raw'], defaultFormat: 'raw' }
+  }
+
+  const entry = STORAGE_FORMATS[type]
+
+  if (!entry) return { formats: ['raw'], defaultFormat: 'raw' }
+
+  // A storage may pin its own default with the `format` property.
+  const pinned = typeof cfg?.format === 'string' && entry.valid.includes(cfg.format) ? cfg.format : null
+
+  return { formats: [...entry.valid], defaultFormat: pinned || entry.defaultFormat }
+}
+
+/** Same as storageFormats, narrowed to the formats a VM disk can use. */
+export function vmDiskFormats(cfg: Parameters<typeof storageFormats>[0]): StorageFormatSupport {
+  const { formats, defaultFormat } = storageFormats(cfg)
+  const usable = formats.filter(f => (VM_DISK_FORMATS as readonly string[]).includes(f))
+
+  return {
+    formats: usable.length > 0 ? usable : ['raw'],
+    defaultFormat: usable.includes(defaultFormat) ? defaultFormat : (usable[0] || 'raw'),
+  }
+}
+
 /** Storage types that are inherently shared across cluster nodes */
 export const SHARED_STORAGE_TYPES = ["rbd", "cephfs", "nfs", "cifs", "glusterfs", "iscsi", "iscsidirect", "zfs", "pbs"] as const
 

@@ -6,6 +6,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
+import { vmDiskFormats } from '@/lib/proxmox/storage'
 import { cpuGroupHeaderSx } from './cpuSelectStyles'
 
 import {
@@ -331,10 +332,25 @@ function CreateVmDialog({
     setDisks(prev => prev.filter((_, i) => i !== idx))
   }
 
+  /** Format PVE would use on that storage when the request names none. */
+  const storageDefaultFormat = (storageName: string): string => {
+    const s = storages.find((x: any) => x.storage === storageName)
+
+    return s?.defaultFormat || vmDiskFormats({ type: s?.type }).defaultFormat
+  }
+
   const updateDisk = (idx: number, updates: Partial<DiskConfig>) => {
     setDisks(prev => {
       const updated = [...prev]
       updated[idx] = { ...updated[idx], ...updates }
+
+      // Follow the storage: PVE picks the format the storage defaults to, so
+      // announcing a fixed raw lied on any storage defaulting to qcow2, and a
+      // PVE 9 LVM storage with snapshot-as-volume-chain does (issue #735).
+      if (updates.storage && updates.storage !== prev[idx].storage) {
+        updated[idx].format = storageDefaultFormat(updates.storage)
+      }
+
       if (updates.bus && updates.bus !== prev[idx].bus) {
         const usedIndices = prev.filter((d, i) => i !== idx && d.bus === updates.bus).map(d => d.index)
         let nextIndex = 0
@@ -782,7 +798,13 @@ return
         setDisks(prev => {
           if (prev.length > 0 && !prev[0].storage) {
             const updated = [...prev]
-            updated[0] = { ...updated[0], storage: filteredDisk[0].storage }
+            const seeded = filteredDisk[0]
+
+            updated[0] = {
+              ...updated[0],
+              storage: seeded.storage,
+              format: seeded.defaultFormat || vmDiskFormats({ type: seeded.type }).defaultFormat,
+            }
             return updated
           }
           return prev

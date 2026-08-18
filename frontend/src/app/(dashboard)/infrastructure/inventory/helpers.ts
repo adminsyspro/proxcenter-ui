@@ -260,6 +260,44 @@ export function machineTypeRow(raw: string | undefined | null): {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Disk image format (issue #735)                                     */
+/* ------------------------------------------------------------------ */
+
+/** Image formats PVE spells out in the volume name suffix. */
+const DISK_FORMAT_SUFFIXES = new Set(['raw', 'qcow2', 'vmdk', 'subvol'])
+
+/**
+ * Real image format of a drive entry (`scsi0: FC-LAB01:vm-500-disk-0.qcow2,size=10G`).
+ *
+ * PVE hardly ever writes the optional `format=` drive property: the format is
+ * carried by the volume name suffix and the storage layer reads it back from
+ * there. Falling back to `raw` whenever `format=` is missing therefore
+ * mislabelled every qcow2 and vmdk disk (issue #735, reported on a PVE 9 LVM
+ * storage whose volumes are qcow2 for volume-chain snapshots). Volumes with no
+ * suffix (LVM, RBD, ZFS zvol) genuinely are raw.
+ */
+export function parseDiskFormat(diskStr: string | undefined | null): string {
+  const value = String(diskStr ?? '')
+  const explicit = value.match(/(?:^|,)format=(\w+)/)
+
+  if (explicit) return explicit[1]
+
+  // Storage IDs accept dots, so only the volume name (everything after the
+  // first colon) may be searched for a suffix.
+  const volid = value.split(',')[0]
+  const colon = volid.indexOf(':')
+  const volume = colon === -1 ? '' : volid.slice(colon + 1)
+  const suffix = volume.includes('.') ? volume.split('.').pop()!.toLowerCase() : ''
+
+  if (DISK_FORMAT_SUFFIXES.has(suffix)) return suffix
+
+  // A container subvolume carries no suffix on ZFS (`local-zfs:subvol-100-disk-0`).
+  if (/(^|\/)subvol-/.test(volume)) return 'subvol'
+
+  return 'raw'
+}
+
 export function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   const u = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -1235,6 +1273,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
             const sizeMatch = diskStr.match(/size=(\d+[GMT]?)/i)
 
             const isCdrom = diskStr.includes('media=cdrom') || storagePart[0] === 'none' || String(diskStr) === 'cdrom'
+
+            // PVE stores the Cloud-Init drive as a media=cdrom entry backed by a
+            // real `vm-<vmid>-cloudinit` volume, so it is not a CD-ROM at all and
+            // must not be offered the ISO editor (issue #735 recette).
+            const isCloudInit = /vm-\d+-cloudinit(\.\w+)?$/.test(parts[0])
             const isMountpoint = key === 'rootfs' || key.match(/^mp\d+$/)
             const mountpointMatch = isMountpoint ? diskStr.match(/mp=([^,]+)/) : null
 
@@ -1242,7 +1285,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
               id: key,
               storage: storagePart[0] || 'unknown',
               size: isCdrom ? '-' : (sizeMatch ? sizeMatch[1] : 'unknown'),
-              format: isCdrom ? 'cdrom' : (diskStr.includes('format=') ? diskStr.match(/format=(\w+)/)?.[1] : 'raw'),
+              format: isCdrom ? 'cdrom' : parseDiskFormat(String(diskStr)),
               cache: diskStr.match(/cache=(\w+)/)?.[1],
               iothread: diskStr.includes('iothread=1'),
               discard: diskStr.includes('discard=on'),
@@ -1256,6 +1299,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
               iops_rd: diskStr.match(/iops_rd=(\d+)/)?.[1] ? Number(diskStr.match(/iops_rd=(\d+)/)?.[1]) : undefined,
               iops_wr: diskStr.match(/iops_wr=(\d+)/)?.[1] ? Number(diskStr.match(/iops_wr=(\d+)/)?.[1]) : undefined,
               isCdrom,
+              isCloudInit,
               mountpoint: mountpointMatch?.[1] || (key === 'rootfs' ? '/' : undefined),
               rawValue: String(diskStr),
             })

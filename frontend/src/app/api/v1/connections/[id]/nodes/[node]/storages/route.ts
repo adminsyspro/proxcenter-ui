@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { vmDiskFormats } from "@/lib/proxmox/storage"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 
@@ -78,7 +79,32 @@ return contents.includes(contentFilter)
         : []
     }
 
-    return NextResponse.json({ data: storages || [] })
+    // The per-node status carries type and content but never the format
+    // capability: an explicit `format` pin and the PVE 9 LVM option
+    // `snapshot-as-volume-chain` only live in the cluster storage config, and
+    // that option is what decides whether qcow2 is allowed (issue #735).
+    // A caller without Datastore.Audit degrades to the type-based answer
+    // instead of losing the whole storage list.
+    let storageConfigs: any[] = []
+
+    try {
+      storageConfigs = await pveFetch<any[]>(conn, "/storage")
+    } catch {
+      storageConfigs = []
+    }
+
+    const configByName = new Map<string, any>()
+
+    for (const cfg of storageConfigs || []) {
+      if (cfg?.storage) configByName.set(cfg.storage, cfg)
+    }
+
+    const withFormats = (storages || []).map((s: any) => ({
+      ...s,
+      ...vmDiskFormats({ ...(configByName.get(s.storage) || {}), type: s.type }),
+    }))
+
+    return NextResponse.json({ data: withFormats })
   } catch (e: any) {
     console.error('Error fetching storages:', e)
     

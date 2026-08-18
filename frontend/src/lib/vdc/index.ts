@@ -12,6 +12,7 @@ import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
 import { clearVdcScopeCache } from './scope'
+import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 
 import type {
   Vdc,
@@ -194,7 +195,11 @@ const vdcWithDetailsInclude = {
     include: { subnet: true },
     orderBy: { pveName: 'asc' as const },
   },
-  vlanPools: { orderBy: { bridge: 'asc' as const } },
+  vlanPools: {
+    orderBy: [{ bridge: 'asc' as const }, { rangeStart: 'asc' as const }] as (
+      { bridge: 'asc' } | { rangeStart: 'asc' }
+    )[],
+  },
   pbsNamespaces: true,
 } as const
 
@@ -327,6 +332,14 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     )
   }
 
+  // 2ter. Validate VLAN pools before any PVE side effect (pool/zone creation
+  // below is not rolled back by a validation failure caught this early).
+  const vlanPools: VlanPoolInput[] = input.vlanPools ?? []
+  if (vlanPools.length > 0) {
+    validateVlanPoolsInput(vlanPools)
+    await assertNoCrossVdcOverlap(input.connectionId, null, vlanPools)
+  }
+
   // 3. Allocate vDC id (needed for zone generation)
   const id = randomUUID()
   const now = new Date()
@@ -424,6 +437,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
         })
       }
 
+      if (vlanPools.length > 0) {
+        await tx.vdcVlanPool.createMany({
+          data: vlanPools.map(p => ({
+            id: randomUUID(), vdcId: id, bridge: p.bridge,
+            rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
+          })),
+        })
+      }
+
       await tx.vdcUsageCache.create({
         data: {
           id: randomUUID(),
@@ -465,9 +487,18 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
 
 export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcWithDetails> {
   // Verify vDC exists
-  const existing = await prisma.vdc.findUnique({ where: { id }, select: { id: true, tenantId: true } })
+  const existing = await prisma.vdc.findUnique({
+    where: { id },
+    select: { id: true, tenantId: true, connectionId: true },
+  })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
+  }
+
+  if (input.vlanPools) {
+    validateVlanPoolsInput(input.vlanPools)
+    await assertNoCrossVdcOverlap(existing.connectionId, id, input.vlanPools)
+    await assertPoolShrinkSafe(id, input.vlanPools)
   }
 
   const now = new Date()
@@ -500,6 +531,18 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
             bridge: sb.bridge,
             label: sb.label ?? null,
             createdAt: now,
+          })),
+        })
+      }
+    }
+
+    if (input.vlanPools) {
+      await tx.vdcVlanPool.deleteMany({ where: { vdcId: id } })
+      if (input.vlanPools.length > 0) {
+        await tx.vdcVlanPool.createMany({
+          data: input.vlanPools.map(p => ({
+            id: randomUUID(), vdcId: id, bridge: p.bridge,
+            rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
           })),
         })
       }

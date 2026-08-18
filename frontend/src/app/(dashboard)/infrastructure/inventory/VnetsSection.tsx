@@ -25,7 +25,17 @@ import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useTenant } from '@/contexts/TenantContext'
 
-interface Vdc { id: string; name: string; connectionId?: string; enabled?: boolean }
+interface VlanPool { bridge: string; rangeStart: number; rangeEnd: number }
+
+interface Vdc {
+  id: string
+  name: string
+  connectionId?: string
+  enabled?: boolean
+  /** Provider-dedicated VLAN ranges; drives the VLAN branch of the create
+   *  dialog. Absent (or empty) means the tenant only gets VXLAN. */
+  vlanPools?: VlanPool[]
+}
 
 interface SubnetView {
   cidr: string
@@ -303,7 +313,7 @@ export default function VnetsSection({ connectionIds }: Props) {
 
       <VnetCreateDialog
         open={createOpen}
-        vdcs={vdcs.map(v => ({ id: v.id, name: v.name }))}
+        vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [] }))}
         onClose={() => setCreateOpen(false)}
         onCreated={() => { setCreateOpen(false); void reload() }}
       />

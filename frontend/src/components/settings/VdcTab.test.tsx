@@ -62,6 +62,9 @@ beforeEach(() => {
     if (url.includes('available-resources')) {
       return jsonRes({ data: { nodes: [{ name: 'pve1', status: 'online' }], storages: [{ id: 'shared-nfs', type: 'nfs', maxdisk: 1000 }] } })
     }
+    if (url.includes('provider-bridges?scope=vlan-pool')) {
+      return jsonRes({ data: [{ iface: 'vmbr0', nodes: ['pve1'], type: 'bridge', vlanAware: true }] })
+    }
     if (url.includes('provider-bridges')) return jsonRes({ data: [] })
     return jsonRes({ data: [] })
   }))
@@ -153,5 +156,28 @@ describe('VdcTab — create dialog (multi-vDC)', () => {
 
     expect(posted.name).toBe('Prod Frankfurt')
     expect(posted.slug).toBe('acme-frankfurt')
+  })
+
+  it('adds a VLAN pool range and sends it in the create payload', async () => {
+    const scope = await openCreateDialog()
+    await pickCluster(scope, 'frankfurt')
+
+    // The VLAN pools block only renders once the resources fetch resolves,
+    // same gate as the Shared Bridges block right above it.
+    await scope.findByText('VLAN pools')
+
+    const addBtn = scope.getByRole('button', { name: 'Add a range' })
+    await waitFor(() => expect(addBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(addBtn)
+
+    fireEvent.mouseDown(scope.getByLabelText('Bridge'))
+    fireEvent.click(await screen.findByRole('option', { name: 'vmbr0' }))
+
+    fireEvent.change(scope.getByLabelText('First VLAN ID'), { target: { value: '100' } })
+    fireEvent.change(scope.getByLabelText('Last VLAN ID'), { target: { value: '199' } })
+
+    await submitCreate(scope)
+
+    expect(posted.vlanPools).toEqual([{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }])
   })
 })

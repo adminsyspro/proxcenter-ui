@@ -126,7 +126,7 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   }
 
   const aggregate = await prisma.vdcVnet.aggregate({
-    where: { vdc: { connectionId: ownerVdc.connectionId } },
+    where: { type: 'vxlan', vdc: { connectionId: ownerVdc.connectionId } },
     _max: { tag: true },
   })
   const dbMax = aggregate._max.tag
@@ -153,7 +153,11 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
 
   const candidates = [dbMax, pveMax].filter((n): n is number => typeof n === 'number')
   if (candidates.length === 0) return VNI_BASE
-  return Math.max(...candidates) + 1
+  // PVE's /cluster/sdn/vnets set (pveMax) can carry VLAN tags (<= 4094)
+  // alongside VXLAN VNIs, so a VLAN-only connection must not drag the next
+  // VXLAN allocation below the VNI floor.
+  const next = Math.max(...candidates) + 1
+  return next < VNI_BASE ? VNI_BASE : next
 }
 
 // ---------------------------------------------------------------------------

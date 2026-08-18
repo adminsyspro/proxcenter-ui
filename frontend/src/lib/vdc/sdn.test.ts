@@ -152,6 +152,14 @@ describe('allocateVni', () => {
     await addVnet('vdc-A', 'lan', 10000)
     expect(await allocateVni('vdc-B')).toBe(10000)
   })
+
+  it('ignores VLAN-type vnets: a VLAN-only connection still starts VXLAN allocation at 10000', async () => {
+    await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
+    await prismaTest.vdcVnet.create({
+      data: { id: 'vdc-1-vlan', vdcId: 'vdc-1', pveName: 'vlan1', type: 'vlan', bridge: 'vmbr0', tag: 201 },
+    })
+    expect(await allocateVni('vdc-1')).toBe(10000)
+  })
 })
 
 describe('generatePveVnetId', () => {

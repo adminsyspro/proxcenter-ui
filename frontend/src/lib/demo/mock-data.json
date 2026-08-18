@@ -28181,7 +28181,7 @@
         "pveName": "a1b2c3d4",
         "displayName": "Web tier",
         "description": "Public-facing web servers",
-        "vxlanTag": 10100,
+        "tag": 10100,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-acme-prod-web",
@@ -28208,7 +28208,7 @@
         "pveName": "e5f6a7b8",
         "displayName": "App tier",
         "description": "Internal application servers",
-        "vxlanTag": 10101,
+        "tag": 10101,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-acme-prod-app",
@@ -28239,7 +28239,7 @@
         "pveName": "c9d0e1f2",
         "displayName": "Web tier",
         "description": "Public-facing web servers",
-        "vxlanTag": 10110,
+        "tag": 10110,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-acme-dr-web",
@@ -28266,7 +28266,7 @@
         "pveName": "b3a4f5e6",
         "displayName": "App tier",
         "description": "Internal application servers",
-        "vxlanTag": 10111,
+        "tag": 10111,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-acme-dr-app",
@@ -28297,7 +28297,7 @@
         "pveName": "d7c8b9a0",
         "displayName": "Web tier",
         "description": "Public-facing web servers",
-        "vxlanTag": 10120,
+        "tag": 10120,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-globex-prod-web",
@@ -28324,7 +28324,7 @@
         "pveName": "1e2f3a4b",
         "displayName": "App tier",
         "description": "Internal application servers",
-        "vxlanTag": 10121,
+        "tag": 10121,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-globex-prod-app",
@@ -28355,7 +28355,7 @@
         "pveName": "5c6d7e8f",
         "displayName": "Web tier",
         "description": "Public-facing web servers",
-        "vxlanTag": 10130,
+        "tag": 10130,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-initech-prod-web",
@@ -28382,7 +28382,7 @@
         "pveName": "9a0b1c2d",
         "displayName": "App tier",
         "description": "Internal application servers",
-        "vxlanTag": 10131,
+        "tag": 10131,
         "firewall": true,
         "subnet": {
           "id": "demo-subnet-initech-prod-app",

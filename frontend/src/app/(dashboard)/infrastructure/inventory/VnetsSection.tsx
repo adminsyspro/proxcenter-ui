@@ -47,7 +47,8 @@ interface VnetRow {
   /** Hashed 8-char PVE ID; surfaced in a tooltip for provider debugging. */
   pveName: string
   description?: string | null
-  vxlanTag?: number | null
+  tag?: number | null
+  type?: string
   firewall?: boolean
   /** L3 / IPAM info attached to the VNet. Always present in the new model. */
   subnet: SubnetView | null
@@ -136,7 +137,8 @@ export default function VnetsSection({ connectionIds }: Props) {
               displayName: vnet.displayName ?? vnet.pveName,
               pveName: vnet.pveName,
               description: vnet.description,
-              vxlanTag: vnet.vxlanTag,
+              tag: vnet.tag,
+              type: vnet.type,
               firewall: vnet.firewall,
               subnet,
               ipamUsage,
@@ -219,7 +221,7 @@ export default function VnetsSection({ connectionIds }: Props) {
                       sx={{ '&:last-child td': { border: 0 }, cursor: 'pointer' }}
                     >
                       <TableCell sx={{ py: 1 }}>
-                        <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.vxlanTag ? ` · VNI ${r.vxlanTag}` : ''}`} arrow placement="top">
+                        <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.tag ? ` · ${r.type === 'vlan' ? 'VLAN' : 'VNI'} ${r.tag}` : ''}`} arrow placement="top">
                           <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
                         </Tooltip>
                       </TableCell>

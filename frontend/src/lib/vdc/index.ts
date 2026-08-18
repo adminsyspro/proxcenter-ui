@@ -129,7 +129,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     pveName: v.pveName,
     displayName: v.displayName ?? v.pveName,
     description: v.description ?? null,
-    vxlanTag: v.vxlanTag,
+    tag: v.tag,
+    type: (v.type ?? 'vxlan') as 'vxlan' | 'vlan',
+    bridge: v.bridge ?? null,
+    zoneName: v.zoneName ?? null,
     firewall: v.firewall !== false,
     subnet: v.subnet
       ? {
@@ -146,6 +149,14 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
       : null,
     createdBy: v.createdBy ?? null,
     createdAt: v.createdAt.toISOString(),
+  }))
+  const vlanPools = row.vlanPools.map((p: any) => ({
+    id: p.id,
+    vdcId: p.vdcId,
+    bridge: p.bridge,
+    rangeStart: p.rangeStart,
+    rangeEnd: p.rangeEnd,
+    createdAt: p.createdAt.toISOString(),
   }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
@@ -167,6 +178,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     usage,
     sharedBridges,
     vnets,
+    vlanPools,
     pbsBindings,
   }
 }
@@ -182,6 +194,7 @@ const vdcWithDetailsInclude = {
     include: { subnet: true },
     orderBy: { pveName: 'asc' as const },
   },
+  vlanPools: { orderBy: { bridge: 'asc' as const } },
   pbsNamespaces: true,
 } as const
 

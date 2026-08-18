@@ -53,7 +53,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
         pveName: row.pveName,
         displayName: row.displayName ?? row.pveName,
         description: row.description ?? null,
-        vxlanTag: row.vxlanTag,
+        tag: row.tag,
         firewall: row.firewall !== false,
         subnet,
         createdBy: row.createdBy ?? null,

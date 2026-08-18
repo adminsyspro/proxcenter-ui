@@ -22,7 +22,8 @@ interface VnetDetail {
   pveName: string
   displayName: string
   description: string | null
-  vxlanTag: number
+  tag: number
+  type?: string
   firewall: boolean
   subnet: SubnetView | null
 }

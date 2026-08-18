@@ -102,8 +102,8 @@ beforeEach(async () => {
   })
   await prismaTest.vdcVnet.createMany({
     data: [
-      { id: 'vnet-1', vdcId: 'vdc-1', pveName: 'tenantA', vxlanTag: 10000 },
-      { id: 'vnet-2', vdcId: 'vdc-1', pveName: 'tenantB', vxlanTag: 10001 },
+      { id: 'vnet-1', vdcId: 'vdc-1', pveName: 'tenantA', tag: 10000 },
+      { id: 'vnet-2', vdcId: 'vdc-1', pveName: 'tenantB', tag: 10001 },
     ],
   })
   await prismaTest.vdcSubnet.createMany({

@@ -98,16 +98,16 @@ describe('checkVnetQuota', () => {
   it('allows under limit', async () => {
     await seedVdc({ tenantId: 'tenant-a' })
     await prismaTest.vdcQuota.create({ data: { id: 'q-vdc-1', vdcId: 'vdc-1', maxVnets: 5 } })
-    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: 'a', vxlanTag: 10000 } })
-    await prismaTest.vdcVnet.create({ data: { id: 'y', vdcId: 'vdc-1', pveName: 'b', vxlanTag: 10001 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: 'a', tag: 10000 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'y', vdcId: 'vdc-1', pveName: 'b', tag: 10001 } })
     expect(await checkVnetQuota('vdc-1')).toEqual({ allowed: true, current: 2, max: 5 })
   })
 
   it('blocks at limit', async () => {
     await seedVdc({ tenantId: 'tenant-a' })
     await prismaTest.vdcQuota.create({ data: { id: 'q-vdc-1', vdcId: 'vdc-1', maxVnets: 2 } })
-    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: 'a', vxlanTag: 10000 } })
-    await prismaTest.vdcVnet.create({ data: { id: 'y', vdcId: 'vdc-1', pveName: 'b', vxlanTag: 10001 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: 'a', tag: 10000 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'y', vdcId: 'vdc-1', pveName: 'b', tag: 10001 } })
     expect(await checkVnetQuota('vdc-1')).toEqual({ allowed: false, current: 2, max: 2 })
   })
 })

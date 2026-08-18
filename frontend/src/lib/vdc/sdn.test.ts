@@ -68,9 +68,9 @@ async function addVdc(opts: VdcOpts): Promise<void> {
   })
 }
 
-async function addVnet(vdcId: string, pveName: string, vxlanTag: number): Promise<void> {
+async function addVnet(vdcId: string, pveName: string, tag: number): Promise<void> {
   await prismaTest.vdcVnet.create({
-    data: { id: `${vdcId}-${pveName}`, vdcId, pveName, vxlanTag },
+    data: { id: `${vdcId}-${pveName}`, vdcId, pveName, tag },
   })
 }
 
@@ -191,7 +191,7 @@ describe('generatePveVnetId', () => {
   it('collision-resistant via nonce when hash collides', async () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const firstTry = await generatePveVnetId('vdc-1', 'lan')
-    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: firstTry, vxlanTag: 10000 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: firstTry, tag: 10000 } })
 
     const next = await generatePveVnetId('vdc-1', 'lan')
     expect(next).not.toBe(firstTry)

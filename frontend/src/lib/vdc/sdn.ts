@@ -127,9 +127,9 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
 
   const aggregate = await prisma.vdcVnet.aggregate({
     where: { vdc: { connectionId: ownerVdc.connectionId } },
-    _max: { vxlanTag: true },
+    _max: { tag: true },
   })
-  const dbMax = aggregate._max.vxlanTag
+  const dbMax = aggregate._max.tag
 
   // Our DB only knows the VNets ProxCenter created. PVE can carry tags from
   // legacy zones (older ProxCenter installs, manual `pvesh` work, leftover

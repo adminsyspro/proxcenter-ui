@@ -33,7 +33,7 @@ const VNET = (id: string, name: string) => ({
   id,
   displayName: name,
   pveName: id,
-  vxlanTag: 100,
+  tag: 100,
   firewall: false,
   subnet: { cidr: '10.0.0.0/24', gateway: '10.0.0.1', dnsServers: [] },
   ipamUsage: { used: 3, usable: 250 },

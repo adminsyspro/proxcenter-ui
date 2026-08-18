@@ -30,6 +30,7 @@ import {
   buildMachineType,
   formatMachineType,
   machineTypeRow,
+  parseDiskFormat,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -998,5 +999,134 @@ describe('machineTypeRow', () => {
     expect(row.editValue).toBe('virt')
     expect(row.options).toHaveLength(3)
     expect(row.options[2]).toEqual({ value: 'virt', label: 'virt' })
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Disk image format (issue #735)                                     */
+/* ------------------------------------------------------------------ */
+
+describe('parseDiskFormat', () => {
+  it('reads the format from the volume name suffix when PVE omits format=', () => {
+    // The exact line reported in issue #735 (PVE 9 LVM storage, qcow2 volumes).
+    expect(parseDiskFormat('FC-LAB01:vm-500-disk-0.qcow2,size=10G')).toBe('qcow2')
+  })
+
+  it('reads the suffix on a file-based volume stored under the VMID directory', () => {
+    expect(parseDiskFormat('local:100/vm-100-disk-0.qcow2,size=32G')).toBe('qcow2')
+    expect(parseDiskFormat('local:100/vm-100-disk-1.raw,size=8G')).toBe('raw')
+    expect(parseDiskFormat('local:100/vm-100-disk-2.vmdk,size=8G')).toBe('vmdk')
+  })
+
+  it('keeps an explicit format= property over the suffix', () => {
+    expect(parseDiskFormat('local:100/vm-100-disk-0.raw,format=qcow2,size=8G')).toBe('qcow2')
+    expect(parseDiskFormat('nas:100/vm-100-disk-0.qcow2,format=raw')).toBe('raw')
+  })
+
+  it('reports raw for block storages, whose volumes carry no suffix', () => {
+    expect(parseDiskFormat('local-lvm:vm-100-disk-0,size=32G')).toBe('raw')
+    expect(parseDiskFormat('ceph-pool:vm-100-disk-0,size=32G')).toBe('raw')
+    expect(parseDiskFormat('local-zfs:vm-100-disk-0,size=32G')).toBe('raw')
+  })
+
+  it('reports subvol for container subvolumes, suffixed or not', () => {
+    expect(parseDiskFormat('local-zfs:subvol-100-disk-0,size=8G')).toBe('subvol')
+    expect(parseDiskFormat('local-btrfs:100/subvol-100-disk-0.subvol,size=8G')).toBe('subvol')
+  })
+
+  it('ignores dots in the storage ID', () => {
+    expect(parseDiskFormat('nas.lab.local:vm-100-disk-0,size=8G')).toBe('raw')
+    expect(parseDiskFormat('nas.lab.local:100/vm-100-disk-0.qcow2,size=8G')).toBe('qcow2')
+  })
+
+  it('falls back to raw on an unknown suffix or a missing value', () => {
+    expect(parseDiskFormat('local:100/vm-100-disk-0.tmp,size=8G')).toBe('raw')
+    expect(parseDiskFormat('')).toBe('raw')
+    expect(parseDiskFormat(undefined)).toBe('raw')
+    expect(parseDiskFormat(null)).toBe('raw')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails: Hardware disks report the real format (issue #735)   */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails: disk format on the Hardware tab', () => {
+  const jsonRes = (body: any, ok = true) => ({ ok, json: async () => body }) as Response
+
+  function stubFetch(config: Record<string, any>) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+
+      if (url.includes('/config')) return Promise.resolve(jsonRes({ data: config }))
+      if (url.includes('/status')) return Promise.resolve(jsonRes({ data: {} }))
+      if (url.includes('/resources')) return Promise.resolve(jsonRes({ data: [
+        { node: 'pve1', vmid: '500', type: 'qemu', name: 'vm500', status: 'running' },
+      ] }))
+      if (url.includes('/nodes')) return Promise.resolve(jsonRes({ data: [{ node: 'pve1', status: 'online' }] }))
+
+      return Promise.resolve(jsonRes({ data: {} }))
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('labels a qcow2 volume qcow2, not raw', async () => {
+    stubFetch({ name: 'vm500', scsi0: 'FC-LAB01:vm-500-disk-0.qcow2,size=10G' })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+    const disk = payload?.disksInfo?.find(d => d.id === 'scsi0')
+
+    expect(disk?.format).toBe('qcow2')
+  })
+
+  it('still labels a block-storage volume raw and a CDROM cdrom', async () => {
+    stubFetch({
+      name: 'vm500',
+      scsi0: 'local-lvm:vm-500-disk-0,size=10G',
+      ide2: 'local:iso/debian-13.iso,media=cdrom,size=600M',
+    })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+
+    expect(payload?.disksInfo?.find(d => d.id === 'scsi0')?.format).toBe('raw')
+    expect(payload?.disksInfo?.find(d => d.id === 'ide2')?.format).toBe('cdrom')
+  })
+
+  // The Cloud-Init drive is a media=cdrom entry backed by a real volume, so it
+  // reads as a CD-ROM sitting on a block storage unless it is flagged apart.
+  it('flags the Cloud-Init drive instead of passing it off as a CD-ROM', async () => {
+    stubFetch({ name: 'vm500', ide2: 'CephPool:vm-500-cloudinit,media=cdrom' })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+    const drive = payload?.disksInfo?.find(d => d.id === 'ide2') as any
+
+    expect(drive?.isCloudInit).toBe(true)
+    expect(drive?.storage).toBe('CephPool')
+  })
+
+  it('flags a Cloud-Init drive allocated on a file-based storage too', async () => {
+    stubFetch({ name: 'vm500', ide2: 'local:500/vm-500-cloudinit.qcow2,media=cdrom' })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+
+    expect((payload?.disksInfo?.find(d => d.id === 'ide2') as any)?.isCloudInit).toBe(true)
+  })
+
+  it('leaves a real ISO and a physical drive out of the Cloud-Init case', async () => {
+    stubFetch({
+      name: 'vm500',
+      ide0: 'cdrom,media=cdrom',
+      ide2: 'local:iso/debian-13.iso,media=cdrom,size=600M',
+      scsi0: 'CephPool:vm-500-disk-0,size=10G',
+    })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+
+    for (const id of ['ide0', 'ide2', 'scsi0']) {
+      expect((payload?.disksInfo?.find(d => d.id === id) as any)?.isCloudInit).toBe(false)
+    }
   })
 })

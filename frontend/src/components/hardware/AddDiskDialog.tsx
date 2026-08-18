@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -27,6 +27,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { VM_DISK_FORMATS, vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import type { Storage } from './utils'
@@ -65,6 +66,31 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
   const [storage, setStorage] = useState('')
   const [diskSize, setDiskSize] = useState(32)
   const [format, setFormat] = useState('raw')
+
+  // Which formats the selected storage accepts is the storage's answer, not a
+  // property of its type: a PVE 9 LVM storage with snapshot-as-volume-chain
+  // takes qcow2, and even defaults to it (issue #735). The API computes it;
+  // an older payload falls back to the type-based table.
+  const selectedStorageObj = useMemo(() => storages.find(s => s.storage === storage), [storages, storage])
+  const supportedFormats = useMemo(
+    () => {
+      if (!selectedStorageObj) return [...VM_DISK_FORMATS]
+
+      return selectedStorageObj.formats?.length
+        ? selectedStorageObj.formats
+        : vmDiskFormats({ type: selectedStorageObj.type }).formats
+    },
+    [selectedStorageObj]
+  )
+
+  // Show the format PVE would pick for that storage, so the dialog never
+  // announces raw while PVE allocates qcow2.
+  useEffect(() => {
+    if (!selectedStorageObj) return
+
+    setFormat(selectedStorageObj.defaultFormat || vmDiskFormats({ type: selectedStorageObj.type }).defaultFormat)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storage, selectedStorageObj])
 
   // CDROM state
   const [cdromMode, setCdromMode] = useState<'iso' | 'physical' | 'none'>('none')
@@ -480,12 +506,12 @@ return match ? Number.parseInt(match[1]) : -1
                 min={1}
                 inputProps={{ min: 1 }}
               />
-              <FormControl fullWidth size="small">
+              <FormControl fullWidth size="small" disabled={supportedFormats.length < 2}>
                 <InputLabel>Format</InputLabel>
                 <Select value={format} onChange={(e) => setFormat(e.target.value)} label="Format">
-                  <MenuItem value="raw">raw</MenuItem>
-                  <MenuItem value="qcow2">qcow2</MenuItem>
-                  <MenuItem value="vmdk">vmdk</MenuItem>
+                  {supportedFormats.map(fmt => (
+                    <MenuItem key={fmt} value={fmt}>{fmt}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Box>

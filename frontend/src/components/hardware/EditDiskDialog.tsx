@@ -30,22 +30,10 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
-
-// Storage types that support multiple disk image formats (file-based storages)
-// Block-based storages (lvm, lvmthin, rbd, zfspool, iscsi, iscsidirect) only support raw
-const FILE_BASED_STORAGE_TYPES = new Set(['dir', 'nfs', 'cifs', 'smb', 'glusterfs', 'cephfs', 'btrfs'])
-
-function getSupportedFormats(storageType: string): string[] {
-  if (FILE_BASED_STORAGE_TYPES.has(storageType)) {
-    return ['raw', 'qcow2', 'vmdk']
-  }
-
-  // Block-based storage: only raw
-  return ['raw']
-}
 
 // ==================== EDIT DISK DIALOG ====================
 type EditDiskDialogProps = {
@@ -79,7 +67,7 @@ type EditDiskDialogProps = {
     rawValue?: string
   } | null
   existingDisks?: string[]
-  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number }>
+  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string }>
   initialTab?: number
 }
 
@@ -104,7 +92,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   const [targetStorage, setTargetStorage] = useState('')
   const [deleteSource, setDeleteSource] = useState(true)
   const [targetFormat, setTargetFormat] = useState('')
-  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number }>>([])
+  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string }>>([])
   const [storagesLoading, setStoragesLoading] = useState(false)
 
   // Disk config (éditable)
@@ -128,8 +116,18 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
     () => storages.find(s => s.storage === targetStorage),
     [storages, targetStorage]
   )
+  // The API answers with the formats the storage itself accepts, which is the
+  // only way to know that a PVE 9 LVM storage takes qcow2 (issue #735). An
+  // older payload, or a caller who cannot read the storage config, falls back
+  // to the type-based table.
   const supportedFormats = useMemo(
-    () => selectedTargetStorageObj ? getSupportedFormats(selectedTargetStorageObj.type) : ['raw', 'qcow2', 'vmdk'],
+    () => {
+      if (!selectedTargetStorageObj) return ['raw', 'qcow2', 'vmdk']
+
+      return selectedTargetStorageObj.formats?.length
+        ? selectedTargetStorageObj.formats
+        : vmDiskFormats({ type: selectedTargetStorageObj.type }).formats
+    },
     [selectedTargetStorageObj]
   )
   const supportsMultipleFormats = supportedFormats.length > 1

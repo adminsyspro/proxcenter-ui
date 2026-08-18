@@ -1,11 +1,37 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+/**
+ * Postgres-backed tests for tenant VNet resolution, quota and creation.
+ *
+ * `@/lib/proxmox/client` and `@/lib/connections/getConnection` are mocked at
+ * module level: `createVnetForTenant` reaches PVE through './sdn' and './vlan',
+ * so the SDN calls are asserted on the pveFetch mock rather than by mocking
+ * those modules (same stance as vlan.test.ts).
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
 
-import { checkVnetQuota, resolveVdcForVnet } from './vnets'
+const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
+
+const getConnectionByIdMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/connections/getConnection', () => ({
+  getConnectionById: (...a: any[]) => getConnectionByIdMock(...a),
+}))
+
+import { generateVlanZoneName } from './vlan'
+import {
+  checkVnetQuota,
+  createVnetForTenant,
+  resolveSubnetForBridge,
+  resolveVdcForVnet,
+} from './vnets'
 
 const TABLES = [
+  'vdc_ipam_allocations',
+  'vdc_subnets',
   'vdc_vnets',
+  'vdc_vlan_pools',
+  'sdn_vlan_zones',
   'vdc_quotas',
   'vdcs',
   'provider_connections',
@@ -15,6 +41,17 @@ const TABLES = [
 
 beforeEach(async () => {
   await truncate(TABLES)
+
+  pveFetchMock.mockReset()
+  // GET endpoints hit by allocateVni / allocateVlanTag return an empty live
+  // SDN config; every mutation resolves with no payload.
+  pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+    const method = String(opts?.method ?? 'GET').toUpperCase()
+    if (method === 'GET') return []
+    return undefined
+  })
+  getConnectionByIdMock.mockReset()
+  getConnectionByIdMock.mockResolvedValue({ baseUrl: 'https://pve.test', apiToken: 'tok' })
 
   const now = new Date()
   await prismaTest.tenant.createMany({
@@ -64,6 +101,22 @@ async function seedVdc(opts: VdcSeed): Promise<string> {
   return id
 }
 
+async function addPool(vdcId: string, bridge: string, rangeStart: number, rangeEnd: number): Promise<void> {
+  await prismaTest.vdcVlanPool.create({
+    data: { id: `${vdcId}-${bridge}-${rangeStart}`, vdcId, bridge, rangeStart, rangeEnd },
+  })
+}
+
+/** pveFetch calls matching a method + path (method defaults to GET). */
+function pveCalls(method: string, path: string): any[][] {
+  return pveFetchMock.mock.calls.filter((c) => {
+    const m = String(c[2]?.method ?? 'GET').toUpperCase()
+    return m === method.toUpperCase() && c[1] === path
+  })
+}
+
+const SUBNET = { cidr: '10.42.0.0/24', gateway: '10.42.0.1' }
+
 describe('resolveVdcForVnet', () => {
   it('returns vdc when owned by tenant and enabled', async () => {
     await seedVdc({ tenantId: 'tenant-a', slug: 'acme-prod', sdnZoneName: 'zacmeprod' })
@@ -77,9 +130,14 @@ describe('resolveVdcForVnet', () => {
     expect(await resolveVdcForVnet('vdc-1', 'tenant-b')).toBeNull()
   })
 
-  it('returns null when vdc has no SDN zone (pre-Phase-4a vDC)', async () => {
+  it('returns the vdc with a null zone when it has no SDN zone (VLAN-only vDC)', async () => {
+    // A vDC without an SDN zone can still host VLAN VNets, so the resolver no
+    // longer rejects it: the missing zone is only fatal on the VXLAN branch of
+    // createVnetForTenant.
     await seedVdc({ tenantId: 'tenant-a', sdnZoneName: null })
-    expect(await resolveVdcForVnet('vdc-1', 'tenant-a')).toBeNull()
+    const vdc = await resolveVdcForVnet('vdc-1', 'tenant-a')
+    expect(vdc).not.toBeNull()
+    expect(vdc?.sdnZoneName).toBeNull()
   })
 
   it('returns null when vdc is disabled', async () => {
@@ -109,5 +167,191 @@ describe('checkVnetQuota', () => {
     await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: 'a', tag: 10000 } })
     await prismaTest.vdcVnet.create({ data: { id: 'y', vdcId: 'vdc-1', pveName: 'b', tag: 10001 } })
     expect(await checkVnetQuota('vdc-1')).toEqual({ allowed: false, current: 2, max: 2 })
+  })
+})
+
+describe('createVnetForTenant (VXLAN)', () => {
+  it('keeps the VXLAN path on the vDC zone with a null bridge', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      subnet: SUBNET, createdBy: 'user-1',
+    })
+
+    expect(vnet.type).toBe('vxlan')
+    expect(vnet.bridge).toBeNull()
+    expect(vnet.zoneName).toBe('zacme')
+    expect(vnet.tag).toBe(10000)
+
+    const row = await prismaTest.vdcVnet.findUnique({ where: { id: vnet.id } })
+    expect(row?.type).toBe('vxlan')
+    expect(row?.bridge).toBeNull()
+    expect(row?.zoneName).toBe('zacme')
+
+    const posts = pveCalls('POST', '/cluster/sdn/vnets')
+    expect(posts).toHaveLength(1)
+    expect((posts[0][2].body as URLSearchParams).get('zone')).toBe('zacme')
+    // No VLAN zone is provisioned on the VXLAN path.
+    expect(pveCalls('POST', '/cluster/sdn/zones')).toHaveLength(0)
+    expect(await prismaTest.sdnVlanZone.count()).toBe(0)
+  })
+
+  it('refuses a VXLAN VNet on a vDC without an SDN zone', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: null })
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      subnet: SUBNET, createdBy: null,
+    })).rejects.toThrow(/vDC has no SDN zone - VXLAN networks are unavailable/)
+
+    expect(pveCalls('POST', '/cluster/sdn/vnets')).toHaveLength(0)
+  })
+})
+
+describe('createVnetForTenant (VLAN)', () => {
+  it('allocates the first pool tag and lands the VNet in the shared VLAN zone', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr0',
+      subnet: SUBNET, createdBy: 'user-1',
+    })
+
+    const sharedZone = generateVlanZoneName('conn-1', 'vmbr0')
+    expect(vnet.type).toBe('vlan')
+    expect(vnet.bridge).toBe('vmbr0')
+    expect(vnet.tag).toBe(100)
+    expect(vnet.zoneName).toBe(sharedZone)
+
+    const row = await prismaTest.vdcVnet.findUnique({ where: { id: vnet.id } })
+    expect(row?.type).toBe('vlan')
+    expect(row?.bridge).toBe('vmbr0')
+    expect(row?.tag).toBe(100)
+    expect(row?.zoneName).toBe(sharedZone)
+
+    // The PVE VNet goes to the shared per-(connection, bridge) zone, not the
+    // vDC's own VXLAN zone.
+    const posts = pveCalls('POST', '/cluster/sdn/vnets')
+    expect(posts).toHaveLength(1)
+    const body = posts[0][2].body as URLSearchParams
+    expect(body.get('zone')).toBe(sharedZone)
+    expect(body.get('tag')).toBe('100')
+
+    const zonePosts = pveCalls('POST', '/cluster/sdn/zones')
+    expect(zonePosts).toHaveLength(1)
+    const zoneBody = zonePosts[0][2].body as URLSearchParams
+    expect(zoneBody.get('type')).toBe('vlan')
+    expect(zoneBody.get('bridge')).toBe('vmbr0')
+    expect(zoneBody.get('zone')).toBe(sharedZone)
+
+    const zoneRow = await prismaTest.sdnVlanZone.findUnique({
+      where: { connectionId_bridge: { connectionId: 'conn-1', bridge: 'vmbr0' } },
+    })
+    expect(zoneRow?.zoneName).toBe(sharedZone)
+  })
+
+  it('honours an explicit in-pool vlanTag', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr0', vlanTag: 150,
+      subnet: SUBNET, createdBy: null,
+    })
+
+    expect(vnet.tag).toBe(150)
+    expect((pveCalls('POST', '/cluster/sdn/vnets')[0][2].body as URLSearchParams).get('tag')).toBe('150')
+  })
+
+  it('rejects a vlanTag outside the vDC pools', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr0', vlanTag: 500,
+      subnet: SUBNET, createdBy: null,
+    })).rejects.toThrow(/outside the vDC pools/)
+
+    expect(await prismaTest.vdcVnet.count()).toBe(0)
+  })
+
+  it('rejects a bridge with no VLAN pool before provisioning any zone', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr9',
+      subnet: SUBNET, createdBy: null,
+    })).rejects.toThrow(/has no VLAN pool/)
+
+    // Allocation runs before ensureVlanZone: a rejected create leaves no
+    // orphan zone behind, neither on PVE nor in our DB.
+    expect(pveCalls('POST', '/cluster/sdn/zones')).toHaveLength(0)
+    expect(await prismaTest.sdnVlanZone.count()).toBe(0)
+  })
+
+  it('rejects a VLAN VNet without a bridge', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+
+    await expect(createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan',
+      subnet: SUBNET, createdBy: null,
+    })).rejects.toThrow(/bridge is required/)
+  })
+
+  it('creates a VLAN VNet on a vDC that has no SDN zone at all', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: null })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr0',
+      subnet: SUBNET, createdBy: null,
+    })
+
+    expect(vnet.zoneName).toBe(generateVlanZoneName('conn-1', 'vmbr0'))
+
+    // The IPAM lookup falls back to the VNet's own zone when the vDC has none.
+    const resolved = await resolveSubnetForBridge('conn-1', vnet.pveName)
+    expect(resolved?.sdnZoneName).toBe(generateVlanZoneName('conn-1', 'vmbr0'))
+  })
+})
+
+describe('createVnetForTenant (externalAddressing)', () => {
+  it('stores the subnet with ipamEnabled=false and hides it from the IPAM lookup', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      type: 'vlan', bridge: 'vmbr0', externalAddressing: true,
+      subnet: SUBNET, createdBy: null,
+    })
+
+    const subnet = await prismaTest.vdcSubnet.findUnique({ where: { vnetId: vnet.id } })
+    expect(subnet?.ipamEnabled).toBe(false)
+    expect(vnet.subnet.ipamEnabled).toBe(false)
+
+    expect(await resolveSubnetForBridge('conn-1', vnet.pveName)).toBeNull()
+  })
+
+  it('keeps ipamEnabled=true when externalAddressing is absent', async () => {
+    await seedVdc({ tenantId: 'tenant-a', sdnZoneName: 'zacme' })
+
+    const vnet = await createVnetForTenant({
+      vdcId: 'vdc-1', tenantId: 'tenant-a', displayName: 'lan',
+      subnet: SUBNET, createdBy: null,
+    })
+
+    const subnet = await prismaTest.vdcSubnet.findUnique({ where: { vnetId: vnet.id } })
+    expect(subnet?.ipamEnabled).toBe(true)
+    expect(await resolveSubnetForBridge('conn-1', vnet.pveName)).not.toBeNull()
   })
 })

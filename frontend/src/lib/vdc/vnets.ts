@@ -22,6 +22,7 @@ import {
   countVnetAttachments,
   generatePveVnetId,
 } from './sdn'
+import { allocateVlanTag, ensureVlanZone } from './vlan'
 
 // ---------------------------------------------------------------------------
 // resolveVdcForVnet
@@ -31,7 +32,9 @@ interface ResolvedVdc {
   id: string
   tenantId: string
   connectionId: string
-  sdnZoneName: string
+  /** Null on a VLAN-only vDC: the VXLAN zone is provisioned per vDC, VLAN
+   *  networks live in a shared per-(connection, bridge) zone instead. */
+  sdnZoneName: string | null
 }
 
 export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promise<ResolvedVdc | null> {
@@ -41,7 +44,6 @@ export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promis
   })
   if (!row) return null
   if (row.enabled === false) return null
-  if (!row.sdnZoneName) return null
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -155,6 +157,13 @@ export interface CreateVnetInput {
     gateway: string
     dnsServers?: string[]
   }
+  /** 'vxlan' (default) or 'vlan'. VLAN requires `bridge` and a matching vDC pool. */
+  type?: 'vxlan' | 'vlan'
+  bridge?: string
+  /** Explicit VLAN tag; null/undefined = auto (first free in the vDC pools). */
+  vlanTag?: number | null
+  /** True = subnet stays declarative: ipamEnabled=false, no auto-IP at deploy. */
+  externalAddressing?: boolean
   createdBy: string | null
 }
 
@@ -209,15 +218,40 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
 
   const pveName = await generatePveVnetId(vdc.id, displayName)
   const conn = await getConn(vdc)
-  // Pass the PVE connection so allocateVni can union our DB's max VxlanTag
-  // with the live `/cluster/sdn/vnets` set — avoids handing back a tag a
-  // legacy zone already booked under our feet.
-  const tag = await allocateVni(vdc.id, conn)
+
+  const type: 'vxlan' | 'vlan' = input.type === 'vlan' ? 'vlan' : 'vxlan'
+  let tag: number
+  let zoneName: string
+  let bridge: string | null = null
+
+  if (type === 'vlan') {
+    if (!input.bridge) throw new Error('bridge is required for a VLAN network')
+    bridge = input.bridge
+    // Pool + DB + live-PVE union; throws the user-facing 400/409 messages.
+    tag = await allocateVlanTag({
+      vdcId: vdc.id, connectionId: vdc.connectionId,
+      bridge, requestedTag: input.vlanTag ?? null, conn,
+    })
+    // Shared provider zone for (connection, bridge), lazily created, never
+    // deleted. PVE's per-zone tag uniqueness backstops a cross-vDC race:
+    // two concurrent creates with the same tag end in one PVE 400.
+    zoneName = await ensureVlanZone(conn, vdc.connectionId, bridge)
+  } else {
+    if (!vdc.sdnZoneName) {
+      throw new Error('vDC has no SDN zone - VXLAN networks are unavailable on this vDC')
+    }
+    zoneName = vdc.sdnZoneName
+    // Pass the PVE connection so allocateVni can union our DB's max tag
+    // with the live `/cluster/sdn/vnets` set, avoids handing back a tag a
+    // legacy zone already booked under our feet.
+    tag = await allocateVni(vdc.id, conn)
+  }
+
   const firewall = input.firewall !== false
 
   await createVnetPve(conn, {
     pveName,
-    zoneName: vdc.sdnZoneName,
+    zoneName,
     tag,
     alias: displayName,
   })
@@ -234,6 +268,9 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
         displayName,
         description: input.description ?? null,
         tag,
+        type,
+        bridge,
+        zoneName,
         firewall,
         createdBy: input.createdBy,
         createdAt: now,
@@ -277,7 +314,9 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
         cidr: input.subnet.cidr,
         gateway: input.subnet.gateway,
         dnsServers: dnsList.length > 0 ? dnsList.join(',') : null,
-        ipamEnabled: true,
+        // External addressing = the tenant runs its own DHCP/IPAM on this
+        // network; we keep the CIDR declarative and never hand out IPs.
+        ipamEnabled: input.externalAddressing === true ? false : true,
         createdAt: now,
       },
     })
@@ -482,7 +521,9 @@ export async function resolveSubnetForBridge(
       subnet: true,
     },
   })
-  if (!row || !row.subnet || !row.vdc.sdnZoneName) return null
+  // A VLAN VNet carries its own (shared) zone; only a VXLAN VNet falls back
+  // to the vDC zone. A vDC with neither is not deployable.
+  if (!row || !row.subnet || !(row.zoneName ?? row.vdc.sdnZoneName)) return null
   return {
     vdcId: row.vdc.id,
     vnetId: row.id,
@@ -493,7 +534,7 @@ export async function resolveSubnetForBridge(
     dnsServers: row.subnet.dnsServers
       ? row.subnet.dnsServers.split(',').map(s => s.trim()).filter(Boolean)
       : [],
-    sdnZoneName: row.vdc.sdnZoneName,
+    sdnZoneName: (row.zoneName ?? row.vdc.sdnZoneName)!,
     pvePoolName: row.vdc.pvePoolName,
   }
 }

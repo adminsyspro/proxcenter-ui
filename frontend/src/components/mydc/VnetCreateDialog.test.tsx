@@ -79,6 +79,9 @@ async function pickOption(label: string, optionName: string | RegExp) {
   fireEvent.mouseDown(field(label))
   const option = await screen.findByRole('option', { name: optionName })
   fireEvent.click(option)
+  // The open listbox carries the same aria-labelledby as its combobox, so a
+  // second pick on the same select would see two matches for the label.
+  await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
 }
 
 /** Fill the always-required fields (name + subnet). */
@@ -104,6 +107,9 @@ describe('VnetCreateDialog: vDC without VLAN pools', () => {
     expect(queryField('Network type')).toBeNull()
     expect(queryField('Bridge')).toBeNull()
     expect(queryField('VLAN ID')).toBeNull()
+    // External addressing is a VLAN-only escape hatch: on a VXLAN overlay
+    // ProxCenter's IPAM is the only allocator that works.
+    expect(queryField('Addressing managed outside ProxCenter')).toBeNull()
     expect(screen.getByText('VNI is auto-allocated by ProxCenter.')).toBeTruthy()
   })
 
@@ -128,9 +134,11 @@ describe('VnetCreateDialog: vDC with VLAN pools', () => {
     renderDialog([VDC_POOLED])
 
     expect(field('Network type')).toBeTruthy()
-    // VXLAN stays the default: no VLAN field until the tenant asks for one.
+    // VXLAN stays the default: no VLAN field until the tenant asks for one,
+    // and no external-addressing checkbox either.
     expect(queryField('Bridge')).toBeNull()
     expect(queryField('VLAN ID')).toBeNull()
+    expect(queryField('Addressing managed outside ProxCenter')).toBeNull()
 
     await pickOption('Network type', 'VLAN')
 
@@ -211,6 +219,26 @@ describe('VnetCreateDialog: vDC with VLAN pools', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(lastPostBody().externalAddressing).toBe(true)
+  })
+
+  it('drops the external-addressing flag when the tenant switches back to VXLAN', async () => {
+    renderDialog([VDC_POOLED])
+    fillRequired()
+    await pickOption('Network type', 'VLAN')
+    fireEvent.click(field('Addressing managed outside ProxCenter'))
+    expect((field('Addressing managed outside ProxCenter') as HTMLInputElement).checked).toBe(true)
+
+    await pickOption('Network type', /^VXLAN/)
+    expect(queryField('Addressing managed outside ProxCenter')).toBeNull()
+
+    await waitFor(() => expect(createButton().disabled).toBe(false))
+    fireEvent.click(createButton())
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const body = lastPostBody()
+    expect('externalAddressing' in body).toBe(false)
+    expect('type' in body).toBe(false)
+    expect('bridge' in body).toBe(false)
   })
 
   it('drops the VLAN sub-form back to VXLAN when the tenant switches vDC', async () => {

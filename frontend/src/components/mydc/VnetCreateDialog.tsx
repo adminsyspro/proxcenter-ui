@@ -144,8 +144,8 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
             type: 'vlan',
             bridge,
             ...(vlanTag !== '' ? { vlanTag: Number(vlanTag) } : {}),
+            ...(externalAddressing ? { externalAddressing: true } : {}),
           } : {}),
-          ...(externalAddressing ? { externalAddressing: true } : {}),
         }),
       })
       const json = await res.json()
@@ -206,7 +206,13 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
               select
               label={t('myVdc.vnetType')}
               value={netType}
-              onChange={(e) => setNetType(e.target.value as 'vxlan' | 'vlan')}
+              onChange={(e) => {
+                const next = e.target.value as 'vxlan' | 'vlan'
+                // Back to VXLAN drops the bridge, the tag AND the external
+                // addressing flag: none of them mean anything on an overlay.
+                if (next === 'vxlan') resetVlanForm()
+                else setNetType(next)
+              }}
               helperText={t('myVdc.vnetTypeHelp')}
               fullWidth
             >
@@ -286,12 +292,21 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
               size="small"
               placeholder="1.1.1.1, 9.9.9.9"
             />
-            <FormControlLabel
-              control={<Checkbox checked={externalAddressing} onChange={(e) => setExternalAddressing(e.target.checked)} />}
-              label={t('myVdc.vnetExternalAddressing')}
-            />
-            {externalAddressing && (
-              <Typography variant="caption" color="text.secondary">{t('myVdc.vnetExternalAddressingHelp')}</Typography>
+            {/* VLAN only. On a VXLAN overlay ProxCenter's IPAM is the sole
+                working allocator (PVE-native DHCP does not work there and an
+                outside DHCP cannot reach the overlay), so opting out would
+                leave the VNet with no allocator at all. On VLAN it is the
+                point of the feature: an outside DHCP or static plan. */}
+            {netType === 'vlan' && (
+              <>
+                <FormControlLabel
+                  control={<Checkbox checked={externalAddressing} onChange={(e) => setExternalAddressing(e.target.checked)} />}
+                  label={t('myVdc.vnetExternalAddressing')}
+                />
+                {externalAddressing && (
+                  <Typography variant="caption" color="text.secondary">{t('myVdc.vnetExternalAddressingHelp')}</Typography>
+                )}
+              </>
             )}
           </Stack>
 

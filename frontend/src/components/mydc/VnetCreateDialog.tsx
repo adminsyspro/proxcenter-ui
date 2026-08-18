@@ -236,7 +236,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
                 value={vlanTag}
                 onChange={(e) => setVlanTag(e.target.value.trim())}
                 error={!tagValid}
-                helperText={t('myVdc.vnetVlanIdAutoHint', { ranges: rangesLabel })}
+                helperText={rangesLabel ? t('myVdc.vnetVlanIdAutoHint', { ranges: rangesLabel }) : t('myVdc.vnetVlanId')}
                 type="number"
                 fullWidth
                 disabled={!bridge}

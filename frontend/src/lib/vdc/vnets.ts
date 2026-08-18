@@ -444,30 +444,110 @@ export async function deleteVnetForTenant(
 }
 
 // ---------------------------------------------------------------------------
-// Bridge whitelist helpers (used by guest route enforcement in Task 4)
+// Network allow-list helpers (used by the guest route enforcement)
 // ---------------------------------------------------------------------------
 
+export interface AllowedNetwork {
+  kind: 'vnet' | 'shared'
+  /** Inclusive VLAN ranges the tenant may tag on a shared bridge (from vDC pools). */
+  vlanRanges: Array<{ start: number; end: number }>
+}
+
 /**
- * Returns the set of bridge names a tenant is allowed to attach to on a given connection.
- * Returns null if no restrictions apply (tenant without vDCs on this connection).
+ * Networks a tenant may reference in a netN config string on this connection,
+ * with the VLAN ranges (vDC pools) it may tag on each shared bridge.
+ * Returns null when no restriction applies (tenant without vDCs here).
  */
-export async function getAllowedBridgesForTenant(tenantId: string, connectionId: string): Promise<Set<string> | null> {
+export async function getAllowedNetworksForTenant(
+  tenantId: string,
+  connectionId: string,
+): Promise<Map<string, AllowedNetwork> | null> {
   const vdcRows = await prisma.vdc.findMany({
     where: { tenantId, connectionId, enabled: true },
     select: {
-      id: true,
       vnets: { select: { pveName: true } },
       sharedBridges: { select: { bridge: true } },
+      vlanPools: { select: { bridge: true, rangeStart: true, rangeEnd: true } },
     },
   })
   if (vdcRows.length === 0) return null
 
-  const allowed = new Set<string>()
+  const allowed = new Map<string, AllowedNetwork>()
   for (const vdc of vdcRows) {
-    for (const v of vdc.vnets) allowed.add(v.pveName)
-    for (const b of vdc.sharedBridges) allowed.add(b.bridge)
+    for (const v of vdc.vnets) allowed.set(v.pveName, { kind: 'vnet', vlanRanges: [] })
+    for (const b of vdc.sharedBridges) {
+      if (!allowed.has(b.bridge)) allowed.set(b.bridge, { kind: 'shared', vlanRanges: [] })
+    }
+    // A pool only widens a bridge the vDC already shares: it never opens one on
+    // its own, otherwise a leftover pool row would hand out an unrelated bridge.
+    for (const p of vdc.vlanPools) {
+      const entry = allowed.get(p.bridge)
+      if (entry?.kind === 'shared') entry.vlanRanges.push({ start: p.rangeStart, end: p.rangeEnd })
+    }
   }
   return allowed
+}
+
+/** 802.1Q tops out at 4094, so no legitimate list is longer than that. */
+const MAX_VLAN_IDS = 4094
+
+/** PVE trunks syntax: ids or ranges separated by ';' (e.g. "10;20-25"). */
+function parseVlanIdList(raw: string): number[] {
+  const out: number[] = []
+  for (const part of raw.split(/[;,]/)) {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?$/)
+    if (!m) return [Number.NaN]
+    const a = Number(m[1]); const b = m[2] ? Number(m[2]) : a
+    if (b < a) return [Number.NaN]
+    for (let t = a; t <= b; t++) {
+      // The string is tenant-supplied: "trunks=1-4294967295" must be denied,
+      // not expanded. Past the 802.1Q ceiling the whole list is refused.
+      if (out.length >= MAX_VLAN_IDS) return [Number.NaN]
+      out.push(t)
+    }
+  }
+  return out
+}
+
+/**
+ * Validates one netN config string against the tenant's allowed networks.
+ * Closes the pre-existing hole where only the bridge NAME was checked: a
+ * tenant could append tag=137 (or trunks=) on a shared bridge and land on a
+ * neighbour's VLAN. Rules: SDN vnets never take a tag (the vnet carries its
+ * own); shared bridges only take tags/trunks inside the vDC's VLAN pools.
+ */
+export function validateNetAgainstScope(
+  netStr: string,
+  networks: Map<string, AllowedNetwork>,
+): { ok: true } | { ok: false; error: string } {
+  const bridge = parseBridgeFromNet(netStr)
+  if (!bridge) return { ok: true }
+
+  const entry = networks.get(bridge)
+  if (!entry) {
+    return {
+      ok: false,
+      error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(networks.keys()).join(', ')}`,
+    }
+  }
+
+  const tags: number[] = []
+  const tagMatch = String(netStr).match(/(?:^|,)tag=([^,]*)/)
+  if (tagMatch) tags.push(...parseVlanIdList(tagMatch[1]))
+  const trunksMatch = String(netStr).match(/(?:^|,)trunks=([^,]*)/)
+  if (trunksMatch) tags.push(...parseVlanIdList(trunksMatch[1]))
+  if (tags.length === 0) return { ok: true }
+
+  if (entry.kind === 'vnet') {
+    return { ok: false, error: `VLAN tags are not allowed on SDN network "${bridge}" (the network carries its own tag)` }
+  }
+  for (const tag of tags) {
+    const inRange = Number.isInteger(tag) && entry.vlanRanges.some(r => tag >= r.start && tag <= r.end)
+    if (!inRange) {
+      return { ok: false, error: `VLAN tag ${tag} on bridge "${bridge}" is outside your vDC's VLAN pools` }
+    }
+  }
+  return { ok: true }
 }
 
 /** Parse bridge= from a PVE net config string */

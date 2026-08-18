@@ -11,7 +11,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getImageBySlug, customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { isFileBasedStorage, supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
-import { getAllowedBridgesForTenant, resolveSubnetForBridge } from "@/lib/vdc/vnets"
+import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
@@ -165,13 +165,22 @@ export async function POST(req: Request) {
         )
       }
 
-      const allowedBridges = await getAllowedBridgesForTenant(tenantId, body.connectionId)
+      const allowedNetworks = await getAllowedNetworksForTenant(tenantId, body.connectionId)
       const bridge = body.hardware?.networkBridge
-      if (allowedBridges !== null && bridge && !allowedBridges.has(bridge)) {
-        return NextResponse.json(
-          { error: `Bridge "${bridge}" is not authorised for this vDC. Allowed: ${Array.from(allowedBridges).join(', ')}` },
-          { status: 403 },
-        )
+      if (allowedNetworks !== null && bridge) {
+        const rawTag = body.hardware?.vlanTag
+        // The pipeline below builds `,tag=${hw.vlanTag}` on plain truthiness,
+        // so the probe mirrors it: a tag that will be sent must be a plain
+        // integer, otherwise a forged "10,tag=250" would smuggle a second key.
+        if (rawTag && !/^\d+$/.test(String(rawTag))) {
+          return NextResponse.json({ error: 'vlanTag must be a positive integer' }, { status: 400 })
+        }
+        // Probe the string the pipeline will actually build: networkModel is a
+        // free-form tenant field too, so a forged "virtio,tag=250" would slip a
+        // tag past a probe that hardcoded the model.
+        const netStr = `${body.hardware?.networkModel || 'virtio'},bridge=${bridge}${rawTag ? `,tag=${rawTag}` : ''}`
+        const verdict = validateNetAgainstScope(netStr, allowedNetworks)
+        if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
       }
     }
 

@@ -22,15 +22,19 @@ import { generateVlanZoneName } from './vlan'
 import {
   checkVnetQuota,
   createVnetForTenant,
+  getAllowedNetworksForTenant,
   resolveSubnetForBridge,
   resolveVdcForVnet,
+  validateNetAgainstScope,
 } from './vnets'
+import type { AllowedNetwork } from './vnets'
 
 const TABLES = [
   'vdc_ipam_allocations',
   'vdc_subnets',
   'vdc_vnets',
   'vdc_vlan_pools',
+  'vdc_shared_bridges',
   'sdn_vlan_zones',
   'vdc_quotas',
   'vdcs',
@@ -104,6 +108,12 @@ async function seedVdc(opts: VdcSeed): Promise<string> {
 async function addPool(vdcId: string, bridge: string, rangeStart: number, rangeEnd: number): Promise<void> {
   await prismaTest.vdcVlanPool.create({
     data: { id: `${vdcId}-${bridge}-${rangeStart}`, vdcId, bridge, rangeStart, rangeEnd },
+  })
+}
+
+async function addSharedBridge(vdcId: string, bridge: string): Promise<void> {
+  await prismaTest.vdcSharedBridge.create({
+    data: { id: `${vdcId}-shared-${bridge}`, vdcId, bridge },
   })
 }
 
@@ -353,5 +363,136 @@ describe('createVnetForTenant (externalAddressing)', () => {
     const subnet = await prismaTest.vdcSubnet.findUnique({ where: { vnetId: vnet.id } })
     expect(subnet?.ipamEnabled).toBe(true)
     expect(await resolveSubnetForBridge('conn-1', vnet.pveName)).not.toBeNull()
+  })
+})
+
+describe('getAllowedNetworksForTenant', () => {
+  it('returns null when the tenant has no vDC on this connection', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    expect(await getAllowedNetworksForTenant('tenant-b', 'conn-1')).toBeNull()
+  })
+
+  it('lists SDN vnets as kind vnet and shared bridges as kind shared', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await prismaTest.vdcVnet.create({ data: { id: 'v1', vdcId: 'vdc-1', pveName: 'vnetacme', tag: 10000 } })
+    await addSharedBridge('vdc-1', 'vmbr0')
+
+    const networks = await getAllowedNetworksForTenant('tenant-a', 'conn-1')
+    expect(networks).not.toBeNull()
+    expect(networks?.get('vnetacme')).toEqual({ kind: 'vnet', vlanRanges: [] })
+    expect(networks?.get('vmbr0')).toEqual({ kind: 'shared', vlanRanges: [] })
+  })
+
+  it('feeds vlanRanges from the vDC pools bound to a shared bridge', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addSharedBridge('vdc-1', 'vmbr0')
+    await addPool('vdc-1', 'vmbr0', 100, 199)
+    await addPool('vdc-1', 'vmbr0', 300, 310)
+
+    const networks = await getAllowedNetworksForTenant('tenant-a', 'conn-1')
+    expect(networks?.get('vmbr0')?.vlanRanges).toEqual(
+      expect.arrayContaining([{ start: 100, end: 199 }, { start: 300, end: 310 }]),
+    )
+    expect(networks?.get('vmbr0')?.vlanRanges).toHaveLength(2)
+  })
+
+  it('does not open a bridge that only carries a pool and is not shared', async () => {
+    await seedVdc({ tenantId: 'tenant-a' })
+    await addPool('vdc-1', 'vmbr9', 100, 199)
+
+    const networks = await getAllowedNetworksForTenant('tenant-a', 'conn-1')
+    expect(networks).not.toBeNull()
+    expect(networks?.has('vmbr9')).toBe(false)
+  })
+
+  it('ignores disabled vDCs and vDCs on another connection', async () => {
+    await seedVdc({ id: 'vdc-off', tenantId: 'tenant-a', slug: 'off', enabled: false })
+    await addSharedBridge('vdc-off', 'vmbr7')
+    expect(await getAllowedNetworksForTenant('tenant-a', 'conn-1')).toBeNull()
+  })
+})
+
+describe('validateNetAgainstScope', () => {
+  const networks = (): Map<string, AllowedNetwork> =>
+    new Map<string, AllowedNetwork>([
+      ['vnetacme', { kind: 'vnet', vlanRanges: [] }],
+      ['vmbr0', { kind: 'shared', vlanRanges: [{ start: 100, end: 199 }, { start: 300, end: 310 }] }],
+      ['vmbr1', { kind: 'shared', vlanRanges: [] }],
+    ])
+
+  it('refuses a bridge outside the vDC', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr42', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('is not authorized')
+  })
+
+  it('accepts an untagged NIC on an allowed vnet', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vnetacme', networks())).toEqual({ ok: true })
+  })
+
+  it('refuses a tag on an SDN vnet', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vnetacme,tag=137', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('not allowed on SDN network')
+  })
+
+  it('refuses trunks on an SDN vnet', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vnetacme,trunks=100', networks()).ok).toBe(false)
+  })
+
+  it('accepts a tag inside the shared bridge pools', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=150', networks())).toEqual({ ok: true })
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=305', networks())).toEqual({ ok: true })
+  })
+
+  it('refuses a tag outside the shared bridge pools', async () => {
+    // 250 sits in the gap between the two pools, the neighbour's VLAN.
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,tag=250', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain("outside your vDC's VLAN pools")
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=400', networks()).ok).toBe(false)
+  })
+
+  it('refuses an absurd trunks range instead of expanding it', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,trunks=1-4294967295', networks())
+    expect(v.ok).toBe(false)
+  })
+
+  it('refuses a reversed range', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,trunks=199-100', networks()).ok).toBe(false)
+  })
+
+  it('refuses any tag on a shared bridge without a pool', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr1,tag=100', networks()).ok).toBe(false)
+  })
+
+  it('accepts a NIC without a tag on a shared bridge', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr1,firewall=1', networks())).toEqual({ ok: true })
+  })
+
+  it('accepts trunks fully inside the pools', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,trunks=100;150', networks())).toEqual({ ok: true })
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,trunks=100-120;305', networks())).toEqual({ ok: true })
+  })
+
+  it('refuses trunks with one id outside the pools', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,trunks=100;500', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('500')
+  })
+
+  it('refuses a malformed tag list', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=abc', networks()).ok).toBe(false)
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,trunks=100;oops', networks()).ok).toBe(false)
+  })
+
+  it('accepts a net string with no bridge= at all (historical behaviour)', async () => {
+    expect(validateNetAgainstScope('virtio=BC:24:11:00:00:01', networks())).toEqual({ ok: true })
+    expect(validateNetAgainstScope('', networks())).toEqual({ ok: true })
+  })
+
+  it('does not mistake a substring key for tag= or trunks=', async () => {
+    // "mtag=" must not be read as "tag=": the guard anchors on a comma or the start.
+    expect(validateNetAgainstScope('virtio,bridge=vmbr1,mtag=137', networks())).toEqual({ ok: true })
   })
 })

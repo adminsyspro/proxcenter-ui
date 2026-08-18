@@ -112,6 +112,9 @@ export async function POST(req: Request, ctx: RouteContext) {
       if (msg.includes('already in use on bridge')) return NextResponse.json({ error: msg }, { status: 409 })
       if (msg.includes('No free VLAN tag')) return NextResponse.json({ error: msg }, { status: 409 })
       if (msg.includes('bridge is required')) return NextResponse.json({ error: msg }, { status: 400 })
+      // Pre-Phase-4a vDCs carry no SDN zone: a default (VXLAN) create on one
+      // is a bad request, not a server fault.
+      if (msg.includes('has no SDN zone')) return NextResponse.json({ error: msg }, { status: 400 })
       // Catches our own "VNet ... already exists" AND PVE's cross-zone
       // backstop ("tag 137 already exist in vnet ...", no trailing s).
       if (msg.includes('already exist')) return NextResponse.json({ error: msg }, { status: 409 })

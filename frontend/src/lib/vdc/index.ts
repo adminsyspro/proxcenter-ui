@@ -150,7 +150,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     createdBy: v.createdBy ?? null,
     createdAt: v.createdAt.toISOString(),
   }))
-  const vlanPools = row.vlanPools.map((p: any) => ({
+  const vlanPools = (row.vlanPools ?? []).map((p: any) => ({
     id: p.id,
     vdcId: p.vdcId,
     bridge: p.bridge,

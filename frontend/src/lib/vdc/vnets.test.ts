@@ -486,6 +486,36 @@ describe('validateNetAgainstScope', () => {
     expect(validateNetAgainstScope('virtio,bridge=vmbr0,trunks=100;oops', networks()).ok).toBe(false)
   })
 
+  it('refuses a second tag= even when the first one is in the pool', async () => {
+    // Only checking the first occurrence would let 250 ride in behind 150 and
+    // leave the outcome to PVE's property-string parser.
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,tag=150,tag=250', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('250')
+  })
+
+  it('refuses a second trunks= even when the first one is in the pool', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,trunks=150,trunks=500', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('500')
+  })
+
+  it('refuses a tag key padded with whitespace', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0, tag=250', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('250')
+  })
+
+  it('refuses an upper-case tag key', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,TAG=250', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('250')
+  })
+
+  it('still accepts a single compliant in-pool tag', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=150', networks())).toEqual({ ok: true })
+  })
+
   it('accepts a net string with no bridge= at all (historical behaviour)', async () => {
     expect(validateNetAgainstScope('virtio=BC:24:11:00:00:01', networks())).toEqual({ ok: true })
     expect(validateNetAgainstScope('', networks())).toEqual({ ok: true })

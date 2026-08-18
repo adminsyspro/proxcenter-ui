@@ -531,11 +531,17 @@ export function validateNetAgainstScope(
     }
   }
 
+  // EVERY occurrence of both keys, case-insensitive and tolerant of padding.
+  // Checking only the first tag= would let "tag=150,tag=250" ride in behind the
+  // in-pool value and leave the foreign one to PVE's property-string parser:
+  // a cross-tenant L2 control must not lean on that external invariant.
   const tags: number[] = []
-  const tagMatch = String(netStr).match(/(?:^|,)tag=([^,]*)/)
-  if (tagMatch) tags.push(...parseVlanIdList(tagMatch[1]))
-  const trunksMatch = String(netStr).match(/(?:^|,)trunks=([^,]*)/)
-  if (trunksMatch) tags.push(...parseVlanIdList(trunksMatch[1]))
+  for (const m of String(netStr).matchAll(/(?:^|,)\s*tag=([^,]*)/gi)) {
+    tags.push(...parseVlanIdList(m[1]))
+  }
+  for (const m of String(netStr).matchAll(/(?:^|,)\s*trunks=([^,]*)/gi)) {
+    tags.push(...parseVlanIdList(m[1]))
+  }
   if (tags.length === 0) return { ok: true }
 
   if (entry.kind === 'vnet') {

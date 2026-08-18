@@ -651,22 +651,25 @@ export async function deleteVdc(id: string): Promise<void> {
     console.warn(`[vdc] Could not check PVE pool "${vdc.pvePoolName}": ${msg}`)
   }
 
-  // 3. Delete all VNets in the vDC zone (best effort).
-  if (vdc.sdnZoneName) {
-    const vnetRows = await prisma.vdcVnet.findMany({
-      where: { vdcId: id },
-      select: { pveName: true },
-    })
-
-    for (const v of vnetRows) {
-      try {
-        await deleteVnetPve(conn, v.pveName)
-      } catch (err: any) {
-        console.warn(`[vdc] Failed to delete VNet "${v.pveName}": ${err?.message}`)
-      }
+  // 3. Delete all VNets of the vDC (best effort), whatever zone they live in.
+  // The old code only ran this under `if (vdc.sdnZoneName)`, which would skip
+  // the VLAN vnets of a vDC without a VXLAN zone.
+  const vnetRows = await prisma.vdcVnet.findMany({
+    where: { vdcId: id },
+    select: { pveName: true },
+  })
+  for (const v of vnetRows) {
+    try {
+      await deleteVnetPve(conn, v.pveName)
+    } catch (err: any) {
+      console.warn(`[vdc] Failed to delete VNet "${v.pveName}": ${err?.message}`)
     }
+  }
 
-    // Delete the SDN zone
+  // Delete the vDC's own VXLAN zone. The shared VLAN zones (sdn_vlan_zones)
+  // are NEVER deleted here: they belong to the (connection, bridge) pair and
+  // other vDCs may use them; an empty zone costs nothing.
+  if (vdc.sdnZoneName) {
     try {
       await deleteZone(conn, vdc.sdnZoneName)
     } catch (err: any) {
@@ -681,8 +684,8 @@ export async function deleteVdc(id: string): Promise<void> {
     console.warn(`[vdc] Failed to delete PVE pool "${vdc.pvePoolName}" (best effort): ${err?.message}`)
   }
 
-  // 5. Apply SDN changes if zone was removed
-  if (vdc.sdnZoneName) {
+  // 5. Apply SDN changes if a vnet or a zone was touched above.
+  if (vnetRows.length > 0 || vdc.sdnZoneName) {
     try {
       await applySdn(conn)
     } catch (err: any) {

@@ -488,16 +488,40 @@ describe('validateNetAgainstScope', () => {
 
   it('refuses a second tag= even when the first one is in the pool', async () => {
     // Only checking the first occurrence would let 250 ride in behind 150 and
-    // leave the outcome to PVE's property-string parser.
+    // leave the outcome to PVE's property-string parser. A repeated key is now
+    // refused outright, so the message names the duplication, not the id.
     const v = validateNetAgainstScope('virtio,bridge=vmbr0,tag=150,tag=250', networks())
     expect(v.ok).toBe(false)
-    expect(v.ok === false && v.error).toContain('250')
+    expect(v.ok === false && v.error).toContain('Duplicate')
   })
 
   it('refuses a second trunks= even when the first one is in the pool', async () => {
     const v = validateNetAgainstScope('virtio,bridge=vmbr0,trunks=150,trunks=500', networks())
     expect(v.ok).toBe(false)
-    expect(v.ok === false && v.error).toContain('500')
+    expect(v.ok === false && v.error).toContain('Duplicate')
+  })
+
+  it('refuses duplicate keys even when every value is in the pool', async () => {
+    const v = validateNetAgainstScope('virtio,bridge=vmbr0,tag=150,tag=160', networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('Duplicate')
+  })
+
+  it('refuses a repeated key without enumerating every occurrence', async () => {
+    // Each occurrence carries its own 4094-id budget, so enumerating them all
+    // would be O(N x 4094) on a field with no upstream length limit. Refusing
+    // on the second match bounds the work by construction.
+    const netStr = 'virtio,bridge=vmbr0' + ',tag=1-4094'.repeat(5000)
+    const started = Date.now()
+    const v = validateNetAgainstScope(netStr, networks())
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.error).toContain('Duplicate')
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+
+  it('accepts one tag and one trunks together when both are in the pool', async () => {
+    expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=150,trunks=160;170', networks()))
+      .toEqual({ ok: true })
   })
 
   it('refuses a tag key padded with whitespace', async () => {

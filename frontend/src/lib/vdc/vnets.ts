@@ -509,6 +509,25 @@ function parseVlanIdList(raw: string): number[] {
   return out
 }
 
+const DUPLICATE_NET_KEY_ERROR =
+  'Duplicate tag= or trunks= keys are not allowed in a network config'
+
+/**
+ * Ids declared under one key, or null when the key appears more than once.
+ * matchAll is lazy, so returning on the second match stops the scan there.
+ * `re` must be a fresh literal per call: a shared /g regex carries lastIndex.
+ */
+function collectVlanIdsForKey(netStr: string, re: RegExp): number[] | null {
+  const out: number[] = []
+  let seen = false
+  for (const m of netStr.matchAll(re)) {
+    if (seen) return null
+    seen = true
+    out.push(...parseVlanIdList(m[1]))
+  }
+  return out
+}
+
 /**
  * Validates one netN config string against the tenant's allowed networks.
  * Closes the pre-existing hole where only the bridge NAME was checked: a
@@ -531,17 +550,20 @@ export function validateNetAgainstScope(
     }
   }
 
-  // EVERY occurrence of both keys, case-insensitive and tolerant of padding.
-  // Checking only the first tag= would let "tag=150,tag=250" ride in behind the
-  // in-pool value and leave the foreign one to PVE's property-string parser:
-  // a cross-tenant L2 control must not lean on that external invariant.
-  const tags: number[] = []
-  for (const m of String(netStr).matchAll(/(?:^|,)\s*tag=([^,]*)/gi)) {
-    tags.push(...parseVlanIdList(m[1]))
-  }
-  for (const m of String(netStr).matchAll(/(?:^|,)\s*trunks=([^,]*)/gi)) {
-    tags.push(...parseVlanIdList(m[1]))
-  }
+  // Reading only the first tag= would let "tag=150,tag=250" ride in behind the
+  // in-pool value and leave the foreign one to PVE's property-string parser: a
+  // cross-tenant L2 control must not lean on that external invariant. Reading
+  // them all instead is no better, since each occurrence carries its own id
+  // budget and netN has no upstream length limit. So a repeated key is refused
+  // outright, which bounds the work at two matches and matches PVE, where a
+  // duplicate key is invalid anyway.
+  // Case-insensitive and tolerant of padding after the separator.
+  const tagIds = collectVlanIdsForKey(String(netStr), /(?:^|,)\s*tag=([^,]*)/gi)
+  if (tagIds === null) return { ok: false, error: DUPLICATE_NET_KEY_ERROR }
+  const trunkIds = collectVlanIdsForKey(String(netStr), /(?:^|,)\s*trunks=([^,]*)/gi)
+  if (trunkIds === null) return { ok: false, error: DUPLICATE_NET_KEY_ERROR }
+
+  const tags = [...tagIds, ...trunkIds]
   if (tags.length === 0) return { ok: true }
 
   if (entry.kind === 'vnet') {

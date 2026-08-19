@@ -13,6 +13,7 @@ import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
 import { clearVdcScopeCache } from './scope'
 import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
+import { getVdcStorageUsedMb } from './quota'
 
 import type {
   Vdc,
@@ -876,6 +877,22 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
     usedStorageMb += Math.round((vm.maxdisk || 0) / 1048576)
   }
 
+  // Per-tier usage for display (spec §7): same content-listing meter as the
+  // enforcement path, stored as JSON on the usage cache row.
+  const usedStorageByStorage: Record<string, number> = {}
+  const policyRows = await prisma.vdcStoragePolicy.findMany({
+    where: { vdcId },
+    select: { policy: { select: { storageId: true } } },
+  })
+  if (policyRows.length > 0 && vmMembers.length > 0) {
+    const meterNode = vmMembers[0].node
+    const vmids = new Set(vmMembers.map((vm: any) => Number(vm.vmid)))
+    for (const pr of policyRows) {
+      const usedMb = await getVdcStorageUsedMb(conn, meterNode, pr.policy.storageId, vmids)
+      if (usedMb !== null) usedStorageByStorage[pr.policy.storageId] = usedMb
+    }
+  }
+
   // 6. Count snapshots per VM (non-"current" entries)
   for (const vm of vmMembers) {
     try {
@@ -954,6 +971,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
       usedVms,
       usedSnapshots,
       usedBackups,
+      usedStorageByStorage,
       lastSyncedAt: now,
     },
     create: {
@@ -965,6 +983,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
       usedVms,
       usedSnapshots,
       usedBackups,
+      usedStorageByStorage,
       lastSyncedAt: now,
     },
   })
@@ -976,6 +995,7 @@ export async function refreshVdcUsage(vdcId: string): Promise<VdcUsage> {
     usedVms,
     usedSnapshots,
     usedBackups,
+    usedStorageByStorage,
     lastSyncedAt: now.toISOString(),
   }
 }

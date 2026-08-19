@@ -104,11 +104,25 @@ describe('EditDiskDialog, storage policy locks QoS fields (regular disk)', () =>
     },
   ]
 
+  // Carries its own (pre-policy) QoS values on the raw config, deliberately
+  // DIFFERENT from the ceph-gold policy's caps (mbpsRd 300, iopsRd 5000,
+  // etc. below), same as a disk that had explicit limits before a policy
+  // was attached to its storage. The load-values effect (disk.mbps_rd ->
+  // mbpsRd state, etc.) populates these into state, so:
+  //  - the "shows the policy caps" test proves the displayed value is the
+  //    policy's (300), not the disk's own raw value (111);
+  //  - the "no QoS push" test is non-vacuous: with a real, non-empty state
+  //    for every field, deleting the `!selectedPolicy` guard in handleSave
+  //    would push mbps_rd=111 etc. and fail the assertion.
   const policiedDisk = {
     id: 'scsi0',
     size: '32G',
     storage: 'ceph-gold',
-    rawValue: 'ceph-gold:vm-100-disk-0,size=32G',
+    rawValue: 'ceph-gold:vm-100-disk-0,size=32G,mbps_rd=111,mbps_wr=222,iops_rd=3333,iops_wr=4444',
+    mbps_rd: 111,
+    mbps_wr: 222,
+    iops_rd: 3333,
+    iops_wr: 4444,
   }
 
   const plainDisk = {
@@ -144,6 +158,11 @@ describe('EditDiskDialog, storage policy locks QoS fields (regular disk)', () =>
     await waitFor(() => expect(props.onSave).toHaveBeenCalled())
     const saved = props.onSave.mock.calls[0][0] as string
 
+    // Exact match, not just a substring check: the disk's own raw config
+    // carried real mbps_rd=111/mbps_wr=222/iops_rd=3333/iops_wr=4444 (loaded
+    // into state by the hydration effect), so this fails the moment the
+    // `!selectedPolicy` guard around the QoS push in handleSave is removed.
+    expect(saved).toBe('ceph-gold:vm-100-disk-0,size=32G')
     expect(saved).not.toMatch(/mbps_|iops_/)
   })
 

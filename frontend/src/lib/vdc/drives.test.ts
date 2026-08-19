@@ -55,6 +55,17 @@ describe('parseDriveString', () => {
   it('accepts a nested volid path', () => {
     expect(parseDriveString('local:100/vm-100-disk-0.qcow2').ok).toBe(true)
   })
+  it('accepts a real-world ISO filename with a space, parens and a plus sign', () => {
+    const r = parseDriveString('local:iso/Win10_22H2 (x64)+updated.iso,media=cdrom')
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.drive.storage).toBe('local')
+  })
+  it('still refuses a raw device path even with the widened volume charset', () => {
+    expect(parseDriveString('ceph-nvme:/dev/sda').ok).toBe(false)
+  })
+  it('still refuses path traversal even with the widened volume charset', () => {
+    expect(parseDriveString('ceph-nvme:../../etc/shadow').ok).toBe(false)
+  })
 })
 
 describe('validateDriveAgainstScope', () => {
@@ -114,6 +125,7 @@ describe('isTenantDiskKey', () => {
     ['scsi0', 'qemu', true], ['virtio3', 'qemu', true], ['unused0', 'qemu', true],
     ['efidisk0', 'qemu', true], ['tpmstate0', 'qemu', true], ['net0', 'qemu', false],
     ['rootfs', 'lxc', true], ['mp2', 'lxc', true], ['scsi0', 'lxc', false],
+    ['unused0', 'lxc', true], ['net0', 'lxc', false],
   ] as const)('%s/%s -> %s', (key, type, want) => {
     expect(isTenantDiskKey(key, type)).toBe(want)
   })

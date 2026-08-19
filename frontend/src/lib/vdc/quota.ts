@@ -184,8 +184,12 @@ export async function checkVdcQuota(
   storagePolicies?: VdcResolveResult['storagePolicies'],
   node?: string,
 ): Promise<QuotaCheckResult> {
-  // 1. No quota configured - allow everything
-  if (!quota) {
+  // 1. No quota configured AND no storage-policy tiers to meter - allow
+  // everything. A vDC's per-storage-policy (tier) quota lives independently
+  // of the global VdcQuota row: a vDC with quota === null (no VdcQuota row)
+  // still needs its tier caps enforced, so only skip the whole PVE round-trip
+  // when both are absent.
+  if (!quota && (storagePolicies?.length ?? 0) === 0) {
     return {
       allowed: true,
       violations: [],
@@ -241,7 +245,7 @@ export async function checkVdcQuota(
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).
   let snapshots = 0
-  if (operation.type === 'snapshot' && quota.maxSnapshots !== null) {
+  if (operation.type === 'snapshot' && quota && quota.maxSnapshots !== null) {
     const snapPromises = vmMembers.map(async (vm: any) => {
       try {
         const resType = vm.type === 'lxc' ? 'lxc' : 'qemu'
@@ -267,7 +271,7 @@ export async function checkVdcQuota(
   const addStorageMb = operation.addStorageMb ?? 0
   const addVms = operation.addVms ?? 0
 
-  if (quota.maxVcpus !== null && addVcpus > 0) {
+  if (quota && quota.maxVcpus !== null && addVcpus > 0) {
     if (vcpus + addVcpus > quota.maxVcpus) {
       violations.push(
         `vCPUs: ${vcpus}/${quota.maxVcpus} used, +${addVcpus} requested exceeds quota`
@@ -275,7 +279,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxRamMb !== null && addRamMb > 0) {
+  if (quota && quota.maxRamMb !== null && addRamMb > 0) {
     if (ramMb + addRamMb > quota.maxRamMb) {
       violations.push(
         `RAM: ${formatMb(ramMb)}/${formatMb(quota.maxRamMb)} used, +${formatMb(addRamMb)} requested exceeds quota`
@@ -283,7 +287,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxStorageMb !== null && addStorageMb > 0) {
+  if (quota && quota.maxStorageMb !== null && addStorageMb > 0) {
     if (storageMb + addStorageMb > quota.maxStorageMb) {
       violations.push(
         `Storage: ${formatMb(storageMb)}/${formatMb(quota.maxStorageMb)} used, +${formatMb(addStorageMb)} requested exceeds quota`
@@ -291,7 +295,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxVms !== null && addVms > 0) {
+  if (quota && quota.maxVms !== null && addVms > 0) {
     if (vms + addVms > quota.maxVms) {
       violations.push(
         `VMs: ${vms}/${quota.maxVms} used, cannot create additional VM`
@@ -300,7 +304,7 @@ export async function checkVdcQuota(
   }
 
   const addSnapshots = operation.addSnapshots ?? 0
-  if (quota.maxSnapshots !== null && addSnapshots > 0) {
+  if (quota && quota.maxSnapshots !== null && addSnapshots > 0) {
     if (snapshots + addSnapshots > quota.maxSnapshots) {
       violations.push(
         `Snapshots: ${snapshots}/${quota.maxSnapshots} used, cannot create additional snapshot`

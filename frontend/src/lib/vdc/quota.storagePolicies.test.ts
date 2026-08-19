@@ -131,6 +131,28 @@ describe('checkVdcQuota: per-storage-policy (tier) metering', () => {
     warnSpy.mockRestore()
   })
 
+  it('meters the tier even when the vDC has no VdcQuota row at all (quota === null)', async () => {
+    const policies = [{ policyId: 'p1', name: 'Gold', storageId: 'ceph-nvme', quotaMb: 40960 }]
+    const result = await checkVdcQuota(
+      CONNECTION_ID, POOL_NAME, null,
+      { type: 'create', addStorageMbByStorage: { 'ceph-nvme': 10240 } },
+      policies, 'pve1',
+    )
+    expect(result.allowed).toBe(false)
+    expect(result.violations).toHaveLength(1)
+    expect(result.violations[0]).toContain('Gold')
+  })
+
+  it('allows everything without touching PVE when both quota and storagePolicies are absent', async () => {
+    const result = await checkVdcQuota(
+      CONNECTION_ID, POOL_NAME, null,
+      { type: 'config', addStorageMb: 999999 },
+    )
+    expect(result.allowed).toBe(true)
+    expect(result.violations).toHaveLength(0)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
   it('keeps the global maxStorageMb aggregate check working unchanged when storagePolicies/node are omitted', async () => {
     const quota = { ...NO_QUOTA, maxStorageMb: 40960 }
     const result = await checkVdcQuota(

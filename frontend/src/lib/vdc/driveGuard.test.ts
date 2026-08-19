@@ -112,4 +112,37 @@ describe('enforceTenantDrives', () => {
     await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
     expect(body.scsi0).toBe('ceph-nvme:vm-100-disk-0,media=cdrom,iops_rd=5000,iops_wr=4000,mbps_rd=500')
   })
+
+  it('iaas: a lxc unusedN key is validated against scope (the config route forwards it, so it must be too)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
+    const body = { unused0: 'local-lvm:vm-100-disk-3' }
+    await expect(
+      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'lxc', body }),
+    ).rejects.toThrow(/local-lvm/)
+  })
+
+  it('iaas: a null vdcScope (should not happen post-contract-fix) throws rather than fail-open', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: null })
+    const body = { scsi0: 'ceph-nvme:32' }
+    await expect(
+      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body }),
+    ).rejects.toThrow(DriveScopeError)
+  })
+
+  it('iaas: two disks on the same policied storage accumulate their metering', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(
+      iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }),
+    )
+    const body = { scsi0: 'ceph-nvme:10', scsi1: 'ceph-nvme:20' }
+    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 30720 }, totalAddMb: 30720 })
+  })
+
+  it('iaas: a connectionId absent from storagesByConnection denies every storage-bearing key (empty set)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
+    const body = { scsi0: 'ceph-nvme:32' }
+    await expect(
+      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-OTHER', type: 'qemu', body }),
+    ).rejects.toThrow(DriveScopeError)
+  })
 })

@@ -52,6 +52,7 @@ async function loadPut() {
 }
 
 const baseParams = { id: 'conn-1', type: 'qemu', node: 'pve3', vmid: '100' }
+const lxcParams = { ...baseParams, type: 'lxc' }
 
 /** Pull the URLSearchParams sent to the PVE config PUT. */
 function configPutBody() {
@@ -163,5 +164,50 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
     })
     expect(res.status).toBe(403)
     expect(configPutBody()).toBeNull()
+  })
+})
+
+describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
+  it('403: an iaas lxc reassigning an out-of-scope unused disk never reaches PVE', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme']))
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: lxcParams,
+      body: { unused0: 'local-lvm:vm-999-disk-0' },
+    })
+    expect(res.status).toBe(403)
+    expect(configPutBody()).toBeNull()
+  })
+
+  it('200: iaas lxc mp0 is dropped before it reaches PVE or the drive guard (not in the lxc forwarding set)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(
+      iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }),
+    )
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: lxcParams,
+      body: { cores: '4', mp0: 'ceph-nvme:100' },
+    })
+    expect(res.status).toBe(200)
+    const sent = configPutBody()
+    expect(sent?.get('cores')).toBe('4')
+    expect(sent?.has('mp0')).toBe(false)
+    // mp0 never reached the guard, so it was never metered against ceph-nvme
+    // (would otherwise have produced a spurious 409 for a disk PVE never saw).
+    expect(checkVdcQuotaMock).not.toHaveBeenCalled()
+  })
+
+  it('200: a provider lxc passes unused0 verbatim (non-regression)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: lxcParams,
+      body: { unused0: 'local-lvm:vm-1-disk-9' },
+    })
+    expect(res.status).toBe(200)
+    expect(configPutBody()?.get('unused0')).toBe('local-lvm:vm-1-disk-9')
   })
 })

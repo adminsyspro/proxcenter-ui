@@ -60,6 +60,36 @@ const ALLOWED_LXC_FIELDS = new Set([
   'revert',
 ])
 
+/**
+ * Whether `key` is actually forwarded to PVE for this guest type. Type-aware
+ * on purpose: qemu keeps every field this route has ever forwarded (disks,
+ * PCI/USB passthrough, cloud-init IP configs, ...); lxc forwards only its
+ * own field set plus net/unused (rootfs and mpN are NOT in this route's
+ * forwarding set, matching this route's pre-existing lxc behaviour).
+ *
+ * This is the single source of truth the drive guard and the formData
+ * builder both consult, so the two can never drift again: a key the guard
+ * validates/meters but this route silently drops (or vice versa) is exactly
+ * the class of bug this predicate closes.
+ */
+function isForwardedConfigKey(key: string, type: 'qemu' | 'lxc'): boolean {
+  if (type === 'lxc') {
+    return ALLOWED_LXC_FIELDS.has(key) || /^net\d+$/.test(key) || /^unused\d+$/.test(key)
+  }
+  return ALLOWED_QEMU_FIELDS.has(key) ||
+    /^net\d+$/.test(key) ||        // net0, net1, etc.
+    /^(scsi|virtio|ide|sata)\d+$/.test(key) || // disques
+    /^unused\d+$/.test(key) ||     // unused disks
+    /^hostpci\d+$/.test(key) ||    // PCI passthrough
+    /^usb\d+$/.test(key) ||        // USB passthrough
+    /^ipconfig\d+$/.test(key) ||   // Cloud-Init IP configs
+    /^efidisk\d+$/.test(key) ||    // EFI disk
+    /^tpmstate\d+$/.test(key) ||   // TPM state
+    /^serial\d+$/.test(key) ||     // Serial ports
+    /^audio\d+$/.test(key) ||      // Audio device
+    key === 'rng0'                 // VirtIO RNG
+}
+
 // GET: Récupérer la configuration de la VM
 export async function GET(
   req: Request,
@@ -221,6 +251,16 @@ export async function PUT(
       }
     }
 
+    // Type-aware admission: drop any key this route will never forward to
+    // PVE for this guest type BEFORE anything downstream (drive guard, IPAM
+    // after-snapshot, formData) looks at `body`. Otherwise the drive guard
+    // can validate/meter a key (e.g. lxc mp0/rootfs) that the formData loop
+    // silently drops, producing a false 403/409 for an allocation PVE never
+    // sees.
+    for (const key of Object.keys(body)) {
+      if (!isForwardedConfigKey(key, type as 'qemu' | 'lxc')) delete body[key]
+    }
+
     // Disk storage allow-list + storage-policy QoS stamping + quota metering
     // (pre-existing hole: disk keys used to flow verbatim to PVE).
     try {
@@ -249,19 +289,9 @@ export async function PUT(
     const formData = new URLSearchParams()
     
     for (const [key, value] of Object.entries(body)) {
-      // Vérifier si le champ est autorisé ou si c'est un champ réseau/disque
-      const isAllowed = allowedFields.has(key) ||
-                        /^net\d+$/.test(key) ||      // net0, net1, etc.
-                        /^(scsi|virtio|ide|sata)\d+$/.test(key) || // disques
-                        /^unused\d+$/.test(key) ||   // unused disks
-                        /^hostpci\d+$/.test(key) ||  // PCI passthrough
-                        /^usb\d+$/.test(key) ||      // USB passthrough
-                        /^ipconfig\d+$/.test(key) || // Cloud-Init IP configs
-                        /^efidisk\d+$/.test(key) ||  // EFI disk
-                        /^tpmstate\d+$/.test(key) || // TPM state
-                        /^serial\d+$/.test(key) ||   // Serial ports
-                        /^audio\d+$/.test(key) ||    // Audio device
-                        key === 'rng0'               // VirtIO RNG
+      // body was already prefiltered to isForwardedConfigKey above; this
+      // re-check is a harmless double filter kept so the two never drift.
+      const isAllowed = isForwardedConfigKey(key, type as 'qemu' | 'lxc')
 
       if (isAllowed && value !== undefined && value !== null) {
         // PVE requires sshkeys to be URL-encoded inside the value (double-encoding)

@@ -30,7 +30,10 @@ export interface DriveQosCaps {
 }
 
 export function isTenantDiskKey(key: string, type: 'qemu' | 'lxc'): boolean {
-  if (type === 'lxc') return LXC_DISK_KEY_RE.test(key)
+  // unusedN is included for lxc too: the config route forwards it to PVE
+  // (foreign volid reattach) regardless of guest type, so it must be
+  // validated against scope for lxc the same way it is for qemu.
+  if (type === 'lxc') return LXC_DISK_KEY_RE.test(key) || /^unused\d+$/.test(key)
   return DATA_DISK_KEY_RE.test(key) || AUX_DISK_KEY_RE.test(key)
 }
 
@@ -39,8 +42,13 @@ const OPT_RE = /^([a-z][a-z0-9_-]*)=(.*)$/
 // The volume part after "storage:" must look like a PVE volid segment
 // (vm-100-disk-0, iso/debian.iso, 100/vm-100-disk-0.qcow2, or a bare decimal
 // size) and never a raw filesystem path smuggled behind a valid storage
-// prefix (ceph-nvme:/dev/sda, ceph-nvme:../../etc/shadow).
-const VOLUME_REST_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+// prefix (ceph-nvme:/dev/sda, ceph-nvme:../../etc/shadow). Space, parens and
+// "+" are allowed: real ISO filenames carry them (e.g.
+// "Win10_22H2 (x64).iso"), and refusing them broke legitimate
+// EditDiskDialog re-saves without adding any actual scope protection (no
+// leading slash, no ':', no backslash, and the ".." segment refusal all
+// still hold).
+const VOLUME_REST_RE = /^[A-Za-z0-9][A-Za-z0-9._+ ()/-]*$/
 
 function hasDotDotSegment(rest: string): boolean {
   return rest.split('/').includes('..')

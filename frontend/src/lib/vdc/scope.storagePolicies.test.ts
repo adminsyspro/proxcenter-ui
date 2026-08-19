@@ -2,7 +2,7 @@
  * Postgres-backed tests for the storage-policy additions to `getVdcScope`:
  * a policy's storage joins the existing `storagesByConnection` Set (visible/
  * authorised storage), and its QoS caps land in a new parallel
- * `storagePoliciesByConnection` map — additive only, the pre-existing Set
+ * `storagePoliciesByConnection` map, additive only: the pre-existing Set
  * contract is untouched.
  *
  * `getVdcScope` caches per (tenantId, context) for 5s; each `describe` below
@@ -92,7 +92,7 @@ async function assignPolicy(vdcId: string, policyId: string, quotaMb: number | n
   })
 }
 
-describe('getVdcScope — storage policies', () => {
+describe('getVdcScope: storage policies', () => {
   it('adds the policy storage to storagesByConnection alongside the primary storage', async () => {
     const tenantId = 'tenant-scope-sp-1'
     await addTenant(tenantId)
@@ -150,13 +150,13 @@ describe('getVdcScope — storage policies', () => {
   })
 
   // NOTE: the brief's literal setup ("two vDCs of the same tenant on the
-  // same connection") is rejected by Postgres — `Vdc` carries
+  // same connection") is rejected by Postgres: `Vdc` carries
   // `@@unique([tenantId, connectionId])`, so one tenant can only ever have
   // one vDC per connection. The closest reachable equivalent that still
   // exercises the merge/no-duplicate path: two DIFFERENT tenants each with
   // their own vDC on the SAME connection, both assigned to the SAME shared
   // storage policy. Each tenant's own `buildVdcScope` call (scoped by
-  // `where: tenantId`) must still resolve to exactly one entry — proving
+  // `where: tenantId`) must still resolve to exactly one entry, proving
   // the other tenant's assignment row to the same policy neither duplicates
   // nor leaks across the tenant boundary.
   it('resolves one entry per tenant when two tenants share a connection and a policy (no cross-tenant duplication)', async () => {

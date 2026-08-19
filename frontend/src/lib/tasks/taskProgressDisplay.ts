@@ -42,11 +42,12 @@ export function formatEta(seconds: number): string {
 
 // Steps the pipelines write to migrationJob.currentStep that have a stable
 // translation under tasks.steps.*. Warm: planning…converting_disks (delta
-// passes are numbered, see below). Cold/v2v: preflight…pending.
+// passes are numbered, see below). Cold/v2v: preflight…awaiting_root_choice.
 const KNOWN_STEPS = new Set([
   "planning", "enabling_cbt", "preparing_disks", "full_copy", "source_shutdown",
   "awaiting_cutover", "cutover", "verify", "converting_disks",
   "preflight", "transferring", "creating_vm", "configuring", "pending",
+  "awaiting_root_choice",
 ])
 
 /**

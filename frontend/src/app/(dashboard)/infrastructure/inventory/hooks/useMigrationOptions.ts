@@ -53,6 +53,10 @@ export function useMigrationOptions({
   const [migStartAfter, setMigStartAfter] = useState(false)
   const [migDiskPaths, setMigDiskPaths] = useState('')
   const [migTempStorage, setMigTempStorage] = useState('/tmp')
+  // virt-v2v root filesystem override (#738). Empty means automatic selection;
+  // only a genuine multi-boot guest needs the exact root device, copied from
+  // the failed job's log.
+  const [migV2vRoot, setMigV2vRoot] = useState<string>('')
   const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot' | 'warm'>('cold')
   // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
   // Kept in state for the payload contract; no longer user-selectable in the UI.
@@ -77,6 +81,7 @@ export function useMigrationOptions({
     setMigStartAfter(false)
     setMigDiskPaths(deriveHypervDiskPaths(esxiMigrateVm))
     setMigTempStorage('/tmp')
+    setMigV2vRoot('')
     setMigType('cold')
     setMigTransferMode('auto')
     setMigConvertToQcow2(false)
@@ -95,6 +100,8 @@ export function useMigrationOptions({
     setMigDiskPaths,
     migTempStorage,
     setMigTempStorage,
+    migV2vRoot,
+    setMigV2vRoot,
     migType,
     setMigType,
     migTransferMode,

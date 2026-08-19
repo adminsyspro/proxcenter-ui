@@ -12,6 +12,7 @@ import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { assertStorageName } from "@/lib/ssh/validate"
+import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 
 export const runtime = "nodejs"
 
@@ -111,6 +112,23 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'cutoverMode must be "auto" or "manual"' }, { status: 400 })
       }
       cutoverMode = body.cutoverMode
+    }
+
+    // Optional virt-v2v root filesystem (`--root`). Only used by the cold
+    // virt-v2v pipelines, and only needed for a genuine multi-boot guest: the
+    // pipeline resolves the common SLES/openSUSE snapper case on its own.
+    // Validated here so a typo comes back as a 400 instead of failing the job
+    // hours later, and because the value reaches an SSH command line.
+    let v2vRoot: string | undefined
+    if (body.v2vRoot !== undefined && body.v2vRoot !== null && String(body.v2vRoot).trim() !== "") {
+      const cleaned = sanitizeV2vRoot(String(body.v2vRoot))
+      if (!cleaned) {
+        return NextResponse.json(
+          { error: "v2vRoot must be a device or subvolume name as printed by virt-v2v, for example /dev/system/root" },
+          { status: 400 },
+        )
+      }
+      v2vRoot = cleaned
     }
 
     // Verify connections exist
@@ -218,6 +236,7 @@ export async function POST(req: Request) {
           vcenterDatacenter, vcenterCluster, vcenterHost, diskPaths, tempStorage,
           migrationType: v2vMigrationType,
           ...(targetVmid !== undefined && { targetVmid }),
+          ...(v2vRoot !== undefined && { v2vRoot }),
         }, tenantId)
       } else if (effectiveSourceType === "xcpng") {
         await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)
@@ -287,6 +306,7 @@ export async function POST(req: Request) {
               vmxPath: posixVmxPath,
               esxiHost: esxiHostname,
               ...(targetVmid !== undefined && { targetVmid }),
+              ...(v2vRoot !== undefined && { v2vRoot }),
             }, tenantId)
             return
           }

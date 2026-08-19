@@ -111,6 +111,8 @@ import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './components/ForcePowerOffButton'
+import RootChoiceButton, { isAwaitingRootChoice } from './components/RootChoiceButton'
+import { statusChipLabelKey, waitIconClass, waitTitleKey, isWaitDisplayKey } from './components/migrationWaitDisplay'
 import UsageBar from './components/UsageBar'
 import ConsolePreview from './components/ConsolePreview'
 import StatusChip from './components/StatusChip'
@@ -362,6 +364,7 @@ export default function InventoryDetails({
     migStartAfter, setMigStartAfter,
     migDiskPaths, setMigDiskPaths,
     migTempStorage, setMigTempStorage,
+    migV2vRoot, setMigV2vRoot,
     migType, setMigType,
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
@@ -378,7 +381,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -1002,6 +1005,7 @@ export default function InventoryDetails({
                   ...((job as any).vcenterCluster && { vcenterCluster: (job as any).vcenterCluster }),
                   ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
                   ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
+                  ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
                 }),
               })
               const d = await res.json()
@@ -4040,6 +4044,13 @@ return vm?.isCluster ?? false
             // to be a silent five minute poll; it is now a state the operator can
             // see and act on (#614).
             const migAwaitingPowerOff = isAwaitingPowerOff(vmMigJob)
+            // Guest inspection found several bootable systems and the pipeline
+            // refuses to guess which one to convert; the run is parked until
+            // the operator picks one (#738).
+            const migAwaitingRootChoice = isAwaitingRootChoice(vmMigJob)
+            // Chip label resolved by the shared wait-display rules: an i18n key
+            // for every known state, raw step text otherwise.
+            const migChipLabel = statusChipLabelKey(vmMigJob)
 
             return (
               /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
@@ -4114,7 +4125,7 @@ return vm?.isCluster ?? false
                       {vmMigJob && (
                         <Chip
                           size="small"
-                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : migAwaitingPowerOff ? t('inventoryPage.esxiMigration.awaitingPowerOff') : migAwaitingOperator ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                          label={isWaitDisplayKey(migChipLabel) ? t(migChipLabel) : migChipLabel}
                           color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'cancelled' ? 'default' : 'primary'}
                           sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
                         />
@@ -4151,8 +4162,10 @@ return vm?.isCluster ?? false
                         the gate waits for a human, so both the wait and the two
                         ways out of it have to be visible without scrolling. */}
                     {vmMigJob && !['completed', 'failed', 'cancelled'].includes(vmMigJob.status) && (() => {
-                      const awaiting = migAwaitingOperator || migAwaitingPowerOff
+                      const awaiting = migAwaitingOperator || migAwaitingPowerOff || migAwaitingRootChoice
                       const canCutover = canRequestCutover(vmMigJob)
+                      // Same key-or-raw contract as the chip label above.
+                      const migWaitTitle = waitTitleKey(vmMigJob)
 
                       return (
                         <Box sx={{ px: 2, pb: 2 }}>
@@ -4163,17 +4176,18 @@ return vm?.isCluster ?? false
                             bgcolor: awaiting ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                           }}>
                             <i
-                              className={migAwaitingPowerOff ? 'ri-shut-down-line' : awaiting ? 'ri-pause-circle-line' : 'ri-loader-4-line'}
+                              className={waitIconClass(vmMigJob)}
                               style={{ fontSize: 20, color: awaiting ? theme.palette.primary.main : undefined, opacity: awaiting ? 1 : 0.5 }}
                             />
                             <Box sx={{ flex: 1, minWidth: 160 }}>
                               <Typography variant="body2" fontWeight={700}>
-                                {migAwaitingPowerOff
-                                  ? t('inventoryPage.esxiMigration.awaitingPowerOff')
-                                  : awaiting
-                                    ? t('inventoryPage.esxiMigration.awaitingCutover')
-                                    : (vmMigJob.currentStep || vmMigJob.status).replaceAll('_', ' ')}
+                                {isWaitDisplayKey(migWaitTitle) ? t(migWaitTitle) : migWaitTitle}
                               </Typography>
+                              {migAwaitingRootChoice && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {t('inventoryPage.esxiMigration.chooseRootBody')}
+                                </Typography>
+                              )}
                               {canCutover && (
                                 <Typography variant="caption" color="text.secondary">
                                   {t('inventoryPage.esxiMigration.estimatedDowntime')} ~{Math.round(vmMigJob.projectedDowntimeSec / 60)} min
@@ -4182,6 +4196,7 @@ return vm?.isCluster ?? false
                             </Box>
                             <WarmCutoverButton job={vmMigJob} />
                             <ForcePowerOffButton job={vmMigJob} />
+                            <RootChoiceButton job={vmMigJob} />
                             <Button
                               size="small"
                               variant="outlined"
@@ -4577,6 +4592,8 @@ return vm?.isCluster ?? false
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}
         setMigTempStorage={setMigTempStorage}
+        migV2vRoot={migV2vRoot}
+        setMigV2vRoot={setMigV2vRoot}
         migType={migType}
         setMigType={setMigType}
         migTransferMode={migTransferMode}

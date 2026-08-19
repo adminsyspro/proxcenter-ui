@@ -33,9 +33,11 @@ import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
+import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 
 const warm = runWarmMigration as unknown as ReturnType<typeof vi.fn>
 const cold = runMigrationPipeline as unknown as ReturnType<typeof vi.fn>
+const v2v = runV2vMigrationPipeline as unknown as ReturnType<typeof vi.fn>
 
 const body = {
   sourceConnectionId: "src", sourceVmId: "vm-1", targetConnectionId: "tgt",
@@ -51,7 +53,7 @@ function createdJobData(): any {
 
 beforeEach(() => {
   h.afterCbs.length = 0
-  warm.mockReset(); cold.mockReset()
+  warm.mockReset(); cold.mockReset(); v2v.mockReset()
   h.prisma.connection.findUnique.mockReset()
   h.prisma.migrationJob.create.mockReset().mockResolvedValue({ id: "job-1" })
 })
@@ -217,5 +219,57 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(warm.mock.calls[0][0]).toBe("job-1")
     expect(warm.mock.calls[0][1]).toMatchObject({ sourceConnectionId: "src", targetStorage: "local-lvm" })
     expect(cold).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/v1/migrations, virt-v2v root filesystem", () => {
+  // v2vRoot ends up in `virt-v2v --root <value>` on the target node, so a value
+  // carrying shell metacharacters must never reach the pipeline. Rejected here
+  // rather than in the pipeline so the caller sees a 400 instead of a job that
+  // fails hours later.
+  it.each([
+    "/dev/sda2; rm -rf /",
+    "$(whoami)",
+    "root`id`",
+    "/dev/system/root /dev/sda2",
+    "/dev/system/root\nreboot",
+  ])("rejects a malformed v2vRoot %j before creating a job", async (v2vRoot) => {
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", v2vRoot } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toMatch(/v2vRoot/i)
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+    await runAfters()
+    expect(v2v).not.toHaveBeenCalled()
+    expect(cold).not.toHaveBeenCalled()
+  })
+
+  it("forwards a valid v2vRoot to the virt-v2v pipeline", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, {
+      body: { ...body, migrationType: "cold", v2vRoot: " /dev/system/root " },
+    })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+    expect(v2v).toHaveBeenCalledTimes(1)
+    // trimmed on the way through, so the pipeline never has to guess
+    expect(v2v.mock.calls[0][1]).toMatchObject({ v2vRoot: "/dev/system/root" })
+  })
+
+  it("leaves v2vRoot out of the payload when the caller omits it", async () => {
+    // Absence matters: an empty string would be passed to virt-v2v as --root ''
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: "vcenter", name: "vc", baseUrl: "https://vc" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, migrationType: "cold", v2vRoot: "" } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+    expect(v2v).toHaveBeenCalledTimes(1)
+    expect(v2v.mock.calls[0][1]).not.toHaveProperty("v2vRoot")
   })
 })

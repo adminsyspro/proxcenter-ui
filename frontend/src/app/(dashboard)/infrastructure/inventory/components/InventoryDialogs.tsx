@@ -68,8 +68,10 @@ import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
 import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
-import WarmCutoverButton, { isAwaitingOperator } from './WarmCutoverButton'
-import ForcePowerOffButton, { isAwaitingPowerOff } from './ForcePowerOffButton'
+import WarmCutoverButton from './WarmCutoverButton'
+import ForcePowerOffButton from './ForcePowerOffButton'
+import RootChoiceButton from './RootChoiceButton'
+import { statusChipLabelKey, isWaitDisplayKey } from './migrationWaitDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { copyToClipboard } from '@/lib/clipboard'
 
@@ -269,6 +271,8 @@ export interface InventoryDialogsProps {
   setMigDiskPaths: (v: string) => void
   migTempStorage: string
   setMigTempStorage: (v: string) => void
+  migV2vRoot: string
+  setMigV2vRoot: (v: string) => void
   migType: 'cold' | 'live' | 'sshfs_boot' | 'warm'
   setMigType: (v: 'cold' | 'live' | 'sshfs_boot' | 'warm') => void
   migTransferMode: 'https' | 'sshfs' | 'auto'
@@ -302,7 +306,7 @@ export interface InventoryDialogsProps {
   setBulkMigLogsExpanded: (v: React.SetStateAction<boolean>) => void
   bulkMigLogsFilter: string | null
   setBulkMigLogsFilter: (v: string | null) => void
-  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>
+  bulkMigConfigRef: React.MutableRefObject<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>
   bulkMigHostInfo: any
 
   // Upgrade dialog
@@ -414,7 +418,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migStartAfter, setMigStartAfter, migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
     migDowntimeBudget, setMigDowntimeBudget,
-    migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage,
+    migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
     migJobId, setMigJobId, migJob, setMigJob, migNodeOptions,
@@ -2797,6 +2801,24 @@ return
                     </Box>
                   )}
 
+                  {/* virt-v2v root filesystem override (#738). virt-v2v prompts for
+                      a root when guest inspection finds several bootable roots; the
+                      pipeline already retries by dropping btrfs/snapper snapshot
+                      subvolumes, so only a genuine multi-boot guest needs the exact
+                      root device here, copied from the failed job's log. Same
+                      visibility as the Temporary Storage select above. */}
+                  {migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label={t('inventoryPage.esxiMigration.v2vRoot')}
+                      placeholder={t('inventoryPage.esxiMigration.v2vRootPlaceholder')}
+                      value={migV2vRoot}
+                      onChange={e => setMigV2vRoot(e.target.value)}
+                      helperText={t('inventoryPage.esxiMigration.v2vRootHelp')}
+                    />
+                  )}
+
                   {/* Disk paths for Hyper-V */}
                   {esxiMigrateVm?.hostType === 'hyperv' && (
                     <Box>
@@ -3009,7 +3031,7 @@ return
                 {!['completed', 'failed', 'cancelled'].includes(migJob.status) && (
                   <Chip
                     size="small"
-                    label={isAwaitingPowerOff(migJob) ? t('inventoryPage.esxiMigration.awaitingPowerOff') : isAwaitingOperator(migJob) ? t('inventoryPage.esxiMigration.awaitingCutover') : (migJob.currentStep?.replaceAll("_", ' ') || migJob.status)}
+                    label={(() => { const label = statusChipLabelKey(migJob, 'dialog'); return isWaitDisplayKey(label) ? t(label) : label })()}
                     color="primary"
                     sx={{ fontWeight: 600 }}
                   />
@@ -3188,6 +3210,8 @@ return
                         ...(migTempStorage !== '/tmp' && {
                           tempStorage: migTempStorage,
                         }),
+                        // virt-v2v root filesystem override (#738); omitted when empty.
+                        ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                         ...(esxiMigrateVm.hostType === 'hyperv' && migDiskPaths.trim() && {
                           diskPaths: migDiskPaths.trim().split('\n').map((p: string) => p.trim()).filter(Boolean),
                         }),
@@ -3257,6 +3281,7 @@ return
                       reachable from here and not only from the inventory. */}
                   <WarmCutoverButton job={migJob} size="medium" />
                   <ForcePowerOffButton job={migJob} size="medium" />
+                  <RootChoiceButton job={migJob} size="medium" />
                   <Button
                     color="error"
                     onClick={() => {
@@ -3922,6 +3947,20 @@ return
                   )
                 })()}
 
+                {/* virt-v2v root filesystem override (#738), same visibility as the
+                    Temporary Storage select above; applied to every VM in the batch. */}
+                {migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && (
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label={t('inventoryPage.esxiMigration.v2vRoot')}
+                    placeholder={t('inventoryPage.esxiMigration.v2vRootPlaceholder')}
+                    value={migV2vRoot}
+                    onChange={e => setMigV2vRoot(e.target.value)}
+                    helperText={t('inventoryPage.esxiMigration.v2vRootHelp')}
+                  />
+                )}
+
                 <FormControlLabel
                   control={<Switch size="small" checked={migStartAfter} onChange={(_, v) => setMigStartAfter(v)} />}
                   label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
@@ -4341,6 +4380,8 @@ return
                           ...(migTempStorage && migTempStorage !== '/tmp' && {
                             tempStorage: migTempStorage,
                           }),
+                          // virt-v2v root filesystem override (#738); omitted when empty.
+                          ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                         }),
                       })
                       const d = await res.json()
@@ -4386,6 +4427,7 @@ return
                     ...(migTempStorage && migTempStorage !== '/tmp' && {
                       tempStorage: migTempStorage,
                     }),
+                    ...(migV2vRoot.trim() && { v2vRoot: migV2vRoot.trim() }),
                   }
                   setBulkMigJobs(jobs)
                   setBulkMigStarting(false)

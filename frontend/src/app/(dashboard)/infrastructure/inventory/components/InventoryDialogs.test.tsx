@@ -306,6 +306,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
     setMigDiskPaths: vi.fn(),
     migTempStorage: '',
     setMigTempStorage: vi.fn(),
+    migV2vRoot: '',
+    setMigV2vRoot: vi.fn(),
     migType: 'cold',
     setMigType: vi.fn(),
     migTransferMode: 'auto',

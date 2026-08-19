@@ -12,6 +12,10 @@ const {
   pveFetchMock,
   resolveVdcForTenantMock,
   getCurrentTenantIdMock,
+  waitForTaskMock,
+  syncIpamForVmConfigMock,
+  releaseAllocationsForVmMock,
+  afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
   getInfraMock: vi.fn(),
@@ -19,15 +23,21 @@ const {
   pveFetchMock: vi.fn(),
   resolveVdcForTenantMock: vi.fn(),
   getCurrentTenantIdMock: vi.fn(),
+  waitForTaskMock: vi.fn(),
+  syncIpamForVmConfigMock: vi.fn(),
+  releaseAllocationsForVmMock: vi.fn(),
+  afterCbs: [] as Array<() => Promise<void>>,
 }))
 
 // The route schedules post-restore work (waitForTask, pool placement, IPAM
-// sync) via next/server's after(). We only care about the synchronous
-// response + the immediate PVE POST, so after() is stubbed to a no-op that
-// never runs its callback -- keeping NextResponse itself real.
+// sync, QoS restamp) via next/server's after(). Most tests only care about
+// the synchronous response + the immediate PVE POST, so they never drive
+// afterCbs. Tests that need to exercise the scheduled work (Task 13's
+// restamp block) pull the captured callback out of afterCbs and await it
+// directly -- keeping NextResponse itself real.
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>()
-  return { ...actual, after: vi.fn() }
+  return { ...actual, after: (fn: () => Promise<void>) => { afterCbs.push(fn) } }
 })
 
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
@@ -49,6 +59,9 @@ vi.mock("@/lib/vdc/quota", () => ({
 }))
 // Only exercised by the pbsBackup path, which none of these tests take.
 vi.mock("@/lib/vdc/scope", () => ({ assertVdcPbsAccess: vi.fn() }))
+vi.mock("@/lib/proxmox/tasks", () => ({ waitForTask: (...a: any[]) => waitForTaskMock(...a) }))
+vi.mock("@/lib/vdc/ipamSync", () => ({ syncIpamForVmConfig: (...a: any[]) => syncIpamForVmConfigMock(...a) }))
+vi.mock("@/lib/vdc/ipam", () => ({ releaseAllocationsForVm: (...a: any[]) => releaseAllocationsForVmMock(...a) }))
 // Guards prisma.vdc.findFirst (pool-placement lookup, isTenant only) and
 // prisma.connection.findUnique (pbsBackup path, unused here) from hitting a
 // real database.
@@ -63,6 +76,7 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue("audit-1") }))
 
 beforeEach(() => {
+  afterCbs.length = 0
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({
     id: "pve-1",
@@ -76,6 +90,9 @@ beforeEach(() => {
   getInfraMock.mockReset().mockResolvedValue({ kind: "provider" })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   pveFetchMock.mockReset().mockResolvedValue("UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:")
+  waitForTaskMock.mockReset().mockResolvedValue(undefined)
+  syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
+  releaseAllocationsForVmMock.mockReset()
 })
 
 /** Decode the URL-encoded form body of a pveFetch(conn, path, opts) call. */
@@ -140,6 +157,7 @@ describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- raw archive voli
         // Allow-listed storage is "ceph-vdc" -- deliberately does NOT
         // include "local", which is the prefix of the archive below.
         storagesByConnection: new Map([["pve-1", new Set(["ceph-vdc"])]]),
+        storagePoliciesByConnection: new Map<string, Map<string, any>>(),
         poolsByConnection: new Map<string, Set<string>>(),
         vnetsByConnection: new Map<string, Set<string>>(),
         sharedBridgesByConnection: new Map<string, Set<string>>(),
@@ -162,5 +180,115 @@ describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- raw archive voli
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toMatch(/not authorised/i)
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/v1/connections/[id]/nodes/[node]/restore -- post-restore QoS restamp (Task 13)", () => {
+  const gold = { policyId: "p-gold", name: "Gold", iopsRd: 5000, iopsWr: 4000, mbpsRd: 500, mbpsWr: null }
+
+  /** iaas union scope with the given per-connection allowed storages + tier policies. */
+  function iaasScope(storages: string[], policies: Record<string, typeof gold> = {}) {
+    return {
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        pbsConnectionIds: new Set<string>(),
+        nodesByConnection: new Map<string, Set<string>>(),
+        storagesByConnection: new Map([["pve-1", new Set(storages)]]),
+        storagePoliciesByConnection: new Map([["pve-1", new Map(Object.entries(policies))]]),
+        poolsByConnection: new Map<string, Set<string>>(),
+        vnetsByConnection: new Map<string, Set<string>>(),
+        sharedBridgesByConnection: new Map<string, Set<string>>(),
+        pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+        pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+      },
+    }
+  }
+
+  function restoredConfigCall() {
+    return pveFetchMock.mock.calls.find(
+      (c) => String(c[1]).endsWith("/qemu/111/config") && c[2]?.method === "PUT",
+    )
+  }
+
+  it("iaas: restores an archive whose config carries a stale-QoS scsi0 on a policied storage -- restamp PUT captured with the policy caps", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue(iaasScope(["ceph-nvme"], { "ceph-nvme": gold }))
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      if (opts?.method === "POST") return "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+      if (opts?.method === "PUT") return null
+      if (String(path).endsWith("/qemu/111/config")) {
+        return { scsi0: "ceph-nvme:vm-111-disk-0,size=32G,iops_rd=1" }
+      }
+      return {}
+    })
+
+    const { POST } = await import("./route")
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: "ceph-nvme:backup/vzdump-qemu-111-2026_08_11-15_51_33.vma.zst", type: "qemu" },
+    })
+    expect(res.status).toBe(200)
+
+    expect(afterCbs.length).toBeGreaterThan(0)
+    for (const cb of afterCbs) await cb()
+
+    const putCall = restoredConfigCall()
+    expect(putCall).toBeTruthy()
+    const patch = new URLSearchParams(String(putCall?.[2]?.body))
+    expect(patch.get("scsi0")).toBe("ceph-nvme:vm-111-disk-0,size=32G,iops_rd=5000,iops_wr=4000,mbps_rd=500")
+  })
+
+  it("no policies on the connection: no restamp PUT", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue(iaasScope(["ceph-nvme"]))
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      if (opts?.method === "POST") return "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+      if (opts?.method === "PUT") return null
+      if (String(path).endsWith("/qemu/111/config")) {
+        return { scsi0: "ceph-nvme:vm-111-disk-0,size=32G" }
+      }
+      return {}
+    })
+
+    const { POST } = await import("./route")
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: "ceph-nvme:backup/vzdump-qemu-111-2026_08_11-15_51_33.vma.zst", type: "qemu" },
+    })
+    expect(res.status).toBe(200)
+
+    for (const cb of afterCbs) await cb()
+
+    expect(restoredConfigCall()).toBeUndefined()
+  })
+
+  it("provider: unchanged, no restamp attempted", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      if (opts?.method === "POST") return "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+      if (opts?.method === "PUT") return null
+      if (String(path).endsWith("/qemu/111/config")) {
+        return { scsi0: "local-lvm:vm-111-disk-0,size=32G,iops_rd=1" }
+      }
+      return {}
+    })
+
+    const { POST } = await import("./route")
+    const res = await callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu" },
+    })
+    expect(res.status).toBe(200)
+
+    for (const cb of afterCbs) await cb()
+
+    expect(restoredConfigCall()).toBeUndefined()
   })
 })

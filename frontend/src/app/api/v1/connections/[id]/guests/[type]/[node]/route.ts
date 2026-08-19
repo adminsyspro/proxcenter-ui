@@ -10,6 +10,7 @@ import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
+import { enforceTenantDrives, DriveScopeError } from "@/lib/vdc/driveGuard"
 
 export const runtime = "nodejs"
 
@@ -101,6 +102,19 @@ export async function POST(
       return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
+    // Tenant disk storage scope + storage-policy QoS stamping (spec §5.3).
+    // Runs unconditionally for iaas tenants, ahead of the vDC quota block
+    // below, because the stamp must precede the PVE POST regardless of
+    // whether a vDC quota is even configured, and the metered total feeds
+    // the same checkVdcQuota call.
+    let drives: Awaited<ReturnType<typeof enforceTenantDrives>> = null
+    try {
+      drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body })
+    } catch (e: any) {
+      if (e instanceof DriveScopeError) return NextResponse.json({ error: e.message }, { status: 403 })
+      throw e
+    }
+
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
@@ -108,15 +122,16 @@ export async function POST(
         // Estimate resources from body
         const vcpus = Number.parseInt(body.cores || '1') * Number.parseInt(body.sockets || '1')
         const ramMb = Number.parseInt(body.memory || '512')
-        const storageMb = sumNewDiskStorageMb(body)
+        const storageMb = drives ? drives.totalAddMb : sumNewDiskStorageMb(body)
 
         const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
           type: 'create',
           addVcpus: vcpus,
           addRamMb: ramMb,
           addStorageMb: storageMb,
+          addStorageMbByStorage: drives?.addStorageMbByStorage,
           addVms: 1,
-        })
+        }, vdcInfo.storagePolicies, node)
 
         if (!quotaCheck.allowed) {
           return NextResponse.json({

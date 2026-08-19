@@ -1630,10 +1630,90 @@ export default function VdcTab() {
                     </>
                   )}
 
+                  {/* Tenant networks: the VXLAN / SDN overlay is automatic */}
+
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-git-branch-line" />
+                      {t('vdc.vxlanSectionTitle')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.vxlanSectionHint')}</Typography>
+                    {editingVdc?.sdnZoneName ? (
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                        {t('vdc.vxlanZoneInfo', { zone: editingVdc.sdnZoneName, count: editingVdc.vnets?.length ?? 0 })}
+                      </Typography>
+                    ) : null}
+                  </Box>
+
+                  {/* VLAN pools */}
+
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-price-tag-3-line" />
+                        {t('vdc.vlanPoolsTitle')}
+                      </Typography>
+                      <Tooltip title={t('vdc.vlanPoolAdd')} arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={t('vdc.vlanPoolAdd')}
+                            onClick={() => setVlanPools((prev) => [...prev, { bridge: poolBridges[0]?.iface ?? '', rangeStart: '', rangeEnd: '' }])}
+                            disabled={poolBridges.length === 0}
+                          >
+                            <i className="ri-add-line" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.vlanPoolsHint')}</Typography>
+
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                      {vlanPools.map((pool, idx) => {
+                        const bridgeMeta = poolBridges.find((b) => b.iface === pool.bridge)
+                        return (
+                          <Stack key={idx} direction="row" spacing={1} alignItems="flex-start">
+                            <TextField
+                              select size="small" sx={{ flex: 1, minWidth: 160 }}
+                              label={t('vdc.vlanPoolBridge')}
+                              value={pool.bridge}
+                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, bridge: e.target.value } : p))}
+                              helperText={pool.bridge && bridgeMeta && !bridgeMeta.vlanAware ? t('vdc.vlanPoolNotVlanAware') : undefined}
+                            >
+                              {poolBridges.map((b) => (
+                                <MenuItem key={b.iface} value={b.iface}>{b.iface}</MenuItem>
+                              ))}
+                            </TextField>
+                            <TextField
+                              size="small" type="number" label={t('vdc.vlanPoolStart')}
+                              sx={{ width: 150, flexShrink: 0 }}
+                              value={pool.rangeStart}
+                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, rangeStart: e.target.value } : p))}
+                              slotProps={{ htmlInput: { min: 1, max: 4094 } }}
+                            />
+                            <TextField
+                              size="small" type="number" label={t('vdc.vlanPoolEnd')}
+                              sx={{ width: 150, flexShrink: 0 }}
+                              value={pool.rangeEnd}
+                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, rangeEnd: e.target.value } : p))}
+                              slotProps={{ htmlInput: { min: 1, max: 4094 } }}
+                            />
+                            <IconButton size="small" sx={{ mt: 0.75, flexShrink: 0 }} onClick={() => setVlanPools((prev) => prev.filter((_, i) => i !== idx))}>
+                              <i className="ri-delete-bin-line" />
+                            </IconButton>
+                          </Stack>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+
                   {/* Shared Bridges */}
 
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>{t('vdc.sharedBridgesTitle')}</Typography>
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-router-line" />
+                      {t('vdc.sharedBridgesTitle')}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">{t('vdc.sharedBridgesHint')}</Typography>
 
                     {providerBridges.length === 0 ? (
@@ -1683,56 +1763,6 @@ export default function VdcTab() {
                         })}
                       </Stack>
                     )}
-                  </Box>
-
-                  {/* VLAN pools */}
-
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>{t('vdc.vlanPoolsTitle')}</Typography>
-                    <Typography variant="caption" color="text.secondary">{t('vdc.vlanPoolsHint')}</Typography>
-
-                    <Stack spacing={1} sx={{ mt: 1 }}>
-                      {vlanPools.map((pool, idx) => {
-                        const bridgeMeta = poolBridges.find((b) => b.iface === pool.bridge)
-                        return (
-                          <Stack key={idx} direction="row" spacing={1} alignItems="center">
-                            <TextField
-                              select size="small" sx={{ minWidth: 180 }}
-                              label={t('vdc.vlanPoolBridge')}
-                              value={pool.bridge}
-                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, bridge: e.target.value } : p))}
-                              helperText={pool.bridge && bridgeMeta && !bridgeMeta.vlanAware ? t('vdc.vlanPoolNotVlanAware') : undefined}
-                            >
-                              {poolBridges.map((b) => (
-                                <MenuItem key={b.iface} value={b.iface}>{b.iface}</MenuItem>
-                              ))}
-                            </TextField>
-                            <TextField
-                              size="small" type="number" label={t('vdc.vlanPoolStart')}
-                              value={pool.rangeStart}
-                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, rangeStart: e.target.value } : p))}
-                              slotProps={{ htmlInput: { min: 1, max: 4094 } }}
-                            />
-                            <TextField
-                              size="small" type="number" label={t('vdc.vlanPoolEnd')}
-                              value={pool.rangeEnd}
-                              onChange={(e) => setVlanPools((prev) => prev.map((p, i) => i === idx ? { ...p, rangeEnd: e.target.value } : p))}
-                              slotProps={{ htmlInput: { min: 1, max: 4094 } }}
-                            />
-                            <IconButton size="small" onClick={() => setVlanPools((prev) => prev.filter((_, i) => i !== idx))}>
-                              <i className="ri-delete-bin-line" />
-                            </IconButton>
-                          </Stack>
-                        )
-                      })}
-                      <Button
-                        size="small" variant="outlined" sx={{ alignSelf: 'flex-start' }}
-                        onClick={() => setVlanPools((prev) => [...prev, { bridge: poolBridges[0]?.iface ?? '', rangeStart: '', rangeEnd: '' }])}
-                        disabled={poolBridges.length === 0}
-                      >
-                        {t('vdc.vlanPoolAdd')}
-                      </Button>
-                    </Stack>
                   </Box>
                 </>
               ) : null}

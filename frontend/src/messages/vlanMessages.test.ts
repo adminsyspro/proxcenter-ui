@@ -10,6 +10,9 @@ import zhCN from './zh-CN.json'
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
 const requiredKeys = [
+  'vdc.vxlanSectionTitle',
+  'vdc.vxlanSectionHint',
+  'vdc.vxlanZoneInfo',
   'vdc.vlanPoolsTitle',
   'vdc.vlanPoolsHint',
   'vdc.vlanPoolAdd',

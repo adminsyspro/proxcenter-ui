@@ -5,6 +5,10 @@ export type Storage = {
   avail?: number
   total?: number
   content?: string
+  /** Formats this storage accepts for a VM disk, computed by the API (issue #735). */
+  formats?: string[]
+  /** Format PVE picks when none is given. */
+  defaultFormat?: string
 }
 
 export type NodeInfo = {

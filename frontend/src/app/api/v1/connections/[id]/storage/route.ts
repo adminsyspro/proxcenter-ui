@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { isSharedStorage } from "@/lib/proxmox/storage"
+import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -104,6 +104,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         // Pour PBS
         datastore: config.datastore || null,
         fingerprint: config.fingerprint || null,
+
+        // Formats acceptés pour un disque de VM (issue #735) : dépend de la
+        // config du stockage, pas seulement de son type depuis PVE 9.
+        ...vmDiskFormats({ ...config, type: storageType }),
       }
     })
 

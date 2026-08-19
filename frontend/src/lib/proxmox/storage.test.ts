@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { aggregateStorage, normalizeStorageEntry } from './storage'
+import { aggregateStorage, normalizeStorageEntry, storageFormats, vmDiskFormats } from './storage'
 
 const TiB = 1024 ** 4
 
@@ -118,5 +118,76 @@ describe('aggregateStorage', () => {
 
     expect(rows[0].tenantId).toBeUndefined()
     expect(rows[0].tenantName).toBeUndefined()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Format capability per storage (issue #735)                         */
+/* ------------------------------------------------------------------ */
+
+describe('storageFormats', () => {
+  it('gives file-based storages their full set, raw by default', () => {
+    expect(storageFormats({ type: 'dir' })).toEqual({ formats: ['raw', 'qcow2', 'vmdk', 'subvol'], defaultFormat: 'raw' })
+    expect(storageFormats({ type: 'nfs' })).toEqual({ formats: ['raw', 'qcow2', 'vmdk'], defaultFormat: 'raw' })
+    expect(storageFormats({ type: 'cifs' })).toEqual({ formats: ['raw', 'qcow2', 'vmdk'], defaultFormat: 'raw' })
+  })
+
+  it('keeps raw-only storages raw-only', () => {
+    for (const type of ['lvmthin', 'rbd', 'iscsi', 'iscsidirect', 'cephfs', 'pbs', 'unknown-plugin']) {
+      expect(storageFormats({ type })).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+    }
+  })
+
+  it('gives ZFS and Btrfs raw plus the container subvolume', () => {
+    expect(storageFormats({ type: 'zfspool' }).formats).toEqual(['raw', 'subvol'])
+    expect(storageFormats({ type: 'btrfs' }).formats).toEqual(['raw', 'subvol'])
+  })
+
+  // PVE 9 LVMPlugin::get_formats: qcow2 is valid, and the default, only when
+  // the storage opted into volume-chain snapshots.
+  it('opens qcow2 on an LVM storage that snapshots as volume chain', () => {
+    expect(storageFormats({ type: 'lvm' })).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+    expect(storageFormats({ type: 'lvm', 'snapshot-as-volume-chain': 1 })).toEqual({
+      formats: ['raw', 'qcow2'],
+      defaultFormat: 'qcow2',
+    })
+  })
+
+  it('accepts the option however PVE spells it', () => {
+    expect(storageFormats({ type: 'lvm', 'snapshot-as-volume-chain': '1' }).formats).toContain('qcow2')
+    expect(storageFormats({ type: 'lvm', 'snapshot-as-volume-chain': true }).formats).toContain('qcow2')
+    expect(storageFormats({ type: 'lvm', 'snapshot-as-volume-chain': 0 }).formats).not.toContain('qcow2')
+  })
+
+  it('honours a format pinned in the storage config', () => {
+    expect(storageFormats({ type: 'dir', format: 'qcow2' }).defaultFormat).toBe('qcow2')
+  })
+
+  it('ignores a pinned format the storage does not accept', () => {
+    expect(storageFormats({ type: 'zfspool', format: 'qcow2' }).defaultFormat).toBe('raw')
+  })
+
+  it('answers raw for a missing config', () => {
+    expect(storageFormats(null)).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+    expect(storageFormats(undefined)).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+    expect(storageFormats({})).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+  })
+})
+
+describe('vmDiskFormats', () => {
+  it('drops subvol, which only ever holds a container', () => {
+    expect(vmDiskFormats({ type: 'dir' }).formats).toEqual(['raw', 'qcow2', 'vmdk'])
+    expect(vmDiskFormats({ type: 'zfspool' })).toEqual({ formats: ['raw'], defaultFormat: 'raw' })
+  })
+
+  it('carries the LVM volume-chain case through', () => {
+    expect(vmDiskFormats({ type: 'lvm', 'snapshot-as-volume-chain': 1 })).toEqual({
+      formats: ['raw', 'qcow2'],
+      defaultFormat: 'qcow2',
+    })
+  })
+
+  it('never returns an empty list', () => {
+    expect(vmDiskFormats({ type: 'whatever' }).formats).toEqual(['raw'])
   })
 })

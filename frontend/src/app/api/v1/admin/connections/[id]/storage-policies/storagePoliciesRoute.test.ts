@@ -286,6 +286,22 @@ describe('PUT /api/v1/admin/connections/{id}/storage-policies/{policyId}', () =>
     )
     expect((await res.json()).data).toEqual(POLICY_ROW)
   })
+
+  it('409s a storage-change-while-assigned rejection from updateStoragePolicy (Finding I3)', async () => {
+    updateStoragePolicyMock.mockRejectedValue(
+      new Error('Storage policy storage cannot be changed while assigned to vDCs: "Acme"'),
+    )
+
+    const res = await callRoute(PUT as Parameters<typeof callRoute>[0], {
+      method: 'PUT',
+      params: { id: CONN_ID, policyId: POLICY_ID },
+      body: { ...VALID_BODY, storageId: 'other-storage' },
+    })
+
+    expect(res.status).toBe(409)
+    expect(clearScopeCacheForPolicyMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('DELETE /api/v1/admin/connections/{id}/storage-policies/{policyId}', () => {

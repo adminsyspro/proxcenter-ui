@@ -138,4 +138,30 @@ describe('StoragePoliciesSection', () => {
     fireEvent.click(deleteButtons[1])
     await waitFor(() => expect(deletedUrl).toContain('/connections/c1/storage-policies/p2'))
   })
+
+  it('disables the storage select in the edit dialog when the policy has vDC assignments (Finding I3)', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('gold')
+
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' })
+    // gold (vdcCount: 2) is the first row, bronze (vdcCount: 0) the second.
+    fireEvent.click(editButtons[0])
+
+    await screen.findByRole('dialog')
+    const storageSelect = screen.getByLabelText(/^Storage/)
+    expect(storageSelect.getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByText(/In use by 2 vDCs/)).toBeInTheDocument()
+  })
+
+  it('leaves the storage select enabled in the edit dialog when the policy has no vDC assignments', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('bronze')
+
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' })
+    fireEvent.click(editButtons[1])
+
+    await screen.findByRole('dialog')
+    const storageSelect = screen.getByLabelText(/^Storage/)
+    expect(storageSelect.getAttribute('aria-disabled')).toBeNull()
+  })
 })

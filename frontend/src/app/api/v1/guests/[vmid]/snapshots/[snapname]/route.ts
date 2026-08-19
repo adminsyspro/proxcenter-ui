@@ -1,8 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { waitForTask } from "@/lib/proxmox/tasks"
+import { restampGuestDrives } from "@/lib/vdc/driveGuard"
+import type { DriveQosCaps } from "@/lib/vdc/drives"
 
 export const runtime = "nodejs"
 
@@ -62,11 +67,42 @@ export async function POST(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
+    // Storage-tier QoS policies (Finding I1): a snapshot taken before a
+    // storage policy existed re-applies its own drive lines verbatim on
+    // rollback, potentially handing back self-chosen QoS on a now-policied
+    // storage. Resolved eagerly (union scope, iaas only) ahead of the PVE
+    // rollback call and reused by the post-rollback restamp after() block
+    // below (cookies/request context die inside after()).
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+    const rollbackPolicies: Map<string, DriveQosCaps> =
+      infra.kind === 'iaas' && infra.vdcScope
+        ? (infra.vdcScope.storagePoliciesByConnection.get(connId) ?? new Map())
+        : new Map()
+
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}/rollback`
-    
+
     const result = await pveFetch<string>(conn, apiPath, {
       method: 'POST',
     })
+
+    // ── Post-rollback storage-tier QoS restamp ──
+    // qemu only: DATA_DISK_KEY_RE (inside restampGuestDrives) only matches
+    // qemu drive keys, lxc mountpoints use a different shape entirely
+    // (mirrors the clone/restore after() blocks).
+    if (type === 'qemu' && rollbackPolicies.size > 0 && result) {
+      const upid = String(result)
+      const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`
+      after(async () => {
+        try {
+          await waitForTask(conn, node, upid)
+        } catch (err: any) {
+          console.error(`[rollback-qos-stamp] waitForTask failed for vmid=${vmid}: ${err?.message ?? err}`)
+          return
+        }
+        await restampGuestDrives({ conn, configPath, policies: rollbackPolicies, logTag: '[rollback-qos-stamp]' })
+      })
+    }
 
     // Audit
     const { audit } = await import("@/lib/audit")

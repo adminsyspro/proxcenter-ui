@@ -6,7 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
-import { enforceTenantDrives, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
 
@@ -265,14 +265,26 @@ export async function PUT(
     // (pre-existing hole: disk keys used to flow verbatim to PVE).
     try {
       const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body })
-      if (drives && drives.totalAddMb > 0 && vdcInfo) {
-        const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
-          type: 'config',
-          addStorageMb: drives.totalAddMb,
-          addStorageMbByStorage: drives.addStorageMbByStorage,
-        }, vdcInfo.storagePolicies, node)
-        if (!quotaCheck.allowed) {
-          return NextResponse.json({ error: 'Quota exceeded', violations: quotaCheck.violations }, { status: 409 })
+      if (drives && vdcInfo) {
+        // Import-from metering (Finding I2): PVE allocates a full-size
+        // volume for scsiN: "gold:0,import-from=gold:vm-100-disk-0", so meter
+        // the REAL source size rather than accept the tenant-declared zero.
+        if (drives.importRefs.length > 0) {
+          const imported = await meterImportRefs(conn, node, drives.importRefs)
+          for (const [storage, mb] of Object.entries(imported.addStorageMbByStorage)) {
+            drives.addStorageMbByStorage[storage] = (drives.addStorageMbByStorage[storage] ?? 0) + mb
+          }
+          drives.totalAddMb += imported.totalAddMb
+        }
+        if (drives.totalAddMb > 0) {
+          const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
+            type: 'config',
+            addStorageMb: drives.totalAddMb,
+            addStorageMbByStorage: drives.addStorageMbByStorage,
+          }, vdcInfo.storagePolicies, node)
+          if (!quotaCheck.allowed) {
+            return NextResponse.json({ error: 'Quota exceeded', violations: quotaCheck.violations }, { status: 409 })
+          }
         }
       }
     } catch (e: any) {

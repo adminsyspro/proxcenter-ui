@@ -130,8 +130,32 @@ export async function createStoragePolicy(connectionId: string, input: StoragePo
   }
 }
 
+/** Finding I3 (§10 guard closure): changing the storage of an ASSIGNED
+ *  policy would silently remove the OLD storage from every assigned vDC's
+ *  scope, the exact allow-list shrink the unassign volume-guard
+ *  (assertPolicyUnassignSafe) exists to police, but this path never went
+ *  through it. Refuse the storage change outright while any vDC still has
+ *  the policy assigned; caps-only edits (same storageId) are unaffected. */
+async function assertStorageChangeSafe(policyId: string, newStorageId: string): Promise<void> {
+  const current = await prisma.storagePolicy.findUnique({
+    where: { id: policyId },
+    select: { storageId: true },
+  })
+  if (!current || current.storageId === newStorageId) return
+
+  const assignments = await prisma.vdcStoragePolicy.findMany({
+    where: { policyId },
+    select: { vdc: { select: { name: true } } },
+  })
+  if (assignments.length > 0) {
+    const names = assignments.map((a) => `"${a.vdc.name}"`).join(', ')
+    throw new Error(`Storage policy storage cannot be changed while assigned to vDCs: ${names}`)
+  }
+}
+
 export async function updateStoragePolicy(policyId: string, input: StoragePolicyInput): Promise<StoragePolicyDto> {
   validateStoragePolicyInput(input)
+  await assertStorageChangeSafe(policyId, input.storageId.trim())
   try {
     const row = await prisma.storagePolicy.update({
       where: { id: policyId },

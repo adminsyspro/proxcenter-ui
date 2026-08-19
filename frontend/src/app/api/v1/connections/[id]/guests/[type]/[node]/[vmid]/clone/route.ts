@@ -15,8 +15,9 @@ import { waitForTask } from "@/lib/proxmox/tasks"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import {
-  DATA_DISK_KEY_RE, LXC_DISK_KEY_RE, parseDriveString, parsePveSizeToMb, stampDriveQos,
+  DATA_DISK_KEY_RE, LXC_DISK_KEY_RE, parseDriveString, parsePveSizeToMb,
 } from "@/lib/vdc/drives"
+import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 
 export const runtime = "nodejs"
 
@@ -312,27 +313,13 @@ export async function POST(
       after(async () => {
         try {
           if (stampUpid) await waitForTask(conn, stampNode, stampUpid)
-          const cfg = await pveFetch<any>(conn, stampPath)
-          const patch = new URLSearchParams()
-          for (const [k, v] of Object.entries(cfg || {})) {
-            if (!DATA_DISK_KEY_RE.test(k)) continue
-            const parsed = parseDriveString(String(v ?? ''))
-            if (parsed.ok === false || parsed.drive.storage === null) continue
-            const caps = clonePolicies.get(parsed.drive.storage)
-            if (!caps) continue
-            const stamped = stampDriveQos(String(v), caps)
-            if (stamped !== String(v)) patch.set(k, stamped)
-          }
-          if (Array.from(patch.keys()).length > 0) {
-            await pveFetch<any>(conn, stampPath, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: patch.toString(),
-            })
-          }
         } catch (err: any) {
           console.error(`[clone-qos-stamp] failed for vmid=${body.newid}: ${err?.message ?? err}`)
+          return
         }
+        await restampGuestDrives({
+          conn, configPath: stampPath, policies: clonePolicies, logTag: '[clone-qos-stamp]',
+        })
       })
     }
 

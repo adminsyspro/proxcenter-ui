@@ -179,3 +179,58 @@ describe('POST guests create: disk storage allow-list + storage-policy QoS stamp
     expect(sent.scsi0).toBe('local-lvm:10,mbps=999,iops=50')
   })
 })
+
+describe('POST guests create: import-from metering (Finding I2 -- meter, never refuse)', () => {
+  it('409: import-from onto a quota-carrying tier is metered against the REAL source size and trips quota', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
+    resolveVdcForTenantMock.mockResolvedValue({
+      poolName: 'pool-1',
+      quota: { maxStorageMb: null },
+      storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
+    })
+    checkVdcQuotaMock.mockResolvedValue({ allowed: false, violations: ['Storage policy "Gold" (gold): over quota'] })
+    pveFetchMock.mockReset().mockImplementation(async (_conn, path: string) => {
+      if (String(path).endsWith('/storage/gold/content')) {
+        return [{ volid: 'gold:vm-100-disk-0', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
+      }
+      return 'UPID:x'
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: qemuParams,
+      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:vm-100-disk-0' },
+    })
+    expect(res.status).toBe(409)
+
+    expect(checkVdcQuotaMock).toHaveBeenCalled()
+    const [, , , operation] = checkVdcQuotaMock.mock.calls[0]
+    expect(operation.addStorageMb).toBe(32768)
+    expect(operation.addStorageMbByStorage).toEqual({ gold: 32768 })
+    expect(createdBody('pve1', 'qemu')).toBeNull()
+  })
+
+  it('200: a source content-listing failure fails open (import-from allowed, unmetered)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
+    resolveVdcForTenantMock.mockResolvedValue({
+      poolName: 'pool-1',
+      quota: { maxStorageMb: null },
+      storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
+    })
+    pveFetchMock.mockReset().mockImplementation(async (_conn, path: string) => {
+      if (String(path).endsWith('/storage/gold/content')) throw new Error('storage unreachable')
+      return 'UPID:x'
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: qemuParams,
+      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:vm-100-disk-0' },
+    })
+    expect(res.status).toBe(200)
+    expect(checkVdcQuotaMock).toHaveBeenCalled()
+    const [, , , operation] = checkVdcQuotaMock.mock.calls[0]
+    expect(operation.addStorageMb).toBe(0)
+    expect(operation.addStorageMbByStorage).toEqual({})
+  })
+})

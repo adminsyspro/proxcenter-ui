@@ -215,6 +215,34 @@ describe('updateStoragePolicy', () => {
     await expect(updateStoragePolicy(silver.id, validInput({ name: 'gold', storageId: 'ceph-hdd' })))
       .rejects.toThrow('already')
   })
+
+  it('rejects changing storageId while the policy is assigned to a vDC, naming it (Finding I3, spec §10)', async () => {
+    await addVdc({ id: 'vdc-1', connectionId: 'conn1', name: 'Acme' })
+    const policy = await createStoragePolicy('conn1', validInput({ name: 'gold', storageId: 'ceph-nvme' }))
+    await assignPolicy('vdc-1', policy.id)
+
+    await expect(
+      updateStoragePolicy(policy.id, validInput({ name: 'gold', storageId: 'ceph-hdd' })),
+    ).rejects.toThrow('Storage policy storage cannot be changed while assigned to vDCs: "Acme"')
+  })
+
+  it('allows a caps-only edit (same storageId) of a policy assigned to a vDC', async () => {
+    await addVdc({ id: 'vdc-1', connectionId: 'conn1', name: 'Acme' })
+    const policy = await createStoragePolicy('conn1', validInput({ name: 'gold', storageId: 'ceph-nvme' }))
+    await assignPolicy('vdc-1', policy.id)
+
+    const updated = await updateStoragePolicy(policy.id, validInput({
+      name: 'gold', storageId: 'ceph-nvme', iopsRd: 9000,
+    }))
+    expect(updated.iopsRd).toBe(9000)
+    expect(updated.storageId).toBe('ceph-nvme')
+  })
+
+  it('allows changing storageId when the policy has no vDC assignments', async () => {
+    const policy = await createStoragePolicy('conn1', validInput({ name: 'gold', storageId: 'ceph-nvme' }))
+    const updated = await updateStoragePolicy(policy.id, validInput({ name: 'gold', storageId: 'ceph-hdd' }))
+    expect(updated.storageId).toBe('ceph-hdd')
+  })
 })
 
 describe('deleteStoragePolicy', () => {

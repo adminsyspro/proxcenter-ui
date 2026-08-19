@@ -211,3 +211,59 @@ describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
     expect(configPutBody()?.get('unused0')).toBe('local-lvm:vm-1-disk-9')
   })
 })
+
+describe('PUT config: import-from metering (Finding I2 -- meter, never refuse)', () => {
+  it('409: import-from onto a quota-carrying tier is metered against the REAL source size and trips quota', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
+    resolveVdcForTenantMock.mockResolvedValue({
+      poolName: 'pool-1',
+      quota: { maxStorageMb: null },
+      storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
+    })
+    checkVdcQuotaMock.mockResolvedValue({ allowed: false, violations: ['Storage policy "Gold" (gold): over quota'] })
+    pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'PUT') return { data: 'ok' }
+      if (String(path).endsWith('/storage/gold/content')) {
+        return [{ volid: 'gold:vm-100-disk-0', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
+      }
+      return {}
+    })
+
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: baseParams,
+      body: { scsi1: 'gold:0,import-from=gold:vm-100-disk-0' },
+    })
+    expect(res.status).toBe(409)
+
+    expect(checkVdcQuotaMock).toHaveBeenCalled()
+    const [, , , operation] = checkVdcQuotaMock.mock.calls[0]
+    expect(operation.addStorageMb).toBe(32768)
+    expect(operation.addStorageMbByStorage).toEqual({ gold: 32768 })
+    expect(configPutBody()).toBeNull()
+  })
+
+  it('200: a source content-listing failure fails open (import-from allowed, unmetered)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], { gold }))
+    resolveVdcForTenantMock.mockResolvedValue({
+      poolName: 'pool-1',
+      quota: { maxStorageMb: null },
+      storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'gold', quotaMb: 1024 }],
+    })
+    pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'PUT') return { data: 'ok' }
+      if (String(path).endsWith('/storage/gold/content')) throw new Error('storage unreachable')
+      return {}
+    })
+
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: baseParams,
+      body: { scsi1: 'gold:0,import-from=gold:vm-100-disk-0' },
+    })
+    expect(res.status).toBe(200)
+    expect(checkVdcQuotaMock).not.toHaveBeenCalled()
+  })
+})

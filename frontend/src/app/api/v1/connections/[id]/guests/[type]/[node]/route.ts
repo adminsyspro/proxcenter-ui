@@ -10,7 +10,7 @@ import { generatePveMacAddress } from "@/lib/vdc/sdn"
 import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
-import { enforceTenantDrives, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 
 export const runtime = "nodejs"
 
@@ -119,6 +119,17 @@ export async function POST(
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
       if (vdcInfo) {
+        // Import-from metering (Finding I2): PVE allocates a full-size
+        // volume for scsiN: "gold:0,import-from=gold:vm-100-disk-0", so meter
+        // the REAL source size rather than accept the tenant-declared zero.
+        if (drives && drives.importRefs.length > 0) {
+          const imported = await meterImportRefs(conn, node, drives.importRefs)
+          for (const [storage, mb] of Object.entries(imported.addStorageMbByStorage)) {
+            drives.addStorageMbByStorage[storage] = (drives.addStorageMbByStorage[storage] ?? 0) + mb
+          }
+          drives.totalAddMb += imported.totalAddMb
+        }
+
         // Estimate resources from body
         const vcpus = Number.parseInt(body.cores || '1') * Number.parseInt(body.sockets || '1')
         const ramMb = Number.parseInt(body.memory || '512')

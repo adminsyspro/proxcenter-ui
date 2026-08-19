@@ -321,6 +321,12 @@ export default function StoragePoliciesSection({ connections }: Props) {
             label={t('vdc.storagePolicyStorage')}
             value={form.storageId}
             onChange={(e) => setForm((f) => ({ ...f, storageId: e.target.value }))}
+            disabled={!!dialog?.policy && (dialog.policy.vdcCount ?? 0) > 0}
+            helperText={
+              dialog?.policy && (dialog.policy.vdcCount ?? 0) > 0
+                ? t('vdc.storagePolicyInUse', { count: dialog.policy.vdcCount })
+                : undefined
+            }
             fullWidth
           >
             {dialogStorages.map((s) => (

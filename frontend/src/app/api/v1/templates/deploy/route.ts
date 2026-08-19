@@ -18,6 +18,7 @@ import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { getVdcScope } from "@/lib/vdc/scope"
+import { policyQosSuffix } from "@/lib/vdc/drives"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 
@@ -108,6 +109,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No vDC on this connection — deploy not allowed' }, { status: 403 })
     }
 
+    // QoS suffix (`,iops_rd=..,iops_wr=..,mbps_rd=..,mbps_wr=..`) stamped onto
+    // the data disk (scsi0) when body.storage carries a storage policy in the
+    // tenant's vDC scope. Computed once below, inside the existing
+    // `if (isTenant)` scope block: provider deploys never fetch scope, so
+    // this stays '' for them by construction.
+    let dataDiskQosSuffix = ''
+
     // vDC quota enforcement. Mirrors the create-VM route on
     // /connections/[id]/guests/[type]/[node] so a tenant can't bypass
     // their CPU / RAM / storage / VM-count limits by going through the
@@ -131,7 +139,8 @@ export async function POST(req: Request) {
         addRamMb: Number.isFinite(ramMb) ? ramMb : 0,
         addStorageMb: storageMb,
         addVms: 1,
-      })
+        addStorageMbByStorage: storageMb > 0 ? { [body.storage]: storageMb } : undefined,
+      }, vdcInfo?.storagePolicies ?? undefined, body.node)
 
       if (!quotaCheck.allowed) {
         return NextResponse.json({
@@ -164,6 +173,12 @@ export async function POST(req: Request) {
           { status: 403 },
         )
       }
+
+      // Storage-policy QoS: body.storage may carry a tier's IOPS/MBPS caps in
+      // this tenant's scope. Resolved once here so both the cloud-image and
+      // ISO createParams branches stamp the identical suffix on scsi0.
+      const policiesByStorage = scope.storagePoliciesByConnection?.get(body.connectionId)
+      dataDiskQosSuffix = policyQosSuffix(policiesByStorage?.get(body.storage))
 
       const allowedNetworks = await getAllowedNetworksForTenant(tenantId, body.connectionId)
       const bridge = body.hardware?.networkBridge
@@ -255,6 +270,7 @@ export async function POST(req: Request) {
             sourceType,
             volumeId,
             vdcInfo,
+            dataDiskQosSuffix,
             onIpamAllocation: (alloc) => { ipamAllocation = alloc },
           })
           return
@@ -478,7 +494,7 @@ export async function POST(req: Request) {
           memory: String(hw.memory),
           cpu: hw.cpu,
           scsihw: hw.scsihw,
-          scsi0: `${body.storage}:0,import-from=${importVolume}`,
+          scsi0: `${body.storage}:0,import-from=${importVolume}${dataDiskQosSuffix}`,
           net0: netSpec,
           ide2: `${body.storage}:cloudinit`,
           boot: "order=scsi0",
@@ -626,12 +642,16 @@ async function runIsoDeploy(args: {
   sourceType: string
   volumeId: string | null
   vdcInfo: { poolName?: string | null } | null
+  /** Storage-policy QoS suffix for the data disk (scsi0), computed once by
+   *  the caller (empty string when body.storage carries no policy, or the
+   *  tenant is the provider). Never applied to ide2 or efidisk0. */
+  dataDiskQosSuffix: string
   /** Optional sink the caller fills in once we've claimed an IP — lets
    *  the parent's try/catch release the reservation if any later step
    *  throws (waitForTask timeout, audit failure, etc.). */
   onIpamAllocation?: (alloc: { subnetId: string; ip: string }) => void
 }): Promise<void> {
-  const { deploymentId, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, onIpamAllocation } = args
+  const { deploymentId, conn, body, image, isCustom, sourceType, volumeId, vdcInfo, dataDiskQosSuffix, onIpamAllocation } = args
   const hw = body.hardware
   const isoStorage: string = body.isoStorage
 
@@ -751,7 +771,7 @@ async function runIsoDeploy(args: {
     scsihw: hw.scsihw,
     // Empty data disk (no import-from). Format defaults to qcow2 on
     // file-based storage; on block-based storage PVE picks raw automatically.
-    scsi0: `${body.storage}:${diskSizeGb}`,
+    scsi0: `${body.storage}:${diskSizeGb}${dataDiskQosSuffix}`,
     net0: isoNetSpec,
     // Boot ISO on the secondary IDE bus (PVE convention for install media).
     ide2: `${isoVolume},media=cdrom`,

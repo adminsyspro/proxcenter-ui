@@ -2,26 +2,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-// The success path schedules the deployment pipeline through after(); swallow
-// it so a 200 can be asserted without driving the pipeline.
+// The success path schedules the deployment pipeline through after(). Most
+// tests only care about the synchronous response, so the callback is merely
+// captured (never auto-run); tests that need to exercise the pipeline itself
+// (createParams assertions) call runAfters() explicitly.
+const afterCbs: Array<() => Promise<void>> = []
 vi.mock('next/server', async (io) => {
   const actual = await io<typeof import('next/server')>()
-  return { ...actual, after: vi.fn() }
+  return { ...actual, after: (fn: () => Promise<void>) => { afterCbs.push(fn) } }
 })
+async function runAfters() {
+  for (const cb of afterCbs) await cb()
+}
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const customImageFindUniqueMock = vi.fn<(...args: any[]) => Promise<any>>()
+const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     customImage: { findUnique: customImageFindUniqueMock },
-    deployment: { create: vi.fn(async () => ({ id: 'dep-1' })) },
+    deployment: { create: vi.fn(async () => ({ id: 'dep-1' })), update: vi.fn(async () => ({})) },
     blueprint: { create: vi.fn(async () => ({})) },
   }),
-  getCurrentTenantId: async () => 'tenant-1',
+  getCurrentTenantId: () => getCurrentTenantIdMock(),
   DEFAULT_TENANT_ID: 'default',
 }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create' } }))
@@ -53,6 +60,8 @@ vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: vi.fn() }))
 const getVdcScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/vdc/scope', () => ({ getVdcScope: getVdcScopeMock }))
+const auditMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
 
 const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
 vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
@@ -72,6 +81,7 @@ const baseBody = {
 }
 
 beforeEach(() => {
+  afterCbs.length = 0
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   pveFetchMock.mockReset()
@@ -82,7 +92,32 @@ beforeEach(() => {
   getImageBySlugMock.mockReset().mockReturnValue(undefined)
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
+  auditMock.mockReset().mockResolvedValue({})
 })
+
+/** Generic PVE stub covering both deploy pipeline branches (cloud-image
+ *  download + ISO download), so the createParams sent to the `qemu` create
+ *  call can be captured without hand-rolling every intermediate PVE hop. */
+function stubPveFetchForDeploy() {
+  pveFetchMock.mockReset()
+  pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+    const method = opts?.method
+    if (/^\/storage\/[^/]+$/.test(path) && !method) return { type: 'dir', content: 'images,iso,import' }
+    if (/\/content\?content=(import|iso)$/.test(path)) return []
+    if (/\/download-url$/.test(path) && method === 'POST') return 'UPID:download'
+    if (/\/qemu$/.test(path) && method === 'POST') return 'UPID:create'
+    return {}
+  })
+}
+
+/** The URLSearchParams body of the `POST /nodes/.../qemu` create call. */
+function qemuCreateParams(): URLSearchParams {
+  const call = pveFetchMock.mock.calls.find(
+    ([, path, opts]: any) => /\/qemu$/.test(path) && opts?.method === 'POST',
+  )
+  return call?.[2]?.body as URLSearchParams
+}
 
 describe('POST templates/deploy — MSP VMID range enforcement', () => {
   it('400: rejected by range check before PVE is ever touched', async () => {
@@ -205,5 +240,97 @@ describe('POST templates/deploy: vDC network allow-list', () => {
     const POST = await loadPost()
     const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr0', vlanTag: 150 }) })
     expect(res.status).toBe(200)
+  })
+})
+
+describe('POST templates/deploy: storage-policy QoS stamping on deployed disks', () => {
+  /** Tenant with a policy bound to body.storage on conn-1. */
+  function reachDeployPipeline() {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+      storagePoliciesByConnection: new Map([
+        ['conn-1', new Map([['local-lvm', { iopsRd: 5000, iopsWr: 3000, mbpsRd: 200, mbpsWr: 100 }]])],
+      ]),
+    })
+  }
+
+  beforeEach(() => { stubPveFetchForDeploy() })
+
+  it('cloud-image branch: scsi0 carries the policy QoS suffix, ide2 stays plain', async () => {
+    reachDeployPipeline()
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('scsi0')).toBe(
+      'local-lvm:0,import-from=local-lvm:import/u.qcow2,iops_rd=5000,iops_wr=3000,mbps_rd=200,mbps_wr=100',
+    )
+    expect(params.get('ide2')).toBe('local-lvm:cloudinit')
+  })
+
+  it('ISO branch: scsi0 carries the suffix, ide2 and efidisk0 stay plain', async () => {
+    reachDeployPipeline()
+    getImageBySlugMock.mockReturnValue({ slug: 'debian-12', format: 'iso', downloadUrl: 'https://img.test/d.iso' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      body: { ...baseBody, isoStorage: 'local-lvm', hardware: { ...baseBody.hardware, bios: 'ovmf' } },
+    })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('scsi0')).toBe('local-lvm:10,iops_rd=5000,iops_wr=3000,mbps_rd=200,mbps_wr=100')
+    expect(params.get('ide2')).toBe('local-lvm:iso/d.iso,media=cdrom')
+    expect(params.get('efidisk0')).toBe('local-lvm:1,efitype=4m,pre-enrolled-keys=1')
+  })
+
+  it('provider deploy: scope is never fetched, so no suffix is stamped', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    resolveVdcForTenantMock.mockResolvedValue(null)
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('scsi0')).toBe('local-lvm:0,import-from=local-lvm:import/u.qcow2')
+    expect(getVdcScopeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST templates/deploy: storage-policy tier quota', () => {
+  it('409 before any PVE call when the tier quota is exceeded', async () => {
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const storagePolicies = [{ policyId: 'p1', name: 'gold', storageId: 'local-lvm', quotaMb: 1024 }]
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies })
+    checkVdcQuotaMock.mockResolvedValue({
+      allowed: false,
+      violations: ['gold: 1024/1024 MB, +10240 MB exceeds tier quota'],
+      currentUsage: { vcpus: 0, ramMb: 0, storageMb: 0, vms: 0, snapshots: 0, backups: 0 },
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+
+    expect(res.status).toBe(409)
+    const json = await readJson<{ violations: string[] }>(res)
+    expect(json?.violations).toEqual(['gold: 1024/1024 MB, +10240 MB exceeds tier quota'])
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(checkVdcQuotaMock).toHaveBeenCalledWith(
+      'conn-1',
+      'pool-a',
+      null,
+      expect.objectContaining({ addStorageMbByStorage: { 'local-lvm': 10240 } }),
+      storagePolicies,
+      'pve1',
+    )
   })
 })

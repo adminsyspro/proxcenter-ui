@@ -2657,6 +2657,15 @@ return favorites.has(vmKey)
     }
   }, [])
 
+  // A vnet created/edited/deleted in VnetsSection (NetworkDashboard panel)
+  // must refresh the tree's one-shot tvnet fetch: without this the NETWORK
+  // branch keeps the pre-mutation list until a full page reload.
+  useEffect(() => {
+    const onChanged = () => { if (tenantVnetsFetchedRef.current) void fetchTenantVnets() }
+    window.addEventListener('proxcenter:tenant-vnets-changed', onChanged)
+    return () => window.removeEventListener('proxcenter:tenant-vnets-changed', onChanged)
+  }, [fetchTenantVnets])
+
   // Fetch networks when section is expanded
   const fetchNetworks = useCallback(() => {
     const connIds = clusters.map(c => c.connId).filter(Boolean)

@@ -16,11 +16,18 @@ vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnec
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: vi.fn(async () => null), checkVdcQuota: vi.fn() }))
-vi.mock('@/lib/vdc/vnets', () => ({
-  getAllowedBridgesForTenant: vi.fn(async () => null),
-  resolveSubnetForBridge: vi.fn(async () => null),
-  parseBridgeFromNet: () => null,
-}))
+const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/vdc/vnets', async (io) => {
+  // The verdict logic is what this file exercises, so it runs for real; only
+  // the DB-backed allow-list lookup is stubbed.
+  const actual = await io<typeof import('@/lib/vdc/vnets')>()
+  return {
+    getAllowedNetworksForTenant: getAllowedNetworksForTenantMock,
+    validateNetAgainstScope: actual.validateNetAgainstScope,
+    resolveSubnetForBridge: vi.fn(async () => null),
+    parseBridgeFromNet: () => null,
+  }
+})
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
 vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
@@ -40,6 +47,7 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   pveFetchMock.mockReset().mockResolvedValue('UPID:x')
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
+  getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
 })
 
 describe('POST guests create — MSP VMID range enforcement', () => {
@@ -146,5 +154,64 @@ describe('POST guests create: flat-scoped pool containment', () => {
     expect(createdBody().pool).toBeUndefined()
     // No fallback needed, so the perimeter is never resolved.
     expect(getRequestGuestScopePerimeterMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST guests create: vDC network allow-list', () => {
+  /** vmbr0 is shared with a 100-199 pool; vnetacme is an SDN vnet. */
+  const scoped = () =>
+    new Map([
+      ['vmbr0', { kind: 'shared' as const, vlanRanges: [{ start: 100, end: 199 }] }],
+      ['vnetacme', { kind: 'vnet' as const, vlanRanges: [] }],
+    ])
+
+  it('403: a VLAN tag outside the vDC pools never reaches PVE', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { vmid: 190, net0: 'virtio,bridge=vmbr0,tag=250' },
+    })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain("outside your vDC's VLAN pools")
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: a tag on an SDN vnet is refused', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { vmid: 190, net0: 'virtio,bridge=vnetacme,tag=150' },
+    })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('200: a tag inside the vDC pools is accepted', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { vmid: 190, net0: 'virtio,bridge=vmbr0,tag=150' },
+    })
+    expect(res.status).toBe(200)
+    const createCall = pveFetchMock.mock.calls.find(
+      (c) => c[1] === '/nodes/pve1/qemu' && c[2]?.method === 'POST',
+    )
+    expect(createCall).toBeTruthy()
+  })
+
+  it('403: an unknown bridge is still refused', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { vmid: 190, net0: 'virtio,bridge=vmbr42' },
+    })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain('is not authorized')
   })
 })

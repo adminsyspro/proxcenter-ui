@@ -12,6 +12,7 @@ import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { generateZoneName, createZone, deleteZone, deleteVnetPve, applySdn } from './sdn'
 import { clearVdcScopeCache } from './scope'
+import { validateVlanPoolsInput, assertNoCrossVdcOverlap, assertPoolShrinkSafe, type VlanPoolInput } from './vlan'
 
 import type {
   Vdc,
@@ -129,7 +130,10 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     pveName: v.pveName,
     displayName: v.displayName ?? v.pveName,
     description: v.description ?? null,
-    vxlanTag: v.vxlanTag,
+    tag: v.tag,
+    type: (v.type ?? 'vxlan') as 'vxlan' | 'vlan',
+    bridge: v.bridge ?? null,
+    zoneName: v.zoneName ?? null,
     firewall: v.firewall !== false,
     subnet: v.subnet
       ? {
@@ -146,6 +150,14 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
       : null,
     createdBy: v.createdBy ?? null,
     createdAt: v.createdAt.toISOString(),
+  }))
+  const vlanPools = (row.vlanPools ?? []).map((p: any) => ({
+    id: p.id,
+    vdcId: p.vdcId,
+    bridge: p.bridge,
+    rangeStart: p.rangeStart,
+    rangeEnd: p.rangeEnd,
+    createdAt: p.createdAt.toISOString(),
   }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
@@ -167,6 +179,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     usage,
     sharedBridges,
     vnets,
+    vlanPools,
     pbsBindings,
   }
 }
@@ -181,6 +194,11 @@ const vdcWithDetailsInclude = {
   vnets: {
     include: { subnet: true },
     orderBy: { pveName: 'asc' as const },
+  },
+  vlanPools: {
+    orderBy: [{ bridge: 'asc' as const }, { rangeStart: 'asc' as const }] as (
+      { bridge: 'asc' } | { rangeStart: 'asc' }
+    )[],
   },
   pbsNamespaces: true,
 } as const
@@ -314,6 +332,14 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     )
   }
 
+  // 2ter. Validate VLAN pools before any PVE side effect (pool/zone creation
+  // below is not rolled back by a validation failure caught this early).
+  const vlanPools: VlanPoolInput[] = input.vlanPools ?? []
+  if (vlanPools.length > 0) {
+    validateVlanPoolsInput(vlanPools)
+    await assertNoCrossVdcOverlap(input.connectionId, null, vlanPools)
+  }
+
   // 3. Allocate vDC id (needed for zone generation)
   const id = randomUUID()
   const now = new Date()
@@ -411,6 +437,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
         })
       }
 
+      if (vlanPools.length > 0) {
+        await tx.vdcVlanPool.createMany({
+          data: vlanPools.map(p => ({
+            id: randomUUID(), vdcId: id, bridge: p.bridge,
+            rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
+          })),
+        })
+      }
+
       await tx.vdcUsageCache.create({
         data: {
           id: randomUUID(),
@@ -452,9 +487,18 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
 
 export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcWithDetails> {
   // Verify vDC exists
-  const existing = await prisma.vdc.findUnique({ where: { id }, select: { id: true, tenantId: true } })
+  const existing = await prisma.vdc.findUnique({
+    where: { id },
+    select: { id: true, tenantId: true, connectionId: true },
+  })
   if (!existing) {
     throw new Error(`vDC not found: ${id}`)
+  }
+
+  if (input.vlanPools) {
+    validateVlanPoolsInput(input.vlanPools)
+    await assertNoCrossVdcOverlap(existing.connectionId, id, input.vlanPools)
+    await assertPoolShrinkSafe(id, input.vlanPools)
   }
 
   const now = new Date()
@@ -487,6 +531,18 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
             bridge: sb.bridge,
             label: sb.label ?? null,
             createdAt: now,
+          })),
+        })
+      }
+    }
+
+    if (input.vlanPools) {
+      await tx.vdcVlanPool.deleteMany({ where: { vdcId: id } })
+      if (input.vlanPools.length > 0) {
+        await tx.vdcVlanPool.createMany({
+          data: input.vlanPools.map(p => ({
+            id: randomUUID(), vdcId: id, bridge: p.bridge,
+            rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
           })),
         })
       }
@@ -595,22 +651,25 @@ export async function deleteVdc(id: string): Promise<void> {
     console.warn(`[vdc] Could not check PVE pool "${vdc.pvePoolName}": ${msg}`)
   }
 
-  // 3. Delete all VNets in the vDC zone (best effort).
-  if (vdc.sdnZoneName) {
-    const vnetRows = await prisma.vdcVnet.findMany({
-      where: { vdcId: id },
-      select: { pveName: true },
-    })
-
-    for (const v of vnetRows) {
-      try {
-        await deleteVnetPve(conn, v.pveName)
-      } catch (err: any) {
-        console.warn(`[vdc] Failed to delete VNet "${v.pveName}": ${err?.message}`)
-      }
+  // 3. Delete all VNets of the vDC (best effort), whatever zone they live in.
+  // The old code only ran this under `if (vdc.sdnZoneName)`, which would skip
+  // the VLAN vnets of a vDC without a VXLAN zone.
+  const vnetRows = await prisma.vdcVnet.findMany({
+    where: { vdcId: id },
+    select: { pveName: true },
+  })
+  for (const v of vnetRows) {
+    try {
+      await deleteVnetPve(conn, v.pveName)
+    } catch (err: any) {
+      console.warn(`[vdc] Failed to delete VNet "${v.pveName}": ${err?.message}`)
     }
+  }
 
-    // Delete the SDN zone
+  // Delete the vDC's own VXLAN zone. The shared VLAN zones (sdn_vlan_zones)
+  // are NEVER deleted here: they belong to the (connection, bridge) pair and
+  // other vDCs may use them; an empty zone costs nothing.
+  if (vdc.sdnZoneName) {
     try {
       await deleteZone(conn, vdc.sdnZoneName)
     } catch (err: any) {
@@ -625,8 +684,8 @@ export async function deleteVdc(id: string): Promise<void> {
     console.warn(`[vdc] Failed to delete PVE pool "${vdc.pvePoolName}" (best effort): ${err?.message}`)
   }
 
-  // 5. Apply SDN changes if zone was removed
-  if (vdc.sdnZoneName) {
+  // 5. Apply SDN changes if a vnet or a zone was touched above.
+  if (vnetRows.length > 0 || vdc.sdnZoneName) {
     try {
       await applySdn(conn)
     } catch (err: any) {

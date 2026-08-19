@@ -123,6 +123,38 @@ describe('POST /api/v1/admin/vdcs', () => {
     expect((await res.json()).data.id).toBe('vdc-new')
   })
 
+  it('forwards vlanPools to createVdc', async () => {
+    const vlanPools = [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }]
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, vlanPools },
+    })
+
+    expect(res.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ vlanPools }), 'admin-1')
+  })
+
+  it('maps an invalid VLAN pool rejection from createVdc to 400', async () => {
+    createVdcMock.mockRejectedValue(
+      new Error('VLAN pool range 0-100 is invalid (bounds 1-4094, start <= end)')
+    )
+
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, vlanPools: [{ bridge: 'vmbr0', rangeStart: 0, rangeEnd: 100 }] },
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('maps a VLAN pool shrink-safety rejection from createVdc to 409', async () => {
+    createVdcMock.mockRejectedValue(
+      new Error('Cannot shrink VLAN pools: VNet "prod-lan" uses tag 150 on bridge "vmbr0"')
+    )
+
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], { method: 'POST', body: VALID_BODY })
+    expect(res.status).toBe(409)
+  })
+
   it('maps a P2002 unique-constraint race to 409', async () => {
     createVdcMock.mockRejectedValue(Object.assign(new Error('unique violation'), { code: 'P2002' }))
 

@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
   Dialog, DialogContent, DialogActions, Button, TextField, FormControlLabel, Switch,
-  Alert, Stack, Typography, MenuItem,
+  Alert, Stack, Typography, MenuItem, Checkbox,
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
@@ -14,7 +14,11 @@ import {
 } from '@/lib/vdc/network'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 
-interface VdcOption { id: string; name: string }
+/** A VLAN range the provider dedicated to this vDC on a given bridge.
+ *  Comes straight from `/api/v1/vdcs` (`VdcWithDetails.vlanPools`). */
+interface VlanPoolOption { bridge: string; rangeStart: number; rangeEnd: number }
+
+interface VdcOption { id: string; name: string; vlanPools?: VlanPoolOption[] }
 
 interface Props {
   open: boolean
@@ -50,12 +54,45 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const [cidr, setCidr] = useState('')
   const [gateway, setGateway] = useState('')
   const [dnsServers, setDnsServers] = useState('')        // comma-separated
+  // VLAN branch (issue #646). VXLAN stays the default everywhere: a tenant
+  // whose vDC carries no VLAN pool never sees any of this.
+  const [netType, setNetType] = useState<'vxlan' | 'vlan'>('vxlan')
+  const [bridgeChoice, setBridgeChoice] = useState('')
+  const [vlanTag, setVlanTag] = useState('')              // '' = auto-allocate
+  const [externalAddressing, setExternalAddressing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // VLAN pools are per-vDC, so a bridge or a tag picked for vDC A means
+  // nothing in vDC B: every vDC switch, and every reopen, drops the whole
+  // VLAN sub-form back to its defaults rather than carrying a now-foreign
+  // selection into the POST.
+  const resetVlanForm = useCallback(() => {
+    setNetType('vxlan'); setBridgeChoice(''); setVlanTag(''); setExternalAddressing(false)
+  }, [])
+
   useEffect(() => {
-    if (open) setVdcId(initialVdc)
-  }, [open, initialVdc])
+    if (!open) return
+    setVdcId(initialVdc)
+    resetVlanForm()
+  }, [open, initialVdc, resetVlanForm])
+
+  const selectedVdc = vdcs.find(v => v.id === vdcId)
+  const vlanPools = useMemo(() => selectedVdc?.vlanPools ?? [], [selectedVdc])
+  const hasVlanPools = vlanPools.length > 0
+  const bridges = useMemo(() => [...new Set(vlanPools.map(p => p.bridge))], [vlanPools])
+  // A single bridge in the pools leaves the tenant no decision to make, so
+  // it is selected implicitly rather than through an effect that would
+  // write state back on every render.
+  const bridge = bridgeChoice || (bridges.length === 1 ? bridges[0] : '')
+  const bridgeRanges = vlanPools.filter(p => p.bridge === bridge)
+  const rangesLabel = bridgeRanges.map(p => `${p.rangeStart}-${p.rangeEnd}`).join(', ')
+  const tagNum = vlanTag === '' ? null : Number(vlanTag)
+  // '' means "let the backend allocate". A typed tag has to land inside one
+  // of the ranges the provider dedicated to this vDC on this bridge; the
+  // server re-checks it, this only spares the tenant a round-trip.
+  const tagValid = tagNum === null
+    || (Number.isInteger(tagNum) && bridgeRanges.some(p => tagNum >= p.rangeStart && tagNum <= p.rangeEnd))
 
   // CIDR / gateway live validation — drives helper text + Submit gate.
   const cidrInfo = useMemo(() => parseCidr(cidr), [cidr])
@@ -75,6 +112,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const nameValid = displayName === '' || NAME_REGEX.test(displayName)
   const subnetValid = cidrValid && !!gateway && gatewayValid
   const canSubmit = !!vdcId && !!displayName && nameValid && subnetValid && !saving
+    && (netType === 'vxlan' || (!!bridge && tagValid))
 
   const handleSubmit = async () => {
     if (!vdcId) {
@@ -102,6 +140,12 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
           description: description || undefined,
           firewall,
           subnet,
+          ...(netType === 'vlan' ? {
+            type: 'vlan',
+            bridge,
+            ...(vlanTag !== '' ? { vlanTag: Number(vlanTag) } : {}),
+            ...(externalAddressing ? { externalAddressing: true } : {}),
+          } : {}),
         }),
       })
       const json = await res.json()
@@ -109,6 +153,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
       onCreated()
       setDisplayName(''); setDescription(''); setFirewall(true)
       setCidr(''); setGateway(''); setDnsServers('')
+      resetVlanForm()
     } catch (e: any) {
       setError(e?.message || String(e))
     } finally {
@@ -125,7 +170,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
             select
             label={t('myVdc.vnetVdc')}
             value={vdcId}
-            onChange={(e) => setVdcId(e.target.value)}
+            onChange={(e) => { setVdcId(e.target.value); resetVlanForm() }}
             disabled={vdcs.length <= 1 || saving}
             helperText={vdcs.length === 0 ? t('myVdc.vnetNoVdc') : undefined}
             fullWidth
@@ -156,7 +201,52 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
             control={<Switch checked={firewall} onChange={(e) => setFirewall(e.target.checked)} />}
             label={t('myVdc.vnetFirewallToggle')}
           />
-          <Typography variant="caption" color="text.secondary">{t('myVdc.vnetVniAutoAllocated')}</Typography>
+          {hasVlanPools && (
+            <TextField
+              select
+              label={t('myVdc.vnetType')}
+              value={netType}
+              onChange={(e) => {
+                const next = e.target.value as 'vxlan' | 'vlan'
+                // Back to VXLAN drops the bridge, the tag AND the external
+                // addressing flag: none of them mean anything on an overlay.
+                if (next === 'vxlan') resetVlanForm()
+                else setNetType(next)
+              }}
+              helperText={t('myVdc.vnetTypeHelp')}
+              fullWidth
+            >
+              <MenuItem value="vxlan">{t('myVdc.vnetTypeVxlan')}</MenuItem>
+              <MenuItem value="vlan">{t('myVdc.vnetTypeVlan')}</MenuItem>
+            </TextField>
+          )}
+          {netType === 'vlan' && (
+            <>
+              <TextField
+                select
+                label={t('myVdc.vnetBridge')}
+                value={bridge}
+                onChange={(e) => { setBridgeChoice(e.target.value); setVlanTag('') }}
+                fullWidth
+              >
+                {bridges.map((b) => (<MenuItem key={b} value={b}>{b}</MenuItem>))}
+              </TextField>
+              <TextField
+                label={t('myVdc.vnetVlanId')}
+                value={vlanTag}
+                onChange={(e) => setVlanTag(e.target.value.trim())}
+                error={!tagValid}
+                helperText={rangesLabel ? t('myVdc.vnetVlanIdAutoHint', { ranges: rangesLabel }) : t('myVdc.vnetVlanId')}
+                type="number"
+                fullWidth
+                disabled={!bridge}
+                slotProps={{ htmlInput: { min: 1, max: 4094 } }}
+              />
+            </>
+          )}
+          <Typography variant="caption" color="text.secondary">
+            {t(netType === 'vlan' ? 'myVdc.vnetVlanAutoAllocated' : 'myVdc.vnetVniAutoAllocated')}
+          </Typography>
 
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             <Typography variant="subtitle2">{t('myVdc.subnetSectionTitle')}</Typography>
@@ -202,6 +292,22 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
               size="small"
               placeholder="1.1.1.1, 9.9.9.9"
             />
+            {/* VLAN only. On a VXLAN overlay ProxCenter's IPAM is the sole
+                working allocator (PVE-native DHCP does not work there and an
+                outside DHCP cannot reach the overlay), so opting out would
+                leave the VNet with no allocator at all. On VLAN it is the
+                point of the feature: an outside DHCP or static plan. */}
+            {netType === 'vlan' && (
+              <>
+                <FormControlLabel
+                  control={<Checkbox checked={externalAddressing} onChange={(e) => setExternalAddressing(e.target.checked)} />}
+                  label={t('myVdc.vnetExternalAddressing')}
+                />
+                {externalAddressing && (
+                  <Typography variant="caption" color="text.secondary">{t('myVdc.vnetExternalAddressingHelp')}</Typography>
+                )}
+              </>
+            )}
           </Stack>
 
           {error && <Alert severity="error">{error}</Alert>}

@@ -68,9 +68,9 @@ async function addVdc(opts: VdcOpts): Promise<void> {
   })
 }
 
-async function addVnet(vdcId: string, pveName: string, vxlanTag: number): Promise<void> {
+async function addVnet(vdcId: string, pveName: string, tag: number): Promise<void> {
   await prismaTest.vdcVnet.create({
-    data: { id: `${vdcId}-${pveName}`, vdcId, pveName, vxlanTag },
+    data: { id: `${vdcId}-${pveName}`, vdcId, pveName, tag },
   })
 }
 
@@ -152,6 +152,14 @@ describe('allocateVni', () => {
     await addVnet('vdc-A', 'lan', 10000)
     expect(await allocateVni('vdc-B')).toBe(10000)
   })
+
+  it('ignores VLAN-type vnets: a VLAN-only connection still starts VXLAN allocation at 10000', async () => {
+    await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
+    await prismaTest.vdcVnet.create({
+      data: { id: 'vdc-1-vlan', vdcId: 'vdc-1', pveName: 'vlan1', type: 'vlan', bridge: 'vmbr0', tag: 201 },
+    })
+    expect(await allocateVni('vdc-1')).toBe(10000)
+  })
 })
 
 describe('generatePveVnetId', () => {
@@ -191,7 +199,7 @@ describe('generatePveVnetId', () => {
   it('collision-resistant via nonce when hash collides', async () => {
     await addVdc({ id: 'vdc-1', connectionId: 'conn-A' })
     const firstTry = await generatePveVnetId('vdc-1', 'lan')
-    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: firstTry, vxlanTag: 10000 } })
+    await prismaTest.vdcVnet.create({ data: { id: 'x', vdcId: 'vdc-1', pveName: firstTry, tag: 10000 } })
 
     const next = await generatePveVnetId('vdc-1', 'lan')
     expect(next).not.toBe(firstTry)

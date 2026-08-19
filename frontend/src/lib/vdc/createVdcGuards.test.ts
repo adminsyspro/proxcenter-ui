@@ -15,6 +15,7 @@ const {
     tenant: { findUnique: vi.fn() },
     vdc: { findFirst: vi.fn(), findUnique: vi.fn() },
     vdcVnet: { findMany: vi.fn() },
+    vdcVlanPool: { findMany: vi.fn() },
     connection: { findUnique: vi.fn(), findMany: vi.fn() },
     providerConnection: { findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -42,7 +43,7 @@ vi.mock('./sdn', () => ({
 }))
 vi.mock('./scope', () => ({ clearVdcScopeCache: clearVdcScopeCacheMock }))
 
-import { createVdc, updateVdc, deleteVdc } from './index'
+import { createVdc, updateVdc, deleteVdc, getVdcById } from './index'
 
 const baseInput = {
   tenantId: 't1',
@@ -83,6 +84,8 @@ beforeEach(() => {
   prismaMock.connection.findUnique.mockResolvedValue(null)
   prismaMock.connection.findMany.mockResolvedValue([])
   prismaMock.providerConnection.findUnique.mockResolvedValue({ connectionId: 'conn-2' })
+  prismaMock.vdcVlanPool.findMany.mockResolvedValue([])
+  prismaMock.vdcVnet.findMany.mockResolvedValue([])
 })
 
 describe('createVdc guards', () => {
@@ -166,5 +169,184 @@ describe('vDC mutations invalidate the scope cache', () => {
 
     await deleteVdc('v1')
     expect(clearVdcScopeCacheMock).toHaveBeenCalledWith('t1')
+  })
+})
+
+// Tracked (non-permissive) transaction stub: unlike `permissiveTransaction`,
+// each table proxy is memoized so the same vi.fn() instance is returned on
+// every access: the tests below need to inspect the createMany/deleteMany
+// call arguments after the transaction runs, which the shared proxy (a new
+// txModel() per property access) does not allow.
+function trackedTx() {
+  const models: Record<string, ReturnType<typeof txModel>> = {}
+  const proxy = new Proxy({} as any, {
+    get: (_t, prop: string) => (models[prop] ??= txModel()),
+  })
+  return { proxy, models }
+}
+
+function happyPathPve() {
+  prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
+  getConnectionByIdMock.mockResolvedValue({ id: 'conn-2' })
+  pveFetchMock.mockResolvedValue({})
+  generateZoneNameMock.mockResolvedValue('zacme')
+  createZoneMock.mockResolvedValue(undefined)
+  applySdnMock.mockResolvedValue(undefined)
+}
+
+describe('createVdc VLAN pools', () => {
+  it('rejects an invalid VLAN pool range before touching PVE', async () => {
+    await expect(
+      createVdc({ ...baseInput, vlanPools: [{ bridge: 'vmbr0', rangeStart: 0, rangeEnd: 100 }] }, null)
+    ).rejects.toThrow('VLAN pool range 0-100 is invalid (bounds 1-4094, start <= end)')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a VLAN pool that overlaps another vDC on the same connection, before touching PVE', async () => {
+    prismaMock.vdcVlanPool.findMany.mockResolvedValue([
+      { bridge: 'vmbr0', rangeStart: 100, rangeEnd: 200, vdc: { name: 'Globex' } },
+    ])
+    await expect(
+      createVdc({ ...baseInput, vlanPools: [{ bridge: 'vmbr0', rangeStart: 150, rangeEnd: 250 }] }, null)
+    ).rejects.toThrow('VLAN pool 150-250 on bridge "vmbr0" overlaps vDC "Globex" (100-200)')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('persists the VLAN pool rows inside the create transaction', async () => {
+    happyPathPve()
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await createVdc({ ...baseInput, vlanPools: [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }] }, null)
+
+    expect(tx.models.vdcVlanPool.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          id: expect.any(String),
+          vdcId: expect.any(String),
+          bridge: 'vmbr0',
+          rangeStart: 100,
+          rangeEnd: 199,
+          createdAt: expect.any(Date),
+        },
+      ],
+    })
+  })
+
+  it('does not touch vdc_vlan_pools when no pools are given', async () => {
+    happyPathPve()
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await createVdc(baseInput, null)
+
+    expect(tx.models.vdcVlanPool).toBeUndefined()
+  })
+})
+
+describe('updateVdc VLAN pools', () => {
+  it('excludes the edited vDC from the cross-vDC overlap check, using its real connectionId', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' }) // existence check
+      .mockResolvedValueOnce(fullRow) // getVdcById at the end
+    prismaMock.$transaction.mockImplementation(permissiveTransaction)
+
+    await updateVdc('v1', { vlanPools: [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 200 }] } as any)
+
+    expect(prismaMock.vdcVlanPool.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { vdc: { connectionId: 'conn-X' }, vdcId: { not: 'v1' } },
+      })
+    )
+  })
+
+  it('rejects an overlap with another vDC on update', async () => {
+    prismaMock.vdc.findUnique.mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' })
+    prismaMock.vdcVlanPool.findMany.mockResolvedValue([
+      { bridge: 'vmbr0', rangeStart: 100, rangeEnd: 200, vdc: { name: 'Globex' } },
+    ])
+
+    await expect(
+      updateVdc('v1', { vlanPools: [{ bridge: 'vmbr0', rangeStart: 150, rangeEnd: 250 }] } as any)
+    ).rejects.toThrow('VLAN pool 150-250 on bridge "vmbr0" overlaps vDC "Globex" (100-200)')
+  })
+
+  it('rejects a shrink that would strand an existing VLAN VNet', async () => {
+    prismaMock.vdc.findUnique.mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' })
+    prismaMock.vdcVnet.findMany.mockResolvedValue([
+      { displayName: 'prod-lan', pveName: 'prod-lan', bridge: 'vmbr0', tag: 250 },
+    ])
+
+    await expect(
+      updateVdc('v1', { vlanPools: [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 200 }] } as any)
+    ).rejects.toThrow('Cannot shrink VLAN pools: VNet "prod-lan" uses tag 250 on bridge "vmbr0"')
+  })
+
+  it('replaces the VLAN pool rows inside the update transaction', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' })
+      .mockResolvedValueOnce(fullRow)
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { vlanPools: [{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 200 }] } as any)
+
+    expect(tx.models.vdcVlanPool.deleteMany).toHaveBeenCalledWith({ where: { vdcId: 'v1' } })
+    expect(tx.models.vdcVlanPool.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          id: expect.any(String),
+          vdcId: 'v1',
+          bridge: 'vmbr0',
+          rangeStart: 100,
+          rangeEnd: 200,
+          createdAt: expect.any(Date),
+        },
+      ],
+    })
+  })
+
+  it('clears all VLAN pools when vlanPools is an empty array (no existing VLAN VNet to strand)', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' })
+      .mockResolvedValueOnce(fullRow)
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { vlanPools: [] } as any)
+
+    expect(tx.models.vdcVlanPool.deleteMany).toHaveBeenCalledWith({ where: { vdcId: 'v1' } })
+    expect(tx.models.vdcVlanPool.createMany).not.toHaveBeenCalled()
+  })
+
+  it('leaves vdc_vlan_pools untouched when vlanPools is not part of the update', async () => {
+    prismaMock.vdc.findUnique
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-X' })
+      .mockResolvedValueOnce(fullRow)
+    const tx = trackedTx()
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(tx.proxy))
+
+    await updateVdc('v1', { name: 'Renamed' } as any)
+
+    expect(tx.models.vdcVlanPool).toBeUndefined()
+    expect(prismaMock.vdcVlanPool.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('getVdcById VLAN pools ordering', () => {
+  it('requests vlanPools sorted by bridge then rangeStart', async () => {
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+
+    await getVdcById('v1')
+
+    expect(prismaMock.vdc.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          vlanPools: { orderBy: [{ bridge: 'asc' }, { rangeStart: 'asc' }] },
+        }),
+      })
+    )
   })
 })

@@ -126,10 +126,10 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
   }
 
   const aggregate = await prisma.vdcVnet.aggregate({
-    where: { vdc: { connectionId: ownerVdc.connectionId } },
-    _max: { vxlanTag: true },
+    where: { type: 'vxlan', vdc: { connectionId: ownerVdc.connectionId } },
+    _max: { tag: true },
   })
-  const dbMax = aggregate._max.vxlanTag
+  const dbMax = aggregate._max.tag
 
   // Our DB only knows the VNets ProxCenter created. PVE can carry tags from
   // legacy zones (older ProxCenter installs, manual `pvesh` work, leftover
@@ -153,7 +153,11 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
 
   const candidates = [dbMax, pveMax].filter((n): n is number => typeof n === 'number')
   if (candidates.length === 0) return VNI_BASE
-  return Math.max(...candidates) + 1
+  // PVE's /cluster/sdn/vnets set (pveMax) can carry VLAN tags (<= 4094)
+  // alongside VXLAN VNIs, so a VLAN-only connection must not drag the next
+  // VXLAN allocation below the VNI floor.
+  const next = Math.max(...candidates) + 1
+  return next < VNI_BASE ? VNI_BASE : next
 }
 
 // ---------------------------------------------------------------------------
@@ -179,15 +183,25 @@ async function listClusterNodeIps(conn: any): Promise<string[]> {
     .map((e: any) => e.ip as string)
 }
 
+export interface CreateZoneOptions { type?: 'vxlan' | 'vlan'; bridge?: string }
+
 /**
- * Creates a VXLAN zone on PVE. Caller must invoke applySdn(conn) afterwards.
+ * Creates an SDN zone on PVE. Caller must invoke applySdn(conn) afterwards.
+ * Default is the historical VXLAN zone (peers = every cluster node IP);
+ * `{ type: 'vlan', bridge }` creates a VLAN zone bound to a physical bridge.
  */
-export async function createZone(conn: any, zoneName: string): Promise<void> {
-  const peers = await listClusterNodeIps(conn)
+export async function createZone(conn: any, zoneName: string, opts: CreateZoneOptions = {}): Promise<void> {
+  const type = opts.type ?? 'vxlan'
   const params = new URLSearchParams()
-  params.append('type', 'vxlan')
+  params.append('type', type)
   params.append('zone', zoneName)
-  params.append('peers', peers.join(','))
+  if (type === 'vxlan') {
+    const peers = await listClusterNodeIps(conn)
+    params.append('peers', peers.join(','))
+  } else {
+    if (!opts.bridge) throw new Error(`createZone: bridge is required for VLAN zone "${zoneName}"`)
+    params.append('bridge', opts.bridge)
+  }
 
   try {
     await pveFetch(conn, '/cluster/sdn/zones', { method: 'POST', body: params })
@@ -414,45 +428,4 @@ export async function countVnetAttachments(conn: any, pveName: string): Promise<
   }
 
   return count
-}
-
-// ---------------------------------------------------------------------------
-// Reconcile DB mirror with PVE state
-// ---------------------------------------------------------------------------
-
-/**
- * Compare DB `vdc_vnets` rows with PVE SDN state for the given zone.
- * If a DB row exists for a VNet not in PVE: delete the DB row.
- * If PVE has a VNet in this zone not in DB: log warning (don't auto-create).
- */
-export async function reconcileVnets(vdcId: string, zoneName: string, conn: any): Promise<void> {
-  const dbRows = await prisma.vdcVnet.findMany({
-    where: { vdcId },
-    select: { id: true, pveName: true },
-  })
-
-  let pveVnets: SdnVnet[] = []
-  try {
-    const all = await listVnetsPve(conn)
-    pveVnets = all.filter((v) => v.zone === zoneName)
-  } catch (err: any) {
-    console.warn(`[vdc-sdn] reconcileVnets: listVnetsPve failed for zone ${zoneName}: ${err?.message}`)
-    return
-  }
-
-  const pveSet = new Set(pveVnets.map((v) => v.vnet))
-  const dbSet = new Set(dbRows.map((r) => r.pveName))
-
-  for (const row of dbRows) {
-    if (!pveSet.has(row.pveName)) {
-      await prisma.vdcVnet.delete({ where: { id: row.id } })
-      console.warn(`[vdc-sdn] reconcileVnets: removed stale DB row for VNet ${row.pveName}`)
-    }
-  }
-
-  for (const v of pveVnets) {
-    if (!dbSet.has(v.vnet)) {
-      console.warn(`[vdc-sdn] reconcileVnets: orphan VNet ${v.vnet} in zone ${zoneName} (not in DB)`)
-    }
-  }
 }

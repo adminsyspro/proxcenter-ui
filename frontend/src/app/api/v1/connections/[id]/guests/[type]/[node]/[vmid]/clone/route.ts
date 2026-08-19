@@ -7,7 +7,7 @@ import { cloneVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
-import { getAllowedBridgesForTenant, parseBridgeFromNet, resolveSubnetForBridge } from "@/lib/vdc/vnets"
+import { getAllowedNetworksForTenant, validateNetAgainstScope, parseBridgeFromNet, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { stripMacFromNet } from "@/lib/vdc/ipamScan"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
@@ -101,18 +101,13 @@ export async function POST(
       throw e
     }
 
-    // Phase 4b: Enforce bridge whitelist
-    const allowedBridges = await getAllowedBridgesForTenant(tenantId, id)
-    if (allowedBridges !== null) {
+    // Phase 4b: enforce the network allow-list (bridge name + VLAN tag/trunks)
+    const allowedNetworks = await getAllowedNetworksForTenant(tenantId, id)
+    if (allowedNetworks !== null) {
       for (const key of Object.keys(body || {})) {
         if (!/^net\d+$/.test(key)) continue
-        const bridge = parseBridgeFromNet(String(body[key] || ""))
-        if (bridge && !allowedBridges.has(bridge)) {
-          return NextResponse.json(
-            { error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(allowedBridges).join(", ")}` },
-            { status: 403 }
-          )
-        }
+        const verdict = validateNetAgainstScope(String(body[key] || ""), allowedNetworks)
+        if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
       }
     }
 

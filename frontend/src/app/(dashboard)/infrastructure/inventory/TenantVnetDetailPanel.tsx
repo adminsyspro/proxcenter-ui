@@ -22,7 +22,8 @@ interface VnetDetail {
   pveName: string
   displayName: string
   description: string | null
-  vxlanTag: number
+  tag: number
+  type?: string
   firewall: boolean
   subnet: SubnetView | null
 }
@@ -214,6 +215,19 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
           {vnet.displayName}
           {sn && <span style={{ marginLeft: 12 }}>{sn.cidr}</span>}
         </Typography>
+        {/* Segment ID: the VLAN tag on a VLAN-backed VNet, the VNI on the
+            VXLAN overlay. Same acronyms as the VNets table tooltip. */}
+        {vnet.tag != null && (
+          <Chip
+            size="small"
+            label={`${vnet.type === 'vlan' ? 'VLAN' : 'VNI'} ${vnet.tag}`}
+            sx={{
+              height: 20, fontSize: 11, flexShrink: 0,
+              bgcolor: alpha(theme.palette.primary.main, 0.1),
+              color: 'primary.main',
+            }}
+          />
+        )}
         <Tooltip arrow title={t('common.edit')}>
           <IconButton size="small" onClick={() => setEditOpen(true)}>
             <i className="ri-pencil-line" style={{ fontSize: 18 }} />

@@ -79,7 +79,7 @@ async function seed(args: { cidr: string; gateway: string }): Promise<SeedIds> {
       id: 'vnet-1',
       vdcId: 'vdc-1',
       pveName: 'znet-test',
-      vxlanTag: 100,
+      tag: 100,
     },
   })
   await prismaTest.vdcSubnet.create({

@@ -22,6 +22,7 @@ import {
   countVnetAttachments,
   generatePveVnetId,
 } from './sdn'
+import { allocateVlanTag, ensureVlanZone } from './vlan'
 
 // ---------------------------------------------------------------------------
 // resolveVdcForVnet
@@ -31,7 +32,9 @@ interface ResolvedVdc {
   id: string
   tenantId: string
   connectionId: string
-  sdnZoneName: string
+  /** Null on a VLAN-only vDC: the VXLAN zone is provisioned per vDC, VLAN
+   *  networks live in a shared per-(connection, bridge) zone instead. */
+  sdnZoneName: string | null
 }
 
 export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promise<ResolvedVdc | null> {
@@ -41,7 +44,6 @@ export async function resolveVdcForVnet(vdcId: string, tenantId: string): Promis
   })
   if (!row) return null
   if (row.enabled === false) return null
-  if (!row.sdnZoneName) return null
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -106,7 +108,10 @@ function rowToVnet(r: any): VdcVnet {
     pveName: r.pveName,
     displayName: r.displayName ?? r.pveName,
     description: r.description ?? null,
-    vxlanTag: r.vxlanTag,
+    tag: r.tag,
+    type: (r.type ?? 'vxlan') as 'vxlan' | 'vlan',
+    bridge: r.bridge ?? null,
+    zoneName: r.zoneName ?? null,
     firewall: r.firewall !== false,
     subnet,
     createdBy: r.createdBy ?? null,
@@ -152,6 +157,13 @@ export interface CreateVnetInput {
     gateway: string
     dnsServers?: string[]
   }
+  /** 'vxlan' (default) or 'vlan'. VLAN requires `bridge` and a matching vDC pool. */
+  type?: 'vxlan' | 'vlan'
+  bridge?: string
+  /** Explicit VLAN tag; null/undefined = auto (first free in the vDC pools). */
+  vlanTag?: number | null
+  /** True = subnet stays declarative: ipamEnabled=false, no auto-IP at deploy. */
+  externalAddressing?: boolean
   createdBy: string | null
 }
 
@@ -206,15 +218,40 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
 
   const pveName = await generatePveVnetId(vdc.id, displayName)
   const conn = await getConn(vdc)
-  // Pass the PVE connection so allocateVni can union our DB's max VxlanTag
-  // with the live `/cluster/sdn/vnets` set — avoids handing back a tag a
-  // legacy zone already booked under our feet.
-  const tag = await allocateVni(vdc.id, conn)
+
+  const type: 'vxlan' | 'vlan' = input.type === 'vlan' ? 'vlan' : 'vxlan'
+  let tag: number
+  let zoneName: string
+  let bridge: string | null = null
+
+  if (type === 'vlan') {
+    if (!input.bridge) throw new Error('bridge is required for a VLAN network')
+    bridge = input.bridge
+    // Pool + DB + live-PVE union; throws the user-facing 400/409 messages.
+    tag = await allocateVlanTag({
+      vdcId: vdc.id, connectionId: vdc.connectionId,
+      bridge, requestedTag: input.vlanTag ?? null, conn,
+    })
+    // Shared provider zone for (connection, bridge), lazily created, never
+    // deleted. PVE's per-zone tag uniqueness backstops a cross-vDC race:
+    // two concurrent creates with the same tag end in one PVE 400.
+    zoneName = await ensureVlanZone(conn, vdc.connectionId, bridge)
+  } else {
+    if (!vdc.sdnZoneName) {
+      throw new Error('vDC has no SDN zone - VXLAN networks are unavailable on this vDC')
+    }
+    zoneName = vdc.sdnZoneName
+    // Pass the PVE connection so allocateVni can union our DB's max tag
+    // with the live `/cluster/sdn/vnets` set, avoids handing back a tag a
+    // legacy zone already booked under our feet.
+    tag = await allocateVni(vdc.id, conn)
+  }
+
   const firewall = input.firewall !== false
 
   await createVnetPve(conn, {
     pveName,
-    zoneName: vdc.sdnZoneName,
+    zoneName,
     tag,
     alias: displayName,
   })
@@ -230,7 +267,10 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
         pveName,
         displayName,
         description: input.description ?? null,
-        vxlanTag: tag,
+        tag,
+        type,
+        bridge,
+        zoneName,
         firewall,
         createdBy: input.createdBy,
         createdAt: now,
@@ -274,7 +314,9 @@ export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVn
         cidr: input.subnet.cidr,
         gateway: input.subnet.gateway,
         dnsServers: dnsList.length > 0 ? dnsList.join(',') : null,
-        ipamEnabled: true,
+        // External addressing = the tenant runs its own DHCP/IPAM on this
+        // network; we keep the CIDR declarative and never hand out IPs.
+        ipamEnabled: input.externalAddressing === true ? false : true,
         createdAt: now,
       },
     })
@@ -402,30 +444,138 @@ export async function deleteVnetForTenant(
 }
 
 // ---------------------------------------------------------------------------
-// Bridge whitelist helpers (used by guest route enforcement in Task 4)
+// Network allow-list helpers (used by the guest route enforcement)
 // ---------------------------------------------------------------------------
 
+export interface AllowedNetwork {
+  kind: 'vnet' | 'shared'
+  /** Inclusive VLAN ranges the tenant may tag on a shared bridge (from vDC pools). */
+  vlanRanges: Array<{ start: number; end: number }>
+}
+
 /**
- * Returns the set of bridge names a tenant is allowed to attach to on a given connection.
- * Returns null if no restrictions apply (tenant without vDCs on this connection).
+ * Networks a tenant may reference in a netN config string on this connection,
+ * with the VLAN ranges (vDC pools) it may tag on each shared bridge.
+ * Returns null when no restriction applies (tenant without vDCs here).
  */
-export async function getAllowedBridgesForTenant(tenantId: string, connectionId: string): Promise<Set<string> | null> {
+export async function getAllowedNetworksForTenant(
+  tenantId: string,
+  connectionId: string,
+): Promise<Map<string, AllowedNetwork> | null> {
   const vdcRows = await prisma.vdc.findMany({
     where: { tenantId, connectionId, enabled: true },
     select: {
-      id: true,
       vnets: { select: { pveName: true } },
       sharedBridges: { select: { bridge: true } },
+      vlanPools: { select: { bridge: true, rangeStart: true, rangeEnd: true } },
     },
   })
   if (vdcRows.length === 0) return null
 
-  const allowed = new Set<string>()
+  const allowed = new Map<string, AllowedNetwork>()
   for (const vdc of vdcRows) {
-    for (const v of vdc.vnets) allowed.add(v.pveName)
-    for (const b of vdc.sharedBridges) allowed.add(b.bridge)
+    for (const v of vdc.vnets) allowed.set(v.pveName, { kind: 'vnet', vlanRanges: [] })
+    for (const b of vdc.sharedBridges) {
+      if (!allowed.has(b.bridge)) allowed.set(b.bridge, { kind: 'shared', vlanRanges: [] })
+    }
+    // A pool only widens a bridge the vDC already shares: it never opens one on
+    // its own, otherwise a leftover pool row would hand out an unrelated bridge.
+    for (const p of vdc.vlanPools) {
+      const entry = allowed.get(p.bridge)
+      if (entry?.kind === 'shared') entry.vlanRanges.push({ start: p.rangeStart, end: p.rangeEnd })
+    }
   }
   return allowed
+}
+
+/** 802.1Q tops out at 4094, so no legitimate list is longer than that. */
+const MAX_VLAN_IDS = 4094
+
+/** PVE trunks syntax: ids or ranges separated by ';' (e.g. "10;20-25"). */
+function parseVlanIdList(raw: string): number[] {
+  const out: number[] = []
+  for (const part of raw.split(/[;,]/)) {
+    const m = part.trim().match(/^(\d+)(?:-(\d+))?$/)
+    if (!m) return [Number.NaN]
+    const a = Number(m[1]); const b = m[2] ? Number(m[2]) : a
+    if (b < a) return [Number.NaN]
+    for (let t = a; t <= b; t++) {
+      // The string is tenant-supplied: "trunks=1-4294967295" must be denied,
+      // not expanded. Past the 802.1Q ceiling the whole list is refused.
+      if (out.length >= MAX_VLAN_IDS) return [Number.NaN]
+      out.push(t)
+    }
+  }
+  return out
+}
+
+const DUPLICATE_NET_KEY_ERROR =
+  'Duplicate tag= or trunks= keys are not allowed in a network config'
+
+/**
+ * Ids declared under one key, or null when the key appears more than once.
+ * matchAll is lazy, so returning on the second match stops the scan there.
+ * `re` must be a fresh literal per call: a shared /g regex carries lastIndex.
+ */
+function collectVlanIdsForKey(netStr: string, re: RegExp): number[] | null {
+  const out: number[] = []
+  let seen = false
+  for (const m of netStr.matchAll(re)) {
+    if (seen) return null
+    seen = true
+    out.push(...parseVlanIdList(m[1]))
+  }
+  return out
+}
+
+/**
+ * Validates one netN config string against the tenant's allowed networks.
+ * Closes the pre-existing hole where only the bridge NAME was checked: a
+ * tenant could append tag=137 (or trunks=) on a shared bridge and land on a
+ * neighbour's VLAN. Rules: SDN vnets never take a tag (the vnet carries its
+ * own); shared bridges only take tags/trunks inside the vDC's VLAN pools.
+ */
+export function validateNetAgainstScope(
+  netStr: string,
+  networks: Map<string, AllowedNetwork>,
+): { ok: true } | { ok: false; error: string } {
+  const bridge = parseBridgeFromNet(netStr)
+  if (!bridge) return { ok: true }
+
+  const entry = networks.get(bridge)
+  if (!entry) {
+    return {
+      ok: false,
+      error: `Bridge "${bridge}" is not authorized for this vDC. Allowed: ${Array.from(networks.keys()).join(', ')}`,
+    }
+  }
+
+  // Reading only the first tag= would let "tag=150,tag=250" ride in behind the
+  // in-pool value and leave the foreign one to PVE's property-string parser: a
+  // cross-tenant L2 control must not lean on that external invariant. Reading
+  // them all instead is no better, since each occurrence carries its own id
+  // budget and netN has no upstream length limit. So a repeated key is refused
+  // outright, which bounds the work at two matches and matches PVE, where a
+  // duplicate key is invalid anyway.
+  // Case-insensitive and tolerant of padding after the separator.
+  const tagIds = collectVlanIdsForKey(String(netStr), /(?:^|,)\s*tag=([^,]*)/gi)
+  if (tagIds === null) return { ok: false, error: DUPLICATE_NET_KEY_ERROR }
+  const trunkIds = collectVlanIdsForKey(String(netStr), /(?:^|,)\s*trunks=([^,]*)/gi)
+  if (trunkIds === null) return { ok: false, error: DUPLICATE_NET_KEY_ERROR }
+
+  const tags = [...tagIds, ...trunkIds]
+  if (tags.length === 0) return { ok: true }
+
+  if (entry.kind === 'vnet') {
+    return { ok: false, error: `VLAN tags are not allowed on SDN network "${bridge}" (the network carries its own tag)` }
+  }
+  for (const tag of tags) {
+    const inRange = Number.isInteger(tag) && entry.vlanRanges.some(r => tag >= r.start && tag <= r.end)
+    if (!inRange) {
+      return { ok: false, error: `VLAN tag ${tag} on bridge "${bridge}" is outside your vDC's VLAN pools` }
+    }
+  }
+  return { ok: true }
 }
 
 /** Parse bridge= from a PVE net config string */
@@ -479,7 +629,9 @@ export async function resolveSubnetForBridge(
       subnet: true,
     },
   })
-  if (!row || !row.subnet || !row.vdc.sdnZoneName) return null
+  // A VLAN VNet carries its own (shared) zone; only a VXLAN VNet falls back
+  // to the vDC zone. A vDC with neither is not deployable.
+  if (!row || !row.subnet || !(row.zoneName ?? row.vdc.sdnZoneName)) return null
   return {
     vdcId: row.vdc.id,
     vnetId: row.id,
@@ -490,7 +642,7 @@ export async function resolveSubnetForBridge(
     dnsServers: row.subnet.dnsServers
       ? row.subnet.dnsServers.split(',').map(s => s.trim()).filter(Boolean)
       : [],
-    sdnZoneName: row.vdc.sdnZoneName,
+    sdnZoneName: (row.zoneName ?? row.vdc.sdnZoneName)!,
     pvePoolName: row.vdc.pvePoolName,
   }
 }

@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
         // the call site dropped it, so a brand-new vDC was created with
         // an empty uplink list regardless of what the form sent.
         sharedBridges: body.sharedBridges,
+        vlanPools: body.vlanPools,
         quota: body.quota,
       },
       session?.user?.id ?? null

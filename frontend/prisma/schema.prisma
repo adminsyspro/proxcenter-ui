@@ -60,6 +60,7 @@ model Connection {
 
   providerConnection ProviderConnection?
   licenseMapping     LicenseMapping?
+  sdnVlanZones       SdnVlanZone[]
 }
 
 model ManagedHost {
@@ -730,6 +731,7 @@ model Vdc {
   usageCache    VdcUsageCache?
   sharedBridges VdcSharedBridge[]
   vnets         VdcVnet[]
+  vlanPools     VdcVlanPool[]
   ipam          VdcIpamAllocation[]
   pbsNamespaces VdcPbsNamespace[]
 
@@ -819,7 +821,10 @@ model VdcVnet {
   pveName     String   @map("pve_name")
   displayName String?  @map("display_name")
   description String?
-  vxlanTag    Int      @map("vxlan_tag")
+  tag         Int      @map("vxlan_tag")
+  type        String   @default("vxlan")
+  bridge      String?
+  zoneName    String?  @map("zone_name")
   firewall    Boolean? @default(true)
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -828,7 +833,7 @@ model VdcVnet {
   ipam   VdcIpamAllocation[]
 
   @@unique([vdcId, pveName])
-  @@unique([vdcId, vxlanTag])
+  @@unique([vdcId, type, tag])
   @@unique([vdcId, displayName], map: "idx_vdc_vnets_display_name")
   @@index([vdcId])
   @@map("vdc_vnets")
@@ -910,6 +915,32 @@ model VdcPbsPveStorage {
   @@unique([pveConnectionId, pveStorageName])
   @@index([vdcPbsNamespaceId])
   @@map("vdc_pbs_pve_storages")
+}
+
+model VdcVlanPool {
+  id         String   @id
+  vdcId      String   @map("vdc_id")
+  vdc        Vdc      @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  bridge     String
+  rangeStart Int      @map("range_start")
+  rangeEnd   Int      @map("range_end")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([vdcId])
+  @@map("vdc_vlan_pools")
+}
+
+model SdnVlanZone {
+  id           String     @id
+  connectionId String     @map("connection_id")
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  bridge       String
+  zoneName     String     @map("zone_name")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@unique([connectionId, bridge])
+  @@unique([connectionId, zoneName])
+  @@map("sdn_vlan_zones")
 }
 
 // ─────────────── §1.5 Alerts (legacy frontend system) ───────────────

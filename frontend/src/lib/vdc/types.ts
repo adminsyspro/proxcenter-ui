@@ -28,6 +28,7 @@ export interface VdcWithDetails extends Vdc {
   sharedBridges: VdcSharedBridge[]
   vnets: VdcVnet[]
   vlanPools: VdcVlanPool[]
+  storagePolicies: VdcStoragePolicyDto[]
   pbsBindings: VdcPbsBinding[]
 }
 
@@ -59,7 +60,34 @@ export interface VdcUsage {
   usedVms: number
   usedSnapshots: number
   usedBackups: number
+  usedStorageByStorage?: Record<string, number> | null
   lastSyncedAt: string | null
+}
+
+export interface StoragePolicyDto {
+  id: string
+  connectionId: string
+  name: string
+  description: string | null
+  storageId: string
+  iopsRd: number | null
+  iopsWr: number | null
+  mbpsRd: number | null
+  mbpsWr: number | null
+  vdcCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface VdcStoragePolicyDto {
+  policyId: string
+  name: string
+  storageId: string
+  iopsRd: number | null
+  iopsWr: number | null
+  mbpsRd: number | null
+  mbpsWr: number | null
+  quotaMb: number | null
 }
 
 export interface VdcSharedBridge {
@@ -137,6 +165,7 @@ export interface CreateVdcInput {
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
+  storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
 }
 
 export interface UpdateVdcInput {
@@ -148,4 +177,5 @@ export interface UpdateVdcInput {
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
+  storagePolicies?: Array<{ policyId: string; quotaMb: number | null }>
 }

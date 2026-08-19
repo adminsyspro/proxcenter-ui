@@ -732,6 +732,7 @@ model Vdc {
   sharedBridges VdcSharedBridge[]
   vnets         VdcVnet[]
   vlanPools     VdcVlanPool[]
+  storagePolicies VdcStoragePolicy[]
   ipam          VdcIpamAllocation[]
   pbsNamespaces VdcPbsNamespace[]
 
@@ -796,6 +797,7 @@ model VdcUsageCache {
   usedVms       Int       @default(0) @map("used_vms")
   usedSnapshots Int       @default(0) @map("used_snapshots")
   usedBackups   Int       @default(0) @map("used_backups")
+  usedStorageByStorage Json? @map("used_storage_by_storage")
   lastSyncedAt  DateTime? @map("last_synced_at")
 
   @@map("vdc_usage_cache")
@@ -928,6 +930,41 @@ model VdcVlanPool {
 
   @@index([vdcId])
   @@map("vdc_vlan_pools")
+}
+
+model StoragePolicy {
+  id                 String             @id
+  connectionId       String             @map("connection_id")
+  providerConnection ProviderConnection @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
+  name               String
+  description        String?
+  storageId          String             @map("storage_id")
+  iopsRd             Int?               @map("iops_rd")
+  iopsWr             Int?               @map("iops_wr")
+  mbpsRd             Int?               @map("mbps_rd")
+  mbpsWr             Int?               @map("mbps_wr")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @default(now()) @map("updated_at")
+
+  vdcAssignments VdcStoragePolicy[]
+
+  @@unique([connectionId, name])
+  @@unique([connectionId, storageId])
+  @@map("storage_policies")
+}
+
+model VdcStoragePolicy {
+  id        String        @id
+  vdcId     String        @map("vdc_id")
+  vdc       Vdc           @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  policyId  String        @map("policy_id")
+  policy    StoragePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  quotaMb   Int?          @map("quota_mb")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@unique([vdcId, policyId])
+  @@index([vdcId])
+  @@map("vdc_storage_policies")
 }
 
 model SdnVlanZone {
@@ -1196,6 +1233,7 @@ model ProviderConnection {
   connectionId String     @id @map("connection_id")
   connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   vdcs         Vdc[]
+  storagePolicies StoragePolicy[]
 
   @@map("provider_connections")
 }

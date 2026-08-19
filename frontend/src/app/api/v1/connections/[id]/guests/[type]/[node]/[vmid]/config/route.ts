@@ -6,6 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { enforceTenantDrives, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
 
@@ -165,8 +166,9 @@ export async function PUT(
 
     // ── vDC Quota Check (CPU/RAM increases) ──
     const tenantId = await getCurrentTenantId()
+    let vdcInfo: Awaited<ReturnType<typeof resolveVdcForTenant>> = null
     try {
-      const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
+      vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
       if (vdcInfo && (body.cores || body.sockets || body.memory)) {
         // Fetch current VM config from PVE to compute deltas
@@ -217,6 +219,27 @@ export async function PUT(
         const verdict = validateNetAgainstScope(String(body[key] || ""), allowedNetworks)
         if (verdict.ok === false) return NextResponse.json({ error: verdict.error }, { status: 403 })
       }
+    }
+
+    // Disk storage allow-list + storage-policy QoS stamping + quota metering
+    // (pre-existing hole: disk keys used to flow verbatim to PVE).
+    try {
+      const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body })
+      if (drives && drives.totalAddMb > 0 && vdcInfo) {
+        const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
+          type: 'config',
+          addStorageMb: drives.totalAddMb,
+          addStorageMbByStorage: drives.addStorageMbByStorage,
+        }, vdcInfo.storagePolicies, node)
+        if (!quotaCheck.allowed) {
+          return NextResponse.json({ error: 'Quota exceeded', violations: quotaCheck.violations }, { status: 409 })
+        }
+      }
+    } catch (e: any) {
+      if (e instanceof DriveScopeError) {
+        return NextResponse.json({ error: e.message }, { status: 403 })
+      }
+      throw e
     }
 
     // Sélectionner les champs autorisés selon le type

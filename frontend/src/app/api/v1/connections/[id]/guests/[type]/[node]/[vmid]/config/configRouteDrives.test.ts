@@ -1,3 +1,9 @@
+/**
+ * Route-level tests for the disk storage allow-list + storage-policy QoS
+ * stamping wired into the config PUT (Task 8). `driveGuard.ts` itself is
+ * NOT mocked here: it runs for real against the mocked
+ * `getTenantInfrastructureScope`, the same way the real route will.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
@@ -27,8 +33,6 @@ vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
-  // Real verdict logic, so the tag/trunks guard behaves faithfully; only the
-  // DB-backed allow-list lookup is stubbed.
   const actual = await io<typeof import('@/lib/vdc/vnets')>()
   return {
     getAllowedNetworksForTenant: getAllowedNetworksForTenantMock,
@@ -57,6 +61,18 @@ function configPutBody() {
   return call ? new URLSearchParams(String(call?.[2]?.body ?? '')) : null
 }
 
+const gold = { policyId: 'p-gold', name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 500, mbpsWr: null }
+
+function iaasInfra(storages: string[], policies: Record<string, typeof gold> = {}) {
+  return {
+    kind: 'iaas',
+    vdcScope: {
+      storagesByConnection: new Map([['conn-1', new Set(storages)]]),
+      storagePoliciesByConnection: new Map([['conn-1', new Map(Object.entries(policies))]]),
+    },
+  }
+}
+
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
@@ -64,9 +80,6 @@ beforeEach(() => {
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
-  // This suite is about the net0 allow-list; the disk-drive guard (Task 8) is
-  // exercised separately in configRouteDrives.test.ts, so default to
-  // 'provider' here (enforceTenantDrives short-circuits to null, unchanged).
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   // Default: config GET reads return an empty config, the config PUT succeeds.
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
@@ -75,63 +88,80 @@ beforeEach(() => {
   })
 })
 
-describe('PUT config: vDC network allow-list guard', () => {
-  /** vmbr0 is shared with a 100-199 pool; vnetacme is an SDN vnet. */
-  const scoped = () =>
-    new Map([
-      ['vmbr0', { kind: 'shared' as const, vlanRanges: [{ start: 100, end: 199 }] }],
-      ['vnetacme', { kind: 'vnet' as const, vlanRanges: [] }],
-    ])
-
-  it('200: a restricted tenant tagging inside the pool on a shared bridge reaches PVE', async () => {
-    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+describe('PUT config: disk storage allow-list + storage-policy QoS stamping', () => {
+  it('403: an iaas tenant referencing an out-of-scope storage never reaches PVE', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme', 'ceph-hdd']))
     const PUT = await loadPut()
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: baseParams,
-      body: { net0: 'virtio,bridge=vmbr0,tag=150' },
-    })
-    expect(res.status).toBe(200)
-    expect(configPutBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=150')
-  })
-
-  it('403: a tag outside the vDC pools never reaches the PVE config PUT', async () => {
-    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
-    const PUT = await loadPut()
-    const res = await callRoute(PUT, {
-      method: 'PUT',
-      params: baseParams,
-      body: { net0: 'virtio,bridge=vmbr0,tag=250' },
+      body: { scsi1: 'local-lvm:32' },
     })
     expect(res.status).toBe(403)
     const json = (await res.json()) as { error: string }
-    expect(json.error).toContain("outside your vDC's VLAN pools")
+    expect(json.error).toContain('local-lvm')
     expect(configPutBody()).toBeNull()
   })
 
-  it('403: a tag on an SDN vnet is refused (the vnet already carries its own tag)', async () => {
-    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+  it('200: a policied storage is stamped with the policy caps, tenant mbps= is stripped', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(
+      iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }),
+    )
     const PUT = await loadPut()
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: baseParams,
-      body: { net0: 'virtio,bridge=vnetacme,tag=10' },
-    })
-    expect(res.status).toBe(403)
-    const json = (await res.json()) as { error: string }
-    expect(json.error).toContain('not allowed on SDN network')
-    expect(configPutBody()).toBeNull()
-  })
-
-  it('200: an unrestricted tenant (null allow-list) passes unchanged', async () => {
-    getAllowedNetworksForTenantMock.mockResolvedValue(null)
-    const PUT = await loadPut()
-    const res = await callRoute(PUT, {
-      method: 'PUT',
-      params: baseParams,
-      body: { net0: 'virtio,bridge=vmbr0,tag=9999' },
+      body: { scsi1: 'ceph-nvme:32,mbps=9999' },
     })
     expect(res.status).toBe(200)
-    expect(configPutBody()?.get('net0')).toBe('virtio,bridge=vmbr0,tag=9999')
+    const sent = configPutBody()
+    expect(sent?.get('scsi1')).toBe('ceph-nvme:32,iops_rd=5000,iops_wr=4000,mbps_rd=500')
+    expect(sent?.get('scsi1')).not.toContain('mbps=9999')
+  })
+
+  it('409: a storage-policy quota violation is surfaced with violations', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(
+      iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }),
+    )
+    resolveVdcForTenantMock.mockResolvedValue({
+      poolName: 'pool-1',
+      quota: { maxStorageMb: null },
+      storagePolicies: [{ policyId: 'p-gold', name: 'Gold', storageId: 'ceph-nvme', quotaMb: 1024 }],
+    })
+    checkVdcQuotaMock.mockResolvedValue({ allowed: false, violations: ['Storage policy "Gold" (ceph-nvme): over quota'] })
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: baseParams,
+      body: { scsi1: 'ceph-nvme:32' },
+    })
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { error: string; violations: string[] }
+    expect(json.violations).toEqual(['Storage policy "Gold" (ceph-nvme): over quota'])
+    expect(configPutBody()).toBeNull()
+  })
+
+  it('200: a provider passes disk fields verbatim (non-regression)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: baseParams,
+      body: { scsi1: 'local-lvm:32,mbps=10' },
+    })
+    expect(res.status).toBe(200)
+    expect(configPutBody()?.get('scsi1')).toBe('local-lvm:32,mbps=10')
+  })
+
+  it('403: an iaas tenant reassigning an out-of-scope unused disk is refused', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme']))
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: baseParams,
+      body: { unused0: 'local-lvm:vm-1-disk-9' },
+    })
+    expect(res.status).toBe(403)
+    expect(configPutBody()).toBeNull()
   })
 })

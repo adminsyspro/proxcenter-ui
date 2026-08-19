@@ -99,6 +99,10 @@ export default function VnetsSection({ connectionIds }: Props) {
   const connKey = connectionIds.slice().sort((a, b) => a.localeCompare(b)).join(',')
   const connFilter = useMemo(() => new Set(connKey ? connKey.split(',') : []), [connKey])
 
+  // The inventory tree keeps its own one-shot tvnet fetch; tell it a
+  // mutation happened so its NETWORK branch refreshes without a full reload.
+  const notifyTreeChanged = () => window.dispatchEvent(new CustomEvent('proxcenter:tenant-vnets-changed'))
+
   const reload = useCallback(async () => {
     setLoading(true)
     try {
@@ -315,14 +319,14 @@ export default function VnetsSection({ connectionIds }: Props) {
         open={createOpen}
         vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [] }))}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => { setCreateOpen(false); void reload() }}
+        onCreated={() => { setCreateOpen(false); void reload(); notifyTreeChanged() }}
       />
       {editVnet && (
         <VnetEditDialog
           vnet={editVnet.row}
           vdcId={editVnet.row.vdcId}
           onClose={() => setEditVnet(null)}
-          onSaved={() => { setEditVnet(null); void reload() }}
+          onSaved={() => { setEditVnet(null); void reload(); notifyTreeChanged() }}
         />
       )}
       {deleteVnet && (
@@ -330,7 +334,7 @@ export default function VnetsSection({ connectionIds }: Props) {
           vnet={deleteVnet.row}
           vdcId={deleteVnet.row.vdcId}
           onClose={() => setDeleteVnet(null)}
-          onDeleted={() => { setDeleteVnet(null); void reload() }}
+          onDeleted={() => { setDeleteVnet(null); void reload(); notifyTreeChanged() }}
         />
       )}
 

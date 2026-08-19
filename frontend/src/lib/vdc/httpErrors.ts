@@ -21,6 +21,10 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
     return { status: 400, message: msg }
   }
   if (msg.includes('not in the provider pool')) return { status: 400, message: msg }
+  if (msg.includes('is in use by vDC')) return { status: 409, message: msg }
+  if (msg.includes('Cannot remove storage policy')) return { status: 409, message: msg }
+  if (msg.startsWith('A storage policy with this name or storage')) return { status: 409, message: msg }
+  if (msg.startsWith('Storage policy')) return { status: 400, message: msg }
 
   return { status: 500, message: msg }
 }

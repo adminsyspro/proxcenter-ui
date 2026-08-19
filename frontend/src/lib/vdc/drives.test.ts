@@ -46,6 +46,15 @@ describe('parseDriveString', () => {
   it('refuses an option without =', () => {
     expect(parseDriveString('ceph-nvme:32,iothread').ok).toBe(false)
   })
+  it('refuses a raw device path behind a valid storage prefix', () => {
+    expect(parseDriveString('ceph-nvme:/dev/sda').ok).toBe(false)
+  })
+  it('refuses a path-traversal volume reference', () => {
+    expect(parseDriveString('ceph-nvme:../../etc/shadow').ok).toBe(false)
+  })
+  it('accepts a nested volid path', () => {
+    expect(parseDriveString('local:100/vm-100-disk-0.qcow2').ok).toBe(true)
+  })
 })
 
 describe('validateDriveAgainstScope', () => {
@@ -70,6 +79,9 @@ describe('validateDriveAgainstScope', () => {
   it('lets none,media=cdrom through', () => {
     expect(validateDriveAgainstScope('ide2', 'none,media=cdrom', scope).ok).toBe(true)
   })
+  it('refuses an import-from volid whose own volume is a raw path', () => {
+    expect(validateDriveAgainstScope('scsi0', 'ceph-nvme:0,import-from=ceph-nvme:/dev/sda', scope).ok).toBe(false)
+  })
 })
 
 describe('stampDriveQos', () => {
@@ -84,8 +96,12 @@ describe('stampDriveQos', () => {
   it('is a no-op without a policy', () => {
     expect(stampDriveQos('ceph-hdd:32,iops_rd=100', undefined)).toBe('ceph-hdd:32,iops_rd=100')
   })
-  it('never stamps a cdrom line', () => {
-    expect(stampDriveQos('local:iso/x.iso,media=cdrom', gold)).toBe('local:iso/x.iso,media=cdrom')
+  it('strips and stamps QoS on a spoofed cdrom line when a policy is present', () => {
+    const out = stampDriveQos('ceph-nvme:vm-100-disk-0,media=cdrom,iops_rd=99999', gold)
+    expect(out).toBe('ceph-nvme:vm-100-disk-0,media=cdrom,iops_rd=5000,iops_wr=4000,mbps_rd=500')
+  })
+  it('leaves a cdrom line untouched when there is no policy', () => {
+    expect(stampDriveQos('local:iso/x.iso,media=cdrom', undefined)).toBe('local:iso/x.iso,media=cdrom')
   })
   it('QOS_KEYS carries the full 15-key family', () => {
     expect(QOS_KEYS.size).toBe(15)

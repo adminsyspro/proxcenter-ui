@@ -36,6 +36,20 @@ export function isTenantDiskKey(key: string, type: 'qemu' | 'lxc'): boolean {
 
 const OPT_RE = /^([a-z][a-z0-9_-]*)=(.*)$/
 
+// The volume part after "storage:" must look like a PVE volid segment
+// (vm-100-disk-0, iso/debian.iso, 100/vm-100-disk-0.qcow2, or a bare decimal
+// size) and never a raw filesystem path smuggled behind a valid storage
+// prefix (ceph-nvme:/dev/sda, ceph-nvme:../../etc/shadow).
+const VOLUME_REST_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+
+function hasDotDotSegment(rest: string): boolean {
+  return rest.split('/').includes('..')
+}
+
+function isValidVolumeRest(rest: string): boolean {
+  return VOLUME_REST_RE.test(rest) && !hasDotDotSegment(rest)
+}
+
 export function parseDriveString(raw: string):
   { ok: true; drive: ParsedDrive } | { ok: false; error: string } {
   const value = String(raw ?? '').trim()
@@ -72,19 +86,26 @@ export function parseDriveString(raw: string):
     return { ok: false, error: `Invalid storage name "${storage}"` }
   }
   const rest = head.slice(idx + 1)
+  if (!isValidVolumeRest(rest)) {
+    return { ok: false, error: `Unsupported volume reference "${rest}"` }
+  }
   const sizeMatch = rest.match(/^(\d+(?:\.\d+)?)$/)
   const newAllocationGb = sizeMatch ? Number.parseFloat(sizeMatch[1]) : null
 
   return { ok: true, drive: { storage, head, opts, isCdrom, newAllocationGb } }
 }
 
-/** Volid inside import-from= must itself point at an in-scope storage. */
+/** Volid inside import-from= must itself point at an in-scope storage, and
+ *  its own volume part is held to the same shape rule as the main drive
+ *  reference (no raw path smuggled behind a valid storage prefix). */
 function importFromStorage(opts: Array<[string, string]>): string | null | undefined {
   const entry = opts.find(([k]) => k === 'import-from')
   if (!entry) return undefined
   const v = entry[1]
   const idx = v.indexOf(':')
   if (idx <= 0 || v.startsWith('/')) return null // unsupported shape
+  const rest = v.slice(idx + 1)
+  if (!isValidVolumeRest(rest)) return null
   return v.slice(0, idx)
 }
 
@@ -123,11 +144,15 @@ export function policyQosSuffix(caps: DriveQosCaps | undefined): string {
 }
 
 /** Strip-and-stamp: caller only invokes this on DATA disk keys of a
- *  policied storage. No policy = raw preserved verbatim (spec Section 5.2). */
+ *  policied storage. No policy = raw preserved verbatim (spec Section 5.2).
+ *  isCdrom is deliberately NOT exempted here: a tenant could spoof
+ *  media=cdrom on an actual data disk to dodge the QoS caps, and a genuine
+ *  capped cdrom line is harmless. Only a parse failure or a storage-less
+ *  line (e.g. "none,media=cdrom") passes through untouched. */
 export function stampDriveQos(raw: string, caps: DriveQosCaps | undefined): string {
   if (!caps) return raw
   const parsed = parseDriveString(raw)
-  if (!parsed.ok || parsed.drive.isCdrom || parsed.drive.storage === null) return raw
+  if (parsed.ok === false || parsed.drive.storage === null) return raw
   const kept = parsed.drive.opts.filter(([k]) => !QOS_KEYS.has(k))
   const base = [parsed.drive.head, ...kept.map(([k, v]) => `${k}=${v}`)].join(',')
   return `${base}${policyQosSuffix(caps)}`

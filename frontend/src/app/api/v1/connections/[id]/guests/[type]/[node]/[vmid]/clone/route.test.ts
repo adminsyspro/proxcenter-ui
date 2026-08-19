@@ -51,6 +51,10 @@ vi.mock('@/lib/vdc/ipamSync', () => ({ syncIpamForVmConfig: syncIpamForVmConfigM
 vi.mock('@/lib/vdc/ipam', () => ({ releaseAllocationsForVm: vi.fn() }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: waitForTaskMock }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
+}))
 const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
 vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
 
@@ -80,6 +84,7 @@ beforeEach(() => {
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
+  getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   // Default: config reads return an empty config, clone POST returns a UPID.
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
     if (opts?.method === 'POST') return 'UPID:clone:1'

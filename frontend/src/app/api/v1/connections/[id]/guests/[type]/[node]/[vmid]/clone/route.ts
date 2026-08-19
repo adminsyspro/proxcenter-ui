@@ -13,6 +13,10 @@ import { stripMacFromNet } from "@/lib/vdc/ipamScan"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import {
+  DATA_DISK_KEY_RE, LXC_DISK_KEY_RE, parseDriveString, parsePveSizeToMb, stampDriveQos,
+} from "@/lib/vdc/drives"
 
 export const runtime = "nodejs"
 
@@ -63,6 +67,24 @@ export async function POST(
       return NextResponse.json({ error: vmidRangeCheck.error }, { status: vmidRangeCheck.status ?? 400 })
     }
 
+    // Storage-tier scope (spec §5.3): resolve the union scope ONCE, ahead of
+    // the PVE clone call, and reuse it for the post-clone QoS restamp after()
+    // block below. Cookies/request context die inside after(), so anything
+    // scope-dependent must be captured eagerly here.
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+    const isIaas = infra.kind === 'iaas'
+    const iaasScope = isIaas ? infra.vdcScope : null
+    if (isIaas && !iaasScope) {
+      return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
+    }
+    if (isIaas && body.storage) {
+      const allowed = iaasScope!.storagesByConnection.get(id) ?? new Set<string>()
+      if (!allowed.has(body.storage)) {
+        return NextResponse.json(
+          { error: `Storage "${body.storage}" is not authorised for this tenant.` }, { status: 403 })
+      }
+    }
+
     let vdcPoolName: string | null = null
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
@@ -76,12 +98,33 @@ export async function POST(
         const vcpus = (vmConfig?.cores || 1) * (vmConfig?.sockets || 1)
         const ramMb = vmConfig?.memory || 512
 
+        // PVE forces a full clone for non-template sources regardless of the
+        // `full` param, so metering only on body.full would undercount.
+        const isFullCloneReq = body.full === true || body.full === 1 || vmConfig?.template !== 1
+        const addByStorage: Record<string, number> = {}
+        let addMb = 0
+        if (isFullCloneReq) {
+          for (const [k, v] of Object.entries(vmConfig || {})) {
+            if (!DATA_DISK_KEY_RE.test(k) && !LXC_DISK_KEY_RE.test(k)) continue
+            const parsed = parseDriveString(String(v ?? ''))
+            if (parsed.ok === false || parsed.drive.storage === null) continue
+            const sizeOpt = parsed.drive.opts.find(([ok]) => ok === 'size')?.[1]
+            const mb = sizeOpt ? parsePveSizeToMb(sizeOpt) : 0
+            if (mb <= 0) continue
+            const target = typeof body.storage === 'string' && body.storage ? body.storage : parsed.drive.storage
+            addByStorage[target] = (addByStorage[target] ?? 0) + mb
+            addMb += mb
+          }
+        }
+
         const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
           type: 'clone',
           addVcpus: vcpus,
           addRamMb: ramMb,
           addVms: 1,
-        })
+          addStorageMb: addMb,
+          addStorageMbByStorage: Object.keys(addByStorage).length > 0 ? addByStorage : undefined,
+        }, vdcInfo.storagePolicies, node)
 
         if (!quotaCheck.allowed) {
           return NextResponse.json({
@@ -252,6 +295,43 @@ export async function POST(
           // Best-effort cleanup so a failed sync doesn't leak partial
           // allocations. The clone itself stays, data loss > drift.
           try { await releaseAllocationsForVm(id, newVmid) } catch { /* tolerate */ }
+        }
+      })
+    }
+
+    // ── Post-clone storage-tier QoS restamp ──
+    // Storage policies are resolved once above (pre-PVE-call) since after()
+    // runs outside the request context. Separate from the IPAM after() block
+    // above: gated on the tenant actually having tier policies, runs its own
+    // waitForTask on the clone's UPID, and only PUTs if something changed.
+    const clonePolicies = isIaas ? (iaasScope!.storagePoliciesByConnection.get(id) ?? new Map()) : new Map()
+    if (clonePolicies.size > 0 && body.newid) {
+      const stampNode = String(body.target || node)
+      const stampPath = `/nodes/${encodeURIComponent(stampNode)}/${type}/${encodeURIComponent(String(body.newid))}/config`
+      const stampUpid = String(result || '')
+      after(async () => {
+        try {
+          if (stampUpid) await waitForTask(conn, stampNode, stampUpid)
+          const cfg = await pveFetch<any>(conn, stampPath)
+          const patch = new URLSearchParams()
+          for (const [k, v] of Object.entries(cfg || {})) {
+            if (!DATA_DISK_KEY_RE.test(k)) continue
+            const parsed = parseDriveString(String(v ?? ''))
+            if (parsed.ok === false || parsed.drive.storage === null) continue
+            const caps = clonePolicies.get(parsed.drive.storage)
+            if (!caps) continue
+            const stamped = stampDriveQos(String(v), caps)
+            if (stamped !== String(v)) patch.set(k, stamped)
+          }
+          if (Array.from(patch.keys()).length > 0) {
+            await pveFetch<any>(conn, stampPath, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: patch.toString(),
+            })
+          }
+        } catch (err: any) {
+          console.error(`[clone-qos-stamp] failed for vmid=${body.newid}: ${err?.message ?? err}`)
         }
       })
     }

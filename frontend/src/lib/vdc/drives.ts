@@ -151,6 +151,19 @@ export function policyQosSuffix(caps: DriveQosCaps | undefined): string {
   return parts.length > 0 ? `,${parts.join(',')}` : ''
 }
 
+/** "32G" | "512M" | "1T" | "8192" (implicit MB) -> integer MB. Returns 0 for
+ *  anything unparseable (caller treats 0 as "nothing to meter"). */
+export function parsePveSizeToMb(size: string): number {
+  const m = String(size).trim().match(/^(\d+(?:\.\d+)?)([KMGT])?$/i)
+  if (!m) return 0
+  const v = Number.parseFloat(m[1])
+  const unit = (m[2] || 'M').toUpperCase()
+  if (unit === 'T') return Math.round(v * 1024 * 1024)
+  if (unit === 'G') return Math.round(v * 1024)
+  if (unit === 'K') return Math.round(v / 1024)
+  return Math.round(v)
+}
+
 /** Strip-and-stamp: caller only invokes this on DATA disk keys of a
  *  policied storage. No policy = raw preserved verbatim (spec Section 5.2).
  *  isCdrom is deliberately NOT exempted here: a tenant could spoof

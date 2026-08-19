@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isTenantDiskKey, parseDriveString, validateDriveAgainstScope,
-  stampDriveQos, policyQosSuffix, QOS_KEYS,
+  stampDriveQos, policyQosSuffix, QOS_KEYS, parsePveSizeToMb,
 } from './drives'
 
 const scope = new Set(['ceph-nvme', 'ceph-hdd'])
@@ -117,6 +117,18 @@ describe('stampDriveQos', () => {
   it('QOS_KEYS carries the full 15-key family', () => {
     expect(QOS_KEYS.size).toBe(15)
     expect(QOS_KEYS.has('iops_rd_max_length')).toBe(true)
+  })
+})
+
+describe('parsePveSizeToMb', () => {
+  it.each([
+    ['32G', 32768], ['512M', 512], ['1T', 1048576], ['8192', 8192],
+    ['1.5G', 1536], ['4k', 0], ['0G', 0],
+  ] as const)('%s -> %d MB', (size, mb) => {
+    expect(parsePveSizeToMb(size)).toBe(mb)
+  })
+  it('returns 0 for an unparseable size', () => {
+    expect(parsePveSizeToMb('not-a-size')).toBe(0)
   })
 })
 

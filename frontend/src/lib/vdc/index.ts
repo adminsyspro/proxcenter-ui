@@ -86,6 +86,7 @@ function rowToUsage(row: any): VdcUsage | null {
     usedVms: row.usedVms ?? 0,
     usedSnapshots: row.usedSnapshots ?? 0,
     usedBackups: row.usedBackups ?? 0,
+    usedStorageByStorage: row.usedStorageByStorage ?? null,
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
   }
 }
@@ -159,6 +160,16 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     rangeEnd: p.rangeEnd,
     createdAt: p.createdAt.toISOString(),
   }))
+  const storagePolicies = (row.storagePolicies ?? []).map((sp: any) => ({
+    policyId: sp.policyId,
+    name: sp.policy.name,
+    storageId: sp.policy.storageId,
+    iopsRd: sp.policy.iopsRd ?? null,
+    iopsWr: sp.policy.iopsWr ?? null,
+    mbpsRd: sp.policy.mbpsRd ?? null,
+    mbpsWr: sp.policy.mbpsWr ?? null,
+    quotaMb: sp.quotaMb ?? null,
+  }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -180,6 +191,7 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     sharedBridges,
     vnets,
     vlanPools,
+    storagePolicies,
     pbsBindings,
   }
 }
@@ -200,6 +212,7 @@ const vdcWithDetailsInclude = {
       { bridge: 'asc' } | { rangeStart: 'asc' }
     )[],
   },
+  storagePolicies: { include: { policy: true }, orderBy: { createdAt: 'asc' as const } },
   pbsNamespaces: true,
 } as const
 
@@ -340,6 +353,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     await assertNoCrossVdcOverlap(input.connectionId, null, vlanPools)
   }
 
+  // 2quater. Same reasoning as 2ter: validate storage-policy assignments
+  // before any PVE side effect (pool/zone creation below is not rolled back
+  // by a validation failure caught this early).
+  const storagePolicyAssignments = input.storagePolicies ?? []
+  if (storagePolicyAssignments.length > 0) {
+    const { validateVdcPolicyAssignments } = await import('./storagePolicies')
+    await validateVdcPolicyAssignments(input.connectionId, storagePolicyAssignments)
+  }
+
   // 3. Allocate vDC id (needed for zone generation)
   const id = randomUUID()
   const now = new Date()
@@ -446,6 +468,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
         })
       }
 
+      if (storagePolicyAssignments.length > 0) {
+        await tx.vdcStoragePolicy.createMany({
+          data: storagePolicyAssignments.map(sp => ({
+            id: randomUUID(), vdcId: id, policyId: sp.policyId,
+            quotaMb: sp.quotaMb ?? null, createdAt: now,
+          })),
+        })
+      }
+
       await tx.vdcUsageCache.create({
         data: {
           id: randomUUID(),
@@ -501,6 +532,15 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     await assertPoolShrinkSafe(id, input.vlanPools)
   }
 
+  if (input.storagePolicies) {
+    const { validateVdcPolicyAssignments, assertPolicyUnassignSafe } = await import('./storagePolicies')
+    await validateVdcPolicyAssignments(existing.connectionId, input.storagePolicies)
+    const kept = new Set(input.storagePolicies.map(sp => sp.policyId))
+    const connOwner = await getConnectionOwnerTenantId(existing.connectionId)
+    const guardConn = await getConnectionById(existing.connectionId, connOwner)
+    await assertPolicyUnassignSafe(id, kept, guardConn)
+  }
+
   const now = new Date()
 
   await prisma.$transaction(async tx => {
@@ -543,6 +583,18 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
           data: input.vlanPools.map(p => ({
             id: randomUUID(), vdcId: id, bridge: p.bridge,
             rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, createdAt: now,
+          })),
+        })
+      }
+    }
+
+    if (input.storagePolicies) {
+      await tx.vdcStoragePolicy.deleteMany({ where: { vdcId: id } })
+      if (input.storagePolicies.length > 0) {
+        await tx.vdcStoragePolicy.createMany({
+          data: input.storagePolicies.map(sp => ({
+            id: randomUUID(), vdcId: id, policyId: sp.policyId,
+            quotaMb: sp.quotaMb ?? null, createdAt: now,
           })),
         })
       }

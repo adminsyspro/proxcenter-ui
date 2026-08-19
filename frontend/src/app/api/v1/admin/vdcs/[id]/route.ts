@@ -66,6 +66,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       // returned the old value and the UI rolled back the change.
       sharedBridges: body.sharedBridges,
       vlanPools: body.vlanPools,
+      storagePolicies: body.storagePolicies,
       quota: body.quota,
     })
 

@@ -127,10 +127,9 @@ describe('POST clone: target storage scope (spec §5.3)', () => {
     expect(res.status).toBe(403)
     const json = (await res.json()) as { error: string }
     expect(json.error).toContain('local-lvm')
-    const cloneCall = pveFetchMock.mock.calls.find(
-      (c) => String(c[1]).endsWith('/clone') && c[2]?.method === 'POST',
-    )
-    expect(cloneCall).toBeUndefined()
+    // No PVE call at all before the storage check, not merely "no clone POST":
+    // the source vmConfig read, the pool listing, none of it should fire.
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('200: an in-scope body.storage is accepted', async () => {
@@ -190,6 +189,53 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     const operation = checkVdcQuotaMock.mock.calls[0][3]
     expect(operation.addStorageMb).toBe(32768)
     expect(operation.addStorageMbByStorage).toEqual({ 'ceph-hdd': 32768 })
+  })
+
+  const multiStorageSourceConfig = {
+    scsi0: 'ceph-hdd:vm-100-disk-0,size=32G',
+    virtio1: 'ceph-nvme:vm-100-disk-1,size=8G',
+    ide2: 'local:iso/x.iso,media=cdrom',
+  }
+
+  it('full clone WITH body.storage, two disks on DIFFERENT source storages: both meter against the target storage', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      if (String(path).endsWith('/qemu/100/config')) return multiStorageSourceConfig
+      return {}
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: baseParams,
+      body: { newid: 101, full: true, storage: 'ceph-nvme' },
+    })
+    expect(res.status).toBe(200)
+
+    const operation = checkVdcQuotaMock.mock.calls[0][3]
+    expect(operation.addStorageMb).toBe(40960)
+    expect(operation.addStorageMbByStorage).toEqual({ 'ceph-nvme': 40960 })
+  })
+
+  it('full clone WITHOUT body.storage, two disks on DIFFERENT source storages: each meters its own storage', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      if (String(path).endsWith('/qemu/100/config')) return multiStorageSourceConfig
+      return {}
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(200)
+
+    const operation = checkVdcQuotaMock.mock.calls[0][3]
+    expect(operation.addStorageMb).toBe(40960)
+    expect(operation.addStorageMbByStorage).toEqual({ 'ceph-hdd': 32768, 'ceph-nvme': 8192 })
   })
 
   it('non-template source without `full`: metered anyway (PVE forces a full clone)', async () => {

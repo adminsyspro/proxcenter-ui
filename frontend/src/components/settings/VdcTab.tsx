@@ -35,6 +35,7 @@ import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 
 import { useTranslations } from 'next-intl'
 
+import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -141,6 +142,12 @@ export default function VdcTab() {
   // on a bridge, which the tenant can later carve VLAN networks out of.
   const [vlanPools, setVlanPools] = useState<Array<{ bridge: string; rangeStart: string; rangeEnd: string }>>([])
   const [poolBridges, setPoolBridges] = useState<Array<{ iface: string; vlanAware?: boolean }>>([])
+
+  // Storage policy assignments (storage policies + QoS, P3): QoS-capped
+  // storage policies the connection's provider defined, and the subset (with
+  // a per-vDC quota override) this vDC is assigned.
+  const [connPolicies, setConnPolicies] = useState<Array<{ id: string; name: string; storageId: string }>>([])
+  const [vdcPolicies, setVdcPolicies] = useState<Array<{ policyId: string; quotaGb: string }>>([])
 
   // PBS bindings (inline in the edit dialog, below Nodes)
   const [pbsConnections, setPbsConnections] = useState<Array<{ id: string; name: string; fingerprint: string | null }>>([])
@@ -392,6 +399,7 @@ export default function VdcTab() {
     if (!form.connectionId) {
       setProviderBridges([])
       setPoolBridges([])
+      setConnPolicies([])
       return
     }
     void (async () => {
@@ -416,6 +424,18 @@ export default function VdcTab() {
       } catch (err) {
         console.error('Failed to load VLAN-pool bridges', err)
         setPoolBridges([])
+      }
+    })()
+    void (async () => {
+      try {
+        const policiesRes = await fetch(`/api/v1/admin/connections/${encodeURIComponent(form.connectionId)}/storage-policies`)
+        if (policiesRes.ok) {
+          const policiesJson = await policiesRes.json()
+          setConnPolicies(Array.isArray(policiesJson.data) ? policiesJson.data : [])
+        }
+      } catch (err) {
+        console.error('Failed to load storage policies', err)
+        setConnPolicies([])
       }
     })()
   }, [form.connectionId])
@@ -470,6 +490,7 @@ export default function VdcTab() {
     setAvailableResources(null)
     setSelectedSharedBridges(new Map())
     setVlanPools([])
+    setVdcPolicies([])
     setPbsDraft({ enabled: false, mode: 'auto', pbsConnectionId: '', datastore: '', namespace: '' })
     setPbsDraftDatastores([])
     setDialogOpen(true)
@@ -514,6 +535,10 @@ export default function VdcTab() {
       bridge: p.bridge, rangeStart: String(p.rangeStart), rangeEnd: String(p.rangeEnd),
     })))
 
+    setVdcPolicies((vdc.storagePolicies ?? []).map((sp: any) => ({
+      policyId: sp.policyId, quotaGb: sp.quotaMb != null ? String(Math.round(sp.quotaMb / 1024)) : '',
+    })))
+
     setDialogOpen(true)
   }
 
@@ -554,6 +579,13 @@ export default function VdcTab() {
           rangeEnd: Number.parseInt(p.rangeEnd, 10),
         }))
 
+      const storagePoliciesPayload = vdcPolicies
+        .filter((sp) => sp.policyId)
+        .map((sp) => ({
+          policyId: sp.policyId,
+          quotaMb: sp.quotaGb ? Number.parseInt(sp.quotaGb, 10) * 1024 : null,
+        }))
+
       // Snapshot nodes from the live resources at submit time —
       // form.nodes gets auto-filled by the resources fetch useEffect,
       // but a race (slow PVE, fetch retry, user clicking Submit right
@@ -590,6 +622,7 @@ export default function VdcTab() {
           primaryStorage: form.primaryStorage,
           sharedBridges: sharedBridgesPayload,
           vlanPools: vlanPoolsPayload,
+          storagePolicies: storagePoliciesPayload,
           quota,
         }
 
@@ -619,6 +652,7 @@ export default function VdcTab() {
           primaryStorage: form.primaryStorage,
           sharedBridges: sharedBridgesPayload,
           vlanPools: vlanPoolsPayload,
+          storagePolicies: storagePoliciesPayload,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -1210,6 +1244,8 @@ export default function VdcTab() {
         </Alert>
       )}
 
+      <StoragePoliciesSection connections={connections} />
+
       <Card>
         <CardContent>
           {/* A vDC always lives in a non-default tenant — the provider tenant
@@ -1699,6 +1735,67 @@ export default function VdcTab() {
                               slotProps={{ htmlInput: { min: 1, max: 4094 } }}
                             />
                             <IconButton size="small" sx={{ mt: 0.75, flexShrink: 0 }} onClick={() => setVlanPools((prev) => prev.filter((_, i) => i !== idx))}>
+                              <i className="ri-delete-bin-line" />
+                            </IconButton>
+                          </Stack>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+
+                  {/* Storage policy assignments (storage policies + QoS, P3) */}
+
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-database-2-line" />
+                        {t('vdc.vdcPoliciesTitle')}
+                      </Typography>
+                      <Tooltip title={t('vdc.vdcPolicyAdd')} arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={t('vdc.vdcPolicyAdd')}
+                            onClick={() => setVdcPolicies((prev) => [...prev, { policyId: '', quotaGb: '' }])}
+                            disabled={connPolicies.length === 0 || vdcPolicies.length >= connPolicies.length}
+                          >
+                            <i className="ri-add-line" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.vdcPoliciesHint')}</Typography>
+
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                      {vdcPolicies.map((sp, idx) => {
+                        const takenByOthers = new Set(vdcPolicies.filter((_, i) => i !== idx).map((p) => p.policyId))
+                        const options = connPolicies.filter((p) => !takenByOthers.has(p.id) || p.id === sp.policyId)
+                        return (
+                          <Stack key={idx} direction="row" spacing={1} alignItems="flex-start">
+                            <TextField
+                              select size="small" sx={{ flex: 1, minWidth: 200 }}
+                              label={t('vdc.storagePolicyName')}
+                              value={sp.policyId}
+                              onChange={(e) => setVdcPolicies((prev) => prev.map((p, i) => i === idx ? { ...p, policyId: e.target.value } : p))}
+                            >
+                              {options.map((p) => (
+                                <MenuItem key={p.id} value={p.id}>
+                                  <Box>
+                                    <Typography variant="body2">{p.name}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{p.storageId}</Typography>
+                                  </Box>
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <TextField
+                              size="small" type="number" label={t('vdc.vdcPolicyQuotaGb')}
+                              sx={{ width: 160, flexShrink: 0 }}
+                              value={sp.quotaGb}
+                              onChange={(e) => setVdcPolicies((prev) => prev.map((p, i) => i === idx ? { ...p, quotaGb: e.target.value } : p))}
+                              slotProps={{ htmlInput: { min: 1 } }}
+                              helperText={t('vdc.vdcPolicyUnlimited')}
+                            />
+                            <IconButton size="small" sx={{ mt: 0.75, flexShrink: 0 }} onClick={() => setVdcPolicies((prev) => prev.filter((_, i) => i !== idx))}>
                               <i className="ri-delete-bin-line" />
                             </IconButton>
                           </Stack>

@@ -7286,7 +7286,24 @@
     "backups": "备份",
     "tenantHasVdcs": "该租户已拥有 {count, plural, =1 {一个 vDC:{names}} other {# 个 vDC:{names}}}。您可以在尚未覆盖的集群上再创建一个。",
     "tenantAllClustersUsed": "该租户在每个可用集群上都已拥有 vDC。",
-    "tenantUsers": "租户用户"
+    "tenantUsers": "租户用户",
+    "storagePoliciesTitle": "存储策略",
+    "storagePoliciesHint": "定义具名的 QoS 配置（共享存储上的 IOPS 和 MB/s 限制），租户可将其关联到 vDC 的磁盘。",
+    "storagePolicyAdd": "添加存储策略",
+    "storagePolicyName": "名称",
+    "storagePolicyStorage": "存储",
+    "storagePolicyDescription": "描述",
+    "storagePolicyIopsRd": "IOPS（读）",
+    "storagePolicyIopsWr": "IOPS（写）",
+    "storagePolicyMbpsRd": "MB/s（读）",
+    "storagePolicyMbpsWr": "MB/s（写）",
+    "storagePolicyInUse": "{count, plural, other {已被 # 个 vDC 使用}}",
+    "storagePolicyVdcCount": "vDC 数",
+    "vdcPoliciesTitle": "存储策略",
+    "vdcPoliciesHint": "为此 vDC 关联 QoS 存储策略。租户随后可在自助服务中将磁盘放置在这些策略上。",
+    "vdcPolicyAdd": "关联策略",
+    "vdcPolicyQuotaGb": "配额（GB）",
+    "vdcPolicyUnlimited": "留空表示无限制"
   },
   "sdn": {
     "subtab": {

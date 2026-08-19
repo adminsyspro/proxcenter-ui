@@ -45,7 +45,7 @@ import {
   scannedToIntSet,
 } from './ipamScan'
 import { resolveSubnetForBridge, type SubnetForBridge } from './vnets'
-import { parseCidr } from './network'
+import { ipInCidrUsable, parseCidr } from './network'
 
 import type { ProxmoxClientOptions } from '@/lib/proxmox/client'
 
@@ -322,7 +322,13 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
           }
         }
 
-        const hint = afterSlot.ipFromIpconfig ?? undefined
+        // A stale ipconfigN inherited from `before` must not steer the
+        // allocator when the NIC just moved to another subnet (bridge
+        // change): honour the hint only when it actually belongs to the
+        // target subnet, otherwise fall back to auto-pick and let the
+        // bodyOverrides correction below rewrite ipconfigN.
+        const rawHint = afterSlot.ipFromIpconfig ?? undefined
+        const hint = rawHint && ipInCidrUsable(rawHint, afterSubnet.cidr) ? rawHint : undefined
         const allocated = await allocateIp({
           vdcId: afterSubnet.vdcId,
           subnetId: afterSubnet.subnetId,

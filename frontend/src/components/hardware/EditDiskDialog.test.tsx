@@ -16,6 +16,7 @@ import {
   renderWithProviders,
   screen,
   userEvent,
+  waitFor,
 } from '@/__tests__/setup/renderWithProviders'
 
 import { EditDiskDialog } from './EditDiskDialog'
@@ -79,5 +80,87 @@ describe('EditDiskDialog — clearable reassign index', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reassign' }))
 
     expect(props.onSave).toHaveBeenCalledWith({ scsi5: unusedDisk.rawValue })
+  })
+})
+
+/**
+ * Task 16: tenant UI honesty on QoS. The disk's storage is derived from
+ * `disk.rawValue.split(':')[0]` and looked up in `availableStorages`. When
+ * that storage is governed by a vDC storage policy (Task 14 decorates the
+ * storages route with `policy`), the Bandwidth tab shows the policy's own
+ * caps as disabled fields and handleSave must not push any mbps_ or iops_
+ * option (the server strips-and-stamps its own caps regardless of what the
+ * client sends).
+ */
+describe('EditDiskDialog, storage policy locks QoS fields (regular disk)', () => {
+  afterEach(cleanup)
+
+  const availableStorages = [
+    { storage: 'local', type: 'dir' },
+    {
+      storage: 'ceph-gold',
+      type: 'rbd',
+      policy: { name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 300, mbpsWr: 250 },
+    },
+  ]
+
+  const policiedDisk = {
+    id: 'scsi0',
+    size: '32G',
+    storage: 'ceph-gold',
+    rawValue: 'ceph-gold:vm-100-disk-0,size=32G',
+  }
+
+  const plainDisk = {
+    id: 'scsi0',
+    size: '32G',
+    storage: 'local',
+    rawValue: 'local:vm-100-disk-0,size=32G',
+  }
+
+  const bandwidthTab = () => screen.getByRole('tab', { name: 'Bandwidth' })
+  const mbpsReadField = () => screen.getByLabelText('Read limit (MB/s)') as HTMLInputElement
+  const saveButton = () => screen.getByRole('button', { name: 'Save' })
+
+  it('locks the Bandwidth fields to the policy caps and shows the Alert', async () => {
+    renderWithProviders(
+      <EditDiskDialog {...makeProps({ disk: policiedDisk, availableStorages })} />,
+    )
+
+    await userEvent.click(bandwidthTab())
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Gold')
+    expect(mbpsReadField()).toBeDisabled()
+    expect(mbpsReadField().value).toBe('300')
+  })
+
+  it('does not push any QoS option on save when the disk storage is policied', async () => {
+    const props = makeProps({ disk: policiedDisk, availableStorages })
+
+    renderWithProviders(<EditDiskDialog {...props} />)
+
+    await userEvent.click(saveButton())
+
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled())
+    const saved = props.onSave.mock.calls[0][0] as string
+
+    expect(saved).not.toMatch(/mbps_|iops_/)
+  })
+
+  it('keeps Bandwidth fields editable and pushes QoS keys for a non-policied storage (no regression)', async () => {
+    const props = makeProps({ disk: plainDisk, availableStorages })
+
+    renderWithProviders(<EditDiskDialog {...props} />)
+
+    await userEvent.click(bandwidthTab())
+    expect(mbpsReadField()).not.toBeDisabled()
+
+    await userEvent.type(mbpsReadField(), '50')
+    await userEvent.click(saveButton())
+
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled())
+    const saved = props.onSave.mock.calls[0][0] as string
+
+    expect(saved).toContain('mbps_rd=50')
   })
 })

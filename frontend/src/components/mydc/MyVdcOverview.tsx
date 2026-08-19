@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, CircularProgress, IconButton, Paper, Tooltip, Typography } from '@mui/material'
+import { Box, CircularProgress, IconButton, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
 import QuotaDonut from './QuotaDonut'
@@ -139,6 +139,37 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
               unlimitedLabel={unlimitedLabel}
             />
           </Box>
+
+          {/* Per-tier storage usage: one bar per storage policy attached to
+              this vDC that carries its own quota (quotaMb != null). Policies
+              without a quota share the global storage donut above and get no
+              bar here; usedStorageByStorage is keyed by storageId and can be
+              absent for a tier with no usage yet, hence the ?? 0. */}
+          {vdc.storagePolicies?.some((sp: any) => sp.quotaMb != null) && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                {t('myVdc.storageTiersTitle')}
+              </Typography>
+              {vdc.storagePolicies
+                .filter((sp: any) => sp.quotaMb != null)
+                .map((sp: any) => {
+                  const usedMb = usage.usedStorageByStorage?.[sp.storageId] ?? 0
+                  const pct = Math.min(100, Math.round((usedMb / sp.quotaMb) * 100))
+
+                  return (
+                    <Box key={sp.policyId} sx={{ mt: 1 }}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="caption">{t('myVdc.storageTierUsage', { policy: sp.name })}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatMbAsGb(usedMb)} / {formatMbAsGb(sp.quotaMb)}
+                        </Typography>
+                      </Stack>
+                      <LinearProgress variant="determinate" value={pct} color={pct >= 90 ? 'error' : 'primary'} />
+                    </Box>
+                  )
+                })}
+            </Box>
+          )}
         </Box>
       </Paper>
 

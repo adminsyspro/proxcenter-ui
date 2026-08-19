@@ -34,6 +34,11 @@ import { vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { DetachConfirmDialog } from './DetachConfirmDialog'
+import type { StoragePolicyCaps } from './utils'
+
+// Renders a QoS cap for a disabled, policy-driven field: empty for "no limit
+// on that axis" rather than "0", so a null cap doesn't read as a zero limit.
+const capValue = (v: number | null | undefined): string => (v === null || v === undefined ? '' : String(v))
 
 // ==================== EDIT DISK DIALOG ====================
 type EditDiskDialogProps = {
@@ -67,7 +72,7 @@ type EditDiskDialogProps = {
     rawValue?: string
   } | null
   existingDisks?: string[]
-  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string }>
+  availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string; policy?: StoragePolicyCaps }>
   initialTab?: number
 }
 
@@ -92,7 +97,7 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
   const [targetStorage, setTargetStorage] = useState('')
   const [deleteSource, setDeleteSource] = useState(true)
   const [targetFormat, setTargetFormat] = useState('')
-  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string }>>([])
+  const [storages, setStorages] = useState<Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string; policy?: StoragePolicyCaps }>>([])
   const [storagesLoading, setStoragesLoading] = useState(false)
 
   // Disk config (éditable)
@@ -131,6 +136,18 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, onResize, onMo
     [selectedTargetStorageObj]
   )
   const supportsMultipleFormats = supportedFormats.length > 1
+
+  // Storage the disk currently sits on, parsed from its raw config rather
+  // than `disk.storage` so it stays correct even if that field is ever
+  // repurposed for a display label. When a vDC storage policy governs that
+  // storage, the server strips-and-stamps QoS regardless of what the client
+  // sends (Task 14): the Bandwidth tab locks to the policy's own caps and
+  // handleSave stops pushing mbps_*/iops_* options.
+  const diskStorageId = useMemo(() => disk?.rawValue?.split(':')[0], [disk?.rawValue])
+  const selectedPolicy = useMemo(
+    () => storages.find(s => s.storage === diskStorageId)?.policy,
+    [storages, diskStorageId]
+  )
 
   // Reset format when target storage changes and current format is not supported
   useEffect(() => {
@@ -380,10 +397,15 @@ return
       if (skipReplication) baseParts.push('replicate=0')
       if (asyncIo !== 'io_uring') baseParts.push(`aio=${asyncIo}`)
       if (readOnly) baseParts.push('ro=1')
-      if (mbpsRd) baseParts.push(`mbps_rd=${mbpsRd}`)
-      if (mbpsWr) baseParts.push(`mbps_wr=${mbpsWr}`)
-      if (iopsRd) baseParts.push(`iops_rd=${iopsRd}`)
-      if (iopsWr) baseParts.push(`iops_wr=${iopsWr}`)
+      // Skipped entirely when a storage policy governs the disk's storage:
+      // the server strips-and-stamps its own caps anyway, so pushing the
+      // (disabled, grayed-out) fields would just send dead values.
+      if (!selectedPolicy) {
+        if (mbpsRd) baseParts.push(`mbps_rd=${mbpsRd}`)
+        if (mbpsWr) baseParts.push(`mbps_wr=${mbpsWr}`)
+        if (iopsRd) baseParts.push(`iops_rd=${iopsRd}`)
+        if (iopsWr) baseParts.push(`iops_wr=${iopsWr}`)
+      }
 
       await onSave(baseParts.join(','))
       onClose()
@@ -783,20 +805,28 @@ return
               {t('hardware.bandwidthLimits')}
             </Typography>
 
+            {selectedPolicy && (
+              <Alert severity="info">
+                {t('hardware.qosManagedByPolicy', { policy: selectedPolicy.name })}
+              </Alert>
+            )}
+
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <TextField
                 size="small"
                 label="Read limit (MB/s)"
                 type="number"
-                value={mbpsRd}
+                value={selectedPolicy ? capValue(selectedPolicy.mbpsRd) : mbpsRd}
                 onChange={(e) => setMbpsRd(e.target.value)}
+                disabled={!!selectedPolicy}
               />
               <TextField
                 size="small"
                 label="Write limit (MB/s)"
                 type="number"
-                value={mbpsWr}
+                value={selectedPolicy ? capValue(selectedPolicy.mbpsWr) : mbpsWr}
                 onChange={(e) => setMbpsWr(e.target.value)}
+                disabled={!!selectedPolicy}
               />
             </Box>
 
@@ -805,15 +835,17 @@ return
                 size="small"
                 label="Read limit (IOPS)"
                 type="number"
-                value={iopsRd}
+                value={selectedPolicy ? capValue(selectedPolicy.iopsRd) : iopsRd}
                 onChange={(e) => setIopsRd(e.target.value)}
+                disabled={!!selectedPolicy}
               />
               <TextField
                 size="small"
                 label="Write limit (IOPS)"
                 type="number"
-                value={iopsWr}
+                value={selectedPolicy ? capValue(selectedPolicy.iopsWr) : iopsWr}
                 onChange={(e) => setIopsWr(e.target.value)}
+                disabled={!!selectedPolicy}
               />
             </Box>
           </Stack>

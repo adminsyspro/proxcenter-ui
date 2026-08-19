@@ -1,3 +1,15 @@
+// QoS caps carried by a storage policy attached to a vDC (Task 14). Null caps
+// mean "no limit on that axis", not "unset". The server strips-and-stamps
+// these on save regardless of what the client sends, so the UI only needs to
+// show them, never enforce them.
+export type StoragePolicyCaps = {
+  name: string
+  iopsRd: number | null
+  iopsWr: number | null
+  mbpsRd: number | null
+  mbpsWr: number | null
+}
+
 // Types pour les storages
 export type Storage = {
   storage: string
@@ -9,6 +21,8 @@ export type Storage = {
   formats?: string[]
   /** Format PVE picks when none is given. */
   defaultFormat?: string
+  /** Present when a tenant's vDC storage policy governs this storage (iaas only). */
+  policy?: StoragePolicyCaps
 }
 
 export type NodeInfo = {

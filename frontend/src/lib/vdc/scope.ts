@@ -14,6 +14,15 @@ import { clearVdcContextCache, getVdcContext } from './context'
 // Types
 // ---------------------------------------------------------------------------
 
+export interface VdcStoragePolicyInfo {
+  policyId: string
+  name: string
+  iopsRd: number | null
+  iopsWr: number | null
+  mbpsRd: number | null
+  mbpsWr: number | null
+}
+
 export interface VdcScope {
   /** PVE connection IDs referenced by the tenant's vDCs */
   connectionIds: Set<string>
@@ -23,6 +32,8 @@ export interface VdcScope {
   nodesByConnection: Map<string, Set<string>>
   /** Per-connection: allowed storage IDs */
   storagesByConnection: Map<string, Set<string>>
+  /** Per-connection: policied storages and their QoS caps */
+  storagePoliciesByConnection: Map<string, Map<string, VdcStoragePolicyInfo>>
   /** Per-connection: PVE pool names (VMs must be in one of these pools) */
   poolsByConnection: Map<string, Set<string>>
   /** Per-connection: allowed SDN VNet names */
@@ -141,6 +152,13 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
       vnets: { select: { pveName: true } },
       sharedBridges: { select: { bridge: true } },
       pbsNamespaces: { select: { pbsConnectionId: true, datastore: true, namespace: true } },
+      storagePolicies: {
+        select: {
+          policy: {
+            select: { id: true, name: true, storageId: true, iopsRd: true, iopsWr: true, mbpsRd: true, mbpsWr: true },
+          },
+        },
+      },
     },
   })
 
@@ -152,6 +170,7 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
   const connectionIds = new Set<string>()
   const nodesByConnection = new Map<string, Set<string>>()
   const storagesByConnection = new Map<string, Set<string>>()
+  const storagePoliciesByConnection = new Map<string, Map<string, VdcStoragePolicyInfo>>()
   const poolsByConnection = new Map<string, Set<string>>()
   const vnetsByConnection = new Map<string, Set<string>>()
   const sharedBridgesByConnection = new Map<string, Set<string>>()
@@ -178,6 +197,24 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
     if (row.primaryStorage) storagesByConnection.get(connId)!.add(row.primaryStorage)
     for (const sr of row.storages) {
       storagesByConnection.get(connId)!.add(sr.storageId)
+    }
+
+    // Storage policies: their storages join the visible/authorised storage
+    // set, and the QoS caps go to a parallel per-storage map. QoS is
+    // unambiguous connection-wide (one policy per (connection, storage)),
+    // so merging across the tenant's vDCs cannot conflict; the per-vDC
+    // quota deliberately does NOT live here (resolveVdcForTenant owns it).
+    if (!storagePoliciesByConnection.has(connId)) storagePoliciesByConnection.set(connId, new Map())
+    for (const sp of row.storagePolicies) {
+      storagesByConnection.get(connId)!.add(sp.policy.storageId)
+      storagePoliciesByConnection.get(connId)!.set(sp.policy.storageId, {
+        policyId: sp.policy.id,
+        name: sp.policy.name,
+        iopsRd: sp.policy.iopsRd ?? null,
+        iopsWr: sp.policy.iopsWr ?? null,
+        mbpsRd: sp.policy.mbpsRd ?? null,
+        mbpsWr: sp.policy.mbpsWr ?? null,
+      })
     }
 
     // Pools: each vDC has exactly one PVE pool
@@ -218,6 +255,7 @@ async function buildVdcScope(tenantId: string, vdcContext: string | null = null)
     pbsConnectionIds,
     nodesByConnection,
     storagesByConnection,
+    storagePoliciesByConnection,
     poolsByConnection,
     vnetsByConnection,
     sharedBridgesByConnection,

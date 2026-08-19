@@ -5,7 +5,9 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { resizeDiskSchema } from "@/lib/schemas"
 import { getCurrentTenantId } from '@/lib/tenant'
+import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
+import { parseDriveString } from '@/lib/vdc/drives'
 
 export const runtime = "nodejs"
 
@@ -47,11 +49,31 @@ export async function POST(
 
     const { disk, size } = parseResult.data
 
+    const conn = await getConnectionById(id)
+
     const tenantId = await getCurrentTenantId()
     try {
       const vdcInfo = await resolveVdcForTenant(tenantId, id, node)
 
       if (vdcInfo) {
+        // Storage-tier scope (spec §6): a disk living on a storage that has
+        // since dropped out of the tenant's vDC scope is refused outright,
+        // independent of the requested delta.
+        const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+        let diskStorage: string | null = null
+        if (infra.kind === 'iaas') {
+          const scope = infra.vdcScope
+          const resourceTypePve = type === 'lxc' ? 'lxc' : 'qemu'
+          const cfg = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${resourceTypePve}/${encodeURIComponent(vmid)}/config`)
+          const parsed = parseDriveString(String(cfg?.[disk] ?? ''))
+          diskStorage = parsed.ok === false ? null : parsed.drive.storage
+          const allowed = scope?.storagesByConnection.get(id) ?? new Set<string>()
+          if (diskStorage && !allowed.has(diskStorage)) {
+            return NextResponse.json(
+              { error: `Storage "${diskStorage}" is not authorised for this tenant.` }, { status: 403 })
+          }
+        }
+
         const deltaMb = parseSizeDeltaMb(size)
 
         if (deltaMb > 0) {
@@ -59,7 +81,8 @@ export async function POST(
             type: 'resize',
             addStorageMb: deltaMb,
             addVms: 0,
-          })
+            addStorageMbByStorage: diskStorage ? { [diskStorage]: deltaMb } : undefined,
+          }, vdcInfo.storagePolicies, node)
 
           if (!quotaCheck.allowed) {
             return NextResponse.json({
@@ -76,8 +99,6 @@ export async function POST(
       throw e
     }
 
-    const conn = await getConnectionById(id)
-    
     // Déterminer le type de ressource pour l'API Proxmox
     const resourceType = type === 'lxc' ? 'lxc' : 'qemu'
     

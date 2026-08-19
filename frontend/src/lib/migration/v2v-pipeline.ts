@@ -51,6 +51,8 @@ import {
 import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/soap"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { startJobHeartbeat } from "./job-heartbeat"
+import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
+import type { V2vRootCandidate } from "./v2v-root-select"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -120,6 +122,17 @@ export interface V2vMigrationConfig {
    * instead of silently allocating a different ID.
    */
   targetVmid?: number
+  /**
+   * Root filesystem to convert, passed to virt-v2v as `--root <value>`.
+   *
+   * Only needed for guests whose inspection finds several bootable roots, where
+   * the automatic selection cannot decide (a genuine dual-boot guest). Values
+   * are the device names virt-v2v itself printed in the failed job's log, e.g.
+   * `/dev/system/root`. Left unset, the pipeline runs virt-v2v with its default
+   * inspection and, if virt-v2v asks which root to use, retries once with the
+   * single non-snapshot candidate (see ./v2v-root-select).
+   */
+  v2vRoot?: string
 }
 
 interface LogEntry {
@@ -138,6 +151,45 @@ function getPrismaForJob(jobId: string) {
 export function cancelV2vMigrationJob(jobId: string) {
   cancelledJobs.add(jobId)
 }
+
+/**
+ * Root filesystem an operator picked for a job parked on the multi-boot gate,
+ * keyed by job id. In memory on purpose, mirroring the warm cutover gate: the
+ * pipeline runs inside the POST request's after() continuation, so the route
+ * handler and the pipeline share this module instance. A process restart loses
+ * the signal, and the parked job is failed by the orphan sweep like any other
+ * in-flight job.
+ */
+const rootChoiceRequests = new Map<string, string>()
+
+/** `currentStep` a job carries while it waits for the operator's pick. */
+export const V2V_AWAITING_ROOT_CHOICE_STEP = "awaiting_root_choice"
+
+/**
+ * Deliver an operator's pick to a parked job. Returns false when the value does
+ * not look like a device name, so the caller can answer 400 instead of leaving
+ * the job waiting on a value that would never be used.
+ */
+export function requestV2vRootChoice(jobId: string, rootDevice: string): boolean {
+  const clean = sanitizeV2vRoot(rootDevice)
+  if (!clean) return false
+  rootChoiceRequests.set(jobId, clean)
+  return true
+}
+
+/** Test seam: what the registry currently holds for a job. */
+export function __getRequestedRootForTest(jobId: string): string | undefined {
+  return rootChoiceRequests.get(jobId)
+}
+
+/**
+ * How long a job may stay parked waiting for a decision. Same two hours as the
+ * warm cutover gate, and for the same reason: a parked cold job holds its
+ * downloaded VMDKs on the node's temp storage, which can be hundreds of GB.
+ * On expiry the job fails and the normal cleanup frees them.
+ */
+const ROOT_CHOICE_GATE_TIMEOUT_MS = Number(process.env.V2V_ROOT_CHOICE_TIMEOUT_MS) || 2 * 60 * 60 * 1000
+const ROOT_CHOICE_POLL_MS = 3000
 
 async function updateJob(id: string, status: MigrationStatus, extra: Record<string, any> = {}) {
   const prisma = getPrismaForJob(id)
@@ -160,6 +212,111 @@ async function appendLog(id: string, msg: string, level: LogEntry["level"] = "in
 
 function isCancelled(jobId: string): boolean {
   return cancelledJobs.has(jobId)
+}
+
+/**
+ * Park the job until an operator picks which system to convert, and return
+ * their pick. Returns null when the gate expires, so the caller falls through
+ * to the normal failure path, which reports the candidate list. Throws only if
+ * the job is cancelled meanwhile.
+ *
+ * Parking instead of failing is the whole point on the vCenter path: the disks
+ * are already downloaded on the node, so failing here would cost the entire
+ * transfer again on the next attempt, five hours for the guest in #738.
+ *
+ * The status stays `converting_disks` and only `currentStep` changes, following
+ * the force-power-off gate of the warm pipeline: no new status value means
+ * nothing to teach to the dashboards, the progress bars or the task list.
+ */
+async function awaitOperatorRootChoice(
+  jobId: string,
+  candidates: V2vRootCandidate[],
+  opts: { pollMs?: number; timeoutMs?: number } = {},
+): Promise<string | null> {
+  const pollMs = opts.pollMs ?? ROOT_CHOICE_POLL_MS
+  const timeoutMs = opts.timeoutMs ?? ROOT_CHOICE_GATE_TIMEOUT_MS
+  const allowed = new Set(candidates.map(c => c.device))
+  // Drop any stale pick from an earlier gate on the same job.
+  rootChoiceRequests.delete(jobId)
+
+  const prisma = getPrismaForJob(jobId)
+  const row = await prisma.migrationJob.findUnique({ where: { id: jobId }, select: { config: true } })
+  const config = (row?.config as Record<string, any> | null) ?? {}
+  await prisma.migrationJob.update({
+    where: { id: jobId },
+    data: {
+      // The UI builds its dialog from this list, and the route validates the
+      // submitted value against it. Kept on the existing config JSON so this
+      // gate needs no schema change.
+      config: {
+        ...config,
+        v2vRootCandidates: candidates.map(c => ({ device: c.device, description: c.description })),
+      },
+      currentStep: V2V_AWAITING_ROOT_CHOICE_STEP,
+    },
+  })
+  const hours = Math.round(timeoutMs / 3600000)
+  await appendLog(
+    jobId,
+    `Waiting up to ${hours}h for an operator to choose which system to convert. The downloaded ` +
+    `disks are kept meanwhile, so the choice resumes the conversion without transferring again.`,
+    "warn",
+  )
+
+  const start = Date.now()
+  while (true) {
+    if (isCancelled(jobId)) {
+      rootChoiceRequests.delete(jobId)
+      throw new Error("Migration cancelled")
+    }
+    const picked = rootChoiceRequests.get(jobId)
+    if (picked) {
+      rootChoiceRequests.delete(jobId)
+      if (!allowed.has(picked)) {
+        // The route validates against the same list, so this only happens if the
+        // two disagree. Ignore it rather than convert a system nobody offered.
+        await appendLog(jobId, `Ignoring root filesystem "${picked}": not one of the candidates offered for this job.`, "warn")
+        continue
+      }
+      await updateJob(jobId, "converting_disks")
+      await appendLog(jobId, `Operator chose ${picked}. Resuming the conversion with --root, no new transfer needed.`)
+      return picked
+    }
+    if (Date.now() - start > timeoutMs) {
+      rootChoiceRequests.delete(jobId)
+      await appendLog(
+        jobId,
+        `No choice received after ${hours}h. Giving up so the downloaded disks stop occupying the node's temp storage.`,
+        "warn",
+      )
+      return null
+    }
+    await new Promise(r => setTimeout(r, pollMs))
+  }
+}
+
+/**
+ * Test seam: the command builder is internal, but the exact flags it emits are
+ * a contract with virt-v2v, and `--root` in particular decides whether the
+ * conversion can run unattended at all (#738).
+ */
+export function __buildV2vCommandForTest(...args: Parameters<typeof buildV2vCommand>) {
+  return buildV2vCommand(...args)
+}
+
+/** Test seam for the gate, which is otherwise only reachable through a full run. */
+export const __awaitOperatorRootChoiceForTest = awaitOperatorRootChoice
+
+/** Test seam: bind the prisma client the job helpers resolve for a job id. */
+export function __setJobPrismaForTest(jobId: string, prisma: any) {
+  if (prisma) jobPrisma.set(jobId, prisma)
+  else jobPrisma.delete(jobId)
+}
+
+/** Test seam: arm or clear the cancel flag without going through a route. */
+export function __setCancelledForTest(jobId: string, cancelled: boolean) {
+  if (cancelled) cancelledJobs.add(jobId)
+  else cancelledJobs.delete(jobId)
 }
 
 /** Wait for a PVE task to complete */
@@ -722,7 +879,12 @@ async function runVirtV2vWithProgress(
   //    the source" / "Copying disk" messages would appear in a burst at the
   //    very end instead of streaming. `stdbuf` is from coreutils and is
   //    always available on Debian-based Proxmox.
-  const innerCmd = `stdbuf -oL ${v2vCommand} > ${shellEscape(logFile)} 2>&1; echo $? > ${shellEscape(exitFile)}`
+  //    `< /dev/null` makes any prompt fail immediately and deterministically.
+  //    virt-v2v asks on stdin when guest inspection finds several bootable
+  //    roots (`--root ask` is its default); detached like this it would
+  //    otherwise depend on when the SSH channel's stdin happens to close.
+  //    See ./v2v-root-select and the automatic retry in the caller.
+  const innerCmd = `stdbuf -oL ${v2vCommand} < /dev/null > ${shellEscape(logFile)} 2>&1; echo $? > ${shellEscape(exitFile)}`
   const launchCmd = `nohup bash -c ${shellEscape(innerCmd)} > /dev/null 2>&1 & echo $!`
   const launch = await executeSSH(config.targetConnectionId, nodeIp, launchCmd)
   if (!launch.success || !launch.output?.trim()) {
@@ -911,6 +1073,16 @@ function buildV2vCommand(
    * Required when preDownloadedDiskPaths has more than one entry.
    */
   libvirtXmlPath?: string,
+  /**
+   * Value for `--root`. Without it virt-v2v uses its default `--root ask`,
+   * which PROMPTS on stdin for any guest whose inspection finds more than one
+   * bootable root (dual-boot, but also every SLES/openSUSE guest using btrfs
+   * snapper snapshots). We run virt-v2v detached, so a prompt is a hard failure
+   * (`exception: End_of_file`, discussion #738). Passed by the caller either
+   * from config.v2vRoot or from the automatic retry that reads the candidate
+   * list out of the first attempt's log.
+   */
+  rootDevice?: string,
 ): string {
   const tempBase = config.tempStorage || '/tmp'
   const outputDir = `${tempBase}/v2v-${jobId}`
@@ -929,7 +1101,12 @@ function buildV2vCommand(
   // whole command in a nohup + file redirect (`> log 2>&1`) so the streams
   // are merged into a log file, then polled for progress. Putting a `2>&1`
   // here would be redundant (and actively wrong if the caller wraps us).
-  const v2vOpts = `${blockDriverOpt}-o local -os ${shellEscape(outputDir)} --machine-readable`
+  // --root pins the filesystem to convert so virt-v2v never falls back to its
+  // interactive default (`--root ask`). Sanitized here as well as at the call
+  // site: this string goes straight onto an SSH command line.
+  const safeRoot = sanitizeV2vRoot(rootDevice)
+  const rootOpt = safeRoot ? `--root ${shellEscape(safeRoot)} ` : ''
+  const v2vOpts = `${rootOpt}${blockDriverOpt}-o local -os ${shellEscape(outputDir)} --machine-readable`
 
   // Pre-downloaded local disks (NFC export path for vSAN). This bypasses the
   // sourceType-specific URI building below since virt-v2v doesn't need to talk
@@ -1115,6 +1292,15 @@ export async function runV2vMigrationPipeline(
   jobPrisma.set(jobId, prisma)
 
   let targetVmid: number | null = null
+  /**
+   * True only once PVE has actually accepted the create call. `targetVmid` is
+   * set much earlier (Phase 3 reserves an id via /cluster/nextid, or takes the
+   * user's), while the VM itself is created after the conversion in Phase 5, so
+   * a failure in between left the cleanup path trying to destroy a VM that was
+   * never created: PVE answered 500 "Configuration file ... does not exist" and
+   * we told the user to run `qm destroy` on a VMID that holds nothing (#738).
+   */
+  let vmCreated = false
   const tempBase = config.tempStorage || '/tmp'
   const outputDir = `${tempBase}/v2v-${jobId}`
   const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
@@ -1917,6 +2103,22 @@ export async function runV2vMigrationPipeline(
       }
     }
 
+    // Root filesystem pinned by the user in the migration dialog, for the
+    // guests our automatic selection cannot resolve (genuine multi-boot).
+    // Rejected loudly rather than silently ignored: a typo here would send the
+    // job back into the interactive prompt it is meant to avoid.
+    const pinnedRoot = sanitizeV2vRoot(config.v2vRoot)
+    if (config.v2vRoot && !pinnedRoot) {
+      throw new Error(
+        `Invalid root filesystem "${config.v2vRoot}". Expected a device or subvolume name ` +
+        `exactly as printed by virt-v2v, for example /dev/system/root or ` +
+        `btrfsvol:/dev/system/root/@/.snapshots/328/snapshot.`,
+      )
+    }
+    if (pinnedRoot) {
+      await appendLog(jobId, `Converting the root filesystem pinned in the migration options: ${pinnedRoot}`)
+    }
+
     const v2vCommand = buildV2vCommand(
       jobId,
       config,
@@ -1928,6 +2130,7 @@ export async function runV2vMigrationPipeline(
       // path for non-vSAN vCenter VMs and for hyperv/nutanix sources.
       nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : undefined,
       libvirtXmlPath,
+      pinnedRoot || undefined,
     )
     await appendLog(jobId, `Running virt-v2v on ${config.targetNode}...`)
 
@@ -1950,6 +2153,77 @@ export async function runV2vMigrationPipeline(
     // Parse progress from output
     if (v2vResult.output) {
       await processV2vOutput(jobId, v2vResult.output, hasDownloadPhase ? 50 : 0, hasDownloadPhase ? 50 : 100)
+    }
+
+    // ── Multi-boot recovery (#738) ──
+    // virt-v2v's default is `--root ask`: when guest inspection finds more than
+    // one bootable root it prints a numbered list and waits on stdin, so a
+    // detached run dies with `exception: End_of_file` right after inspection.
+    // Every SLES/openSUSE guest using btrfs snapper snapshots hits this without
+    // being multi-boot at all, because each snapshot subvolume inspects as its
+    // own operating system.
+    //
+    // Two outcomes, both ending in a single retry with an explicit `--root`:
+    // either the list leaves exactly one plausible system and we pick it
+    // ourselves, or several remain and the job parks until an operator chooses.
+    // Cheap on every input path: the prompt comes during inspection, before any
+    // data is copied, and on the NFC path the source VMDKs are already on the
+    // node so nothing is ever downloaded twice.
+    let multiBootHint = ""
+    {
+      const rootPlan = planV2vRootRetry({
+        failed: !v2vResult.success,
+        output: v2vResult.output || "",
+        pinnedRoot,
+      })
+      if (rootPlan.action !== "none") {
+        for (const line of rootPlan.logs) {
+          await appendLog(jobId, line, "warn")
+        }
+      }
+      let retryRoot: string | null = null
+      if (rootPlan.action === "retry") {
+        retryRoot = rootPlan.device
+      } else if (rootPlan.action === "hint") {
+        // Several plausible systems: converting the wrong one would produce a VM
+        // that does not boot, so the operator decides. Kept as the error hint too,
+        // in case nobody answers before the gate expires.
+        multiBootHint = rootPlan.hint
+        retryRoot = await awaitOperatorRootChoice(jobId, rootPlan.candidates)
+      }
+      if (retryRoot) {
+        // Drop the partial converted disks of the failed attempt: Phase 6 lists
+        // everything in outputDir that is not a .xml/.vmdk and would otherwise
+        // attach a truncated leftover as an extra disk. The NFC source VMDKs and
+        // the synthesized vm.xml live in the same directory and must survive,
+        // hence the narrow `*-sd?` pattern (virt-v2v's -o local naming).
+        await executeSSH(
+          config.targetConnectionId,
+          nodeIp,
+          `find ${shellEscape(outputDir)} -maxdepth 1 -name '*-sd?' -type f -delete`,
+        ).catch(() => {})
+        const retryCommand = buildV2vCommand(
+          jobId,
+          config,
+          username,
+          host,
+          supportsBlockDriver,
+          nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : undefined,
+          libvirtXmlPath,
+          retryRoot,
+        )
+        v2vResult = await runVirtV2vWithProgress(
+          jobId,
+          config,
+          nodeIp,
+          retryCommand,
+          v2vProgressOffset,
+          v2vProgressScale,
+        )
+        if (v2vResult.output) {
+          await processV2vOutput(jobId, v2vResult.output, v2vProgressOffset, v2vProgressScale)
+        }
+      }
     }
 
     // NTFS dirty-flag detection is kept only for the error-hint logic below:
@@ -1989,6 +2263,17 @@ export async function runV2vMigrationPipeline(
         hint = "\n\nHint: Windows NTFS was captured with the 'dirty' flag set (\"not cleanly unmounted\" / \"Fast Restart\" / \"Windows Hibernation\"). virt-v2v needs to mount the filesystem read-write to inject virtio drivers, and libguestfs refuses a dirty NTFS by design to avoid data corruption. Two root causes and fixes:\n" +
           "  • OFFLINE migration: Windows was shut down with Fast Startup enabled (default on Windows 10/11/Server 2022+), which is really a hybrid hibernation. Inside the guest run `powercfg /h off` then `shutdown /s /f /t 0` for a full cold shutdown, then retry.\n" +
           "  • LIVE migration: VSS quiesce did not actually run in the guest (VMware Tools absent, stopped, or VSS writers broken), so the snapshot is crash-consistent with Windows mid-write. Install / repair VMware Tools in the guest (Tools must be in the guestToolsRunning state) and retry, or fall back to Offline with the clean shutdown above."
+      } else if (multiBootHint) {
+        // Guest inspection found several plausible systems and the automatic
+        // selection refused to guess. The hint lists the exact values to use.
+        hint = multiBootHint
+      } else if (/Enter a number between 1 and \d+/.test(fullOutput)) {
+        // virt-v2v asked again even though we pinned a root (or retried with
+        // one): the pinned value does not match any inspected root.
+        hint = "\n\nHint: virt-v2v stopped to ask which root filesystem to convert, which means " +
+          "the root filesystem it was given does not match any root found by guest inspection. " +
+          "Use one of the values listed just above the question in this log, exactly as printed, " +
+          "in the \"Root filesystem (advanced)\" field of the migration dialog."
       }
       throw new Error(`virt-v2v failed: ${rawError}${hint}`)
     }
@@ -2320,12 +2605,15 @@ export async function runV2vMigrationPipeline(
           `/nodes/${encodeURIComponent(config.targetNode)}/qemu`,
           { method: "POST", body: buildCreateBody(createdVmid) },
         )
+        // Claim the id for the cleanup paths BEFORE waiting on the task: PVE has
+        // accepted the create, so a config may already exist. Waiting first would
+        // leave a failed task's half-created VM behind (and, on the second turn of
+        // this loop, would point the cleanup at the previous id).
+        targetVmid = createdVmid
+        vmCreated = true
         if (createResult) {
           await waitForPveTask(pveConn, config.targetNode, String(createResult))
         }
-        targetVmid = createdVmid
-        // Make sure the cleanup paths use the actually-created id, not the
-        // initially-allocated one we may have moved past.
         await updateJob(jobId, "creating_vm", { targetVmid })
         await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
         break
@@ -2816,18 +3104,29 @@ export async function runV2vMigrationPipeline(
     // cluster (and its zvol/qcow2 disk on the target storage). Silent
     // cleanup failures here previously caused VMID reuse collisions on the
     // next migration attempt.
-    if (targetVmid && config.targetConnectionId) {
+    // Only when the create call actually succeeded: before that, the VMID is a
+    // reservation, no VM exists, and destroying "it" would either 500 on a
+    // missing config or, worse with a user-picked VMID, delete somebody else's
+    // VM that happens to hold that id.
+    if (vmCreated && targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
         await destroyPveVm(pveConn, config.targetNode, targetVmid)
         await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
       } catch (delErr: any) {
-        await appendLog(
-          jobId,
-          `Warning: failed to destroy partial VM ${targetVmid}: ${delErr?.message || String(delErr)}. ` +
-          `Remove it manually via 'qm destroy ${targetVmid} --purge --destroy-unreferenced-disks' to free the VMID and its disk space.`,
-          "warn",
-        )
+        const delMsg = delErr?.message || String(delErr)
+        // PVE reports a missing guest config as a 500 on the DELETE. Nothing is
+        // left behind in that case, so it is not something to act on.
+        if (/does not exist/i.test(delMsg)) {
+          await appendLog(jobId, `Partial VM ${targetVmid} was already gone, nothing to clean up`, "info")
+        } else {
+          await appendLog(
+            jobId,
+            `Warning: failed to destroy partial VM ${targetVmid}: ${delMsg}. ` +
+            `Remove it manually via 'qm destroy ${targetVmid} --purge --destroy-unreferenced-disks' to free the VMID and its disk space.`,
+            "warn",
+          )
+        }
       }
     }
   } finally {
@@ -2865,6 +3164,7 @@ export async function runV2vMigrationPipeline(
       }
     }
     cancelledJobs.delete(jobId)
+    rootChoiceRequests.delete(jobId)
     jobPrisma.delete(jobId)
   }
 }

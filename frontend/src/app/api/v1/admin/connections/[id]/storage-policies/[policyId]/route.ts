@@ -13,6 +13,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import {
   updateStoragePolicy,
   deleteStoragePolicy,
+  normalizeStoragePolicyInput,
   validateStoragePolicyInput,
   assertPolicyStorageValid,
   clearScopeCacheForPolicy,
@@ -48,15 +49,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (!existing) return NextResponse.json({ error: "Storage policy not found" }, { status: 404 })
 
     const body = await req.json()
-    const input = {
-      name: String(body?.name ?? "").trim(),
-      description: typeof body?.description === "string" ? body.description : null,
-      storageId: String(body?.storageId ?? "").trim(),
-      iopsRd: body?.iopsRd ?? null,
-      iopsWr: body?.iopsWr ?? null,
-      mbpsRd: body?.mbpsRd ?? null,
-      mbpsWr: body?.mbpsWr ?? null,
-    }
+    const input = normalizeStoragePolicyInput(body)
     validateStoragePolicyInput(input)
     const conn = await getConnectionById(id)
     await assertPolicyStorageValid(conn, input.storageId)

@@ -24,6 +24,7 @@ const {
   createStoragePolicyMock,
   updateStoragePolicyMock,
   deleteStoragePolicyMock,
+  normalizeStoragePolicyInputMock,
   validateStoragePolicyInputMock,
   assertPolicyStorageValidMock,
   clearScopeCacheForPolicyMock,
@@ -38,6 +39,7 @@ const {
   createStoragePolicyMock: vi.fn(),
   updateStoragePolicyMock: vi.fn(),
   deleteStoragePolicyMock: vi.fn(),
+  normalizeStoragePolicyInputMock: vi.fn(),
   validateStoragePolicyInputMock: vi.fn(),
   assertPolicyStorageValidMock: vi.fn(),
   clearScopeCacheForPolicyMock: vi.fn(),
@@ -61,6 +63,7 @@ vi.mock('@/lib/vdc/storagePolicies', () => ({
   createStoragePolicy: (...a: unknown[]) => createStoragePolicyMock(...a),
   updateStoragePolicy: (...a: unknown[]) => updateStoragePolicyMock(...a),
   deleteStoragePolicy: (...a: unknown[]) => deleteStoragePolicyMock(...a),
+  normalizeStoragePolicyInput: (...a: unknown[]) => normalizeStoragePolicyInputMock(...a),
   validateStoragePolicyInput: (...a: unknown[]) => validateStoragePolicyInputMock(...a),
   assertPolicyStorageValid: (...a: unknown[]) => assertPolicyStorageValidMock(...a),
   clearScopeCacheForPolicy: (...a: unknown[]) => clearScopeCacheForPolicyMock(...a),
@@ -111,6 +114,17 @@ beforeEach(() => {
   createStoragePolicyMock.mockResolvedValue(POLICY_ROW)
   updateStoragePolicyMock.mockResolvedValue(POLICY_ROW)
   deleteStoragePolicyMock.mockResolvedValue(undefined)
+  // Mirrors the real normalizeStoragePolicyInput transform (kept simple
+  // here; the transform itself is pinned by storagePolicies.test.ts).
+  normalizeStoragePolicyInputMock.mockImplementation((body: any) => ({
+    name: String(body?.name ?? '').trim(),
+    description: typeof body?.description === 'string' ? body.description : null,
+    storageId: String(body?.storageId ?? '').trim(),
+    iopsRd: body?.iopsRd ?? null,
+    iopsWr: body?.iopsWr ?? null,
+    mbpsRd: body?.mbpsRd ?? null,
+    mbpsWr: body?.mbpsWr ?? null,
+  }))
   validateStoragePolicyInputMock.mockReturnValue(undefined)
   assertPolicyStorageValidMock.mockResolvedValue(undefined)
   clearScopeCacheForPolicyMock.mockResolvedValue(undefined)
@@ -281,6 +295,18 @@ describe('DELETE /api/v1/admin/connections/{id}/storage-policies/{policyId}', ()
     const res = await callRoute(DELETE as Parameters<typeof callRoute>[0], {
       method: 'DELETE',
       params: { id: CONN_ID, policyId: 'missing' },
+    })
+
+    expect(res.status).toBe(404)
+    expect(deleteStoragePolicyMock).not.toHaveBeenCalled()
+  })
+
+  it('404s a policyId owned by another connection (closes the forged-URL cross-connection delete)', async () => {
+    findUniqueMock.mockResolvedValue({ connectionId: 'other-conn', name: 'Gold NVMe' })
+
+    const res = await callRoute(DELETE as Parameters<typeof callRoute>[0], {
+      method: 'DELETE',
+      params: { id: CONN_ID, policyId: POLICY_ID },
     })
 
     expect(res.status).toBe(404)

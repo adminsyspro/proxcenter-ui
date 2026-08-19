@@ -24,6 +24,23 @@ export interface StoragePolicyInput {
 const NAME_MAX = 64
 const CAP_FIELDS = ['iopsRd', 'iopsWr', 'mbpsRd', 'mbpsWr'] as const
 
+/** Builds a StoragePolicyInput from a raw request body (POST/PUT). Shared by
+ *  both admin routes (route.ts POST, [policyId]/route.ts PUT) so the
+ *  field-by-field trim/coercion isn't duplicated verbatim between them
+ *  (Sonar new-code duplication gate). No validation here: callers still run
+ *  validateStoragePolicyInput on the result. */
+export function normalizeStoragePolicyInput(body: any): StoragePolicyInput {
+  return {
+    name: String(body?.name ?? '').trim(),
+    description: typeof body?.description === 'string' ? body.description : null,
+    storageId: String(body?.storageId ?? '').trim(),
+    iopsRd: body?.iopsRd ?? null,
+    iopsWr: body?.iopsWr ?? null,
+    mbpsRd: body?.mbpsRd ?? null,
+    mbpsWr: body?.mbpsWr ?? null,
+  }
+}
+
 export function validateStoragePolicyInput(input: StoragePolicyInput): void {
   if (!input.name || typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > NAME_MAX) {
     throw new Error(`Storage policy name is required (1-${NAME_MAX} characters)`)

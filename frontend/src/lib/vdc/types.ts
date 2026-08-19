@@ -28,7 +28,6 @@ export interface VdcWithDetails extends Vdc {
   sharedBridges: VdcSharedBridge[]
   vnets: VdcVnet[]
   vlanPools: VdcVlanPool[]
-  storagePolicies: VdcStoragePolicyDto[]
   pbsBindings: VdcPbsBinding[]
 }
 

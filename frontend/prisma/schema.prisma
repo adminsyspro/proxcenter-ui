@@ -725,16 +725,16 @@ model Vdc {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
 
-  nodes         VdcNode[]
-  storages      VdcStorage[]
-  quota         VdcQuota?
-  usageCache    VdcUsageCache?
-  sharedBridges VdcSharedBridge[]
-  vnets         VdcVnet[]
-  vlanPools     VdcVlanPool[]
-  storagePolicies VdcStoragePolicy[]
-  ipam          VdcIpamAllocation[]
-  pbsNamespaces VdcPbsNamespace[]
+  nodes              VdcNode[]
+  storages           VdcStorage[]
+  quota              VdcQuota?
+  usageCache         VdcUsageCache?
+  sharedBridges      VdcSharedBridge[]
+  vnets              VdcVnet[]
+  vlanPools          VdcVlanPool[]
+  storagePolicies    VdcStoragePolicy[]
+  ipam               VdcIpamAllocation[]
+  pbsNamespaces      VdcPbsNamespace[]
 
   @@unique([tenantId, connectionId])
   @@unique([tenantId, slug])
@@ -788,17 +788,17 @@ model VdcQuota {
 }
 
 model VdcUsageCache {
-  id            String    @id
-  vdcId         String    @unique @map("vdc_id")
-  vdc           Vdc       @relation(fields: [vdcId], references: [id], onDelete: Cascade)
-  usedVcpus     Int       @default(0) @map("used_vcpus")
-  usedRamMb     Int       @default(0) @map("used_ram_mb")
-  usedStorageMb Int       @default(0) @map("used_storage_mb")
-  usedVms       Int       @default(0) @map("used_vms")
-  usedSnapshots Int       @default(0) @map("used_snapshots")
-  usedBackups   Int       @default(0) @map("used_backups")
-  usedStorageByStorage Json? @map("used_storage_by_storage")
-  lastSyncedAt  DateTime? @map("last_synced_at")
+  id                   String    @id
+  vdcId                String    @unique @map("vdc_id")
+  vdc                  Vdc       @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  usedVcpus            Int       @default(0) @map("used_vcpus")
+  usedRamMb            Int       @default(0) @map("used_ram_mb")
+  usedStorageMb        Int       @default(0) @map("used_storage_mb")
+  usedVms              Int       @default(0) @map("used_vms")
+  usedSnapshots        Int       @default(0) @map("used_snapshots")
+  usedBackups          Int       @default(0) @map("used_backups")
+  usedStorageByStorage Json?     @map("used_storage_by_storage")
+  lastSyncedAt         DateTime? @map("last_synced_at")
 
   @@map("vdc_usage_cache")
 }
@@ -1230,10 +1230,10 @@ model SshHostKey {
 model ProviderConnection {
   // A connection is in the provider pool (vDC-sliceable) iff a row exists here.
   // App code keeps this in sync for PVE + tenant_id='default' connections only.
-  connectionId String     @id @map("connection_id")
-  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  vdcs         Vdc[]
-  storagePolicies StoragePolicy[]
+  connectionId      String          @id @map("connection_id")
+  connection        Connection      @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  vdcs              Vdc[]
+  storagePolicies   StoragePolicy[]
 
   @@map("provider_connections")
 }

@@ -358,7 +358,8 @@ export async function POST(
         if (!isLxc && restorePolicies.size > 0) {
           const restoreCfgPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(numericVmid))}/config`
           await restampGuestDrives({
-            conn, configPath: restoreCfgPath, policies: restorePolicies, logTag: '[restore-qos-stamp]',
+            conn, configPath: restoreCfgPath, policies: restorePolicies,
+            logTag: `[restore-qos-stamp] vmid=${safeLog(numericVmid)}`,
           })
         }
 

@@ -10,6 +10,7 @@
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { safeLog } from '@/lib/log/sanitize'
 
 import {
   DATA_DISK_KEY_RE, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
@@ -18,15 +19,18 @@ import {
 
 export class DriveScopeError extends Error {}
 
-/** A validated drive carrying an import-from option whose parsed
- *  newAllocationGb is 0 or null (spec Finding I2): PVE allocates a
- *  full-size volume for these regardless of the declared size, so they
- *  must be metered against the REAL source volume size, not the size the
- *  tenant typed. */
+/** A validated drive carrying an import-from option (spec Finding I2): PVE
+ *  allocates the SOURCE volume's full size regardless of the declared
+ *  size, so every such drive must be re-metered against the REAL source
+ *  size, not just the ones declaring 0/no size. `declaredMb` is whatever
+ *  the main enforceTenantDrives loop already counted for this drive (0 when
+ *  newAllocationGb is null/0); meterImportRefs only adds the DELTA on top,
+ *  it never re-counts the declared part. */
 export interface ImportRef {
   key: string
   targetStorage: string
   sourceVolid: string
+  declaredMb: number
 }
 
 export interface DriveEnforcement {
@@ -66,19 +70,23 @@ export async function enforceTenantDrives(args: {
     if (args.type === 'qemu' && DATA_DISK_KEY_RE.test(key) && drive.storage) {
       args.body[key] = stampDriveQos(raw, policies.get(drive.storage))
     }
+    let declaredMb = 0
     if (drive.storage && drive.newAllocationGb !== null && drive.newAllocationGb > 0) {
-      const mb = Math.round(drive.newAllocationGb * 1024)
-      addStorageMbByStorage[drive.storage] = (addStorageMbByStorage[drive.storage] ?? 0) + mb
-      totalAddMb += mb
-    } else if (drive.storage && (drive.newAllocationGb === null || drive.newAllocationGb === 0)) {
-      // Zero/absent declared allocation is exactly the shape a tenant can
-      // repeat to dodge metering: `scsiN: "gold:0,import-from=gold:vm-100-
-      // disk-0"` allocates a full-size PVE volume for free. Refuse-nothing
-      // (import is a legitimate CreateVmDialog flow): hand the caller the
-      // reference so it can meter the REAL source size instead.
+      declaredMb = Math.round(drive.newAllocationGb * 1024)
+      addStorageMbByStorage[drive.storage] = (addStorageMbByStorage[drive.storage] ?? 0) + declaredMb
+      totalAddMb += declaredMb
+    }
+    if (drive.storage) {
+      // A declared size next to import-from is only a LOWER bound: PVE
+      // still allocates the source volume's full size regardless of what
+      // the tenant typed (`gold:1,import-from=...` costs as much as
+      // `gold:0,import-from=...`). Capture the ref for EVERY import-from
+      // drive, not only the 0/absent-size shape (refuse-nothing: import is
+      // a legitimate CreateVmDialog flow): hand the caller the reference,
+      // declared amount included, so it can meter the REAL source size.
       const importOpt = drive.opts.find(([k]) => k === 'import-from')
       if (importOpt) {
-        importRefs.push({ key, targetStorage: drive.storage, sourceVolid: importOpt[1] })
+        importRefs.push({ key, targetStorage: drive.storage, sourceVolid: importOpt[1], declaredMb })
       }
     }
   }
@@ -86,13 +94,18 @@ export async function enforceTenantDrives(args: {
 }
 
 /** Resolve the real size (MB) of each import-from source volume and return
- *  a fresh addStorageMbByStorage/totalAddMb pair to fold into the caller's
- *  metering (spec Finding I2: meter, never refuse). One storage content
- *  listing per DISTINCT source storage: a tenant importing several disks
- *  from the same source storage doesn't cost several PVE round-trips.
- *  Fail-open per ref (absent volid, listing throws): logged and skipped,
- *  never blocks the request, same class as the rest of the lot's
- *  best-effort metering (e.g. getVdcStorageUsedMb in quota.ts). */
+ *  an ADDITIONAL addStorageMbByStorage/totalAddMb pair to fold on top of
+ *  the caller's existing metering (spec Finding I2: meter, never refuse).
+ *  Each ref's `declaredMb` was already counted by enforceTenantDrives's main
+ *  loop, so this only adds `max(0, sourceMb - declaredMb)`: the part PVE
+ *  allocates beyond what the tenant declared, never the full source size
+ *  again (that would double-count the declared portion). One storage
+ *  content listing per DISTINCT source storage: a tenant importing several
+ *  disks from the same source storage doesn't cost several PVE round-trips.
+ *  Fail-open per ref (absent volid, listing throws, unexpected shape):
+ *  logged and skipped, the declared metering the caller already has
+ *  stands unchanged, never blocks the request, same class as the rest of
+ *  the lot's best-effort metering (e.g. getVdcStorageUsedMb in quota.ts). */
 export async function meterImportRefs(
   conn: any,
   node: string,
@@ -112,9 +125,14 @@ export async function meterImportRefs(
           conn,
           `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(srcStorage)}/content`,
         )
-        contentByStorage.set(srcStorage, content ?? [])
+        if (!Array.isArray(content)) {
+          console.warn(`[import-meter] unexpected content listing shape for "${safeLog(srcStorage)}" on "${safeLog(node)}"`)
+          contentByStorage.set(srcStorage, null)
+        } else {
+          contentByStorage.set(srcStorage, content)
+        }
       } catch (err: any) {
-        console.warn(`[import-meter] content listing failed for "${srcStorage}" on "${node}": ${err?.message ?? err}`)
+        console.warn(`[import-meter] content listing failed for "${safeLog(srcStorage)}" on "${safeLog(node)}": ${safeLog(err?.message ?? err)}`)
         contentByStorage.set(srcStorage, null)
       }
     }
@@ -124,15 +142,17 @@ export async function meterImportRefs(
 
     const vol = content.find((v: any) => v?.volid === ref.sourceVolid)
     if (!vol) {
-      console.warn(`[import-meter] source volid "${ref.sourceVolid}" not found on storage "${srcStorage}"`)
+      console.warn(`[import-meter] source volid "${safeLog(ref.sourceVolid)}" not found on storage "${safeLog(srcStorage)}"`)
       continue
     }
 
     const bytes = Number(vol.size) || 0
     if (bytes <= 0) continue
-    const mb = Math.round(bytes / 1048576)
-    addStorageMbByStorage[ref.targetStorage] = (addStorageMbByStorage[ref.targetStorage] ?? 0) + mb
-    totalAddMb += mb
+    const sourceMb = Math.round(bytes / 1048576)
+    const additionalMb = Math.max(0, sourceMb - ref.declaredMb)
+    if (additionalMb <= 0) continue
+    addStorageMbByStorage[ref.targetStorage] = (addStorageMbByStorage[ref.targetStorage] ?? 0) + additionalMb
+    totalAddMb += additionalMb
   }
 
   return { addStorageMbByStorage, totalAddMb }
@@ -144,7 +164,11 @@ export async function meterImportRefs(
  *  blocks (spec §5.3 + Finding I1): each schedules its own waitForTask on
  *  the write's UPID, then calls this once the task has settled. Never
  *  throws: a failure here must not surface as a failed clone/restore/
- *  rollback, it only logs. */
+ *  rollback, it only logs. `logTag` should already carry the guest
+ *  identifier (e.g. `` `[clone-qos-stamp] vmid=${newid}` ``) so a failure
+ *  can be traced back to the guest it happened for; the caller's own
+ *  interpolations into it must already be safeLog'd (raw path/body
+ *  segments can carry log-injection-prone characters). */
 export async function restampGuestDrives(args: {
   conn: any
   configPath: string
@@ -172,6 +196,6 @@ export async function restampGuestDrives(args: {
       })
     }
   } catch (err: any) {
-    console.error(`${logTag} failed: ${err?.message ?? err}`)
+    console.error(`${logTag} failed: ${safeLog(err?.message ?? err)}`)
   }
 }

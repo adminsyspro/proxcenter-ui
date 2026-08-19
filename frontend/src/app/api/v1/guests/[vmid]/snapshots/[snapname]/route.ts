@@ -8,6 +8,7 @@ import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import type { DriveQosCaps } from "@/lib/vdc/drives"
+import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
 
@@ -72,13 +73,20 @@ export async function POST(
     // rollback, potentially handing back self-chosen QoS on a now-policied
     // storage. Resolved eagerly (union scope, iaas only) ahead of the PVE
     // rollback call and reused by the post-rollback restamp after() block
-    // below (cookies/request context die inside after()).
-    const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
-    const rollbackPolicies: Map<string, DriveQosCaps> =
-      infra.kind === 'iaas' && infra.vdcScope
+    // below (cookies/request context die inside after()). The restamp is
+    // best-effort by design (spec §5.3): a DB/scope failure here must not
+    // turn a previously DB-free rollback into a 500, so it falls back to an
+    // empty policies map (no restamp scheduled) rather than throwing.
+    let rollbackPolicies: Map<string, DriveQosCaps> = new Map()
+    try {
+      const tenantId = await getCurrentTenantId()
+      const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+      rollbackPolicies = infra.kind === 'iaas' && infra.vdcScope
         ? (infra.vdcScope.storagePoliciesByConnection.get(connId) ?? new Map())
         : new Map()
+    } catch (err: any) {
+      console.warn(`[rollback-qos-stamp] scope resolution failed for vmid=${safeLog(vmid)}, restamp skipped: ${safeLog(err?.message ?? err)}`)
+    }
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}/rollback`
 
@@ -93,14 +101,15 @@ export async function POST(
     if (type === 'qemu' && rollbackPolicies.size > 0 && result) {
       const upid = String(result)
       const configPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/config`
+      const rollbackLogTag = `[rollback-qos-stamp] vmid=${safeLog(vmid)}`
       after(async () => {
         try {
           await waitForTask(conn, node, upid)
         } catch (err: any) {
-          console.error(`[rollback-qos-stamp] waitForTask failed for vmid=${vmid}: ${err?.message ?? err}`)
+          console.error(`${rollbackLogTag} waitForTask failed: ${safeLog(err?.message ?? err)}`)
           return
         }
-        await restampGuestDrives({ conn, configPath, policies: rollbackPolicies, logTag: '[rollback-qos-stamp]' })
+        await restampGuestDrives({ conn, configPath, policies: rollbackPolicies, logTag: rollbackLogTag })
       })
     }
 

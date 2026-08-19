@@ -160,7 +160,7 @@ describe('enforceTenantDrives', () => {
     expect(result).toEqual({
       addStorageMbByStorage: {},
       totalAddMb: 0,
-      importRefs: [{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0' }],
+      importRefs: [{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 0 }],
     })
   })
 
@@ -168,14 +168,20 @@ describe('enforceTenantDrives', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:vm-100-disk-1,import-from=gold:vm-100-disk-0' }
     const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
-    expect(result?.importRefs).toEqual([{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0' }])
+    expect(result?.importRefs).toEqual([
+      { key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 0 },
+    ])
   })
 
-  it('iaas: import-from WITH an explicit non-zero size is metered normally, never added to importRefs', async () => {
+  it('iaas: import-from WITH an explicit non-zero size is metered for the declared part AND still captured as an importRef (residual fix)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:16,import-from=gold:vm-100-disk-0' }
     const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
-    expect(result).toEqual({ addStorageMbByStorage: { gold: 16384 }, totalAddMb: 16384, importRefs: [] })
+    expect(result).toEqual({
+      addStorageMbByStorage: { gold: 16384 },
+      totalAddMb: 16384,
+      importRefs: [{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 16384 }],
+    })
   })
 
   it('iaas: a plain zero-size volid without import-from produces no importRef', async () => {
@@ -186,9 +192,55 @@ describe('enforceTenantDrives', () => {
   })
 })
 
+describe('enforceTenantDrives + meterImportRefs combined (Finding I2 residual: declared-size shortcut)', () => {
+  const gold32g = [{ volid: 'gold:vm-100-disk-0', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
+
+  it('gold:1,import-from=<32G volid> meters 32768 total for the tier (declared + delta, not double-counted)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
+    const body = { scsi0: 'gold:1,import-from=gold:vm-100-disk-0' }
+    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    expect(result?.addStorageMbByStorage).toEqual({ gold: 1024 })
+
+    pveFetchMock.mockResolvedValue(gold32g)
+    const imported = await meterImportRefs({ id: 'conn-1' }, 'pve1', result!.importRefs)
+    expect(imported).toEqual({ addStorageMbByStorage: { gold: 31744 }, totalAddMb: 31744 })
+
+    const combined = result!.addStorageMbByStorage.gold + imported.addStorageMbByStorage.gold
+    expect(combined).toBe(32768)
+  })
+
+  it('declared 0 keeps metering the full 32768 (non-regression)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
+    const body = { scsi0: 'gold:0,import-from=gold:vm-100-disk-0' }
+    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    expect(result?.addStorageMbByStorage).toEqual({})
+
+    pveFetchMock.mockResolvedValue(gold32g)
+    const imported = await meterImportRefs({ id: 'conn-1' }, 'pve1', result!.importRefs)
+    expect(imported.addStorageMbByStorage).toEqual({ gold: 32768 })
+
+    const combined = (result!.addStorageMbByStorage.gold ?? 0) + imported.addStorageMbByStorage.gold
+    expect(combined).toBe(32768)
+  })
+
+  it('a source resolution failure keeps the declared metering (1024) and allows (fail-open unchanged)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
+    const body = { scsi0: 'gold:1,import-from=gold:vm-100-disk-0' }
+    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    expect(result?.addStorageMbByStorage).toEqual({ gold: 1024 })
+
+    pveFetchMock.mockRejectedValue(new Error('storage unreachable'))
+    const imported = await meterImportRefs({ id: 'conn-1' }, 'pve1', result!.importRefs)
+    expect(imported).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0 })
+
+    const combined = result!.addStorageMbByStorage.gold + (imported.addStorageMbByStorage.gold ?? 0)
+    expect(combined).toBe(1024)
+  })
+})
+
 describe('meterImportRefs (Finding I2)', () => {
   const refs = [
-    { key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0' },
+    { key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 0 },
   ]
 
   it('resolves the source volid size (bytes -> MB) against the target storage', async () => {
@@ -205,13 +257,31 @@ describe('meterImportRefs (Finding I2)', () => {
       { volid: 'gold:vm-100-disk-2', size: 4 * 1024 * 1024 * 1024, content: 'images' },
     ])
     const twoRefs = [
-      { key: 'scsi0', targetStorage: 'silver', sourceVolid: 'gold:vm-100-disk-0' },
-      { key: 'scsi1', targetStorage: 'silver', sourceVolid: 'gold:vm-100-disk-2' },
+      { key: 'scsi0', targetStorage: 'silver', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 0 },
+      { key: 'scsi1', targetStorage: 'silver', sourceVolid: 'gold:vm-100-disk-2', declaredMb: 0 },
     ]
     const result = await meterImportRefs({ id: 'conn-1' }, 'pve1', twoRefs)
     expect(result).toEqual({ addStorageMbByStorage: { silver: 12288 }, totalAddMb: 12288 })
     const contentCalls = pveFetchMock.mock.calls.filter((c) => String(c[1]).includes('/storage/gold/content'))
     expect(contentCalls.length).toBe(1)
+  })
+
+  it('meters only the delta above declaredMb, never the full source size again', async () => {
+    pveFetchMock.mockResolvedValue([
+      { volid: 'gold:vm-100-disk-0', size: 8 * 1024 * 1024 * 1024, content: 'images' },
+    ])
+    const declaredRef = [{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 8192 }]
+    const result = await meterImportRefs({ id: 'conn-1' }, 'pve1', declaredRef)
+    expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0 })
+  })
+
+  it('a declaredMb larger than the source (should not happen, defensive) never goes negative', async () => {
+    pveFetchMock.mockResolvedValue([
+      { volid: 'gold:vm-100-disk-0', size: 4 * 1024 * 1024 * 1024, content: 'images' },
+    ])
+    const overDeclaredRef = [{ key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 999999 }]
+    const result = await meterImportRefs({ id: 'conn-1' }, 'pve1', overDeclaredRef)
+    expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0 })
   })
 
   it('fail-open: a listing failure is skipped, not thrown', async () => {
@@ -224,6 +294,14 @@ describe('meterImportRefs (Finding I2)', () => {
 
   it('fail-open: an absent volid on the listing is skipped, not thrown', async () => {
     pveFetchMock.mockResolvedValue([{ volid: 'gold:some-other-disk', size: 1024, content: 'images' }])
+    await expect(meterImportRefs({ id: 'conn-1' }, 'pve1', refs)).resolves.toEqual({
+      addStorageMbByStorage: {},
+      totalAddMb: 0,
+    })
+  })
+
+  it('fail-open: a non-array listing payload is skipped, not thrown (defect 2)', async () => {
+    pveFetchMock.mockResolvedValue({ error: 'not an array' } as any)
     await expect(meterImportRefs({ id: 'conn-1' }, 'pve1', refs)).resolves.toEqual({
       addStorageMbByStorage: {},
       totalAddMb: 0,

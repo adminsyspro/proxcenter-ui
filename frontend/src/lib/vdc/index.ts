@@ -86,7 +86,6 @@ function rowToUsage(row: any): VdcUsage | null {
     usedVms: row.usedVms ?? 0,
     usedSnapshots: row.usedSnapshots ?? 0,
     usedBackups: row.usedBackups ?? 0,
-    usedStorageByStorage: row.usedStorageByStorage ?? null,
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
   }
 }
@@ -160,16 +159,6 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     rangeEnd: p.rangeEnd,
     createdAt: p.createdAt.toISOString(),
   }))
-  const storagePolicies = (row.storagePolicies ?? []).map((sp: any) => ({
-    policyId: sp.policyId,
-    name: sp.policy?.name ?? '',
-    storageId: sp.policy?.storageId ?? '',
-    iopsRd: sp.policy?.iopsRd ?? null,
-    iopsWr: sp.policy?.iopsWr ?? null,
-    mbpsRd: sp.policy?.mbpsRd ?? null,
-    mbpsWr: sp.policy?.mbpsWr ?? null,
-    quotaMb: sp.quotaMb ?? null,
-  }))
   const pbsBindings = row.pbsNamespaces.map((b: any) => ({
     id: b.id,
     vdcId: b.vdcId,
@@ -191,7 +180,6 @@ function buildVdcWithDetails(row: any, pbsConnNames?: Map<string, string>): VdcW
     sharedBridges,
     vnets,
     vlanPools,
-    storagePolicies,
     pbsBindings,
   }
 }
@@ -211,9 +199,6 @@ const vdcWithDetailsInclude = {
     orderBy: [{ bridge: 'asc' as const }, { rangeStart: 'asc' as const }] as (
       { bridge: 'asc' } | { rangeStart: 'asc' }
     )[],
-  },
-  storagePolicies: {
-    include: { policy: true },
   },
   pbsNamespaces: true,
 } as const

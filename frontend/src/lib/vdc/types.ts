@@ -27,6 +27,7 @@ export interface VdcWithDetails extends Vdc {
   usage: VdcUsage | null
   sharedBridges: VdcSharedBridge[]
   vnets: VdcVnet[]
+  vlanPools: VdcVlanPool[]
   pbsBindings: VdcPbsBinding[]
 }
 
@@ -69,6 +70,15 @@ export interface VdcSharedBridge {
   createdAt: string
 }
 
+export interface VdcVlanPool {
+  id: string
+  vdcId: string
+  bridge: string
+  rangeStart: number
+  rangeEnd: number
+  createdAt: string
+}
+
 export interface VdcVnet {
   id: string
   vdcId: string
@@ -77,7 +87,10 @@ export interface VdcVnet {
   /** Friendly name shown to the tenant (free-form, unique per vDC). */
   displayName: string
   description: string | null
-  vxlanTag: number
+  tag: number
+  type: 'vxlan' | 'vlan'
+  bridge: string | null
+  zoneName: string | null
   firewall: boolean
   /** L3 / IPAM config attached to the VNet. Always present — the VNet is
    *  unusable without a subnet (the IPAM is the only mechanism to allocate
@@ -100,7 +113,7 @@ export interface VdcSubnet {
 // PVE-native shapes used by lib/vdc/sdn.ts
 export interface SdnZone {
   zone: string
-  type: 'vxlan'
+  type: 'vxlan' | 'vlan'
   peers: string[]
 }
 
@@ -123,6 +136,7 @@ export interface CreateVdcInput {
   primaryStorage: string
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
+  vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
 }
 
 export interface UpdateVdcInput {
@@ -133,4 +147,5 @@ export interface UpdateVdcInput {
   primaryStorage?: string
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
+  vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
 }

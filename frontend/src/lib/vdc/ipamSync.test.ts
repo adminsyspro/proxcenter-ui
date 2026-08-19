@@ -102,8 +102,8 @@ beforeEach(async () => {
   })
   await prismaTest.vdcVnet.createMany({
     data: [
-      { id: 'vnet-1', vdcId: 'vdc-1', pveName: 'tenantA', vxlanTag: 10000 },
-      { id: 'vnet-2', vdcId: 'vdc-1', pveName: 'tenantB', vxlanTag: 10001 },
+      { id: 'vnet-1', vdcId: 'vdc-1', pveName: 'tenantA', tag: 10000 },
+      { id: 'vnet-2', vdcId: 'vdc-1', pveName: 'tenantB', tag: 10001 },
     ],
   })
   await prismaTest.vdcSubnet.createMany({
@@ -214,6 +214,34 @@ describe('syncIpamForVmConfig — bridge change between IPAM-managed VNets', () 
     const result = await syncIpamForVmConfig({
       before: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA' },
       after: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantB' },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 100,
+      hostname: null,
+    })
+
+    expect(await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01')).toBeNull()
+    expect((await findAllocationByMac('subnet-2', 'AA:00:00:00:00:01'))?.ip).toBe('10.43.0.1')
+    expect(result.bodyOverrides.ipconfig0).toBe('ip=10.43.0.1/24,gw=10.43.0.254')
+  })
+
+  it('ignores a stale ipconfigN inherited from the old subnet instead of failing on the hint', async () => {
+    // Regression: the config PUT body is a sparse patch, so `after` inherits
+    // the OLD subnet's ipconfig0 when only netN changed. That stale IP used
+    // to reach the allocator as a hint for the NEW subnet and threw
+    // IpamHintUnavailableError (surfaced as HTTP 409 "IP unavailable").
+    await allocateIp({
+      vdcId: 'vdc-1',
+      subnetId: 'subnet-1',
+      vnetId: 'vnet-1',
+      connectionId: 'conn-1',
+      mac: 'AA:00:00:00:00:01',
+      vmid: 100,
+    })
+
+    const result = await syncIpamForVmConfig({
+      before: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', ipconfig0: 'ip=10.42.0.1/24,gw=10.42.0.254' },
+      after: { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantB', ipconfig0: 'ip=10.42.0.1/24,gw=10.42.0.254' },
       conn: fakeConn,
       connectionId: 'conn-1',
       vmid: 100,

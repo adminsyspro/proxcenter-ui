@@ -25,7 +25,17 @@ import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useTenant } from '@/contexts/TenantContext'
 
-interface Vdc { id: string; name: string; connectionId?: string; enabled?: boolean }
+interface VlanPool { bridge: string; rangeStart: number; rangeEnd: number }
+
+interface Vdc {
+  id: string
+  name: string
+  connectionId?: string
+  enabled?: boolean
+  /** Provider-dedicated VLAN ranges; drives the VLAN branch of the create
+   *  dialog. Absent (or empty) means the tenant only gets VXLAN. */
+  vlanPools?: VlanPool[]
+}
 
 interface SubnetView {
   cidr: string
@@ -47,7 +57,8 @@ interface VnetRow {
   /** Hashed 8-char PVE ID; surfaced in a tooltip for provider debugging. */
   pveName: string
   description?: string | null
-  vxlanTag?: number | null
+  tag?: number | null
+  type?: string
   firewall?: boolean
   /** L3 / IPAM info attached to the VNet. Always present in the new model. */
   subnet: SubnetView | null
@@ -87,6 +98,10 @@ export default function VnetsSection({ connectionIds }: Props) {
   // poll, kicking the table back to a spinner.
   const connKey = connectionIds.slice().sort((a, b) => a.localeCompare(b)).join(',')
   const connFilter = useMemo(() => new Set(connKey ? connKey.split(',') : []), [connKey])
+
+  // The inventory tree keeps its own one-shot tvnet fetch; tell it a
+  // mutation happened so its NETWORK branch refreshes without a full reload.
+  const notifyTreeChanged = () => window.dispatchEvent(new CustomEvent('proxcenter:tenant-vnets-changed'))
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -136,7 +151,8 @@ export default function VnetsSection({ connectionIds }: Props) {
               displayName: vnet.displayName ?? vnet.pveName,
               pveName: vnet.pveName,
               description: vnet.description,
-              vxlanTag: vnet.vxlanTag,
+              tag: vnet.tag,
+              type: vnet.type,
               firewall: vnet.firewall,
               subnet,
               ipamUsage,
@@ -219,7 +235,7 @@ export default function VnetsSection({ connectionIds }: Props) {
                       sx={{ '&:last-child td': { border: 0 }, cursor: 'pointer' }}
                     >
                       <TableCell sx={{ py: 1 }}>
-                        <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.vxlanTag ? ` · VNI ${r.vxlanTag}` : ''}`} arrow placement="top">
+                        <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.tag ? ` · ${r.type === 'vlan' ? 'VLAN' : 'VNI'} ${r.tag}` : ''}`} arrow placement="top">
                           <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
                         </Tooltip>
                       </TableCell>
@@ -301,16 +317,16 @@ export default function VnetsSection({ connectionIds }: Props) {
 
       <VnetCreateDialog
         open={createOpen}
-        vdcs={vdcs.map(v => ({ id: v.id, name: v.name }))}
+        vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [] }))}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => { setCreateOpen(false); void reload() }}
+        onCreated={() => { setCreateOpen(false); void reload(); notifyTreeChanged() }}
       />
       {editVnet && (
         <VnetEditDialog
           vnet={editVnet.row}
           vdcId={editVnet.row.vdcId}
           onClose={() => setEditVnet(null)}
-          onSaved={() => { setEditVnet(null); void reload() }}
+          onSaved={() => { setEditVnet(null); void reload(); notifyTreeChanged() }}
         />
       )}
       {deleteVnet && (
@@ -318,7 +334,7 @@ export default function VnetsSection({ connectionIds }: Props) {
           vnet={deleteVnet.row}
           vdcId={deleteVnet.row.vdcId}
           onClose={() => setDeleteVnet(null)}
-          onDeleted={() => { setDeleteVnet(null); void reload() }}
+          onDeleted={() => { setDeleteVnet(null); void reload(); notifyTreeChanged() }}
         />
       )}
 

@@ -128,6 +128,8 @@ export async function GET(req: Request, ctx: RouteContext) {
         select: {
           pveName: true,
           displayName: true,
+          zoneName: true,
+          type: true,
           vdc: { select: { id: true, slug: true, sdnZoneName: true } },
         },
       })
@@ -143,7 +145,9 @@ export async function GET(req: Request, ctx: RouteContext) {
             // (and any future caller) doesn't have to do a second
             // lookup to translate slug → id.
             vdcId: v.vdc.id,
-            zone: v.vdc.sdnZoneName ?? '',
+            // A VLAN VNet lives in the shared per-(connection, bridge) zone,
+            // not the vDC's own VXLAN zone: read the VNet's zone first.
+            zone: v.zoneName ?? v.vdc.sdnZoneName ?? '',
             subnet: subnetByPveName.get(v.pveName) ?? null,
           })
         }

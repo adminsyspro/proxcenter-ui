@@ -36,4 +36,19 @@ describe('mapCreateVdcError', () => {
     )
     expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
   })
+
+  it('maps an invalid VLAN pool range to 400', () => {
+    const e = new Error('VLAN pool range 0-100 is invalid (bounds 1-4094, start <= end)')
+    expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
+  })
+
+  it('maps a cross-vDC VLAN pool overlap to 400 (not the 409 "already exists" bucket)', () => {
+    const e = new Error('VLAN pool 150-250 on bridge "vmbr0" overlaps vDC "Acme" (100-200)')
+    expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
+  })
+
+  it('maps a VLAN pool shrink-safety rejection to 409', () => {
+    const e = new Error('Cannot shrink VLAN pools: VNet "prod-lan" uses tag 150 on bridge "vmbr0"')
+    expect(mapCreateVdcError(e)).toEqual({ status: 409, message: e.message })
+  })
 })

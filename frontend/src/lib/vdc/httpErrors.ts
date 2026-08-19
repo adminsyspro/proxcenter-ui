@@ -13,6 +13,8 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
       message: 'A vDC already exists for this tenant on this cluster (or its slug is already taken).',
     }
   }
+  if (msg.includes('Cannot shrink VLAN pools')) return { status: 409, message: msg }
+  if (msg.startsWith('VLAN pool')) return { status: 400, message: msg }
   if (msg.includes('already has a vDC')) return { status: 409, message: msg }
   if (msg.includes('already exists')) return { status: 409, message: msg }
   if (msg.includes('cannot be created on the provider tenant') || msg.startsWith('Tenant not found')) {

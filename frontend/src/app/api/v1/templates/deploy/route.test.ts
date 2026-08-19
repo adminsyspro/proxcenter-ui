@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
+// The success path schedules the deployment pipeline through after(); swallow
+// it so a 200 can be asserted without driving the pipeline.
+vi.mock('next/server', async (io) => {
+  const actual = await io<typeof import('next/server')>()
+  return { ...actual, after: vi.fn() }
+})
+
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -22,19 +29,30 @@ vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/schemas', () => ({ deploySchema: { safeParse: (b: any) => ({ success: true, data: b }) } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
-vi.mock('@/lib/templates/cloudImages', () => ({ getImageBySlug: () => undefined, customImageToCloudImage: vi.fn() }))
+const getImageBySlugMock = vi.fn<(...args: any[]) => any>()
+vi.mock('@/lib/templates/cloudImages', () => ({ getImageBySlug: getImageBySlugMock, customImageToCloudImage: vi.fn() }))
 vi.mock('@/lib/proxmox/storage', () => ({ isFileBasedStorage: () => true, supportsVmDisks: () => true }))
-vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: vi.fn(async () => null), checkVdcQuota: vi.fn() }))
-vi.mock('@/lib/vdc/vnets', () => ({
-  getAllowedBridgesForTenant: vi.fn(async () => null),
-  resolveSubnetForBridge: vi.fn(async () => null),
-}))
+const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
+const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: resolveVdcForTenantMock, checkVdcQuota: checkVdcQuotaMock }))
+const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/vdc/vnets', async (io) => {
+  // The verdict logic is what this file exercises, so it runs for real; only
+  // the DB-backed allow-list lookup is stubbed.
+  const actual = await io<typeof import('@/lib/vdc/vnets')>()
+  return {
+    getAllowedNetworksForTenant: getAllowedNetworksForTenantMock,
+    validateNetAgainstScope: actual.validateNetAgainstScope,
+    resolveSubnetForBridge: vi.fn(async () => null),
+  }
+})
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
 vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/ipamScan', () => ({ scanUsedIpsForSubnet: vi.fn(), scannedToIntSet: vi.fn(() => new Set()) }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: vi.fn() }))
-vi.mock('@/lib/vdc/scope', () => ({ getVdcScope: vi.fn(async () => null) }))
+const getVdcScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/vdc/scope', () => ({ getVdcScope: getVdcScopeMock }))
 
 const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
 vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
@@ -59,6 +77,11 @@ beforeEach(() => {
   pveFetchMock.mockReset()
   customImageFindUniqueMock.mockReset().mockResolvedValue(null)
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
+  getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
+  getVdcScopeMock.mockReset().mockResolvedValue(null)
+  getImageBySlugMock.mockReset().mockReturnValue(undefined)
+  resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
+  checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
 })
 
 describe('POST templates/deploy — MSP VMID range enforcement', () => {
@@ -88,5 +111,99 @@ describe('POST templates/deploy — MSP VMID range enforcement', () => {
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toBe('Unknown image slug')
     expect(checkVmidAgainstTenantRangeMock).toHaveBeenCalledWith('tenant-1', 190)
+  })
+})
+
+describe('POST templates/deploy: vDC network allow-list', () => {
+  /** vmbr0 is shared with a 100-199 pool; vnetacme is an SDN vnet. */
+  const scoped = () =>
+    new Map([
+      ['vmbr0', { kind: 'shared' as const, vlanRanges: [{ start: 100, end: 199 }] }],
+      ['vnetacme', { kind: 'vnet' as const, vlanRanges: [] }],
+    ])
+
+  /**
+   * The network guard sits behind image resolution, the vDC resolution and the
+   * storage allow-list. Open all three so each case reaches the guard itself.
+   */
+  function reachTheGuard() {
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', url: 'https://img.test/u.qcow2' })
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null })
+    getVdcScopeMock.mockResolvedValue({
+      storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]),
+    })
+  }
+
+  function bodyWith(hw: Record<string, unknown>) {
+    return { ...baseBody, hardware: { ...baseBody.hardware, ...hw } }
+  }
+
+  it('403: a VLAN tag outside the vDC pools never reaches PVE', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr0', vlanTag: 250 }) })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain("outside your vDC's VLAN pools")
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('400: a non-numeric vlanTag is refused before the bridge probe is built', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr0', vlanTag: '10,tag=250' }) })
+    expect(res.status).toBe(400)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toBe('vlanTag must be a positive integer')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: a tag on an SDN vnet is refused', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vnetacme', vlanTag: 150 }) })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: an unknown bridge is still refused', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr42' }) })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain('is not authorized')
+  })
+
+  it('403: a tag smuggled through networkModel is caught too', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      body: bodyWith({ networkModel: 'virtio,tag=250', networkBridge: 'vmbr0' }),
+    })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('403: a tag smuggled through networkBridge is caught too', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr0,tag=250' }) })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('passes a tag inside the vDC pools through to the deployment', async () => {
+    reachTheGuard()
+    getAllowedNetworksForTenantMock.mockResolvedValue(scoped())
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: bodyWith({ networkBridge: 'vmbr0', vlanTag: 150 }) })
+    expect(res.status).toBe(200)
   })
 })

@@ -12,7 +12,9 @@ type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 
 // GET /api/v1/admin/connections/{id}/provider-bridges
 // Returns physical (non-SDN) bridges available on the cluster, deduplicated across nodes.
-export async function GET(_req: Request, ctx: RouteContext) {
+// `?scope=vlan-pool` switches to the VLAN-pool picker's needs: zone uplink bridges are
+// kept (only vnet names are excluded) and each bridge carries a `vlanAware` flag.
+export async function GET(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -29,12 +31,19 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     const conn = await getConnectionById(id, connMeta.tenantId)
 
-    // Exclude SDN-managed bridges (zone uplink bridges + vnet names)
+    const url = new URL(req.url)
+    const scope = url.searchParams.get("scope")
+    const forVlanPool = scope === "vlan-pool"
+
+    // Exclude SDN-managed bridges: vnet names always, zone uplink bridges only
+    // outside vlan-pool scope (the VLAN-pool picker wants zone uplinks back).
     const sdnBridges: Set<string> = new Set()
     try {
-      const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones") || []
-      for (const z of zones) {
-        if (z.bridge) sdnBridges.add(String(z.bridge))
+      if (!forVlanPool) {
+        const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones") || []
+        for (const z of zones) {
+          if (z.bridge) sdnBridges.add(String(z.bridge))
+        }
       }
       const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets") || []
       for (const v of vnets) {
@@ -46,7 +55,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     // Gather bridges from all nodes, deduplicate by iface name
     const nodesRaw = await pveFetch<any[]>(conn, "/nodes") || []
-    const bridgeMap = new Map<string, { iface: string; nodes: string[]; type: string; active?: number; comments?: string }>()
+    const bridgeMap = new Map<
+      string,
+      { iface: string; nodes: string[]; type: string; active?: number; comments?: string; vlanAware?: boolean }
+    >()
 
     for (const n of nodesRaw) {
       const nodeName = n.node
@@ -61,6 +73,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
           const existing = bridgeMap.get(ifc.iface)
           if (existing) {
             existing.nodes.push(nodeName)
+            if (forVlanPool) existing.vlanAware = existing.vlanAware || !!ifc.bridge_vlan_aware
           } else {
             bridgeMap.set(ifc.iface, {
               iface: ifc.iface,
@@ -68,6 +81,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
               type: ifc.type,
               active: ifc.active,
               comments: ifc.comments,
+              ...(forVlanPool ? { vlanAware: !!ifc.bridge_vlan_aware } : {}),
             })
           }
         }

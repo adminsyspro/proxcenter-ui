@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getVdcById, updateVdc, deleteVdc } from "@/lib/vdc"
+import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
 import { listBindingsForVdc } from "@/lib/db/vdcPbsBindings"
@@ -64,6 +65,7 @@ export async function PUT(req: Request, ctx: RouteContext) {
       // checkbox actually persists. Previously dropped here, the next GET
       // returned the old value and the UI rolled back the change.
       sharedBridges: body.sharedBridges,
+      vlanPools: body.vlanPools,
       quota: body.quota,
     })
 
@@ -86,6 +88,9 @@ export async function PUT(req: Request, ctx: RouteContext) {
     if (msg.includes("not found")) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
+
+    const mapped = mapCreateVdcError(e)
+    if (mapped.status !== 500) return NextResponse.json({ error: mapped.message }, { status: mapped.status })
 
     return NextResponse.json({ error: msg }, { status: 500 })
   }

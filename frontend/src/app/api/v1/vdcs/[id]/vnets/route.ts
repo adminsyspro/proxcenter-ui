@@ -79,18 +79,45 @@ export async function POST(req: Request, ctx: RouteContext) {
         : undefined
     const subnet = { cidr, gateway, dnsServers }
 
+    const type = body?.type === 'vlan' ? 'vlan' as const : 'vxlan' as const
+    const bridge = typeof body?.bridge === 'string' ? body.bridge.trim() : ''
+    if (type === 'vlan' && !bridge) {
+      return NextResponse.json({ error: 'bridge is required for a VLAN network' }, { status: 400 })
+    }
+    let vlanTag: number | null = null
+    if (body?.vlanTag != null && body.vlanTag !== '') {
+      vlanTag = Number(body.vlanTag)
+      if (!Number.isInteger(vlanTag) || vlanTag < 1 || vlanTag > 4094) {
+        return NextResponse.json({ error: 'vlanTag must be an integer between 1 and 4094' }, { status: 400 })
+      }
+    }
+    const externalAddressing = body?.externalAddressing === true
+
     const session = await getServerSession(authOptions)
     const createdBy = session?.user?.id ?? null
     const tenantId = await getCurrentTenantId()
 
     try {
-      const vnet = await createVnetForTenant({ vdcId, tenantId, displayName, description, firewall, subnet, createdBy })
+      const vnet = await createVnetForTenant({
+        vdcId, tenantId, displayName, description, firewall, subnet, createdBy,
+        type, bridge: bridge || undefined, vlanTag, externalAddressing,
+      })
       return NextResponse.json({ data: vnet }, { status: 201 })
     } catch (err: any) {
       const msg = err?.message || String(err)
       if (msg.includes("Quota exceeded")) return NextResponse.json({ error: msg }, { status: 409 })
-      if (msg.includes("already exists")) return NextResponse.json({ error: msg }, { status: 409 })
       if (msg.includes("Invalid VNet name")) return NextResponse.json({ error: msg }, { status: 400 })
+      if (msg.includes('has no VLAN pool')) return NextResponse.json({ error: msg }, { status: 400 })
+      if (msg.includes('outside the vDC pools')) return NextResponse.json({ error: msg }, { status: 400 })
+      if (msg.includes('already in use on bridge')) return NextResponse.json({ error: msg }, { status: 409 })
+      if (msg.includes('No free VLAN tag')) return NextResponse.json({ error: msg }, { status: 409 })
+      if (msg.includes('bridge is required')) return NextResponse.json({ error: msg }, { status: 400 })
+      // Pre-Phase-4a vDCs carry no SDN zone: a default (VXLAN) create on one
+      // is a bad request, not a server fault.
+      if (msg.includes('has no SDN zone')) return NextResponse.json({ error: msg }, { status: 400 })
+      // Catches our own "VNet ... already exists" AND PVE's cross-zone
+      // backstop ("tag 137 already exist in vnet ...", no trailing s).
+      if (msg.includes('already exist')) return NextResponse.json({ error: msg }, { status: 409 })
       // Subnet validation surfaces with these prefixes — all user input issues.
       if (
         msg.startsWith("Invalid CIDR") ||

@@ -7275,7 +7275,7 @@
     "storagePolicyIopsWr": "IOPS (쓰기)",
     "storagePolicyMbpsRd": "MBps (읽기)",
     "storagePolicyMbpsWr": "MBps (쓰기)",
-    "storagePolicyInUse": "{count, plural, other {vDC #개에서 사용 중}}",
+    "storagePolicyInUse": "{count, plural, =1 {vDC에서 사용 중} other {vDC #개에서 사용 중}}",
     "storagePolicyVdcCount": "vDC 수",
     "vdcPoliciesTitle": "스토리지 정책",
     "vdcPoliciesHint": "이 vDC에 QoS 스토리지 정책을 연결합니다. 테넌트는 셀프 서비스에서 디스크를 이 정책에 배치할 수 있습니다.",

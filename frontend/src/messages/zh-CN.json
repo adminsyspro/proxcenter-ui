@@ -7297,7 +7297,7 @@
     "storagePolicyIopsWr": "IOPS（写）",
     "storagePolicyMbpsRd": "MB/s（读）",
     "storagePolicyMbpsWr": "MB/s（写）",
-    "storagePolicyInUse": "{count, plural, other {已被 # 个 vDC 使用}}",
+    "storagePolicyInUse": "{count, plural, =1 {已被一个 vDC 使用} other {已被 # 个 vDC 使用}}",
     "storagePolicyVdcCount": "vDC 数",
     "vdcPoliciesTitle": "存储策略",
     "vdcPoliciesHint": "为此 vDC 关联 QoS 存储策略。租户随后可在自助服务中将磁盘放置在这些策略上。",

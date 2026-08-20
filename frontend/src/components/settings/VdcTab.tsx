@@ -26,6 +26,8 @@ import {
   Select,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -117,6 +119,9 @@ export default function VdcTab() {
 
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Sub-tabs: the vDC list and the connection-level storage policies are
+  // separate concerns; showing both stacked made the page too long.
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
@@ -1244,8 +1249,18 @@ export default function VdcTab() {
         </Alert>
       )}
 
-      <StoragePoliciesSection connections={connections} />
+      <Tabs
+        value={activeSection}
+        onChange={(_e, v) => setActiveSection(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab value="vdcs" label={t('vdc.title')} />
+        <Tab value="policies" label={t('vdc.storagePoliciesTitle')} />
+      </Tabs>
 
+      {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
+
+      {activeSection === 'vdcs' && (
       <Card>
         <CardContent>
           {/* A vDC always lives in a non-default tenant — the provider tenant
@@ -1318,6 +1333,7 @@ export default function VdcTab() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>

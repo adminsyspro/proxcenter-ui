@@ -997,6 +997,39 @@ export default function VdcTab() {
       },
     },
     {
+      field: 'storagePolicies',
+      headerName: t('vdc.storagePoliciesTitle'),
+      width: 130,
+      sortable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        const policies: any[] = Array.isArray(params.row.storagePolicies) ? params.row.storagePolicies : []
+        const count = policies.length
+        const tooltip = count === 0 ? t('vdc.vdcPoliciesHint') : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+            {policies.map((sp) => (
+              <Typography key={sp.policyId} variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                {sp.name} • {sp.storageId} • {sp.quotaMb != null ? `${Math.round(sp.quotaMb / 1024)} GB` : t('vdc.quotaUnlimited')}
+              </Typography>
+            ))}
+          </Box>
+        )
+
+        return (
+          <Tooltip arrow title={tooltip}>
+            <Chip
+              icon={<Box component="i" className="ri-hard-drive-2-line" sx={{ fontSize: 14, ml: '6px !important' }} />}
+              label={count}
+              size="small"
+              variant={count === 0 ? 'outlined' : 'filled'}
+              sx={{ height: 24, cursor: 'default' }}
+            />
+          </Tooltip>
+        )
+      },
+    },
+    {
       field: 'quotaVms',
       headerName: t('vdc.vms'),
       width: 110,
@@ -1701,21 +1734,6 @@ export default function VdcTab() {
                       <Divider />
                     </>
                   )}
-
-                  {/* Tenant networks: the VXLAN / SDN overlay is automatic */}
-
-                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className="ri-git-branch-line" />
-                      {t('vdc.vxlanSectionTitle')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">{t('vdc.vxlanSectionHint')}</Typography>
-                    {editingVdc?.sdnZoneName ? (
-                      <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                        {t('vdc.vxlanZoneInfo', { zone: editingVdc.sdnZoneName, count: editingVdc.vnets?.length ?? 0 })}
-                      </Typography>
-                    ) : null}
-                  </Box>
 
                   {/* VLAN pools */}
 

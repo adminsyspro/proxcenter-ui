@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { pveFetch, PVE_SLOW_READ_TIMEOUT_MS } from "@/lib/proxmox/client"
+import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
@@ -37,7 +37,7 @@ export async function GET(
       conn,
       `/nodes/${encodeURIComponent(node)}/storage`,
       {},
-      { timeoutMs: PVE_SLOW_READ_TIMEOUT_MS }
+      { slowRead: true }
     )
 
     // Filtrer par content si demandé
@@ -95,7 +95,7 @@ return contents.includes(contentFilter)
     let storageConfigs: any[] = []
 
     try {
-      storageConfigs = await pveFetch<any[]>(conn, "/storage", {}, { timeoutMs: PVE_SLOW_READ_TIMEOUT_MS })
+      storageConfigs = await pveFetch<any[]>(conn, "/storage", {}, { slowRead: true })
     } catch {
       storageConfigs = []
     }

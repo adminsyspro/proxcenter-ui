@@ -250,12 +250,15 @@ export async function pveFetch<T>(
   opts: ProxmoxClientOptions,
   path: string,
   init: RequestInit = {},
-  fetchOpts: { timeoutMs?: number } = {}
+  fetchOpts: { timeoutMs?: number; slowRead?: boolean } = {}
 ): Promise<T> {
   if (!opts?.baseUrl) throw new Error("pveFetch: missing baseUrl")
   if (!opts?.apiToken) throw new Error("pveFetch: missing apiToken")
 
-  const primaryTimeoutMs = fetchOpts.timeoutMs ?? PVE_DEFAULT_TIMEOUT_MS
+  // slowRead lets a caller opt into the long budget by intent, so the number
+  // stays owned here instead of being imported at every call site.
+  const primaryTimeoutMs =
+    fetchOpts.timeoutMs ?? (fetchOpts.slowRead ? PVE_SLOW_READ_TIMEOUT_MS : PVE_DEFAULT_TIMEOUT_MS)
 
   // A caller that asked for more than the default is telling us this endpoint is
   // slow on purpose. Timing out on such a budget is a slow answer, not a dead

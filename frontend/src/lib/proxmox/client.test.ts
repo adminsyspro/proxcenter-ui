@@ -531,7 +531,11 @@ describe("the long-budget threshold inside pveFetch", () => {
    * counts as evidence of an unreachable host, untouched otherwise.
    */
   const originalBudget = process.env.PVE_TIMEOUT_MS
+  const originalSlowBudget = process.env.PVE_SLOW_READ_TIMEOUT_MS
   const TINY_BUDGET_MS = 50
+  // Kept just above the default so slowRead resolves to a long budget without
+  // making the test wait out the real 30s value.
+  const TINY_SLOW_BUDGET_MS = 80
 
   let server: Server
   let baseUrl = ""
@@ -549,6 +553,8 @@ describe("the long-budget threshold inside pveFetch", () => {
     await new Promise<void>(resolve => server.close(() => resolve()))
     if (originalBudget === undefined) delete process.env.PVE_TIMEOUT_MS
     else process.env.PVE_TIMEOUT_MS = originalBudget
+    if (originalSlowBudget === undefined) delete process.env.PVE_SLOW_READ_TIMEOUT_MS
+    else process.env.PVE_SLOW_READ_TIMEOUT_MS = originalSlowBudget
   })
 
   beforeEach(() => {
@@ -561,12 +567,17 @@ describe("the long-budget threshold inside pveFetch", () => {
     vi.restoreAllMocks()
   })
 
-  async function callAgainstSilentServer(connId: string, timeoutMs?: number) {
+  async function callAgainstSilentServer(
+    connId: string,
+    fetchOpts: { timeoutMs?: number; slowRead?: boolean } = {},
+  ) {
     process.env.PVE_TIMEOUT_MS = String(TINY_BUDGET_MS)
+    process.env.PVE_SLOW_READ_TIMEOUT_MS = String(TINY_SLOW_BUDGET_MS)
     vi.resetModules()
     const client = await import("./client")
     const cache = await import("../cache/nodeIpCache")
     expect(client.PVE_DEFAULT_TIMEOUT_MS).toBe(TINY_BUDGET_MS)
+    expect(client.PVE_SLOW_READ_TIMEOUT_MS).toBe(TINY_SLOW_BUDGET_MS)
 
     // A second IP so the failover candidate pre-check passes and the attempt
     // actually reaches the failure counter, instead of failing fast the way a
@@ -580,7 +591,7 @@ describe("the long-budget threshold inside pveFetch", () => {
         { baseUrl, apiToken: "root@pam!vitest=secret", id: connId },
         "/nodes/pve1/storage",
         {},
-        timeoutMs === undefined ? {} : { timeoutMs },
+        fetchOpts,
       )
       .then(() => null)
       .catch((e: unknown) => e)
@@ -599,7 +610,7 @@ describe("the long-budget threshold inside pveFetch", () => {
   it("counts a timeout when the caller asks for EXACTLY the default budget", async () => {
     // The comparison is strict: equal to the default is NOT a long budget,
     // so this attempt still arms the breaker.
-    const { errorClass, failures } = await callAgainstSilentServer("conn-equal-budget", TINY_BUDGET_MS)
+    const { errorClass, failures } = await callAgainstSilentServer("conn-equal-budget", { timeoutMs: TINY_BUDGET_MS })
     expect(errorClass).toBe("response-timeout")
     expect(failures).toBe(1)
   })
@@ -607,8 +618,25 @@ describe("the long-budget threshold inside pveFetch", () => {
   it("does not count a timeout one millisecond above the default budget", async () => {
     // One millisecond over is enough to make it the caller's own budget, and
     // spending it is a slow answer rather than an outage (#742).
-    const { errorClass, failures } = await callAgainstSilentServer("conn-long-budget", TINY_BUDGET_MS + 1)
+    const { errorClass, failures } = await callAgainstSilentServer("conn-long-budget", { timeoutMs: TINY_BUDGET_MS + 1 })
     expect(errorClass).toBe("response-timeout")
     expect(failures).toBe(0)
+  })
+
+  it("treats slowRead as a long budget, so the storage listing never arms the breaker", async () => {
+    // What the storages route passes. The caller states the intent and the
+    // client owns the number, so no consumer imports the constant (#742).
+    const { errorClass, failures } = await callAgainstSilentServer("conn-slow-read", { slowRead: true })
+    expect(errorClass).toBe("response-timeout")
+    expect(failures).toBe(0)
+  })
+
+  it("lets an explicit timeoutMs win over slowRead", async () => {
+    const { errorClass, failures } = await callAgainstSilentServer("conn-slow-read-override", {
+      slowRead: true,
+      timeoutMs: TINY_BUDGET_MS,
+    })
+    expect(errorClass).toBe("response-timeout")
+    expect(failures).toBe(1)
   })
 })

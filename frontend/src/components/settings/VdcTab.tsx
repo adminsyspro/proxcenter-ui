@@ -1809,6 +1809,15 @@ export default function VdcTab() {
                               label={t('vdc.storagePolicyName')}
                               value={sp.policyId}
                               onChange={(e) => setVdcPolicies((prev) => prev.map((p, i) => i === idx ? { ...p, policyId: e.target.value } : p))}
+                              slotProps={{
+                                select: {
+                                  // The MenuItem body is two stacked lines (name + storage);
+                                  // MUI would render both inside the CLOSED control and
+                                  // overflow it, so the closed state shows the name only.
+                                  renderValue: (value) =>
+                                    connPolicies.find((p) => p.id === (value as string))?.name ?? '',
+                                },
+                              }}
                             >
                               {options.map((p) => (
                                 <MenuItem key={p.id} value={p.id}>

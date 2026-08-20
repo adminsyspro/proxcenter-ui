@@ -1823,7 +1823,10 @@ export default function VdcTab() {
                                 <MenuItem key={p.id} value={p.id}>
                                   <Box>
                                     <Typography variant="body2">{p.name}</Typography>
-                                    <Typography variant="caption" color="text.secondary">{p.storageId}</Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-hard-drive-2-line" style={{ fontSize: 13, opacity: 0.6 }} />
+                                      <Typography variant="caption" color="text.secondary">{p.storageId}</Typography>
+                                    </Box>
                                   </Box>
                                 </MenuItem>
                               ))}

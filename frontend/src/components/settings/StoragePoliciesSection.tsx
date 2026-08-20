@@ -29,6 +29,7 @@ import {
   TableRow,
   TextField,
   Tooltip,
+  useTheme,
   Typography,
 } from '@mui/material'
 
@@ -77,6 +78,7 @@ const emptyForm: PolicyForm = {
 }
 
 export default function StoragePoliciesSection({ connections }: Props) {
+  const theme = useTheme()
   const t = useTranslations()
 
   const [policies, setPolicies] = useState<Record<string, StoragePolicyDto[]>>({})
@@ -232,7 +234,16 @@ export default function StoragePoliciesSection({ connections }: Props) {
             <Card key={conn.id} variant="outlined">
               <CardContent>
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                  <Typography variant="subtitle2">{conn.name}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <img
+                      src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                      alt=""
+                      width={18}
+                      height={18}
+                      style={{ opacity: 0.8 }}
+                    />
+                    <Typography variant="subtitle2">{conn.name}</Typography>
+                  </Box>
                   <Tooltip title={t('vdc.storagePolicyAdd')} arrow>
                     <IconButton size="small" aria-label={t('vdc.storagePolicyAdd')} onClick={() => openCreate(conn.id)}>
                       <i className="ri-add-line" />

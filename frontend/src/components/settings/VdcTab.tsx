@@ -1254,8 +1254,24 @@ export default function VdcTab() {
         onChange={(_e, v) => setActiveSection(v)}
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        <Tab value="vdcs" label={t('vdc.title')} />
-        <Tab value="policies" label={t('vdc.storagePoliciesTitle')} />
+        <Tab
+          value="vdcs"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-cloud-line" style={{ fontSize: 18 }} />
+              {t('vdc.title')}
+            </Box>
+          }
+        />
+        <Tab
+          value="policies"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />
+              {t('vdc.storagePoliciesTitle')}
+            </Box>
+          }
+        />
       </Tabs>
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}

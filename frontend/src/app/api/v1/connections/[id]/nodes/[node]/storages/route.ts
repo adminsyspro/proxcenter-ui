@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { pveFetch } from "@/lib/proxmox/client"
+import { pveFetch, PVE_SLOW_READ_TIMEOUT_MS } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { vmDiskFormats } from "@/lib/proxmox/storage"
@@ -31,7 +31,14 @@ export async function GET(
 
     const conn = await getConnectionById(id)
 
-    let storages = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/storage`)
+    // PVE walks every declared storage before answering, so a datacenter with
+    // many PBS targets can legitimately need far more than the default budget.
+    let storages = await pveFetch<any[]>(
+      conn,
+      `/nodes/${encodeURIComponent(node)}/storage`,
+      {},
+      { timeoutMs: PVE_SLOW_READ_TIMEOUT_MS }
+    )
 
     // Filtrer par content si demandé
     if (contentFilter && storages) {
@@ -88,7 +95,7 @@ return contents.includes(contentFilter)
     let storageConfigs: any[] = []
 
     try {
-      storageConfigs = await pveFetch<any[]>(conn, "/storage")
+      storageConfigs = await pveFetch<any[]>(conn, "/storage", {}, { timeoutMs: PVE_SLOW_READ_TIMEOUT_MS })
     } catch {
       storageConfigs = []
     }

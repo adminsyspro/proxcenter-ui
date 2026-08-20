@@ -325,6 +325,12 @@ export default function InventoryDetails({
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
+  // Storage list load state. A slow PVE makes the storage read hit the API
+  // timeout and the route then answers 500 with { error }: without these two the
+  // Target Storage selector stayed empty and greyed out with no reason shown,
+  // and the operator read it as a locked field (#742).
+  const [migStoragesLoading, setMigStoragesLoading] = useState(false)
+  const [migStoragesError, setMigStoragesError] = useState<string | null>(null)
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
   const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
@@ -710,6 +716,7 @@ export default function InventoryDetails({
     setMigTargetConn(''); setMigTargetNode(''); setMigTargetStorage('')
     setMigTargetVmid(''); setMigTargetVmidStatus('idle')
     setMigNodes([]); setMigStorages([]); setMigNodeOptions([])
+    setMigStoragesLoading(false); setMigStoragesError(null)
     if (esxiMigrateVm) { setMigJobId(null); setMigJob(null) }
     fetch('/api/v1/connections').then(r => r.json()).then(async (d) => {
       const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
@@ -745,9 +752,53 @@ export default function InventoryDetails({
     }).catch(() => {})
   }, [esxiMigrateVm, bulkMigOpen])
 
+  // Storage list loader, shared by the node-selection effect below and the
+  // dialog's Retry action: the failure mode is a timeout on a busy node, so a
+  // second attempt has a real chance of succeeding.
+  const loadMigStorages = useCallback(async (connId: string, node: string) => {
+    // Clear first: on a failure the selector must not keep listing the storages
+    // of the node that was selected before.
+    setMigStorages([]); setMigTargetStorage('')
+    setMigStoragesLoading(true); setMigStoragesError(null)
+    try {
+      const r = await fetch(`/api/v1/connections/${connId}/nodes/${node}/storages?content=images`)
+      const d = await r.json().catch(() => null)
+      // A 500 (storage read timed out) and a 403 (RBAC) both answer { error }:
+      // that body must never reach .filter, it used to throw a TypeError the
+      // empty catch swallowed, leaving the previous node's list in place.
+      if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`)
+      const list = Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : null
+      if (!list) throw new Error(d?.error || 'Unexpected response from the storage list')
+      const storages = list.filter((s: any) => {
+        const content = s.content || ''
+        return content.includes('images')
+      })
+      setMigStorages(storages)
+      if (storages.length > 0) {
+        const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
+        setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
+      }
+    } catch (e: any) {
+      setMigStoragesError(e?.message || 'Failed to load the storage list')
+    } finally {
+      setMigStoragesLoading(false)
+    }
+  }, [])
+
+  // Retry handed to the migrate dialogs. It resolves the node the list is read
+  // from the same way the effect below does ("__auto__" reads the first node of
+  // the selected cluster), so the dialogs never have to know that rule.
+  const retryMigStorages = useCallback(() => {
+    if (!migTargetConn || !migTargetNode) return
+    const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
+    const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
+    if (!fetchNode || fetchNode === '__auto__') return
+    loadMigStorages(migTargetConn, fetchNode)
+  }, [migTargetConn, migTargetNode, migNodeOptions, loadMigStorages])
+
   // Fetch storages, bridges, and check sshfs when node is selected
   useEffect(() => {
-    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null); return }
+    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigStoragesLoading(false); setMigStoragesError(null); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null); return }
     const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
     const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
     if (!fetchNode || fetchNode === '__auto__') return
@@ -847,17 +898,7 @@ export default function InventoryDetails({
         setMigDiskPaths(detectedDisks.join('\n'))
       }
     }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] }))
-    fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
-      const storages = (d.data || d || []).filter((s: any) => {
-        const content = s.content || ''
-        return content.includes('images')
-      })
-      setMigStorages(storages)
-      if (storages.length > 0) {
-        const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
-        setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
-      }
-    }).catch(() => {})
+    loadMigStorages(migTargetConn, fetchNode)
     // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),
     // merged into one selector list. A migrated NIC accepts a VNet name in its
     // bridge= slot exactly like a vmbr, so nodes that use SDN are no longer stuck
@@ -881,7 +922,7 @@ export default function InventoryDetails({
         setMigNetworkBridge(vmbr0 ? 'vmbr0' : merged[0].iface)
       }
     }).catch(() => {})
-  }, [migTargetConn, migTargetNode, migNodeOptions.length])
+  }, [migTargetConn, migTargetNode, migNodeOptions.length, loadMigStorages])
 
   // Cleanup TasksBar restore callback on unmount
   useEffect(() => {
@@ -4601,6 +4642,9 @@ return vm?.isCluster ?? false
         migPveConnections={migPveConnections}
         migNodes={migNodes}
         migStorages={migStorages}
+        migStoragesLoading={migStoragesLoading}
+        migStoragesError={migStoragesError}
+        retryMigStorages={retryMigStorages}
         migSshfsAvailable={migSshfsAvailable}
         vcenterPreflight={vcenterPreflight}
         setVcenterPreflight={setVcenterPreflight}

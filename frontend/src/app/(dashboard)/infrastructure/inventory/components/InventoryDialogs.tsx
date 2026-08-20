@@ -21,6 +21,7 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  FormHelperText,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -280,6 +281,11 @@ export interface InventoryDialogsProps {
   migPveConnections: any[]
   migNodes: any[]
   migStorages: any[]
+  // Optional so the existing prop factories keep type-checking without them:
+  // absent means "no load in flight, no failure", which is the pre-#742 shape.
+  migStoragesLoading: boolean
+  migStoragesError: string | null
+  retryMigStorages: () => void
   migSshfsAvailable: boolean | null
   vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null
   setVcenterPreflight: (v: any) => void
@@ -420,6 +426,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migDowntimeBudget, setMigDowntimeBudget,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
     migType, setMigType, migTransferMode, setMigTransferMode, migPveConnections, migNodes, migStorages,
+    migStoragesLoading, migStoragesError, retryMigStorages,
     migSshfsAvailable, vcenterPreflight, setVcenterPreflight, migStarting, setMigStarting,
     migJobId, setMigJobId, migJob, setMigJob, migNodeOptions,
     bulkMigSelected, setBulkMigSelected, bulkMigOpen, setBulkMigOpen, bulkMigStarting, setBulkMigStarting,
@@ -720,6 +727,35 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // a warm run against the same storage picker.
   const migTargetStorageType: string | undefined = migStorages.find((s: any) => s.storage === migTargetStorage)?.type
   const warmStorageBlocked = warmNeedsBlockStorage(migType, migTargetStorageType)
+  // #742: helper line under the Target Storage selector, shared by the single VM
+  // and the bulk dialog. It tells apart "still reading the node", "the read
+  // failed" (with the reason the API returned plus a Retry, since the failure is
+  // a timeout on a busy node) and "this node exposes no storage that accepts
+  // disk images". Before, all three looked like the same empty locked field.
+  const migStorageHelper = !migTargetNode ? null : migStoragesLoading ? (
+    <FormHelperText sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <CircularProgress size={10} />
+      {t('inventoryPage.esxiMigration.storagesLoading')}
+    </FormHelperText>
+  ) : migStoragesError ? (
+    <FormHelperText sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+      <Box component="span">{t('inventoryPage.esxiMigration.storagesFailed')}</Box>
+      <Box component="span" sx={{ opacity: 0.85 }}>{migStoragesError}</Box>
+      <Link
+        component="button"
+        type="button"
+        underline="always"
+        onClick={retryMigStorages}
+        sx={{ fontSize: 'inherit', lineHeight: 'inherit' }}
+      >
+        {t('inventoryPage.esxiMigration.retry')}
+      </Link>
+    </FormHelperText>
+  ) : migStorages.length === 0 ? (
+    <FormHelperText>{t('inventoryPage.esxiMigration.storagesEmpty')}</FormHelperText>
+  ) : !migTargetStorage ? (
+    <FormHelperText>{t('inventoryPage.esxiMigration.selectStorage')}</FormHelperText>
+  ) : null
   // #663: the budget only governs the automatic decision, so a run held for the
   // operator ignores it and the field is hidden rather than shown inert.
   const showDowntimeBudget = migType === 'warm' && !migManualCutover
@@ -2283,7 +2319,7 @@ return
                       })}
                     </Select>
                   </FormControl>
-                  <FormControl fullWidth size="small" disabled={!migTargetNode || migStorages.length === 0}>
+                  <FormControl fullWidth size="small" error={!!migStoragesError} disabled={!migTargetNode || migStoragesLoading || migStorages.length === 0}>
                     <InputLabel>{t('inventoryPage.esxiMigration.targetStorage')}</InputLabel>
                     <Select
                       value={migTargetStorage}
@@ -2322,6 +2358,7 @@ return
                         )
                       })}
                     </Select>
+                    {migStorageHelper}
                   </FormControl>
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 1 }}>
                     <FormControl fullWidth size="small" disabled={!migTargetNode || migBridges.length === 0}>
@@ -3566,7 +3603,7 @@ return
                     </FormControl>
                     {migTargetNode && (
                       <>
-                        <FormControl fullWidth size="small">
+                        <FormControl fullWidth size="small" error={!!migStoragesError} disabled={migStoragesLoading || migStorages.length === 0}>
                           <InputLabel>{t('inventoryPage.esxiMigration.targetStorage')}</InputLabel>
                           <Select
                             value={migTargetStorage}
@@ -3605,6 +3642,7 @@ return
                               )
                             })}
                           </Select>
+                          {migStorageHelper}
                           {migTargetNode === '__auto__' && <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, ml: 1.5 }}>{t('inventoryPage.esxiMigration.sharedStorageHint')}</Typography>}
                         </FormControl>
                         {warmStorageBlocked && (

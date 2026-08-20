@@ -12,6 +12,40 @@ import { safeLog } from "../log/sanitize"
 // only reliable way to fail fast on unreachable nodes.
 const CONNECT_TIMEOUT = 5_000
 
+/**
+ * Reads a positive millisecond budget from the environment, falling back when
+ * the variable is absent or not a usable number.
+ */
+function readTimeoutEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn(`[pve] Ignoring invalid ${name}="${raw}", using ${fallback}ms instead`)
+    return fallback
+  }
+
+  return parsed
+}
+
+/**
+ * Default per-request budget, sized for the fast endpoints this client polls
+ * most often (/cluster/resources, /nodes, /cluster/status).
+ */
+export const PVE_DEFAULT_TIMEOUT_MS = readTimeoutEnv("PVE_TIMEOUT_MS", 8_000)
+
+/**
+ * Budget for reads that are slow by nature, where PVE enumerates every
+ * configured backend before answering. /nodes/{node}/storage walks all declared
+ * storages, so a datacenter with many PBS targets legitimately needs 20s or
+ * more. Callers opt in explicitly, the default stays short for polling.
+ */
+export const PVE_SLOW_READ_TIMEOUT_MS = readTimeoutEnv("PVE_SLOW_READ_TIMEOUT_MS", 30_000)
+
+/** Short budget for liveness probes: primary recovery and failover candidates. */
+const PVE_PROBE_TIMEOUT_MS = 5_000
+
 let defaultAgent: Agent | null = null
 export function getDefaultAgent(): Agent {
   if (!defaultAgent) {
@@ -47,10 +81,34 @@ function isHardNetworkError(err: unknown): boolean {
   return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
-/** Timeout errors - node may just be slow, not dead */
-function isTimeoutError(err: unknown): boolean {
+/**
+ * An answer we received and rejected: a non-2xx status, or a body we could not
+ * parse. The host replied, so this is never a reachability problem.
+ *
+ * It carries its own type because the message embeds the raw PVE body, and the
+ * predicates below match error codes as substrings: a 500 whose body quotes
+ * ECONNREFUSED (a broken PBS or NFS backend, exactly the setting of issue #742)
+ * would otherwise be read as an unreachable host and trip the failover.
+ */
+export class PveApplicationError extends Error {
+  readonly statusCode: number
+
+  constructor(message: string, statusCode: number) {
+    super(message)
+    this.name = "PveApplicationError"
+    this.statusCode = statusCode
+  }
+}
+
+/**
+ * Connect-phase timeout: the TCP handshake never completed, so the host is as
+ * unreachable as it would be on ECONNREFUSED. Undici raises this on its own
+ * connect timeout, and our AbortSignal does not fire during that phase, which
+ * is what makes it cleanly separable from a response timeout.
+ */
+function isConnectTimeoutError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
-  if (err.name === "TimeoutError" || err.name === "ConnectTimeoutError" || err.name === "AbortError") return true
+  if (err.name === "ConnectTimeoutError") return true
   const codes = ["ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"]
   const msg = String(err.message || "")
   const errCode = String((err as any).code || "")
@@ -59,9 +117,71 @@ function isTimeoutError(err: unknown): boolean {
   return codes.some(c => msg.includes(c) || errCode.includes(c) || causeCode.includes(c))
 }
 
-/** Any network-level error (hard + timeout) */
-function isNetworkError(err: unknown): boolean {
-  return isHardNetworkError(err) || isTimeoutError(err)
+/**
+ * Response timeout: the host accepted the connection but did not answer inside
+ * the budget. The completed handshake is direct evidence that the host is
+ * REACHABLE, so a slow answer must not on its own be reported as a dead node.
+ */
+function isResponseTimeoutError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const cause = (err as any).cause
+  return err.name === "TimeoutError" || cause?.name === "TimeoutError"
+}
+
+/**
+ * The caller's own signal fired, so the consumer of this request went away
+ * (navigation, closed HTTP connection). This says nothing about node health.
+ */
+function isCallerAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const cause = (err as any).cause
+  return err.name === "AbortError" || cause?.name === "AbortError"
+}
+
+export type PveErrorClass =
+  | "hard-network"
+  | "connect-timeout"
+  | "response-timeout"
+  | "caller-abort"
+  | "application"
+
+/**
+ * Sorts a failed request into the one class that decides whether the failover
+ * circuit breaker should count it. Order matters: a caller abort and a connect
+ * timeout are both checked before the broader response-timeout test.
+ */
+/**
+ * Whether a failed attempt is evidence that the host is unreachable, and may
+ * therefore count towards the failover threshold.
+ *
+ * A connect timeout means the handshake never completed, so the host is as
+ * unreachable as it would be on ECONNREFUSED. A response timeout means the
+ * opposite: the host accepted the connection, so it is alive and slow. We still
+ * count the latter on the default budget, otherwise a genuinely wedged node
+ * would never fail over, but never when the caller asked for a longer budget:
+ * requesting 30s and spending them is a slow storage, not an outage (#742).
+ */
+export function isFailoverWorthy(cls: PveErrorClass, hasLongBudget: boolean): boolean {
+  switch (cls) {
+    case "hard-network":
+    case "connect-timeout":
+      return true
+    case "response-timeout":
+      return !hasLongBudget
+    default:
+      return false
+  }
+}
+
+export function classifyPveError(err: unknown): PveErrorClass {
+  // First: an answer we rejected ourselves. Checked before the substring based
+  // predicates so a remote body can never be mistaken for a transport failure.
+  if (err instanceof PveApplicationError) return "application"
+  if (isCallerAbortError(err)) return "caller-abort"
+  if (isConnectTimeoutError(err)) return "connect-timeout"
+  if (isHardNetworkError(err)) return "hard-network"
+  if (isResponseTimeoutError(err)) return "response-timeout"
+  return "application"
 }
 
 /**
@@ -135,7 +255,15 @@ export async function pveFetch<T>(
   if (!opts?.baseUrl) throw new Error("pveFetch: missing baseUrl")
   if (!opts?.apiToken) throw new Error("pveFetch: missing apiToken")
 
-  const primaryTimeoutMs = fetchOpts.timeoutMs ?? 8_000
+  const primaryTimeoutMs = fetchOpts.timeoutMs ?? PVE_DEFAULT_TIMEOUT_MS
+
+  // A caller that asked for more than the default is telling us this endpoint is
+  // slow on purpose. Timing out on such a budget is a slow answer, not a dead
+  // node, so it must not push the connection towards a failover.
+  const hasLongBudget = primaryTimeoutMs > PVE_DEFAULT_TIMEOUT_MS
+
+  const isUnreachableEvidence = (err: unknown) =>
+    isFailoverWorthy(classifyPveError(err), hasLongBudget)
 
   const dispatcher = opts.insecureDev
     ? getInsecureAgent()
@@ -166,11 +294,13 @@ export async function pveFetch<T>(
   }
 
   /** Core request logic against a specific baseUrl */
-  async function doRequest(baseUrl: string, timeoutMs = 8_000, ignoreCallerSignal = false): Promise<T> {
+  async function doRequest(baseUrl: string, timeoutMs = PVE_DEFAULT_TIMEOUT_MS, ignoreCallerSignal = false): Promise<T> {
     const url = `${baseUrl.replace(/\/$/, "")}/api2/json${path}`
 
-    // Use caller signal if provided, otherwise create a timeout signal.
-    // Combine both when caller provides its own signal.
+    // init.signal is a CANCELLATION channel, never a budget: the signals are
+    // combined, so the effective deadline is the SHORTER of the two and a
+    // caller signal can only shorten this request, never lengthen it. To grant
+    // more time, pass fetchOpts.timeoutMs instead.
     // During failover, ignoreCallerSignal=true to avoid the caller's already-aborted
     // signal from instantly killing failover candidates.
     const callerSignal = (!ignoreCallerSignal && init.signal) ? init.signal : undefined
@@ -190,7 +320,7 @@ export async function pveFetch<T>(
     const text = await res.body.text()
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw new Error(`PVE ${res.statusCode} ${path}: ${text}`)
+      throw new PveApplicationError(`PVE ${res.statusCode} ${path}: ${text}`, res.statusCode)
     }
 
     let json: any
@@ -201,7 +331,7 @@ export async function pveFetch<T>(
       const sanitized = text.replace(/\bNaN\b/g, 'null').replace(/\b-?Infinity\b/g, 'null')
       json = JSON.parse(sanitized)
     } catch {
-      throw new Error(`PVE invalid JSON (${res.statusCode}): ${text.slice(0, 200)}`)
+      throw new PveApplicationError(`PVE invalid JSON (${res.statusCode}): ${text.slice(0, 200)}`, res.statusCode)
     }
 
     return json.data as T
@@ -218,7 +348,7 @@ export async function pveFetch<T>(
     // HALF_OPEN: enough time has passed, probe the primary
     if (opts.id && isHalfOpen(opts.id)) {
       try {
-        const result = await doRequest(opts.baseUrl, 5_000)  // shorter timeout for probe
+        const result = await doRequest(opts.baseUrl, PVE_PROBE_TIMEOUT_MS)
         // Primary is back! Clear failover cache and reset failures
         clearFailoverUrl(opts.id)
         resetFailures(opts.id)
@@ -236,9 +366,9 @@ export async function pveFetch<T>(
       const result = await doRequest(cachedFailoverUrl, primaryTimeoutMs)
       return result
     } catch (cachedErr) {
-      if (!isNetworkError(cachedErr)) {
-        // HTTP error (4xx, 5xx) — the failover node IS reachable, this
-        // specific PVE API call just failed (e.g. node offline RRD data).
+      if (!isUnreachableEvidence(cachedErr)) {
+        // Either an HTTP error (4xx, 5xx) or a slow answer on a long budget:
+        // the failover node IS reachable, only this specific call failed.
         // Keep the cache intact so other requests still use the failover.
         throw cachedErr
       }
@@ -262,8 +392,8 @@ export async function pveFetch<T>(
       if (opts.behindProxy) throw err
       if (!opts.id) throw err
 
-      // Network error (hard or timeout): check if failover is possible
-      if (isNetworkError(err)) {
+      // The host looks unreachable: check whether failover is possible
+      if (isUnreachableEvidence(err)) {
         // Quick check: are there any failover candidates?
         // If not (standalone node), fail fast instead of counting toward threshold.
         const currentHost = extractHostFromUrl(opts.baseUrl)
@@ -289,12 +419,13 @@ export async function pveFetch<T>(
 
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
-          console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${isTimeoutError(err) ? 'timeout' : 'hard error'})`)
+          console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${classifyPveError(err)})`)
           throw err
         }
         console.log(`[failover] Connection ${safeLog(opts.id)} reached failure threshold, initiating failover...`)
       } else {
-        // Non-network error (HTTP 500, parse error, etc.) - don't failover
+        // Application error, caller cancellation, or a slow answer on a budget
+        // the caller chose: none of these mean the node is down.
         throw err
       }
     }
@@ -309,7 +440,9 @@ export async function pveFetch<T>(
     const existingLock = getFailoverLock(connId)
     if (existingLock !== null) {
       const newUrl = await existingLock
-      if (newUrl) return doRequest(newUrl)
+      // Same arguments as the post-scan replay below: keep the caller's budget
+      // and ignore a caller signal that the dead primary may already have tripped.
+      if (newUrl) return doRequest(newUrl, primaryTimeoutMs, true)
       throw err // other failover also failed
     }
 
@@ -352,7 +485,7 @@ export async function pveFetch<T>(
         if (ip === currentHost) continue
         const candidateUrl = replaceHostInUrl(opts.baseUrl, ip)
         try {
-          await doRequest(candidateUrl, 5_000, true)
+          await doRequest(candidateUrl, PVE_PROBE_TIMEOUT_MS, true)
           await updateConnectionBaseUrl(connId, candidateUrl)
           return candidateUrl
         } catch {

@@ -312,7 +312,7 @@ describe('meterImportRefs (Finding I2)', () => {
 describe('restampGuestDrives (Finding I1)', () => {
   const gold = { policyId: 'p-gold', name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 500, mbpsWr: null }
 
-  it('builds a PUT patch only for DATA disks whose storage carries a policy', async () => {
+  it('builds a PUT patch only for DATA disks whose storage carries a policy, and returns the stamped keys', async () => {
     pveFetchMock.mockImplementation(async (_conn: any, _path: string, opts?: any) => {
       if (opts?.method === 'PUT') return null
       return {
@@ -321,7 +321,7 @@ describe('restampGuestDrives (Finding I1)', () => {
       }
     })
     const policies = new Map([['ceph-nvme', gold]])
-    await restampGuestDrives({
+    const result = await restampGuestDrives({
       conn: { id: 'conn-1' }, configPath: '/nodes/pve1/qemu/101/config', policies, logTag: '[test-restamp]',
     })
 
@@ -330,25 +330,27 @@ describe('restampGuestDrives (Finding I1)', () => {
     const patch = new URLSearchParams(String(putCall?.[2]?.body))
     expect(patch.get('scsi0')).toBe('ceph-nvme:vm-101-disk-0,iops_rd=5000,iops_wr=4000,mbps_rd=500')
     expect(patch.has('scsi1')).toBe(false)
+    expect(result).toEqual({ stamped: ['scsi0'] })
   })
 
-  it('skips the PUT entirely when nothing would change', async () => {
+  it('skips the PUT entirely when nothing would change, and returns an empty stamped array', async () => {
     pveFetchMock.mockImplementation(async (_conn: any, _path: string, opts?: any) => {
       if (opts?.method === 'PUT') return null
       return { scsi0: 'ceph-hdd:vm-101-disk-0' }
     })
     const policies = new Map([['ceph-nvme', gold]])
-    await restampGuestDrives({
+    const result = await restampGuestDrives({
       conn: { id: 'conn-1' }, configPath: '/nodes/pve1/qemu/101/config', policies, logTag: '[test-restamp]',
     })
     expect(pveFetchMock.mock.calls.some((c) => c[2]?.method === 'PUT')).toBe(false)
+    expect(result).toEqual({ stamped: [] })
   })
 
-  it('swallows a GET/PUT failure, never throws', async () => {
+  it('swallows a GET/PUT failure, never throws, and returns an empty stamped array', async () => {
     pveFetchMock.mockRejectedValue(new Error('PVE unreachable'))
     const policies = new Map([['ceph-nvme', gold]])
     await expect(restampGuestDrives({
       conn: { id: 'conn-1' }, configPath: '/nodes/pve1/qemu/101/config', policies, logTag: '[test-restamp]',
-    })).resolves.toBeUndefined()
+    })).resolves.toEqual({ stamped: [] })
   })
 })

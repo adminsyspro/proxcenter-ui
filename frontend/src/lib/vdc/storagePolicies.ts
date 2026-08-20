@@ -7,9 +7,17 @@ import { randomUUID } from 'crypto'
 
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
+import { safeLog } from '@/lib/log/sanitize'
 
 import { clearVdcScopeCache } from './scope'
 import type { StoragePolicyDto } from './types'
+
+export interface PoolMember {
+  vmid: number
+  node: string
+  name: string
+  vmstatus: string
+}
 
 export interface StoragePolicyInput {
   name: string
@@ -280,6 +288,32 @@ export async function assertPolicyUnassignSafe(
       )
     }
   }
+}
+
+/** Enumerate every qemu VM across the given vDC pools, deduped by vmid (a
+ *  VM only ever belongs to one pool, but nothing stops two assignment rows
+ *  from resolving to the same vDC). Fail-open per pool: a single
+ *  unreachable/renamed pool is logged and skipped rather than aborting the
+ *  whole apply, matching the fail-open convention the rest of this domain
+ *  already uses for best-effort PVE enumeration (assertPolicyUnassignSafe,
+ *  meterImportRefs). Shared by the bulk-apply route and the per-policy disk
+ *  listing route. */
+export async function enumerateQemuMembers(conn: any, poolNames: string[]): Promise<PoolMember[]> {
+  const byVmid = new Map<number, PoolMember>()
+  for (const poolName of poolNames) {
+    try {
+      const pool = await pveFetch<{ members?: any[] }>(conn, `/pools/${encodeURIComponent(poolName)}`)
+      for (const m of pool?.members || []) {
+        if (m?.type !== 'qemu') continue
+        const vmid = Number(m.vmid)
+        if (!Number.isFinite(vmid)) continue
+        byVmid.set(vmid, { vmid, node: String(m.node ?? ''), name: String(m.name ?? `VM ${vmid}`), vmstatus: String(m.status ?? 'stopped') })
+      }
+    } catch (err: any) {
+      console.warn(`[storage-policy-apply] pool "${safeLog(poolName)}" enumeration failed: ${safeLog(err?.message ?? err)}`)
+    }
+  }
+  return Array.from(byVmid.values())
 }
 
 export async function clearScopeCacheForPolicy(policyId: string): Promise<void> {

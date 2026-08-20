@@ -161,21 +161,27 @@ export async function meterImportRefs(
 /** Post-write storage-tier QoS restamp: GET the guest config, re-stamp every
  *  DATA disk whose storage carries a tier policy, PUT only if something
  *  actually changed. Shared by the clone/restore/snapshot-rollback after()
- *  blocks (spec §5.3 + Finding I1): each schedules its own waitForTask on
- *  the write's UPID, then calls this once the task has settled. Never
- *  throws: a failure here must not surface as a failed clone/restore/
- *  rollback, it only logs. `logTag` should already carry the guest
- *  identifier (e.g. `` `[clone-qos-stamp] vmid=${newid}` ``) so a failure
- *  can be traced back to the guest it happened for; the caller's own
- *  interpolations into it must already be safeLog'd (raw path/body
- *  segments can carry log-injection-prone characters). */
+ *  blocks (spec §5.3 + Finding I1) and the bulk policy-apply route (spec
+ *  §11): each after() block schedules its own waitForTask on the write's
+ *  UPID, then calls this once the task has settled; the bulk-apply route
+ *  calls it directly per already-running VM. Never throws: a failure here
+ *  must not surface as a failed clone/restore/rollback, it only logs.
+ *  `logTag` should already carry the guest identifier (e.g.
+ *  `` `[clone-qos-stamp] vmid=${newid}` ``) so a failure can be traced back
+ *  to the guest it happened for; the caller's own interpolations into it
+ *  must already be safeLog'd (raw path/body segments can carry
+ *  log-injection-prone characters). Returns the disk keys whose line
+ *  actually changed (empty when nothing needed re-stamping OR the GET/PUT
+ *  failed): the bulk-apply route uses this to report a per-VM
+ *  updated/unchanged status; the three fire-and-forget callers ignore it. */
 export async function restampGuestDrives(args: {
   conn: any
   configPath: string
   policies: Map<string, DriveQosCaps>
   logTag: string
-}): Promise<void> {
+}): Promise<{ stamped: string[] }> {
   const { conn, configPath, policies, logTag } = args
+  const stamped: string[] = []
   try {
     const cfg = await pveFetch<any>(conn, configPath)
     const patch = new URLSearchParams()
@@ -185,8 +191,11 @@ export async function restampGuestDrives(args: {
       if (parsed.ok === false || parsed.drive.storage === null) continue
       const caps = policies.get(parsed.drive.storage)
       if (!caps) continue
-      const stamped = stampDriveQos(String(v), caps)
-      if (stamped !== String(v)) patch.set(k, stamped)
+      const newLine = stampDriveQos(String(v), caps)
+      if (newLine !== String(v)) {
+        patch.set(k, newLine)
+        stamped.push(k)
+      }
     }
     if (Array.from(patch.keys()).length > 0) {
       await pveFetch<any>(conn, configPath, {
@@ -197,5 +206,7 @@ export async function restampGuestDrives(args: {
     }
   } catch (err: any) {
     console.error(`${logTag} failed: ${safeLog(err?.message ?? err)}`)
+    return { stamped: [] }
   }
+  return { stamped }
 }

@@ -48,17 +48,70 @@ const POLICIES_C1 = [
 
 let posted: any
 let deletedUrl: string | undefined
+let putBody: any
+let applyRequested: boolean
 
 function jsonRes(body: any, status = 200) {
   return { ok: status < 400, status, json: async () => body } as Response
 }
 
+/** Fake streaming Response whose body.getReader() delivers the given NDJSON
+ *  events as one chunk, then signals done: matches the shape the component
+ *  reads (res.body.getReader() + TextDecoder + split('\n')) without pulling
+ *  in a real ReadableStream. */
+function fakeNdjsonResponse(events: any[]): Response {
+  const text = events.map((e) => `${JSON.stringify(e)}\n`).join('')
+  const bytes = new TextEncoder().encode(text)
+  let sent = false
+  const reader = {
+    read: async () => {
+      if (sent) return { done: true, value: undefined }
+      sent = true
+      return { done: false, value: bytes }
+    },
+  }
+  return { ok: true, body: { getReader: () => reader } } as unknown as Response
+}
+
+const APPLY_EVENTS = [
+  { type: 'start', total: 2 },
+  { type: 'vm', index: 0, total: 2, vmid: 201, name: 'web-01', node: 'pve1', disks: ['scsi0'], status: 'updated' },
+  { type: 'vm', index: 1, total: 2, vmid: 202, name: 'web-02', node: 'pve1', disks: [], status: 'unchanged' },
+  { type: 'done', updated: 1, unchanged: 1, errors: 0 },
+]
+
+const DISKS_P1 = {
+  vms: [
+    {
+      vmid: 301, name: 'db-01', node: 'pve1', vmstatus: 'running',
+      disks: [
+        { key: 'scsi0', iopsRd: 5000, iopsWr: 3000, mbpsRd: 500, mbpsWr: 300, inSync: true },
+        { key: 'scsi1', iopsRd: 1000, iopsWr: 1000, mbpsRd: 100, mbpsWr: 100, inSync: false },
+      ],
+    },
+  ],
+}
+
 beforeEach(() => {
   posted = undefined
   deletedUrl = undefined
+  putBody = undefined
+  applyRequested = false
   vi.stubGlobal('fetch', vi.fn(async (input: any, init?: any) => {
     const url = String(input)
 
+    if (url.endsWith('/connections/c1/storage-policies/p1/apply') && init?.method === 'POST') {
+      applyRequested = true
+      return fakeNdjsonResponse(APPLY_EVENTS)
+    }
+    if (url.endsWith('/connections/c1/storage-policies/p1/disks')) return jsonRes({ data: DISKS_P1 })
+    if (url.endsWith('/connections/c1/storage-policies/p2/disks')) return jsonRes({ data: { vms: [] } })
+    const putMatch = url.match(/\/connections\/c1\/storage-policies\/(p\d+)$/)
+    if (putMatch && init?.method === 'PUT') {
+      putBody = JSON.parse(init.body)
+      const base = putMatch[1] === 'p1' ? POLICIES_C1[0] : POLICIES_C1[1]
+      return jsonRes({ data: { ...base, ...putBody } })
+    }
     if (url.includes('/connections/c1/storage-policies') && init?.method === 'POST') {
       posted = JSON.parse(init.body)
       return jsonRes({ data: { id: 'p-new', ...posted } }, 201)
@@ -163,5 +216,80 @@ describe('StoragePoliciesSection', () => {
     await screen.findByRole('dialog')
     const storageSelect = screen.getByLabelText(/^Storage/)
     expect(storageSelect.getAttribute('aria-disabled')).toBeNull()
+  })
+})
+
+describe('bulk apply progress phase (Task 16)', () => {
+  it('switches to the apply-progress phase after saving an edit that changes a QoS cap, and streams progress to done', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('gold')
+
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' })
+    fireEvent.click(editButtons[0]) // gold = p1
+
+    await screen.findByRole('dialog')
+    fireEvent.change(screen.getByLabelText(/IOPS \(read\)/), { target: { value: '6000' } })
+
+    const saveBtn = await screen.findByRole('button', { name: 'Save' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => expect(putBody).toMatchObject({ iopsRd: 6000 }))
+    await waitFor(() => expect(applyRequested).toBe(true))
+
+    expect(await screen.findByText('Applying storage policy to existing disks')).toBeInTheDocument()
+    await screen.findByText(/web-01 \(201\)/)
+    expect(screen.getByText(/web-02 \(202\)/)).toBeInTheDocument()
+
+    expect(await screen.findByText('1 disk(s) updated, 1 unchanged, 0 error(s)')).toBeInTheDocument()
+
+    const closeBtn = screen.getByRole('button', { name: 'Close' })
+    expect(closeBtn.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(closeBtn)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('closes immediately without calling apply when the edit does not change any QoS cap', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('bronze')
+
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' })
+    fireEvent.click(editButtons[1]) // bronze = p2, no caps set
+
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'bronze-renamed' } })
+
+    const saveBtn = await screen.findByRole('button', { name: 'Save' })
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    expect(applyRequested).toBe(false)
+  })
+})
+
+describe('expandable policy disks (drift detection)', () => {
+  it('expands a policy row, fetches its governed disks, and colors the drifted one as a warning', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('gold')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand gold' }))
+
+    await screen.findByText(/db-01 \(301\)/)
+    expect(screen.getByText('pve1')).toBeInTheDocument()
+
+    const inSyncChip = screen.getByText('scsi0 · 5000/3000 · 500/300M').closest('.MuiChip-root')
+    expect(inSyncChip).not.toHaveClass('MuiChip-colorWarning')
+
+    const driftedChip = screen.getByText('scsi1 · 1000/1000 · 100/100M').closest('.MuiChip-root')
+    expect(driftedChip).toHaveClass('MuiChip-colorWarning')
+  })
+
+  it('renders the no-disks caption when a policy governs no existing disks', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('bronze')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand bronze' }))
+
+    expect(await screen.findByText('No existing disks are governed by this policy yet')).toBeInTheDocument()
   })
 })

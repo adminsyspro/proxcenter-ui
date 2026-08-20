@@ -67,6 +67,7 @@ interface VdcFormState {
   unlimitedVms: boolean
   unlimitedSnapshots: boolean
   unlimitedBackups: boolean
+  unlimitedVnets: boolean
 }
 
 const emptyForm: VdcFormState = {
@@ -90,6 +91,7 @@ const emptyForm: VdcFormState = {
   unlimitedVms: true,
   unlimitedSnapshots: true,
   unlimitedBackups: true,
+  unlimitedVnets: true,
 }
 
 // Translates an ISO timestamp into a localized "3m ago" / "2h ago" / "5d ago"
@@ -524,6 +526,7 @@ export default function VdcTab() {
       unlimitedVms: vdc.quota?.maxVms == null,
       unlimitedSnapshots: vdc.quota?.maxSnapshots == null,
       unlimitedBackups: vdc.quota?.maxBackups == null,
+      unlimitedVnets: vdc.quota?.maxVnets == null,
     })
 
     if (vdc.sharedBridges?.length) {
@@ -561,7 +564,7 @@ export default function VdcTab() {
       if (!form.unlimitedVms && form.maxVms) quota.maxVms = Number.parseInt(form.maxVms)
       if (!form.unlimitedSnapshots && form.maxSnapshots) quota.maxSnapshots = Number.parseInt(form.maxSnapshots)
       if (!form.unlimitedBackups && form.maxBackups) quota.maxBackups = Number.parseInt(form.maxBackups)
-      if (form.maxVnets) quota.maxVnets = Number.parseInt(form.maxVnets)
+      if (!form.unlimitedVnets && form.maxVnets) quota.maxVnets = Number.parseInt(form.maxVnets)
 
       // For unlimited fields, explicitly set null so the backend clears them
       if (form.unlimitedVcpus) quota.maxVcpus = null
@@ -570,6 +573,7 @@ export default function VdcTab() {
       if (form.unlimitedVms) quota.maxVms = null
       if (form.unlimitedSnapshots) quota.maxSnapshots = null
       if (form.unlimitedBackups) quota.maxBackups = null
+      if (form.unlimitedVnets) quota.maxVnets = null
 
       const sharedBridgesPayload = Array.from(selectedSharedBridges.entries()).map(([bridge, label]) => ({
         bridge,
@@ -1814,8 +1818,12 @@ export default function VdcTab() {
                                   // The MenuItem body is two stacked lines (name + storage);
                                   // MUI would render both inside the CLOSED control and
                                   // overflow it, so the closed state shows the name only.
-                                  renderValue: (value) =>
-                                    connPolicies.find((p) => p.id === (value as string))?.name ?? '',
+                                  renderValue: (value) => (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <i className="ri-database-2-line" style={{ fontSize: 15, opacity: 0.7 }} />
+                                      {connPolicies.find((p) => p.id === (value as string))?.name ?? ''}
+                                    </Box>
+                                  ),
                                 },
                               }}
                             >
@@ -1929,16 +1937,7 @@ export default function VdcTab() {
               {renderQuotaField(t('vdc.maxSnapshots'), 'maxSnapshots', 'unlimitedSnapshots')}
               {renderQuotaField(t('vdc.maxBackups'), 'maxBackups', 'unlimitedBackups')}
 
-              <TextField
-                label={t('vdc.maxVnets')}
-                type="number"
-                value={form.maxVnets}
-                onChange={(e) => setForm((f) => ({ ...f, maxVnets: e.target.value }))}
-                helperText={t('vdc.maxVnetsHint')}
-                slotProps={{ htmlInput: { min: 0 } }}
-                size="small"
-                fullWidth
-              />
+              {renderQuotaField(t('vdc.maxVnets'), 'maxVnets', 'unlimitedVnets')}
             </>
           )}
         </DialogContent>

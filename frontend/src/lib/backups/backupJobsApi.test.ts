@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import {
   loadBackupJobs,
+  loadBackupPools,
   loadBackupVms,
   saveBackupJob,
   deleteBackupJob,
@@ -57,6 +58,26 @@ describe('backupJobsApi', () => {
         '/api/v1/connections/c/resources?type=vm',
         undefined,
       )
+    })
+  })
+
+  describe('loadBackupPools', () => {
+    it('GETs the connection pools endpoint and returns the list', async () => {
+      const pools = [{ poolid: 'prod', comment: 'Production' }, { poolid: 'lab', comment: null }]
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ data: pools, restricted: false }))
+
+      const result = await loadBackupPools('conn 1', fetchImpl as unknown as typeof fetch)
+
+      expect(fetchImpl).toHaveBeenCalledWith('/api/v1/connections/conn%201/pools', undefined)
+      expect(result).toEqual({ ok: true, data: pools })
+    })
+
+    it('returns a clean HTTP error on an nginx gateway HTML page', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(htmlGateway(502))
+
+      const result = await loadBackupPools('c', fetchImpl as unknown as typeof fetch)
+
+      expect(result).toEqual({ ok: false, error: 'HTTP 502' })
     })
   })
 

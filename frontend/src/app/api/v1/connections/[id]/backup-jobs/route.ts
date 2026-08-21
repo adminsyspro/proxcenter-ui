@@ -308,6 +308,13 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Storage is required" }, { status: 400 })
     }
 
+    // Pool-based selection carries the whole selection in `pool`: without it
+    // the request would create a job with no selection at all (PVE needs one
+    // of all / vmid / pool).
+    if (body.selectionMode === 'pool' && !body.pool) {
+      return NextResponse.json({ error: "Pool is required" }, { status: 400 })
+    }
+
     params.set('storage', body.storage)
     
     // Schedule

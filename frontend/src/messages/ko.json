@@ -7271,6 +7271,7 @@
     "storagePolicyAdd": "스토리지 정책 추가",
     "storagePolicyName": "이름",
     "storagePolicyStorage": "스토리지",
+    "storagePolicyStorageTaken": "이미 \"{policy}\"에서 관리 중",
     "storagePolicyDescription": "설명",
     "storagePolicyIopsRd": "IOPS (읽기)",
     "storagePolicyIopsWr": "IOPS (쓰기)",

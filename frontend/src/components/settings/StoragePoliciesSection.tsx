@@ -6,7 +6,7 @@
 // list. One Card per connection so an operator managing several clusters
 // sees each cluster's policies without leaving the page.
 
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   Alert,
@@ -411,6 +411,22 @@ export default function StoragePoliciesSection({ connections }: Props) {
 
   const dialogStorages = dialog ? storagesByConn[dialog.connectionId] || [] : []
 
+  // A storage carries at most ONE policy per connection (DB unique
+  // (connection_id, storage_id)): the tier quota is metered per storage, so
+  // two policies on the same storage would make the quota attribution
+  // ambiguous. The picker used to offer the taken ones anyway and the save
+  // came back 409, so disable them up front and name the owning policy. The
+  // policy being edited never disables its own storage.
+  const storageOwners = useMemo(() => {
+    const owners = new Map<string, string>()
+    if (!dialog) return owners
+    for (const p of policies[dialog.connectionId] || []) {
+      if (p.id === dialog.policy?.id) continue
+      owners.set(p.storageId, p.name)
+    }
+    return owners
+  }, [dialog, policies])
+
   return (
     <Box sx={{ mb: 3 }}>
       <Typography variant="h6">{t('vdc.storagePoliciesTitle')}</Typography>
@@ -676,14 +692,24 @@ export default function StoragePoliciesSection({ connections }: Props) {
             }
             fullWidth
           >
-            {dialogStorages.map((s) => (
-              <MenuItem key={s.id} value={s.id}>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography variant="body2">{s.id}</Typography>
-                  <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10 }} />
-                </Stack>
-              </MenuItem>
-            ))}
+            {dialogStorages.map((s) => {
+              const owner = storageOwners.get(s.id)
+
+              return (
+                <MenuItem key={s.id} value={s.id} disabled={!!owner}>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box component="i" className="ri-hard-drive-2-line" sx={{ fontSize: 14, opacity: 0.7 }} />
+                    <Typography variant="body2">{s.id}</Typography>
+                    <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10 }} />
+                    {owner && (
+                      <Typography variant="caption" color="text.secondary">
+                        {t('vdc.storagePolicyStorageTaken', { policy: owner })}
+                      </Typography>
+                    )}
+                  </Stack>
+                </MenuItem>
+              )
+            })}
           </TextField>
 
           <Stack direction="row" spacing={2}>

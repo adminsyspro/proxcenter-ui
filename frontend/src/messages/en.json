@@ -7271,6 +7271,7 @@
     "storagePolicyAdd": "Add a storage policy",
     "storagePolicyName": "Name",
     "storagePolicyStorage": "Storage",
+    "storagePolicyStorageTaken": "Already governed by \"{policy}\"",
     "storagePolicyDescription": "Description",
     "storagePolicyIopsRd": "IOPS (read)",
     "storagePolicyIopsWr": "IOPS (write)",

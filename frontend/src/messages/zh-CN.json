@@ -7295,6 +7295,7 @@
     "storagePolicyAdd": "添加存储策略",
     "storagePolicyName": "名称",
     "storagePolicyStorage": "存储",
+    "storagePolicyStorageTaken": "已由「{policy}」管理",
     "storagePolicyDescription": "描述",
     "storagePolicyIopsRd": "IOPS（读）",
     "storagePolicyIopsWr": "IOPS（写）",

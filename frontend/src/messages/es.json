@@ -7271,6 +7271,7 @@
     "storagePolicyAdd": "Añadir política de almacenamiento",
     "storagePolicyName": "Nombre",
     "storagePolicyStorage": "Almacenamiento",
+    "storagePolicyStorageTaken": "Ya gestionado por «{policy}»",
     "storagePolicyDescription": "Descripción",
     "storagePolicyIopsRd": "IOPS (lectura)",
     "storagePolicyIopsWr": "IOPS (escritura)",

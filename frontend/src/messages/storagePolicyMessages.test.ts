@@ -15,6 +15,7 @@ const requiredKeys = [
   'vdc.storagePolicyAdd',
   'vdc.storagePolicyName',
   'vdc.storagePolicyStorage',
+  'vdc.storagePolicyStorageTaken',
   'vdc.storagePolicyDescription',
   'vdc.storagePolicyIopsRd',
   'vdc.storagePolicyIopsWr',

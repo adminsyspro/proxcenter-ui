@@ -23,6 +23,11 @@ export default function ColorPicker({
   // Opt-in: lets the hex field stretch instead of sitting at a fixed 160px.
   // Defaults to false so WhiteLabelTab, the original caller, is untouched.
   fullWidth = false,
+  // Opt-in red outline on the hex field. Default off, so callers that do not
+  // validate (the broadcast banner, whose colours cannot break a render) keep
+  // the previous appearance. The message itself is left to the caller: a
+  // helperText would grow the field and push the swatch out of alignment.
+  error = false,
 }) {
   const inputRef = useRef(null)
   // `value` is free-typed and can be a transient, invalid string (e.g. "#" or
@@ -65,6 +70,7 @@ export default function ColorPicker({
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
+        error={error}
         sx={fullWidth ? { flex: 1, minWidth: 0 } : { width: 160 }}
         slotProps={{ htmlInput: { maxLength: 7 } }}
       />

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { normalizeHexColor } from '@/lib/theme/hexColor'
 
 
 const DEFAULT_BRANDING = {
@@ -39,6 +40,11 @@ export async function GET() {
     settings.faviconUrl = fixUrl(settings.faviconUrl)
     settings.loginLogoUrl = fixUrl(settings.loginLogoUrl)
 
+    // #754: a value stored before the colour was validated can be missing its
+    // '#'. Hand the settings form the colour the administrator meant, so saving
+    // once is enough to clean the row, and drop what cannot be repaired.
+    settings.primaryColor = settings.primaryColor ? (normalizeHexColor(settings.primaryColor) ?? '') : ''
+
     return NextResponse.json(settings)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -52,6 +58,27 @@ export async function PUT(req: Request) {
 
     const body = await req.json()
     const settings = { ...DEFAULT_BRANDING, ...body }
+
+    // #754: the primary colour reaches MUI's lighten()/darken() in the theme
+    // provider, which wraps the dashboard AND the login layout, so an
+    // unparseable value here takes the whole tenant down with a 500 and leaves
+    // no UI to undo it. An empty string means "no override" and stays allowed;
+    // anything else has to be a hex colour, and a missing '#' is added rather
+    // than refused.
+    if (settings.primaryColor) {
+      const primaryColor = normalizeHexColor(settings.primaryColor)
+
+      if (primaryColor === null) {
+        return NextResponse.json(
+          { error: 'Invalid primaryColor: expected a hex colour such as #00ECB2' },
+          { status: 400 }
+        )
+      }
+
+      settings.primaryColor = primaryColor
+    } else {
+      settings.primaryColor = ''
+    }
 
     const tenantId = await getCurrentTenantId()
     await setSetting('branding', tenantId, settings)

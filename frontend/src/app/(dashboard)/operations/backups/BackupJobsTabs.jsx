@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 
@@ -128,6 +128,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
   // back up. The job-create dialog locks selectionMode='pool' for them
   // and lets them pick from this list.
   const [tenantPools, setTenantPools] = useState([])
+  // Provider mode: the cluster's resource pools, so a job can target a
+  // pool the way Proxmox does (issue #746).
+  const [pools, setPools] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   
@@ -212,12 +215,33 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     }
   }, [selectedConnection])
 
+  const loadPools = useCallback(async () => {
+    // Tenants pick a vDC instead, which carries its own pool (tenantPools).
+    if (!selectedConnection || isVdcTenant) {
+      setPools([])
+
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(selectedConnection)}/pools`)
+      const json = await res.json()
+
+      if (!json.error) {
+        setPools((json.data || []).filter(p => !!p?.poolid))
+      }
+    } catch (e) {
+      console.error('Error loading pools:', e)
+    }
+  }, [selectedConnection, isVdcTenant])
+
   useEffect(() => {
     if (selectedConnection) {
       loadJobs()
       loadVms()
+      loadPools()
     }
-  }, [selectedConnection, loadJobs, loadVms])
+  }, [selectedConnection, loadJobs, loadVms, loadPools])
 
   useEffect(() => {
     if (pveConnections.length > 0 && !selectedConnection) {
@@ -265,6 +289,20 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
     return () => { cancelled = true }
   }, [isVdcTenant, selectedConnection])
 
+  // The pool of the job being edited may not be in the fetched list yet
+  // (still loading, or a pool outside the caller's RBAC perimeter), and a
+  // Select whose value has no option silently shows blank, which would
+  // then be saved back as an empty pool. Keep it as an option.
+  const poolOptions = useMemo(() => {
+    const options = pools.map(p => ({ poolid: p.poolid, comment: p.comment || null }))
+
+    if (formData.pool && !options.some(p => p.poolid === formData.pool)) {
+      options.unshift({ poolid: formData.pool, comment: null })
+    }
+
+    return options
+  }, [pools, formData.pool])
+
   const handleCreate = () => {
     // Trouver le premier storage PBS
     const pbsStorage = storages.find(s => s.isPbs || s.type === 'pbs')
@@ -305,6 +343,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false }) {
       mode: job.mode || 'snapshot',
       compress: job.compress || 'zstd',
       selectionMode: job.selectionMode || 'all',
+      pool: job.pool || '',
       vmids: job.vmids || [],
       excludedVmids: job.excludedVmids || [],
       comment: job.comment || '',
@@ -741,6 +780,7 @@ return '—'
                   onChange={(e) => setFormData(prev => ({
                     ...prev,
                     selectionMode: e.target.value,
+                    pool: e.target.value === 'pool' ? prev.pool : '',
                     vmids: [],
                     excludedVmids: []
                   }))}
@@ -749,6 +789,7 @@ return '—'
                   <MenuItem value="all">{t('backups.allVms')}</MenuItem>
                   <MenuItem value="include">{t('backups.selectVms')}</MenuItem>
                   <MenuItem value="exclude">{t('backups.allExceptMode')}</MenuItem>
+                  <MenuItem value="pool">{t('backups.poolBasedMode')}</MenuItem>
                 </Select>
               </FormControl>
 
@@ -790,6 +831,26 @@ return '—'
                     ))
                   }
                 />
+              )}
+
+              {formData.selectionMode === 'pool' && (
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('backups.poolToBackup')}</InputLabel>
+                  <Select
+                    value={formData.pool}
+                    onChange={(e) => setFormData(prev => ({ ...prev, pool: e.target.value }))}
+                    label={t('backups.poolToBackup')}
+                  >
+                    {poolOptions.length === 0 && (
+                      <MenuItem value="" disabled>{t('backups.noResourcePool')}</MenuItem>
+                    )}
+                    {poolOptions.map(p => (
+                      <MenuItem key={p.poolid} value={p.poolid}>
+                        {p.comment ? `${p.poolid} (${p.comment})` : p.poolid}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               )}
             </Box>
             )}
@@ -840,7 +901,7 @@ return '—'
           <Button
             variant="contained"
             onClick={handleSave}
-            disabled={saving || !formData.storage || (isVdcTenant && !formData.pool)}
+            disabled={saving || !formData.storage || (formData.selectionMode === 'pool' && !formData.pool)}
             startIcon={saving ? <CircularProgress size={16} /> : null}
           >
             {dialogMode === 'create' ? t('common.create') : t('common.save')}

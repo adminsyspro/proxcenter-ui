@@ -41,6 +41,22 @@ export function loadBackupVms(
   )
 }
 
+/**
+ * Load the resource pools of a connection, used by the job's pool-based
+ * selection (issue #746). The endpoint is RBAC-aware: a scoped caller only
+ * gets the pools inside their perimeter.
+ */
+export function loadBackupPools(
+  connectionId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<JsonResult<unknown[]>> {
+  return fetchJsonSafe<unknown[]>(
+    `/api/v1/connections/${encodeURIComponent(connectionId)}/pools`,
+    undefined,
+    fetchImpl,
+  )
+}
+
 /** Create (POST) or update (PUT) a backup job. */
 export function saveBackupJob(
   connectionId: string,

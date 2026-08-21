@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import {
   Alert,
   Autocomplete,
@@ -38,6 +38,7 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { runBackupJobNow } from '@/lib/backups/runBackupJob'
 import {
   loadBackupJobs,
+  loadBackupPools,
   loadBackupVms,
   saveBackupJob,
   deleteBackupJob,
@@ -115,6 +116,9 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
   const [storages, setStorages] = useState<any[]>([])
   const [nodes, setNodes] = useState<any[]>([])
   const [vms, setVms] = useState<any[]>([])
+  // Resource pools of the cluster, so a job can target a pool the way
+  // Proxmox does (issue #746).
+  const [pools, setPools] = useState<{ poolid: string; comment: string | null }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [runInfo, setRunInfo] = useState<string | null>(null)
@@ -142,7 +146,8 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     node: '',
     mode: 'snapshot',
     compress: 'zstd',
-    selectionMode: 'all' as 'all' | 'include' | 'exclude',
+    selectionMode: 'all' as 'all' | 'include' | 'exclude' | 'pool',
+    pool: '',
     vmids: [] as number[],
     excludedVmids: [] as number[],
     comment: '',
@@ -221,7 +226,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           name: vm.name,
           type: vm.type,
           node: vm.node,
-          status: vm.status
+          status: vm.status,
+          // Carries the pool membership, which the job detail uses to list
+          // what a pool-based job actually backs up.
+          pool: vm.pool || null
         })))
       }
     } catch (e) {
@@ -229,12 +237,44 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     }
   }, [connectionId])
 
+  // Charger les pools
+  const loadPools = useCallback(async () => {
+    if (!connectionId) return
+
+    try {
+      const result = await loadBackupPools(connectionId)
+
+      if (result.ok) {
+        setPools(((result.data as any[]) || [])
+          .filter((p: any) => !!p?.poolid)
+          .map((p: any) => ({ poolid: String(p.poolid), comment: p.comment || null })))
+      }
+    } catch (e) {
+      console.error('Error loading pools:', e)
+    }
+  }, [connectionId])
+
   useEffect(() => {
     if (connectionId) {
       loadJobs()
       loadVms()
+      loadPools()
     }
-  }, [connectionId, loadJobs, loadVms])
+  }, [connectionId, loadJobs, loadVms, loadPools])
+
+  // A Select whose value matches no option silently renders blank, and the
+  // blank would be saved back as an empty pool. So the pool of the job being
+  // edited stays an option even when the fetched list has not landed yet (or
+  // does not hold it, e.g. a pool outside the caller's RBAC perimeter).
+  const poolOptions = useMemo(() => {
+    const options = pools.map(p => ({ poolid: p.poolid, comment: p.comment }))
+
+    if (formData.pool && !options.some(p => p.poolid === formData.pool)) {
+      options.unshift({ poolid: formData.pool, comment: null })
+    }
+
+    return options
+  }, [pools, formData.pool])
 
   // Créer un job
   const handleCreate = () => {
@@ -246,6 +286,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       mode: 'snapshot',
       compress: 'zstd',
       selectionMode: 'all',
+      pool: '',
       vmids: [],
       excludedVmids: [],
       comment: '',
@@ -289,6 +330,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       mode: job.mode || 'snapshot',
       compress: job.compress || 'zstd',
       selectionMode: (job as any).selectionMode || 'all',
+      pool: (job as any).pool || '',
       vmids: (job as any).vmids || [],
       excludedVmids: (job as any).excludedVmids || [],
       comment: job.comment || '',
@@ -418,6 +460,10 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
 
     if (job.selectionMode === 'include') {
       return t('inventory.vmCount', { count: job.vmids?.length || 0 })
+    }
+
+    if (job.selectionMode === 'pool') {
+      return t('inventory.poolSelection', { name: job.pool || '-' })
     }
 
     return '—'
@@ -763,15 +809,40 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                   <InputLabel>{t('inventory.selectionMode')}</InputLabel>
                   <Select
                     value={formData.selectionMode}
-                    onChange={(e) => setFormData(prev => ({ ...prev, selectionMode: e.target.value as any }))}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      selectionMode: e.target.value as any,
+                      pool: e.target.value === 'pool' ? prev.pool : ''
+                    }))}
                     label={t('inventory.selectionMode')}
                   >
                     <MenuItem value="all">{t('inventory.allVmsOption')}</MenuItem>
                     <MenuItem value="include">{t('inventory.includeSelectedVms')}</MenuItem>
                     <MenuItem value="exclude">{t('inventory.excludeSelectedVms')}</MenuItem>
+                    <MenuItem value="pool">{t('inventory.poolBasedSelection')}</MenuItem>
                   </Select>
                 </FormControl>
               </Box>
+
+              {formData.selectionMode === 'pool' && (
+                <FormControl size="small" fullWidth>
+                  <InputLabel>{t('inventory.poolToBackup')}</InputLabel>
+                  <Select
+                    value={formData.pool}
+                    onChange={(e) => setFormData(prev => ({ ...prev, pool: e.target.value }))}
+                    label={t('inventory.poolToBackup')}
+                  >
+                    {poolOptions.length === 0 && (
+                      <MenuItem value="" disabled>{t('inventory.noResourcePool')}</MenuItem>
+                    )}
+                    {poolOptions.map(p => (
+                      <MenuItem key={p.poolid} value={p.poolid}>
+                        {p.comment ? `${p.poolid} (${p.comment})` : p.poolid}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
 
               {formData.selectionMode === 'include' && (
                 <Autocomplete
@@ -1031,7 +1102,11 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           <Button onClick={() => setDialogOpen(false)} disabled={saving}>
             {t('common.cancel')}
           </Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving || (formData.selectionMode === 'pool' && !formData.pool)}
+          >
             {saving ? <CircularProgress size={20} /> : dialogMode === 'create' ? t('common.create') : t('common.save')}
           </Button>
         </DialogActions>
@@ -1079,10 +1154,12 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           // Resolve included/excluded VMs
           const jobVmids: number[] = (detailJob as any).vmids || []
           const jobExcludedVmids: number[] = (detailJob as any).excludedVmids || []
-          const isAllMode = (detailJob as any).selectionMode === 'all'
-          const includedVms = isAllMode
+          const selectionMode = (detailJob as any).selectionMode
+          const includedVms = selectionMode === 'all'
             ? vms.filter(vm => !jobExcludedVmids.includes(vm.vmid))
-            : vms.filter(vm => jobVmids.includes(vm.vmid))
+            : selectionMode === 'pool'
+              ? vms.filter(vm => vm.pool && vm.pool === (detailJob as any).pool)
+              : vms.filter(vm => jobVmids.includes(vm.vmid))
 
           return (
             <>

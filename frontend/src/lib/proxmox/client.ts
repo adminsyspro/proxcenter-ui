@@ -160,14 +160,25 @@ export type PveErrorClass =
  * count the latter on the default budget, otherwise a genuinely wedged node
  * would never fail over, but never when the caller asked for a longer budget:
  * requesting 30s and spending them is a slow storage, not an outage (#742).
+ *
+ * `replaySafe` is false for a request that is not idempotent (POST/PUT/DELETE).
+ * A slow answer there is the one case where the host provably received the
+ * request and kept working on it after we stopped waiting, as PVE does for a
+ * memory hotplug (#743), so failing over would apply the same write a second
+ * time on another node. A write is therefore never failover evidence on a slow
+ * answer, whatever the budget.
  */
-export function isFailoverWorthy(cls: PveErrorClass, hasLongBudget: boolean): boolean {
+export function isFailoverWorthy(
+  cls: PveErrorClass,
+  hasLongBudget: boolean,
+  replaySafe = true,
+): boolean {
   switch (cls) {
     case "hard-network":
     case "connect-timeout":
       return true
     case "response-timeout":
-      return !hasLongBudget
+      return replaySafe && !hasLongBudget
     default:
       return false
   }
@@ -265,14 +276,18 @@ export async function pveFetch<T>(
   // node, so it must not push the connection towards a failover.
   const hasLongBudget = primaryTimeoutMs > PVE_DEFAULT_TIMEOUT_MS
 
+  const method = String(init.method || "GET").toUpperCase()
+
+  // Only a read may be replayed on another node. PVE keeps applying a write we
+  // stopped waiting for, so a failover would apply it twice (#743).
+  const replaySafe = method === "GET" || method === "HEAD" || method === "OPTIONS"
+
   const isUnreachableEvidence = (err: unknown) =>
-    isFailoverWorthy(classifyPveError(err), hasLongBudget)
+    isFailoverWorthy(classifyPveError(err), hasLongBudget, replaySafe)
 
   const dispatcher = opts.insecureDev
     ? getInsecureAgent()
     : getDefaultAgent()
-
-  const method = String(init.method || "GET").toUpperCase()
 
   // Headers
   const headers: Record<string, string> = {

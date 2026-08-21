@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { putGuestConfig } from '@/lib/proxmox/guestConfigClient'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
@@ -2205,16 +2206,54 @@ return (
     return changed
   }, [data?.memoryInfo, data?.vmType, memory, balloon, balloonEnabled, swap])
 
+  /**
+   * Pousse un patch de configuration du guest et attend que PVE l'ait appliqué.
+   * La route répond 202 + upid quand la tâche qmconfig dépasse le budget de la
+   * requête : le retrait de RAM débranche les barrettes une par une, plusieurs
+   * secondes chacune, et l'ancien appel synchrone expirait pendant que PVE
+   * appliquait quand même le changement (#743). On continue donc de suivre la
+   * tâche côté navigateur au lieu de crier à l'erreur.
+   */
+  const pushGuestConfig = (
+    connId: string,
+    type: string,
+    node: string,
+    vmid: string,
+    patch: Record<string, any>,
+  ) => putGuestConfig(connId, type, node, vmid, patch, {
+    onPending: () => toast.info(t('inventoryPage.configTaskStillApplying')),
+    failedMessage: t('inventoryPage.configTaskFailed'),
+    timeoutMessage: t('inventoryPage.configTaskTimeout'),
+  })
+
+  /**
+   * Recharge le panneau et dit si PVE liste encore une des clés qu'on vient
+   * d'écrire comme en attente. C'est la seule source de vérité pour savoir si
+   * le changement est déjà actif (hotplug) ou s'il attend un arrêt/relance :
+   * l'état d'alimentation de la VM, lui, ne le dit pas.
+   */
+  const reloadVmDetails = async (patch?: Record<string, any>) => {
+    if (!selection) return false
+
+    const payload = await fetchDetails(selection)
+
+    setData(payload)
+    setLocalTags(payload?.tags || [])
+
+    if (!patch) return false
+
+    const pendingKeys = new Set<string>((payload as any)?.pendingKeys || [])
+
+    return Object.keys(patch).some(key => pendingKeys.has(key))
+  }
+
   // Sauvegarder la configuration CPU
   const saveCpuConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
-    // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
-    const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingCpu(true)
 
     try {
@@ -2237,48 +2276,25 @@ return (
       } else {
         configUpdate.cpulimit = 0
       }
-      
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configUpdate)
-        }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
 
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      // Recharger les données
-      const payload = await fetchDetails(selection)
+      await pushGuestConfig(connId, type, node, vmid, configUpdate)
 
-      setData(payload)
-      setLocalTags(payload.tags || [])
-      
-      // Message de succès avec avertissement si VM était running
-      if (wasRunning) {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.cpuConfigSaved'),
-          message: `⚠️ ${t('inventoryPage.vmRunningCpuRestartRequired')}`,
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      } else {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.cpuConfigSaved'),
-          message: t('inventoryPage.changesAppliedSuccessfully'),
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      }
+      const stillPending = await reloadVmDetails(configUpdate)
+
+      setConfirmAction({
+        action: 'info',
+        title: t('inventoryPage.cpuConfigSaved'),
+        message: stillPending
+          ? `⚠️ ${t('inventoryPage.vmRunningCpuRestartRequired')}`
+          : t('inventoryPage.changesAppliedSuccessfully'),
+        vmName: vmTitle,
+        onConfirm: async () => setConfirmAction(null)
+      })
     } catch (e: any) {
-      alert(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
+      // PVE a pu appliquer le changement même si on a perdu la main dessus :
+      // on rafraîchit avant de signaler, le panneau ne doit jamais mentir.
+      await reloadVmDetails().catch(() => {})
+      toast.error(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
     } finally {
       setSavingCpu(false)
     }
@@ -2287,13 +2303,10 @@ return (
   // Sauvegarder la configuration RAM
   const saveMemoryConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
-    // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
-    const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingMemory(true)
 
     try {
@@ -2310,48 +2323,23 @@ return (
           configUpdate.balloon = 0
         }
       }
-      
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configUpdate)
-        }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
 
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      // Recharger les données
-      const payload = await fetchDetails(selection)
+      await pushGuestConfig(connId, type, node, vmid, configUpdate)
 
-      setData(payload)
-      setLocalTags(payload.tags || [])
-      
-      // Message de succès avec avertissement si VM était running (LXC applique les changements immédiatement)
-      if (wasRunning && type !== 'lxc') {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.ramConfigSaved'),
-          message: `⚠️ ${t('inventoryPage.vmRunningRamRestartRequired')}`,
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      } else {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.ramConfigSaved'),
-          message: t('inventoryPage.changesAppliedSuccessfully'),
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      }
+      const stillPending = await reloadVmDetails(configUpdate)
+
+      setConfirmAction({
+        action: 'info',
+        title: t('inventoryPage.ramConfigSaved'),
+        message: stillPending
+          ? `⚠️ ${t('inventoryPage.vmRunningRamRestartRequired')}`
+          : t('inventoryPage.changesAppliedSuccessfully'),
+        vmName: vmTitle,
+        onConfirm: async () => setConfirmAction(null)
+      })
     } catch (e: any) {
-      alert(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
+      await reloadVmDetails().catch(() => {})
+      toast.error(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
     } finally {
       setSavingMemory(false)
     }

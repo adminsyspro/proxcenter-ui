@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { writeGuestConfig, type GuestConfigWriteResult } from "@/lib/proxmox/guestConfigWrite"
+import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -264,6 +266,13 @@ export async function PUT(
         conn,
         `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
       )
+      // PVE's `memory` key is a property string whose default key is the
+      // online amount. Our panel edits that amount alone, so put back any
+      // other segment this VM already carried instead of dropping it.
+      const mergedMemory = mergeMemoryProperty(before?.memory, formData.get('memory'))
+
+      if (mergedMemory) formData.set('memory', mergedMemory)
+
       // Build the after-snapshot the helper compares against. body is a
       // sparse patch — fields not in body inherit from before.
       const after = { ...before, ...body }
@@ -293,23 +302,21 @@ export async function PUT(
       }
     }
 
-    // Proxmox: PUT /nodes/{node}/{qemu|lxc}/{vmid}/config
-    let result: any
+    // Proxmox: the write goes through PVE's asynchronous handler and we follow
+    // the task it spawns, so a slow apply (memory hotplug unplugs one DIMM at a
+    // time) can no longer abort on our side while PVE keeps working (#743).
+    let write: GuestConfigWriteResult
     try {
-      result = await pveFetch<any>(
+      write = await writeGuestConfig({
         conn,
-        `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`,
-        {
-          method: "PUT",
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: formData.toString()
-        }
-      )
+        type,
+        node,
+        vmid,
+        body: formData.toString(),
+      })
     } catch (err) {
-      // PVE rejected the write — undo the IPAM mutations so the DB doesn't
-      // drift away from the unchanged qm config.
+      // PVE rejected the write, or its task ended on an error: undo the IPAM
+      // mutations so the DB doesn't drift away from the unchanged qm config.
       if (ipamRollback) {
         try { await ipamRollback() } catch { /* tolerate */ }
       }
@@ -324,10 +331,19 @@ export async function PUT(
       category: type === 'lxc' ? 'containers' : 'vms',
       resourceType: type,
       resourceId: vmid,
-      details: { node, connectionId: id, fields: Object.keys(body).filter(k => allowedFields.has(k) || /^net\d+$/.test(k) || /^(scsi|virtio|ide|sata)\d+$/.test(k) || /^efidisk\d+$/.test(k) || /^tpmstate\d+$/.test(k) || /^serial\d+$/.test(k) || /^hostpci\d+$/.test(k) || /^usb\d+$/.test(k) || /^audio\d+$/.test(k) || k === 'rng0') },
+      details: { node, connectionId: id, upid: write.upid, fields: Object.keys(body).filter(k => allowedFields.has(k) || /^net\d+$/.test(k) || /^(scsi|virtio|ide|sata)\d+$/.test(k) || /^efidisk\d+$/.test(k) || /^tpmstate\d+$/.test(k) || /^serial\d+$/.test(k) || /^hostpci\d+$/.test(k) || /^usb\d+$/.test(k) || /^audio\d+$/.test(k) || k === 'rng0') },
     })
 
-    return NextResponse.json({ data: result, success: true })
+    // The task outlived the budget we may hold the request for. Hand the caller
+    // the UPID so it keeps following it instead of reporting a failed save.
+    if (write.state === "running") {
+      return NextResponse.json(
+        { data: write.upid, success: true, pending: true, upid: write.upid, node: write.node },
+        { status: 202 },
+      )
+    }
+
+    return NextResponse.json({ data: write.upid, success: true })
   } catch (e: any) {
     console.error("[PUT config] Error:", e)
 

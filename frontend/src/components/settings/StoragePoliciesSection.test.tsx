@@ -123,7 +123,11 @@ beforeEach(() => {
     if (url.endsWith('/connections/c1/storage-policies')) return jsonRes({ data: POLICIES_C1 })
     if (url.endsWith('/connections/c2/storage-policies')) return jsonRes({ data: [] })
     if (url.includes('/connections/c1/available-resources')) {
-      return jsonRes({ data: { storages: [{ id: 'ceph-fast', type: 'rbd' }, { id: 'nfs-slow', type: 'nfs' }] } })
+      // ceph-free carries no policy: it is the only selectable option in the
+      // create dialog, the other two are already governed (gold / bronze).
+      return jsonRes({ data: { storages: [
+        { id: 'ceph-fast', type: 'rbd' }, { id: 'nfs-slow', type: 'nfs' }, { id: 'ceph-free', type: 'rbd' },
+      ] } })
     }
     if (url.includes('/connections/c2/available-resources')) {
       return jsonRes({ data: { storages: [] } })
@@ -158,7 +162,7 @@ describe('StoragePoliciesSection', () => {
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'silver' } })
 
     fireEvent.mouseDown(screen.getByLabelText(/^Storage/))
-    fireEvent.click(await screen.findByRole('option', { name: /nfs-slow/ }))
+    fireEvent.click(await screen.findByRole('option', { name: /ceph-free/ }))
 
     fireEvent.change(screen.getByLabelText(/IOPS \(read\)/), { target: { value: '1000' } })
 
@@ -169,7 +173,7 @@ describe('StoragePoliciesSection', () => {
     await waitFor(() => expect(posted).toBeDefined())
     expect(posted).toMatchObject({
       name: 'silver',
-      storageId: 'nfs-slow',
+      storageId: 'ceph-free',
       iopsRd: 1000,
       iopsWr: null,
       mbpsRd: null,
@@ -177,6 +181,24 @@ describe('StoragePoliciesSection', () => {
     })
 
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
+  })
+
+  it('disables the storages already governed by another policy in the create dialog', async () => {
+    renderWithProviders(<StoragePoliciesSection connections={CONNECTIONS} />)
+    await screen.findByText('gold')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a storage policy' })[0])
+    await screen.findByRole('dialog')
+    fireEvent.mouseDown(screen.getByLabelText(/^Storage/))
+
+    // One policy per (connection, storage): the two storages already carrying
+    // one are offered but not selectable, and each names its owner.
+    const taken = await screen.findByRole('option', { name: /ceph-fast/ })
+
+    expect(taken).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('Already governed by "gold"')).toBeInTheDocument()
+    expect(screen.getByText('Already governed by "bronze"')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /ceph-free/ })).not.toHaveAttribute('aria-disabled')
   })
 
   it('disables delete with a tooltip when the policy is still assigned to a vDC', async () => {

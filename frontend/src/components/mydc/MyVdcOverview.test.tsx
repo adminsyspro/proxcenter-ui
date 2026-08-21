@@ -98,6 +98,29 @@ describe('MyVdcOverview, per-tier storage usage bars', () => {
     expect(bar.className).toContain('colorError')
   })
 
+  it('flags a tier already over its quota, where the clamped bar cannot say it', () => {
+    const vdc = makeVdc({
+      storagePolicies: [{ policyId: 'p1', name: 'Gold', storageId: 'ceph-gold', quotaMb: 1024 * 10 }],
+      usage: {
+        usedVcpus: 0,
+        usedRamMb: 0,
+        usedStorageMb: 0,
+        usedVms: 0,
+        usedSnapshots: 0,
+        usedBackups: 0,
+        usedStorageByStorage: { 'ceph-gold': 1024 * 40 },
+      },
+    })
+
+    const { container } = renderWithProviders(<MyVdcOverview vdc={vdc} />)
+
+    // 40 GB against a 10 GB quota: the bar saturates at 100 %, so the alert
+    // icon and the figures are what carry the overshoot.
+    expect(screen.getByText('40.0 GB / 10.0 GB')).toBeInTheDocument()
+    expect(container.querySelector('i.ri-alarm-warning-line')).not.toBeNull()
+    expect(tierBar()).toHaveAttribute('aria-valuenow', '100')
+  })
+
   it('treats a tier with no recorded usage yet as 0%', () => {
     const vdc = makeVdc({
       storagePolicies: [

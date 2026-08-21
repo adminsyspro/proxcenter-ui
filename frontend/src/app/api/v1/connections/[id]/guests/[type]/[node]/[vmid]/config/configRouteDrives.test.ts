@@ -23,7 +23,15 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { VM_CONFIG: 'vm.config' },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
-vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
+// Spread the real module: writeGuestConfig (#743) reads
+// PVE_DEFAULT_TIMEOUT_MS from it to size PVE's background_delay, and a
+// factory that returns pveFetch alone makes that undefined, so every
+// config write throws and the route answers 500.
+vi.mock('@/lib/proxmox/client', async (io) => {
+  const actual = await io<typeof import('@/lib/proxmox/client')>()
+
+  return { ...actual, pveFetch: pveFetchMock }
+})
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
@@ -54,10 +62,11 @@ async function loadPut() {
 const baseParams = { id: 'conn-1', type: 'qemu', node: 'pve3', vmid: '100' }
 const lxcParams = { ...baseParams, type: 'lxc' }
 
-/** Pull the URLSearchParams sent to the PVE config PUT. */
-function configPutBody() {
+/** Pull the URLSearchParams sent to the PVE config write. qemu goes through
+ *  PVE's asynchronous handler (POST), LXC has none and keeps PUT (#743). */
+function configWriteBody() {
   const call = pveFetchMock.mock.calls.find(
-    (c) => String(c[1]).endsWith('/config') && c[2]?.method === 'PUT',
+    (c) => String(c[1]).endsWith('/config') && (c[2]?.method === 'POST' || c[2]?.method === 'PUT'),
   )
   return call ? new URLSearchParams(String(call?.[2]?.body ?? '')) : null
 }
@@ -82,9 +91,10 @@ beforeEach(() => {
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
-  // Default: config GET reads return an empty config, the config PUT succeeds.
+  // Default: config GET reads return an empty config, the config write
+  // succeeds with nothing to apply (so no task to follow).
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
-    if (opts?.method === 'PUT') return { data: 'ok' }
+    if (opts?.method === 'POST' || opts?.method === 'PUT') return null
     return {}
   })
 })
@@ -101,7 +111,7 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
     expect(res.status).toBe(403)
     const json = (await res.json()) as { error: string }
     expect(json.error).toContain('local-lvm')
-    expect(configPutBody()).toBeNull()
+    expect(configWriteBody()).toBeNull()
   })
 
   it('200: a policied storage is stamped with the policy caps, tenant mbps= is stripped', async () => {
@@ -115,7 +125,7 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
       body: { scsi1: 'ceph-nvme:32,mbps=9999' },
     })
     expect(res.status).toBe(200)
-    const sent = configPutBody()
+    const sent = configWriteBody()
     expect(sent?.get('scsi1')).toBe('ceph-nvme:32,iops_rd=5000,iops_wr=4000,mbps_rd=500')
     expect(sent?.get('scsi1')).not.toContain('mbps=9999')
   })
@@ -139,7 +149,7 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
     expect(res.status).toBe(409)
     const json = (await res.json()) as { error: string; violations: string[] }
     expect(json.violations).toEqual(['Storage policy "Gold" (ceph-nvme): over quota'])
-    expect(configPutBody()).toBeNull()
+    expect(configWriteBody()).toBeNull()
   })
 
   it('200: a provider passes disk fields verbatim (non-regression)', async () => {
@@ -151,7 +161,7 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
       body: { scsi1: 'local-lvm:32,mbps=10' },
     })
     expect(res.status).toBe(200)
-    expect(configPutBody()?.get('scsi1')).toBe('local-lvm:32,mbps=10')
+    expect(configWriteBody()?.get('scsi1')).toBe('local-lvm:32,mbps=10')
   })
 
   it('403: an iaas tenant reassigning an out-of-scope unused disk is refused', async () => {
@@ -163,7 +173,7 @@ describe('PUT config: disk storage allow-list + storage-policy QoS stamping', ()
       body: { unused0: 'local-lvm:vm-1-disk-9' },
     })
     expect(res.status).toBe(403)
-    expect(configPutBody()).toBeNull()
+    expect(configWriteBody()).toBeNull()
   })
 })
 
@@ -177,7 +187,7 @@ describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
       body: { unused0: 'local-lvm:vm-999-disk-0' },
     })
     expect(res.status).toBe(403)
-    expect(configPutBody()).toBeNull()
+    expect(configWriteBody()).toBeNull()
   })
 
   it('200: iaas lxc mp0 is dropped before it reaches PVE or the drive guard (not in the lxc forwarding set)', async () => {
@@ -191,7 +201,7 @@ describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
       body: { cores: '4', mp0: 'ceph-nvme:100' },
     })
     expect(res.status).toBe(200)
-    const sent = configPutBody()
+    const sent = configWriteBody()
     expect(sent?.get('cores')).toBe('4')
     expect(sent?.has('mp0')).toBe(false)
     // mp0 never reached the guard, so it was never metered against ceph-nvme
@@ -208,7 +218,7 @@ describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
       body: { unused0: 'local-lvm:vm-1-disk-9' },
     })
     expect(res.status).toBe(200)
-    expect(configPutBody()?.get('unused0')).toBe('local-lvm:vm-1-disk-9')
+    expect(configWriteBody()?.get('unused0')).toBe('local-lvm:vm-1-disk-9')
   })
 })
 
@@ -241,7 +251,7 @@ describe('PUT config: import-from metering (Finding I2 -- meter, never refuse)',
     const [, , , operation] = checkVdcQuotaMock.mock.calls[0]
     expect(operation.addStorageMb).toBe(32768)
     expect(operation.addStorageMbByStorage).toEqual({ gold: 32768 })
-    expect(configPutBody()).toBeNull()
+    expect(configWriteBody()).toBeNull()
   })
 
   it('200: a source content-listing failure fails open (import-from allowed, unmetered)', async () => {

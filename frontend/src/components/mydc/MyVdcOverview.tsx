@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, CircularProgress, IconButton, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, CircularProgress, Divider, IconButton, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
 import QuotaDonut from './QuotaDonut'
@@ -146,29 +146,63 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
               bar here; usedStorageByStorage is keyed by storageId and can be
               absent for a tier with no usage yet, hence the ?? 0. */}
           {vdc.storagePolicies?.some((sp: any) => sp.quotaMb != null) && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                {t('myVdc.storageTiersTitle')}
-              </Typography>
-              {vdc.storagePolicies
-                .filter((sp: any) => sp.quotaMb != null)
-                .map((sp: any) => {
-                  const usedMb = usage.usedStorageByStorage?.[sp.storageId] ?? 0
-                  const pct = Math.min(100, Math.round((usedMb / sp.quotaMb) * 100))
+            <>
+              {/* Visible separator: the tiers are a sub-section of the quota
+                  card, not an eighth donut. Accent-tinted like the card's own
+                  border so it reads on the glass gradient in both themes. */}
+              <Divider sx={{ mt: 2.5, mb: 2, borderColor: alpha(accent, 0.25) }} />
+              <Box>
+                <Typography
+                  variant="subtitle2"
+                  sx={{ fontWeight: 600, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}
+                >
+                  <Box component="i" className="ri-hard-drive-2-line" sx={{ fontSize: 16, color: 'primary.main' }} />
+                  {t('myVdc.storageTiersTitle')}
+                </Typography>
+                {vdc.storagePolicies
+                  .filter((sp: any) => sp.quotaMb != null)
+                  .map((sp: any) => {
+                    const usedMb = usage.usedStorageByStorage?.[sp.storageId] ?? 0
+                    const pct = Math.min(100, Math.round((usedMb / sp.quotaMb) * 100))
+                    // The bar clamps at 100 %, so a tier already over its
+                    // quota is indistinguishable from one exactly at it:
+                    // the alert icon carries that difference. Decorative,
+                    // the used/quota figures next to it already say it.
+                    const over = usedMb > sp.quotaMb
 
-                  return (
-                    <Box key={sp.policyId} sx={{ mt: 1 }}>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="caption">{t('myVdc.storageTierUsage', { policy: sp.name })}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatMbAsGb(usedMb)} / {formatMbAsGb(sp.quotaMb)}
-                        </Typography>
-                      </Stack>
-                      <LinearProgress variant="determinate" value={pct} color={pct >= 90 ? 'error' : 'primary'} />
-                    </Box>
-                  )
-                })}
-            </Box>
+                    return (
+                      <Box key={sp.policyId} sx={{ mt: 1.5 }}>
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                          <Box
+                            component="i"
+                            className="ri-database-2-line"
+                            sx={{ fontSize: 14, color: 'text.secondary' }}
+                          />
+                          <Typography variant="caption">{t('myVdc.storageTierUsage', { policy: sp.name })}</Typography>
+                          <Box sx={{ flexGrow: 1 }} />
+                          {over && (
+                            <Box
+                              aria-hidden
+                              component="i"
+                              className="ri-alarm-warning-line"
+                              sx={{ fontSize: 14, color: 'error.main' }}
+                            />
+                          )}
+                          <Typography variant="caption" color={over ? 'error.main' : 'text.secondary'}>
+                            {formatMbAsGb(usedMb)} / {formatMbAsGb(sp.quotaMb)}
+                          </Typography>
+                        </Stack>
+                        <LinearProgress
+                          variant="determinate"
+                          value={pct}
+                          color={pct >= 90 ? 'error' : 'primary'}
+                          sx={{ height: 6, borderRadius: 1 }}
+                        />
+                      </Box>
+                    )
+                  })}
+              </Box>
+            </>
           )}
         </Box>
       </Paper>

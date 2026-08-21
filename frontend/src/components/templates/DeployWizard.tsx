@@ -35,6 +35,7 @@ import {
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
+import type { StoragePolicyCaps } from '@/components/hardware/utils'
 import NumericTextField from '@/components/ui/NumericTextField'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
@@ -86,6 +87,10 @@ interface StorageInfo {
   used: number
   avail: number
   type: string
+  /** Present when a tenant's vDC storage policy governs this storage (iaas
+   *  only): the /nodes/{node}/storages payload decorates it, and the tier
+   *  chip plus the quota banner's tier axis both read it. */
+  policy?: StoragePolicyCaps
 }
 
 export default function DeployWizard({ open, onClose, image, prefillBlueprint, resumeDeploymentId }: DeployWizardProps) {

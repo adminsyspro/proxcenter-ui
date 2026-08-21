@@ -31,6 +31,7 @@ const row = (id: string, connectionId: string) => ({
   vnets: [],
   sharedBridges: [],
   pbsNamespaces: [],
+  storagePolicies: [],
 })
 
 beforeEach(() => {

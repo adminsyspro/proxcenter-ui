@@ -21,6 +21,15 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
     return { status: 400, message: msg }
   }
   if (msg.includes('not in the provider pool')) return { status: 400, message: msg }
+  if (msg.includes('is in use by vDC')) return { status: 409, message: msg }
+  if (msg.includes('Cannot remove storage policy')) return { status: 409, message: msg }
+  if (msg.startsWith('A storage policy with this name or storage')) return { status: 409, message: msg }
+  // Checked BEFORE the generic "Storage policy" 400 bucket below: both
+  // messages start with the same two words, and this one is a conflict
+  // (assignments block the storage change) rather than a plain validation
+  // failure.
+  if (msg.includes('cannot be changed while assigned')) return { status: 409, message: msg }
+  if (msg.startsWith('Storage policy')) return { status: 400, message: msg }
 
   return { status: 500, message: msg }
 }

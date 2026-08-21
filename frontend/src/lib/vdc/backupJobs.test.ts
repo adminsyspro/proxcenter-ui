@@ -48,6 +48,7 @@ function makeScope(over: Partial<{
     pbsConnectionIds: new Set(),
     nodesByConnection: new Map([[CONN, new Set(over.nodes ?? ['pve1', 'pve2'])]]),
     storagesByConnection: new Map([[CONN, new Set(over.storages ?? ['vdc-acme-pbs', 'vdc-acme-rbd'])]]),
+    storagePoliciesByConnection: new Map(),
     poolsByConnection: new Map([[CONN, new Set(over.pools ?? ['pool-acme'])]]),
     vnetsByConnection: new Map(),
     sharedBridgesByConnection: new Map(),

@@ -21,6 +21,7 @@ export interface QuotaOperation {
   addVms?: number       // Usually 1 for create/clone, 0 for config/resize
   addSnapshots?: number // 1 for snapshot create, 0 elsewhere
   addBackups?: number   // 1 for backup create, 0 elsewhere
+  addStorageMbByStorage?: Record<string, number> // Per-storage delta, keyed by storage id, for tier (storage policy) metering
 }
 
 export interface QuotaCheckResult {
@@ -40,6 +41,7 @@ export interface VdcResolveResult {
     maxSnapshots: number | null
     maxBackups: number | null
   } | null
+  storagePolicies: Array<{ policyId: string; name: string; storageId: string; quotaMb: number | null }>
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +90,9 @@ export async function resolveVdcForTenant(
       pvePoolName: true,
       quota: true,
       nodes: { select: { nodeName: true } },
+      storagePolicies: {
+        select: { policyId: true, quotaMb: true, policy: { select: { name: true, storageId: true } } },
+      },
     },
   })
 
@@ -117,11 +122,47 @@ export async function resolveVdcForTenant(
       }
     : null
 
-  // 7. Return result
+  // 7. Project storage-policy (tier) assignments
+  const storagePolicies = vdc.storagePolicies.map(sp => ({
+    policyId: sp.policyId,
+    name: sp.policy.name,
+    storageId: sp.policy.storageId,
+    quotaMb: sp.quotaMb ?? null,
+  }))
+
+  // 8. Return result
   return {
     vdcId: vdc.id,
     poolName: vdc.pvePoolName,
     quota,
+    storagePolicies,
+  }
+}
+
+/** Volumes (images/rootdir) of the vDC's pool members on one storage, in MB.
+ *  Returns null when the listing fails: the caller treats that as "cannot
+ *  meter" and allows (same fail-open stance as the pool fetch above). */
+export async function getVdcStorageUsedMb(
+  conn: any,
+  node: string,
+  storage: string,
+  poolVmids: Set<number>,
+): Promise<number | null> {
+  try {
+    const content = await pveFetch<any[]>(
+      conn,
+      `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/content`
+    )
+    let bytes = 0
+    for (const vol of content || []) {
+      if (vol?.content !== 'images' && vol?.content !== 'rootdir') continue
+      if (!poolVmids.has(Number(vol?.vmid))) continue
+      bytes += Number(vol?.size) || 0
+    }
+    return Math.round(bytes / 1048576)
+  } catch (err: any) {
+    console.warn(`[vdc/quota] content listing failed for "${storage}" on "${node}": ${err?.message}`)
+    return null
   }
 }
 
@@ -139,10 +180,16 @@ export async function checkVdcQuota(
   connectionId: string,
   poolName: string,
   quota: VdcResolveResult['quota'],
-  operation: QuotaOperation
+  operation: QuotaOperation,
+  storagePolicies?: VdcResolveResult['storagePolicies'],
+  node?: string,
 ): Promise<QuotaCheckResult> {
-  // 1. No quota configured - allow everything
-  if (!quota) {
+  // 1. No quota configured AND no storage-policy tiers to meter - allow
+  // everything. A vDC's per-storage-policy (tier) quota lives independently
+  // of the global VdcQuota row: a vDC with quota === null (no VdcQuota row)
+  // still needs its tier caps enforced, so only skip the whole PVE round-trip
+  // when both are absent.
+  if (!quota && (storagePolicies?.length ?? 0) === 0) {
     return {
       allowed: true,
       violations: [],
@@ -198,7 +245,7 @@ export async function checkVdcQuota(
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).
   let snapshots = 0
-  if (operation.type === 'snapshot' && quota.maxSnapshots !== null) {
+  if (operation.type === 'snapshot' && quota && quota.maxSnapshots !== null) {
     const snapPromises = vmMembers.map(async (vm: any) => {
       try {
         const resType = vm.type === 'lxc' ? 'lxc' : 'qemu'
@@ -224,7 +271,7 @@ export async function checkVdcQuota(
   const addStorageMb = operation.addStorageMb ?? 0
   const addVms = operation.addVms ?? 0
 
-  if (quota.maxVcpus !== null && addVcpus > 0) {
+  if (quota && quota.maxVcpus !== null && addVcpus > 0) {
     if (vcpus + addVcpus > quota.maxVcpus) {
       violations.push(
         `vCPUs: ${vcpus}/${quota.maxVcpus} used, +${addVcpus} requested exceeds quota`
@@ -232,7 +279,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxRamMb !== null && addRamMb > 0) {
+  if (quota && quota.maxRamMb !== null && addRamMb > 0) {
     if (ramMb + addRamMb > quota.maxRamMb) {
       violations.push(
         `RAM: ${formatMb(ramMb)}/${formatMb(quota.maxRamMb)} used, +${formatMb(addRamMb)} requested exceeds quota`
@@ -240,7 +287,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxStorageMb !== null && addStorageMb > 0) {
+  if (quota && quota.maxStorageMb !== null && addStorageMb > 0) {
     if (storageMb + addStorageMb > quota.maxStorageMb) {
       violations.push(
         `Storage: ${formatMb(storageMb)}/${formatMb(quota.maxStorageMb)} used, +${formatMb(addStorageMb)} requested exceeds quota`
@@ -248,7 +295,7 @@ export async function checkVdcQuota(
     }
   }
 
-  if (quota.maxVms !== null && addVms > 0) {
+  if (quota && quota.maxVms !== null && addVms > 0) {
     if (vms + addVms > quota.maxVms) {
       violations.push(
         `VMs: ${vms}/${quota.maxVms} used, cannot create additional VM`
@@ -257,11 +304,34 @@ export async function checkVdcQuota(
   }
 
   const addSnapshots = operation.addSnapshots ?? 0
-  if (quota.maxSnapshots !== null && addSnapshots > 0) {
+  if (quota && quota.maxSnapshots !== null && addSnapshots > 0) {
     if (snapshots + addSnapshots > quota.maxSnapshots) {
       violations.push(
         `Snapshots: ${snapshots}/${quota.maxSnapshots} used, cannot create additional snapshot`
       )
+    }
+  }
+
+  // Per-policy (tier) quota: metered from the storage content listing
+  // filtered to the vDC's pool members (spec §7). More accurate than the
+  // maxdisk aggregate above, which undercounts multi-disk VMs; the two
+  // meters coexist deliberately.
+  const byStorage = operation.addStorageMbByStorage ?? {}
+  const policyList = storagePolicies ?? []
+  const meterNode = node ?? vmMembers[0]?.node
+  if (policyList.length > 0 && meterNode) {
+    const poolVmids = new Set(vmMembers.map((m: any) => Number(m.vmid)))
+    for (const [storage, addMb] of Object.entries(byStorage)) {
+      if (!(addMb > 0)) continue
+      const policy = policyList.find(p => p.storageId === storage)
+      if (!policy || policy.quotaMb === null) continue
+      const usedMb = await getVdcStorageUsedMb(conn, meterNode, storage, poolVmids)
+      if (usedMb === null) continue
+      if (usedMb + addMb > policy.quotaMb) {
+        violations.push(
+          `Storage policy "${policy.name}" (${storage}): ${formatMb(usedMb)}/${formatMb(policy.quotaMb)} used, +${formatMb(addMb)} requested exceeds quota`
+        )
+      }
     }
   }
 

@@ -35,6 +35,7 @@ import {
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
+import type { StoragePolicyCaps } from '@/components/hardware/utils'
 import NumericTextField from '@/components/ui/NumericTextField'
 import DeploymentProgress from './DeploymentProgress'
 import VendorLogo from './VendorLogo'
@@ -86,6 +87,10 @@ interface StorageInfo {
   used: number
   avail: number
   type: string
+  /** Present when a tenant's vDC storage policy governs this storage (iaas
+   *  only): the /nodes/{node}/storages payload decorates it, and the tier
+   *  chip plus the quota banner's tier axis both read it. */
+  policy?: StoragePolicyCaps
 }
 
 export default function DeployWizard({ open, onClose, image, prefillBlueprint, resumeDeploymentId }: DeployWizardProps) {
@@ -153,6 +158,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // vDC quota (tenant only — provider has no vDC scope so banner stays hidden)
   const [vdcQuota, setVdcQuota] = useState<{ maxVcpus: number | null; maxRamMb: number | null; maxStorageMb: number | null; maxVms: number | null } | null>(null)
   const [vdcUsage, setVdcUsage] = useState<{ usedVcpus: number; usedRamMb: number; usedStorageMb: number; usedVms: number } | null>(null)
+  // Per-tier (storage policy) quotas of the vDC, and the live per-storage
+  // usage the enforcement path meters against. Only the tiers that carry a
+  // quota are kept: a policy without one is pure QoS and never blocks.
+  const [vdcTiers, setVdcTiers] = useState<Array<{ name: string; storageId: string; quotaMb: number }>>([])
+  const [vdcUsedByStorage, setVdcUsedByStorage] = useState<Record<string, number>>({})
   const [quotaBlocked, setQuotaBlocked] = useState(false)
 
   // The picker also keeps the VNet's display name so we can render the
@@ -598,25 +608,32 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // Hardware step. The /api/v1/vdcs route already returns null for the
   // provider tenant (no vDC), so the banner only shows up for tenants.
   useEffect(() => {
+    const reset = () => {
+      setVdcQuota(null); setVdcUsage(null); setVdcTiers([]); setVdcUsedByStorage({})
+    }
     if (!open || !connectionId) {
-      setVdcQuota(null); setVdcUsage(null)
+      reset()
       return
     }
     let cancelled = false
     ;(async () => {
       try {
         const res = await fetch('/api/v1/vdcs')
-        if (!res.ok) { if (!cancelled) { setVdcQuota(null); setVdcUsage(null) } ; return }
+        if (!res.ok) { if (!cancelled) reset() ; return }
         const json = await res.json()
         const vdcs: any[] = Array.isArray(json?.data) ? json.data : []
         const match = vdcs.find(v => v.connectionId === connectionId || v.connection_id === connectionId)
         if (cancelled) return
-        if (match?.quota) {
+        // Keyed on the vDC, not on `match.quota`: a vDC with no VdcQuota row
+        // at all still has its per-tier quotas enforced server-side, so the
+        // banner has to render for the tier axis alone (the four global
+        // donuts then read "unlimited").
+        if (match) {
           setVdcQuota({
-            maxVcpus: match.quota.maxVcpus ?? null,
-            maxRamMb: match.quota.maxRamMb ?? null,
-            maxStorageMb: match.quota.maxStorageMb ?? null,
-            maxVms: match.quota.maxVms ?? null,
+            maxVcpus: match.quota?.maxVcpus ?? null,
+            maxRamMb: match.quota?.maxRamMb ?? null,
+            maxStorageMb: match.quota?.maxStorageMb ?? null,
+            maxVms: match.quota?.maxVms ?? null,
           })
           setVdcUsage({
             usedVcpus: match.usage?.usedVcpus ?? 0,
@@ -624,11 +641,21 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             usedStorageMb: match.usage?.usedStorageMb ?? 0,
             usedVms: match.usage?.usedVms ?? 0,
           })
+          setVdcTiers(
+            (Array.isArray(match.storagePolicies) ? match.storagePolicies : [])
+              .filter((sp: any) => sp?.quotaMb != null && sp?.storageId)
+              .map((sp: any) => ({ name: String(sp.name), storageId: String(sp.storageId), quotaMb: Number(sp.quotaMb) })),
+          )
+          setVdcUsedByStorage(
+            match.usage?.usedStorageByStorage && typeof match.usage.usedStorageByStorage === 'object'
+              ? match.usage.usedStorageByStorage
+              : {},
+          )
         } else {
-          setVdcQuota(null); setVdcUsage(null)
+          reset()
         }
       } catch {
-        if (!cancelled) { setVdcQuota(null); setVdcUsage(null) }
+        if (!cancelled) reset()
       }
     })()
     return () => { cancelled = true }
@@ -964,6 +991,11 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             <MenuItem key={s.storage} value={s.storage}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                 <Typography variant="body2">{s.storage}</Typography>
+                {/* Tier chip, same affordance as AddDiskDialog's storage
+                    picker: the /nodes/{node}/storages payload carries the
+                    governing storage policy for an iaas tenant, so the
+                    deployed disk's QoS caps are visible before the deploy. */}
+                {s.policy && <Chip size="small" label={s.policy.name} />}
                 <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>
                   {s.type} &middot; {((s.avail || 0) / 1073741824).toFixed(1)} GB {t('templates.deploy.target.available')}
                 </Typography>
@@ -1039,6 +1071,22 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     return n * 1024
   }
 
+  // Tier axis of the banner: only the policy governing the SELECTED storage
+  // is relevant, since that is the one the disk will be billed against.
+  // Null (no policy, no quota, no storage picked yet) keeps the tier out of
+  // the banner rather than blocking on a figure we do not have.
+  const selectedTier = (() => {
+    const match = vdcTiers.find(x => x.storageId === storage)
+    if (!match) return null
+
+    return {
+      name: match.name,
+      used: vdcUsedByStorage[storage] ?? 0,
+      requested: parseDiskSizeMb(diskSize),
+      max: match.quotaMb,
+    }
+  })()
+
   const renderHardwareStep = () => (
     <Box>
       {vdcQuota && vdcUsage && (
@@ -1051,6 +1099,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             storageMb: parseDiskSizeMb(diskSize),
             vms: 1,
           }}
+          tier={selectedTier}
           onStateChange={({ blocked }) => {
             if (blocked !== quotaBlocked) setQuotaBlocked(blocked)
           }}

@@ -12,6 +12,8 @@ import { resolveVdcForTenant } from "@/lib/vdc/quota"
 import { assertVdcPbsAccess } from "@/lib/vdc/scope"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
+import { type DriveQosCaps } from "@/lib/vdc/drives"
+import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 
 export const runtime = "nodejs"
 
@@ -90,6 +92,19 @@ export async function POST(
         return NextResponse.json({ error: 'Tenant vDC scope not resolved' }, { status: 403 })
       }
       allowedStorages = scope.storagesByConnection.get(id) ?? new Set<string>()
+    }
+
+    // Storage-tier QoS policies (spec §5.3): resolved eagerly here, ahead of
+    // the PVE restore call, and reused by the post-restore restamp block in
+    // after() below. Cookies/request context die inside after(), so anything
+    // scope-dependent must be captured now.
+    let restorePolicies: Map<string, DriveQosCaps> = new Map()
+    if (infra.kind === 'iaas' && infra.vdcScope) {
+      restorePolicies = new Map(
+        [...(infra.vdcScope.storagePoliciesByConnection.get(id) ?? new Map())].map(
+          ([s, p]) => [s, { iopsRd: p.iopsRd, iopsWr: p.iopsWr, mbpsRd: p.mbpsRd, mbpsWr: p.mbpsWr }]
+        )
+      )
     }
 
     const conn = await getConnectionById(id)
@@ -333,6 +348,19 @@ export async function POST(
           } catch (err: any) {
             console.error(`[restore-pool] failed to add vmid=${numericVmid} to pool ${safeLog(targetPool)}: ${safeLog(err?.message ?? err)}`)
           }
+        }
+
+        // ── Post-restore storage-tier QoS restamp ──
+        // Storage policies are resolved once above (pre-PVE-call) since
+        // after() runs outside the request context. qemu only:
+        // DATA_DISK_KEY_RE only matches qemu drive keys (scsi/virtio/ide/
+        // sata), lxc mountpoints use a different shape entirely.
+        if (!isLxc && restorePolicies.size > 0) {
+          const restoreCfgPath = `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(numericVmid))}/config`
+          await restampGuestDrives({
+            conn, configPath: restoreCfgPath, policies: restorePolicies,
+            logTag: `[restore-qos-stamp] vmid=${safeLog(numericVmid)}`,
+          })
         }
 
         // IPAM sync — qemu only (lxc network config is shaped differently

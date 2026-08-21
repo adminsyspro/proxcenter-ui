@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
         // an empty uplink list regardless of what the form sent.
         sharedBridges: body.sharedBridges,
         vlanPools: body.vlanPools,
+        storagePolicies: body.storagePolicies,
         quota: body.quota,
       },
       session?.user?.id ?? null

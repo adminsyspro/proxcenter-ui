@@ -22,6 +22,7 @@ import {
   CircularProgress,
   Tabs,
   Tab,
+  Chip,
   Radio,
   RadioGroup,
 } from '@mui/material'
@@ -31,6 +32,10 @@ import { VM_DISK_FORMATS, vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import type { Storage } from './utils'
+
+// Renders a QoS cap for a disabled, policy-driven field: empty for "no limit
+// on that axis" rather than "0", so a null cap doesn't read as a zero limit.
+const capValue = (v: number | null | undefined): string => (v === null || v === undefined ? '' : String(v))
 
 // ==================== ADD DISK DIALOG ====================
 type AddDiskDialogProps = {
@@ -72,6 +77,11 @@ export function AddDiskDialog({ open, onClose, onSave, connId, node, vmid, exist
   // takes qcow2, and even defaults to it (issue #735). The API computes it;
   // an older payload falls back to the type-based table.
   const selectedStorageObj = useMemo(() => storages.find(s => s.storage === storage), [storages, storage])
+  // When the selected storage is governed by a vDC storage policy, the server
+  // strips-and-stamps the QoS options regardless of what the client sends
+  // (Task 14). Showing editable fields here would be a lie, so the Bandwidth
+  // tab locks to the policy's own caps and handleSave stops pushing them.
+  const selectedPolicy = selectedStorageObj?.policy
   const supportedFormats = useMemo(
     () => {
       if (!selectedStorageObj) return [...VM_DISK_FORMATS]
@@ -272,11 +282,16 @@ return match ? Number.parseInt(match[1]) : -1
       if (asyncIo !== 'io_uring') options.push(`aio=${asyncIo}`)
       if (readOnly) options.push('ro=1')
 
-      // Bandwidth limits
-      if (mbpsRd) options.push(`mbps_rd=${mbpsRd}`)
-      if (mbpsWr) options.push(`mbps_wr=${mbpsWr}`)
-      if (iopsRd) options.push(`iops_rd=${iopsRd}`)
-      if (iopsWr) options.push(`iops_wr=${iopsWr}`)
+      // Bandwidth limits: skipped entirely when a storage policy governs the
+      // selected storage: the server strips-and-stamps its own caps anyway,
+      // so pushing the (disabled, grayed-out) fields would just send dead
+      // values that misrepresent what the tenant asked for.
+      if (!selectedPolicy) {
+        if (mbpsRd) options.push(`mbps_rd=${mbpsRd}`)
+        if (mbpsWr) options.push(`mbps_wr=${mbpsWr}`)
+        if (iopsRd) options.push(`iops_rd=${iopsRd}`)
+        if (iopsWr) options.push(`iops_wr=${iopsWr}`)
+      }
 
       if (options.length > 0) {
         diskConfig[diskId] += `,${options.join(',')}`
@@ -482,8 +497,11 @@ return match ? Number.parseInt(match[1]) : -1
               >
                 {storages.map((s) => (
                   <MenuItem key={s.storage} value={s.storage}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 2 }}>
-                      <span>{s.storage}</span>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <span>{s.storage}</span>
+                        {s.policy && <Chip size="small" label={s.policy.name} />}
+                      </Box>
                       <Typography variant="caption" sx={{ opacity: 0.7 }}>
                         {s.type} • {formatBytes(s.avail)} free / {formatBytes(s.total)}
                       </Typography>
@@ -583,21 +601,29 @@ return match ? Number.parseInt(match[1]) : -1
               {t('hardware.bandwidthLimits')}
             </Typography>
 
+            {selectedPolicy && (
+              <Alert severity="info">
+                {t('hardware.qosManagedByPolicy', { policy: selectedPolicy.name })}
+              </Alert>
+            )}
+
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <TextField
                 size="small"
                 label="Read limit (MB/s)"
                 type="number"
-                value={mbpsRd}
+                value={selectedPolicy ? capValue(selectedPolicy.mbpsRd) : mbpsRd}
                 onChange={(e) => setMbpsRd(e.target.value)}
+                disabled={!!selectedPolicy}
                 inputProps={{ min: 0 }}
               />
               <TextField
                 size="small"
                 label="Write limit (MB/s)"
                 type="number"
-                value={mbpsWr}
+                value={selectedPolicy ? capValue(selectedPolicy.mbpsWr) : mbpsWr}
                 onChange={(e) => setMbpsWr(e.target.value)}
+                disabled={!!selectedPolicy}
                 inputProps={{ min: 0 }}
               />
             </Box>
@@ -607,16 +633,18 @@ return match ? Number.parseInt(match[1]) : -1
                 size="small"
                 label="Read limit (IOPS)"
                 type="number"
-                value={iopsRd}
+                value={selectedPolicy ? capValue(selectedPolicy.iopsRd) : iopsRd}
                 onChange={(e) => setIopsRd(e.target.value)}
+                disabled={!!selectedPolicy}
                 inputProps={{ min: 0 }}
               />
               <TextField
                 size="small"
                 label="Write limit (IOPS)"
                 type="number"
-                value={iopsWr}
+                value={selectedPolicy ? capValue(selectedPolicy.iopsWr) : iopsWr}
                 onChange={(e) => setIopsWr(e.target.value)}
+                disabled={!!selectedPolicy}
                 inputProps={{ min: 0 }}
               />
             </Box>

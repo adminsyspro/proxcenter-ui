@@ -111,7 +111,20 @@ return contents.includes(contentFilter)
       ...vmDiskFormats({ ...(configByName.get(s.storage) || {}), type: s.type }),
     }))
 
-    return NextResponse.json({ data: withFormats })
+    // Storage-policy metadata for tenant pickers (spec §8.3): lets the UI
+    // show the tier name and caps without a second call. iaas only (scope
+    // is null for provider and msp).
+    const policyMap = scope?.storagePoliciesByConnection?.get(id)
+    const decorated = policyMap
+      ? withFormats.map((s: any) => {
+          const p = policyMap.get(s.storage)
+          return p
+            ? { ...s, policy: { name: p.name, iopsRd: p.iopsRd, iopsWr: p.iopsWr, mbpsRd: p.mbpsRd, mbpsWr: p.mbpsWr } }
+            : s
+        })
+      : withFormats
+
+    return NextResponse.json({ data: decorated })
   } catch (e: any) {
     console.error('Error fetching storages:', e)
     

@@ -51,4 +51,14 @@ describe('mapCreateVdcError', () => {
     const e = new Error('Cannot shrink VLAN pools: VNet "prod-lan" uses tag 150 on bridge "vmbr0"')
     expect(mapCreateVdcError(e)).toEqual({ status: 409, message: e.message })
   })
+
+  it('maps a storage-change-while-assigned rejection to 409, NOT the generic "Storage policy" 400 bucket (Finding I3)', () => {
+    const e = new Error('Storage policy storage cannot be changed while assigned to vDCs: "Acme"')
+    expect(mapCreateVdcError(e)).toEqual({ status: 409, message: e.message })
+  })
+
+  it('still maps a plain "Storage policy" validation message to 400 (ordering non-regression)', () => {
+    const e = new Error('Storage policy name is required (1-64 characters)')
+    expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
+  })
 })

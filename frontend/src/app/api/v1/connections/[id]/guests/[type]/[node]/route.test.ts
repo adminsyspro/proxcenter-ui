@@ -16,6 +16,10 @@ vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnec
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: vi.fn(async () => null), checkVdcQuota: vi.fn() }))
+const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
+}))
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/vdc/vnets', async (io) => {
   // The verdict logic is what this file exercises, so it runs for real; only
@@ -48,6 +52,7 @@ beforeEach(() => {
   pveFetchMock.mockReset().mockResolvedValue('UPID:x')
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
+  getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
 })
 
 describe('POST guests create — MSP VMID range enforcement', () => {

@@ -5,6 +5,8 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getImageBySlug } from "@/lib/templates/cloudImages"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -24,6 +26,19 @@ export async function GET(req: Request) {
         { error: "Missing required params: connectionId, node, storage, imageSlug" },
         { status: 400 }
       )
+    }
+
+    // Storage-tier scope (spec §5.3): an iaas tenant may only probe storages
+    // inside its vDC union scope -- without this an unscoped storage param
+    // would let a tenant enumerate content on any storage on the connection.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+    if (infra.kind === 'iaas') {
+      const allowed = infra.vdcScope?.storagesByConnection.get(connectionId) ?? new Set<string>()
+      if (!allowed.has(storage)) {
+        return NextResponse.json(
+          { error: `Storage "${storage}" is not authorised for this tenant.` }, { status: 403 })
+      }
     }
 
     const image = getImageBySlug(imageSlug)

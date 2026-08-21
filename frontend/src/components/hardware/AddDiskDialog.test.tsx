@@ -16,8 +16,10 @@ import { cleanup } from '@testing-library/react'
 import {
   renderWithProviders,
   screen,
+  within,
   waitFor,
   userEvent,
+  fireEvent,
 } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
@@ -131,5 +133,145 @@ describe('AddDiskDialog — clearable numeric fields', () => {
     await userEvent.click(addButton())
 
     await waitFor(() => expect(props.onSave).toHaveBeenCalledWith({ scsi2: 'local:20' }))
+  })
+})
+
+/**
+ * Task 16: tenant UI honesty on QoS. When the selected storage is governed
+ * by a vDC storage policy (Task 14 decorates the storages route with
+ * `policy`), the Bandwidth tab must show the policy's own caps as disabled
+ * fields and handleSave must not push any mbps_ or iops_ option (the server
+ * strips-and-stamps its own caps regardless of what the client sends).
+ */
+describe('AddDiskDialog, storage policy locks QoS fields', () => {
+  afterEach(cleanup)
+
+  const policiedStorages = [
+    {
+      storage: 'local',
+      content: 'rootdir,images,vztmpl',
+      type: 'dir',
+      avail: 50 * 1024 * 1024 * 1024,
+      total: 100 * 1024 * 1024 * 1024,
+    },
+    {
+      storage: 'ceph-gold',
+      content: 'images',
+      type: 'rbd',
+      avail: 200 * 1024 * 1024 * 1024,
+      total: 500 * 1024 * 1024 * 1024,
+      policy: { name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 300, mbpsWr: 250 },
+    },
+  ]
+
+  function seedPolicyHandlers() {
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/storages`, () =>
+        HttpResponse.json({ data: policiedStorages }),
+      ),
+    )
+  }
+
+  // Same "find the <label>, grab the sibling combobox" helper used across
+  // the repo's other MUI-Select tests (see HostRulesPanel.test.tsx).
+  function storageCombobox() {
+    const el = screen.queryAllByText('Storage').find(n => n.tagName === 'LABEL')
+
+    if (!el?.parentElement) throw new Error('No Select labelled "Storage"')
+
+    return within(el.parentElement).getByRole('combobox')
+  }
+
+  const diskTab = () => screen.getByRole('tab', { name: 'Disk' })
+  const bandwidthTab = () => screen.getByRole('tab', { name: 'Bandwidth' })
+  const mbpsReadField = () => screen.getByLabelText('Read limit (MB/s)') as HTMLInputElement
+  const iopsReadField = () => screen.getByLabelText('Read limit (IOPS)') as HTMLInputElement
+
+  async function selectPoliciedStorage() {
+    await waitFor(() => expect(addButton()).not.toBeDisabled())
+    fireEvent.mouseDown(storageCombobox())
+    fireEvent.click(await screen.findByRole('option', { name: /ceph-gold/ }))
+  }
+
+  it('shows the policy chip on the MenuItem', async () => {
+    seedPolicyHandlers()
+    renderWithProviders(<AddDiskDialog {...makeProps()} />)
+
+    await waitFor(() => expect(addButton()).not.toBeDisabled())
+    fireEvent.mouseDown(storageCombobox())
+
+    const option = await screen.findByRole('option', { name: /ceph-gold/ })
+    expect(within(option).getByText('Gold')).toBeInTheDocument()
+  })
+
+  it('locks the Bandwidth fields to the policy caps and shows the Alert', async () => {
+    seedPolicyHandlers()
+    renderWithProviders(<AddDiskDialog {...makeProps()} />)
+
+    await selectPoliciedStorage()
+    await userEvent.click(bandwidthTab())
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Gold')
+    expect(mbpsReadField()).toBeDisabled()
+    expect(mbpsReadField().value).toBe('300')
+  })
+
+  it('does not push any QoS option when the storage is switched to a policied one after typing a value', async () => {
+    // The realistic trap: the tenant starts on a non-policied storage,
+    // types a real limit, THEN switches to a policied storage before
+    // saving. Switching does not clear the typed field state (mbpsRd/
+    // iopsRd/etc. stay whatever was last typed), so the `!selectedPolicy`
+    // guard in handleSave is the only thing standing between that stale
+    // typed value and the payload, which is exactly what this proves.
+    seedPolicyHandlers()
+    const props = makeProps()
+
+    renderWithProviders(<AddDiskDialog {...props} />)
+
+    // Default selection is 'local' (no policy): type into IOPS read while
+    // the field is still editable.
+    await waitFor(() => expect(addButton()).not.toBeDisabled())
+    await userEvent.click(bandwidthTab())
+    expect(iopsReadField()).not.toBeDisabled()
+    await userEvent.type(iopsReadField(), '100')
+    expect(iopsReadField().value).toBe('100')
+
+    // The Storage select only lives in the Disk tab's content (each tab is
+    // unmounted, not just hidden, when the other is active), so switch back
+    // to reach it, pick the policied storage, then save without needing to
+    // revisit Bandwidth.
+    await userEvent.click(diskTab())
+    fireEvent.mouseDown(storageCombobox())
+    fireEvent.click(await screen.findByRole('option', { name: /ceph-gold/ }))
+    await userEvent.click(addButton())
+
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled())
+    const saved = props.onSave.mock.calls[0][0] as Record<string, string>
+
+    // Exact match: format stays 'raw' (rbd has no other option), so any
+    // deviation here is a leaked QoS key, not e.g. a coincidental format=.
+    expect(saved.scsi0).toBe('ceph-gold:32')
+    expect(saved.scsi0).not.toMatch(/mbps_|iops_/)
+  })
+
+  it('keeps Bandwidth fields editable and pushes QoS keys for a non-policied storage (no regression)', async () => {
+    seedPolicyHandlers()
+    const props = makeProps()
+
+    renderWithProviders(<AddDiskDialog {...props} />)
+
+    // Default selection is the first storage returned ('local'), which
+    // carries no policy.
+    await waitFor(() => expect(addButton()).not.toBeDisabled())
+    await userEvent.click(bandwidthTab())
+    expect(mbpsReadField()).not.toBeDisabled()
+
+    await userEvent.type(mbpsReadField(), '50')
+    await userEvent.click(addButton())
+
+    await waitFor(() => expect(props.onSave).toHaveBeenCalled())
+    const saved = props.onSave.mock.calls[0][0] as Record<string, string>
+
+    expect(saved.scsi0).toContain('mbps_rd=50')
   })
 })

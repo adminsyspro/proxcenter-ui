@@ -9,6 +9,7 @@ const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const syncIpamForVmConfigMock = vi.fn<(...args: any[]) => Promise<any>>()
+const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -28,6 +29,9 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
+}))
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
   // Real verdict logic, so the tag/trunks guard behaves faithfully; only the
@@ -78,6 +82,10 @@ beforeEach(() => {
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
+  // This suite is about the net0 allow-list; the disk-drive guard (Task 8) is
+  // exercised separately in configRouteDrives.test.ts, so default to
+  // 'provider' here (enforceTenantDrives short-circuits to null, unchanged).
+  getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   // Default: config GET reads return an empty config, the config write
   // succeeds with nothing to apply (so no task to follow).
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {

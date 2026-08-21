@@ -134,6 +134,29 @@ describe('POST /api/v1/admin/vdcs', () => {
     expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ vlanPools }), 'admin-1')
   })
 
+  it('forwards storagePolicies to createVdc', async () => {
+    const storagePolicies = [{ policyId: 'policy-1', quotaMb: 102400 }]
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, storagePolicies },
+    })
+
+    expect(res.status).toBe(201)
+    expect(createVdcMock).toHaveBeenCalledWith(expect.objectContaining({ storagePolicies }), 'admin-1')
+  })
+
+  it('maps a storage-policy cross-connection rejection from createVdc to 400', async () => {
+    createVdcMock.mockRejectedValue(
+      new Error('Storage policy policy-1 does not belong to this connection')
+    )
+
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      body: { ...VALID_BODY, storagePolicies: [{ policyId: 'policy-1', quotaMb: null }] },
+    })
+    expect(res.status).toBe(400)
+  })
+
   it('maps an invalid VLAN pool rejection from createVdc to 400', async () => {
     createVdcMock.mockRejectedValue(
       new Error('VLAN pool range 0-100 is invalid (bounds 1-4094, start <= end)')

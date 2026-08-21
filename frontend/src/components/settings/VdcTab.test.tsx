@@ -37,9 +37,18 @@ const EXISTING_VDC = {
   enabled: true,
   quota: {},
   usage: { usedVms: 0 },
+  storagePolicies: [
+    { policyId: 'sp1', name: 'gold', storageId: 'ceph-fast', iopsRd: null, iopsWr: null, mbpsRd: null, mbpsWr: null, quotaMb: 51200 },
+  ],
 }
 
+const CONN_POLICIES = [
+  { id: 'sp1', name: 'gold', storageId: 'ceph-fast', vdcCount: 1 },
+  { id: 'sp2', name: 'bronze', storageId: 'nfs-slow', vdcCount: 0 },
+]
+
 let posted: any
+let putBody: any
 
 function jsonRes(body: any, status = 200) {
   return { ok: status < 400, status, json: async () => body } as Response
@@ -47,12 +56,17 @@ function jsonRes(body: any, status = 200) {
 
 beforeEach(() => {
   posted = undefined
+  putBody = undefined
   vi.stubGlobal('fetch', vi.fn(async (input: any, init?: any) => {
     const url = String(input)
 
     if (url.endsWith('/api/v1/admin/vdcs') && init?.method === 'POST') {
       posted = JSON.parse(init.body)
       return jsonRes({ data: { id: 'vdc-new', name: posted.name } }, 201)
+    }
+    if (url.endsWith(`/api/v1/admin/vdcs/${EXISTING_VDC.id}`) && init?.method === 'PUT') {
+      putBody = JSON.parse(init.body)
+      return jsonRes({ data: { ...EXISTING_VDC, ...putBody } })
     }
     if (url.endsWith('/api/v1/admin/vdcs')) return jsonRes({ data: [EXISTING_VDC] })
     if (url.includes('/users')) return jsonRes({ data: [] })
@@ -66,6 +80,8 @@ beforeEach(() => {
       return jsonRes({ data: [{ iface: 'vmbr0', nodes: ['pve1'], type: 'bridge', vlanAware: true }] })
     }
     if (url.includes('provider-bridges')) return jsonRes({ data: [] })
+    if (url.includes('/connections/c1/storage-policies')) return jsonRes({ data: CONN_POLICIES })
+    if (url.includes('storage-policies')) return jsonRes({ data: [] })
     return jsonRes({ data: [] })
   }))
 })
@@ -179,5 +195,50 @@ describe('VdcTab — create dialog (multi-vDC)', () => {
     await submitCreate(scope)
 
     expect(posted.vlanPools).toEqual([{ bridge: 'vmbr0', rangeStart: 100, rangeEnd: 199 }])
+  })
+})
+
+describe('VdcTab: edit dialog storage policy assignments', () => {
+  async function openEditDialog() {
+    renderWithProviders(<VdcTab />)
+    const nameCell = await screen.findByText(/^ACME/)
+
+    // Scope to the DataGrid row: StoragePoliciesSection (rendered above the
+    // vDC list) has its own pencil icons for editing policies, so a
+    // page-wide icon-class query would grab the wrong dialog.
+    const row = nameCell.closest('[role="row"]') as HTMLElement
+    const editBtn = row.querySelector('.ri-pencil-line')?.closest('button') as HTMLElement
+    fireEvent.click(editBtn)
+
+    const dialog = await screen.findByRole('dialog')
+    return within(dialog)
+  }
+
+  it('hydrates an existing assignment with its quota converted from MB to GB', async () => {
+    const scope = await openEditDialog()
+
+    await scope.findByText('Storage policies')
+    // 51200 MB -> 50 GB
+    await waitFor(() => expect(scope.getByDisplayValue('50')).toBeInTheDocument())
+    expect(scope.getByText('gold')).toBeInTheDocument()
+  })
+
+  it('sends storagePolicies with quotaMb converted in the PUT payload, dropping a row left without a policy', async () => {
+    const scope = await openEditDialog()
+    await scope.findByText('Storage policies')
+    await waitFor(() => expect(scope.getByDisplayValue('50')).toBeInTheDocument())
+
+    // Add a second row and leave it without picking a policy: it must be
+    // dropped from the payload instead of sent with an empty policyId.
+    const addBtn = scope.getByRole('button', { name: 'Attach a policy' })
+    await waitFor(() => expect(addBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(addBtn)
+
+    const saveBtn = scope.getByRole('button', { name: 'Update' })
+    await waitFor(() => expect(saveBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(saveBtn)
+
+    await waitFor(() => expect(putBody).toBeDefined())
+    expect(putBody.storagePolicies).toEqual([{ policyId: 'sp1', quotaMb: 51200 }])
   })
 })

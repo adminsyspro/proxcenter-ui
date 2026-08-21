@@ -24,26 +24,44 @@ export type VdcRequest = {
   storageMb: number
   vms: number
 }
+/** Per-tier (storage policy) axis for the storage the disk actually lands
+ *  on. All values in MB; `name` is the policy name and doubles as the donut
+ *  label, since a proper name needs no translation. */
+export type VdcTier = {
+  name: string
+  used: number
+  requested: number
+  max: number
+}
 
 interface Props {
   quota: VdcQuota
   usage: VdcUsage
   requested: VdcRequest
+  /** Optional fifth axis: the storage-policy quota of the selected storage.
+   *  Omitted (or null) when the target storage carries no policy, when that
+   *  policy carries no quota, or when the figures could not be resolved: the
+   *  tier then stays out of the banner entirely rather than blocking on a
+   *  guess. The server-side check in checkVdcQuota stays the authority, this
+   *  only spares the user a wizard that fails on its last step. */
+  tier?: VdcTier | null
   /** Notified whenever the over-limit / approaching state changes — lets the
    *  parent gate Next/Submit on quota validity. */
   onStateChange?: (state: { blocked: boolean; tight: boolean; overCount: number }) => void
 }
 
-type QuotaResource = 'vcpus' | 'ram' | 'storage' | 'vms'
-interface QuotaItem {
+type QuotaResource = 'vcpus' | 'ram' | 'storage' | 'vms' | 'tier'
+interface RawQuotaItem {
   resource: QuotaResource
   label: string
   icon: string
   used: number
   requested: number
-  projected: number
   max: number | null
   format: (v: number) => string
+}
+interface QuotaItem extends RawQuotaItem {
+  projected: number
   pct: number
   over: boolean
 }
@@ -60,13 +78,13 @@ const formatMbAsGb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`
  * which mirrors the live form state so the donuts animate as the user
  * tweaks sliders.
  */
-export default function VdcQuotaBanner({ quota, usage, requested, onStateChange }: Props) {
+export default function VdcQuotaBanner({ quota, usage, requested, tier, onStateChange }: Props) {
   const t = useTranslations()
   const theme = useTheme()
 
   const items: QuotaItem[] = (() => {
     const fmtNum = (v: number) => String(v)
-    const raw = [
+    const raw: RawQuotaItem[] = [
       { resource: 'vcpus' as const, icon: 'ri-cpu-line', label: t('inventory.createVm.quotaBanner.labels.vcpus'),
         used: usage.usedVcpus, requested: requested.vcpus, max: quota.maxVcpus, format: fmtNum },
       { resource: 'ram' as const, icon: 'ri-ram-2-line', label: t('inventory.createVm.quotaBanner.labels.ram'),
@@ -76,6 +94,15 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
       { resource: 'vms' as const, icon: 'ri-computer-line', label: t('inventory.createVm.quotaBanner.labels.vms'),
         used: usage.usedVms, requested: requested.vms, max: quota.maxVms, format: fmtNum },
     ]
+    // The tier axis is appended, not inserted next to storage: the four
+    // global axes keep their order (and their donut positions) for every
+    // caller that passes no tier.
+    if (tier) {
+      raw.push({
+        resource: 'tier', icon: 'ri-database-2-line', label: tier.name,
+        used: tier.used, requested: tier.requested, max: tier.max, format: formatMbAsGb,
+      })
+    }
     return raw.map(i => {
       const projected = i.used + i.requested
       const pct = i.max != null && i.max > 0 ? Math.round((projected / i.max) * 100) : 0
@@ -145,7 +172,7 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
         sx={{
           display: 'grid',
           gap: 2,
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' },
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: `repeat(${items.length}, 1fr)` },
           justifyItems: 'center',
           position: 'relative',
         }}
@@ -158,7 +185,7 @@ export default function VdcQuotaBanner({ quota, usage, requested, onStateChange 
             used={item.used}
             requested={item.requested}
             max={item.max}
-            formatValue={item.resource === 'ram' || item.resource === 'storage' ? formatMbAsGb : undefined}
+            formatValue={item.resource === 'ram' || item.resource === 'storage' || item.resource === 'tier' ? formatMbAsGb : undefined}
             unlimitedLabel={t('inventory.createVm.quotaBanner.unlimited')}
             size={88}
           />

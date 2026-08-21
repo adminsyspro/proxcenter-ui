@@ -26,6 +26,8 @@ import {
   Select,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -35,6 +37,7 @@ import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 
 import { useTranslations } from 'next-intl'
 
+import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -64,6 +67,7 @@ interface VdcFormState {
   unlimitedVms: boolean
   unlimitedSnapshots: boolean
   unlimitedBackups: boolean
+  unlimitedVnets: boolean
 }
 
 const emptyForm: VdcFormState = {
@@ -87,6 +91,7 @@ const emptyForm: VdcFormState = {
   unlimitedVms: true,
   unlimitedSnapshots: true,
   unlimitedBackups: true,
+  unlimitedVnets: true,
 }
 
 // Translates an ISO timestamp into a localized "3m ago" / "2h ago" / "5d ago"
@@ -116,6 +121,9 @@ export default function VdcTab() {
 
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Sub-tabs: the vDC list and the connection-level storage policies are
+  // separate concerns; showing both stacked made the page too long.
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
@@ -141,6 +149,12 @@ export default function VdcTab() {
   // on a bridge, which the tenant can later carve VLAN networks out of.
   const [vlanPools, setVlanPools] = useState<Array<{ bridge: string; rangeStart: string; rangeEnd: string }>>([])
   const [poolBridges, setPoolBridges] = useState<Array<{ iface: string; vlanAware?: boolean }>>([])
+
+  // Storage policy assignments (storage policies + QoS, P3): QoS-capped
+  // storage policies the connection's provider defined, and the subset (with
+  // a per-vDC quota override) this vDC is assigned.
+  const [connPolicies, setConnPolicies] = useState<Array<{ id: string; name: string; storageId: string }>>([])
+  const [vdcPolicies, setVdcPolicies] = useState<Array<{ policyId: string; quotaGb: string }>>([])
 
   // PBS bindings (inline in the edit dialog, below Nodes)
   const [pbsConnections, setPbsConnections] = useState<Array<{ id: string; name: string; fingerprint: string | null }>>([])
@@ -392,6 +406,7 @@ export default function VdcTab() {
     if (!form.connectionId) {
       setProviderBridges([])
       setPoolBridges([])
+      setConnPolicies([])
       return
     }
     void (async () => {
@@ -416,6 +431,18 @@ export default function VdcTab() {
       } catch (err) {
         console.error('Failed to load VLAN-pool bridges', err)
         setPoolBridges([])
+      }
+    })()
+    void (async () => {
+      try {
+        const policiesRes = await fetch(`/api/v1/admin/connections/${encodeURIComponent(form.connectionId)}/storage-policies`)
+        if (policiesRes.ok) {
+          const policiesJson = await policiesRes.json()
+          setConnPolicies(Array.isArray(policiesJson.data) ? policiesJson.data : [])
+        }
+      } catch (err) {
+        console.error('Failed to load storage policies', err)
+        setConnPolicies([])
       }
     })()
   }, [form.connectionId])
@@ -470,6 +497,7 @@ export default function VdcTab() {
     setAvailableResources(null)
     setSelectedSharedBridges(new Map())
     setVlanPools([])
+    setVdcPolicies([])
     setPbsDraft({ enabled: false, mode: 'auto', pbsConnectionId: '', datastore: '', namespace: '' })
     setPbsDraftDatastores([])
     setDialogOpen(true)
@@ -498,6 +526,7 @@ export default function VdcTab() {
       unlimitedVms: vdc.quota?.maxVms == null,
       unlimitedSnapshots: vdc.quota?.maxSnapshots == null,
       unlimitedBackups: vdc.quota?.maxBackups == null,
+      unlimitedVnets: vdc.quota?.maxVnets == null,
     })
 
     if (vdc.sharedBridges?.length) {
@@ -512,6 +541,10 @@ export default function VdcTab() {
 
     setVlanPools((vdc.vlanPools ?? []).map((p: any) => ({
       bridge: p.bridge, rangeStart: String(p.rangeStart), rangeEnd: String(p.rangeEnd),
+    })))
+
+    setVdcPolicies((vdc.storagePolicies ?? []).map((sp: any) => ({
+      policyId: sp.policyId, quotaGb: sp.quotaMb != null ? String(Math.round(sp.quotaMb / 1024)) : '',
     })))
 
     setDialogOpen(true)
@@ -531,7 +564,7 @@ export default function VdcTab() {
       if (!form.unlimitedVms && form.maxVms) quota.maxVms = Number.parseInt(form.maxVms)
       if (!form.unlimitedSnapshots && form.maxSnapshots) quota.maxSnapshots = Number.parseInt(form.maxSnapshots)
       if (!form.unlimitedBackups && form.maxBackups) quota.maxBackups = Number.parseInt(form.maxBackups)
-      if (form.maxVnets) quota.maxVnets = Number.parseInt(form.maxVnets)
+      if (!form.unlimitedVnets && form.maxVnets) quota.maxVnets = Number.parseInt(form.maxVnets)
 
       // For unlimited fields, explicitly set null so the backend clears them
       if (form.unlimitedVcpus) quota.maxVcpus = null
@@ -540,6 +573,7 @@ export default function VdcTab() {
       if (form.unlimitedVms) quota.maxVms = null
       if (form.unlimitedSnapshots) quota.maxSnapshots = null
       if (form.unlimitedBackups) quota.maxBackups = null
+      if (form.unlimitedVnets) quota.maxVnets = null
 
       const sharedBridgesPayload = Array.from(selectedSharedBridges.entries()).map(([bridge, label]) => ({
         bridge,
@@ -552,6 +586,13 @@ export default function VdcTab() {
           bridge: p.bridge,
           rangeStart: Number.parseInt(p.rangeStart, 10),
           rangeEnd: Number.parseInt(p.rangeEnd, 10),
+        }))
+
+      const storagePoliciesPayload = vdcPolicies
+        .filter((sp) => sp.policyId)
+        .map((sp) => ({
+          policyId: sp.policyId,
+          quotaMb: sp.quotaGb ? Number.parseInt(sp.quotaGb, 10) * 1024 : null,
         }))
 
       // Snapshot nodes from the live resources at submit time —
@@ -590,6 +631,7 @@ export default function VdcTab() {
           primaryStorage: form.primaryStorage,
           sharedBridges: sharedBridgesPayload,
           vlanPools: vlanPoolsPayload,
+          storagePolicies: storagePoliciesPayload,
           quota,
         }
 
@@ -619,6 +661,7 @@ export default function VdcTab() {
           primaryStorage: form.primaryStorage,
           sharedBridges: sharedBridgesPayload,
           vlanPools: vlanPoolsPayload,
+          storagePolicies: storagePoliciesPayload,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -954,6 +997,39 @@ export default function VdcTab() {
       },
     },
     {
+      field: 'storagePolicies',
+      headerName: t('vdc.storagePoliciesTitle'),
+      width: 130,
+      sortable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params) => {
+        const policies: any[] = Array.isArray(params.row.storagePolicies) ? params.row.storagePolicies : []
+        const count = policies.length
+        const tooltip = count === 0 ? t('vdc.vdcPoliciesHint') : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+            {policies.map((sp) => (
+              <Typography key={sp.policyId} variant="caption" sx={{ whiteSpace: 'nowrap' }}>
+                {sp.name} • {sp.storageId} • {sp.quotaMb != null ? `${Math.round(sp.quotaMb / 1024)} GB` : t('vdc.quotaUnlimited')}
+              </Typography>
+            ))}
+          </Box>
+        )
+
+        return (
+          <Tooltip arrow title={tooltip}>
+            <Chip
+              icon={<Box component="i" className="ri-hard-drive-2-line" sx={{ fontSize: 14, ml: '6px !important' }} />}
+              label={count}
+              size="small"
+              variant={count === 0 ? 'outlined' : 'filled'}
+              sx={{ height: 24, cursor: 'default' }}
+            />
+          </Tooltip>
+        )
+      },
+    },
+    {
       field: 'quotaVms',
       headerName: t('vdc.vms'),
       width: 110,
@@ -1210,6 +1286,34 @@ export default function VdcTab() {
         </Alert>
       )}
 
+      <Tabs
+        value={activeSection}
+        onChange={(_e, v) => setActiveSection(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab
+          value="vdcs"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-cloud-line" style={{ fontSize: 18 }} />
+              {t('vdc.title')}
+            </Box>
+          }
+        />
+        <Tab
+          value="policies"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-hard-drive-2-line" style={{ fontSize: 18 }} />
+              {t('vdc.storagePoliciesTitle')}
+            </Box>
+          }
+        />
+      </Tabs>
+
+      {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
+
+      {activeSection === 'vdcs' && (
       <Card>
         <CardContent>
           {/* A vDC always lives in a non-default tenant — the provider tenant
@@ -1282,6 +1386,7 @@ export default function VdcTab() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
@@ -1630,21 +1735,6 @@ export default function VdcTab() {
                     </>
                   )}
 
-                  {/* Tenant networks: the VXLAN / SDN overlay is automatic */}
-
-                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className="ri-git-branch-line" />
-                      {t('vdc.vxlanSectionTitle')}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">{t('vdc.vxlanSectionHint')}</Typography>
-                    {editingVdc?.sdnZoneName ? (
-                      <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-                        {t('vdc.vxlanZoneInfo', { zone: editingVdc.sdnZoneName, count: editingVdc.vnets?.length ?? 0 })}
-                      </Typography>
-                    ) : null}
-                  </Box>
-
                   {/* VLAN pools */}
 
                   <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
@@ -1699,6 +1789,83 @@ export default function VdcTab() {
                               slotProps={{ htmlInput: { min: 1, max: 4094 } }}
                             />
                             <IconButton size="small" sx={{ mt: 0.75, flexShrink: 0 }} onClick={() => setVlanPools((prev) => prev.filter((_, i) => i !== idx))}>
+                              <i className="ri-delete-bin-line" />
+                            </IconButton>
+                          </Stack>
+                        )
+                      })}
+                    </Stack>
+                  </Box>
+
+                  {/* Storage policy assignments (storage policies + QoS, P3) */}
+
+                  <Box sx={{ mt: 2, p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <i className="ri-database-2-line" />
+                        {t('vdc.vdcPoliciesTitle')}
+                      </Typography>
+                      <Tooltip title={t('vdc.vdcPolicyAdd')} arrow>
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label={t('vdc.vdcPolicyAdd')}
+                            onClick={() => setVdcPolicies((prev) => [...prev, { policyId: '', quotaGb: '' }])}
+                            disabled={connPolicies.length === 0 || vdcPolicies.length >= connPolicies.length}
+                          >
+                            <i className="ri-add-line" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">{t('vdc.vdcPoliciesHint')}</Typography>
+
+                    <Stack spacing={1} sx={{ mt: 1 }}>
+                      {vdcPolicies.map((sp, idx) => {
+                        const takenByOthers = new Set(vdcPolicies.filter((_, i) => i !== idx).map((p) => p.policyId))
+                        const options = connPolicies.filter((p) => !takenByOthers.has(p.id) || p.id === sp.policyId)
+                        return (
+                          <Stack key={idx} direction="row" spacing={1} alignItems="flex-start">
+                            <TextField
+                              select size="small" sx={{ flex: 1, minWidth: 200 }}
+                              label={t('vdc.storagePolicyName')}
+                              value={sp.policyId}
+                              onChange={(e) => setVdcPolicies((prev) => prev.map((p, i) => i === idx ? { ...p, policyId: e.target.value } : p))}
+                              slotProps={{
+                                select: {
+                                  // The MenuItem body is two stacked lines (name + storage);
+                                  // MUI would render both inside the CLOSED control and
+                                  // overflow it, so the closed state shows the name only.
+                                  renderValue: (value) => (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                      <i className="ri-database-2-line" style={{ fontSize: 15, opacity: 0.7 }} />
+                                      {connPolicies.find((p) => p.id === (value as string))?.name ?? ''}
+                                    </Box>
+                                  ),
+                                },
+                              }}
+                            >
+                              {options.map((p) => (
+                                <MenuItem key={p.id} value={p.id}>
+                                  <Box>
+                                    <Typography variant="body2">{p.name}</Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <i className="ri-hard-drive-2-line" style={{ fontSize: 13, opacity: 0.6 }} />
+                                      <Typography variant="caption" color="text.secondary">{p.storageId}</Typography>
+                                    </Box>
+                                  </Box>
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                            <TextField
+                              size="small" type="number" label={t('vdc.vdcPolicyQuotaGb')}
+                              sx={{ width: 160, flexShrink: 0 }}
+                              value={sp.quotaGb}
+                              onChange={(e) => setVdcPolicies((prev) => prev.map((p, i) => i === idx ? { ...p, quotaGb: e.target.value } : p))}
+                              slotProps={{ htmlInput: { min: 1 } }}
+                              helperText={t('vdc.vdcPolicyUnlimited')}
+                            />
+                            <IconButton size="small" sx={{ mt: 0.75, flexShrink: 0 }} onClick={() => setVdcPolicies((prev) => prev.filter((_, i) => i !== idx))}>
                               <i className="ri-delete-bin-line" />
                             </IconButton>
                           </Stack>
@@ -1788,16 +1955,7 @@ export default function VdcTab() {
               {renderQuotaField(t('vdc.maxSnapshots'), 'maxSnapshots', 'unlimitedSnapshots')}
               {renderQuotaField(t('vdc.maxBackups'), 'maxBackups', 'unlimitedBackups')}
 
-              <TextField
-                label={t('vdc.maxVnets')}
-                type="number"
-                value={form.maxVnets}
-                onChange={(e) => setForm((f) => ({ ...f, maxVnets: e.target.value }))}
-                helperText={t('vdc.maxVnetsHint')}
-                slotProps={{ htmlInput: { min: 0 } }}
-                size="small"
-                fullWidth
-              />
+              {renderQuotaField(t('vdc.maxVnets'), 'maxVnets', 'unlimitedVnets')}
             </>
           )}
         </DialogContent>

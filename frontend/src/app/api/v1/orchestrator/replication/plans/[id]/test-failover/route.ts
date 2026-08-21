@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (scopeDenied) return scopeDenied
 
-    let body: { network_isolated?: boolean; restore_points?: Record<number, string> } | undefined
+    let body: { network_isolated?: boolean; restore_points?: Record<number, string>; screenshot_delay_seconds?: number } | undefined
     try { body = await request.json() } catch { /* empty body is fine */ }
     const response = await getOrchestratorClient().testFailover(id, body)
 

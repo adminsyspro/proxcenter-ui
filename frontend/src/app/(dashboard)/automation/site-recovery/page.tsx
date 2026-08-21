@@ -36,7 +36,9 @@ import {
   FailoverDialog
 } from '@/components/automation/site-recovery'
 
-import type { RecoveryPlan, RecoveryExecution, UpdateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
+import type {
+  RecoveryPlan, RecoveryExecution, UpdateReplicationJobRequest, TestFailoverOptions
+} from '@/lib/orchestrator/site-recovery.types'
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
@@ -287,12 +289,16 @@ export default function SiteRecoveryPage() {
     }
   }, [plans])
 
-  const handleFailoverConfirm = useCallback(async (options?: { restorePoints?: Record<number, string> }) => {
+  const handleFailoverConfirm = useCallback(async (options?: TestFailoverOptions) => {
     if (!failoverDialog.planId) return
     const endpoint = failoverDialog.type === 'test' ? 'test-failover' : failoverDialog.type
 
     const body = failoverDialog.type === 'test'
-      ? JSON.stringify({ network_isolated: true, ...(options?.restorePoints ? { restore_points: options.restorePoints } : {}) })
+      ? JSON.stringify({
+        network_isolated: options?.networkIsolated ?? true,
+        ...(options?.screenshotDelaySeconds != null ? { screenshot_delay_seconds: options.screenshotDelaySeconds } : {}),
+        ...(options?.restorePoints ? { restore_points: options.restorePoints } : {})
+      })
       : failoverDialog.type === 'failover'
         ? (options?.restorePoints ? JSON.stringify({ restore_points: options.restorePoints }) : undefined)
         : undefined

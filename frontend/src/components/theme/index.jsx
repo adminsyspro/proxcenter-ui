@@ -19,12 +19,14 @@ import ModeChanger from './ModeChanger'
 
 // Config Imports
 import themeConfig from '@configs/themeConfig'
+import primaryColorConfig from '@configs/primaryColorConfig'
 import globalThemesConfig, { getGlobalTheme, densityConfig, transitionConfig } from '@configs/globalThemesConfig'
 import lightBackgroundConfig, { getLightBackground } from '@configs/lightBackgroundConfig'
 
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
 import { useBranding } from '@/contexts/BrandingContext'
+import { resolveHexColor } from '@/lib/theme/hexColor'
 
 // Core Theme Imports
 import defaultCoreTheme from '@core/theme'
@@ -1826,8 +1828,19 @@ const CustomThemeProvider = props => {
 
   // Merge the primary color scheme override with the core theme
   const theme = useMemo(() => {
-    // Branding primary color takes precedence over user setting
-    const effectivePrimaryColor = branding.primaryColor || settings.primaryColor
+    // Branding primary color takes precedence over user setting.
+    //
+    // #754: both values are treated as untrusted here. lighten()/darken() throw
+    // on anything MUI cannot parse, and this provider wraps the dashboard AND
+    // the blank layout (login, setup), so one malformed branding colour used to
+    // turn every page of the tenant into a 500 with no UI left to undo it. A
+    // colour that cannot be repaired falls back to the shipped brand colour,
+    // which keeps the instance usable while the administrator fixes the value.
+    const brandingPrimaryColor = branding.primaryColor ? resolveHexColor(branding.primaryColor, '') : ''
+    const effectivePrimaryColor = resolveHexColor(
+      brandingPrimaryColor || settings.primaryColor,
+      primaryColorConfig[0].main
+    )
 
     // Build light palette with custom background
     const lightPalette = {

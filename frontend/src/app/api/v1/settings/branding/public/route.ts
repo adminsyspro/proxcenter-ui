@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSetting } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
+import { normalizeHexColor } from '@/lib/theme/hexColor'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,7 +51,11 @@ export async function GET() {
       logoUrl: fixUrl(settings.logoUrl),
       faviconUrl: fixUrl(settings.faviconUrl),
       loginLogoUrl: fixUrl(settings.loginLogoUrl),
-      primaryColor: settings.primaryColor,
+      // #754: this is where the branding colour enters the browser and, from
+      // there, MUI's palette. A value stored before the colour was validated is
+      // repaired when it can be ('00ECB2' -> '#00ECB2') and dropped otherwise,
+      // so an instance already stuck on the 500 page comes back on its own.
+      primaryColor: settings.primaryColor ? (normalizeHexColor(settings.primaryColor) ?? '') : '',
       browserTitle: settings.browserTitle,
       poweredByVisible: settings.poweredByVisible,
       showGithubStars: settings.showGithubStars,

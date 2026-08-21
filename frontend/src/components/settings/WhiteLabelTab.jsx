@@ -9,6 +9,7 @@ import {
 import { useTranslations } from 'next-intl'
 import { useBranding } from '@/contexts/BrandingContext'
 import ColorPicker from '@/components/common/ColorPicker'
+import { isHexColor, normalizeHexColor } from '@/lib/theme/hexColor'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 
@@ -52,6 +53,12 @@ export default function WhiteLabelTab() {
   const faviconInputRef = useRef(null)
   const loginLogoInputRef = useRef(null)
 
+  // #754: the primary colour ends up in MUI's lighten()/darken() for the whole
+  // application, login page included, so a value that cannot be parsed used to
+  // take the tenant down with a 500 and no UI left to revert it. An empty field
+  // means "no override" and stays valid; anything else has to be a hex colour.
+  const primaryColorInvalid = config.primaryColor !== '' && !isHexColor(config.primaryColor)
+
   // Load settings
   useEffect(() => {
     fetch('/api/v1/settings/branding')
@@ -71,7 +78,18 @@ export default function WhiteLabelTab() {
       const cleanedHighlights = (config.loginHighlights || [])
         .filter(h => h && h.icon && h.text && h.icon.trim() !== '' && h.text.trim() !== '')
         .slice(0, 3)
-      const payload = { ...config, loginHighlights: cleanedHighlights }
+      // A missing '#' is what an administrator meant, not what they typed, so
+      // it is added here rather than refused (#754).
+      const payload = {
+        ...config,
+        primaryColor: config.primaryColor ? (normalizeHexColor(config.primaryColor) ?? '') : '',
+        loginHighlights: cleanedHighlights,
+      }
+
+      if (config.primaryColor && !payload.primaryColor) {
+        throw new Error('Invalid primary colour: use a hex value such as #00ECB2')
+      }
+
       const res = await fetch('/api/v1/settings/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -353,10 +371,17 @@ export default function WhiteLabelTab() {
             placeholder="#7C4DFF"
             fallback={theme.palette.primary.main}
             onReset={() => setConfig(prev => ({ ...prev, primaryColor: '' }))}
+            error={primaryColorInvalid}
           />
-          <Typography variant="caption" sx={{ opacity: 0.5, mt: 1, display: 'block' }}>
-            Overrides the primary color across the entire application (buttons, links, active states, etc.)
-          </Typography>
+          {primaryColorInvalid ? (
+            <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+              Enter a hex colour such as #00ECB2. The leading # is added for you if you leave it out.
+            </Typography>
+          ) : (
+            <Typography variant="caption" sx={{ opacity: 0.5, mt: 1, display: 'block' }}>
+              Overrides the primary color across the entire application (buttons, links, active states, etc.)
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
@@ -522,7 +547,7 @@ export default function WhiteLabelTab() {
         <Button variant="outlined" color="secondary" onClick={handleReset} startIcon={<i className="ri-refresh-line" />}>
           Reset to Default
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}
+        <Button variant="contained" onClick={handleSave} disabled={saving || primaryColorInvalid}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <i className="ri-save-line" />}>
           Save Changes
         </Button>

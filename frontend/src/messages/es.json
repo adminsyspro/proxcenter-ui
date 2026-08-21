@@ -5717,6 +5717,7 @@
     "roleDefinesPermissions": "El rol define los permisos de usuario",
     "protectedRolesNote": "Super Admin y Provider Admin se gestionan en Seguridad › RBAC › Asignaciones.",
     "communityAdminNotice": "En la edición Community, todos los usuarios tienen acceso de administrador completo. Los permisos acotados basados en roles requieren la edición Enterprise.",
+    "roleAssignmentFailed": "La cuenta se guardó pero no se pudo asignar su rol. Revise sus permisos antes de que el usuario inicie sesión.",
     "newPassword": "Nueva contraseña (dejar vacío para mantener la actual)",
     "minChars": "Mínimo 8 caracteres",
     "accountActive": "Cuenta activa",

@@ -5717,6 +5717,7 @@
     "roleDefinesPermissions": "The role defines user permissions",
     "protectedRolesNote": "Super Admin and Provider Admin are managed in Security › RBAC › Assignments.",
     "communityAdminNotice": "In Community edition, every user has full administrator access. Scoped, role-based permissions require the Enterprise edition.",
+    "roleAssignmentFailed": "The account was saved but its role could not be assigned. Check its permissions before the user signs in.",
     "newPassword": "New password (leave empty to keep current)",
     "minChars": "Minimum 8 characters",
     "accountActive": "Account active",

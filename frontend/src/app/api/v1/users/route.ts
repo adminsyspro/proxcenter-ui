@@ -11,6 +11,7 @@ import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { getServerLicense } from "@/lib/auth/requireEnterprise"
+import { isCommunityDeployment } from "@/lib/auth/communitySuperAdmin"
 import { aliveWhere } from "@/lib/auth/sessions"
 
 export const runtime = "nodejs"
@@ -236,12 +237,13 @@ export async function POST(req: Request) {
     // Enterprise leaves the grant out: scoped roles are assigned separately
     // through the RBAC picker.
     //
-    // The verdict must be POSITIVELY established: an unreachable orchestrator
+    // The Community verdict must be trustworthy: an unreachable orchestrator
     // or an expired Enterprise licence both report enterprise:false, and
     // granting global super-admin on either would be a privilege escalation.
-    // Only a resolved Community edition qualifies.
+    // A Community install has no orchestrator to answer at all, so "resolved"
+    // alone would never fire there. See isCommunityDeployment (issue #755).
     const license = await getServerLicense()
-    const grantSuperAdmin = license.resolved === true && license.edition === "community"
+    const grantSuperAdmin = isCommunityDeployment(license)
 
     await prisma.$transaction([
       prisma.user.create({

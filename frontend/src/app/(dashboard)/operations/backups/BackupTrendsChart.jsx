@@ -89,6 +89,13 @@ export default function BackupTrendsChart({ pbsId }) {
     }))
   }, [data])
 
+  // Recharts paints its own hover band behind the bars, a hardcoded light
+  // grey (#ccc at 99% opacity) that shows up as a white block covering the
+  // hovered day on the dark theme. Replace it with the theme's own tint so it
+  // reads as a highlight in both palettes.
+  const barCursor = { fill: theme.palette.action.hover }
+  const lineCursor = { stroke: alpha(theme.palette.text.primary, 0.3), strokeWidth: 1 }
+
   const pieData = useMemo(() => {
     if (!data?.typeDistribution) return []
     const d = data.typeDistribution
@@ -154,7 +161,7 @@ export default function BackupTrendsChart({ pbsId }) {
                       interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
                     />
                     <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} allowDecimals={false} />
-                    <Tooltip content={<CustomTooltip t={t} mode='count' />} />
+                    <Tooltip content={<CustomTooltip t={t} mode='count' />} cursor={barCursor} />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey='vm' name='VM' stackId='a' fill={theme.palette.primary.main} radius={[0, 0, 0, 0]} />
                     <Bar dataKey='ct' name='CT' stackId='a' fill={theme.palette.secondary.main} radius={[2, 2, 0, 0]} />
@@ -175,7 +182,7 @@ export default function BackupTrendsChart({ pbsId }) {
                       interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
                     />
                     <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickFormatter={v => formatBytes(v)} />
-                    <Tooltip content={<CustomTooltip t={t} mode='size' />} />
+                    <Tooltip content={<CustomTooltip t={t} mode='size' />} cursor={lineCursor} />
                     <Area
                       type='monotone'
                       dataKey='size'
@@ -195,7 +202,7 @@ export default function BackupTrendsChart({ pbsId }) {
                       interval={Math.max(0, Math.floor(chartData.length / 8) - 1)}
                     />
                     <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} allowDecimals={false} />
-                    <Tooltip content={<CustomTooltip t={t} mode='verified' />} />
+                    <Tooltip content={<CustomTooltip t={t} mode='verified' />} cursor={barCursor} />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey='verified' name={t('backups.verified')} stackId='a' fill={theme.palette.success.main} radius={[0, 0, 0, 0]} />
                     <Bar dataKey='unverified' name={t('backups.notVerified')} stackId='a' fill={alpha(theme.palette.text.disabled, 0.3)} radius={[2, 2, 0, 0]} />

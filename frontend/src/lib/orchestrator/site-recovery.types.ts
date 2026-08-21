@@ -131,6 +131,17 @@ export interface UpdateRecoveryPlanRequest {
   vms?: Array<{ vm_id: number; tier: 1 | 2 | 3; boot_order: number }>
 }
 
+// TestFailoverOptions are the per-run choices the Test Failover dialog sends
+// with a test: an older restore point per VM, whether DR VMs boot with their
+// NICs shut (default) or connected to the mapped target bridges, and how long
+// the orchestrator lets the guests settle before capturing boot screenshots
+// (omitted or 0 = the orchestrator's own default).
+export interface TestFailoverOptions {
+  restorePoints?: Record<number, string>
+  networkIsolated?: boolean
+  screenshotDelaySeconds?: number
+}
+
 // ============================================
 // Restore Points
 // ============================================
@@ -207,6 +218,9 @@ export interface RecoveryExecution {
   // frontend can show a live countdown instead of an indefinite spinner.
   // Cleared alongside phase for every other phase/transition.
   phase_ends_at?: string
+  // Test failover only: the stabilization delay this run asked for, in
+  // seconds. Absent on runs that took the orchestrator's default.
+  screenshot_delay_seconds?: number
 }
 
 // ============================================

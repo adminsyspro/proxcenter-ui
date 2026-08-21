@@ -863,12 +863,14 @@ export async function GET(request: Request) {
           const connData = await getConnectionById(conn.id)
           
           // Récupérer nodes et VMs en parallèle (avec timeout per-request)
-          const rTimeout = { signal: AbortSignal.timeout(15000) }
+          // A budget goes in fetchOpts: a caller signal is combined with the
+          // internal timeout, so it can only shorten a request, never lengthen it.
+          const rTimeout = { timeoutMs: 15000 }
 
           const [nodesResult, vmsResult, storageResult] = await Promise.allSettled([
-            pveFetch<NodeData[]>(connData, '/nodes', rTimeout),
-            pveFetch<VmData[]>(connData, '/cluster/resources?type=vm', rTimeout),
-            pveFetch<any[]>(connData, '/cluster/resources?type=storage', rTimeout),
+            pveFetch<NodeData[]>(connData, '/nodes', {}, rTimeout),
+            pveFetch<VmData[]>(connData, '/cluster/resources?type=vm', {}, rTimeout),
+            pveFetch<any[]>(connData, '/cluster/resources?type=storage', {}, rTimeout),
           ])
           
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
@@ -893,7 +895,7 @@ export async function GET(request: Request) {
           }
 
           // Récupérer les données RRD de tous les nodes en parallèle
-          const rrdTimeout = { signal: AbortSignal.timeout(10000) }
+          const rrdTimeout = { timeoutMs: 10000 }
 
           // RRD year (CPU/RAM trends) + RRD month (Network I/O, higher resolution) in parallel
           const [nodeRrdResults, nodeRrdMonthResults] = await Promise.all([
@@ -902,6 +904,7 @@ export async function GET(request: Request) {
                 pveFetch<RrdPoint[]>(
                   connData,
                   `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=year&cf=AVERAGE`,
+                  {},
                   rrdTimeout
                 )
               )
@@ -911,6 +914,7 @@ export async function GET(request: Request) {
                 pveFetch<RrdPoint[]>(
                   connData,
                   `/nodes/${encodeURIComponent(node.node)}/rrddata?timeframe=month&cf=AVERAGE`,
+                  {},
                   rrdTimeout
                 )
               )
@@ -1015,6 +1019,7 @@ export async function GET(request: Request) {
               pveFetch<RrdPoint[]>(
                 connData,
                 `/nodes/${encodeURIComponent(storage.node)}/storage/${encodeURIComponent(storage.storage)}/rrddata?timeframe=year&cf=AVERAGE`,
+                {},
                 rrdTimeout
               )
             )

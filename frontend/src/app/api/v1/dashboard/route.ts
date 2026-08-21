@@ -192,14 +192,16 @@ export async function GET(req: Request) {
 
           if (!connData.baseUrl || !connData.apiToken) return null
 
-          const pveTimeout = { signal: AbortSignal.timeout(15000) }
+          // A budget goes in fetchOpts: a caller signal is combined with the
+          // internal timeout, so it can only shorten a request, never lengthen it.
+          const pveTimeout = { timeoutMs: 15000 }
 
           const [nodesResult, resourcesResult, statusResult, cephResult, storageConfigResult] = await Promise.allSettled([
-            pveFetch<any[]>(connData, "/nodes", pveTimeout),
-            pveFetch<any[]>(connData, "/cluster/resources", pveTimeout),
-            pveFetch<any[]>(connData, "/cluster/status", pveTimeout),
-            conn.hasCeph ? pveFetch<any>(connData, "/cluster/ceph/status", pveTimeout) : Promise.resolve(null),
-            pveFetch<any[]>(connData, "/storage", pveTimeout),
+            pveFetch<any[]>(connData, "/nodes", {}, pveTimeout),
+            pveFetch<any[]>(connData, "/cluster/resources", {}, pveTimeout),
+            pveFetch<any[]>(connData, "/cluster/status", {}, pveTimeout),
+            conn.hasCeph ? pveFetch<any>(connData, "/cluster/ceph/status", {}, pveTimeout) : Promise.resolve(null),
+            pveFetch<any[]>(connData, "/storage", {}, pveTimeout),
           ])
 
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
@@ -242,7 +244,7 @@ export async function GET(req: Request) {
             }
 
             try {
-              const nodeStatus = await pveFetch<any>(connData, `/nodes/${encodeURIComponent(node.node)}/status`, { signal: AbortSignal.timeout(10000) })
+              const nodeStatus = await pveFetch<any>(connData, `/nodes/${encodeURIComponent(node.node)}/status`, {}, { timeoutMs: 10000 })
               const cpuCores = (Number(nodeStatus?.cpuinfo?.cores || 0) * Number(nodeStatus?.cpuinfo?.sockets || 1)) || 0
 
               

@@ -200,7 +200,12 @@ export default function ExternalHypervisorDashboard({ extTypeInfo: info, onSelec
                 <CartesianGrid strokeDasharray="3 3" stroke={alpha(theme.palette.divider, 0.5)} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${theme.palette.divider}`, background: theme.palette.background.paper }} />
+                {/* cursor: Recharts defaults the hover band to a hardcoded
+                    light grey, which reads as a white block on the dark theme. */}
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${theme.palette.divider}`, background: theme.palette.background.paper }}
+                  cursor={{ fill: theme.palette.action.hover }}
+                />
                 <Bar dataKey="vms" name="VMs" fill={theme.palette.primary.main} radius={[3, 3, 0, 0]} />
                 <Bar dataKey="cpu" name="vCPU" fill={theme.palette.warning.main} radius={[3, 3, 0, 0]} />
                 <Bar dataKey="ram" name="RAM (GB)" fill={theme.palette.info.main} radius={[3, 3, 0, 0]} />

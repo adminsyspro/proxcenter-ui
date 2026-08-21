@@ -87,9 +87,9 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
   const events: InventoryEvent[] = []
 
   try {
-    const resources = await pveFetch<any[]>(connConfig, '/cluster/resources', {
-      signal: AbortSignal.timeout(8000),
-    })
+    // Left on the client default so PVE_TIMEOUT_MS governs the poller too.
+    // A caller signal could only shorten it, never lengthen it.
+    const resources = await pveFetch<any[]>(connConfig, '/cluster/resources')
 
     if (!resources || !Array.isArray(resources)) return events
 

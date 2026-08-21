@@ -151,6 +151,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
   let soapSession: SoapSession | null = null
   let targetVmid: number | null = null
+  /**
+   * True only once PVE accepted the create call. `targetVmid` is set earlier
+   * (reserved via /cluster/nextid, or taken from the user's pick), so gating the
+   * cleanup on it alone could destroy a VM this job never created: with a
+   * user-supplied VMID that is already taken, the create fails with "already
+   * exists" and the cleanup would then purge the pre-existing VM holding that id
+   * (#738, same class as the misleading "failed to destroy partial VM" warning).
+   */
+  let vmCreated = false
   let storageTempDir = ''
   // Block volumes pvesm-alloc'd during the run. Lifted to function scope
   // (was previously declared inside the main try) so the catch block can
@@ -401,6 +410,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       `/nodes/${encodeURIComponent(config.targetNode)}/qemu`,
       { method: "POST", body: createBody }
     )
+    // Set before waiting on the task: PVE accepted the create, so a config may
+    // already exist and the cleanup path must know about it even if the task fails.
+    vmCreated = true
     if (createResult) {
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
@@ -2905,8 +2917,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
 
-    // Cleanup: if we created a VM, try to destroy it
-    if (targetVmid && config.targetConnectionId) {
+    // Cleanup: only when this job actually created the VM. Before that the VMID
+    // is just a reservation (or the user's pick, possibly pointing at somebody
+    // else's VM), and destroying it would delete data we never wrote.
+    if (vmCreated && targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
         await destroyPveVm(pveConn, config.targetNode, targetVmid)

@@ -5,14 +5,29 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle,
-  IconButton, LinearProgress, MenuItem, Select, Stack, TextField, Tooltip, Typography
+  FormControlLabel, IconButton, LinearProgress, MenuItem, Select, Stack, Switch, TextField, Tooltip, Typography
 } from '@mui/material'
 
 import { ScreenshotPreviewDialog, useExecutionScreenshots, type ScreenshotMeta } from './ExecutionScreenshots'
 
 import { formatBytes } from '@/utils/format'
 
-import type { RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints } from '@/lib/orchestrator/site-recovery.types'
+import type {
+  RecoveryPlan, RecoveryExecution, RecoveryVMResult, PlanRestorePoints, TestFailoverOptions
+} from '@/lib/orchestrator/site-recovery.types'
+
+// Boot-screenshot stabilization delay offered for a test failover, mirroring
+// the orchestrator's own default and cap (DefaultScreenshotStabilizeDelay /
+// MaxScreenshotStabilizeDelaySeconds): a slow guest needs more than the
+// default to reach a login screen, and the cap keeps a mistyped value from
+// parking the test for hours.
+export const DEFAULT_SCREENSHOT_DELAY_SECONDS = 45
+export const MAX_SCREENSHOT_DELAY_SECONDS = 600
+// Floor of 5s rather than 0: the orchestrator reads 0 as "take the product
+// default" (which is what every execution recorded before the option
+// existed reads back as), so a 0 typed here would wait 45s instead of capturing at
+// once. Offering it would be a trap.
+export const MIN_SCREENSHOT_DELAY_SECONDS = 5
 
 // ── Main Component ─────────────────────────────────────────────────────
 
@@ -21,7 +36,7 @@ interface FailoverDialogProps {
   onClose: () => void
   plan: RecoveryPlan | null
   type: 'test' | 'failover' | 'failback'
-  onConfirm: (options?: { restorePoints?: Record<number, string> }) => void
+  onConfirm: (options?: TestFailoverOptions) => void
   onCleanup?: () => void
   cleanupLoading?: boolean
   cleanupResult?: { vms_stopped: number; disks_rolled: number; jobs_resumed: number; errors: string[] } | null
@@ -48,6 +63,9 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   const [stabilizeRemainingSeconds, setStabilizeRemainingSeconds] = useState<number | null>(null)
   const [confirmCancelFailback, setConfirmCancelFailback] = useState(false)
   const [confirmCutover, setConfirmCutover] = useState(false)
+  // Test-failover options, editable until the run starts.
+  const [networkIsolated, setNetworkIsolated] = useState(true)
+  const [screenshotDelay, setScreenshotDelay] = useState(String(DEFAULT_SCREENSHOT_DELAY_SECONDS))
 
   useEffect(() => {
     if (!open) {
@@ -55,6 +73,8 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
       setSelectedPoints({})
       setConfirmCancelFailback(false)
       setConfirmCutover(false)
+      setNetworkIsolated(true)
+      setScreenshotDelay(String(DEFAULT_SCREENSHOT_DELAY_SECONDS))
     }
   }, [open])
 
@@ -80,7 +100,13 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
   // `execution` yet — the rehydration fetch on open is still in flight or
   // failed. Block a second test-failover attempt until it resolves.
   const testActiveUnresolved = type === 'test' && !!plan.active_test_execution_id && !execution
-  const canConfirm = (!isDestructive || confirmText === confirmRequired) && !testActiveUnresolved
+  // Empty or non-integer input is a typo, not a request for the default:
+  // refuse the run rather than silently sending something else.
+  const screenshotDelayInvalid = type === 'test'
+    && (!/^\d+$/.test(screenshotDelay.trim())
+      || Number(screenshotDelay) < MIN_SCREENSHOT_DELAY_SECONDS
+      || Number(screenshotDelay) > MAX_SCREENSHOT_DELAY_SECONDS)
+  const canConfirm = (!isDestructive || confirmText === confirmRequired) && !testActiveUnresolved && !screenshotDelayInvalid
   // The two-phase failback flow: while reverse replication converges, the
   // dialog shows a dedicated per-VM sync table (not the generic progress
   // rows) and its own Cutover/Cancel actions instead of the default ones.
@@ -145,12 +171,70 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             </Alert>
           )}
 
-          {type === 'test' && (
+          {/* Test options, editable until the run starts: network isolation
+              (on by default) and the post-boot screenshot delay. */}
+          {type === 'test' && !execution && (
+            <Box sx={{ p: 1.5, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+              <Stack spacing={1.5}>
+                <Box>
+                  <FormControlLabel
+                    sx={{ ml: 0 }}
+                    control={
+                      <Switch
+                        size='small'
+                        checked={networkIsolated}
+                        onChange={e => setNetworkIsolated(e.target.checked)}
+                        sx={{ mr: 1 }}
+                      />
+                    }
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                        <Box
+                          component='i'
+                          className={networkIsolated ? 'ri-wifi-off-line' : 'ri-wifi-line'}
+                          sx={{ fontSize: 16, color: networkIsolated ? 'info.main' : 'warning.main' }}
+                        />
+                        <Typography variant='body2' sx={{ fontWeight: 500 }}>
+                          {t('siteRecovery.failover.networkIsolation')}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                  <Typography variant='caption' sx={{ color: 'text.secondary', display: 'block' }}>
+                    {t('siteRecovery.failover.networkIsolationHelp')}
+                  </Typography>
+                </Box>
+                {!networkIsolated && (
+                  <Alert severity='warning'>{t('siteRecovery.failover.networkConnectedWarning')}</Alert>
+                )}
+                <TextField
+                  size='small'
+                  type='number'
+                  label={t('siteRecovery.failover.screenshotDelayLabel')}
+                  value={screenshotDelay}
+                  onChange={e => setScreenshotDelay(e.target.value)}
+                  error={screenshotDelayInvalid}
+                  helperText={screenshotDelayInvalid
+                    ? t('siteRecovery.failover.screenshotDelayInvalid', {
+                      min: MIN_SCREENSHOT_DELAY_SECONDS,
+                      max: MAX_SCREENSHOT_DELAY_SECONDS
+                    })
+                    : t('siteRecovery.failover.screenshotDelayHelp', { seconds: DEFAULT_SCREENSHOT_DELAY_SECONDS })}
+                  InputProps={{ endAdornment: <Typography variant='caption' sx={{ color: 'text.secondary' }}>s</Typography> }}
+                  inputProps={{ min: MIN_SCREENSHOT_DELAY_SECONDS, max: MAX_SCREENSHOT_DELAY_SECONDS, step: 5 }}
+                  sx={{ maxWidth: 280 }}
+                />
+              </Stack>
+            </Box>
+          )}
+          {type === 'test' && execution && (
             <Chip
               size='small'
-              icon={<i className='ri-wifi-off-line' />}
-              label={t('siteRecovery.failover.networkIsolated')}
-              color='info'
+              icon={<i className={execution.network_isolated === false ? 'ri-wifi-line' : 'ri-wifi-off-line'} />}
+              label={execution.network_isolated === false
+                ? t('siteRecovery.failover.networkConnected')
+                : t('siteRecovery.failover.networkIsolated')}
+              color={execution.network_isolated === false ? 'warning' : 'info'}
               variant='outlined'
               sx={{ mt: -0.5 }}
             />
@@ -572,7 +656,15 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
             <Button
               variant='contained'
               color={config.color}
-              onClick={() => onConfirm(Object.keys(selectedPoints).length ? { restorePoints: selectedPoints } : undefined)}
+              onClick={() => onConfirm(
+                type === 'test'
+                  ? {
+                    ...(Object.keys(selectedPoints).length ? { restorePoints: selectedPoints } : {}),
+                    networkIsolated,
+                    screenshotDelaySeconds: Number(screenshotDelay)
+                  }
+                  : Object.keys(selectedPoints).length ? { restorePoints: selectedPoints } : undefined
+              )}
               disabled={!canConfirm}
               startIcon={<i className={config.icon} />}
             >

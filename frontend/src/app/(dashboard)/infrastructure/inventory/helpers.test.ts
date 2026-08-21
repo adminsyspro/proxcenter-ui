@@ -31,6 +31,8 @@ import {
   formatMachineType,
   machineTypeRow,
   parseDiskFormat,
+  HOTPLUG_DEVICES,
+  hotplugDevice,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -1128,5 +1130,34 @@ describe('fetchDetails: disk format on the Hardware tab', () => {
     for (const id of ['ide0', 'ide2', 'scsi0']) {
       expect((payload?.disksInfo?.find(d => d.id === id) as any)?.isCloudInit).toBe(false)
     }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Hotplug device vocabulary (shared by the Options row and its dialog) */
+/* ------------------------------------------------------------------ */
+
+describe('hotplug device vocabulary', () => {
+  it('covers exactly the five devices PVE can hotplug, in PVE order', () => {
+    expect(HOTPLUG_DEVICES.map(d => d.key)).toEqual(['disk', 'network', 'usb', 'memory', 'cpu'])
+  })
+
+  it('gives every device a label and an icon', () => {
+    for (const device of HOTPLUG_DEVICES) {
+      expect(device.label, device.key).toBeTruthy()
+      expect(device.icon, device.key).toMatch(/^ri-[a-z0-9-]+$/)
+    }
+  })
+
+  it('looks a device up from what PVE stores, whatever the case or spacing', () => {
+    // PVE's `hotplug` value is a comma separated list we split and trim.
+    expect(hotplugDevice('memory')?.icon).toBe('ri-ram-line')
+    expect(hotplugDevice(' CPU ')?.label).toBe('CPU')
+  })
+
+  it('returns undefined for a device it does not know', () => {
+    // A future PVE keyword must fall back to the raw string, not crash.
+    expect(hotplugDevice('gpu')).toBeUndefined()
+    expect(hotplugDevice('')).toBeUndefined()
   })
 })

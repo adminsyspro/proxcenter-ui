@@ -593,9 +593,12 @@ function VerdictBanner({ verdict, stats, cephVerdict, simNodesAfter, selectedHas
                     tickFormatter={v => `${v}%`}
                     width={40}
                   />
+                  {/* cursor: Recharts defaults the hover band to a hardcoded
+                      light grey, which reads as a white block on the dark theme. */}
                   <RTooltip
                     formatter={(value: number) => [`${value}%`, 'RAM']}
                     contentStyle={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}
+                    cursor={{ fill: theme.palette.action.hover }}
                   />
                   {selectedHasCeph && (
                     <ReferenceLine

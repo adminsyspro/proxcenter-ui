@@ -4,6 +4,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { cancelMigrationJob } from "@/lib/migration/pipeline"
 import { cancelWarmMigrationJob } from "@/lib/migration/warm/warm-pipeline"
+import { cancelV2vMigrationJob } from "@/lib/migration/v2v-pipeline"
 
 export const runtime = "nodejs"
 
@@ -31,11 +32,15 @@ export async function POST(
       return NextResponse.json({ error: `Cannot cancel a ${job.status} job` }, { status: 400 })
     }
 
-    // Signal both job registries: the job may be running on either the
-    // cold/live pipeline or the warm orchestrator, and each keeps its own
-    // cooperative cancel set. Signalling both is harmless for the other.
+    // Signal every job registry: the job may be running on the cold/live
+    // pipeline, the warm orchestrator or the virt-v2v pipeline, and each keeps
+    // its own cooperative cancel set. Signalling all three is harmless for the
+    // others. The virt-v2v one matters since #738: a job parked on the
+    // multi-boot gate polls that set, so without this the cancel would only
+    // change the row and leave the pipeline waiting until the gate expires.
     cancelMigrationJob(id)
     cancelWarmMigrationJob(id)
+    cancelV2vMigrationJob(id)
     await prisma.migrationJob.update({
       where: { id },
       data: { status: "cancelled", currentStep: "cancelled", completedAt: new Date() },

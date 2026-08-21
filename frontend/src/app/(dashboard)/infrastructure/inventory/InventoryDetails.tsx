@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { isSharedStorage } from '@/lib/proxmox/storage'
+import { putGuestConfig } from '@/lib/proxmox/guestConfigClient'
 
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
@@ -111,6 +112,8 @@ import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './components/ForcePowerOffButton'
+import RootChoiceButton, { isAwaitingRootChoice } from './components/RootChoiceButton'
+import { statusChipLabelKey, waitIconClass, waitTitleKey, isWaitDisplayKey } from './components/migrationWaitDisplay'
 import UsageBar from './components/UsageBar'
 import ConsolePreview from './components/ConsolePreview'
 import StatusChip from './components/StatusChip'
@@ -323,6 +326,12 @@ export default function InventoryDetails({
   const [migPveConnections, setMigPveConnections] = useState<any[]>([])
   const [migNodes, setMigNodes] = useState<any[]>([])
   const [migStorages, setMigStorages] = useState<any[]>([])
+  // Storage list load state. A slow PVE makes the storage read hit the API
+  // timeout and the route then answers 500 with { error }: without these two the
+  // Target Storage selector stayed empty and greyed out with no reason shown,
+  // and the operator read it as a locked field (#742).
+  const [migStoragesLoading, setMigStoragesLoading] = useState(false)
+  const [migStoragesError, setMigStoragesError] = useState<string | null>(null)
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
   const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
@@ -362,6 +371,7 @@ export default function InventoryDetails({
     migStartAfter, setMigStartAfter,
     migDiskPaths, setMigDiskPaths,
     migTempStorage, setMigTempStorage,
+    migV2vRoot, setMigV2vRoot,
     migType, setMigType,
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
@@ -378,7 +388,7 @@ export default function InventoryDetails({
   const [bulkMigLogsFilter, setBulkMigLogsFilter] = useState<string | null>(null)
   const bulkMigJobsRef = useRef(bulkMigJobs)
   bulkMigJobsRef.current = bulkMigJobs
-  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string } | null>(null)
+  const bulkMigConfigRef = useRef<{ sourceConnectionId: string; targetConnectionId: string; targetStorage: string; networkBridge: string; vlanTag?: number; migrationType: string; transferMode: string; startAfterMigration: boolean; convertDisksToQcow2: boolean; sourceType: string; tempStorage?: string; v2vRoot?: string } | null>(null)
   // Snapshot of host info when bulk dialog opens (avoids null data when selection changes)
   const [bulkMigHostInfo, setBulkMigHostInfo] = useState<any>(null)
   const [extHostMigrations, setExtHostMigrations] = useState<any[]>([])
@@ -707,6 +717,7 @@ export default function InventoryDetails({
     setMigTargetConn(''); setMigTargetNode(''); setMigTargetStorage('')
     setMigTargetVmid(''); setMigTargetVmidStatus('idle')
     setMigNodes([]); setMigStorages([]); setMigNodeOptions([])
+    setMigStoragesLoading(false); setMigStoragesError(null)
     if (esxiMigrateVm) { setMigJobId(null); setMigJob(null) }
     fetch('/api/v1/connections').then(r => r.json()).then(async (d) => {
       const pveConns = (d.data || d || []).filter((c: any) => c.type === 'pve')
@@ -742,9 +753,53 @@ export default function InventoryDetails({
     }).catch(() => {})
   }, [esxiMigrateVm, bulkMigOpen])
 
+  // Storage list loader, shared by the node-selection effect below and the
+  // dialog's Retry action: the failure mode is a timeout on a busy node, so a
+  // second attempt has a real chance of succeeding.
+  const loadMigStorages = useCallback(async (connId: string, node: string) => {
+    // Clear first: on a failure the selector must not keep listing the storages
+    // of the node that was selected before.
+    setMigStorages([]); setMigTargetStorage('')
+    setMigStoragesLoading(true); setMigStoragesError(null)
+    try {
+      const r = await fetch(`/api/v1/connections/${connId}/nodes/${node}/storages?content=images`)
+      const d = await r.json().catch(() => null)
+      // A 500 (storage read timed out) and a 403 (RBAC) both answer { error }:
+      // that body must never reach .filter, it used to throw a TypeError the
+      // empty catch swallowed, leaving the previous node's list in place.
+      if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`)
+      const list = Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : null
+      if (!list) throw new Error(d?.error || 'Unexpected response from the storage list')
+      const storages = list.filter((s: any) => {
+        const content = s.content || ''
+        return content.includes('images')
+      })
+      setMigStorages(storages)
+      if (storages.length > 0) {
+        const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
+        setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
+      }
+    } catch (e: any) {
+      setMigStoragesError(e?.message || 'Failed to load the storage list')
+    } finally {
+      setMigStoragesLoading(false)
+    }
+  }, [])
+
+  // Retry handed to the migrate dialogs. It resolves the node the list is read
+  // from the same way the effect below does ("__auto__" reads the first node of
+  // the selected cluster), so the dialogs never have to know that rule.
+  const retryMigStorages = useCallback(() => {
+    if (!migTargetConn || !migTargetNode) return
+    const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
+    const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
+    if (!fetchNode || fetchNode === '__auto__') return
+    loadMigStorages(migTargetConn, fetchNode)
+  }, [migTargetConn, migTargetNode, migNodeOptions, loadMigStorages])
+
   // Fetch storages, bridges, and check sshfs when node is selected
   useEffect(() => {
-    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null); return }
+    if (!migTargetConn || !migTargetNode) { setMigStorages([]); setMigTargetStorage(''); setMigStoragesLoading(false); setMigStoragesError(null); setMigBridges([]); setMigNetworkBridge(''); setMigSshfsAvailable(null); return }
     const connNodes = migNodeOptions.filter((o: any) => o.connId === migTargetConn)
     const fetchNode = migTargetNode === '__auto__' ? (connNodes[0]?.node || migTargetNode) : migTargetNode
     if (!fetchNode || fetchNode === '__auto__') return
@@ -844,17 +899,7 @@ export default function InventoryDetails({
         setMigDiskPaths(detectedDisks.join('\n'))
       }
     }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] }))
-    fetch(`/api/v1/connections/${migTargetConn}/nodes/${fetchNode}/storages?content=images`).then(r => r.json()).then(d => {
-      const storages = (d.data || d || []).filter((s: any) => {
-        const content = s.content || ''
-        return content.includes('images')
-      })
-      setMigStorages(storages)
-      if (storages.length > 0) {
-        const localLvm = storages.find((s: any) => s.storage === 'local-lvm')
-        setMigTargetStorage(localLvm ? 'local-lvm' : storages[0].storage)
-      }
-    }).catch(() => {})
+    loadMigStorages(migTargetConn, fetchNode)
     // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),
     // merged into one selector list. A migrated NIC accepts a VNet name in its
     // bridge= slot exactly like a vmbr, so nodes that use SDN are no longer stuck
@@ -878,7 +923,7 @@ export default function InventoryDetails({
         setMigNetworkBridge(vmbr0 ? 'vmbr0' : merged[0].iface)
       }
     }).catch(() => {})
-  }, [migTargetConn, migTargetNode, migNodeOptions.length])
+  }, [migTargetConn, migTargetNode, migNodeOptions.length, loadMigStorages])
 
   // Cleanup TasksBar restore callback on unmount
   useEffect(() => {
@@ -1002,6 +1047,7 @@ export default function InventoryDetails({
                   ...((job as any).vcenterCluster && { vcenterCluster: (job as any).vcenterCluster }),
                   ...((job as any).vcenterHost && { vcenterHost: (job as any).vcenterHost }),
                   ...(cfg.tempStorage && { tempStorage: cfg.tempStorage }),
+                  ...(cfg.v2vRoot && { v2vRoot: cfg.v2vRoot }),
                 }),
               })
               const d = await res.json()
@@ -2160,16 +2206,54 @@ return (
     return changed
   }, [data?.memoryInfo, data?.vmType, memory, balloon, balloonEnabled, swap])
 
+  /**
+   * Pousse un patch de configuration du guest et attend que PVE l'ait appliqué.
+   * La route répond 202 + upid quand la tâche qmconfig dépasse le budget de la
+   * requête : le retrait de RAM débranche les barrettes une par une, plusieurs
+   * secondes chacune, et l'ancien appel synchrone expirait pendant que PVE
+   * appliquait quand même le changement (#743). On continue donc de suivre la
+   * tâche côté navigateur au lieu de crier à l'erreur.
+   */
+  const pushGuestConfig = (
+    connId: string,
+    type: string,
+    node: string,
+    vmid: string,
+    patch: Record<string, any>,
+  ) => putGuestConfig(connId, type, node, vmid, patch, {
+    onPending: () => toast.info(t('inventoryPage.configTaskStillApplying')),
+    failedMessage: t('inventoryPage.configTaskFailed'),
+    timeoutMessage: t('inventoryPage.configTaskTimeout'),
+  })
+
+  /**
+   * Recharge le panneau et dit si PVE liste encore une des clés qu'on vient
+   * d'écrire comme en attente. C'est la seule source de vérité pour savoir si
+   * le changement est déjà actif (hotplug) ou s'il attend un arrêt/relance :
+   * l'état d'alimentation de la VM, lui, ne le dit pas.
+   */
+  const reloadVmDetails = async (patch?: Record<string, any>) => {
+    if (!selection) return false
+
+    const payload = await fetchDetails(selection)
+
+    setData(payload)
+    setLocalTags(payload?.tags || [])
+
+    if (!patch) return false
+
+    const pendingKeys = new Set<string>((payload as any)?.pendingKeys || [])
+
+    return Object.keys(patch).some(key => pendingKeys.has(key))
+  }
+
   // Sauvegarder la configuration CPU
   const saveCpuConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
-    // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
-    const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingCpu(true)
 
     try {
@@ -2192,48 +2276,25 @@ return (
       } else {
         configUpdate.cpulimit = 0
       }
-      
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configUpdate)
-        }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
 
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      // Recharger les données
-      const payload = await fetchDetails(selection)
+      await pushGuestConfig(connId, type, node, vmid, configUpdate)
 
-      setData(payload)
-      setLocalTags(payload.tags || [])
-      
-      // Message de succès avec avertissement si VM était running
-      if (wasRunning) {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.cpuConfigSaved'),
-          message: `⚠️ ${t('inventoryPage.vmRunningCpuRestartRequired')}`,
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      } else {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.cpuConfigSaved'),
-          message: t('inventoryPage.changesAppliedSuccessfully'),
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      }
+      const stillPending = await reloadVmDetails(configUpdate)
+
+      setConfirmAction({
+        action: 'info',
+        title: t('inventoryPage.cpuConfigSaved'),
+        message: stillPending
+          ? `⚠️ ${t('inventoryPage.vmRunningCpuRestartRequired')}`
+          : t('inventoryPage.changesAppliedSuccessfully'),
+        vmName: vmTitle,
+        onConfirm: async () => setConfirmAction(null)
+      })
     } catch (e: any) {
-      alert(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
+      // PVE a pu appliquer le changement même si on a perdu la main dessus :
+      // on rafraîchit avant de signaler, le panneau ne doit jamais mentir.
+      await reloadVmDetails().catch(() => {})
+      toast.error(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
     } finally {
       setSavingCpu(false)
     }
@@ -2242,13 +2303,10 @@ return (
   // Sauvegarder la configuration RAM
   const saveMemoryConfig = async () => {
     if (!selection || selection.type !== 'vm') return
-    
+
     const { connId, node, type, vmid } = parseVmId(selection.id)
-    
-    // Capturer le statut AVANT la sauvegarde (utiliser vmRealStatus si disponible)
-    const wasRunning = (data?.vmRealStatus || data?.status) === 'running'
     const vmTitle = data?.title
-    
+
     setSavingMemory(true)
 
     try {
@@ -2265,48 +2323,23 @@ return (
           configUpdate.balloon = 0
         }
       }
-      
-      const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(configUpdate)
-        }
-      )
-      
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
 
-        throw new Error(err?.error || `HTTP ${res.status}`)
-      }
-      
-      // Recharger les données
-      const payload = await fetchDetails(selection)
+      await pushGuestConfig(connId, type, node, vmid, configUpdate)
 
-      setData(payload)
-      setLocalTags(payload.tags || [])
-      
-      // Message de succès avec avertissement si VM était running (LXC applique les changements immédiatement)
-      if (wasRunning && type !== 'lxc') {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.ramConfigSaved'),
-          message: `⚠️ ${t('inventoryPage.vmRunningRamRestartRequired')}`,
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      } else {
-        setConfirmAction({
-          action: 'info',
-          title: t('inventoryPage.ramConfigSaved'),
-          message: t('inventoryPage.changesAppliedSuccessfully'),
-          vmName: vmTitle,
-          onConfirm: async () => setConfirmAction(null)
-        })
-      }
+      const stillPending = await reloadVmDetails(configUpdate)
+
+      setConfirmAction({
+        action: 'info',
+        title: t('inventoryPage.ramConfigSaved'),
+        message: stillPending
+          ? `⚠️ ${t('inventoryPage.vmRunningRamRestartRequired')}`
+          : t('inventoryPage.changesAppliedSuccessfully'),
+        vmName: vmTitle,
+        onConfirm: async () => setConfirmAction(null)
+      })
     } catch (e: any) {
-      alert(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
+      await reloadVmDetails().catch(() => {})
+      toast.error(`${t('inventoryPage.errorWhileSaving')}: ${e?.message || e}`)
     } finally {
       setSavingMemory(false)
     }
@@ -4040,6 +4073,13 @@ return vm?.isCluster ?? false
             // to be a silent five minute poll; it is now a state the operator can
             // see and act on (#614).
             const migAwaitingPowerOff = isAwaitingPowerOff(vmMigJob)
+            // Guest inspection found several bootable systems and the pipeline
+            // refuses to guess which one to convert; the run is parked until
+            // the operator picks one (#738).
+            const migAwaitingRootChoice = isAwaitingRootChoice(vmMigJob)
+            // Chip label resolved by the shared wait-display rules: an i18n key
+            // for every known state, raw step text otherwise.
+            const migChipLabel = statusChipLabelKey(vmMigJob)
 
             return (
               /* The column scrolls as a whole when the fixed tasks bar (issue #582) shrinks the
@@ -4114,7 +4154,7 @@ return vm?.isCluster ?? false
                       {vmMigJob && (
                         <Chip
                           size="small"
-                          label={vmMigJob.status === 'completed' ? t('inventoryPage.esxiMigration.completed') : vmMigJob.status === 'failed' ? t('inventoryPage.esxiMigration.failed') : vmMigJob.status === 'cancelled' ? t('inventoryPage.esxiMigration.cancelled') : migAwaitingPowerOff ? t('inventoryPage.esxiMigration.awaitingPowerOff') : migAwaitingOperator ? t('inventoryPage.esxiMigration.awaitingCutover') : vmMigJob.status === 'preparing_disks' ? t('inventoryPage.esxiMigration.preparingDisks') : (vmMigJob.currentStep || vmMigJob.status).replaceAll("_", ' ')}
+                          label={isWaitDisplayKey(migChipLabel) ? t(migChipLabel) : migChipLabel}
                           color={vmMigJob.status === 'completed' ? 'success' : vmMigJob.status === 'failed' ? 'error' : vmMigJob.status === 'cancelled' ? 'default' : 'primary'}
                           sx={{ height: 20, fontSize: 10, fontWeight: 600 }}
                         />
@@ -4151,8 +4191,10 @@ return vm?.isCluster ?? false
                         the gate waits for a human, so both the wait and the two
                         ways out of it have to be visible without scrolling. */}
                     {vmMigJob && !['completed', 'failed', 'cancelled'].includes(vmMigJob.status) && (() => {
-                      const awaiting = migAwaitingOperator || migAwaitingPowerOff
+                      const awaiting = migAwaitingOperator || migAwaitingPowerOff || migAwaitingRootChoice
                       const canCutover = canRequestCutover(vmMigJob)
+                      // Same key-or-raw contract as the chip label above.
+                      const migWaitTitle = waitTitleKey(vmMigJob)
 
                       return (
                         <Box sx={{ px: 2, pb: 2 }}>
@@ -4163,17 +4205,18 @@ return vm?.isCluster ?? false
                             bgcolor: awaiting ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
                           }}>
                             <i
-                              className={migAwaitingPowerOff ? 'ri-shut-down-line' : awaiting ? 'ri-pause-circle-line' : 'ri-loader-4-line'}
+                              className={waitIconClass(vmMigJob)}
                               style={{ fontSize: 20, color: awaiting ? theme.palette.primary.main : undefined, opacity: awaiting ? 1 : 0.5 }}
                             />
                             <Box sx={{ flex: 1, minWidth: 160 }}>
                               <Typography variant="body2" fontWeight={700}>
-                                {migAwaitingPowerOff
-                                  ? t('inventoryPage.esxiMigration.awaitingPowerOff')
-                                  : awaiting
-                                    ? t('inventoryPage.esxiMigration.awaitingCutover')
-                                    : (vmMigJob.currentStep || vmMigJob.status).replaceAll('_', ' ')}
+                                {isWaitDisplayKey(migWaitTitle) ? t(migWaitTitle) : migWaitTitle}
                               </Typography>
+                              {migAwaitingRootChoice && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {t('inventoryPage.esxiMigration.chooseRootBody')}
+                                </Typography>
+                              )}
                               {canCutover && (
                                 <Typography variant="caption" color="text.secondary">
                                   {t('inventoryPage.esxiMigration.estimatedDowntime')} ~{Math.round(vmMigJob.projectedDowntimeSec / 60)} min
@@ -4182,6 +4225,7 @@ return vm?.isCluster ?? false
                             </Box>
                             <WarmCutoverButton job={vmMigJob} />
                             <ForcePowerOffButton job={vmMigJob} />
+                            <RootChoiceButton job={vmMigJob} />
                             <Button
                               size="small"
                               variant="outlined"
@@ -4577,6 +4621,8 @@ return vm?.isCluster ?? false
         setMigDiskPaths={setMigDiskPaths}
         migTempStorage={migTempStorage}
         setMigTempStorage={setMigTempStorage}
+        migV2vRoot={migV2vRoot}
+        setMigV2vRoot={setMigV2vRoot}
         migType={migType}
         setMigType={setMigType}
         migTransferMode={migTransferMode}
@@ -4584,6 +4630,9 @@ return vm?.isCluster ?? false
         migPveConnections={migPveConnections}
         migNodes={migNodes}
         migStorages={migStorages}
+        migStoragesLoading={migStoragesLoading}
+        migStoragesError={migStoragesError}
+        retryMigStorages={retryMigStorages}
         migSshfsAvailable={migSshfsAvailable}
         vcenterPreflight={vcenterPreflight}
         setVcenterPreflight={setVcenterPreflight}

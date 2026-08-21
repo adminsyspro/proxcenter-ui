@@ -72,6 +72,15 @@ describe('POST /api/v1/orchestrator/replication/plans/[id]/test-failover', () =>
     expect(testFailoverMock).toHaveBeenCalledWith('plan-1', { restore_points: restorePoints })
   })
 
+  it('forwards network_isolated and screenshot_delay_seconds to client.testFailover', async () => {
+    await callRoute(POST as Parameters<typeof callRoute>[0], {
+      params: { id: 'plan-1' },
+      body: { network_isolated: false, screenshot_delay_seconds: 180 },
+    })
+
+    expect(testFailoverMock).toHaveBeenCalledWith('plan-1', { network_isolated: false, screenshot_delay_seconds: 180 })
+  })
+
   it('still succeeds with an empty body, calling testFailover with undefined', async () => {
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
       params: { id: 'plan-1' },

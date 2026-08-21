@@ -538,7 +538,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.delete<{ status: string }>(`/replication/plans/${id}`)
   }
 
-  testFailover(planId: string, body?: { network_isolated?: boolean; restore_points?: Record<number, string> }) {
+  testFailover(planId: string, body?: { network_isolated?: boolean; restore_points?: Record<number, string>; screenshot_delay_seconds?: number }) {
     return this.post<any>(`/replication/plans/${planId}/test-failover`, body)
   }
 

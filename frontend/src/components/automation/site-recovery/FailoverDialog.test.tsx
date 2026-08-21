@@ -162,12 +162,12 @@ describe('FailoverDialog restore-point selection (issue #664)', () => {
     expect(onConfirm).toHaveBeenCalledWith({ restorePoints: { 100: 'snap-2' } })
   })
 
-  it('falls back to onConfirm() with no options when Latest stays selected', async () => {
+  it('omits restorePoints (but keeps the network/delay defaults) when Latest stays selected', async () => {
     const { onConfirm } = renderDialog({ type: 'test', restorePoints: restorePoints() })
 
     await userEvent.click(screen.getByRole('button', { name: 'Test Failover' }))
 
-    expect(onConfirm).toHaveBeenCalledWith(undefined)
+    expect(onConfirm).toHaveBeenCalledWith({ networkIsolated: true, screenshotDelaySeconds: 45 })
   })
 
   it('hides selectors and shows the info alert in degraded mode (restore points failed to load)', () => {
@@ -536,5 +536,139 @@ describe('FailoverDialog camera button on rehydrated results (issue #664 follow-
 
     const previewImg = await screen.findByRole('img')
     expect(previewImg).toHaveAttribute('src', '/api/v1/orchestrator/replication/executions/exec-1/screenshots/100')
+  })
+})
+
+describe('FailoverDialog test-failover options (issues #744, #747)', () => {
+  const networkConnectedWarning = 'The DR VMs will boot with their production addresses on the mapped target bridges. Only run this where the DR site is not bridged to production, otherwise addresses will collide.'
+
+  it('shows the network isolation switch and screenshot delay field only for a test failover with no execution yet', () => {
+    renderDialog({ type: 'test', execution: null })
+
+    expect(screen.getByRole('switch', { name: 'Network isolation' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Boot screenshot delay' })).toBeInTheDocument()
+  })
+
+  it('hides the options block once a test execution exists, showing the status chip instead', () => {
+    renderDialog({ type: 'test', execution: execution() })
+
+    expect(screen.queryByRole('switch', { name: 'Network isolation' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: 'Boot screenshot delay' })).not.toBeInTheDocument()
+    expect(screen.getByText('Network Isolated')).toBeInTheDocument()
+  })
+
+  it('does not show the options block for a real failover', () => {
+    renderDialog({ type: 'failover', execution: null })
+
+    expect(screen.queryByRole('switch', { name: 'Network isolation' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton', { name: 'Boot screenshot delay' })).not.toBeInTheDocument()
+  })
+
+  it('shows the network-connected warning only after the isolation switch is turned off', async () => {
+    renderDialog({ type: 'test', execution: null })
+
+    expect(screen.queryByText(networkConnectedWarning)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Network isolation' }))
+
+    expect(screen.getByText(networkConnectedWarning)).toBeInTheDocument()
+  })
+
+  it('hides the warning again once the switch is turned back on', async () => {
+    renderDialog({ type: 'test', execution: null })
+
+    const isolationSwitch = screen.getByRole('switch', { name: 'Network isolation' })
+    await userEvent.click(isolationSwitch)
+    expect(screen.getByText(networkConnectedWarning)).toBeInTheDocument()
+
+    await userEvent.click(isolationSwitch)
+
+    expect(screen.queryByText(networkConnectedWarning)).not.toBeInTheDocument()
+  })
+
+  it('sends the default networkIsolated true and screenshotDelaySeconds 45 when nothing is touched', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', execution: null })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test Failover' }))
+
+    expect(onConfirm).toHaveBeenCalledWith({ networkIsolated: true, screenshotDelaySeconds: 45 })
+  })
+
+  it('sends networkIsolated false and the edited delay after interacting with the options', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', execution: null })
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Network isolation' }))
+    const delayInput = screen.getByRole('spinbutton', { name: 'Boot screenshot delay' })
+    await userEvent.clear(delayInput)
+    await userEvent.type(delayInput, '180')
+    await userEvent.click(screen.getByRole('button', { name: 'Test Failover' }))
+
+    expect(onConfirm).toHaveBeenCalledWith({ networkIsolated: false, screenshotDelaySeconds: 180 })
+  })
+
+  it('disables Confirm and never calls onConfirm once the screenshot delay is cleared', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', execution: null })
+
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Boot screenshot delay' }))
+
+    const confirmButton = screen.getByRole('button', { name: 'Test Failover' })
+    expect(confirmButton).toBeDisabled()
+
+    // MUI sets `pointer-events: none` on a disabled button, which
+    // userEvent.click refuses to target, so use fireEvent (a plain DOM
+    // click) to prove the native `disabled` attribute blocks the handler.
+    fireEvent.click(confirmButton)
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('disables Confirm and never calls onConfirm once the screenshot delay exceeds the 600s cap', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', execution: null })
+
+    const delayInput = screen.getByRole('spinbutton', { name: 'Boot screenshot delay' })
+    await userEvent.clear(delayInput)
+    await userEvent.type(delayInput, '900')
+
+    const confirmButton = screen.getByRole('button', { name: 'Test Failover' })
+    expect(confirmButton).toBeDisabled()
+
+    fireEvent.click(confirmButton)
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('disables Confirm when the screenshot delay falls under the 5s floor', async () => {
+    const { onConfirm } = renderDialog({ type: 'test', execution: null })
+
+    const delayInput = screen.getByRole('spinbutton', { name: 'Boot screenshot delay' })
+    await userEvent.clear(delayInput)
+    await userEvent.type(delayInput, '0')
+
+    const confirmButton = screen.getByRole('button', { name: 'Test Failover' })
+    expect(confirmButton).toBeDisabled()
+
+    fireEvent.click(confirmButton)
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('shows the "network connected" chip variant when the execution ran with the network connected', () => {
+    renderDialog({ type: 'test', execution: execution({ network_isolated: false }) })
+
+    expect(screen.getByText('Network connected')).toBeInTheDocument()
+    expect(screen.queryByText('Network Isolated')).not.toBeInTheDocument()
+  })
+
+  it('shows the "network isolated" chip variant by default (network_isolated not false)', () => {
+    renderDialog({ type: 'test', execution: execution() })
+
+    expect(screen.getByText('Network Isolated')).toBeInTheDocument()
+    expect(screen.queryByText('Network connected')).not.toBeInTheDocument()
+  })
+
+  it('still calls onConfirm without networkIsolated/screenshotDelaySeconds for a real failover', async () => {
+    const { onConfirm } = renderDialog({ type: 'failover', execution: null })
+
+    await userEvent.type(screen.getByPlaceholderText('Prod DR'), 'Prod DR')
+    await userEvent.click(screen.getByRole('button', { name: 'Execute Failover' }))
+
+    expect(onConfirm).toHaveBeenCalledWith(undefined)
   })
 })

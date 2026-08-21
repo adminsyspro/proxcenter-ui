@@ -679,6 +679,18 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user }) {
+      // Repair accounts created while the Community super-admin grant was
+      // wrongly withheld (issue #755): Community hides the role picker, so
+      // without this the operator has no way to give them any right at all.
+      // No-op on every other installation, and on any user who already holds
+      // a grant. Never allowed to block a login that already succeeded.
+      try {
+        const { backfillCommunitySuperAdmin } = await import("@/lib/auth/communitySuperAdmin")
+        await backfillCommunitySuperAdmin(user.id)
+      } catch (e) {
+        console.error("[auth] Community super-admin backfill failed:", e)
+      }
+
       // Audit login réussi
       const { audit } = await import("@/lib/audit")
 

@@ -372,6 +372,23 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
     }
   }, [selectedTenants, selectedRole, enableTenantMgmt, currentSessionTenantId, user])
 
+  // The account write already succeeded when a role write fails, so the list
+  // must still refresh, but the dialog stays open with the reason instead of
+  // closing on an account whose rights are not what the operator just picked.
+  // Left silent, this produced accounts that could see nothing at all and no
+  // error anywhere to explain it (issue #755).
+  const reportRoleWriteFailure = async res => {
+    const data = await res.json().catch(() => ({}))
+
+    onSave()
+    setError(
+      data.error ||
+        (t
+          ? t('usersPage.roleAssignmentFailed')
+          : 'The account was saved but its role could not be assigned. Check its permissions.')
+    )
+  }
+
   const handleSave = async () => {
     setError('')
 
@@ -481,15 +498,17 @@ return
         if (isEdit && user.roles) {
           for (const role of user.roles) {
             if (role.assignment_id) {
-              await fetch(`/api/v1/rbac/assignments/${role.assignment_id}`, {
+              const dropRes = await fetch(`/api/v1/rbac/assignments/${role.assignment_id}`, {
                 method: 'DELETE'
               })
+
+              if (!dropRes.ok) return reportRoleWriteFailure(dropRes)
             }
           }
         }
 
         if (selectedRole) {
-          await fetch('/api/v1/rbac/assignments', {
+          const assignRes = await fetch('/api/v1/rbac/assignments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -500,6 +519,8 @@ return
               scope_target: null
             })
           })
+
+          if (!assignRes.ok) return reportRoleWriteFailure(assignRes)
         }
       }
 

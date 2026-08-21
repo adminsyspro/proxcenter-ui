@@ -8,7 +8,7 @@
  * picker instead. Detection uses getServerLicense() (fail-closed to
  * Community), the same signal that drives RBAC picker visibility in the UI.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 const checkPermissionMock = vi.fn()
@@ -159,13 +159,17 @@ describe("POST /api/v1/users — Community auto super-admin (issue #512)", () =>
 })
 
 /**
- * The auto-grant may only fire on a POSITIVELY established Community verdict.
+ * The auto-grant may only fire on a trustworthy Community verdict.
  * getServerLicense() fails closed to a Community-looking payload whenever the
  * orchestrator is unreachable or answers non-2xx, and an expired Enterprise
- * licence also reports enterprise:false — granting global super-admin on
+ * licence also reports enterprise:false: granting global super-admin on
  * either would be a privilege escalation (issue #633 follow-up).
+ *
+ * A resolved verdict is not the test though, because a Community install has
+ * no orchestrator to answer and so never resolves. What tells the two apart is
+ * whether an orchestrator is configured at all (issue #755).
  */
-describe("POST /api/v1/users, the grant needs a resolved licence (issue #633)", () => {
+describe("POST /api/v1/users, the grant needs a trustworthy verdict (issues #633, #755)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     checkPermissionMock.mockResolvedValue(null)
@@ -173,7 +177,12 @@ describe("POST /api/v1/users, the grant needs a resolved licence (issue #633)", 
     userFindUniqueMock.mockResolvedValue(null)
   })
 
-  it("does not grant super-admin when the license verdict is unresolved", async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it("does not grant super-admin when a configured orchestrator failed to answer", async () => {
+    vi.stubEnv("ORCHESTRATOR_URL", "http://orchestrator:8080")
     getServerLicenseMock.mockResolvedValue({
       enterprise: false, edition: "community", licensed: false, expired: false,
       features: [], options: [], resolved: false,
@@ -184,6 +193,30 @@ describe("POST /api/v1/users, the grant needs a resolved licence (issue #633)", 
     expect(rbacUserRoleCreateMock).not.toHaveBeenCalled()
     expect(userCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ role: "user" }) }),
+    )
+  })
+
+  // The #755 regression itself: this is what every Community install looks
+  // like, and it produced accounts that could see nothing at all.
+  it("grants super-admin when no orchestrator is configured, unresolved verdict and all", async () => {
+    vi.stubEnv("ORCHESTRATOR_URL", "")
+    getServerLicenseMock.mockResolvedValue({
+      enterprise: false, edition: "community", licensed: false, expired: false,
+      features: [], options: [], resolved: false,
+    })
+    const res = await createUser()
+
+    expect(res.status).toBe(200)
+    expect(userCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ role: "super_admin" }) }),
+    )
+    expect(rbacUserRoleCreateMock).toHaveBeenCalledTimes(1)
+    expect(rbacUserRoleCreateMock.mock.calls[0][0].data).toMatchObject({
+      roleId: "role_super_admin",
+      scopeType: "global",
+    })
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ details: expect.objectContaining({ superAdminGranted: true }) }),
     )
   })
 

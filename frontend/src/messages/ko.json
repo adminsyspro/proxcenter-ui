@@ -5717,6 +5717,7 @@
     "roleDefinesPermissions": "역할이 사용자 권한을 정의합니다",
     "protectedRolesNote": "Super Admin 및 Provider Admin은 보안 › RBAC › 할당에서 관리됩니다.",
     "communityAdminNotice": "Community 에디션에서는 모든 사용자가 전체 관리자 권한을 갖습니다. 범위 지정 역할 기반 권한은 Enterprise 에디션이 필요합니다.",
+    "roleAssignmentFailed": "계정은 저장되었지만 역할을 할당하지 못했습니다. 사용자가 로그인하기 전에 권한을 확인하세요.",
     "newPassword": "새 비밀번호 (현재 비밀번호를 유지하려면 비워 두세요)",
     "minChars": "최소 8자",
     "accountActive": "계정 활성",

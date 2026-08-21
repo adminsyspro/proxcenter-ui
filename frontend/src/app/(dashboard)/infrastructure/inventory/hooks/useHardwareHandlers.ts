@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 
+import { putGuestConfig } from '@/lib/proxmox/guestConfigClient'
+
 import { parseVmId, parseNodeId, fetchDetails } from '../helpers'
 import type { InventorySelection, DetailsPayload, ActiveDialog } from '../types'
 import { useNodeData } from './useNodeData'
@@ -44,26 +46,28 @@ export function useHardwareHandlers({
 
   // ==================== HARDWARE HANDLERS ====================
 
+  /**
+   * Toute écriture de configuration passe par là. La route répond 202 + upid
+   * quand PVE a accepté le changement mais l'applique encore (allocation de
+   * disque sur un stockage lent, hotplug) : il faut suivre la tâche, pas
+   * annoncer un échec (#743, #332).
+   */
+  const writeConfig = useCallback(
+    (connId: string, type: string, node: string, vmid: string, patch: Record<string, any>) =>
+      putGuestConfig(connId, type, node, vmid, patch, {
+        failedMessage: t('inventoryPage.configTaskFailed'),
+        timeoutMessage: t('inventoryPage.configTaskTimeout'),
+      }),
+    [t],
+  )
+
   // Sauvegarder un nouveau disque
   const handleSaveDisk = useCallback(async (diskConfig: any) => {
     if (!selection || selection.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(diskConfig)
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, diskConfig)
 
     // Recharger les données
     const payload = await fetchDetails(selection)
@@ -77,20 +81,7 @@ export function useHardwareHandlers({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(networkConfig)
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, networkConfig)
 
     // Recharger les données
     const payload = await fetchDetails(selection)
@@ -104,20 +95,7 @@ export function useHardwareHandlers({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scsihw: controller })
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, { scsihw: controller })
 
     // Recharger les données
     const payload = await fetchDetails(selection)
@@ -146,20 +124,7 @@ export function useHardwareHandlers({
       body = { [selectedDisk.id]: diskConfig }
     }
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, body)
 
     // Recharger les données
     const payload = await fetchDetails(selection)
@@ -195,11 +160,7 @@ export function useHardwareHandlers({
             const newDevices = devices.filter(d => d !== selectedDisk.id)
             const newBoot = newDevices.length > 0 ? `order=${newDevices.join(';')}` : 'order='
             // Update boot order first (remove the device from it)
-            await fetch(configUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ boot: newBoot }),
-            })
+            await writeConfig(connId, type, node, vmid, { boot: newBoot })
           }
         }
       }
@@ -209,17 +170,7 @@ export function useHardwareHandlers({
       // is surfaced to the user. Not a silent failure.
     }
 
-    const res = await fetch(configUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ delete: selectedDisk.id })
-    })
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, { delete: selectedDisk.id })
 
     // Recharger les données
     const payload = await fetchDetails(selection)
@@ -298,20 +249,7 @@ export function useHardwareHandlers({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const res = await fetch(
-      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ delete: selectedNetwork.id })
-      }
-    )
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-
-      throw new Error(err?.error || `HTTP ${res.status}`)
-    }
+    await writeConfig(connId, type, node, vmid, { delete: selectedNetwork.id })
 
     // Recharger les données
     const payload = await fetchDetails(selection)

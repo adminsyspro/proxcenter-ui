@@ -1,3 +1,5 @@
+import { parseMemoryProperty } from '@/lib/proxmox/memoryProperty'
+
 import type { InventorySelection, DetailsPayload, SeriesPoint, RrdTimeframe, Status } from './types'
 
 /* ------------------------------------------------------------------ */
@@ -16,6 +18,33 @@ export const TAG_PALETTE = [
   '#455a64',
   '#7a7a00',
 ]
+
+/* ------------------------------------------------------------------ */
+/* Hotplug                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les périphériques que PVE sait brancher à chaud, dans l'ordre de sa propre
+ * liste `hotplug`. Icônes reprises du vocabulaire du produit (le disque et le
+ * réseau sont celles des sections Matériel), définies ici pour que le tableau
+ * des Options et son dialogue d'édition ne puissent pas diverger.
+ */
+export const HOTPLUG_DEVICES = [
+  { key: 'disk', label: 'Disk', icon: 'ri-hard-drive-2-line' },
+  { key: 'network', label: 'Network', icon: 'ri-global-line' },
+  { key: 'usb', label: 'USB', icon: 'ri-usb-line' },
+  { key: 'memory', label: 'Memory', icon: 'ri-ram-line' },
+  { key: 'cpu', label: 'CPU', icon: 'ri-cpu-line' },
+] as const
+
+export type HotplugDevice = (typeof HOTPLUG_DEVICES)[number]
+
+/** Retrouve un périphérique de hotplug par sa clé PVE, insensible à la casse. */
+export function hotplugDevice(key: string): HotplugDevice | undefined {
+  const wanted = key.trim().toLowerCase()
+
+  return HOTPLUG_DEVICES.find(device => device.key === wanted)
+}
 
 export function hashStringToInt(str: string) {
   let h = 0
@@ -1245,13 +1274,21 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           } : undefined,
         }
 
+        // PVE's `memory` is a property string whose default key is the online
+        // amount, so read that out instead of dropping a string into a
+        // numeric field.
+        const memoryCurrent = parseMemoryProperty(config.memory).current ?? 512
+        const pendingMemory = pending.memory !== undefined
+          ? (parseMemoryProperty(pending.memory).current ?? pending.memory)
+          : undefined
+
         memoryInfo = {
-          memory: config.memory || 512,
-          balloon: config.balloon !== undefined ? config.balloon : config.memory,
+          memory: memoryCurrent,
+          balloon: config.balloon !== undefined ? config.balloon : memoryCurrent,
           shares: config.shares,
           swap: config.swap ?? 0,
           pending: (pending.memory !== undefined || pending.balloon !== undefined || pending.swap !== undefined) ? {
-            memory: pending.memory,
+            memory: pendingMemory,
             balloon: pending.balloon,
             swap: pending.swap,
           } : undefined,

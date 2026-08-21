@@ -75,7 +75,7 @@ const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachCo
 const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow } from '../helpers'
+import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow, hotplugDevice } from '../helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
@@ -2354,9 +2354,20 @@ return (
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
                                   <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                                    {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim().toLowerCase()).filter(Boolean).map((h: string) => (
-                                      <Chip key={h} label={{ disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }[h] || h} size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 22 }} />
-                                    ))}
+                                    {(data.optionsInfo?.hotplug || 'disk,network,usb').split(',').map((h: string) => h.trim().toLowerCase()).filter(Boolean).map((h: string) => {
+                                      const device = hotplugDevice(h)
+
+                                      return (
+                                        <Chip
+                                          key={h}
+                                          icon={device ? <Box component="i" className={device.icon} sx={{ fontSize: 14 }} /> : undefined}
+                                          label={device?.label || h}
+                                          size="small"
+                                          variant="outlined"
+                                          sx={{ fontSize: '0.75rem', height: 22 }}
+                                        />
+                                      )
+                                    })}
                                   </Box>
                                   {pendingChip('hotplug')}
                                 </td>

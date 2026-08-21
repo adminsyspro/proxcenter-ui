@@ -64,7 +64,7 @@ import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
 
 import type { InventorySelection, DetailsPayload } from '../types'
-import { parseNodeId, parseVmId } from '../helpers'
+import { parseNodeId, parseVmId, HOTPLUG_DEVICES } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
@@ -1495,8 +1495,6 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               </FormControl>
             )}
             {editOptionDialog?.type === 'hotplug' && (() => {
-              const fields = ['disk', 'network', 'usb', 'memory', 'cpu']
-              const fieldLabels: Record<string, string> = { disk: 'Disk', network: 'Network', usb: 'USB', memory: 'Memory', cpu: 'CPU' }
               const raw = typeof editOptionValue === 'string' ? editOptionValue.toLowerCase() : ''
               const current = raw.split(',').map((s: string) => s.trim()).filter(Boolean)
               const toggle = (field: string) => {
@@ -1505,11 +1503,16 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
               }
               return (
                 <Stack spacing={1}>
-                  {fields.map(field => (
+                  {HOTPLUG_DEVICES.map(device => (
                     <FormControlLabel
-                      key={field}
-                      control={<Checkbox checked={current.includes(field)} onChange={() => toggle(field)} />}
-                      label={fieldLabels[field] || field}
+                      key={device.key}
+                      control={<Checkbox checked={current.includes(device.key)} onChange={() => toggle(device.key)} />}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box component="i" className={device.icon} sx={{ fontSize: 16, opacity: 0.6 }} />
+                          {device.label}
+                        </Box>
+                      }
                     />
                   ))}
                 </Stack>

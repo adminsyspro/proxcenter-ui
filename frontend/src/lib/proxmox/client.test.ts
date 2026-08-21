@@ -364,6 +364,27 @@ describe("isFailoverWorthy", () => {
     expect(isFailoverWorthy("response-timeout", false)).toBe(true)
   })
 
+  it("does NOT count a response timeout on a write, whatever the budget (#743)", () => {
+    // A slow write is the one case where the host provably received the
+    // request and kept applying it after we gave up: PVE sleeps 3s per DIMM
+    // while unplugging memory. Counting it would arm the breaker and then
+    // REPLAY the same write on another node.
+    expect(isFailoverWorthy("response-timeout", false, false)).toBe(false)
+    expect(isFailoverWorthy("response-timeout", true, false)).toBe(false)
+  })
+
+  it("keeps counting a response timeout on a read, which is what replaySafe defaults to", () => {
+    expect(isFailoverWorthy("response-timeout", false, true)).toBe(true)
+    expect(isFailoverWorthy("response-timeout", false)).toBe(true)
+  })
+
+  it("still fails over a write when the host is unreachable, that request never landed", () => {
+    // A refused connection or a handshake that never completed says the write
+    // was not delivered, so trying another node cannot apply it twice.
+    expect(isFailoverWorthy("connect-timeout", false, false)).toBe(true)
+    expect(isFailoverWorthy("hard-network", false, false)).toBe(true)
+  })
+
   it("decides the whole class times budget matrix", () => {
     // Exhaustive table: adding a class without deciding its failover meaning
     // shows up right here.
@@ -570,6 +591,7 @@ describe("the long-budget threshold inside pveFetch", () => {
   async function callAgainstSilentServer(
     connId: string,
     fetchOpts: { timeoutMs?: number; slowRead?: boolean } = {},
+    init: RequestInit = {},
   ) {
     process.env.PVE_TIMEOUT_MS = String(TINY_BUDGET_MS)
     process.env.PVE_SLOW_READ_TIMEOUT_MS = String(TINY_SLOW_BUDGET_MS)
@@ -590,7 +612,7 @@ describe("the long-budget threshold inside pveFetch", () => {
       .pveFetch(
         { baseUrl, apiToken: "root@pam!vitest=secret", id: connId },
         "/nodes/pve1/storage",
-        {},
+        init,
         fetchOpts,
       )
       .then(() => null)
@@ -629,6 +651,31 @@ describe("the long-budget threshold inside pveFetch", () => {
     const { errorClass, failures } = await callAgainstSilentServer("conn-slow-read", { slowRead: true })
     expect(errorClass).toBe("response-timeout")
     expect(failures).toBe(0)
+  })
+
+  it.each(["POST", "PUT", "DELETE"])(
+    "does not count a %s that times out on the default budget (#743)",
+    async method => {
+      // The config write that started all this: PVE's synchronous handler
+      // outlives our budget while it unplugs memory, and replaying it on
+      // another node would apply the change twice.
+      const { errorClass, failures } = await callAgainstSilentServer(
+        `conn-write-${method}`,
+        {},
+        { method, body: "memory=4096" },
+      )
+
+      expect(errorClass).toBe("response-timeout")
+      expect(failures).toBe(0)
+    },
+  )
+
+  it("still counts a GET that times out on the default budget", async () => {
+    // The control: same server, same budget, only the method differs.
+    const { errorClass, failures } = await callAgainstSilentServer("conn-read-get", {}, { method: "GET" })
+
+    expect(errorClass).toBe("response-timeout")
+    expect(failures).toBe(1)
   })
 
   it("lets an explicit timeoutMs win over slowRead", async () => {

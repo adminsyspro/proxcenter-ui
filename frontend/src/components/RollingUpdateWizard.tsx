@@ -731,7 +731,7 @@ export default function RollingUpdateWizard({
                               )}
                             </Box>
                           }
-                          secondaryTypographyProps={{ component: 'div' }}
+                          slotProps={{ secondary: { component: 'div' } }}
                         />
                       </ListItem>
                     )

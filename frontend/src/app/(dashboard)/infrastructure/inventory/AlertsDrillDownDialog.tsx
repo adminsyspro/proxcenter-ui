@@ -187,7 +187,7 @@ export default function AlertsDrillDownDialog({
               )}
             </Stack>
           }
-          secondaryTypographyProps={{ component: 'div' }}
+          slotProps={{ secondary: { component: 'div' } }}
         />
       </ListItem>
     )

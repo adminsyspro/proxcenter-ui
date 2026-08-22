@@ -458,7 +458,8 @@
       "backup": "백업",
       "storage": "스토리지",
       "monitoring": "모니터링",
-      "automation": "자동화"
+      "automation": "자동화",
+      "other": "기타"
     },
     "widgetNames": {
       "kpiClusters": "클러스터 / 노드",
@@ -490,7 +491,8 @@
       "backupCalendar": "백업 캘린더",
       "nodesGauges": "노드 게이지",
       "clustersGauges": "클러스터 게이지",
-      "clusterHealth": "클러스터 상태 점수"
+      "clusterHealth": "클러스터 상태 점수",
+      "themeLogo": "테마 로고"
     },
     "widgetDescs": {
       "kpiClusters": "클러스터 및 노드 수 표시",
@@ -522,7 +524,8 @@
       "nodesGauges": "노드별 원형 게이지 (CPU, RAM, 디스크)",
       "clustersGauges": "클러스터별 게이지, 스파크라인 및 상태 점수",
       "clusterHealth": "핵심 지표가 포함된 상태 점수",
-      "sectionHeader": "접을 수 있는 섹션 구분선"
+      "sectionHeader": "접을 수 있는 섹션 구분선",
+      "themeLogo": "현재 테마의 로고를 표시합니다"
     },
     "widgetDrs": {
       "automatic": "자동",

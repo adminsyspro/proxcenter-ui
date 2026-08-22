@@ -50,6 +50,9 @@ const SectionHeaderWidget = dynamic(() => import('./widgets/SectionHeaderWidget'
 const DrsStatusWidget = dynamic(() => import('./widgets/DrsStatusWidget'), { ssr: false })
 const SiteRecoveryWidget = dynamic(() => import('./widgets/SiteRecoveryWidget'), { ssr: false })
 
+// Other
+const ThemeLogoWidget = dynamic(() => import('./widgets/ThemeLogoWidget'), { ssr: false })
+
 export const WIDGET_REGISTRY = {
   'section-header': {
     type: 'section-header',
@@ -411,6 +414,22 @@ export const WIDGET_REGISTRY = {
     requiresInfraScope: true,
     component: SiteRecoveryWidget,
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OTHER
+  // ═══════════════════════════════════════════════════════════════════════════
+  'theme-logo': {
+    type: 'theme-logo',
+    name: 'Theme Logo',
+    description: 'Logo of the current theme',
+    icon: 'ri-palette-line',
+    category: 'other',
+    defaultSize: { w: 2, h: 2 },
+    minSize: { w: 1, h: 1 },
+    maxSize: { w: 12, h: 20 },
+    noContainer: true,
+    component: ThemeLogoWidget,
+  },
 }
 
 export const WIDGET_CATEGORIES = [
@@ -420,6 +439,7 @@ export const WIDGET_CATEGORIES = [
   { id: 'storage', name: 'Storage', icon: 'ri-hard-drive-2-line' },
   { id: 'monitoring', name: 'Monitoring', icon: 'ri-alarm-warning-line' },
   { id: 'automation', name: 'Automation', icon: 'ri-robot-2-line' },
+  { id: 'other', name: 'Other', icon: 'ri-more-line' },
 ]
 
 export function getWidgetsByCategory(category, opts = {}) {

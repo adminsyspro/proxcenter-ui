@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
-import { ResponsiveGridLayout } from 'react-grid-layout'
+import { ResponsiveGridLayout, getCompactor } from 'react-grid-layout'
 
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
@@ -12,6 +12,7 @@ import {
 } from '@mui/material'
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory, isWidgetVisibleForScope } from './widgetRegistry'
+import { computeReclaimedRows, yShiftFor } from './layoutReclaim'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 import { CardsSkeleton } from '@/components/skeletons'
 import { useWidgetVisibility } from '@/hooks/useWidgetVisibility'
@@ -20,6 +21,11 @@ import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
 const GRID_COLS = { lg: 12, md: 12, sm: 12, xs: 12, xxs: 12 }
 const ROW_HEIGHT = 40
 const MARGIN = [6, 4]
+
+// react-grid-layout v2 configures compaction through a compactor object; the
+// v1 compactType/preventCollision props are silently ignored. Free placement:
+// no compaction, no overlap, dropping onto an occupied spot is refused.
+const FREE_PLACEMENT_COMPACTOR = getCompactor(null, false, true)
 
 const TIME_RANGES = [
   { value: 'hour', label: '1h' },
@@ -468,15 +474,25 @@ return hidden
   const visibleLayout = (editMode ? layout : layout.filter(w => !hiddenBySection.has(w.id)))
     .filter(w => isWidgetVisibleForScope(w.type, { hasInfraScope, hiddenWidgets }))
 
+  // View mode only: close the rows freed by hidden widgets (display-time shift,
+  // never saved: handleLayoutChange is a no-op outside edit mode).
+  const visibleIds = new Set(visibleLayout.map(w => w.id))
+  const reclaimedRows = editMode
+    ? []
+    : computeReclaimedRows(
+        visibleLayout.map(w => ({ y: w.y, h: WIDGET_REGISTRY[w.type]?.isSection ? 0.5 : w.h })),
+        layout.filter(w => !visibleIds.has(w.id))
+      )
+
   // Convertir notre layout en format react-grid-layout (registry overrides saved min/max)
   const gridLayout = visibleLayout.map(w => {
     const def = WIDGET_REGISTRY[w.type]
 
-    
+
 return {
       i: w.id,
       x: w.x,
-      y: w.y,
+      y: w.y - yShiftFor(reclaimedRows, w.y),
       w: w.w,
       h: def?.isSection ? (editMode ? 1 : 0.5) : w.h,
       minW: def?.minSize?.w ?? w.minW ?? 2,
@@ -871,7 +887,7 @@ return () => document.removeEventListener('fullscreenchange', handler)
             draggableHandle=".widget-drag-handle"
             onLayoutChange={(currentLayout, allLayouts) => handleLayoutChange(allLayouts.lg || currentLayout)}
             useCSSTransforms={true}
-            compactType="vertical"
+            compactor={FREE_PLACEMENT_COMPACTOR}
           >
           {visibleLayout.map((config) => (
             <div key={config.id}>

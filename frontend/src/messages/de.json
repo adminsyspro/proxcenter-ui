@@ -7014,6 +7014,7 @@
     "failedReleaseConnection": "Verbindung konnte nicht freigegeben werden",
     "failedLoadConnections": "Verbindungen konnten nicht geladen werden",
     "vmidRange": "VMID-Bereich (optional)",
+    "vmidRangeColumn": "VMID-Bereich",
     "vmidRangeStart": "Erste VMID",
     "vmidRangeEnd": "Letzte VMID",
     "vmidRangeHelp": "Neue über ProxCenter erstellte VMs und Container erhalten eine VMID aus diesem Bereich. Bestehende Gäste sind nicht betroffen.",

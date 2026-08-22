@@ -187,6 +187,7 @@ export default function AlertsDrillDownDialog({
               )}
             </Stack>
           }
+          slotProps={{ secondary: { component: 'div' } }}
         />
       </ListItem>
     )

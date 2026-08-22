@@ -476,6 +476,16 @@ export default function TenantsTab() {
       ),
     },
     {
+      field: 'vmidRange',
+      headerName: t('tenants.vmidRangeColumn'),
+      width: 150,
+      valueGetter: (_value, row) => row.vmidRangeStart ?? null,
+      renderCell: (params) =>
+        params.row.vmidRangeStart != null && params.row.vmidRangeEnd != null
+          ? `${params.row.vmidRangeStart} - ${params.row.vmidRangeEnd}`
+          : '',
+    },
+    {
       field: 'description',
       headerName: t('common.description'),
       flex: 2,
@@ -878,7 +888,7 @@ export default function TenantsTab() {
                                 sx={{ height: 16, fontSize: '0.6rem' }}
                               />
                             }
-                            secondaryTypographyProps={{ component: 'div' }}
+                            slotProps={{ secondary: { component: 'div' } }}
                           />
                         </ListItem>
                       ))}

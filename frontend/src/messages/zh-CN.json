@@ -7016,6 +7016,7 @@
     "failedReleaseConnection": "释放连接失败",
     "failedLoadConnections": "加载连接失败",
     "vmidRange": "VMID 范围（可选）",
+    "vmidRangeColumn": "VMID 范围",
     "vmidRangeStart": "起始 VMID",
     "vmidRangeEnd": "结束 VMID",
     "vmidRangeHelp": "通过 ProxCenter 创建的新虚拟机和容器将从此范围内获取 VMID。现有客户机不受影响。",

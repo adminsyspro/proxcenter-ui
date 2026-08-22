@@ -731,6 +731,7 @@ export default function RollingUpdateWizard({
                               )}
                             </Box>
                           }
+                          slotProps={{ secondary: { component: 'div' } }}
                         />
                       </ListItem>
                     )

@@ -7073,6 +7073,7 @@
     "failedReleaseConnection": "연결 반환에 실패했습니다",
     "failedLoadConnections": "연결을 불러오지 못했습니다",
     "vmidRange": "VMID 범위 (선택 사항)",
+    "vmidRangeColumn": "VMID 범위",
     "vmidRangeStart": "첫 VMID",
     "vmidRangeEnd": "마지막 VMID",
     "vmidRangeHelp": "ProxCenter를 통해 생성되는 새 VM과 컨테이너는 이 범위의 VMID를 받습니다. 기존 게스트는 영향을 받지 않습니다.",

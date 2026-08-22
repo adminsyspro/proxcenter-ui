@@ -37,6 +37,11 @@ const nextConfig = {
     output: 'standalone',
     basePath: process.env.BASEPATH,
     poweredByHeader: false,
+    typescript: {
+        // Since 16.3 the build type check covers every file in tsconfig
+        // include, tests included; keep the build scope free of them.
+        tsconfigPath: 'tsconfig.build.json',
+    },
     serverExternalPackages: ['ssh2'],
     experimental: {
         serverActions: {

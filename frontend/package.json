@@ -131,7 +131,8 @@
     "@hono/node-server": ">=1.19.13",
     "defu": ">=6.1.5",
     "fast-uri": "^3.1.4",
-    "shell-quote": ">=1.10.0"
+    "shell-quote": ">=1.10.0",
+    "deepmerge-ts": ">=8.0.2"
   },
   "overrides": {
     "rimraf": "5.0.7",
@@ -150,6 +151,7 @@
     "postcss": "$postcss",
     "js-cookie": "^3.0.7",
     "shell-quote": ">=1.10.0",
+    "deepmerge-ts": ">=8.0.2",
     "tmp": "^0.2.6",
     "uuid": "^11.1.1"
   }

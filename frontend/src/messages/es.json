@@ -458,7 +458,8 @@
       "backup": "Backups",
       "storage": "Almacenamiento",
       "monitoring": "Monitorización",
-      "automation": "Automatización"
+      "automation": "Automatización",
+      "other": "Otros"
     },
     "widgetNames": {
       "kpiClusters": "Clusters / Nodos",
@@ -490,7 +491,8 @@
       "backupCalendar": "Calendario de backups",
       "nodesGauges": "Indicadores de nodos",
       "clustersGauges": "Indicadores de clusters",
-      "clusterHealth": "Salud del cluster"
+      "clusterHealth": "Salud del cluster",
+      "themeLogo": "Logo del tema"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number de clusters y nodos",
@@ -522,7 +524,8 @@
       "nodesGauges": "por-nodo circular gauges (RAM, RAM, Disco)",
       "clustersGauges": "por-cluster gauges, sparklines y salud puntuación",
       "clusterHealth": "Salud puntuación con clave metrics",
-      "sectionHeader": "Separador de sección contraíble"
+      "sectionHeader": "Separador de sección contraíble",
+      "themeLogo": "Muestra el logo del tema actual"
     },
     "widgetDrs": {
       "automatic": "Automático",

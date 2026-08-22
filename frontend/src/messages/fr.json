@@ -458,7 +458,8 @@
       "backup": "Sauvegardes",
       "storage": "Stockage",
       "monitoring": "Monitoring",
-      "automation": "Automation"
+      "automation": "Automation",
+      "other": "Autres"
     },
     "widgetNames": {
       "kpiClusters": "Clusters / Nodes",
@@ -490,7 +491,8 @@
       "backupCalendar": "Calendrier Backups",
       "nodesGauges": "Jauges Nodes",
       "clustersGauges": "Jauges Clusters",
-      "clusterHealth": "Santé Cluster"
+      "clusterHealth": "Santé Cluster",
+      "themeLogo": "Logo du thème"
     },
     "widgetDescs": {
       "kpiClusters": "Affiche le nombre de clusters et nodes",
@@ -522,7 +524,8 @@
       "nodesGauges": "Jauges circulaires par nœud (CPU, RAM, Disk)",
       "clustersGauges": "Jauges par cluster avec sparklines et score",
       "clusterHealth": "Score de santé avec métriques clés",
-      "sectionHeader": "Séparateur de section pliable"
+      "sectionHeader": "Séparateur de section pliable",
+      "themeLogo": "Affiche le logo du thème actuel"
     },
     "widgetDrs": {
       "automatic": "Automatique",

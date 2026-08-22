@@ -458,7 +458,8 @@
       "backup": "Backups",
       "storage": "Storage",
       "monitoring": "Monitoring",
-      "automation": "Automation"
+      "automation": "Automation",
+      "other": "Other"
     },
     "widgetNames": {
       "kpiClusters": "Clusters / Nodes",
@@ -490,7 +491,8 @@
       "backupCalendar": "Backup Calendar",
       "nodesGauges": "Nodes Gauges",
       "clustersGauges": "Clusters Gauges",
-      "clusterHealth": "Cluster Health"
+      "clusterHealth": "Cluster Health",
+      "themeLogo": "Theme Logo"
     },
     "widgetDescs": {
       "kpiClusters": "Shows number of clusters and nodes",
@@ -522,7 +524,8 @@
       "nodesGauges": "Per-node circular gauges (CPU, RAM, Disk)",
       "clustersGauges": "Per-cluster gauges, sparklines and health score",
       "clusterHealth": "Health score with key metrics",
-      "sectionHeader": "Collapsible section separator"
+      "sectionHeader": "Collapsible section separator",
+      "themeLogo": "Shows the current theme logo"
     },
     "widgetDrs": {
       "automatic": "Automatic",

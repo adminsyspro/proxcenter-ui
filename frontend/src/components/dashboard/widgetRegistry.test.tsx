@@ -40,6 +40,15 @@ describe('WIDGET_REGISTRY', () => {
     expect(def.requiresInfraScope).toBe(true)
     expect(def.defaultSize).toEqual({ w: 6, h: 5 })
   })
+
+  it('registers the theme logo widget under Other, visible to any scope', () => {
+    const def = WIDGET_REGISTRY['theme-logo']
+
+    expect(def).toBeTruthy()
+    expect(def.category).toBe('other')
+    expect(def.requiresInfraScope).toBeUndefined()
+    expect(getWidgetsByCategory('other').map(w => w.type)).toContain('theme-logo')
+  })
 })
 
 describe('getWidgetsByCategory', () => {

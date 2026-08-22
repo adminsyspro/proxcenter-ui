@@ -446,7 +446,8 @@
       "backup": "Backups",
       "storage": "Storage",
       "monitoring": "Überwachung",
-      "automation": "Automatisierung"
+      "automation": "Automatisierung",
+      "other": "Sonstiges"
     },
     "widgetNames": {
       "kpiClusters": "Cluster / Nodes",
@@ -475,7 +476,8 @@
       "zfsArc": "ZFS ARC",
       "vmHeatmap": "Guest-Heatmap",
       "drsStatus": "DRS-Status",
-      "siteRecovery": "Site Recovery"
+      "siteRecovery": "Site Recovery",
+      "themeLogo": "Theme-Logo"
     },
     "widgetDescs": {
       "kpiClusters": "Anzahl der Cluster und Nodes",
@@ -509,7 +511,8 @@
       "nodesGauges": "Kreisdiagramme pro Node (CPU, RAM, Disk)",
       "clustersGauges": "Diagramme pro Cluster mit Sparklines und Score",
       "clusterHealth": "Gesundheitsbewertung mit wichtigen Metriken",
-      "sectionHeader": "Einklappbarer Abschnittsseparator"
+      "sectionHeader": "Einklappbarer Abschnittsseparator",
+      "themeLogo": "Zeigt das Logo des aktuellen Themes"
     },
     "widgetDrs": {
       "automatic": "Automatisch",

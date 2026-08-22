@@ -22,8 +22,8 @@ import primaryColorConfig from '@configs/primaryColorConfig'
 import { useSettings } from '@core/hooks/useSettings'
 import { useBranding } from '@/contexts/BrandingContext'
 
-// Noms des thèmes pour l'affichage
-const themeNames = {
+// Noms des thèmes pour l'affichage (réutilisé par le widget Logo du thème)
+export const themeNames = {
   'primary-1': { name: 'PROXCENTER', icon: 'proxmox-logo' },
   'primary-2': { name: 'Ocean', icon: 'ri-water-flash-fill' },
   'primary-3': { name: 'Cherry', icon: 'ri-heart-fill' },

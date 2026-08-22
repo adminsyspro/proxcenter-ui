@@ -105,7 +105,7 @@
     "eslint-config-next": "16.3.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "2.31.0",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "msw": "^2.14.6",
     "postcss": "^8.5.18",
     "postcss-styled-syntax": "0.7.2",

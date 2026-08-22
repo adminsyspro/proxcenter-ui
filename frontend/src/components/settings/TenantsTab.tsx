@@ -476,6 +476,16 @@ export default function TenantsTab() {
       ),
     },
     {
+      field: 'vmidRange',
+      headerName: t('tenants.vmidRangeColumn'),
+      width: 150,
+      valueGetter: (_value, row) => row.vmidRangeStart ?? null,
+      renderCell: (params) =>
+        params.row.vmidRangeStart != null && params.row.vmidRangeEnd != null
+          ? `${params.row.vmidRangeStart} - ${params.row.vmidRangeEnd}`
+          : '',
+    },
+    {
       field: 'description',
       headerName: t('common.description'),
       flex: 2,

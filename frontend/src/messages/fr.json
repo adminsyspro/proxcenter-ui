@@ -7074,6 +7074,7 @@
     "failedReleaseConnection": "Échec de la remise dans le pool",
     "failedLoadConnections": "Échec du chargement des connexions",
     "vmidRange": "Plage de VMID (optionnelle)",
+    "vmidRangeColumn": "Plage VMID",
     "vmidRangeStart": "Premier VMID",
     "vmidRangeEnd": "Dernier VMID",
     "vmidRangeHelp": "Les nouvelles VM et conteneurs créés via ProxCenter reçoivent un VMID de cette plage. Les invités existants ne sont pas affectés.",

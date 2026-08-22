@@ -7073,6 +7073,7 @@
     "failedReleaseConnection": "Error al liberar conexión",
     "failedLoadConnections": "Error al cargar conexiones",
     "vmidRange": "Rango de VMID (opcional)",
+    "vmidRangeColumn": "Rango VMID",
     "vmidRangeStart": "Primer VMID",
     "vmidRangeEnd": "Último VMID",
     "vmidRangeHelp": "Las nuevas VMs y contenedores creados a través de ProxCenter reciben un VMID de este rango. Los invitados existentes no se ven afectados.",

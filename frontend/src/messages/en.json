@@ -7073,6 +7073,7 @@
     "failedReleaseConnection": "Failed to release connection",
     "failedLoadConnections": "Failed to load connections",
     "vmidRange": "VMID range (optional)",
+    "vmidRangeColumn": "VMID range",
     "vmidRangeStart": "First VMID",
     "vmidRangeEnd": "Last VMID",
     "vmidRangeHelp": "New VMs and containers created through ProxCenter get a VMID from this range. Existing guests are not affected.",

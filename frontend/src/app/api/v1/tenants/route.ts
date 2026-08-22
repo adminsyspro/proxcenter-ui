@@ -43,17 +43,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "operatingModel must be 'iaas' or 'msp'" }, { status: 400 })
   }
 
-  // Optional MSP VMID range (both bounds or none; MSP only; no overlap
-  // with another tenant's range).
+  // Optional VMID range (both bounds or none; msp and iaas tenants alike;
+  // no overlap with another tenant's range).
   const rangeParse = parseVmidRangeInput(body)
   if (!rangeParse.ok) {
     return NextResponse.json({ error: rangeParse.error }, { status: 400 })
   }
   const vmidRange = rangeParse.range ?? null
   if (vmidRange) {
-    if (body.operatingModel !== 'msp') {
-      return NextResponse.json({ error: "A VMID range is only available for MSP tenants" }, { status: 400 })
-    }
     const conflict = await findVmidRangeConflict(vmidRange.start, vmidRange.end)
     if (conflict) {
       return NextResponse.json(

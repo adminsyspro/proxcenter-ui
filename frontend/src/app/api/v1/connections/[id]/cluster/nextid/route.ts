@@ -39,10 +39,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const url = new URL(req.url)
     const vmidParam = url.searchParams.get("vmid")
 
-    // MSP tenant with a VMID range: ProxCenter computes the next free VMID
-    // inside the range across ALL of the tenant's connections. PVE's own
-    // /cluster/nextid can't do this (per-cluster, and its default upper
-    // bound never reaches high ranges like 189334001).
+    // Tenant with a VMID range (msp or vdc/iaas): ProxCenter computes the
+    // next free VMID inside the range across ALL of the tenant's clusters.
+    // PVE's own /cluster/nextid can't do this (per-cluster, and its default
+    // upper bound never reaches high ranges like 189334001).
     const tenantId = await getCurrentTenantId()
     const range = await resolveTenantVmidRange(tenantId)
 

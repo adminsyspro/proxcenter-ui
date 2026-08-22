@@ -63,11 +63,11 @@ describe('POST /api/v1/tenants vmidRange', () => {
     expect(res.status).toBe(201)
     expect(createTenantMock).toHaveBeenCalledWith(expect.objectContaining({ vmidRangeStart: 189334001, vmidRangeEnd: 189334999 }))
   })
-  it('rejects a range on a non-MSP tenant with 400', async () => {
+  it('forwards a valid iaas (vDC) range to createTenant', async () => {
     const { POST } = await import('./route')
     const res = await callRoute(POST, { body: { slug: 'acme', name: 'Acme', operatingModel: 'iaas', vmidRangeStart: 100, vmidRangeEnd: 200 } })
-    expect(res.status).toBe(400)
-    expect(createTenantMock).not.toHaveBeenCalled()
+    expect(res.status).toBe(201)
+    expect(createTenantMock).toHaveBeenCalledWith(expect.objectContaining({ operatingModel: 'iaas', vmidRangeStart: 100, vmidRangeEnd: 200 }))
   })
   it.each([
     [{ vmidRangeStart: 300, vmidRangeEnd: 200 }],

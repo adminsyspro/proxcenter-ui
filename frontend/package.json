@@ -99,7 +99,7 @@
     "@types/ssh2": "^1.15.5",
     "@vitest/coverage-v8": "^4.1.6",
     "autoprefixer": "10.4.27",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.5",
     "esbuild": "^0.28.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.0",

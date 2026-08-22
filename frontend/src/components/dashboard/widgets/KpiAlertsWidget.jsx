@@ -192,6 +192,7 @@ return t('time.daysAgo', { count: Math.floor(diff / 86400) })
                           <Typography variant='caption' sx={{ opacity: 0.4 }}>• {alert.source}</Typography>
                         </Box>
                       }
+                      secondaryTypographyProps={{ component: 'div' }}
                     />
                     <i className='ri-arrow-right-s-line' style={{ fontSize: '1.2857rem', opacity: 0.3 }} />
                   </ListItemButton>

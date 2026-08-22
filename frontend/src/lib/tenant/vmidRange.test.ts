@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { tenantFindUniqueMock, tenantFindFirstMock, connectionFindManyMock, pveFetchMock, getConnectionByIdMock } = vi.hoisted(() => ({
+const { tenantFindUniqueMock, tenantFindFirstMock, vdcFindManyMock, connectionFindManyMock, pveFetchMock, getConnectionByIdMock } = vi.hoisted(() => ({
   tenantFindUniqueMock: vi.fn(),
   tenantFindFirstMock: vi.fn(),
+  vdcFindManyMock: vi.fn(),
   connectionFindManyMock: vi.fn(),
   pveFetchMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
@@ -11,6 +12,7 @@ const { tenantFindUniqueMock, tenantFindFirstMock, connectionFindManyMock, pveFe
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     tenant: { findUnique: tenantFindUniqueMock, findFirst: tenantFindFirstMock },
+    vdc: { findMany: vdcFindManyMock },
     connection: { findMany: connectionFindManyMock },
   },
 }))
@@ -31,6 +33,7 @@ import {
 beforeEach(() => {
   tenantFindUniqueMock.mockReset()
   tenantFindFirstMock.mockReset().mockResolvedValue(null)
+  vdcFindManyMock.mockReset().mockResolvedValue([])
   connectionFindManyMock.mockReset().mockResolvedValue([])
   pveFetchMock.mockReset()
   getConnectionByIdMock.mockReset().mockImplementation(async (id: string) => ({ id, baseUrl: 'x', apiToken: 'y' }))
@@ -71,8 +74,16 @@ describe('resolveTenantVmidRange', () => {
     expect(await resolveTenantVmidRange('default')).toBeNull()
     expect(tenantFindUniqueMock).not.toHaveBeenCalled()
   })
-  it('returns null for iaas tenants even with a stored range', async () => {
+  it('returns the range for iaas tenants with one', async () => {
     tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas', vmidRangeStart: 100, vmidRangeEnd: 200 })
+    expect(await resolveTenantVmidRange('t1')).toEqual({ start: 100, end: 200 })
+  })
+  it('returns null for iaas tenants without a stored range', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas', vmidRangeStart: null, vmidRangeEnd: null })
+    expect(await resolveTenantVmidRange('t1')).toBeNull()
+  })
+  it('returns null for provider tenants even with a stored range', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: null, vmidRangeStart: 100, vmidRangeEnd: 200 })
     expect(await resolveTenantVmidRange('t1')).toBeNull()
   })
   it('returns null for MSP tenants without a range', async () => {
@@ -86,7 +97,8 @@ describe('resolveTenantVmidRange', () => {
 })
 
 describe('getUsedVmidsForTenant', () => {
-  it('unions vmids across connections and reports unreachable ones', async () => {
+  it('uses an MSP tenant\'s own PVE connections and unions their vmids', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'msp' })
     connectionFindManyMock.mockResolvedValue([
       { id: 'c1', name: 'alpha', tenantId: 't1' },
       { id: 'c2', name: 'beta', tenantId: 't1' },
@@ -99,6 +111,67 @@ describe('getUsedVmidsForTenant', () => {
     const { used, unreachable } = await getUsedVmidsForTenant('t1')
     expect(used).toEqual(new Set([100, 101, 189334001]))
     expect(unreachable).toEqual(['gamma'])
+    expect(connectionFindManyMock).toHaveBeenCalledWith({
+      where: { tenantId: 't1', type: 'pve' },
+      select: { id: true, name: true, tenantId: true },
+    })
+    expect(vdcFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it('uses the deduplicated union of an iaas tenant\'s vDC connections', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas' })
+    vdcFindManyMock.mockResolvedValue([
+      { connectionId: 'c1' },
+      { connectionId: 'c2' },
+      { connectionId: 'c1' },
+    ])
+    connectionFindManyMock.mockResolvedValue([
+      { id: 'c1', name: 'alpha', tenantId: 'provider' },
+      { id: 'c2', name: 'beta', tenantId: 'provider' },
+    ])
+    pveFetchMock
+      .mockResolvedValueOnce([{ vmid: 100 }, { vmid: '101' }])
+      .mockResolvedValueOnce([{ vmid: 189334001 }])
+
+    const { used, unreachable } = await getUsedVmidsForTenant('t1')
+
+    expect(used).toEqual(new Set([100, 101, 189334001]))
+    expect(unreachable).toEqual([])
+    expect(vdcFindManyMock).toHaveBeenCalledWith({
+      where: { tenantId: 't1' },
+      select: { connectionId: true },
+    })
+    expect(connectionFindManyMock).toHaveBeenCalledWith({
+      where: { id: { in: ['c1', 'c2'] }, type: 'pve' },
+      select: { id: true, name: true, tenantId: true },
+    })
+  })
+
+  it('returns no usage for an iaas tenant with no vDCs', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas' })
+    vdcFindManyMock.mockResolvedValue([])
+
+    const result = await getUsedVmidsForTenant('t1')
+
+    expect(result).toEqual({ used: new Set(), unreachable: [] })
+    expect(connectionFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it('reports an unreachable iaas vDC connection by name', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas' })
+    vdcFindManyMock.mockResolvedValue([{ connectionId: 'c1' }, { connectionId: 'c2' }])
+    connectionFindManyMock.mockResolvedValue([
+      { id: 'c1', name: 'alpha', tenantId: 'provider' },
+      { id: 'c2', name: 'beta', tenantId: 'provider' },
+    ])
+    pveFetchMock
+      .mockResolvedValueOnce([{ vmid: 100 }])
+      .mockRejectedValueOnce(new Error('unreachable'))
+
+    const { used, unreachable } = await getUsedVmidsForTenant('t1')
+
+    expect(used).toEqual(new Set([100]))
+    expect(unreachable).toEqual(['beta'])
   })
 })
 

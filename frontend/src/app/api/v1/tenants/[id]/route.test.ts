@@ -76,12 +76,27 @@ describe('PUT /api/v1/tenants/[id] vmidRange', () => {
     )
   })
 
-  it('rejects a range on a non-MSP tenant with 400', async () => {
+  it('accepts a range on an iaas (vDC) tenant', async () => {
     tenantFindUniqueMock.mockResolvedValue({ operatingModel: 'iaas' })
     const { PUT } = await import('./route')
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: { id: 't1' },
+      body: { vmidRangeStart: 100, vmidRangeEnd: 200 },
+    })
+    expect(res.status).toBe(200)
+    expect(updateTenantMock).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ vmidRangeStart: 100, vmidRangeEnd: 200 }),
+    )
+  })
+
+  it('rejects a range on the provider tenant with 400', async () => {
+    tenantFindUniqueMock.mockResolvedValue({ operatingModel: null })
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT, {
+      method: 'PUT',
+      params: { id: 'default' },
       body: { vmidRangeStart: 100, vmidRangeEnd: 200 },
     })
     expect(res.status).toBe(400)

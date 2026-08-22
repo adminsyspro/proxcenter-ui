@@ -217,12 +217,14 @@ export default function TenantsTab() {
     }
   }
 
-  const isMspForm = editingTenant ? editingTenant.operatingModel === 'msp' : form.operatingModel === 'msp'
+  // VMID range: every real tenant (msp or vdc/iaas) supports one; only the
+  // provider tenant (operatingModel null) does not.
+  const supportsVmidRange = editingTenant ? !!editingTenant.operatingModel : true
 
   const vmidRangeError = useMemo(() => {
-    // Not an MSP form: the fields are unmounted, so their (possibly stale)
-    // buffers must never gate the Save button.
-    if (!isMspForm) return null
+    // Fields unmounted (provider tenant): their (possibly stale) buffers
+    // must never gate the Save button.
+    if (!supportsVmidRange) return null
 
     const rawStart = form.vmidRangeStart.trim()
     const rawEnd = form.vmidRangeEnd.trim()
@@ -237,7 +239,7 @@ export default function TenantsTab() {
     if (start > end) return t('tenants.vmidRangeInvalid')
 
     return null
-  }, [isMspForm, form.vmidRangeStart, form.vmidRangeEnd, t])
+  }, [supportsVmidRange, form.vmidRangeStart, form.vmidRangeEnd, t])
 
   const handleSave = async () => {
     setSaving(true)
@@ -259,8 +261,8 @@ export default function TenantsTab() {
         body.operatingModel = form.operatingModel
       }
 
-      // VMID range: MSP only; empty fields clear the range (null)
-      if (isMspForm) {
+      // VMID range: any msp/iaas tenant; empty fields clear the range (null)
+      if (supportsVmidRange) {
         body.vmidRangeStart = form.vmidRangeStart.trim() ? Number.parseInt(form.vmidRangeStart, 10) : null
         body.vmidRangeEnd = form.vmidRangeEnd.trim() ? Number.parseInt(form.vmidRangeEnd, 10) : null
       }
@@ -639,9 +641,9 @@ export default function TenantsTab() {
             </FormControl>
           )}
 
-          {/* VMID range — MSP tenants only. Enforced for new guests created
-              through ProxCenter; existing guests are unaffected. */}
-          {isMspForm && (
+          {/* VMID range: msp and vdc/iaas tenants. Enforced for new guests
+              created through ProxCenter; existing guests are unaffected. */}
+          {supportsVmidRange && (
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 2 }}>{t('tenants.vmidRange')}</Typography>
               <Box sx={{ display: 'flex', gap: 2 }}>

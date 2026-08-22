@@ -69,8 +69,8 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   if (rangeParse.range) {
     const existing = await prisma.tenant.findUnique({ where: { id }, select: { operatingModel: true } })
     if (!existing) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
-    if (existing.operatingModel !== 'msp') {
-      return NextResponse.json({ error: "A VMID range is only available for MSP tenants" }, { status: 400 })
+    if (existing.operatingModel !== 'msp' && existing.operatingModel !== 'iaas') {
+      return NextResponse.json({ error: "A VMID range is not available on the provider tenant" }, { status: 400 })
     }
     const conflict = await findVmidRangeConflict(rangeParse.range.start, rangeParse.range.end, id)
     if (conflict) {

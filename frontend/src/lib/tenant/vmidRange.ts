@@ -1,7 +1,7 @@
 // src/lib/tenant/vmidRange.ts
-// Optional per-tenant VMID range (MSP tenants only). New guests created
-// through ProxCenter must take a VMID inside the range; pre-existing guests
-// are never checked (relaxed enforcement).
+// Optional per-tenant VMID range (MSP and vDC/iaas tenants). New guests
+// created through ProxCenter must take a VMID inside the range; pre-existing
+// guests are never checked (relaxed enforcement).
 
 import { prisma } from "@/lib/db/prisma"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -58,7 +58,7 @@ export async function resolveTenantVmidRange(tenantId: string): Promise<VmidRang
     select: { operatingModel: true, vmidRangeStart: true, vmidRangeEnd: true },
   })
 
-  if (tenant?.operatingModel !== "msp") return null
+  if (tenant?.operatingModel !== "msp" && tenant?.operatingModel !== "iaas") return null
   if (tenant.vmidRangeStart == null || tenant.vmidRangeEnd == null) return null
   return { start: tenant.vmidRangeStart, end: tenant.vmidRangeEnd }
 }
@@ -72,14 +72,42 @@ export interface TenantVmidUsage {
 }
 
 /**
- * VMIDs currently in use across ALL of the tenant's PVE connections
- * (cross-cluster).
+ * PVE connections whose VMID space the tenant allocates from.
+ *  - msp:  the connections the tenant owns outright.
+ *  - iaas: the provider connections referenced by ALL of the tenant's vDCs
+ *          (full union, never the vDC view context; disabled vDCs included:
+ *          scanning more clusters only makes the uniqueness check stricter).
  */
-export async function getUsedVmidsForTenant(tenantId: string): Promise<TenantVmidUsage> {
-  const conns = await prisma.connection.findMany({
+async function getTenantPveConnections(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { operatingModel: true },
+  })
+  if (tenant?.operatingModel === "iaas") {
+    const vdcs = await prisma.vdc.findMany({
+      where: { tenantId },
+      select: { connectionId: true },
+    })
+    const connectionIds = [...new Set(vdcs.map((v) => v.connectionId))]
+    if (connectionIds.length === 0) return []
+    return prisma.connection.findMany({
+      where: { id: { in: connectionIds }, type: "pve" },
+      select: { id: true, name: true, tenantId: true },
+    })
+  }
+  return prisma.connection.findMany({
     where: { tenantId, type: "pve" },
     select: { id: true, name: true, tenantId: true },
   })
+}
+
+/**
+ * VMIDs currently in use across ALL of the tenant's PVE clusters. On a shared
+ * iaas cluster this includes every guest on the cluster, other tenants and
+ * provider included: VMIDs are cluster-global in PVE.
+ */
+export async function getUsedVmidsForTenant(tenantId: string): Promise<TenantVmidUsage> {
+  const conns = await getTenantPveConnections(tenantId)
 
   const used = new Set<number>()
   const unreachable: string[] = []

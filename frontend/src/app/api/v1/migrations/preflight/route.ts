@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { runV2vPreflight, installV2vPackages, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
+import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
 import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
@@ -53,10 +54,14 @@ export async function POST(req: Request) {
     }
 
     // Warm migration go/no-go: report whether the target node has the VDDK
-    // runtime the engine needs. Node prep is the operator's job (documented);
-    // this only reports readiness so the dialog can block a doomed launch.
+    // runtime the engine needs, plus whether this server holds the Enterprise
+    // VDDK package token — a boolean only, added here in the route layer so
+    // the dialog can offer the automated "Prepare this node" action
+    // (POST /api/v1/migrations/warm-node-setup) without the token ever
+    // reaching the client. Manual node prep stays documented as the fallback.
     if (action === "warm-check") {
-      return NextResponse.json(await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir))
+      const result = await runWarmNodePreflight(targetConnectionId, targetNode, vddkLibdir)
+      return NextResponse.json({ ...result, vddkTokenConfigured: isVddkPackageTokenConfigured() })
     }
 
     const result = await runV2vPreflight(

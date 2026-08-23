@@ -50,7 +50,11 @@ export async function POST(req: Request) {
     return NextResponse.json(result)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error"
-    console.error("[migrations/warm-node-setup] Error:", safeLog(message))
+    // targetNode and vddkLibdir reach this message, so the log line carries a
+    // user-provided value. safeLog already strips CR/LF and control characters,
+    // but code scanning does not see through it, hence the explicit inline
+    // strip used by the other routes in this API.
+    console.error("[migrations/warm-node-setup] Error:", safeLog(message).replace(/[\r\n]/g, ""))
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

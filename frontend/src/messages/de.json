@@ -4127,7 +4127,8 @@
       "syncing": "Synchronisierung",
       "error": "Fehler",
       "paused": "Pausiert",
-      "pending": "Ausstehend"
+      "pending": "Ausstehend",
+      "noMatch": "Keine passenden VMs"
     },
     "planStatus": {
       "ready": "Bereit",

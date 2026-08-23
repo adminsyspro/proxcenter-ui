@@ -6,7 +6,7 @@ import type { ScheduleSpec } from '@/components/automation/site-recovery/schedul
 // Replication Jobs
 // ============================================
 
-export type ReplicationJobStatus = 'synced' | 'syncing' | 'error' | 'paused' | 'pending' | 'failed_over'
+export type ReplicationJobStatus = 'synced' | 'syncing' | 'error' | 'paused' | 'pending' | 'failed_over' | 'no_match'
 
 export interface BandwidthWindow {
   days: number[]          // 0=Sun, 1=Mon, …, 6=Sat
@@ -265,6 +265,7 @@ export interface JobStatusSummary {
   pending: number
   error: number
   paused: number
+  no_match: number
 }
 
 export interface ReplicationHealthStatus {

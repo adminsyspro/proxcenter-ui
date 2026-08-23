@@ -146,11 +146,11 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     cephConnections.filter(c => c.id !== sourceCluster)
   , [cephConnections, sourceCluster])
 
-  // VMs filtered by source cluster (only running qemu VMs on Ceph storage)
+  // VMs filtered by source cluster (qemu VMs on Ceph storage, any power
+  // state: replication is RBD-level and handles stopped guests, #687)
   const sourceVMs = useMemo(() =>
     allVMs.filter(vm =>
       vm.connId === sourceCluster &&
-      vm.status === 'running' &&
       vm.type === 'qemu' &&
       cephVMMap.has(vm.vmid)
     )

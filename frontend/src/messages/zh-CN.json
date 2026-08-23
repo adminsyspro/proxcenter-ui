@@ -4126,7 +4126,8 @@
       "syncing": "同步中",
       "error": "错误",
       "paused": "已暂停",
-      "pending": "等待中"
+      "pending": "等待中",
+      "noMatch": "无匹配的虚拟机"
     },
     "planStatus": {
       "ready": "就绪",

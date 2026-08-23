@@ -4150,7 +4150,8 @@
       "syncing": "동기화 중",
       "error": "오류",
       "paused": "일시 중지됨",
-      "pending": "대기 중"
+      "pending": "대기 중",
+      "noMatch": "일치하는 VM 없음"
     },
     "planStatus": {
       "ready": "준비됨",

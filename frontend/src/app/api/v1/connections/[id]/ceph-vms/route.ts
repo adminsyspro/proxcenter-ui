@@ -34,10 +34,12 @@ export async function GET(
       return NextResponse.json({ data: [] })
     }
 
-    // 2. Get all QEMU VMs from cluster resources
+    // 2. Get all QEMU VMs from cluster resources. Power state is irrelevant:
+    // replication is RBD-level and a stopped guest replicates fine (#687).
+    // Templates stay excluded: a replica of one could not start at failover.
     const resources = await pveFetch<any[]>(conn, "/cluster/resources")
     const qemuVMs = (resources || []).filter(
-      (r: any) => r.type === "qemu" && r.status === "running"
+      (r: any) => r.type === "qemu" && r.template !== 1
     )
 
     // 3. Fetch configs in parallel to check disk storage

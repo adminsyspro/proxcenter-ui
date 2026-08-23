@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders, screen, userEvent, fireEvent } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import type { ReplicationJob } from '@/lib/orchestrator/site-recovery.types'
 
@@ -131,5 +131,32 @@ describe('ProtectionTab — failed-over job lockdown', () => {
 
     expect(await screen.findByRole('button', { name: 'Sync Now' })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: 'Resume' })).not.toBeDisabled()
+  })
+})
+
+describe('ProtectionTab: no matching VMs status (issue #687)', () => {
+  it('shows the "No matching VMs" chip for a no_match job', () => {
+    renderTab([job({ status: 'no_match' })])
+
+    const chipLabel = screen.getByText('No matching VMs')
+    const chip = chipLabel.closest('.MuiChip-root')
+    expect(chip).toBeInTheDocument()
+    expect(chip).toHaveClass('MuiChip-colorWarning')
+    expect(chip?.querySelector('.ri-price-tag-3-line')).toBeInTheDocument()
+  })
+
+  it('offers no_match in the status filter and filters the job list to matching jobs', async () => {
+    renderTab([
+      job({ id: 'job-no-match', status: 'no_match', vm_ids: [200], vm_names: ['no-match-vm'] }),
+      job({ id: 'job-pending', status: 'pending', vm_ids: [201], vm_names: ['pending-vm'] }),
+    ])
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    const noMatchOption = await screen.findByRole('option', { name: 'No matching VMs' })
+    expect(noMatchOption).toBeInTheDocument()
+    await userEvent.click(noMatchOption)
+
+    expect(screen.getByText('200 - no-match-vm')).toBeInTheDocument()
+    expect(screen.queryByText('201 - pending-vm')).not.toBeInTheDocument()
   })
 })

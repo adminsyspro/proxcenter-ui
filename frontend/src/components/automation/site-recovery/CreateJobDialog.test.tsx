@@ -14,6 +14,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { SWRConfig } from 'swr'
+import type { ComponentProps } from 'react'
 
 import { renderWithProviders, screen, userEvent, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
@@ -28,6 +29,35 @@ function renderDialog() {
   renderWithProviders(
     <CreateJobDialog open onClose={vi.fn()} onSubmit={vi.fn()} connections={[]} allVMs={[]} />,
   )
+}
+
+function renderDialogWithVMs(allVMs: ComponentProps<typeof CreateJobDialog>['allVMs']) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/v1/connections/src/ceph-vms') {
+      return new Response(JSON.stringify({
+        data: allVMs.map(vm => ({ vmid: vm.vmid, cephDiskGb: vm.diskGb })),
+      }), { status: 200 })
+    }
+
+    return new Response('{}', { status: 200 })
+  }))
+
+  renderWithProviders(
+    <SWRConfig value={{ revalidateOnMount: true }}>
+      <CreateJobDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        connections={[{ id: 'src', name: 'Source', hasCeph: true }]}
+        allVMs={allVMs}
+      />
+    </SWRConfig>,
+  )
+}
+
+async function selectSourceCluster() {
+  fireEvent.mouseDown(screen.getAllByRole('combobox')[0])
+  await userEvent.click(await screen.findByRole('option', { name: 'Source' }))
 }
 
 // No bandwidth window and no cluster selected, so the numeric inputs are, in
@@ -145,5 +175,33 @@ describe('CreateJobDialog snapshot retention (issue #664)', () => {
       snapshot_keep_source: 3,
       snapshot_keep_target: 3,
     }))
+  })
+})
+
+describe('CreateJobDialog stopped VM replication (issue #687)', () => {
+  it('lists and allows selecting a stopped qemu VM on Ceph storage', async () => {
+    renderDialogWithVMs([
+      { vmid: 200, name: 'stopped-db', node: 'node1', connId: 'src', type: 'qemu', status: 'stopped', tags: [], diskGb: 20 },
+    ])
+
+    await selectSourceCluster()
+
+    const stoppedVM = await screen.findByRole('checkbox', { name: /stopped-db.*200/ })
+    expect(stoppedVM).not.toBeChecked()
+
+    await userEvent.click(stoppedVM)
+
+    expect(stoppedVM).toBeChecked()
+  })
+
+  it('offers tags belonging to a stopped VM in tag selection mode', async () => {
+    renderDialogWithVMs([
+      { vmid: 201, name: 'stopped-app', node: 'node1', connId: 'src', type: 'qemu', status: 'stopped', tags: ['disaster-recovery'], diskGb: 15 },
+    ])
+
+    await selectSourceCluster()
+    await userEvent.click(screen.getByRole('button', { name: 'Tags' }))
+
+    expect(await screen.findByRole('checkbox', { name: /disaster-recovery/ })).toBeInTheDocument()
   })
 })

@@ -150,14 +150,16 @@ const RPOGauge = ({ compliance, t }: { compliance: number; t: any }) => {
 
 const JobStatusDistribution = ({ summary, t }: { summary: JobStatusSummary; t: any }) => {
   const theme = useTheme()
-  const total = summary.synced + summary.syncing + summary.pending + summary.error + summary.paused
+  const noMatch = summary.no_match || 0
+  const total = summary.synced + summary.syncing + summary.pending + summary.error + summary.paused + noMatch
 
   const segments = [
     { key: 'synced', count: summary.synced, color: theme.palette.success.main, label: t('siteRecovery.status.synced') },
     { key: 'syncing', count: summary.syncing, color: theme.palette.primary.main, label: t('siteRecovery.status.syncing') },
     { key: 'pending', count: summary.pending, color: theme.palette.warning.main, label: t('siteRecovery.status.pending') },
     { key: 'error', count: summary.error, color: theme.palette.error.main, label: t('siteRecovery.status.error') },
-    { key: 'paused', count: summary.paused, color: theme.palette.text.disabled, label: t('siteRecovery.status.paused') }
+    { key: 'paused', count: summary.paused, color: theme.palette.text.disabled, label: t('siteRecovery.status.paused') },
+    { key: 'no_match', count: noMatch, color: theme.palette.warning.dark, label: t('siteRecovery.status.noMatch') }
   ].filter(s => s.count > 0)
 
   if (total === 0) return null
@@ -919,7 +921,7 @@ export default function DashboardTab({ health, loading, jobs, connections, vmNam
   }, [health])
 
   const jobSummary = useMemo(() => health?.job_summary || {
-    synced: 0, syncing: 0, pending: 0, error: 0, paused: 0
+    synced: 0, syncing: 0, pending: 0, error: 0, paused: 0, no_match: 0
   }, [health])
 
   if (loading) {

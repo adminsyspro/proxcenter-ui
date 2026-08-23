@@ -73,7 +73,8 @@ const StatusChip = ({ status, t }: { status: ReplicationJobStatus; t: any }) => 
     error: { label: t('siteRecovery.status.error'), color: 'error' },
     paused: { label: t('siteRecovery.status.paused'), color: 'default' },
     pending: { label: t('siteRecovery.status.pending'), color: 'warning' },
-    failed_over: { label: t('siteRecovery.jobs.failedOver'), color: 'warning', icon: 'ri-shield-star-line' }
+    failed_over: { label: t('siteRecovery.jobs.failedOver'), color: 'warning', icon: 'ri-shield-star-line' },
+    no_match: { label: t('siteRecovery.status.noMatch'), color: 'warning', icon: 'ri-price-tag-3-line' }
   }
 
   const c = config[status] || config.paused
@@ -592,6 +593,7 @@ export default function ProtectionTab({
               <MenuItem value='syncing'>{t('siteRecovery.status.syncing')}</MenuItem>
               <MenuItem value='paused'>{t('siteRecovery.status.paused')}</MenuItem>
               <MenuItem value='error'>{t('siteRecovery.status.error')}</MenuItem>
+              <MenuItem value='no_match'>{t('siteRecovery.status.noMatch')}</MenuItem>
             </Select>
             {(q || statusFilter !== 'all') && (
               <Button size='small' onClick={() => { setQ(''); setStatusFilter('all') }} startIcon={<i className='ri-close-line' />}>

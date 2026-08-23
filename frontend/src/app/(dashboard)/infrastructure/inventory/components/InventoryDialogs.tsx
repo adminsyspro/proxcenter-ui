@@ -684,7 +684,10 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // before the node is resolved, so it's skipped (the engine backstop still covers it).
   // The verdict carries the target it was taken for (`key`), so a stale result from a
   // previously selected node is never mistaken for the current selection.
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string } | null>(null)
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string; tokenConfigured?: boolean } | null>(null)
+  // Bumped after a successful automated node setup so this effect re-runs and
+  // the go/no-go flips to ready without the user having to reselect the node.
+  const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
   React.useEffect(() => {
     if ((esxiMigrateVm?.hostType !== 'vmware' && esxiMigrateVm?.hostType !== 'vcenter') || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
       setWarmPreflight(null)
@@ -699,18 +702,57 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check' }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; error?: string }) => {
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error })
+      .then((d: { ok?: boolean; missing?: string[]; error?: string; vddkTokenConfigured?: boolean }) => {
+        // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
+        // package token exists, i.e. the automated "Prepare this node" action
+        // can work. The token itself never reaches the client.
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error, tokenConfigured: !!d.vddkTokenConfigured })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [] }) })
     return () => { cancelled = true }
-  }, [esxiMigrateVm?.hostType, migType, migTargetConn, migTargetNode])
+  }, [esxiMigrateVm?.hostType, migType, migTargetConn, migTargetNode, warmPreflightRefresh])
   // Only trust the verdict when it belongs to the currently selected target. On a
   // node/connection switch the state briefly still holds the prior target's result
   // (the effect re-runs after render); ignoring a mismatched key stops a stale "ready"
   // from re-enabling the launch against a node that has not passed the current check.
   const warmPreflightCurrent =
     warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}` ? warmPreflight : null
+
+  // Automated warm-node provisioning (Enterprise VDDK package). Offered inside
+  // the not-ready alert only when the server reported a configured package
+  // token. `phase` walks confirm -> running -> error; success clears the state
+  // and bumps warmPreflightRefresh so the go/no-go above re-runs and flips to
+  // ready. Keyed like warmPreflight so a pending confirm/error from a
+  // previously selected target is never shown against another node.
+  const [warmSetup, setWarmSetup] = useState<{ key: string; phase: 'confirm' | 'running' | 'error'; error?: string } | null>(null)
+  const warmSetupKey = `${migTargetConn}::${migTargetNode}`
+  const warmSetupCurrent = warmSetup && warmSetup.key === warmSetupKey ? warmSetup : null
+  const runWarmNodeSetup = React.useCallback(async () => {
+    const key = `${migTargetConn}::${migTargetNode}`
+    setWarmSetup({ key, phase: 'running' })
+    try {
+      const r = await fetch('/api/v1/migrations/warm-node-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode }),
+      })
+      const d: { ok?: boolean; missing?: string[]; error?: string } = await r.json().catch(() => ({}))
+      if (r.ok && d.ok) {
+        setWarmSetup(null)
+        setWarmPreflightRefresh(n => n + 1)
+      } else {
+        // Either the route failed (error) or the install ran but the node
+        // still misses pieces (post-provision preflight not ok).
+        setWarmSetup({
+          key,
+          phase: 'error',
+          error: d.error || (d.missing?.length ? d.missing.join(', ') : `HTTP ${r.status}`),
+        })
+      }
+    } catch (e) {
+      setWarmSetup({ key, phase: 'error', error: e instanceof Error ? e.message : String(e) })
+    }
+  }, [migTargetConn, migTargetNode])
 
   // Post-migration qcow2 conversion (#595) only applies to thick `lvm` target
   // storages: since #587 their volumes are allocated raw, which forfeits
@@ -2537,6 +2579,68 @@ return
                           <Typography variant="body2" sx={{ mb: 0.5 }}>
                             {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflightCurrent.missing.join(', ') })}
                           </Typography>
+                        )}
+                        {/* Automated provisioning — offered only when the server holds the
+                            Enterprise VDDK package token (boolean flag from the route; the
+                            token itself never reaches the client). Confirm first: it installs
+                            apt packages, adds a Debian non-free apt source, and writes ~96 MB
+                            under /usr/lib on the hypervisor. The manual doc link below stays
+                            visible as the fallback either way. */}
+                        {warmPreflightCurrent.tokenConfigured && (
+                          <Box sx={{ mb: 1 }}>
+                            {warmSetupCurrent?.phase === 'running' ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <CircularProgress size={14} />
+                                <Typography variant="body2">
+                                  {t('inventoryPage.esxiMigration.warmSetupRunning')}
+                                </Typography>
+                              </Box>
+                            ) : warmSetupCurrent?.phase === 'confirm' ? (
+                              <>
+                                <Typography variant="body2" sx={{ mb: 0.75 }}>
+                                  {t('inventoryPage.esxiMigration.warmSetupConfirmText')}
+                                </Typography>
+                                <Stack direction="row" spacing={1}>
+                                  <Button
+                                    size="small"
+                                    color="warning"
+                                    variant="contained"
+                                    startIcon={<i className="ri-download-line" />}
+                                    onClick={runWarmNodeSetup}
+                                    sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                                  >
+                                    {t('inventoryPage.esxiMigration.warmSetupConfirm')}
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    color="inherit"
+                                    onClick={() => setWarmSetup(null)}
+                                    sx={{ textTransform: 'none', fontSize: 11 }}
+                                  >
+                                    {t('inventoryPage.esxiMigration.warmSetupCancel')}
+                                  </Button>
+                                </Stack>
+                              </>
+                            ) : (
+                              <>
+                                {warmSetupCurrent?.phase === 'error' && (
+                                  <Typography variant="body2" color="error.main" sx={{ mb: 0.75 }}>
+                                    {t('inventoryPage.esxiMigration.warmSetupFailed', { error: warmSetupCurrent.error || '' })}
+                                  </Typography>
+                                )}
+                                <Button
+                                  size="small"
+                                  color="warning"
+                                  variant="contained"
+                                  startIcon={<i className="ri-tools-line" />}
+                                  onClick={() => setWarmSetup({ key: warmSetupKey, phase: 'confirm' })}
+                                  sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                                >
+                                  {t('inventoryPage.esxiMigration.warmSetupAction')}
+                                </Button>
+                              </>
+                            )}
+                          </Box>
                         )}
                         <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
                           {t.rich('inventoryPage.esxiMigration.warmPreflightDocsHint', {

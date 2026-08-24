@@ -160,6 +160,17 @@ export function buildVddkInstallScript(opts: VddkInstallScriptOpts): string {
     // pipefail so a failing curl cannot be masked by tar; -e for early exit.
     "set -eo pipefail",
     "export DEBIAN_FRONTEND=noninteractive",
+    // 0. Refuse Debian < 13 before touching anything: nbdkit-plugin-vddk is
+    // only packaged from Debian 13 (PVE 9) on, so apt would dead-end after
+    // installing half the stack. The preflight already keeps the UI action
+    // hidden on such a node; this guard covers direct API calls. An
+    // unreadable VERSION_ID falls through on purpose.
+    ". /etc/os-release 2>/dev/null || true",
+    'DEBIAN_MAJOR="$(echo "$VERSION_ID" | cut -d. -f1)"',
+    'if [ -n "$DEBIAN_MAJOR" ] && [ "$DEBIAN_MAJOR" -lt 13 ] 2>/dev/null; then',
+    '  echo "Warm migration needs Proxmox VE 9: this node runs Debian $DEBIAN_MAJOR (Proxmox VE $((DEBIAN_MAJOR - 4))), and nbdkit-plugin-vddk is only packaged from Debian 13 on." >&2',
+    "  exit 1",
+    "fi",
     // 1. NBD server + client (Debian main).
     // `|| true`: a node without a Proxmox subscription always fails
     // `apt-get update` with a 401 on enterprise.proxmox.com, which is benign

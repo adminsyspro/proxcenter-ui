@@ -12,6 +12,16 @@ export interface VddkPreflightResult {
   missing: string[]
   /** Human-actionable message when not ok (install commands, VDDK symlink hint). */
   error?: string
+  /** Debian major version reported by the node's /etc/os-release, when readable. */
+  debianMajor?: number
+  /**
+   * True when the node cannot be prepared at all: something is missing AND the
+   * node runs Debian < 13 (Proxmox VE < 9). Debian 13 is the first release
+   * that ships nbdkit-plugin-vddk, so on an older node both the automated
+   * preparation and the manual guide dead-end on apt. A node that already has
+   * everything stays ok regardless of its version.
+   */
+  osUnsupported?: boolean
 }
 
 /** Install hint shown for each absent dependency. */
@@ -41,6 +51,9 @@ export function buildPreflightCmd(libdir: string): string {
     `echo "nbd-client=$(command -v nbd-client || echo MISSING)"`,
     `echo "vddk-plugin=$(find /usr/lib /usr/lib64 -name 'nbdkit-vddk-plugin.so' 2>/dev/null | head -1)"`,
     `echo "vddk-lib=$(ls ${lib}/lib64/libvixDiskLib.so* 2>/dev/null | head -1)"`,
+    // Debian major version: decides whether the node can be prepared at all
+    // (nbdkit-plugin-vddk only exists from Debian 13 / PVE 9 on).
+    'echo "debian-major=$(. /etc/os-release 2>/dev/null; echo "$VERSION_ID" | cut -d. -f1)"',
   ].join("; ")
 }
 
@@ -57,11 +70,28 @@ export function parsePreflightOutput(output: string, libdir: string): VddkPrefli
     if (i > 0) map.set(line.slice(0, i).trim(), line.slice(i + 1).trim())
   }
   const missing = ["nbdkit", "nbd-client", "vddk-plugin", "vddk-lib"].filter(k => absent(map.get(k)))
-  if (missing.length === 0) return { ok: true, missing: [] }
+  const parsed = Number.parseInt(map.get("debian-major") ?? "", 10)
+  const debianMajor = Number.isFinite(parsed) ? parsed : undefined
+  if (missing.length === 0) return { ok: true, missing: [], debianMajor }
+  // Debian < 13 cannot be prepared: nbdkit-plugin-vddk is not packaged there,
+  // so apt dead-ends for the automated path and the manual guide alike. An
+  // unreadable version deliberately falls through to the generic hints; an
+  // unknown or newer system must not be locked out by this check.
+  if (debianMajor !== undefined && debianMajor < 13) {
+    return {
+      ok: false,
+      missing,
+      debianMajor,
+      osUnsupported: true,
+      error:
+        `Warm migration needs Proxmox VE 9: this node runs Debian ${debianMajor} ` +
+        `(Proxmox VE ${debianMajor - 4}), and nbdkit-plugin-vddk is only packaged from Debian 13 on.`,
+    }
+  }
   const error =
     `VDDK warm-migration preflight failed on the Proxmox node (libdir ${libdir}). Missing: ${missing.join(", ")}. ` +
     missing.map(k => `${k}: ${HINTS[k]}`).join("; ")
-  return { ok: false, missing, error }
+  return { ok: false, missing, error, debianMajor }
 }
 
 /**

@@ -2183,6 +2183,7 @@
       "warmPreflightReady": "Target node is ready for warm migration (nbdkit, nbd-client and the VDDK are present).",
       "warmPreflightFailedTitle": "Target node is not ready for warm migration",
       "warmPreflightMissing": "Missing on the node: {items}.",
+      "warmPrepNeedsPve9": "This node runs Proxmox VE {pve} (Debian {debian}). Warm migration needs Proxmox VE 9: Debian 13 is the first release that ships the nbdkit VDDK plugin, so this node cannot be prepared, automatically or by hand.",
       "warmPreflightDocsHint": "Prepare the Proxmox node first (install nbdkit, the nbdkit VDDK plugin, nbd-client and the Broadcom VDDK), then reselect the node. See the <link>warm migration node setup guide</link>.",
       "warmSetupAction": "Prepare this node",
       "warmSetupConfirmText": "ProxCenter will prepare this node over SSH: install nbdkit, nbd-client and the nbdkit VDDK plugin via apt, add a Debian non-free apt source (/etc/apt/sources.list.d/proxcenter-nonfree.list), and download the VDDK from the ProxCenter Enterprise package into /usr/lib/vmware-vix-disklib (about 96 MB on the hypervisor).",

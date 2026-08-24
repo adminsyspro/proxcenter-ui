@@ -2167,6 +2167,7 @@
       "warmPreflightReady": "目标节点已就绪，可进行温迁移（nbdkit、nbd-client 和 VDDK 均已就位）。",
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
+      "warmPrepNeedsPve9": "此节点运行的是 Proxmox VE {pve}（Debian {debian}）。热迁移需要 Proxmox VE 9：Debian 13 是首个提供 nbdkit VDDK 插件的版本，因此无法自动或手动准备此节点。",
       "warmPreflightDocsHint": "请先准备 Proxmox 节点（安装 nbdkit、nbdkit VDDK 插件、nbd-client 以及 Broadcom VDDK），然后重新选择节点。请参阅<link>温迁移节点准备指南</link>。",
       "warmSetupAction": "准备此节点",
       "warmSetupConfirmText": "ProxCenter 将通过 SSH 准备此节点：使用 apt 安装 nbdkit、nbd-client 和 nbdkit VDDK 插件，添加 Debian non-free apt 源（/etc/apt/sources.list.d/proxcenter-nonfree.list），并从 ProxCenter Enterprise 软件包下载 VDDK 到 /usr/lib/vmware-vix-disklib（在虚拟化主机上约占用 96 MB）。",

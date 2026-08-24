@@ -117,7 +117,7 @@
     "tailwindcss": "4.3.1",
     "tailwindcss-logical": "4.2.0",
     "tsx": "4.23.12",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.11"
   },
   "resolutions": {
     "rimraf": "5.0.7",

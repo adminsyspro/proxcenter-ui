@@ -114,7 +114,7 @@
     "stylelint-use-logical-spec": "5.0.1",
     "stylis": "4.4.0",
     "stylis-plugin-rtl": "2.1.1",
-    "tailwindcss": "4.3.1",
+    "tailwindcss": "4.3.3",
     "tailwindcss-logical": "4.2.0",
     "tsx": "4.23.12",
     "vitest": "^4.1.3"

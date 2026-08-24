@@ -120,6 +120,20 @@ services:
       VIP: ${VIP}
       HA_REDIRECT_DISABLED: ${HA_REDIRECT_DISABLED:-}
       HA_REDIRECT_EXEMPT_HOSTS: ${HA_REDIRECT_EXEMPT_HOSTS:-}
+      # Private GHCR package carrying the VDDK the warm migration path needs.
+      # Broadcom closed the public download in August 2026, so the product
+      # installs it on the target node itself. Without GHCR_TOKEN in the
+      # container, the "Prepare the node" action stays disabled.
+      GHCR_TOKEN: ${GHCR_TOKEN:-}
+      PROXCENTER_VDDK_PACKAGE: ${PROXCENTER_VDDK_PACKAGE:-}
+      PROXCENTER_VDDK_TAG: ${PROXCENTER_VDDK_TAG:-}
+      # Proxmox API budgets in milliseconds. Empty keeps the defaults: 8000 for
+      # a regular call, 30000 for the reads that enumerate every storage.
+      PVE_TIMEOUT_MS: ${PVE_TIMEOUT_MS:-}
+      PVE_SLOW_READ_TIMEOUT_MS: ${PVE_SLOW_READ_TIMEOUT_MS:-}
+      # How long a cold migration waits for an operator to pick the root
+      # filesystem before it gives the node temp storage back. Default: 2 hours.
+      V2V_ROOT_CHOICE_TIMEOUT_MS: ${V2V_ROOT_CHOICE_TIMEOUT_MS:-}
     healthcheck:
       # Liveness on purpose: /api/health (readiness) returns 503 while the
       # DB is unreachable, which would flap the container during failover.

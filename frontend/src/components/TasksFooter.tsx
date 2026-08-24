@@ -24,9 +24,15 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid'
 import { useTaskEvents } from '@/hooks/useTaskEvents'
 import { useProxCenterTasks, type PCTask } from '@/contexts/ProxCenterTasksContext'
 import { useSharedTasks } from '@/hooks/useSharedTasks'
-import { mergeSharedTasks, type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
+import { useJobs } from '@/hooks/useJobs'
+import { useRefreshInterval } from '@/hooks/useRefreshInterval'
+import { useLicense } from '@/contexts/LicenseContext'
+import { type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
+import { mergeTaskbarRows } from '@/lib/tasks/orchestratorTaskRows'
 import TaskDetailDialog from './TaskDetailDialog'
 import SharedTaskDetailDialog from '@/components/SharedTaskDetailDialog'
+import JobDetailDialog from '@/components/tasks/JobDetailDialog'
+import { runJobAction } from '@/lib/tasks/jobActions'
 import {
   TASKBAR_HEADER_HEIGHT,
   TASKBAR_MIN_PANEL_HEIGHT,
@@ -169,7 +175,57 @@ export default function TasksFooter({
   // ProxCenter tasks
   const { tasks: pcTasks, clearDone: clearPCDone, restoreTask } = useProxCenterTasks()
   const { data: sharedResp } = useSharedTasks()
-  const mergedPcTasks: MergedPCTask[] = mergeSharedTasks(pcTasks, sharedResp?.data ?? [])
+
+  // Task Center jobs (rolling updates, DRS, replication, Site Recovery) belong
+  // on this tab too: they are ProxCenter tasks, not Proxmox ones. Enterprise
+  // only, like the Task Center itself.
+  //
+  // Polled at half the cadence of the shared tasks above, because this footer
+  // is mounted on EVERY page: one poll fans out to four orchestrator calls
+  // plus one history call per recovery plan. The Task Center page keeps its
+  // own faster refresh while it is open (and shares this SWR cache key).
+  // useRefreshInterval scales it with the user's global setting and returns 0
+  // on a hidden tab.
+  const { isEnterprise } = useLicense()
+  const jobsRefreshInterval = useRefreshInterval(60000)
+  const { data: jobsResp, mutate: mutateJobs } = useJobs(isEnterprise, jobsRefreshInterval)
+
+  const mergedPcTasks: MergedPCTask[] = useMemo(
+    () => mergeTaskbarRows(pcTasks, sharedResp?.data ?? [], jobsResp?.data ?? []),
+    [pcTasks, sharedResp, jobsResp]
+  )
+
+  // A double-click opens the very same dialog as the Task Center table, so the
+  // logs and the pause/resume/cancel actions of a job are one click away from
+  // any page. Keyed by the job id the row carries.
+  const jobsById = useMemo(
+    () => new Map<string, any>((jobsResp?.data ?? []).map((j: any) => [j.id, j])),
+    [jobsResp]
+  )
+  const [detailJob, setDetailJob] = useState<any>(null)
+  const [jobActionError, setJobActionError] = useState<string | null>(null)
+
+  const openJobDetail = (task: MergedPCTask) => {
+    const job = task.jobId ? jobsById.get(task.jobId) : null
+    if (!job) return
+
+    setJobActionError(null)
+    setDetailJob(job)
+  }
+
+  const handleJobAction = async (job: any, action: any) => {
+    setJobActionError(null)
+    const { ok, error } = await runJobAction(job, action)
+    if (!ok) {
+      setJobActionError(error ?? null)
+
+      return
+    }
+
+    const refreshed = await mutateJobs()
+    const fresh = (refreshed as any)?.data?.find((j: any) => j.id === job.id)
+    if (fresh) setDetailJob(fresh)
+  }
   const [detailJobId, setDetailJobId] = useState<string | null>(null)
   const pcRunningCount = mergedPcTasks.filter(t => t.status === 'running').length
 
@@ -774,9 +830,19 @@ export default function TasksFooter({
                   {mergedPcTasks.map((task) => (
                     <Box
                       key={task.id}
-                      onClick={() => task.shared ? setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, '')) : restoreTask(task.id)}
+                      onDoubleClick={() => openJobDetail(task)}
+                      onClick={() => {
+                        // A row backed by a Task Center job opens its dialog on
+                        // double-click, like the Proxmox tab: nothing to do on a
+                        // single click. The others keep their own behaviour.
+                        if (task.jobId && jobsById.has(task.jobId)) return
+                        if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
+                        restoreTask(task.id)
+                      }}
                       sx={{
-                        px: 2, py: 1,
+                        // Same row height as the compact DataGrid of the
+                        // Proxmox tab (36px), so both tabs read as one list.
+                        px: 2, py: 0, minHeight: 36,
                         borderBottom: '1px solid rgba(231,227,252,0.08)',
                         display: 'flex', alignItems: 'center', gap: 2,
                         cursor: 'pointer',
@@ -786,24 +852,26 @@ export default function TasksFooter({
                       {/* Icon */}
                       <i
                         className={
+                          task.icon ? task.icon :
                           task.type === 'upload' ? 'ri-upload-2-line' :
                           task.type === 'download' ? 'ri-download-2-line' :
                           'ri-settings-3-line'
                         }
                         style={{ fontSize: 16, opacity: 0.6, flexShrink: 0 }}
                       />
-                      {/* Label */}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }} noWrap>
+                      {/* Label, detail and initiator on ONE line: stacked
+                          Typographies made every row two or three lines tall. */}
+                      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, flexShrink: 0, maxWidth: '45%' }} noWrap>
                           {task.label}
                         </Typography>
                         {task.detail && (
-                          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem' }} noWrap>
+                          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem', flex: 1, minWidth: 0 }} noWrap>
                             {task.detail}
                           </Typography>
                         )}
                         {task.shared && task.readOnly && task.startedByName && (
-                          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem' }} noWrap>
+                          <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem', flexShrink: 0 }} noWrap>
                             {t('tasks.shared.startedBy', { name: task.startedByName })}
                           </Typography>
                         )}
@@ -937,6 +1005,15 @@ return ''
 
     {/* Shared Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
     <SharedTaskDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />
+    <JobDetailDialog
+      open={!!detailJob}
+      job={detailJob}
+      onClose={() => setDetailJob(null)}
+      onAction={handleJobAction}
+      actionError={jobActionError}
+      isEnterprise={isEnterprise}
+      t={t}
+    />
 
     {/* Task Detail Dialog - outside dark ThemeProvider so it follows user theme */}
     {selectedTask && (

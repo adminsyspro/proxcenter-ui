@@ -7,6 +7,10 @@ export interface MergedPCTask extends PCTask {
   rawStatus?: string
   startedByName?: string
   jobId?: string
+  /** Remix icon class, set by rows that carry their own job-type icon. */
+  icon?: string
+  /** Task Center job (rolling update, DRS, replication, Site Recovery). */
+  orchestrator?: boolean
 }
 
 function statusFor(raw: string): PCTaskStatus {
@@ -61,7 +65,13 @@ export function mergeSharedTasks(localTasks: PCTask[], serverTasks: SharedTask[]
     // otherwise keep the server row (terminal server, or non-running local)
   }
 
-  return [...byId.values()].sort((a, b) => {
+  return sortPcTasks([...byId.values()])
+}
+
+/** Running first, then most recent first. Exported so rows merged in from
+ *  another source (orchestratorTaskRows) sort exactly the same way. */
+export function sortPcTasks(rows: MergedPCTask[]): MergedPCTask[] {
+  return [...rows].sort((a, b) => {
     const ar = a.status === "running" ? 0 : 1
     const br = b.status === "running" ? 0 : 1
     if (ar !== br) return ar - br

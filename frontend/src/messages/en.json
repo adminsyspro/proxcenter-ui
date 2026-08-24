@@ -3715,6 +3715,7 @@
     "typeReplication": "Replication",
     "typeDrs": "DRS",
     "typeMaintenance": "Maintenance",
+    "typeSiteRecovery": "Site Recovery",
     "typeMigration": "Migration",
     "statusRunning": "Running",
     "statusSuccess": "Success",

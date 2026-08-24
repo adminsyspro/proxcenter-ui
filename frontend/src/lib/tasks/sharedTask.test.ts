@@ -37,6 +37,8 @@ describe("sourceTypeLabel", () => {
   it("maps known source types and falls back to the raw value then External", () => {
     expect(sourceTypeLabel("vcenter")).toBe("vCenter")
     expect(sourceTypeLabel("esxi-direct")).toBe("ESXi")
+    // Raw connection type of an ESXi host (subType != vcenter).
+    expect(sourceTypeLabel("vmware")).toBe("ESXi")
     expect(sourceTypeLabel("xcpng")).toBe("XCP-ng")
     expect(sourceTypeLabel("weirdthing")).toBe("weirdthing")
     expect(sourceTypeLabel(null)).toBe("External")

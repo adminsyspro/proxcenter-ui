@@ -8,6 +8,10 @@ export const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const
 export const SOURCE_TYPE_LABELS: Record<string, string> = {
   esxi: "ESXi",
   "esxi-direct": "ESXi",
+  // A vmware connection whose subType is not "vcenter" is an ESXi host: the
+  // migration route stores the raw connection type in config.sourceType, so
+  // without this entry every ESXi-direct job was labelled "vmware".
+  vmware: "ESXi",
   vcenter: "vCenter",
   hyperv: "Hyper-V",
   nutanix: "Nutanix",

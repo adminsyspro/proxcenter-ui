@@ -132,6 +132,17 @@ describe("resolveVddkArtifact", () => {
 describe("buildVddkInstallScript", () => {
   const script = () => buildVddkInstallScript({ pkg: "adminsyspro/proxcenter-vddk", digest: DIGEST })
 
+  it("refuses a Debian < 13 node before touching anything, and names PVE 9", () => {
+    const lines = script().split("\n")
+    const guard = lines.findIndex(l => l.includes('"$DEBIAN_MAJOR" -lt 13'))
+    const firstInstall = lines.findIndex(l => l.includes("apt-get install"))
+    expect(guard).toBeGreaterThan(-1)
+    expect(firstInstall).toBeGreaterThan(guard)
+    expect(script()).toContain("Proxmox VE 9")
+    // an unreadable VERSION_ID must fall through, not refuse
+    expect(script()).toContain('[ -n "$DEBIAN_MAJOR" ]')
+  })
+
   it("installs nbdkit + nbd-client from Debian main first", () => {
     const s = script()
     expect(s).toContain("apt-get update")

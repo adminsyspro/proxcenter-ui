@@ -684,7 +684,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   // before the node is resolved, so it's skipped (the engine backstop still covers it).
   // The verdict carries the target it was taken for (`key`), so a stale result from a
   // previously selected node is never mistaken for the current selection.
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string; tokenConfigured?: boolean } | null>(null)
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -702,11 +702,11 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check' }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; error?: string; vddkTokenConfigured?: boolean }) => {
+      .then((d: { ok?: boolean; missing?: string[]; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error, tokenConfigured: !!d.vddkTokenConfigured })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [] }) })
     return () => { cancelled = true }
@@ -2575,7 +2575,17 @@ return
                         <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                           {t('inventoryPage.esxiMigration.warmPreflightFailedTitle')}
                         </Typography>
-                        {warmPreflightCurrent.missing.length > 0 && (
+                        {/* Debian < 13 cannot be prepared at all (nbdkit-plugin-vddk is only
+                            packaged from Debian 13 / PVE 9 on), so the version verdict replaces
+                            the missing list and the automated action below stays hidden. */}
+                        {warmPreflightCurrent.osUnsupported ? (
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>
+                            {t('inventoryPage.esxiMigration.warmPrepNeedsPve9', {
+                              debian: String(warmPreflightCurrent.debianMajor ?? ''),
+                              pve: String((warmPreflightCurrent.debianMajor ?? 13) - 4),
+                            })}
+                          </Typography>
+                        ) : warmPreflightCurrent.missing.length > 0 && (
                           <Typography variant="body2" sx={{ mb: 0.5 }}>
                             {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflightCurrent.missing.join(', ') })}
                           </Typography>
@@ -2586,7 +2596,7 @@ return
                             apt packages, adds a Debian non-free apt source, and writes ~96 MB
                             under /usr/lib on the hypervisor. The manual doc link below stays
                             visible as the fallback either way. */}
-                        {warmPreflightCurrent.tokenConfigured && (
+                        {warmPreflightCurrent.tokenConfigured && !warmPreflightCurrent.osUnsupported && (
                           <Box sx={{ mb: 1 }}>
                             {warmSetupCurrent?.phase === 'running' ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

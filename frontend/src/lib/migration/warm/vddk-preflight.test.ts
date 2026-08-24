@@ -35,6 +35,11 @@ describe("buildPreflightCmd", () => {
     expect(cmd).toContain("nbdkit-vddk-plugin.so")
     expect(cmd).toContain("'/opt/vddk'/lib64/libvixDiskLib.so")
   })
+  it("probes the Debian major version alongside the four dependencies", () => {
+    const cmd = buildPreflightCmd("/opt/vddk")
+    expect(cmd).toContain("debian-major=")
+    expect(cmd).toContain("/etc/os-release")
+  })
 })
 
 describe("parsePreflightOutput", () => {
@@ -56,6 +61,47 @@ describe("parsePreflightOutput", () => {
     expect(r.ok).toBe(false)
     expect(r.missing).toContain("vddk-lib")
     expect(r.error).toMatch(/libvixDiskLib|VDDK|symlink/i)
+  })
+})
+
+describe("parsePreflightOutput: PVE 9 requirement", () => {
+  it("flags a Debian 12 node with missing pieces as unsupported, not merely unprepared", () => {
+    // The exact failure seen on a PVE 8 node: pieces missing, and apt has no
+    // nbdkit-plugin-vddk to offer on bookworm.
+    const r = parsePreflightOutput("debian-major=12\n", "/opt/vddk")
+    expect(r.ok).toBe(false)
+    expect(r.osUnsupported).toBe(true)
+    expect(r.debianMajor).toBe(12)
+    expect(r.missing).toContain("vddk-plugin")
+    expect(r.error).toContain("Proxmox VE 9")
+    expect(r.error).toContain("Debian 12")
+    expect(r.error).toContain("Proxmox VE 8")
+  })
+
+  it("keeps the generic missing-list verdict on Debian 13", () => {
+    const r = parsePreflightOutput("debian-major=13\n", "/opt/vddk")
+    expect(r.ok).toBe(false)
+    expect(r.osUnsupported).toBeUndefined()
+    expect(r.debianMajor).toBe(13)
+    expect(r.error).toContain("Missing:")
+  })
+
+  it("never blocks a ready node, whatever its Debian version", () => {
+    // A PVE 8 node someone provisioned by other means is ready: warm migration
+    // only needs the pieces to be present, the version gate is about apt.
+    const r = parsePreflightOutput(ALL_PRESENT + "\ndebian-major=12", "/opt/vddk")
+    expect(r.ok).toBe(true)
+    expect(r.osUnsupported).toBeUndefined()
+    expect(r.debianMajor).toBe(12)
+  })
+
+  it("falls through to the generic hints when the version is unreadable", () => {
+    // An unknown or future system must not be locked out by this check.
+    const r = parsePreflightOutput("debian-major=\n", "/opt/vddk")
+    expect(r.ok).toBe(false)
+    expect(r.osUnsupported).toBeUndefined()
+    expect(r.debianMajor).toBeUndefined()
+    expect(r.error).toContain("Missing:")
   })
 })
 

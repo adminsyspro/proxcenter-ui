@@ -2183,6 +2183,7 @@
       "warmPreflightReady": "대상 노드가 웜 마이그레이션 준비를 마쳤습니다 (nbdkit, nbd-client, VDDK가 있습니다).",
       "warmPreflightFailedTitle": "대상 노드가 웜 마이그레이션 준비가 되지 않았습니다",
       "warmPreflightMissing": "노드에 없는 항목: {items}.",
+      "warmPrepNeedsPve9": "이 노드는 Proxmox VE {pve}(Debian {debian})에서 실행 중입니다. 웜 마이그레이션에는 Proxmox VE 9가 필요합니다. Debian 13부터 nbdkit VDDK 플러그인이 제공되므로 이 노드는 자동으로도 수동으로도 준비할 수 없습니다.",
       "warmPreflightDocsHint": "먼저 Proxmox 노드를 준비한 후(nbdkit, nbdkit VDDK 플러그인, nbd-client, Broadcom VDDK 설치) 노드를 다시 선택하세요. <link>웜 마이그레이션 노드 설정 가이드</link>를 참조하세요.",
       "warmSetupAction": "이 노드 준비",
       "warmSetupConfirmText": "ProxCenter가 SSH로 이 노드를 준비합니다: apt로 nbdkit, nbd-client, nbdkit VDDK 플러그인을 설치하고, Debian non-free apt 소스(/etc/apt/sources.list.d/proxcenter-nonfree.list)를 추가한 뒤, ProxCenter Enterprise 패키지에서 VDDK를 /usr/lib/vmware-vix-disklib에 내려받습니다(하이퍼바이저에 약 96 MB).",

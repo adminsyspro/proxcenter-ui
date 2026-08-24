@@ -65,7 +65,7 @@
     "prisma": "^7.9.1",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-colorful": "5.7.0",
+    "react-colorful": "5.8.0",
     "react-dom": "19.2.4",
     "react-grid-layout": "^2.2.4",
     "react-leaflet": "^5.0.0",

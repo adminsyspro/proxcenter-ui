@@ -3691,6 +3691,7 @@
     "typeReplication": "复制",
     "typeDrs": "DRS",
     "typeMaintenance": "维护",
+    "typeSiteRecovery": "站点恢复",
     "typeMigration": "迁移",
     "statusRunning": "运行中",
     "statusSuccess": "成功",

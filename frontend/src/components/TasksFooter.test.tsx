@@ -54,12 +54,20 @@ vi.mock('@/hooks/useTaskEvents', () => ({
   useTaskEvents: () => ({ data: { data: [] }, mutate: vi.fn(), isLoading: false }),
 }))
 
+// The ProxCenter tab also lists Task Center jobs now: Enterprise gate, SWR
+// poll and the router used when a job row is clicked.
+vi.mock('@/contexts/LicenseContext', () => ({ useLicense: () => ({ isEnterprise: true }) }))
+vi.mock('@/hooks/useJobs', () => ({ useJobs: () => ({ data: undefined }) }))
+vi.mock('@/hooks/useRefreshInterval', () => ({ useRefreshInterval: () => 0 }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 vi.mock('@mui/x-data-grid', () => ({
   DataGrid: () => <div data-testid="datagrid" />,
 }))
 
 vi.mock('./TaskDetailDialog', () => ({ default: () => null }))
 vi.mock('@/components/SharedTaskDetailDialog', () => ({ default: () => null }))
+vi.mock('@/components/tasks/JobDetailDialog', () => ({ default: () => null }))
 
 // ------------------------------------------------------------------ //
 // Helpers

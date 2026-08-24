@@ -9,23 +9,13 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Divider,
   FormControl,
   IconButton,
   InputAdornment,
   LinearProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   MenuItem,
   Select,
-  Stack,
   TextField,
   Tooltip,
   Typography
@@ -33,15 +23,6 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 import { PieChart, Pie, Cell } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
-// RemixIcon replacements for @mui/icons-material
-const CheckCircleIcon = (props) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const ErrorIcon = (props) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const WarningIcon = (props) => <i className="ri-alert-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const InfoIcon = (props) => <i className="ri-information-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const CloseIcon = (props) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PauseIcon = (props) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PlayArrowIcon = (props) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
@@ -49,6 +30,10 @@ import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useJobs } from '@/hooks/useJobs'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
+
+import { runJobAction } from '@/lib/tasks/jobActions'
+import JobDetailDialog from '@/components/tasks/JobDetailDialog'
+import { StatusChip, TypeChip } from '@/components/tasks/JobChips'
 
 /* --------------------------------
    Helpers
@@ -68,70 +53,25 @@ function useTimeAgo(t) {
   }
 }
 
-/* --------------------------------
-   Type Labels (fallback if translation missing)
--------------------------------- */
+// Every control in the filter toolbar is normalised to this height: MUI gives
+// a size='small' TextField/Select 40px but a size='small' Button ~31px, so the
+// row looked ragged.
+const CONTROL_HEIGHT = 40
 
-const TYPE_LABELS = {
-  backup: 'Backup',
-  replication: 'Replication',
-  drs: 'DRS',
-  maintenance: 'Maintenance',
-  migration: 'Migration',
-  rolling_update: 'Rolling Update'
-}
-
-const TYPE_ICONS = {
-  backup: 'ri-hard-drive-2-line',
-  replication: 'ri-repeat-line',
-  drs: 'ri-exchange-line',
-  maintenance: 'ri-tools-line',
-  migration: 'ri-swap-box-line',
-  rolling_update: 'ri-refresh-line'
+// Icon-only toolbar buttons keep the outlined look and the exact height of the
+// text field and the selectors next to them.
+const CONTROL_ICON_BUTTON_SX = {
+  width: CONTROL_HEIGHT,
+  height: CONTROL_HEIGHT,
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: 1
 }
 
 /* --------------------------------
    Components
 -------------------------------- */
 
-function StatusChip({ status, t }) {
-  const config = {
-    running: { label: t('jobsPage.statusRunning'), color: 'info' },
-    success: { label: t('jobsPage.statusSuccess'), color: 'success' },
-    completed: { label: t('jobsPage.statusSuccess'), color: 'success' },
-    failed: { label: t('jobsPage.statusFailed'), color: 'error' },
-    cancelled: { label: t('jobsPage.statusCancelled'), color: 'error' },
-    queued: { label: t('jobsPage.statusQueued'), color: 'default' },
-    pending: { label: t('jobsPage.statusQueued'), color: 'default' },
-    paused: { label: t('jobsPage.statusPaused'), color: 'warning' }
-  }
-
-  const cfg = config[status] || { label: status, color: 'default' }
-
-  return <Chip size='small' label={cfg.label} color={cfg.color} sx={{ minWidth: 80 }} />
-}
-
-function TypeChip({ type, t }) {
-  const TYPE_LABEL_KEYS = {
-    backup: 'jobsPage.typeBackup',
-    replication: 'jobsPage.typeReplication',
-    drs: 'jobsPage.typeDrs',
-    maintenance: 'jobsPage.typeMaintenance',
-    migration: 'jobsPage.typeMigration',
-    rolling_update: 'jobsPage.typeRollingUpdate'
-  }
-  const label = t && TYPE_LABEL_KEYS[type] ? t(TYPE_LABEL_KEYS[type]) : (TYPE_LABELS[type] || type)
-  const icon = TYPE_ICONS[type] || 'ri-file-list-line'
-
-  return (
-    <Chip
-      size='small'
-      label={label}
-      variant='outlined'
-      icon={<i className={icon} style={{ fontSize: 14 }} />}
-    />
-  )
-}
 
 function ProgressCell({ value, status }) {
   if (status === 'queued' || status === 'pending') {
@@ -154,277 +94,6 @@ function ProgressCell({ value, status }) {
   )
 }
 
-function getNodeStatusIcon(status) {
-  switch (status) {
-    case 'completed':
-      return <CheckCircleIcon color="success" fontSize="small" />
-    case 'failed':
-      return <ErrorIcon color="error" fontSize="small" />
-    case 'running':
-    case 'updating':
-    case 'migrating_vms':
-    case 'rebooting':
-    case 'entering_maintenance':
-    case 'exiting_maintenance':
-    case 'verifying_health':
-    case 'waiting_return':
-      return <CircularProgress size={18} />
-    case 'pending':
-      return <InfoIcon color="disabled" fontSize="small" />
-    case 'skipped':
-      return <WarningIcon color="warning" fontSize="small" />
-    default:
-      return <InfoIcon color="disabled" fontSize="small" />
-  }
-}
-
-/* --------------------------------
-   Job Detail Dialog
--------------------------------- */
-
-function JobDetailDialog({ open, onClose, job, onAction, isEnterprise, t }) {
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(false)
-
-  // Fetch full job details when dialog opens
-  useEffect(() => {
-    if (open && job?.id && job.type === 'rolling_update' && isEnterprise) {
-      fetchJobDetails()
-    }
-  }, [open, job?.id, isEnterprise])
-
-  const fetchJobDetails = async () => {
-    if (!job?.id || !isEnterprise) return
-
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/v1/orchestrator/rolling-updates/${job.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        const ru = data.data || data
-        if (ru?.logs) {
-          setLogs(ru.logs)
-        }
-      }
-    } catch (e) {
-      console.error('Error fetching job details:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Auto-refresh if job is running
-  useEffect(() => {
-    if (open && job?.status === 'running' && isEnterprise) {
-      const interval = setInterval(fetchJobDetails, 3000)
-      return () => clearInterval(interval)
-    }
-  }, [open, job?.status, isEnterprise])
-
-  if (!job) return null
-
-  const nodeStatuses = job.metadata?.nodeStatuses || []
-  const isRunning = job.status === 'running'
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{ sx: { maxHeight: '80vh' } }}
-    >
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <TypeChip type={job.type} t={t} />
-          <Typography variant="h6">{job.name}</Typography>
-          <StatusChip status={job.status} t={t} />
-        </Box>
-        <IconButton onClick={onClose} size="small">
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
-
-      <DialogContent dividers>
-        <Stack spacing={3}>
-          {/* Progress */}
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography variant="body2">
-                {t('jobsPage.progression', { completed: job.metadata?.completedNodes || 0, total: job.metadata?.totalNodes || 0 })}
-              </Typography>
-              {job.metadata?.currentNode && (
-                <Typography variant="body2" color="text.secondary">
-                  {t('jobsPage.currentlyRunning', { node: job.metadata.currentNode })}
-                </Typography>
-              )}
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              value={job.progress || 0}
-              sx={{ height: 8, borderRadius: 1 }}
-            />
-          </Box>
-
-          {/* Info */}
-          <Box sx={{ display: 'flex', gap: 4 }}>
-            <Box>
-              <Typography variant="caption" color="text.secondary">{t('jobsPage.target')}</Typography>
-              <Typography variant="body2">{job.target || '—'}</Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">{t('jobsPage.started')}</Typography>
-              <Typography variant="body2">
-                {job.startedAt ? new Date(job.startedAt).toLocaleString() : '—'}
-              </Typography>
-            </Box>
-            {job.endedAt && (
-              <Box>
-                <Typography variant="caption" color="text.secondary">{t('jobsPage.ended')}</Typography>
-                <Typography variant="body2">
-                  {new Date(job.endedAt).toLocaleString()}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-
-          {/* Actions */}
-          {isRunning && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                startIcon={<PauseIcon />}
-                onClick={() => onAction(job.id, 'pause')}
-              >
-                {t('jobsPage.pause')}
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                startIcon={<StopIcon />}
-                onClick={() => onAction(job.id, 'cancel')}
-              >
-                {t('common.cancel')}
-              </Button>
-            </Box>
-          )}
-
-          {job.status === 'paused' && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                color="primary"
-                startIcon={<PlayArrowIcon />}
-                onClick={() => onAction(job.id, 'resume')}
-              >
-                {t('jobsPage.resume')}
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                startIcon={<StopIcon />}
-                onClick={() => onAction(job.id, 'cancel')}
-              >
-                {t('common.cancel')}
-              </Button>
-            </Box>
-          )}
-
-          {/* Error */}
-          {job.metadata?.error && (
-            <Box sx={{ p: 2, bgcolor: 'error.main', color: 'error.contrastText', borderRadius: 1 }}>
-              <Typography variant="body2">{job.metadata.error}</Typography>
-            </Box>
-          )}
-
-          {/* Node statuses */}
-          {nodeStatuses.length > 0 && (
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                  {t('jobsPage.nodeStatuses')}
-                </Typography>
-                <List dense>
-                  {nodeStatuses.map((ns) => (
-                    <ListItem key={ns.node_name}>
-                      <ListItemIcon sx={{ minWidth: 40 }}>
-                        {getNodeStatusIcon(ns.status)}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={ns.node_name}
-                        secondary={
-                          <>
-                            {ns.status}
-                            {ns.version_before && ns.version_after &&
-                              ` • ${ns.version_before} → ${ns.version_after}`}
-                            {ns.did_reboot && ` • ${t('jobsPage.rebooted')}`}
-                          </>
-                        }
-                      />
-                      {ns.error && (
-                        <Chip size="small" label={t('common.error')} color="error" />
-                      )}
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Logs */}
-          <Card variant="outlined">
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight={700}>
-                  {t('jobsPage.logs')}
-                </Typography>
-                {loading && <CircularProgress size={16} />}
-              </Box>
-              <Box
-                sx={{
-                  maxHeight: 300,
-                  overflow: 'auto',
-                  bgcolor: 'background.default',
-                  borderRadius: 1,
-                  p: 1,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                }}
-              >
-                {logs.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {t('jobsPage.noLogs')}
-                  </Typography>
-                ) : (
-                  logs.slice(-100).map((log, i) => (
-                    <Box
-                      key={i}
-                      sx={{
-                        color: log.level === 'error' ? 'error.main' :
-                               log.level === 'warning' ? 'warning.main' :
-                               'text.primary',
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      [{new Date(log.timestamp).toLocaleTimeString()}]
-                      {log.node && ` [${log.node}]`}
-                      {' '}{log.message}
-                    </Box>
-                  ))
-                )}
-              </Box>
-            </CardContent>
-          </Card>
-        </Stack>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 /* --------------------------------
    Page
@@ -441,6 +110,9 @@ export default function JobsPage() {
   // Dialog state
   const [selectedJob, setSelectedJob] = useState(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // A rejected action (403 without vm.migrate, 400 on an already-finished job)
+  // must say so instead of looking like the click did nothing.
+  const [actionError, setActionError] = useState(null)
 
   const { setPageInfo } = usePageTitle()
 
@@ -465,27 +137,30 @@ export default function JobsPage() {
     }
   }, [stats.running, isEnterprise, mutate])
 
-  // Handle job action (pause/resume/cancel)
-  const handleJobAction = async (jobId, action) => {
+  // Handle job action (pause/resume/cancel). The endpoint depends on the job
+  // type: a migration is cancelled through /api/v1/migrations, only a rolling
+  // update goes to the orchestrator route.
+  const handleJobAction = async (job, action) => {
     if (!isEnterprise) return
 
-    try {
-      const res = await fetch(`/api/v1/orchestrator/rolling-updates/${jobId}/${action}`, {
-        method: 'POST',
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || `Failed to ${action} job`)
-      }
-      // Refresh jobs list
-      mutate()
-    } catch (e) {
-      console.error(`Error ${action} job:`, e)
+    setActionError(null)
+    const { ok, error: actionFailure } = await runJobAction(job, action)
+    if (!ok) {
+      setActionError(actionFailure)
+
+      return
     }
+
+    // Refresh the list, then re-point the open dialog at the refreshed row so
+    // a cancelled migration stops advertising itself as running.
+    const refreshed = await mutate()
+    const fresh = refreshed?.data?.find(j => j.id === job.id)
+    if (fresh) setSelectedJob(fresh)
   }
 
   // Handle row double-click
   const handleRowDoubleClick = (params) => {
+    setActionError(null)
     setSelectedJob(params.row)
     setDialogOpen(true)
   }
@@ -597,18 +272,6 @@ export default function JobsPage() {
   return (
     <EnterpriseGuard requiredFeature={Features.TASK_CENTER} featureName="Task Center">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0 }}>
-          <Button
-            variant='outlined'
-            size='small'
-            startIcon={isValidating ? <CircularProgress size={14} /> : <i className='ri-refresh-line' />}
-            onClick={() => mutate()}
-            disabled={isValidating}
-          >
-            {t('common.refresh')}
-          </Button>
-        </Box>
-
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, flexShrink: 0 }}>
         {/* Total — full distribution donut */}
@@ -739,13 +402,18 @@ export default function JobsPage() {
       {/* Filtres + Table */}
       <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         <CardContent sx={{ pb: 0, flexShrink: 0 }}>
-          <Stack direction='row' spacing={1.5} sx={{ flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+          {/* Plain flex row, not a Stack: Stack injects margin-left on every
+              sibling with a selector more specific than a child's own sx, so an
+              `ml: auto` meant to push the trailing controls right is silently
+              dropped and everything stays packed on the left. An explicit
+              spacer pins both icon buttons to the right edge instead. */}
+          <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
             <TextField
               size='small'
               placeholder={t('common.search')}
               value={q}
               onChange={e => setQ(e.target.value)}
-              sx={{ minWidth: 220 }}
+              sx={{ minWidth: 220, '& .MuiOutlinedInput-root': { height: CONTROL_HEIGHT } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position='start'>
@@ -756,19 +424,21 @@ export default function JobsPage() {
             />
 
             <FormControl size='small' sx={{ minWidth: 150 }}>
-              <Select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+              {/* Only the types the endpoint can actually emit. "Backup" was
+                  offered here with no source feeding it, so the filter always
+                  emptied the table (same trap as "Migration" before #767). */}
+              <Select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} sx={{ height: CONTROL_HEIGHT }}>
                 <MenuItem value='all'>{t('jobsPage.allTypes')}</MenuItem>
                 <MenuItem value='rolling_update'>{t('jobsPage.typeRollingUpdate')}</MenuItem>
-                <MenuItem value='backup'>{t('jobsPage.typeBackup')}</MenuItem>
                 <MenuItem value='replication'>{t('jobsPage.typeReplication')}</MenuItem>
                 <MenuItem value='drs'>{t('jobsPage.typeDrs')}</MenuItem>
                 <MenuItem value='migration'>{t('jobsPage.typeMigration')}</MenuItem>
-                <MenuItem value='maintenance'>{t('jobsPage.typeMaintenance')}</MenuItem>
+                <MenuItem value='site_recovery'>{t('jobsPage.typeSiteRecovery')}</MenuItem>
               </Select>
             </FormControl>
 
             <FormControl size='small' sx={{ minWidth: 130 }}>
-              <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} sx={{ height: CONTROL_HEIGHT }}>
                 <MenuItem value='all'>{t('jobsPage.allStatuses')}</MenuItem>
                 <MenuItem value='running'>{t('jobsPage.statusRunning')}</MenuItem>
                 <MenuItem value='queued'>{t('jobsPage.statusQueued')}</MenuItem>
@@ -778,22 +448,33 @@ export default function JobsPage() {
               </Select>
             </FormControl>
 
-            <Button
-              variant='outlined'
-              size='small'
-              onClick={() => {
-                setQ('')
-                setTypeFilter('all')
-                setStatusFilter('all')
-              }}
-            >
-              {t('common.reset')}
-            </Button>
+            <Box sx={{ flexGrow: 1 }} />
 
-            <Typography variant='body2' sx={{ ml: 'auto', opacity: 0.6 }}>
-              {t('jobsPage.jobsCount', { count: filtered.length })}
-            </Typography>
-          </Stack>
+            <Tooltip title={t('common.reset')}>
+              <IconButton
+                sx={CONTROL_ICON_BUTTON_SX}
+                onClick={() => {
+                  setQ('')
+                  setTypeFilter('all')
+                  setStatusFilter('all')
+                }}
+              >
+                <i className='ri-filter-off-line' style={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+
+            {/* A disabled button fires no pointer event, so the Tooltip needs a
+                wrapper element to hang on while a refresh is in flight. */}
+            <Tooltip title={t('common.refresh')}>
+              <span>
+                <IconButton sx={CONTROL_ICON_BUTTON_SX} onClick={() => mutate()} disabled={isValidating}>
+                  {isValidating
+                    ? <CircularProgress size={16} />
+                    : <i className='ri-refresh-line' style={{ fontSize: 18 }} />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
         </CardContent>
 
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -857,6 +538,7 @@ export default function JobsPage() {
         onClose={() => setDialogOpen(false)}
         job={selectedJob}
         onAction={handleJobAction}
+        actionError={actionError}
         isEnterprise={isEnterprise}
         t={t}
       />

@@ -69,6 +69,27 @@ describe("GET /api/v1/tasks/shared/[id]", () => {
     expect(res.status).toBe(404)
   })
 
+  it("history=1 returns an old finished job with its logs (Task Center opens the full history)", async () => {
+    h.global.migrationJob.findUnique.mockResolvedValue(
+      job({ status: "completed", updatedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) }),
+    )
+    h.global.user.findUnique.mockResolvedValue({ name: "Alice", email: "a@x" })
+    const res = await callRoute(GET, { method: "GET", params: { id: "job-1" }, searchParams: { history: "1" } })
+    const body = (await readJson(res)) as any
+    expect(res.status).toBe(200)
+    expect(body.data.logs).toEqual([{ t: 1, m: "started" }])
+  })
+
+  it("history=1 still enforces the tenant scope", async () => {
+    h.getTenantConnectionIds.mockResolvedValue(new Set(["pve-other"]))
+    h.getCurrentTenantId.mockResolvedValue("tenant-a")
+    h.sessionClient.migrationJob.findUnique.mockResolvedValue(
+      job({ status: "completed", updatedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) }),
+    )
+    const res = await callRoute(GET, { method: "GET", params: { id: "job-1" }, searchParams: { history: "1" } })
+    expect(res.status).toBe(404)
+  })
+
   it("returns the job with logs for an in-scope recent job", async () => {
     h.global.migrationJob.findUnique.mockResolvedValue(job())
     h.global.user.findUnique.mockResolvedValue({ name: "Alice", email: "a@x" })

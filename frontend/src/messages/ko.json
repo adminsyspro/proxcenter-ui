@@ -3715,6 +3715,7 @@
     "typeReplication": "복제",
     "typeDrs": "DRS",
     "typeMaintenance": "유지 관리",
+    "typeSiteRecovery": "사이트 복구",
     "typeMigration": "마이그레이션",
     "statusRunning": "실행 중",
     "statusSuccess": "성공",

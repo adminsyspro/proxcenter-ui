@@ -5,6 +5,7 @@ import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
 
 export const runtime = "nodejs"
 
@@ -20,7 +21,25 @@ function extractHostname(baseUrl: string): string {
   }
 }
 
-// GET /api/v1/orchestrator/jobs - List all jobs (rolling updates, future: DRS, migrations, etc.)
+/**
+ * MigrationJob.status -> the status vocabulary the Task Center renders.
+ * The four pipelines (cold, xcpng, virt-v2v, warm) agree on
+ * pending|completed|failed|cancelled and each adds its own in-flight steps
+ * (preflight, creating_vm, transferring, converting_disks, planning,
+ * enabling_cbt, preparing_disks, full_copy, delta_sync, awaiting_cutover,
+ * cutover, verify...). Anything non-terminal that is not still queued is
+ * therefore reported as running rather than enumerated, so a step added by a
+ * future pipeline can never fall through to a status the page cannot render.
+ */
+function migrationJobStatus(status: string): string {
+  if (status === "completed") return "success"
+  if (status === "failed" || status === "cancelled") return status
+  if (status === "pending") return "pending"
+
+  return "running"
+}
+
+// GET /api/v1/orchestrator/jobs - List all jobs (rolling updates, DRS, external migrations, Site Recovery)
 export async function GET(req: Request) {
   try {
     // Gates the "Task Center" page (menuData permissions: ['tasks.view']).
@@ -69,9 +88,23 @@ export async function GET(req: Request) {
       connByName.set(c.name, host)
     }
 
-    /** Resolve a connection identifier (id or name) to its server hostname */
-    const resolve = (idOrName: string): string =>
-      connById.get(idOrName) || connByName.get(idOrName) || idOrName
+    /**
+     * Resolve a connection identifier (id or name) to its server hostname.
+     *
+     * A reference matching neither is a connection that no longer exists: the
+     * orchestrator keeps the raw cluster id in its own rows (a Site Recovery
+     * plan's source_cluster_id is a plain string, not a foreign key to
+     * Connection), so a plan whose clusters were deleted used to print bare
+     * cuids in the Target and Detail columns. Say what it is instead, keeping
+     * the id prefix so the row stays traceable. A surviving row always
+     * resolves for a non-provider caller, since the deny-by-default filter
+     * below drops anything referencing a connection outside its perimeter.
+     */
+    const resolve = (idOrName?: string | null): string => {
+      if (!idOrName) return "unknown"
+
+      return connById.get(idOrName) || connByName.get(idOrName) || `Deleted connection (${idOrName.slice(0, 8)})`
+    }
 
     const jobs: any[] = []
 
@@ -187,6 +220,69 @@ export async function GET(req: Request) {
       }
     }
 
+    // Fetch external hypervisor -> Proxmox migrations (cold, virt-v2v, warm).
+    // These rows live in OUR database, not the orchestrator, which is why the
+    // Task Center never listed a single one (#767): the page offered a
+    // "Migration" type filter that no source could ever emit, so an operator
+    // who started a VMware/XCP-ng/Hyper-V/Nutanix migration found an empty
+    // page and no way to cancel it.
+    //
+    // Perimeter: targetConnectionId only, i.e. the exact rule the shared-task
+    // footer already applies to these same rows (jobPassesSharedTaskScope).
+    // The source is an external hypervisor connection that a vDC tenant never
+    // owns, so also requiring it inside the perimeter would hide every
+    // migration from iaas tenants. Provider keeps the fleet view.
+    try {
+      const migrationJobs = await globalPrisma.migrationJob.findMany({
+        where: infra.kind === "provider"
+          ? {}
+          : { targetConnectionId: { in: Array.from(perimeterConnectionIds) } },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      })
+
+      for (const mj of migrationJobs) {
+        const migTarget = resolve(mj.targetConnectionId)
+        const vmLabel = mj.sourceVmName || mj.sourceVmId
+        const srcLabel = sourceTypeLabel((mj.config as any)?.sourceType)
+        const route = `${srcLabel} → ${mj.targetNode}${mj.targetVmid ? ` (VMID ${mj.targetVmid})` : ""}`
+        // On a finished job every pipeline sets currentStep to the status word
+        // itself, so appending it would just repeat the status chip. Only an
+        // in-flight step ("disk 1/2", "delta_sync"...) carries information.
+        const isTerminal = (TERMINAL_STATUSES as readonly string[]).includes(mj.status)
+
+        jobs.push({
+          id: mj.id,
+          name: `Migration - ${vmLabel}`,
+          type: "migration",
+          status: migrationJobStatus(mj.status),
+          progress: mj.progress ?? 0,
+          startedAt: mj.startedAt ?? mj.createdAt,
+          endedAt: mj.completedAt ?? undefined,
+          createdAt: mj.createdAt,
+          detail: mj.currentStep && !isTerminal ? `${route} • ${mj.currentStep}` : route,
+          target: migTarget,
+          metadata: {
+            connectionId: mj.targetConnectionId,
+            sourceVmName: mj.sourceVmName,
+            sourceHost: mj.sourceHost,
+            targetNode: mj.targetNode,
+            targetVmid: mj.targetVmid,
+            currentStep: mj.currentStep,
+            totalDisks: mj.totalDisks,
+            currentDisk: mj.currentDisk,
+            transferSpeed: mj.transferSpeed,
+            error: mj.error,
+            // Drives the Cancel button in the detail dialog: the cancel route
+            // rejects a terminal job with a 400, so don't offer it.
+            cancellable: !isTerminal,
+          },
+        })
+      }
+    } catch (e) {
+      console.error("Failed to fetch migration jobs:", e)
+    }
+
     // Fetch Site Recovery replication jobs
     try {
       const replRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/jobs`, {
@@ -277,7 +373,10 @@ export async function GET(req: Request) {
               jobs.push({
                 id: exec.id,
                 name: `${typeLabel} - ${plan.name}`,
-                type: "maintenance",
+                // A failover, a failback or a test failover is Site Recovery,
+                // not maintenance: the old "maintenance" type made the Type
+                // column lie about what the operator had run.
+                type: "site_recovery",
                 status: jobStatus,
                 progress: jobStatus === "success" ? 100 : jobStatus === "running" ? 50 : 0,
                 startedAt: exec.started_at,

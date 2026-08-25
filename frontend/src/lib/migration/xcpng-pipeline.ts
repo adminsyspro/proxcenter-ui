@@ -7,7 +7,8 @@
  * 3. Create empty VM shell on Proxmox via API
  * 4. For each disk:
  *    - Block storage (LVM, ZFS, RBD): download VHD → pvesm alloc → qemu-img convert directly to device
- *    - File-based storage (dir, NFS, CIFS): download VHD to storage path → convert → qm disk import
+ *    - File-based storage (dir, NFS, CIFS): download VHD to storage path → convert →
+ *      rename into the storage (adopt), with qm disk import as fallback (#292)
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
@@ -33,6 +34,7 @@ import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
@@ -416,8 +418,21 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
     await appendLog(jobId, `Temp directory: ${storageTempDir}`)
 
+    // The storage's own volume directory, where a converted image must sit to
+    // be adopted by rename (#292). NOT storageTempDir: the operator may have
+    // picked a temp storage on another filesystem — the adoption module then
+    // refuses the rename and the disk goes through a converting `qm disk import`
+    // instead, which is the wanted fallback.
+    const targetImagesDir = `${storageConfig?.path || '/var/lib/vz'}/images/${targetVmid}`
+
     // Track allocated block volumes (for cleanup on error)
     const allocatedVolumes: AllocatedVolume[] = []
+    // File volumes turned into PVE volumes by rename during this run (#292).
+    // Name reservation only, so two disks never claim the same
+    // vm-<vmid>-disk-<N>. Deliberately NOT in allocatedVolumes: that registry is
+    // pvesm-freed on failure, and the pre-#292 behaviour on a late failure was
+    // to leave an unused disk behind, never to delete the converted image.
+    const adoptedVolumes: AllocatedVolume[] = []
 
     // Allocate a raw volume on block storage and return the device path
     async function allocateBlockVolume(sizeBytes: number): Promise<{ volumeId: string, devicePath: string, rbdMapped?: boolean }> {
@@ -612,62 +627,30 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       // Import disk into Proxmox storage
       const importFile = `${tmpFile}.${importFormat}`
-      await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
-      const importResult = await executeSSHWithTimeout(
-        prisma, config.targetConnectionId, nodeIp,
-        `qm disk import ${targetVmid} "${importFile}" ${config.targetStorage} --format ${importFormat} 2>&1`,
-        3600000
-      )
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${importFile}"`)
-
-      if (!importResult.success) {
-        throw new Error(`Disk import failed: ${importResult.error}`)
-      }
-
-      // Parse the actual disk volume name from qm disk import output
-      let diskVolume = ""
-      const importOutput = importResult.output || ""
-      const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
-      const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
-      if (importMatch?.[1]) {
-        diskVolume = importMatch[1]
-      } else if (altMatch?.[1]) {
-        diskVolume = altMatch[1]
-      } else {
-        await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
-        try {
-          const vmConf = await pveFetch<Record<string, any>>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
-          )
-          const unusedKeys = Object.keys(vmConf)
-            .filter(k => k.startsWith("unused"))
-            .sort((a, b) => a.localeCompare(b))
-          if (unusedKeys.length > 0) {
-            diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
-            await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
-          }
-        } catch (e: any) {
-          await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
-        }
-        if (!diskVolume) {
-          diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
-          await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
-        }
-      }
-
-      // Attach disk to SCSI slot via PVE API
-      const attachBody = new URLSearchParams({
-        [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
+      // Rename-or-import (#292): the shared helper adopts the converted image by
+      // rename when it already sits on the target storage's filesystem (the
+      // default temp dir IS its images/<vmid> directory), imports it otherwise,
+      // and attaches the result. See adoptImportAndAttachFileVolume.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
+        pveConn,
+        targetNode: config.targetNode,
+        connectionId: config.targetConnectionId,
+        nodeIp,
+        sourcePath: importFile,
+        targetStorage: config.targetStorage,
+        imagesDir: targetImagesDir,
+        targetVmid: targetVmid!,
+        format: importFormat,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
+        taken: adoptedVolumes,
+        onLog: (m, level) => appendLog(jobId, m, level),
       })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
+      if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
     }
 
     if (isLive) {

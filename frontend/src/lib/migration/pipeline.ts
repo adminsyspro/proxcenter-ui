@@ -7,7 +7,8 @@
  * 3. Create empty VM shell on Proxmox via API
  * 4. For each disk:
  *    - Block storage (LVM, ZFS, RBD): pvesm alloc → stream raw data directly to device (no temp files)
- *    - File-based storage (dir, NFS, CIFS): download to storage path → convert → qm disk import
+ *    - File-based storage (dir, NFS, CIFS): download to storage path → convert →
+ *      rename into the storage (adopt), with qm disk import as fallback (#292)
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
@@ -28,6 +29,7 @@ import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
 } from "./pvesm-alloc"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
@@ -169,6 +171,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
   // update so the cleanup only frees true orphans, never volumes the VM
   // already references (the VM-level DELETE handles those).
   const allocatedVolumes: AllocatedVolume[] = []
+  // File volumes turned into PVE volumes by rename during this run (#292).
+  // Name reservation only, so two disks never claim the same vm-<vmid>-disk-<N>.
+  // Deliberately NOT in allocatedVolumes: that registry drives volumesToFree(),
+  // which pvesm-frees non-attached volumes on failure — and the pre-#292
+  // behaviour on a late failure was to leave an unused disk behind, never to
+  // delete the converted image. Keep it that way.
+  const adoptedVolumes: AllocatedVolume[] = []
   // Base directory for large intermediate files on the PVE node (SSHFS mount, VMDK dumps,
   // vmkfstools clone targets). User-selectable; falls back to /tmp for backwards compat.
   // /tmp is often a tiny tmpfs on Proxmox — a multi-GB disk transfer will saturate it.
@@ -1272,46 +1281,30 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Conversion complete: ${diskSizeGB} GB in ${elapsed.toFixed(0)}s (${transferSpeed}), output ${(outputSize / 1073741824).toFixed(1)} GB`, "success")
 
       // Import into Proxmox storage
-      await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
-      const importResult = await executeSSHWithTimeout(
-        prisma, config.targetConnectionId, nodeIp,
-        `qm disk import ${targetVmid} "${outputFile}" ${config.targetStorage} --format ${importFormat} 2>&1`,
-        3600000
-      )
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${outputFile}"`)
-
-      if (!importResult.success) {
-        throw new Error(`Disk import failed: ${importResult.error}`)
-      }
-
-      // Parse volume name from import output (same logic as convertAndImportDisk)
-      let diskVolume = ""
-      const importOutput = importResult.output || ""
-      const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
-      const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
-      if (importMatch?.[1]) {
-        diskVolume = importMatch[1]
-      } else if (altMatch?.[1]) {
-        diskVolume = altMatch[1]
-      } else {
-        try {
-          const vmConf = await pveFetch<Record<string, any>>(pveConn, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
-          const unusedKeys = Object.keys(vmConf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
-          if (unusedKeys.length > 0) diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
-        } catch {}
-        if (!diskVolume) diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
-      }
-
-      // Attach disk
-      const attachBody = new URLSearchParams({ [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}` })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
+      // Rename-or-import (#292): the converted image was written into the target
+      // storage's own images/<vmid> directory, so adopting it by rename skips the
+      // second full disk copy `qm disk import` used to do here. The shared helper
+      // owns the guard rails, the import fallback and the attach.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
+        pveConn,
+        targetNode: config.targetNode,
+        connectionId: config.targetConnectionId,
+        nodeIp,
+        sourcePath: outputFile,
+        targetStorage: config.targetStorage,
+        imagesDir: storageTempDir,
+        targetVmid: targetVmid!,
+        format: importFormat,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
+        taken: adoptedVolumes,
+        onLog: (m, level) => appendLog(jobId, m, level),
+      })
+      if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
     }
 
     // Stream disk via SSHFS for block storage (dd or qemu-img convert to pre-allocated device)
@@ -1700,64 +1693,29 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
       // Import disk into Proxmox storage
-      await appendLog(jobId, `Importing disk into storage "${config.targetStorage}"...`)
+      await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
-      const importResult = await executeSSHWithTimeout(
-        prisma, config.targetConnectionId, nodeIp,
-        `qm disk import ${targetVmid} "${tmpFile}.${importFormat}" ${config.targetStorage} --format ${importFormat} 2>&1`,
-        3600000
-      )
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.${importFormat}"`)
-
-      if (!importResult.success) {
-        throw new Error(`Disk import failed: ${importResult.error}`)
-      }
-
-      // Parse the actual disk volume name from qm disk import output
-      let diskVolume = ""
-      const importOutput = importResult.output || ""
-      // Try standard format: "Successfully imported disk as 'unused0:storage:vm-XXX-disk-N'"
-      const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
-      // Also try alternate format: "unused0: successfully imported disk 'storage:vm-XXX-disk-N'"
-      const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
-      if (importMatch?.[1]) {
-        diskVolume = importMatch[1]
-      } else if (altMatch?.[1]) {
-        diskVolume = altMatch[1]
-      } else {
-        await appendLog(jobId, `Parsing import output failed (output: ${importOutput.substring(0, 200)}), reading VM config to find unused disk...`, "info")
-        try {
-          const vmConf = await pveFetch<Record<string, any>>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
-          )
-          const unusedKeys = Object.keys(vmConf)
-            .filter(k => k.startsWith("unused"))
-            .sort((a, b) => a.localeCompare(b))
-          if (unusedKeys.length > 0) {
-            diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
-            await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
-          }
-        } catch (e: any) {
-          await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
-        }
-        if (!diskVolume) {
-          diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${i}`
-          await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
-        }
-      }
-
-      // Attach disk to SCSI slot via PVE API
-      const attachBody = new URLSearchParams({
-        [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
+      // Rename-or-import (#292): the shared helper adopts the converted image by
+      // rename when it can, imports it otherwise, and attaches the result. See
+      // adoptImportAndAttachFileVolume for the guard rails.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
+        pveConn,
+        targetNode: config.targetNode,
+        connectionId: config.targetConnectionId,
+        nodeIp,
+        sourcePath: `${tmpFile}.${importFormat}`,
+        targetStorage: config.targetStorage,
+        imagesDir: storageTempDir,
+        targetVmid: targetVmid!,
+        format: importFormat,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
+        taken: adoptedVolumes,
+        onLog: (m, level) => appendLog(jobId, m, level),
       })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(jobId, `Disk ${i + 1} imported and attached as ${scsiSlot}`, "success")
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
+      if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
     }
 
     // Mount SSHFS if transfer mode requires it
@@ -2723,7 +2681,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         }
 
         if (isFileBased) {
-          // File-based storage: qemu-img convert directly from SSHFS mount → qm disk import
+          // File-based storage: qemu-img convert directly from SSHFS mount into the
+          // storage's images/<vmid> dir, then adopt by rename (#292)
           await transferDiskViaSshfs(i, vmConfig.disks[i])
         } else {
           // Block storage: dd from SSHFS mount directly to pre-allocated block device
@@ -2747,7 +2706,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         }
 
         if (isFileBased) {
-          // File-based storage: download to storage path → convert → qm disk import
+          // File-based storage: download to storage path → convert → adopt by rename (#292)
           await downloadDisk(i, vmConfig.disks[i])
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
           await convertAndImportDisk(i)

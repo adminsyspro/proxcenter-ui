@@ -5,9 +5,12 @@
  * 1. Preflight checks (SSH, virt-v2v installed)
  * 2. Prepare credentials (password file on target node)
  * 3. Create VM shell on Proxmox via API
- * 4. Execute virt-v2v on the target node (converts + downloads to /tmp)
+ * 4. Execute virt-v2v on the target node (converts + downloads to /tmp; on a
+ *    file-based target storage the converted disks are written straight into a
+ *    staging directory on that storage, #292)
  * 5. Parse output XML to configure the VM
- * 6. Import converted disks into Proxmox storage
+ * 6. Import converted disks into Proxmox storage (adopt-by-rename when they
+ *    were staged on the storage itself, `qm disk import` / block write otherwise)
  * 7. Cleanup temp files, optionally start VM
  *
  * virt-v2v runs ON the Proxmox node itself (it connects to the source hypervisor).
@@ -25,6 +28,7 @@ import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 // SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
 // has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
@@ -850,9 +854,16 @@ async function runVirtV2vWithProgress(
   v2vCommand: string,
   progressOffset: number,
   progressScale: number,
+  /**
+   * virt-v2v's output directory when the pipeline stages the conversion on the
+   * target storage (#292). Must match the override given to buildV2vCommand:
+   * the mkdir, the log/exit marker files and the du/df liveness probes all
+   * follow the conversion to where it actually writes.
+   */
+  outputDirOverride?: string,
 ): Promise<{ success: boolean; output: string; error?: string }> {
   const tempBase = config.tempStorage || '/tmp'
-  const outputDir = `${tempBase}/v2v-${jobId}`
+  const outputDir = outputDirOverride || `${tempBase}/v2v-${jobId}`
   const logFile = `${outputDir}/v2v.log`
   const exitFile = `${outputDir}/v2v.exit`
 
@@ -1083,9 +1094,21 @@ function buildV2vCommand(
    * list out of the first attempt's log.
    */
   rootDevice?: string,
+  /**
+   * Convert straight into this directory instead of `<tempStorage>/v2v-<jobId>`
+   * (#292). Set by the pipeline to a staging directory ON the file-based target
+   * storage, so the converted image is born on the storage's own filesystem and
+   * Phase 6 can adopt it by rename instead of paying a second full-disk copy
+   * with `qm disk import`. Also switches the output to qcow2 (`-of qcow2`), the
+   * format that storage wants — producing it here is what used to be `qm disk
+   * import --format qcow2`'s job. Without the override the command stays byte
+   * for byte the legacy one (raw output, no `-of`): the block-storage path
+   * feeds that raw image to `qemu-img convert -n`.
+   */
+  outputDirOverride?: string,
 ): string {
   const tempBase = config.tempStorage || '/tmp'
-  const outputDir = `${tempBase}/v2v-${jobId}`
+  const outputDir = outputDirOverride || `${tempBase}/v2v-${jobId}`
   const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   const vmNameEsc = shellEscape(config.sourceVmName)
 
@@ -1106,7 +1129,11 @@ function buildV2vCommand(
   // site: this string goes straight onto an SSH command line.
   const safeRoot = sanitizeV2vRoot(rootDevice)
   const rootOpt = safeRoot ? `--root ${shellEscape(safeRoot)} ` : ''
-  const v2vOpts = `${rootOpt}${blockDriverOpt}-o local -os ${shellEscape(outputDir)} --machine-readable`
+  // -of qcow2 ONLY in direct-write mode: the file-based storage wants qcow2 and
+  // producing it here is what makes the qm-disk-import copy skippable (#292).
+  // The legacy raw output must not change otherwise — see outputDirOverride.
+  const outputFormatOpt = outputDirOverride ? '-of qcow2 ' : ''
+  const v2vOpts = `${rootOpt}${blockDriverOpt}${outputFormatOpt}-o local -os ${shellEscape(outputDir)} --machine-readable`
 
   // Pre-downloaded local disks (NFC export path for vSAN). This bypasses the
   // sourceType-specific URI building below since virt-v2v doesn't need to talk
@@ -1302,7 +1329,25 @@ export async function runV2vMigrationPipeline(
    */
   let vmCreated = false
   const tempBase = config.tempStorage || '/tmp'
-  const outputDir = `${tempBase}/v2v-${jobId}`
+  /**
+   * Working directory on the temp storage: the NFC source downloads and the
+   * synthesized libvirt XML always live here, whatever the target storage is.
+   * Keyed on jobId, never on the VMID: the create loop in Phase 5 can pick a
+   * different id on collision (#292).
+   */
+  const tempDir = `${tempBase}/v2v-${jobId}`
+  /**
+   * Where virt-v2v writes the CONVERTED disks. Defaults to the temp directory;
+   * Phase 1 repoints it to a staging directory on the target storage when that
+   * storage is file-based (#292), so the converted image is born on the
+   * storage's own filesystem and Phase 6 adopts it by rename instead of paying
+   * a second full-disk copy through `qm disk import`. Staged OUTSIDE the
+   * storage's images/ tree on purpose: PVE scans images/ for volumes, and a
+   * failed conversion must not leave stray files there.
+   */
+  let outputDir = tempDir
+  /** Non-null exactly when the direct-write staging above is active (#292). */
+  let directWriteDir: string | null = null
   const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   let nutanixImageUuids: string[] = []  // Track Nutanix images for cleanup
   let hypervMounted = false  // Track CIFS mount for cleanup
@@ -1373,6 +1418,51 @@ export async function runV2vMigrationPipeline(
         "virt-v2v on this node does not support --block-driver. Falling back to virtio-blk: Windows data disks will be attached on virtio0 (matching the injected viostor.sys driver) instead of scsi0.",
         "warn",
       )
+    }
+
+    // Resolve the target storage ONCE, before the conversion (#292). Phase 6
+    // used to fetch it only after virt-v2v had written the converted image to
+    // the temp directory — too late to decide WHERE the conversion writes. The
+    // path MUST come from the storage config: a dir storage points at an
+    // arbitrary path (/mnt/pve/<storage> is NOT a valid assumption), and
+    // /var/lib/vz only covers the API omitting the field on stock "local".
+    const storageConfig = await pveFetch<any>(
+      pveConn,
+      `/storage/${encodeURIComponent(config.targetStorage)}`
+    )
+    const storageType = storageConfig?.type || "dir"
+    const isFileBased = isFileBasedStorage(storageType)
+    const storagePath: string = storageConfig?.path || '/var/lib/vz'
+    if (isFileBased && storagePath) {
+      // Guard against a dead mount (#292): converting "onto the storage" while
+      // its NFS/CIFS mount is down would silently fill the root filesystem
+      // under the mountpoint and hide the files once the mount returns. The
+      // legacy flow failed loudly at `qm disk import` in that state, so
+      // anything but a positively active storage keeps the legacy temp path
+      // (correct, just twice the I/O).
+      const storageStatus = await pveFetch<any>(
+        pveConn,
+        `/nodes/${encodeURIComponent(config.targetNode)}/storage/${encodeURIComponent(config.targetStorage)}/status`,
+      ).catch(() => null)
+      const storageActive = storageStatus?.active === 1 || storageStatus?.active === true
+      if (storageActive) {
+        directWriteDir = `${storagePath}/proxcenter-v2v/${jobId}`
+        outputDir = directWriteDir
+        await appendLog(
+          jobId,
+          `Target storage "${config.targetStorage}" (${storageType}) is file-based: ` +
+          `virt-v2v will convert straight into ${directWriteDir}, so the disks can be ` +
+          `adopted in place instead of paying a second full copy through qm disk import.`,
+          "info",
+        )
+      } else {
+        await appendLog(
+          jobId,
+          `Target storage "${config.targetStorage}" is file-based but not reported active on ${config.targetNode}; ` +
+          `keeping the conversion on the temp storage (qm disk import will copy the disks).`,
+          "warn",
+        )
+      }
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -2003,7 +2093,9 @@ export async function runV2vMigrationPipeline(
         config,
         nodeIp,
         vmwareSession,
-        outputDir,
+        // Source VMDKs land on the TEMP storage even in direct-write mode:
+        // only the converted output moves to the target storage (#292).
+        tempDir,
         sourceVmwareConfig,
         liveSnapshotMor,
       )
@@ -2085,7 +2177,10 @@ export async function runV2vMigrationPipeline(
     // an XML we write ourselves using the source VM's metadata from SOAP.
     let libvirtXmlPath: string | undefined
     if (nfcDownloadedDisks.length > 1) {
-      libvirtXmlPath = `${outputDir}/vm.xml`
+      // In the temp dir (which the NFC export already created), NOT in the
+      // conversion output dir: Phase 5 does `cat <outputDir>/*.xml` and must
+      // only ever see virt-v2v's own output XML (#292).
+      libvirtXmlPath = `${tempDir}/vm.xml`
       const xml = buildSynthesizedLibvirtXml(
         config.sourceVmName,
         sourceVmwareConfig?.memoryMB || 1024,
@@ -2131,6 +2226,7 @@ export async function runV2vMigrationPipeline(
       nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : undefined,
       libvirtXmlPath,
       pinnedRoot || undefined,
+      directWriteDir || undefined,
     )
     await appendLog(jobId, `Running virt-v2v on ${config.targetNode}...`)
 
@@ -2148,6 +2244,7 @@ export async function runV2vMigrationPipeline(
       v2vCommand,
       v2vProgressOffset,
       v2vProgressScale,
+      directWriteDir || undefined,
     )
 
     // Parse progress from output
@@ -2194,9 +2291,11 @@ export async function runV2vMigrationPipeline(
       if (retryRoot) {
         // Drop the partial converted disks of the failed attempt: Phase 6 lists
         // everything in outputDir that is not a .xml/.vmdk and would otherwise
-        // attach a truncated leftover as an extra disk. The NFC source VMDKs and
-        // the synthesized vm.xml live in the same directory and must survive,
-        // hence the narrow `*-sd?` pattern (virt-v2v's -o local naming).
+        // attach a truncated leftover as an extra disk. Since #292 the NFC
+        // source VMDKs and the synthesized vm.xml live in the temp directory,
+        // but the narrow `*-sd?` pattern (virt-v2v's -o local naming) is kept:
+        // in non-direct-write mode outputDir IS the temp directory and those
+        // inputs must survive the retry.
         await executeSSH(
           config.targetConnectionId,
           nodeIp,
@@ -2211,6 +2310,7 @@ export async function runV2vMigrationPipeline(
           nfcDownloadedDisks.length > 0 ? nfcDownloadedDisks : undefined,
           libvirtXmlPath,
           retryRoot,
+          directWriteDir || undefined,
         )
         v2vResult = await runVirtV2vWithProgress(
           jobId,
@@ -2219,6 +2319,7 @@ export async function runV2vMigrationPipeline(
           retryCommand,
           v2vProgressOffset,
           v2vProgressScale,
+          directWriteDir || undefined,
         )
         if (v2vResult.output) {
           await processV2vOutput(jobId, v2vResult.output, v2vProgressOffset, v2vProgressScale)
@@ -2291,7 +2392,7 @@ export async function runV2vMigrationPipeline(
       for (const p of nfcDownloadedDisks) {
         await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(p)}`).catch(() => {})
       }
-      await appendLog(jobId, `Cleaned up ${nfcDownloadedDisks.length} NFC source VMDK(s) from ${outputDir}`, "info")
+      await appendLog(jobId, `Cleaned up ${nfcDownloadedDisks.length} NFC source VMDK(s) from ${tempDir}`, "info")
       // Clear the array so the finally-block doesn't try to rm them again.
       nfcDownloadedDisks = []
     }
@@ -2661,15 +2762,13 @@ export async function runV2vMigrationPipeline(
 
     await appendLog(jobId, `Found ${diskFiles.length} disk file(s): ${diskFiles.join(", ")}`)
 
-    // Determine storage type
-    const storageConfig = await pveFetch<any>(
-      pveConn,
-      `/storage/${encodeURIComponent(config.targetStorage)}`
-    )
-    const storageType = storageConfig?.type || "dir"
-    const isFileBased = isFileBasedStorage(storageType)
+    // Storage type and path were resolved once in Phase 1 (#292): isFileBased
+    // picks the import strategy here, storagePath locates the images/<vmid>
+    // directory the adoption renames into.
 
-    // Track the highest disk number used (EFI VMs may have disk-0 for efidisk0)
+    // Track the highest disk number used (EFI VMs may have disk-0 for efidisk0).
+    // Only the block branch still consumes it; the file-based branch gets its
+    // index from importOrAdoptFileVolume via nextFreeDiskName.
     let nextDiskNum = isEfi ? 1 : 0
 
     // Block volumes created by THIS migration, for the optional post-migration
@@ -2677,6 +2776,13 @@ export async function runV2vMigrationPipeline(
     // registry, so this list exists only to tell the conversion which attached
     // disks are ours — it must never convert a disk an operator attached.
     const blockVolumes: AllocatedVolume[] = []
+
+    // File-based volumes created by THIS migration (adopted or imported), so two
+    // disks never claim the same vm-<vmid>-disk-<N> name (#292). Deliberately NOT
+    // pushed into blockVolumes: that list drives the optional post-migration
+    // qcow2 conversion (#595) and the failure cleanup, and these volumes are
+    // already qcow2 and already the VM's disks.
+    const adoptedVolumes: AllocatedVolume[] = []
 
     // When virt-v2v can't inject virtio-scsi (`--block-driver` missing), it falls
     // back to virtio-blk (viostor.sys) as the boot-critical driver on Windows.
@@ -2708,72 +2814,45 @@ export async function runV2vMigrationPipeline(
         ? (i === 0 ? "sata0" : `scsi${i - 1}`)
         : (useVirtioBlk ? `virtio${i}` : `scsi${i}`)
 
-      await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Importing ${diskFile}...`)
+      // "Adding", not "importing": on a file-based target the disk is usually
+      // adopted by rename and nothing is copied at all (#292).
+      await appendLog(jobId, `[Disk ${i + 1}/${diskFiles.length}] Adding ${diskFile} to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", {
         currentStep: `importing_disk_${i + 1}`,
         progress: Math.round(70 + (i / diskFiles.length) * 25),
       })
 
       if (isFileBased) {
-        // File-based storage: qm disk import. Same 30s-default-timeout problem
-        // as the dd path below — qm disk import streams the entire disk into
-        // PVE storage and routinely runs for 5-30 min on multi-GB disks. Use a
-        // 4h cap so SSH doesn't kill the import mid-stream.
-        const FOUR_HOURS_MS = 14_400_000
-        const importResult = await executeSSH(
-          config.targetConnectionId, nodeIp,
-          `qm disk import ${targetVmid} ${shellEscape(diskPath)} ${shellEscape(config.targetStorage)} --format qcow2 2>&1`,
-          FOUR_HOURS_MS,
-        )
-
-        if (!importResult.success) {
-          throw new Error(`Disk import failed for ${diskFile}: ${importResult.error || importResult.output}`)
-        }
-
-        // Parse disk volume name from qm disk import output
-        let diskVolume = ""
-        const importOutput = importResult.output || ""
-        const importMatch = importOutput.match(/Successfully imported disk as '(?:unused\d+:)?(.+?)'/)
-        const altMatch = !importMatch && importOutput.match(/unused\d+:\s*successfully imported disk '(.+?)'/i)
-
-        if (importMatch?.[1]) {
-          diskVolume = importMatch[1]
-        } else if (altMatch?.[1]) {
-          diskVolume = altMatch[1]
-        } else {
-          // Fallback: read VM config to find unused disk
-          await appendLog(jobId, `Parsing import output failed, reading VM config to find unused disk...`, "info")
-          try {
-            const vmConf = await pveFetch<Record<string, any>>(
-              pveConn,
-              `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`
-            )
-            const unusedKeys = Object.keys(vmConf)
-              .filter(k => k.startsWith("unused"))
-              .sort((a, b) => a.localeCompare(b))
-            if (unusedKeys.length > 0) {
-              diskVolume = vmConf[unusedKeys[unusedKeys.length - 1]] as string
-              await appendLog(jobId, `Found unused disk in VM config: ${diskVolume}`, "info")
-            }
-          } catch (e: any) {
-            await appendLog(jobId, `Failed to read VM config: ${e.message}`, "warn")
-          }
-          if (!diskVolume) {
-            diskVolume = `${config.targetStorage}:vm-${targetVmid}-disk-${nextDiskNum}`
-            await appendLog(jobId, `Using guessed volume name: ${diskVolume}`, "warn")
-          }
-        }
-
-        // Attach disk via PVE API
-        const attachBody = new URLSearchParams({
-          [diskSlot]: `${diskVolume},discard=on`,
+        // File-based storage (#292): the converted image usually already sits in
+        // the staging directory ON this storage, as qcow2. importOrAdoptFileVolume
+        // renames it into images/<vmid>/ (O(1), no second full-disk copy) and
+        // falls back to a converting `qm disk import` whenever the rename is
+        // unsafe: temp dir on another filesystem, raw image (no direct-write
+        // mode), destination name taken. Either way the source file is consumed
+        // by the helper, so no rm here.
+        // Adopt the converted image by rename when it already sits on the target
+        // storage (direct-write mode), import it otherwise, then attach it. The
+        // shared helper owns the guard rails and the attach. sourceFormat marks
+        // the file raw unless we asked virt-v2v for qcow2, so a raw image is
+        // converted by the import fallback rather than misnamed.
+        const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
+          pveConn,
+          targetNode: config.targetNode,
+          connectionId: config.targetConnectionId,
+          nodeIp,
+          sourcePath: diskPath,
+          targetStorage: config.targetStorage,
+          imagesDir: `${storagePath}/images/${targetVmid}`,
+          targetVmid: targetVmid!,
+          format: "qcow2",
+          sourceFormat: directWriteDir ? "qcow2" : "raw",
+          slot: diskSlot,
+          driveOpts: ",discard=on",
+          diskLabel: `Disk ${i + 1}`,
+          taken: adoptedVolumes,
+          onLog: (m, level) => appendLog(jobId, m, level),
         })
-        try {
-          await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-          await appendLog(jobId, `Disk ${i + 1} imported and attached as ${diskSlot}`, "success")
-        } catch (attachErr: any) {
-          await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
-        }
+        adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
       } else {
         // Block storage: stat size -> pvesm alloc -> pvesm path -> qemu-img convert
         const statResult = await executeSSH(
@@ -2878,6 +2957,12 @@ export async function runV2vMigrationPipeline(
     // ── PHASE 7: Finish ──
     await appendLog(jobId, "Cleaning up temporary files...")
     await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
+    if (directWriteDir) {
+      // Direct-write mode (#292): the rm above removed the staging dir on the
+      // target storage; the temp dir (NFC downloads, synthesized XML) is a
+      // separate path there and needs its own removal.
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(tempDir)}`).catch(() => {})
+    }
 
     // Unmount Hyper-V share if we mounted it
     if (hypervMounted) {
@@ -3004,6 +3089,14 @@ export async function runV2vMigrationPipeline(
       const nodeIp = await getNodeIp(pveConn, config.targetNode)
       const rmOutput = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`, CLEANUP_TIMEOUT_MS)
       if (!rmOutput.success) failedCleanups.push(`${outputDir}: ${rmOutput.error || "unknown"}`)
+      if (directWriteDir) {
+        // Direct-write mode (#292): the rm above covered the staging dir on the
+        // PRODUCTION storage — leftovers there are worse than leftovers on /tmp,
+        // so this path runs on every failure and cancellation. The temp dir is
+        // a distinct path in this mode and needs its own removal.
+        const rmTemp = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(tempDir)}`, CLEANUP_TIMEOUT_MS)
+        if (!rmTemp.success) failedCleanups.push(`${tempDir}: ${rmTemp.error || "unknown"}`)
+      }
       const rmPw = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`, CLEANUP_TIMEOUT_MS)
       if (!rmPw.success) failedCleanups.push(`${pwFile}: ${rmPw.error || "unknown"}`)
       // If we bootstrapped a one-shot ESXi key (password-auth source), remove the

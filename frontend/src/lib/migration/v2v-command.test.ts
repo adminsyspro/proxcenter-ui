@@ -26,6 +26,7 @@ function build(config: any, opts: {
   disks?: string[]
   xml?: string
   root?: string
+  outputDirOverride?: string
 } = {}) {
   return buildV2vCommand(
     "job-1",
@@ -36,6 +37,7 @@ function build(config: any, opts: {
     opts.disks,
     opts.xml,
     opts.root,
+    opts.outputDirOverride,
   )
 }
 
@@ -144,5 +146,42 @@ describe("buildV2vCommand carries --root on every input path", () => {
 
   it("refuses an unknown source type", () => {
     expect(() => build({ ...base, sourceType: "kvm" })).toThrow(/Unsupported source type/)
+  })
+})
+
+/**
+ * Direct storage write (#292): with the override the conversion lands as qcow2
+ * in a staging dir on the target storage, so Phase 6 can adopt it by rename.
+ * Without it the command must stay byte for byte the legacy one — the
+ * block-storage path feeds that raw output to `qemu-img convert -n`.
+ */
+describe("buildV2vCommand direct storage write (#292)", () => {
+  const stagingDir = "/mnt/pve/nfs-vmstore/proxcenter-v2v/job-1"
+
+  it("converts to qcow2 straight into the staging dir when the override is set", () => {
+    const cmd = build(vcenter, { outputDirOverride: stagingDir })
+    expect(cmd).toContain(`-of qcow2 -o local -os '${stagingDir}' --machine-readable`)
+    // and the temp-storage output dir is nowhere on the command line
+    expect(cmd).not.toContain("/var/lib/vz/v2v-job-1")
+  })
+
+  it("keeps the option order stable around --root and --block-driver", () => {
+    const cmd = build(vcenter, { root: "/dev/system/root", outputDirOverride: stagingDir })
+    expect(cmd).toContain("--root '/dev/system/root' --block-driver virtio-scsi -of qcow2 -o local")
+  })
+
+  it("applies the override on the pre-downloaded disk path too", () => {
+    const cmd = build(vcenter, { disks: ["/var/lib/vz/v2v-job-1/disk-0.vmdk"], outputDirOverride: stagingDir })
+    // the source VMDK stays on the temp storage, only the output moves
+    expect(cmd).toContain("virt-v2v -i disk '/var/lib/vz/v2v-job-1/disk-0.vmdk'")
+    expect(cmd).toContain(`-of qcow2 -o local -os '${stagingDir}'`)
+  })
+
+  it("keeps today's raw command, byte for byte, without the override", () => {
+    const cmd = build(vcenter)
+    // no -of: the block-storage path expects virt-v2v's raw output
+    expect(cmd).not.toContain("-of ")
+    expect(cmd).not.toContain("proxcenter-v2v")
+    expect(cmd).toContain("--block-driver virtio-scsi -o local -os '/var/lib/vz/v2v-job-1' --machine-readable")
   })
 })

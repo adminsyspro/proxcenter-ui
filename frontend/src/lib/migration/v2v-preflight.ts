@@ -163,7 +163,15 @@ export async function runV2vPreflight(
   // 4c. Check virt-customize (for guest tools injection)
   result.virtCustomizeAvailable = virtCustomizeCheck.success && virtCustomizeCheck.output?.trim().endsWith('yes')
 
-  // 5. Check disk space on /tmp
+  // 5. Check disk space on /tmp.
+  // NOTE (#292): on a file-based target storage the pipeline now converts
+  // straight into a staging dir ON that storage, so the converted image no
+  // longer needs room on the temp storage — only the source download does.
+  // This check cannot tell the modes apart: it receives a single
+  // requiredDiskBytes and no target storage identity from the route, so it
+  // stays deliberately conservative (worst case: it demands more temp space
+  // than direct-write mode really uses). Splitting the requirement would need
+  // the route and the dialog to send the target storage along.
   if (dfCheck.success && dfCheck.output?.trim()) {
     const availableBytes = Number.parseInt(dfCheck.output.trim(), 10)
     if (!Number.isNaN(availableBytes)) {

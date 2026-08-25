@@ -28,7 +28,7 @@ import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
-import { importOrAdoptFileVolume } from "./adopt-file-volume"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 // SOAP imports for the NFC (HttpNfcLease) transport path used when the source VM
 // has any disk on a vSAN datastore. vpx://+HTTPS /folder/ download is broken for
@@ -2830,12 +2830,14 @@ export async function runV2vMigrationPipeline(
         // unsafe: temp dir on another filesystem, raw image (no direct-write
         // mode), destination name taken. Either way the source file is consumed
         // by the helper, so no rm here.
-        const vmConf = await pveFetch<Record<string, any>>(
+        // Adopt the converted image by rename when it already sits on the target
+        // storage (direct-write mode), import it otherwise, then attach it. The
+        // shared helper owns the guard rails and the attach. sourceFormat marks
+        // the file raw unless we asked virt-v2v for qcow2, so a raw image is
+        // converted by the import fallback rather than misnamed.
+        const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
           pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-        ).catch(() => null)
-
-        const { volumeId: diskVolume, adopted } = await importOrAdoptFileVolume({
+          targetNode: config.targetNode,
           connectionId: config.targetConnectionId,
           nodeIp,
           sourcePath: diskPath,
@@ -2843,39 +2845,14 @@ export async function runV2vMigrationPipeline(
           imagesDir: `${storagePath}/images/${targetVmid}`,
           targetVmid: targetVmid!,
           format: "qcow2",
-          // virt-v2v only writes qcow2 when we asked for it; otherwise the file
-          // is raw and the import must convert, exactly as before #292.
           sourceFormat: directWriteDir ? "qcow2" : "raw",
-          vmConf,
+          slot: diskSlot,
+          driveOpts: ",discard=on",
+          diskLabel: `Disk ${i + 1}`,
           taken: adoptedVolumes,
-          onLog: (m) => appendLog(jobId, m),
-          resolveUnusedVolume: async () => {
-            const conf = await pveFetch<Record<string, any>>(
-              pveConn,
-              `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-            )
-            const unusedKeys = Object.keys(conf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
-            return unusedKeys.length > 0 ? String(conf[unusedKeys[unusedKeys.length - 1]]) : ""
-          },
+          onLog: (m, level) => appendLog(jobId, m, level),
         })
         adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
-
-        // Attach disk via PVE API
-        const attachBody = new URLSearchParams({
-          [diskSlot]: `${diskVolume},discard=on`,
-        })
-        try {
-          await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-          await appendLog(
-            jobId,
-            adopted
-              ? `Disk ${i + 1} attached as ${diskSlot} (adopted in place, no copy)`
-              : `Disk ${i + 1} imported and attached as ${diskSlot}`,
-            "success",
-          )
-        } catch (attachErr: any) {
-          await appendLog(jobId, `Warning: Could not auto-attach ${diskSlot}: ${attachErr.message}`, "warn")
-        }
       } else {
         // Block storage: stat size -> pvesm alloc -> pvesm path -> qemu-img convert
         const statResult = await executeSSH(

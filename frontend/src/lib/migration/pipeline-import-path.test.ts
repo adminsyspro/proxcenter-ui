@@ -29,8 +29,8 @@ describe.each(PIPELINES)("%s import path (#292)", (name) => {
     expect(source).not.toContain("qm disk import ${")
   })
 
-  it("routes file volumes through the shared rename-or-import module", () => {
-    expect(source).toMatch(/import \{[^}]*importOrAdoptFileVolume[^}]*\} from "\.\/adopt-file-volume"/)
-    expect(source).toContain("await importOrAdoptFileVolume(")
+  it("routes file volumes through the shared adopt-and-attach module", () => {
+    expect(source).toMatch(/import \{[^}]*adoptImportAndAttachFileVolume[^}]*\} from "\.\/adopt-file-volume"/)
+    expect(source).toContain("await adoptImportAndAttachFileVolume(")
   })
 })

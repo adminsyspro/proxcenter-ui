@@ -34,7 +34,7 @@ import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
-import { importOrAdoptFileVolume } from "./adopt-file-volume"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
@@ -630,20 +630,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
-      // Rename-or-import (#292): when the converted image already sits on the
-      // target storage's filesystem (the default temp dir IS its images/<vmid>
-      // directory), adopting it by rename skips the second full disk copy
-      // `qm disk import` used to do here. With an operator-picked temp storage on
-      // another filesystem the shared module refuses the rename and falls back to
-      // a real (converting) import. Either way it consumes the source file — no
-      // rm -f of the converted image here, after an adoption that file IS the
-      // VM's disk.
-      const vmConf = await pveFetch<Record<string, any>>(
+      // Rename-or-import (#292): the shared helper adopts the converted image by
+      // rename when it already sits on the target storage's filesystem (the
+      // default temp dir IS its images/<vmid> directory), imports it otherwise,
+      // and attaches the result. See adoptImportAndAttachFileVolume.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
         pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      ).catch(() => null)
-
-      const { volumeId: diskVolume, adopted } = await importOrAdoptFileVolume({
+        targetNode: config.targetNode,
         connectionId: config.targetConnectionId,
         nodeIp,
         sourcePath: importFile,
@@ -651,36 +644,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         imagesDir: targetImagesDir,
         targetVmid: targetVmid!,
         format: importFormat,
-        vmConf,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
-        onLog: (m) => appendLog(jobId, m),
-        resolveUnusedVolume: async () => {
-          const conf = await pveFetch<Record<string, any>>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          )
-          const unusedKeys = Object.keys(conf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
-          return unusedKeys.length > 0 ? String(conf[unusedKeys[unusedKeys.length - 1]]) : ""
-        },
+        onLog: (m, level) => appendLog(jobId, m, level),
       })
       if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
-
-      // Attach disk to SCSI slot via PVE API
-      const attachBody = new URLSearchParams({
-        [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
-      })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(
-          jobId,
-          adopted
-            ? `Disk ${i + 1} attached as ${scsiSlot} (adopted in place, no copy)`
-            : `Disk ${i + 1} imported and attached as ${scsiSlot}`,
-          "success",
-        )
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
     }
 
     if (isLive) {

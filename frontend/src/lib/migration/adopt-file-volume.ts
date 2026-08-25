@@ -1,5 +1,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { pveFetch, type ProxmoxClientOptions } from "@/lib/proxmox/client"
 import { nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
+import { pveSetVmConfig } from "./pve-vm-config"
 
 /**
  * Turning an already-converted image into a PVE volume WITHOUT re-copying it (#292).
@@ -192,4 +194,97 @@ export async function importOrAdoptFileVolume(args: ImportOrAdoptArgs): Promise<
   const guessed = nextFreeDiskName(args.vmConf, args.taken ?? [], targetVmid)
   await args.onLog?.(`Falling back to the expected volume name ${targetStorage}:${targetVmid}/${guessed}.${format}`)
   return { volumeId: `${targetStorage}:${targetVmid}/${guessed}.${format}`, adopted: false }
+}
+
+/** Log levels the migration job log accepts, mirrored so the shared helper stays decoupled. */
+type AttachLogLevel = "info" | "success" | "warn" | "error"
+
+export interface AdoptImportAttachArgs {
+  /** PVE client options for the target node's cluster. */
+  pveConn: ProxmoxClientOptions
+  /** PVE node the VM lives on. */
+  targetNode: string
+  connectionId: string
+  nodeIp: string
+  /** Absolute path of the converted image on the target node. */
+  sourcePath: string
+  targetStorage: string
+  /** `<storage path>/images/<vmid>`, where an adopted volume is renamed to. */
+  imagesDir: string
+  targetVmid: number
+  /** Format the volume must have on the target storage. */
+  format: "qcow2" | "raw"
+  /** Real format of `sourcePath` when it differs from `format` (a rename cannot convert). */
+  sourceFormat?: "qcow2" | "raw"
+  /** VM disk slot to attach to, e.g. `scsi0`, `sata0`, `virtio1`. */
+  slot: string
+  /** Extra drive options appended to the volid, e.g. `,discard=on` on a file target. */
+  driveOpts?: string
+  /** Label for the log lines, e.g. `Disk 1`. */
+  diskLabel: string
+  /** Volumes already created by this run, so two disks never claim one name. */
+  taken?: AllocatedVolume[]
+  onLog: (message: string, level?: AttachLogLevel) => Promise<void> | void
+}
+
+/**
+ * The whole file-based finish of a cold migration in one place (#292): read the VM
+ * config for the disk indexes already taken, adopt the converted image by rename
+ * (or import it as the fallback), then attach the resulting volume to `slot` and
+ * log the outcome. Every cold pipeline used to inline this identical block; it
+ * lives here so the guard rails and the wording stay in one spot.
+ *
+ * Returns the attached volume id and whether it was adopted (renamed) rather than
+ * copied, so the caller can register it for its own bookkeeping.
+ */
+export async function adoptImportAndAttachFileVolume(
+  args: AdoptImportAttachArgs,
+): Promise<{ volumeId: string; adopted: boolean }> {
+  const {
+    pveConn, targetNode, connectionId, nodeIp, sourcePath, targetStorage,
+    imagesDir, targetVmid, format, sourceFormat, slot, driveOpts = "",
+    diskLabel, taken, onLog,
+  } = args
+
+  const readVmConfig = () =>
+    pveFetch<Record<string, any>>(
+      pveConn,
+      `/nodes/${encodeURIComponent(targetNode)}/qemu/${targetVmid}/config`,
+    )
+
+  const vmConf = await readVmConfig().catch(() => null)
+
+  const { volumeId, adopted } = await importOrAdoptFileVolume({
+    connectionId,
+    nodeIp,
+    sourcePath,
+    targetStorage,
+    imagesDir,
+    targetVmid,
+    format,
+    ...(sourceFormat ? { sourceFormat } : {}),
+    vmConf,
+    taken,
+    onLog: (m) => onLog(m),
+    resolveUnusedVolume: async () => {
+      const conf = await readVmConfig()
+      const unusedKeys = Object.keys(conf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
+      return unusedKeys.length > 0 ? String(conf[unusedKeys[unusedKeys.length - 1]]) : ""
+    },
+  })
+
+  const attachBody = new URLSearchParams({ [slot]: `${volumeId}${driveOpts}` })
+  try {
+    await pveSetVmConfig(pveConn, targetNode, targetVmid, attachBody)
+    await onLog(
+      adopted
+        ? `${diskLabel} attached as ${slot} (adopted in place, no copy)`
+        : `${diskLabel} imported and attached as ${slot}`,
+      "success",
+    )
+  } catch (attachErr: any) {
+    await onLog(`Warning: Could not auto-attach ${slot}: ${attachErr.message}`, "warn")
+  }
+
+  return { volumeId, adopted }
 }

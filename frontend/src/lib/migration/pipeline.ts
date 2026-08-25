@@ -29,7 +29,7 @@ import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
 } from "./pvesm-alloc"
-import { importOrAdoptFileVolume } from "./adopt-file-volume"
+import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
@@ -1286,16 +1286,11 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Rename-or-import (#292): the converted image was written into the target
       // storage's own images/<vmid> directory, so adopting it by rename skips the
-      // second full disk copy `qm disk import` used to do here. The shared module
-      // falls back to a real (converting) import when the file sits on another
-      // filesystem, and it consumes the source file either way — no rm -f of the
-      // converted image here, after an adoption that file IS the VM's disk.
-      const vmConf = await pveFetch<Record<string, any>>(
+      // second full disk copy `qm disk import` used to do here. The shared helper
+      // owns the guard rails, the import fallback and the attach.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
         pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      ).catch(() => null)
-
-      const { volumeId: diskVolume, adopted } = await importOrAdoptFileVolume({
+        targetNode: config.targetNode,
         connectionId: config.targetConnectionId,
         nodeIp,
         sourcePath: outputFile,
@@ -1303,34 +1298,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         imagesDir: storageTempDir,
         targetVmid: targetVmid!,
         format: importFormat,
-        vmConf,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
-        onLog: (m) => appendLog(jobId, m),
-        resolveUnusedVolume: async () => {
-          const conf = await pveFetch<Record<string, any>>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          )
-          const unusedKeys = Object.keys(conf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
-          return unusedKeys.length > 0 ? String(conf[unusedKeys[unusedKeys.length - 1]]) : ""
-        },
+        onLog: (m, level) => appendLog(jobId, m, level),
       })
       if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
-
-      // Attach disk
-      const attachBody = new URLSearchParams({ [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}` })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(
-          jobId,
-          adopted
-            ? `Disk ${i + 1} attached as ${scsiSlot} (adopted in place, no copy)`
-            : `Disk ${i + 1} imported and attached as ${scsiSlot}`,
-          "success",
-        )
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
     }
 
     // Stream disk via SSHFS for block storage (dd or qemu-img convert to pre-allocated device)
@@ -1722,18 +1696,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `Adding disk to storage "${config.targetStorage}"...`)
       await updateJob(jobId, "transferring", { currentStep: `importing_disk_${i + 1}` })
 
-      // Rename-or-import (#292): the converted image was written into the target
-      // storage's own images/<vmid> directory, so adopting it by rename skips the
-      // second full disk copy `qm disk import` used to do here. The shared module
-      // falls back to a real (converting) import when the file sits on another
-      // filesystem, and it consumes the source file either way — no rm -f of the
-      // converted image here, after an adoption that file IS the VM's disk.
-      const vmConf = await pveFetch<Record<string, any>>(
+      // Rename-or-import (#292): the shared helper adopts the converted image by
+      // rename when it can, imports it otherwise, and attaches the result. See
+      // adoptImportAndAttachFileVolume for the guard rails.
+      const { volumeId: diskVolume, adopted } = await adoptImportAndAttachFileVolume({
         pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-      ).catch(() => null)
-
-      const { volumeId: diskVolume, adopted } = await importOrAdoptFileVolume({
+        targetNode: config.targetNode,
         connectionId: config.targetConnectionId,
         nodeIp,
         sourcePath: `${tmpFile}.${importFormat}`,
@@ -1741,36 +1709,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         imagesDir: storageTempDir,
         targetVmid: targetVmid!,
         format: importFormat,
-        vmConf,
+        slot: scsiSlot,
+        driveOpts: isFileBased ? ",discard=on" : "",
+        diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
-        onLog: (m) => appendLog(jobId, m),
-        resolveUnusedVolume: async () => {
-          const conf = await pveFetch<Record<string, any>>(
-            pveConn,
-            `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`,
-          )
-          const unusedKeys = Object.keys(conf).filter(k => k.startsWith("unused")).sort((a, b) => a.localeCompare(b))
-          return unusedKeys.length > 0 ? String(conf[unusedKeys[unusedKeys.length - 1]]) : ""
-        },
+        onLog: (m, level) => appendLog(jobId, m, level),
       })
       if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
-
-      // Attach disk to SCSI slot via PVE API
-      const attachBody = new URLSearchParams({
-        [scsiSlot]: `${diskVolume}${isFileBased ? ",discard=on" : ""}`,
-      })
-      try {
-        await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
-        await appendLog(
-          jobId,
-          adopted
-            ? `Disk ${i + 1} attached as ${scsiSlot} (adopted in place, no copy)`
-            : `Disk ${i + 1} imported and attached as ${scsiSlot}`,
-          "success",
-        )
-      } catch (attachErr: any) {
-        await appendLog(jobId, `Warning: Could not auto-attach ${scsiSlot}: ${attachErr.message}`, "warn")
-      }
     }
 
     // Mount SSHFS if transfer mode requires it

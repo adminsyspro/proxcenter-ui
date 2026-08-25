@@ -4,10 +4,16 @@ vi.mock("@/lib/ssh/exec", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/ssh/exec")>()
   return { ...actual, executeSSH: vi.fn() }
 })
+vi.mock("@/lib/proxmox/client", () => ({ pveFetch: vi.fn() }))
+vi.mock("./pve-vm-config", () => ({ pveSetVmConfig: vi.fn() }))
 import { executeSSH } from "@/lib/ssh/exec"
-import { adoptFileVolume, importOrAdoptFileVolume } from "./adopt-file-volume"
+import { pveFetch } from "@/lib/proxmox/client"
+import { pveSetVmConfig } from "./pve-vm-config"
+import { adoptFileVolume, importOrAdoptFileVolume, adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 
 const mockSSH = executeSSH as unknown as ReturnType<typeof vi.fn>
+const mockFetch = pveFetch as unknown as ReturnType<typeof vi.fn>
+const mockSetConfig = pveSetVmConfig as unknown as ReturnType<typeof vi.fn>
 
 const moved = { success: true, output: "ADOPT_OK" }
 /** What the guarded command yields when a `[ ... ]` test fails: no ADOPT_OK, and
@@ -26,6 +32,8 @@ const args = {
 
 beforeEach(() => {
   mockSSH.mockReset()
+  mockFetch.mockReset()
+  mockSetConfig.mockReset()
 })
 
 describe("adoptFileVolume", () => {
@@ -224,5 +232,70 @@ describe("importOrAdoptFileVolume", () => {
       .mockResolvedValueOnce({ success: false, output: "storage 'nfs-01' does not support vm images", error: "Exit code 255" })
 
     await expect(importOrAdoptFileVolume({ ...args, vmConf: {} })).rejects.toThrow(/does not support vm images/)
+  })
+})
+
+describe("adoptImportAndAttachFileVolume", () => {
+  const attachArgs = {
+    ...args,
+    pveConn: { baseUrl: "https://pve:8006", apiToken: "t" } as any,
+    targetNode: "pve1",
+    slot: "scsi0",
+    driveOpts: ",discard=on",
+    diskLabel: "Disk 1",
+  }
+
+  it("adopts by rename, attaches to the slot with the drive options, and reports it adopted", async () => {
+    mockFetch.mockResolvedValueOnce({}) // read the VM config for the taken indexes
+    mockSSH.mockResolvedValueOnce(moved) // the rename
+    mockSetConfig.mockResolvedValueOnce(undefined)
+    const logs: string[] = []
+
+    const result = await adoptImportAndAttachFileVolume({ ...attachArgs, onLog: (m) => { logs.push(m) } })
+
+    expect(result).toEqual({ volumeId: "nfs-01:250/vm-250-disk-0.qcow2", adopted: true })
+    expect(mockSetConfig.mock.calls[0][1]).toBe("pve1")
+    expect(mockSetConfig.mock.calls[0][2]).toBe(250)
+    const body = mockSetConfig.mock.calls[0][3] as URLSearchParams
+    expect(body.get("scsi0")).toBe("nfs-01:250/vm-250-disk-0.qcow2,discard=on")
+    expect(logs.join(" ")).toContain("adopted in place, no copy")
+  })
+
+  it("imports when the rename is refused and reports it imported", async () => {
+    mockFetch.mockResolvedValueOnce({})
+    mockSSH
+      .mockResolvedValueOnce(refused)
+      .mockResolvedValueOnce({ success: true, output: "Successfully imported disk as 'nfs-01:250/vm-250-disk-0.qcow2'" })
+      .mockResolvedValueOnce({ success: true, output: "" })
+    mockSetConfig.mockResolvedValueOnce(undefined)
+    const logs: string[] = []
+
+    const result = await adoptImportAndAttachFileVolume({ ...attachArgs, onLog: (m) => { logs.push(m) } })
+
+    expect(result.adopted).toBe(false)
+    expect(logs.join(" ")).toContain("imported and attached as scsi0")
+  })
+
+  it("never throws when the attach fails: it warns and still returns the volume", async () => {
+    mockFetch.mockResolvedValueOnce({})
+    mockSSH.mockResolvedValueOnce(moved)
+    mockSetConfig.mockRejectedValueOnce(new Error("VM is locked"))
+    const logs: string[] = []
+
+    const result = await adoptImportAndAttachFileVolume({ ...attachArgs, onLog: (m) => { logs.push(m) } })
+
+    expect(result.adopted).toBe(true)
+    expect(logs.join(" ")).toContain("Could not auto-attach scsi0")
+  })
+
+  it("leaves the volid bare when driveOpts is empty, for a block-storage attach", async () => {
+    mockFetch.mockResolvedValueOnce({})
+    mockSSH.mockResolvedValueOnce(moved)
+    mockSetConfig.mockResolvedValueOnce(undefined)
+
+    await adoptImportAndAttachFileVolume({ ...attachArgs, driveOpts: "", onLog: () => {} })
+
+    const body = mockSetConfig.mock.calls[0][3] as URLSearchParams
+    expect(body.get("scsi0")).toBe("nfs-01:250/vm-250-disk-0.qcow2")
   })
 })

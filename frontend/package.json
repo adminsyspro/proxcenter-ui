@@ -115,7 +115,7 @@
     "stylis": "4.4.0",
     "stylis-plugin-rtl": "2.1.1",
     "tailwindcss": "4.3.3",
-    "tailwindcss-logical": "4.2.0",
+    "tailwindcss-logical": "5.0.0",
     "tsx": "4.23.12",
     "vitest": "^4.1.11"
   },

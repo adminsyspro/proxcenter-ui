@@ -74,6 +74,7 @@ export class NutanixClient {
     if (this.insecureTLS) {
       opts.dispatcher = new (await import("undici")).Agent({
         connect: { rejectUnauthorized: false },
+        allowH2: false,
       })
     }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'node:path'
+import { Agent, getGlobalDispatcher } from 'undici'
 
 const importDiskAssetsMock = vi.fn()
 const sweepMock = vi.fn()
@@ -32,6 +33,15 @@ describe('instrumentation register (startup disk-asset import)', () => {
     expect(importDiskAssetsMock).toHaveBeenCalledTimes(1)
     const root: string = importDiskAssetsMock.mock.calls[0][0]
     expect(root.endsWith(path.join('data', 'uploads'))).toBe(true)
+  })
+
+  it('pins the undici global dispatcher to HTTP/1.1 (undici 8 defaults to h2)', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs')
+    await register()
+    const dispatcher = getGlobalDispatcher()
+    expect(dispatcher).toBeInstanceOf(Agent)
+    const options = Object.getOwnPropertySymbols(dispatcher).find((s) => s.description === 'options')!
+    expect((dispatcher as any)[options].allowH2).toBe(false)
   })
 
   it('does nothing on the edge runtime', async () => {

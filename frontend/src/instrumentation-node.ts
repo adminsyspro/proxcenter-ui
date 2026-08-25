@@ -7,12 +7,20 @@
 // branding, login backgrounds and compliance PDF logos.
 import path from 'node:path'
 
+import { Agent, setGlobalDispatcher } from 'undici'
+
 import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 
 export async function registerNode(): Promise<void> {
+  // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
+  // call was only ever exercised over HTTP/1.1, so the process-wide dispatcher
+  // behind every `request()` without an explicit one stays on h1; the explicit
+  // Agents in lib/ pin `allowH2: false` themselves (see lib/http/insecure-fetch.ts).
+  setGlobalDispatcher(new Agent({ allowH2: false }))
+
   if (process.env.DEMO_MODE === 'true') return
 
   try {

@@ -124,7 +124,7 @@ export async function soapRequest(
     body,
     signal: AbortSignal.timeout(timeoutMs),
     dispatcher: insecureTLS
-      ? new Agent({ connect: { rejectUnauthorized: false } })
+      ? new Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
       : undefined,
   })
   const text = await res.body.text()

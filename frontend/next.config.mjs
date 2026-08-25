@@ -42,7 +42,7 @@ const nextConfig = {
         // include, tests included; keep the build scope free of them.
         tsconfigPath: 'tsconfig.build.json',
     },
-    serverExternalPackages: ['ssh2'],
+    serverExternalPackages: ['ssh2', 'undici'],
     experimental: {
         serverActions: {
             bodySizeLimit: '10gb',

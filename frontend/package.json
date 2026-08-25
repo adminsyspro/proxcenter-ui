@@ -45,7 +45,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xyflow/react": "^12.11.3",
     "classnames": "2.5.1",
-    "cron-parser": "^4.9.0",
+    "cron-parser": "^5.10.0",
     "d3-array": "^3.2.4",
     "d3-sankey": "^0.12.3",
     "dequal": "^2.0.3",

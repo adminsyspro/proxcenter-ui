@@ -9,37 +9,87 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #0c0c0c; color: #ccc;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    /* Colonne flex plutôt qu'une zone en absolu sous une barre de 41px codée en
+       dur: la barre porte maintenant assez de contrôles pour passer à la ligne
+       dans une fenêtre étroite, et elle recouvrirait l'écran de l'invité. */
+    body { display: flex; flex-direction: column; }
     #toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 16px;
-      background: #111; border-bottom: 1px solid #333; }
-    #dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+      background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
+      flex-wrap: wrap; row-gap: 6px; }
+    #dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
     #dot.connected { background: #22c55e; } #dot.connecting { background: #f59e0b; } #dot.error { background: #ef4444; }
-    #title { font-weight: 600; color: #fff; } #status { color: #888; font-size: 12px; }
-    #spice-area { position: absolute; top: 41px; bottom: 0; left: 0; right: 0; background: #000; overflow: auto; }
-    #message { position: absolute; inset: 0; top: 41px; display: none; place-items: center; text-align: center; padding: 24px; }
+    #title { font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #status { color: #888; font-size: 12px; white-space: nowrap; }
+    #toolbar .buttons { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    #toolbar button {
+      padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer;
+    }
+    #toolbar button:hover { background: #444; }
+    #toolbar button:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #toolbar button.icon { padding: 6px 9px; font-size: 14px; line-height: 1; }
+    #toolbar button.active { background: #1e3a8a; border-color: #3b82f6; }
+    #toolbar select {
+      padding: 5px 8px; font-size: 12px; background: #333; color: #fff;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer;
+    }
+    #toolbar select option:disabled { color: #666; }
+    #spice-area { flex: 1 1 auto; min-height: 0; position: relative; background: #000; overflow: auto; }
+    #message { position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; }
     #message.visible { display: grid; }
     #message .big { font-size: 15px; color: #fecaca; } #message .small { font-size: 13px; color: #9ca3af; margin-top: 8px; }
+    /* Plein écran: la barre quitte le flux pour laisser tout l'écran à
+       l'invité, et revient quand le pointeur atteint le bord haut. */
+    body.fs #toolbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 20; opacity: 0.97;
+      transform: translateY(-100%); transition: transform 0.18s ease;
+    }
+    body.fs #toolbar.peek, body.fs #toolbar:hover { transform: none; }
   </style>
 </head>
 <body>
   <div id="toolbar">
     <span id="dot"></span><span id="title">SPICE</span><span id="status">• Initializing...</span>
+    <div class="buttons">
+      <select id="scaling" title="Scaling mode">
+        <option value="scale">Fit to window</option>
+        <option value="remote">Resize guest</option>
+        <option value="off">No scaling (1:1)</option>
+      </select>
+      <button id="btn-cad" disabled>Ctrl+Alt+Del</button>
+      <button id="btn-fullscreen" class="icon" title="Fullscreen">&#9974;</button>
+      <button id="btn-reconnect">Reconnect</button>
+      <button id="btn-close">Close</button>
+    </div>
   </div>
-  <div id="spice-area"></div>
-  <div id="message"><div><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+  <div id="spice-area">
+    <div id="message"><div><div class="big" id="msg-big"></div><div class="small" id="msg-small"></div></div></div>
+  </div>
 
   <script src="/spice/spice.bundle.js"></script>
+  <!-- Helpers partagés avec la console noVNC, testés dans
+       src/lib/console/viewport.test.ts et bundlés par bundle-console.js -->
+  <script src="/console/console-ui.bundle.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const connId = params.get('connId');
     const type = params.get('type');
     const node = params.get('node');
     const vmid = params.get('vmid');
+    const toolbar = document.getElementById('toolbar');
     const dot = document.getElementById('dot');
     const status = document.getElementById('status');
     const title = document.getElementById('title');
     const area = document.getElementById('spice-area');
     const messageBox = document.getElementById('message');
+    const scalingSelect = document.getElementById('scaling');
+    const remoteOption = scalingSelect.querySelector('option[value="remote"]');
+    const btnCad = document.getElementById('btn-cad');
+    const btnFullscreen = document.getElementById('btn-fullscreen');
+    const btnReconnect = document.getElementById('btn-reconnect');
+    const btnClose = document.getElementById('btn-close');
     let sc = null;
+    let agentConnected = false;
 
     // Même libellé dans la barre d'outils et dans le titre de fenêtre, nom de
     // la VM en tête pour survivre à la troncature de la barre des tâches
@@ -84,8 +134,163 @@
       messageBox.classList.add('visible');
     }
 
+    // --- Mise à l'échelle ---------------------------------------------------
+    // Mêmes trois modes que la console noVNC, mais rien n'est fourni par
+    // spice-html5: il dessine le framebuffer invité à sa taille natale dans un
+    // canvas, sans mise à l'échelle ni redimensionnement automatique.
+    //  - "scale"  transformation CSS sur le canvas, l'invité n'est pas touché.
+    //  - "remote" demande une résolution à l'agent invité (spice-vdagent).
+    //  - "off"    taille natale, la zone défile.
+    let scalingMode = ConsoleUI.loadScalingMode(window.localStorage, 'spice');
+
+    scalingSelect.value = scalingMode;
+
+    function guestCanvas() {
+      return area.querySelector('canvas');
+    }
+
+    // Sans agent invité, "remote" ne peut rien demander: on retombe sur la mise
+    // à l'échelle locale pour que la fenêtre reste utilisable au lieu de
+    // n'avoir aucun effet.
+    function effectiveScalingMode() {
+      return scalingMode === 'remote' && !agentConnected ? 'scale' : scalingMode;
+    }
+
+    function applyFitScale() {
+      const canvas = guestCanvas();
+      const fitting = effectiveScalingMode() === 'scale';
+
+      // Une transformation CSS ne change pas la boîte de mise en page: sans
+      // cela, un canvas 1920x1080 réduit de moitié garderait ses ascenseurs.
+      area.style.overflow = fitting ? 'hidden' : 'auto';
+
+      if (!canvas) return;
+
+      if (!fitting) {
+        canvas.style.transform = '';
+        canvas.style.transformOrigin = '';
+
+        return;
+      }
+
+      // On agrandit aussi, pas seulement on réduit: c'est déjà ce que fait
+      // scaleViewport côté noVNC, et "Fit to window" doit vouloir dire la même
+      // chose dans les deux consoles. Un invité en 720x400 (console texte) dans
+      // une fenêtre 1024x768 doit remplir la fenêtre.
+      const scale = ConsoleUI.computeFitScale(
+        { width: canvas.width, height: canvas.height },
+        { width: area.clientWidth, height: area.clientHeight },
+        { allowUpscale: true }
+      );
+
+      canvas.style.transformOrigin = 'top left';
+      canvas.style.transform = scale === 1 ? '' : `scale(${scale})`;
+    }
+
+    // Un flux d'événements resize deviendrait un flux de changements de
+    // résolution invitée, donc on attend que le redimensionnement se calme.
+    const requestGuestResize = ConsoleUI.debounce(function() {
+      if (!sc || !agentConnected || effectiveScalingMode() !== 'remote') return;
+
+      const res = ConsoleUI.computeGuestResolution(area.clientWidth, area.clientHeight);
+
+      if (!res) return;
+
+      sc.resize_window(0, res.width, res.height, 32, 0, 0);
+    }, 200);
+
+    // Sans agent invité, "Resize guest" ne peut rien faire: le dire plutôt que
+    // de laisser choisir un mode inerte.
+    function syncScalingAvailability() {
+      remoteOption.disabled = !agentConnected;
+      remoteOption.textContent = agentConnected ? 'Resize guest' : 'Resize guest (no agent)';
+      scalingSelect.title = agentConnected
+        ? 'Scaling mode'
+        : 'Scaling mode. Resizing the guest needs the SPICE guest agent (spice-vdagent) running inside the VM.';
+    }
+
+    function applyScalingMode() {
+      applyFitScale();
+      requestGuestResize();
+    }
+
+    scalingSelect.addEventListener('change', () => {
+      scalingMode = ConsoleUI.parseScalingMode(scalingSelect.value);
+      scalingSelect.value = scalingMode;
+      ConsoleUI.saveScalingMode(window.localStorage, 'spice', scalingMode);
+      applyScalingMode();
+    });
+
+    // Le canvas est recréé à chaque changement de résolution invitée, donc on
+    // surveille la zone plutôt que de ne réagir qu'aux resize de fenêtre.
+    new MutationObserver(applyFitScale).observe(area, { childList: true, subtree: true });
+    new ResizeObserver(function() {
+      applyFitScale();
+      requestGuestResize();
+    }).observe(area);
+
+    // --- Plein écran --------------------------------------------------------
+    function syncFullscreenUi() {
+      const on = ConsoleUI.isFullscreen(document);
+
+      document.body.classList.toggle('fs', on);
+      btnFullscreen.classList.toggle('active', on);
+      btnFullscreen.title = on ? 'Leave fullscreen' : 'Fullscreen';
+      if (!on) toolbar.classList.remove('peek');
+    }
+
+    if (!ConsoleUI.fullscreenSupported(document.documentElement)) {
+      btnFullscreen.style.display = 'none';
+    }
+
+    btnFullscreen.addEventListener('click', () => {
+      ConsoleUI.toggleFullscreen(document, document.documentElement);
+    });
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+      document.addEventListener(evt, syncFullscreenUi);
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!document.body.classList.contains('fs')) return;
+      toolbar.classList.toggle('peek', e.clientY <= 4);
+    });
+
+    // --- Actions ------------------------------------------------------------
+    btnCad.addEventListener('click', () => {
+      if (sc) window.SpiceHtml5.sendCtrlAltDel(sc);
+    });
+
+    btnReconnect.addEventListener('click', () => {
+      disconnect();
+      connect();
+    });
+
+    btnClose.addEventListener('click', () => {
+      disconnect();
+      window.close();
+    });
+
+    function disconnect() {
+      agentConnected = false;
+      syncScalingAvailability();
+      btnCad.disabled = true;
+      requestGuestResize.cancel();
+
+      if (sc) {
+        try { sc.stop(); } catch (e) { console.error('SPICE stop failed:', e); }
+        sc = null;
+      }
+
+      // stop() détruit les surfaces mais laisse le canvas (et le curseur
+      // simulé) dans le DOM: sans ce nettoyage, une reconnexion empile les
+      // écrans. La boîte de message vit dans la même zone, on la garde.
+      area.replaceChildren(messageBox);
+    }
+
     async function connect() {
       if (!connId || !type || !node || !vmid) return fail('Missing parameters');
+      messageBox.classList.remove('visible');
       setStatus('connecting', 'Creating session...');
       let json;
       try {
@@ -116,10 +321,23 @@
           password,
           onerror: (e) => fail('SPICE connection failed',
             'Check that ProxCenter can reach the node on TCP 3128, or use the noVNC console.'),
-          onsuccess: () => setStatus('connected', 'Connected'),
+          onsuccess: () => {
+            setStatus('connected', 'Connected');
+            btnCad.disabled = false;
+            applyFitScale();
+          },
+          // spice-html5 appelle onagent quand spice-vdagent répond, ce qui est
+          // le seul moment où une demande de résolution a une chance d'aboutir.
+          onagent: () => {
+            agentConnected = true;
+            syncScalingAvailability();
+            applyScalingMode();
+          },
         });
       } catch (e) { fail('SPICE init failed', e.message); }
     }
+
+    syncScalingAvailability();
     fetchVmName();
     connect();
   </script>

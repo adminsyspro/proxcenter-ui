@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from "./migrationGuards"
+import { vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from "./migrationGuards"
 
 describe("vsanBlocksMigrationType", () => {
   it("blocks the file-based types on a vSAN source", () => {
@@ -120,5 +120,61 @@ describe("formatDowntimeBudget", () => {
     for (const sec of DOWNTIME_BUDGET_PRESETS) {
       expect(formatDowntimeBudget(sec)).not.toContain(".")
     }
+  })
+})
+
+describe("vsanBlocksDirectEsxiRun", () => {
+  it("blocks a direct-ESXi cold run on vSAN, Windows guest included", () => {
+    // The regression this function exists for (#292 recette, 2026-08-24): a
+    // Windows cold run is routed to virt-v2v over `-i vmx -it ssh`, which reads
+    // the vmdk as a file and finds a vsan:// descriptor. The dialog showed the
+    // red alert and left the button clickable, so the job started and died in
+    // the transfer phase.
+    expect(vsanBlocksDirectEsxiRun(true, "cold", false)).toBe(true)
+    expect(vsanBlocksDirectEsxiRun(true, "live", false)).toBe(true)
+  })
+
+  it("lets warm through: VDDK serves vSAN objects on that same direct connection", () => {
+    expect(vsanBlocksDirectEsxiRun(true, "warm", false)).toBe(false)
+  })
+
+  it("exempts a v2v-managed source, whose NFC export is vSAN aware", () => {
+    for (const type of ["cold", "live"]) {
+      expect(vsanBlocksDirectEsxiRun(true, type, true)).toBe(false)
+    }
+  })
+
+  it("blocks nothing when no disk sits on vSAN", () => {
+    for (const managed of [true, false]) {
+      for (const type of ["cold", "live", "warm"]) {
+        expect(vsanBlocksDirectEsxiRun(false, type, managed)).toBe(false)
+      }
+    }
+  })
+})
+
+describe("requiredTempBytes", () => {
+  const oneTB = 1024 ** 4
+
+  it("asks for the source size once on a file-based target: #292 writes the conversion onto the storage", () => {
+    for (const type of ["dir", "nfs", "cifs", "glusterfs", "btrfs"]) {
+      expect(requiredTempBytes(oneTB, type)).toBe(oneTB)
+    }
+  })
+
+  it("still asks for twice on a block target, where the converted image lands on temp", () => {
+    for (const type of ["lvm", "lvmthin", "zfspool", "rbd"]) {
+      expect(requiredTempBytes(oneTB, type)).toBe(2 * oneTB)
+    }
+  })
+
+  it("keeps the conservative factor while the storage type is unknown", () => {
+    expect(requiredTempBytes(oneTB, undefined)).toBe(2 * oneTB)
+    expect(requiredTempBytes(oneTB, "")).toBe(2 * oneTB)
+  })
+
+  it("never demands a negative amount", () => {
+    expect(requiredTempBytes(-1, "nfs")).toBe(0)
+    expect(requiredTempBytes(0, "lvm")).toBe(0)
   })
 })

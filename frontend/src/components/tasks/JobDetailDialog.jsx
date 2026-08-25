@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   Box,
@@ -19,10 +19,12 @@ import {
   ListItemIcon,
   ListItemText,
   Stack,
+  Tooltip,
   Typography
 } from '@mui/material'
 
 import { extractLogs, jobActions, jobDetailUrl, normalizeLog, syntheticLogs } from '@/lib/tasks/jobActions'
+import { useCopyToClipboard } from '@/lib/clipboard'
 
 import { StatusChip, TypeChip } from './JobChips'
 
@@ -67,6 +69,41 @@ function getNodeStatusIcon(status) {
   }
 }
 
+/** Distance from the bottom still counted as "parked at the tail", in px. */
+const TAIL_THRESHOLD_PX = 32
+
+/**
+ * Is this scroller parked at the tail?
+ *
+ * Exported so the follow rule can be asserted on a plain object: jsdom has no
+ * layout engine, so a rendered log panel reports zero for all three metrics and
+ * could never exercise this.
+ */
+export function isAtTail(el, threshold = TAIL_THRESHOLD_PX) {
+  if (!el) return true
+
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+}
+
+/**
+ * The log as text, formatted the way the panel prints it.
+ *
+ * Copies EVERY entry, not just the 100 the panel renders: the button exists to
+ * paste a whole run into an issue or a mail, and a truncated log is worse than
+ * none.
+ */
+export function logsAsText(entries) {
+  return entries
+    .map(normalizeLog)
+    .map(log => {
+      const ts = log.timestamp ? `[${new Date(log.timestamp).toLocaleTimeString()}] ` : ''
+      const node = log.node ? `[${log.node}] ` : ''
+
+      return `${ts}${node}${log.message}`
+    })
+    .join('\n')
+}
+
 /* --------------------------------
    Job Detail Dialog
 -------------------------------- */
@@ -84,6 +121,12 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
   // orchestrator routes) must say so rather than look like an empty log.
   const logError = forThisJob ? logState.error : null
   const [loading, setLoading] = useState(false)
+  const logCopy = useCopyToClipboard()
+  const logsRef = useRef(null)
+  // Follow the tail only while the reader is parked at it. A job writes lines
+  // for minutes, so yanking the view back down while they read an earlier line
+  // is worse than not following at all.
+  const followTail = useRef(true)
   // Held per job id rather than as a boolean: a stale confirmation must never
   // carry over to the next job opened in this (permanently mounted) dialog.
   const [confirmCancelFor, setConfirmCancelFor] = useState(null)
@@ -98,10 +141,12 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
     }
   }, [open, detailUrl, isEnterprise])
 
-  const fetchJobDetails = async () => {
+  const fetchJobDetails = async ({ silent = false } = {}) => {
     if (!detailUrl || !isEnterprise) return
 
-    setLoading(true)
+    // A background refresh must not raise the spinner: on a running job it
+    // fires every 3 s and the header blinked continuously.
+    if (!silent) setLoading(true)
     try {
       const res = await fetch(detailUrl)
       if (res.ok) {
@@ -113,17 +158,32 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
     } catch (e) {
       console.error('Error fetching job details:', e)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   // Auto-refresh if job is running
   useEffect(() => {
     if (open && detailUrl && job?.status === 'running' && isEnterprise) {
-      const interval = setInterval(fetchJobDetails, 3000)
+      const interval = setInterval(() => fetchJobDetails({ silent: true }), 3000)
       return () => clearInterval(interval)
     }
   }, [open, detailUrl, job?.status, isEnterprise])
+
+  // Reopening the dialog, or opening it on another job, starts at the tail
+  // again: the ref survives, the dialog is never unmounted.
+  useEffect(() => {
+    followTail.current = true
+  }, [open, job?.id])
+
+  // Scroll with the job. Keyed on the line count, which is what the 3 s refresh
+  // above changes while a migration runs.
+  useEffect(() => {
+    if (!open) return
+    const el = logsRef.current
+    if (!el || !followTail.current) return
+    el.scrollTop = el.scrollHeight
+  }, [open, logs.length])
 
   if (!job) return null
 
@@ -326,9 +386,25 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                 <Typography variant="subtitle2" fontWeight={700}>
                   {t('jobsPage.logs')}
                 </Typography>
-                {loading && <CircularProgress size={16} />}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {loading && <CircularProgress size={16} />}
+                  {logs.length > 0 && (
+                    <Tooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
+                      <IconButton
+                        size="small"
+                        aria-label={t('common.copy')}
+                        onClick={() => { void logCopy.copy(logsAsText(logs)) }}
+                        sx={{ opacity: 0.6, '&:hover': { opacity: 1 } }}
+                      >
+                        <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
               </Box>
               <Box
+                ref={logsRef}
+                onScroll={() => { followTail.current = isAtTail(logsRef.current) }}
                 sx={{
                   maxHeight: 300,
                   overflow: 'auto',

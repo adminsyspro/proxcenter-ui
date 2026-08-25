@@ -26,6 +26,49 @@ export function vsanBlocksMigrationType(hasVsanDisks: boolean, migType: string):
 }
 
 /**
+ * Whether a vSAN-backed source blocks the run on a DIRECT ESXi connection.
+ *
+ * `vsanBlocksMigrationType` states the rule; this states who it applies to, and
+ * that distinction is the whole reason it exists as its own function. A vCenter
+ * (and likewise Hyper-V or Nutanix) source is exempt: virt-v2v reaches those
+ * disks through the NFC export, which is vSAN aware. Everything else reads the
+ * datastore as files and cannot.
+ *
+ * Found during the #292 recette on 2026-08-24: the migrate button tested the
+ * rule only in the branch a direct-ESXi *Linux* guest falls through, so a
+ * Windows guest, which the API routes to virt-v2v over `-i vmx -it ssh` and
+ * which cannot read a vSAN object either, sailed past the red alert with an
+ * enabled button. The rule now sits above that branch, and here so it can be
+ * asserted without rendering the dialog.
+ */
+export function vsanBlocksDirectEsxiRun(
+  hasVsanDisks: boolean,
+  migType: string,
+  isV2vManagedSource: boolean,
+): boolean {
+  return !isV2vManagedSource && vsanBlocksMigrationType(hasVsanDisks, migType)
+}
+
+/**
+ * Temp space a cold virt-v2v run must find on the temp storage, in bytes.
+ *
+ * The old rule always demanded twice the source's committed space, because the
+ * source download AND the converted image both landed on the temp storage.
+ * Since #292 a file-based target has the conversion written straight onto
+ * itself, so only the download still needs temp room. Keeping the doubled
+ * requirement would go on refusing exactly the migrations the change was made
+ * to unlock: a 1 TB VM onto NFS asked for 2 TB of temp space.
+ *
+ * Unknown storage type keeps the conservative factor: the dialog would rather
+ * ask for space that turns out unnecessary than start a run that fills the
+ * filesystem halfway through a disk.
+ */
+export function requiredTempBytes(committedBytes: number, targetStorageType?: string): number {
+  const directWrite = !!targetStorageType && isFileBasedStorage(targetStorageType)
+  return Math.max(0, committedBytes) * (directWrite ? 1 : 2)
+}
+
+/**
  * Whether the selected target storage rules out a warm migration.
  *
  * Warm patches the target by byte offset (`dd seek`), which is only meaningful

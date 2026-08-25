@@ -119,6 +119,12 @@ let currentRun: ScriptedRun | null
 let v2vLaunches: string[]
 /** What Phase 6 "ls -1 <outputDir>" reports as converted disk files. */
 let diskListing: string
+/**
+ * Output of the adoption attempt (#292: `mkdir -p images/<vmid> && stat && mv -n
+ * && echo ADOPT_OK`). Empty = rename refused, so the pipeline falls back to
+ * `qm disk import`, which is what every pre-#292 test exercised.
+ */
+let adoptAnswer: string
 
 function queueV2vRuns(runs: ScriptedRun[]) {
   scriptedRuns.push(...runs)
@@ -151,6 +157,9 @@ async function sshRouter(_connId: string, _host: string, command: string) {
   }
   if (command.startsWith("cat ") && command.includes("*.xml")) return ok("") // no domain XML: fallback VM config
   if (command.startsWith("ls -1 ")) return ok(diskListing)
+  if (command.startsWith("mkdir -p ") && command.includes("echo ADOPT_OK")) {
+    return ok(adoptAnswer)
+  }
   if (command.startsWith("qm disk import ")) {
     return ok("Successfully imported disk as 'unused0:local:120/vm-120-disk-0.qcow2'")
   }
@@ -164,6 +173,9 @@ async function pveRouter(_conn: unknown, path: string, init?: { method?: string 
   // VM create accepted; falsy return skips the task-status polling
   if (path.endsWith("/qemu") && init?.method === "POST") return ""
   if (path.startsWith("/storage/")) return { type: "dir" }
+  // Node-level storage status: the direct-write gate (#292) requires the
+  // storage to be positively active before staging the conversion on it.
+  if (/^\/nodes\/[^/]+\/storage\/[^/]+\/status$/.test(path)) return { active: 1 }
   return {}
 }
 
@@ -231,6 +243,7 @@ beforeEach(() => {
   currentRun = null
   v2vLaunches = []
   diskListing = "testvm-sda\n"
+  adoptAnswer = ""
   prisma = makeFakePrisma()
   vi.mocked(getTenantPrisma).mockImplementation(() => prisma as any)
   vi.mocked(getConnectionById).mockResolvedValue(PVE_CONN as any)
@@ -360,5 +373,81 @@ describe("runV2vMigrationPipeline cleanup guard (#738)", () => {
     expect(destroyPveVm).toHaveBeenCalledTimes(1)
     expect(destroyPveVm).toHaveBeenCalledWith(expect.objectContaining({ id: "conn-target" }), "pve1", 120)
     expect(messages().some(m => m.includes("Cleaned up partial VM 120"))).toBe(true)
+  })
+})
+
+describe("runV2vMigrationPipeline direct storage write (#292)", () => {
+  const sshCommands = () => vi.mocked(executeSSH).mock.calls.map(c => String(c[2]))
+
+  it("converts onto the storage and adopts the disk by rename, no qm disk import", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    adoptAnswer = "ADOPT_OK"
+    // A dir/NFS storage's path is arbitrary and comes from the storage config.
+    vi.mocked(pveFetch).mockImplementation((async (conn: unknown, path: string, init?: { method?: string }) => {
+      if (path.startsWith("/storage/")) return { type: "nfs", path: "/mnt/pve/nfs-vmstore" }
+      return pveRouter(conn, path, init)
+    }) as any)
+
+    await runPipelineToEnd("v2v-it-adopt", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    // virt-v2v was pointed at the staging dir ON the storage and asked for qcow2
+    expect(v2vLaunches).toHaveLength(1)
+    expect(v2vLaunches[0]).toContain("-of qcow2")
+    expect(v2vLaunches[0]).toContain("-os '/mnt/pve/nfs-vmstore/proxcenter-v2v/v2v-it-adopt'")
+    // the whole point: the disk is never copied a second time
+    const commands = sshCommands()
+    expect(commands.some(c => c.startsWith("qm disk import "))).toBe(false)
+    // the rename targeted the storage's own images/<vmid> directory
+    const adoptCmd = commands.find(c => c.includes("echo ADOPT_OK")) || ""
+    expect(adoptCmd).toContain("mkdir -p '/mnt/pve/nfs-vmstore/images/120'")
+    expect(adoptCmd).toContain(
+      "mv -n '/mnt/pve/nfs-vmstore/proxcenter-v2v/v2v-it-adopt/testvm-sda' '/mnt/pve/nfs-vmstore/images/120/vm-120-disk-0.qcow2'",
+    )
+    // the adopted volume is what got attached
+    const attach = vi.mocked(pveSetVmConfig).mock.calls.find(c => c[3].has("scsi0"))
+    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    // both the staging dir on the storage AND the temp dir are cleaned up
+    expect(commands).toContain("rm -rf '/mnt/pve/nfs-vmstore/proxcenter-v2v/v2v-it-adopt'")
+    expect(commands).toContain("rm -rf '/tmp/v2v-v2v-it-adopt'")
+  })
+
+  it("falls back to qm disk import when the rename is refused, and still completes", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    // adoptAnswer stays "": the rename is refused, as on a cross-filesystem move
+
+    await runPipelineToEnd("v2v-it-fallback", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    // direct-write mode was still on (dir storage, path fallback /var/lib/vz)
+    expect(v2vLaunches[0]).toContain("-of qcow2")
+    expect(v2vLaunches[0]).toContain("-os '/var/lib/vz/proxcenter-v2v/v2v-it-fallback'")
+    // the fallback is the converting import, fed with the staged qcow2
+    const importCmd = sshCommands().find(c => c.startsWith("qm disk import ")) || ""
+    expect(importCmd).toContain(
+      "qm disk import 120 '/var/lib/vz/proxcenter-v2v/v2v-it-fallback/testvm-sda' 'local' --format qcow2",
+    )
+    expect(messages().some(m => m.includes("falling back to qm disk import"))).toBe(true)
+    const attach = vi.mocked(pveSetVmConfig).mock.calls.find(c => c[3].has("scsi0"))
+    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+  })
+
+  it("keeps the legacy temp staging when the storage is not reported active", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    // dead NFS mount: writing "onto the storage" would land under the mountpoint
+    vi.mocked(pveFetch).mockImplementation((async (conn: unknown, path: string, init?: { method?: string }) => {
+      if (/\/storage\/.+\/status$/.test(path)) return { active: 0 }
+      return pveRouter(conn, path, init)
+    }) as any)
+
+    await runPipelineToEnd("v2v-it-inactive", makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    // no direct write: raw conversion into the temp dir, byte-for-byte legacy
+    expect(v2vLaunches[0]).not.toContain("-of qcow2")
+    expect(v2vLaunches[0]).toContain("-os '/tmp/v2v-v2v-it-inactive'")
+    // and the disk reaches the storage through the converting import
+    const importCmd = sshCommands().find(c => c.startsWith("qm disk import ")) || ""
+    expect(importCmd).toContain("qm disk import 120 '/tmp/v2v-v2v-it-inactive/testvm-sda' 'local' --format qcow2")
   })
 })

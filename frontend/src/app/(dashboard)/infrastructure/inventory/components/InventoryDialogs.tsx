@@ -68,7 +68,7 @@ import { parseNodeId, parseVmId, HOTPLUG_DEVICES } from '../helpers'
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon, MoveUpIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
-import { vsanBlocksMigrationType, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
+import { vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
 import WarmCutoverButton from './WarmCutoverButton'
 import ForcePowerOffButton from './ForcePowerOffButton'
 import RootChoiceButton from './RootChoiceButton'
@@ -3265,6 +3265,13 @@ return
                   // for automatic driver injection, so we gate on the same deps as vCenter.
                   const isDirectEsxiWinCold = !isV2vVcenter && isWindowsGuest && migType === 'cold'
                   const needsV2vDeps = isV2vVcenter || isDirectEsxiWinCold
+                  // vSAN source: tested HERE, above the needsV2vDeps branch, because that
+                  // branch returns false on its own and used to swallow the check for the
+                  // one population that needs it most (direct-ESXi Windows cold, routed to
+                  // virt-v2v over `-i vmx -it ssh`, which cannot read a vSAN object
+                  // either). The alert above the button was always shown; only the gate
+                  // was dead. Found during the #292 recette.
+                  if (vsanBlocksDirectEsxiRun(vsanBlocksMigration, migType, isV2vVcenter)) return true
                   // Power-state gates: cold needs the VM off, live needs it on.
                   // Applies to every source type. Auto-power-off/on is intentionally
                   // NOT done here - the user toggles VM state on the source hypervisor
@@ -3288,11 +3295,13 @@ return
                     // virtio-win is required for Windows guests — without it the
                     // VM will likely BSOD with INACCESSIBLE_BOOT_DEVICE.
                     if (isWindowsGuest && !vcenterPreflight.virtioWinInstalled) return true
-                    // Temp storage must have at least 2x the source VM's committed
-                    // space (rough heuristic: NFC download + virt-v2v converted output).
+                    // Temp storage room: the source download always lands there, the
+                    // converted image only when the target is block storage, since #292
+                    // writes it straight onto a file-based target. requiredTempBytes owns
+                    // that 1x / 2x rule.
                     if (!migTempStorage) return true
                     const sel = vcenterPreflight.tempStorages?.find(s => s.path === migTempStorage)
-                    if (!sel || sel.availableBytes < (esxiMigrateVm?.committed || 0) * 2) return true
+                    if (!sel || sel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, migTargetStorageType)) return true
                     // Direct-ESXi via v2v also requires SSH + key on the source connection
                     // (virt-v2v -it ssh doesn't do password auth).
                     if (isDirectEsxiWinCold && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
@@ -3302,10 +3311,6 @@ return
                   // connection and sshfs/pv must be available when those modes selected.
                   if (migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                   if (migSshfsAvailable === false && (migTransferMode === 'sshfs' || migType === 'sshfs_boot')) return true
-                  // vSAN source on direct-ESXi: the file-based types stay blocked, warm
-                  // does not. Until this was fixed, a vSAN VM could only be migrated
-                  // without vCenter through the API.
-                  if (vsanBlocksSelectedType) return true
                   if (warmStorageBlocked) return true
                   if (downtimeBudgetInvalid) return true
                   // Warm: require a CURRENT successful readiness check for the selected

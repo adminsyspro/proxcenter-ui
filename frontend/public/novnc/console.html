@@ -17,13 +17,16 @@
     #toolbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 8px 16px; background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
+      flex-wrap: wrap; row-gap: 6px;
     }
-    #toolbar .info { display: flex; align-items: center; gap: 12px; }
+    /* Le nom de la VM cède la place avant les boutons: la barre porte assez de
+       contrôles pour dépasser la largeur d'une fenêtre de console 1024px. */
+    #toolbar .info { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
     #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
     #status-dot.connected { background: #22c55e; }
     #status-dot.connecting { background: #f59e0b; }
     #status-dot.error { background: #ef4444; }
-    #vm-info { color: #fff; font-size: 14px; font-weight: 600; }
+    #vm-info { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #status-text { color: #666; font-size: 12px; }
     #toolbar .vm-actions { display: flex; gap: 4px; margin: 0 16px; }
     #toolbar .vm-actions button {
@@ -41,7 +44,7 @@
     #toolbar .vm-actions button.btn-pause { color: #3b82f6; }
     #toolbar .vm-actions button.btn-pause:hover { background: #1e3a8a; }
     #toolbar .vm-actions button.loading { opacity: 0.5; pointer-events: none; }
-    #toolbar .buttons { display: flex; gap: 8px; }
+    #toolbar .buttons { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
     button {
       padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
       border: 1px solid #444; border-radius: 4px; cursor: pointer;
@@ -67,6 +70,22 @@
     #novnc-instructions code {
       display: block; background: #1c1917; padding: 12px; border-radius: 4px; text-align: left; font-size: 12px; margin: 12px 0;
     }
+    #toolbar select {
+      padding: 5px 8px; font-size: 12px; background: #333; color: #fff;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer; max-width: 150px;
+    }
+    #toolbar select:disabled { background: #222; color: #666; cursor: not-allowed; }
+    #toolbar .buttons button.icon { padding: 6px 9px; font-size: 14px; line-height: 1; }
+    #toolbar .buttons button.active { background: #1e3a8a; border-color: #3b82f6; }
+    /* Plein écran: la barre quitte le flux pour laisser tout l'écran à
+       l'invité, et revient quand le pointeur atteint le bord haut ou la
+       survole. Elle reste un élément vivant, donc chaque contrôle est à un
+       geste sans quitter le plein écran. */
+    body.fs #toolbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 20; opacity: 0.97;
+      transform: translateY(-100%); transition: transform 0.18s ease;
+    }
+    body.fs #toolbar.peek, body.fs #toolbar:hover { transform: none; }
   </style>
 </head>
 <body>
@@ -84,7 +103,17 @@
         <button id="btn-pause" class="btn-pause" title="Pause">⏸</button>
       </div>
       <div class="buttons">
+        <select id="scaling" title="Scaling mode">
+          <option value="scale">Fit to window</option>
+          <option value="remote">Resize guest</option>
+          <option value="off">No scaling (1:1)</option>
+        </select>
+        <select id="sendkey" title="Send a key combination the browser would otherwise swallow" disabled>
+          <option value="">Send key</option>
+        </select>
+        <button id="btn-paste" title="Send text to the guest clipboard, then paste inside the guest" disabled>Paste</button>
         <button id="btn-cad" disabled>Ctrl+Alt+Del</button>
+        <button id="btn-fullscreen" class="icon" title="Fullscreen">&#9974;</button>
         <button id="btn-reconnect">Reconnect</button>
         <button id="btn-close">Close</button>
       </div>
@@ -110,6 +139,9 @@ node bundle-novnc.js
 
   <!-- Charger noVNC bundle (IIFE) -->
   <script src="/novnc/rfb.bundle.js"></script>
+  <!-- Helpers partagés avec la console SPICE, testés dans
+       src/lib/console/viewport.test.ts et bundlés par bundle-console.js -->
+  <script src="/console/console-ui.bundle.js"></script>
   
   <script>
     let RFB;
@@ -132,6 +164,7 @@ node bundle-novnc.js
       return typeof RFB === 'function';
     }
     
+    const toolbar = document.getElementById('toolbar');
     const statusDot = document.getElementById('status-dot');
     const vmInfo = document.getElementById('vm-info');
     const statusText = document.getElementById('status-text');
@@ -142,6 +175,10 @@ node bundle-novnc.js
     const loadingSubtext = document.getElementById('loading-subtext');
     const novncInstructions = document.getElementById('novnc-instructions');
     const btnCad = document.getElementById('btn-cad');
+    const btnPaste = document.getElementById('btn-paste');
+    const btnFullscreen = document.getElementById('btn-fullscreen');
+    const scalingSelect = document.getElementById('scaling');
+    const sendKeySelect = document.getElementById('sendkey');
     const btnReconnect = document.getElementById('btn-reconnect');
     const btnClose = document.getElementById('btn-close');
     const btnStart = document.getElementById('btn-start');
@@ -178,6 +215,127 @@ node bundle-novnc.js
     }
 
     renderVmLabel();
+
+    // Toute interaction avec la barre d'outils vole le clavier à l'invité, il
+    // faut le lui rendre à chaque fois.
+    function focusCanvas() {
+      const canvas = screen.querySelector('canvas');
+
+      if (!canvas) return;
+      canvas.setAttribute('tabindex', '0');
+      canvas.style.outline = 'none';
+      canvas.focus({ preventScroll: true });
+    }
+
+    // --- Mise à l'échelle ---------------------------------------------------
+    // Trois modes, nommés comme le réglage `resize` de la console Proxmox
+    // d'origine. Le défaut reste "scale", c'est-à-dire le comportement que
+    // cette console a toujours eu. "remote" demande à l'invité de changer de
+    // résolution: noVNC n'envoie SetDesktopSize que si le serveur a annoncé
+    // ExtendedDesktopSize, donc le mode se dégrade en silence là où l'invité
+    // n'a pas le pilote qui sait l'honorer.
+    let scalingMode = ConsoleUI.loadScalingMode(window.localStorage, 'novnc');
+
+    scalingSelect.value = scalingMode;
+
+    function applyScalingMode() {
+      if (!rfb) return;
+
+      const flags = ConsoleUI.rfbFlagsForScalingMode(scalingMode);
+
+      rfb.scaleViewport = flags.scaleViewport;
+      rfb.clipViewport = flags.clipViewport;
+      rfb.resizeSession = flags.resizeSession;
+    }
+
+    scalingSelect.addEventListener('change', () => {
+      scalingMode = ConsoleUI.parseScalingMode(scalingSelect.value);
+      scalingSelect.value = scalingMode;
+      ConsoleUI.saveScalingMode(window.localStorage, 'novnc', scalingMode);
+      applyScalingMode();
+      focusCanvas();
+    });
+
+    // --- Plein écran --------------------------------------------------------
+    function syncFullscreenUi() {
+      const on = ConsoleUI.isFullscreen(document);
+
+      document.body.classList.toggle('fs', on);
+      btnFullscreen.classList.toggle('active', on);
+      btnFullscreen.title = on ? 'Leave fullscreen' : 'Fullscreen';
+      if (!on) toolbar.classList.remove('peek');
+      focusCanvas();
+    }
+
+    if (!ConsoleUI.fullscreenSupported(document.documentElement)) {
+      btnFullscreen.style.display = 'none';
+    }
+
+    btnFullscreen.addEventListener('click', () => {
+      ConsoleUI.toggleFullscreen(document, document.documentElement);
+    });
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'MSFullscreenChange'].forEach(function(evt) {
+      document.addEventListener(evt, syncFullscreenUi);
+    });
+
+    // En plein écran la barre est hors écran: le bord haut la ramène.
+    document.addEventListener('mousemove', function(e) {
+      if (!document.body.classList.contains('fs')) return;
+      toolbar.classList.toggle('peek', e.clientY <= 4);
+    });
+
+    // --- Combinaisons de touches -------------------------------------------
+    // Celles que le navigateur ou le bureau hôte intercepte et que l'invité ne
+    // verrait jamais si on les tapait.
+    ConsoleUI.KEY_COMBOS.forEach(function(combo) {
+      const opt = document.createElement('option');
+
+      opt.value = combo.id;
+      opt.textContent = combo.label;
+      sendKeySelect.appendChild(opt);
+    });
+
+    sendKeySelect.addEventListener('change', () => {
+      const id = sendKeySelect.value;
+
+      // Le select est un déclencheur, pas un état: on le remet sur son libellé.
+      sendKeySelect.value = '';
+      if (!id || !rfb) return;
+
+      ConsoleUI.keyComboSequence(id).forEach(function(stroke) {
+        rfb.sendKey(stroke.keysym, stroke.code, stroke.down);
+      });
+      focusCanvas();
+    });
+
+    // clipboardPasteFrom remplit le presse-papier DE L'INVITÉ (RFB n'a pas de
+    // primitive "tape ce texte"), l'utilisateur colle ensuite avec le raccourci
+    // de son invité.
+    btnPaste.addEventListener('click', async () => {
+      if (!rfb) return;
+
+      let text = '';
+
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        // Pas de permission, pas d'API en HTTP simple, ou presse-papier vide.
+        text = '';
+      }
+
+      if (!text) text = window.prompt('Text to send to the guest clipboard:') || '';
+      if (!text) return;
+
+      rfb.clipboardPasteFrom(text);
+      focusCanvas();
+    });
+
+    function setInputControlsEnabled(enabled) {
+      btnCad.disabled = !enabled;
+      btnPaste.disabled = !enabled;
+      sendKeySelect.disabled = !enabled;
+    }
 
     function setStatus(status, text) {
       statusDot.className = status;
@@ -289,47 +447,19 @@ node bundle-novnc.js
         console.log('WebSocket URL:', wsFullUrl);
         
         rfb = new RFB(screen, wsFullUrl, { credentials: { password } });
-        
-        rfb.scaleViewport = true;
-        rfb.resizeSession = false;  // Désactivé car cause des erreurs
-        rfb.clipViewport = false;
+
         rfb.viewOnly = false;
         rfb.focusOnClick = true;
         rfb.qualityLevel = 6;
         rfb.compressionLevel = 2;
         rfb.background = '#000';
-        
-        // Debug: log des événements
-        console.log('RFB config:', {
-          scaleViewport: rfb.scaleViewport,
-          resizeSession: rfb.resizeSession,
-          viewOnly: rfb.viewOnly,
-          focusOnClick: rfb.focusOnClick,
-          qualityLevel: rfb.qualityLevel,
-          compressionLevel: rfb.compressionLevel
-        });
-        
-        // Vérifier si viewOnly est bien false
-        if (rfb.viewOnly) {
-          console.error('WARNING: viewOnly is true!');
-        }
-        
-        // Debug: intercepter les événements sur le canvas après connexion
-        setTimeout(() => {
-          const canvas = screen.querySelector('canvas');
-          if (canvas) {
-            canvas.addEventListener('keydown', (e) => {
-              console.log('KEY DOWN:', e.key, e.keyCode);
-            }, true);
-            canvas.addEventListener('mousedown', (e) => {
-              console.log('MOUSE DOWN:', e.button, e.clientX, e.clientY);
-            }, true);
-            canvas.addEventListener('click', (e) => {
-              console.log('CLICK:', e.button, e.clientX, e.clientY);
-            }, true);
-          }
-        }, 500);
-        
+
+        // scaleViewport / resizeSession / clipViewport viennent tous du mode
+        // enregistré. noVNC observe le conteneur #screen avec un
+        // ResizeObserver, donc masquer la barre en plein écran suffit à
+        // déclencher une remise à l'échelle (ou un redimensionnement invité).
+        applyScalingMode();
+
         rfb.addEventListener('connect', () => {
           console.log('VNC connected');
           loading.style.display = 'none';
@@ -339,19 +469,8 @@ node bundle-novnc.js
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
           }
-          btnCad.disabled = false;
-          
-          // Focus agressif sur le canvas
-          const focusCanvas = () => {
-            const canvas = screen.querySelector('canvas');
-            if (canvas) {
-              canvas.setAttribute('tabindex', '0');
-              canvas.style.outline = 'none';
-              canvas.focus({ preventScroll: true });
-              console.log('Canvas focused, activeElement:', document.activeElement.tagName);
-            }
-          };
-          
+          setInputControlsEnabled(true);
+
           // Focus immédiat et répété
           focusCanvas();
           setTimeout(focusCanvas, 100);
@@ -374,7 +493,7 @@ node bundle-novnc.js
         
         rfb.addEventListener('disconnect', (e) => {
           console.log('VNC disconnected:', e.detail);
-          btnCad.disabled = true;
+          setInputControlsEnabled(false);
 
           if (userDisconnected) {
             setStatus('', 'Disconnected');

@@ -7193,7 +7193,12 @@
     "samplingHigh": "⚡ High precision — suitable for networks under 1 Gbps",
     "samplingBalanced": "✓ Good precision/performance trade-off — recommended for most cases",
     "samplingLight": "✓ Lightweight — suitable for 10 Gbps+ networks",
-    "samplingVeryLight": "📉 Very lightweight — may miss low-volume flows"
+    "samplingVeryLight": "📉 Very lightweight — may miss low-volume flows",
+    "noAttributionTitle": "Samples are arriving, but no flow can be attributed to a VM",
+    "noAttributionHelp": "The agents are working, sFlow data is being decoded. Attribution needs guest traffic to be visible where sampling happens: a guest NIC must reach an OVS bridge. On an SDN VNet, traffic between two guests of the same VNet stays on the Linux bridge and is never sampled.",
+    "noNodeToConfigure": "No node needs configuring.",
+    "configureRequestFailed": "The configuration request failed.",
+    "configureOutcome": "sFlow configured on {configured} of {total} nodes"
   },
   "vdc": {
     "title": "Virtual Datacenters",

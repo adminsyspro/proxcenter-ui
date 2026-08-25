@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { orchestratorFetch } from "@/lib/orchestrator"
-import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { audit } from "@/lib/audit"
+import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure"
+import { GUEST_MACS_COMMAND, parseGuestMACs } from "@/lib/sflow/guestMacs"
+import { saveDesiredSFlowConfig } from "@/lib/sflow/reconciler"
 
 // sFlow collector target: an "ip:port" / "host:port" string. Constrain it to
 // hostname / IPv4 / IPv6 characters plus the port colon so it can be safely
@@ -24,6 +28,27 @@ interface NodeSFlowStatus {
   sflowTarget: string
   sflowSampling: number
   bridges: string[]
+  // Why the port map push failed, when it did. Swallowing it made a node that
+  // could never attribute a flow look identical to one waiting for traffic.
+  portMapError: string
+}
+
+// Read every guest NIC MAC of a cluster, from any one of its nodes. The command
+// and the parsing live in @/lib/sflow/guestMacs, which documents why the path is
+// what it is.
+//
+// Tries the hosts in turn: one reachable node answers for the whole cluster, and
+// depending on a single one would lose the whole table whenever that node is down.
+async function collectGuestMACs(connId: string, ips: string[]): Promise<Record<string, number>> {
+  for (const ip of ips) {
+    const result = await executeSSH(connId, ip, GUEST_MACS_COMMAND)
+    if (!result.success) continue
+
+    const macs = parseGuestMACs(result.output ?? "")
+    if (Object.keys(macs).length > 0) return macs
+  }
+
+  return {}
 }
 
 // In-memory TTL cache per tenant. Each GET probes every node of every PVE connection
@@ -45,6 +70,7 @@ async function probeHost(
   connName: string,
   nodeName: string,
   ip: string,
+  guestMacs: Record<string, number>,
 ): Promise<NodeSFlowStatus> {
   const nodeStatus: NodeSFlowStatus = {
     node: nodeName,
@@ -58,6 +84,7 @@ async function probeHost(
     sflowTarget: "",
     sflowSampling: 0,
     bridges: [],
+    portMapError: "",
   }
 
   try {
@@ -103,13 +130,23 @@ async function probeHost(
         if (samplingMatch) nodeStatus.sflowSampling = Number.parseInt(samplingMatch[1], 10)
       }
 
-      // Refresh the Go orchestrator port map so sFlow samples can be decoded
-      // with VM context (ifIndex → VMID). Non-critical — don't fail the probe.
-      if (ipLinkResult.success && ipLinkResult.output) {
-        await orchestratorFetch("/sflow/portmap", {
-          method: "POST",
-          body: { agent_ip: ip, ip_link_output: ipLinkResult.output },
-        }).catch(() => {})
+      // Refresh the Go orchestrator port map so sFlow samples can be attributed
+      // to a guest: by ifIndex when the guest port is on the sampled bridge, by
+      // guest MAC otherwise. The failure is reported rather than swallowed,
+      // because a silent failure here is indistinguishable from "no traffic".
+      if ((ipLinkResult.success && ipLinkResult.output) || Object.keys(guestMacs).length > 0) {
+        try {
+          await orchestratorFetch("/sflow/portmap", {
+            method: "POST",
+            body: {
+              agent_ip: ip,
+              ip_link_output: ipLinkResult.output ?? "",
+              guest_macs: guestMacs,
+            },
+          })
+        } catch (e: any) {
+          nodeStatus.portMapError = e?.message || "port map push failed"
+        }
       }
     }
   } catch {
@@ -117,6 +154,41 @@ async function probeHost(
   }
 
   return nodeStatus
+}
+
+// Record the outcome of a configure run. Without this there is no trace at all
+// distinguishing "the user never pressed the button" from "it failed on every
+// node", which is exactly the ambiguity that made this action look inert.
+async function recordSFlowConfigureAudit(
+  results: Array<{ node: string; success: boolean; error?: string; bridgesConfigured?: number }>,
+  collectorTarget: string,
+): Promise<void> {
+  const failures = results.filter(r => !r.success)
+
+  try {
+    await audit({
+      action: "update",
+      category: "nodes",
+      resourceType: "sflow",
+      resourceName: `sFlow -> ${collectorTarget}`,
+      status: failures.length === 0 ? "success" : "failure",
+      errorMessage: failures.length > 0 ? failures.map(f => `${f.node}: ${f.error}`).join("; ") : undefined,
+      details: {
+        collectorTarget,
+        nodes: results.length,
+        configured: results.length - failures.length,
+        perNode: results.map(r => ({
+          node: r.node,
+          success: r.success,
+          bridges: r.bridgesConfigured ?? 0,
+          error: r.error,
+        })),
+      },
+    })
+  } catch {
+    // An audit failure must not mask the configuration result the caller is
+    // about to report.
+  }
 }
 
 // GET /api/v1/orchestrator/sflow/agents — check sFlow status on all nodes
@@ -141,7 +213,12 @@ export async function GET() {
       connections.map(async (conn): Promise<NodeSFlowStatus[]> => {
         if (!conn.sshKeyEnc && !conn.sshPassEnc) return []
         const targets = conn.hosts.filter((h): h is typeof h & { ip: string } => h.enabled && !!h.ip)
-        return Promise.all(targets.map(host => probeHost(conn.id, conn.name, host.node, host.ip)))
+        if (targets.length === 0) return []
+
+        // Cluster-wide, so the first node that answers covers every guest.
+        const guestMacs = await collectGuestMACs(conn.id, targets.map(h => h.ip))
+
+        return Promise.all(targets.map(host => probeHost(conn.id, conn.name, host.node, host.ip, guestMacs)))
       })
     )
     const results: NodeSFlowStatus[] = nested.flat()
@@ -187,13 +264,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "pollingInterval must be an integer between 1 and 86400" }, { status: 400 })
     }
 
+    const desiredConfig: SFlowDesiredConfig = {
+      collectorTarget,
+      samplingRate: safeSampling,
+      pollingInterval: safePolling,
+    }
+
     const prisma = await getSessionPrisma()
     const connections = await prisma.connection.findMany({
       where: { type: "pve", sshEnabled: true },
       include: { hosts: true },
     })
 
-    const results: Array<{ node: string; ip: string; success: boolean; error?: string }> = []
+    const results: Array<{
+      node: string
+      ip: string
+      success: boolean
+      error?: string
+      bridgesConfigured?: number
+    }> = []
 
     for (const nodeReq of nodes) {
       const { ip, connectionId } = nodeReq
@@ -204,16 +293,14 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // Configure sFlow on all OVS bridges
-        const cmd = `for br in $(ovs-vsctl list-br); do ovs-vsctl -- clear Bridge $br sflow; ovs-vsctl -- set Bridge $br sflow=@s -- --id=@s create sflow agent=$br target=${shellEscape(collectorTarget)} header=128 sampling=${safeSampling} polling=${safePolling}; done`
-
-        const result = await executeSSH(conn.id, ip, cmd)
+        const applied = await applySFlowOnNode(conn.id, ip, desiredConfig)
 
         results.push({
           node: nodeReq.node,
           ip,
-          success: result.success,
-          error: result.success ? undefined : result.error,
+          success: applied.success,
+          error: applied.error,
+          bridgesConfigured: applied.bridgesConfigured,
         })
       } catch (e: any) {
         results.push({ node: nodeReq.node, ip, success: false, error: e.message })
@@ -223,14 +310,34 @@ export async function POST(request: NextRequest) {
     const successCount = results.filter(r => r.success).length
 
     // Invalidate the agents cache so the next GET reflects the new sFlow config
-    invalidateAgentsCache(await getCurrentTenantId())
+    const tenantId = await getCurrentTenantId()
+    invalidateAgentsCache(tenantId)
 
-    return NextResponse.json({
-      success: successCount > 0,
-      configured: successCount,
-      total: results.length,
-      results,
-    })
+    // Remember what was asked for, so the reconciler can put it back after a
+    // node loses its OVS database. Only worth storing if it worked somewhere.
+    if (successCount > 0) {
+      await saveDesiredSFlowConfig(tenantId, desiredConfig)
+    }
+
+    await recordSFlowConfigureAudit(results, collectorTarget)
+
+    // A run where every node failed is an error, not a 200 carrying a flag no
+    // caller reads. That silence is what made this action look like a no-op.
+    const status = successCount === 0 ? 502 : 200
+
+    return NextResponse.json(
+      {
+        success: successCount > 0,
+        configured: successCount,
+        total: results.length,
+        results,
+        error:
+          successCount === 0
+            ? results[0]?.error || "sFlow could not be configured on any node"
+            : undefined,
+      },
+      { status }
+    )
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to configure sFlow" },

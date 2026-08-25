@@ -7193,7 +7193,12 @@
     "samplingHigh": "⚡ 높은 정밀도 — 1 Gbps 미만 네트워크에 적합",
     "samplingBalanced": "✓ 정밀도와 성능의 균형 — 대부분의 경우 권장",
     "samplingLight": "✓ 가벼움 — 10 Gbps 이상 네트워크에 적합",
-    "samplingVeryLight": "📉 매우 가벼움 — 소량 플로우를 놓칠 수 있음"
+    "samplingVeryLight": "📉 매우 가벼움 — 소량 플로우를 놓칠 수 있음",
+    "noAttributionTitle": "샘플이 수신되고 있지만 어떤 플로우도 VM에 귀속되지 않습니다",
+    "noAttributionHelp": "에이전트가 정상 작동 중이며 sFlow 데이터도 디코딩되고 있습니다. 귀속을 위해서는 샘플링이 수행되는 위치에서 게스트 트래픽이 보여야 합니다. 즉, 게스트 NIC가 OVS 브리지에 연결되어야 합니다. SDN VNet에서는 동일한 VNet에 속한 두 게스트 간 트래픽이 Linux 브리지에 머물러 샘플링되지 않습니다.",
+    "noNodeToConfigure": "구성할 노드가 없습니다.",
+    "configureRequestFailed": "구성 요청에 실패했습니다.",
+    "configureOutcome": "{configured}개 노드에 sFlow 구성 완료(전체 {total}개)"
   },
   "vdc": {
     "title": "가상 데이터센터",

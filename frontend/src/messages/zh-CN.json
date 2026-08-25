@@ -7136,7 +7136,12 @@
     "samplingHigh": "⚡ 高精度 — 适用于低于 1 Gbps 的网络",
     "samplingBalanced": "✓ 精度/性能兼顾 — 适用于大多数场景",
     "samplingLight": "✓ 轻量 — 适用于 10 Gbps 及以上网络",
-    "samplingVeryLight": "📉 非常轻量 — 可能会遗漏低流量的流"
+    "samplingVeryLight": "📉 非常轻量 — 可能会遗漏低流量的流",
+    "noAttributionTitle": "正在接收样本，但无法将任何流量归属到 VM",
+    "noAttributionHelp": "代理工作正常，sFlow 数据正在被解码。要进行归属，必须能在采样位置看到客户机流量：客户机 NIC 必须经过 OVS 网桥。在 SDN VNet 上，同一 VNet 内两个客户机之间的流量会停留在 Linux 网桥上，永远不会被采样。",
+    "noNodeToConfigure": "没有需要配置的节点。",
+    "configureRequestFailed": "配置请求失败。",
+    "configureOutcome": "已在 {configured} 个节点上配置 sFlow，共 {total} 个节点"
   },
   "myVdc": {
     "title": "我的数据中心",

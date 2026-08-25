@@ -983,13 +983,16 @@ return () => clearTimeout(timer)
                 </FormControl>
               )}
               <Tooltip title={t('common.refresh')}>
-                <IconButton
-                  size='small'
-                  onClick={handleRefresh}
-                  disabled={loading || !selectedPbs}
-                >
-                  {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
-                </IconButton>
+                <span>
+                  <IconButton
+                    aria-label={t('common.refresh')}
+                    size='small'
+                    onClick={handleRefresh}
+                    disabled={loading || !selectedPbs}
+                  >
+                    {loading ? <CircularProgress size={18} /> : <i className='ri-refresh-line' />}
+                  </IconButton>
+                </span>
               </Tooltip>
 
               <Box sx={{ flex: 1 }} />

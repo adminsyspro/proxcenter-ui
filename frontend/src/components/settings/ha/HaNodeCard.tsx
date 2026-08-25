@@ -124,14 +124,17 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
             {onSwitchover && (
               <Tooltip title={t('node.promoteTooltip')} arrow slotProps={tooltipSlotProps}>
-                <IconButton
-                  size="small"
-                  color="primary"
-                  disabled={loading}
-                  onClick={() => setConfirmOpen('switchover')}
-                >
-                  <i className="ri-swap-line" style={{ fontSize: 18 }} />
-                </IconButton>
+                <span>
+                  <IconButton
+                    aria-label={t('node.promoteTooltip')}
+                    size="small"
+                    color="primary"
+                    disabled={loading}
+                    onClick={() => setConfirmOpen('switchover')}
+                  >
+                    <i className="ri-swap-line" style={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
               </Tooltip>
             )}
             <Tooltip
@@ -141,6 +144,7 @@ export default function HaNodeCard({ member, vipAddress, maintenance, maintenanc
             >
               <span>
                 <IconButton
+                  aria-label={maintenance ? t('node.maintenanceExitTooltip') : maintenanceLocked ? t('node.maintenanceLockedTooltip') : t('node.maintenanceEnterTooltip')}
                   size="small"
                   color={maintenance ? 'warning' : 'default'}
                   disabled={loading || (!maintenance && maintenanceLocked)}

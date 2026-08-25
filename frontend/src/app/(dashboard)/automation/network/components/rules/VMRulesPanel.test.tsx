@@ -450,6 +450,25 @@ describe('VMRulesPanel', () => {
     await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, { log_level_in: 'debug' }))
   })
 
+  it('refreshes the firewall log from the dialog button once the log has loaded', async () => {
+    api.getVMFirewallLog.mockResolvedValue([{ n: 1, t: 'DROP IN 10.0.0.1' }])
+    renderPanel()
+    fireEvent.click(screen.getByText('VLAN 20'))
+
+    fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
+
+    await waitFor(() => expect(screen.getByText('DROP IN 10.0.0.1')).toBeInTheDocument())
+    const fetches = api.getVMFirewallLog.mock.calls.length
+
+    const refresh = within(screen.getByRole('dialog')).getByRole('button', { name: 'Refresh' })
+
+    expect(refresh).toBeEnabled()
+    fireEvent.click(refresh)
+
+    await waitFor(() => expect(api.getVMFirewallLog).toHaveBeenCalledTimes(fetches + 1))
+    expect(api.getVMFirewallLog).toHaveBeenLastCalledWith(CONN, 'pve1', 'qemu', 100, 200)
+  })
+
   it('says so when a guest has no firewall log line', async () => {
     renderPanel()
     fireEvent.click(screen.getByText('Untagged'))
@@ -503,5 +522,26 @@ describe('VMRulesPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load VMs' }))
     expect(p.loadVMFirewallData).toHaveBeenCalled()
+  })
+
+  it('keeps the Refresh tooltip on the log dialog button while the log is loading', async () => {
+    // Never settles, so the dialog stays in its loading state for the whole test.
+    api.getVMFirewallLog.mockImplementation(() => new Promise<never>(() => {}))
+    renderPanel()
+    fireEvent.click(screen.getByText('VLAN 20'))
+
+    fireEvent.click(within(rowOf('web-01')).getByRole('button', { name: 'Firewall Logs' }))
+
+    const dialog = await screen.findByRole('dialog')
+
+    const refresh = within(dialog).getByRole('button', { name: 'Refresh' })
+
+    expect(refresh).toBeDisabled()
+
+    // A disabled button fires no mouse events; the span wrapper is what the
+    // Tooltip listens on, which is the whole point of wrapping it.
+    fireEvent.mouseOver(refresh.parentElement!)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Refresh')
   })
 })

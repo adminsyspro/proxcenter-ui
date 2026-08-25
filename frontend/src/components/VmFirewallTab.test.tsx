@@ -217,4 +217,30 @@ describe('VmFirewallTab', () => {
 
     await waitFor(() => expect(api.updateVMOptions).toHaveBeenCalledWith(CONN_ID, NODE, 'qemu', VMID, { log_level_in: 'debug' }))
   })
+
+  it('keeps the Refresh tooltip reachable while the log refresh button is disabled', async () => {
+    // Never settles: `logsLoading` stays true for the whole test, so the
+    // refresh IconButton renders disabled. MUI drops the tooltip when its
+    // direct child is a disabled <button>; the <span> wrapper is what keeps
+    // the hover listeners alive.
+    api.getVMFirewallLog.mockReturnValue(new Promise(() => {}))
+
+    await renderTab()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Firewall Logs' }))
+
+    const dialog = await screen.findByRole('dialog')
+    const refresh = dialog.querySelector('.ri-refresh-line')?.closest('button')
+
+    if (!refresh) throw new Error('refresh button not rendered in the log dialog')
+
+    expect(refresh).toBeDisabled()
+    expect(refresh.parentElement?.tagName).toBe('SPAN')
+
+    fireEvent.mouseOver(refresh.parentElement!)
+
+    const tip = await screen.findByRole('tooltip')
+
+    expect(tip).toHaveTextContent('Refresh')
+  })
 })

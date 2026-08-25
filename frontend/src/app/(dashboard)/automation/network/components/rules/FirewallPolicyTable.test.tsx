@@ -311,4 +311,19 @@ describe('FirewallPolicyTable', () => {
     expect(masterSwitch()).toBeDisabled()
     for (const button of screen.getAllByRole('button', { name: 'Add rule' })) expect(button).toBeDisabled()
   })
+
+  it('keeps the Add rule tooltip on the header icon button while it is disabled', async () => {
+    renderTable({ selectedConnection: '' })
+
+    // The header's icon-only button is the one disabled without a connection.
+    const button = screen.getAllByRole('button', { name: 'Add rule' }).find(b => (b as HTMLButtonElement).disabled)!
+
+    expect(button).toBeDisabled()
+
+    // A disabled button fires no mouse events; the span wrapper is what the
+    // Tooltip listens on, which is the whole point of wrapping it.
+    fireEvent.mouseOver(button.parentElement!)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Add rule')
+  })
 })

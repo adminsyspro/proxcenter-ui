@@ -716,9 +716,11 @@ return updated.slice(-30)
           </Select>
         </FormControl>
         <Tooltip title={t('common.refresh')}>
-          <IconButton onClick={loadCeph} disabled={loading}>
-            <i className='ri-refresh-line' />
-          </IconButton>
+          <span>
+            <IconButton aria-label={t('common.refresh')} onClick={loadCeph} disabled={loading}>
+              <i className='ri-refresh-line' />
+            </IconButton>
+          </span>
         </Tooltip>
       </Box>
 

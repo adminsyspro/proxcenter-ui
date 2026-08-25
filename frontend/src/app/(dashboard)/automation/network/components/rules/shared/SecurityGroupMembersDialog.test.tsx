@@ -287,4 +287,28 @@ describe('SecurityGroupMembersDialog', () => {
     expect(screen.queryByRole('option', { name: 'web-attached (150)' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1)
   })
+
+  it('keeps the Detach tooltip reachable while a detach is in flight', async () => {
+    const member = guest(147, { name: 'web-04', rules: [groupRule(GROUP, 3)] })
+    let finishDetach: (() => void) | undefined
+
+    deleteVMRule.mockImplementationOnce(() => new Promise<void>(resolve => { finishDetach = resolve }))
+
+    renderDialog({ guests: [member] })
+
+    const button = screen.getByRole('button', { name: 'Detach' })
+
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+
+    // Busy disables every member's Detach button, and a disabled button fires
+    // no mouse events: the span wrapper is what the Tooltip listens on.
+    await waitFor(() => expect(button).toBeDisabled())
+    fireEvent.mouseOver(button.parentElement!)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Detach')
+
+    await act(async () => finishDetach?.())
+    await waitFor(() => expect(button).toBeEnabled())
+  })
 })

@@ -3016,9 +3016,11 @@ return favorites.has(vmKey)
           />
           {onRefresh && (
             <Tooltip title={t('common.refresh')}>
-              <IconButton size='small' onClick={onRefresh} disabled={refreshLoading}>
-                <RefreshIcon fontSize='small' />
-              </IconButton>
+              <span>
+                <IconButton aria-label={t('common.refresh')} size='small' onClick={onRefresh} disabled={refreshLoading}>
+                  <RefreshIcon fontSize='small' />
+                </IconButton>
+              </span>
             </Tooltip>
           )}
           {viewMode === 'tree' && (

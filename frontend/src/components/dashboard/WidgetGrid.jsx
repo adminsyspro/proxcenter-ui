@@ -978,13 +978,16 @@ return () => document.removeEventListener('fullscreenchange', handler)
         </Tooltip>
         {onRefresh && (
           <Tooltip title={t('dashboard.refreshData')} placement='left'>
-            <IconButton
-              onClick={onRefresh}
-              disabled={refreshLoading}
-              size='small'
-            >
-              <i className={refreshLoading ? 'ri-loader-4-line' : 'ri-refresh-line'} style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton
+                aria-label={t('dashboard.refreshData')}
+                onClick={onRefresh}
+                disabled={refreshLoading}
+                size='small'
+              >
+                <i className={refreshLoading ? 'ri-loader-4-line' : 'ri-refresh-line'} style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
         )}
         <Tooltip title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'} placement='left'>

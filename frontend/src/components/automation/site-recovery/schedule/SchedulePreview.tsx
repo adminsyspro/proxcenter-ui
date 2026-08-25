@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, Box, Typography } from '@mui/material'
-import parser from 'cron-parser'
+import { CronExpressionParser } from 'cron-parser'
 import type { ScheduleSpec } from './types'
 import { scheduleToCron } from './scheduleToCron'
 
@@ -19,7 +19,7 @@ export default function SchedulePreview({ spec, timezone, count = 5 }: Props) {
     if (!spec) return null
     try {
       const cronBody = scheduleToCron(spec, '')
-      const it = parser.parseExpression(cronBody, { tz: timezone || undefined })
+      const it = CronExpressionParser.parse(cronBody, { tz: timezone || undefined })
       const out: string[] = []
       for (let i = 0; i < count; i++) {
         out.push(it.next().toDate().toLocaleString(undefined, { timeZone: timezone || undefined }))

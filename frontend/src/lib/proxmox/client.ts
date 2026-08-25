@@ -46,10 +46,12 @@ export const PVE_SLOW_READ_TIMEOUT_MS = readTimeoutEnv("PVE_SLOW_READ_TIMEOUT_MS
 /** Short budget for liveness probes: primary recovery and failover candidates. */
 const PVE_PROBE_TIMEOUT_MS = 5_000
 
+// `allowH2: false` on every Agent: undici 8 enables HTTP/2 via ALPN by default,
+// pveproxy and the other hypervisor APIs were only ever exercised over HTTP/1.1.
 let defaultAgent: Agent | null = null
 export function getDefaultAgent(): Agent {
   if (!defaultAgent) {
-    defaultAgent = new Agent({ connect: { timeout: CONNECT_TIMEOUT } })
+    defaultAgent = new Agent({ connect: { timeout: CONNECT_TIMEOUT }, allowH2: false })
   }
   return defaultAgent
 }
@@ -57,7 +59,7 @@ export function getDefaultAgent(): Agent {
 let insecureAgent: Agent | null = null
 export function getInsecureAgent(): Agent {
   if (!insecureAgent) {
-    insecureAgent = new Agent({ connect: { rejectUnauthorized: false, timeout: CONNECT_TIMEOUT } })
+    insecureAgent = new Agent({ connect: { rejectUnauthorized: false, timeout: CONNECT_TIMEOUT }, allowH2: false })
   }
   return insecureAgent
 }

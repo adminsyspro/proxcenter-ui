@@ -354,7 +354,7 @@ export async function POST(req: Request) {
         }
         // ESXi almost always uses self-signed certs — use undici Agent to bypass TLS
         if (insecureTLS) {
-          fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
+          fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
         }
         // Try /sdk/vimServiceVersions.xml first, fallback to / — accept any response (even 4xx) as proof of reachability
         const res = await fetch(`${esxiUrl}/sdk/vimServiceVersions.xml`, fetchOpts).catch(() => null)
@@ -380,7 +380,7 @@ export async function POST(req: Request) {
           signal: AbortSignal.timeout(15000),
         }
         if (insecureTLS) {
-          fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
+          fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
         }
         const res = await fetch(`${xoUrl}/rest/v0/hosts`, fetchOpts).catch((err: any) => {
           console.error(`[xcpng] Connection to ${xoUrl}/rest/v0/hosts failed:`, err?.message || err)

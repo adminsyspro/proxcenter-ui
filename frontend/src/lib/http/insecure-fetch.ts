@@ -4,6 +4,12 @@
  *      seen on Node 26 + undici 8.x when a custom dispatcher is passed to
  *      WHATWG fetch().
  *   2. Optional self-signed TLS bypass via an undici Agent.
+ *   3. HTTP/1.1 only: undici 8 negotiates h2 through ALPN by default, and
+ *      every hypervisor API we talk to was validated over HTTP/1.1. The
+ *      Agents built in lib/ pin `allowH2: false`, and instrumentation-node.ts
+ *      pins the module-wide dispatcher used by every `request()` call that
+ *      passes none. `undici` is a serverExternalPackage so that dispatcher is
+ *      the one instance shared by every route.
  *
  * Background: v1.4.1 fixed two compounding Node 26 / undici 8.x regressions
  * on the vCenter SOAP path (brotli skipped, headers swallowed). The same
@@ -18,7 +24,7 @@ export const INSECURE_FETCH_HEADERS = {
 
 export async function makeInsecureDispatcher(): Promise<unknown> {
   const { Agent } = await import("undici")
-  return new Agent({ connect: { rejectUnauthorized: false } })
+  return new Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
 }
 
 export type InsecureFetchInit = RequestInit & {

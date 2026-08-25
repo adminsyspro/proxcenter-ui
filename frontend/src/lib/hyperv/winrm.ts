@@ -329,7 +329,7 @@ export class WinRMClient {
     if (this.conn.useSSL) {
       try {
         const { Agent } = await import("undici")
-        fetchOpts.dispatcher = new Agent({ connect: { rejectUnauthorized: false } })
+        fetchOpts.dispatcher = new Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
       } catch {
         // undici not available; proceed without custom dispatcher
       }

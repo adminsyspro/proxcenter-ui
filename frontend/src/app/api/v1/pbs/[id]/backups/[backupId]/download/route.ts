@@ -10,19 +10,14 @@
 // name.
 
 import { cookies } from 'next/headers'
-import { Agent, request } from 'undici'
+import { request } from 'undici'
 
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
+import { getInsecureAgent } from '@/lib/proxmox/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 
 export const runtime = 'nodejs'
-
-let insecureAgent: Agent | null = null
-function getInsecureAgent(): Agent {
-  if (!insecureAgent) insecureAgent = new Agent({ connect: { rejectUnauthorized: false } })
-  return insecureAgent
-}
 
 export async function GET(
   req: Request,

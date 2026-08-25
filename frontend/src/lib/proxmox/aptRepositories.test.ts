@@ -154,6 +154,25 @@ describe('computeRepoIssues', () => {
     ).toEqual([{ kind: 'enterprise', component: 'ceph-squid' }])
   })
 
+  it('stays silent when a ceph enterprise repo does have its no-subscription pair', () => {
+    expect(
+      computeRepoIssues({
+        'standard-repos': [
+          { handle: 'ceph-squid-enterprise', status: 1 },
+          { handle: 'ceph-squid-no-subscription', status: 1 },
+        ],
+      })
+    ).toEqual([])
+  })
+
+  it('skips a malformed entry with no handle instead of keying on undefined', () => {
+    expect(
+      computeRepoIssues({
+        'standard-repos': [{ name: 'Nameless' }, { handle: '' }, { handle: 'enterprise', status: 1 }],
+      })
+    ).toEqual([{ kind: 'enterprise' }])
+  })
+
   it('does not mistake the bare enterprise handle for a component pair', () => {
     const issues = computeRepoIssues({ 'standard-repos': [{ handle: 'enterprise', status: 1 }] })
 

@@ -1,4 +1,12 @@
-// src/middleware.ts
+// src/proxy.ts
+//
+// Was `src/middleware.ts`: Next 16 deprecated the `middleware` filename and
+// its named export in favour of `proxy`, to make the network boundary the
+// point of the file. The routing logic below is unchanged. One consequence is
+// NOT cosmetic: `proxy` always runs on the **nodejs** runtime and that cannot
+// be configured, where `middleware` defaulted to edge. Staying free of Prisma
+// and of any DB round-trip here is therefore now a deliberate choice (see the
+// absolute-cap note below), not a constraint the runtime imposes.
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
@@ -74,7 +82,7 @@ function isEnrollBypass(pathname: string): boolean {
 }
 
 // Strips every inbound x-pxc-* header from a forwarded-request Headers
-// object. These are internal signals set ONLY by this middleware (gesture 3
+// object. These are internal signals set ONLY by this proxy (gesture 3
 // below), never legitimate client input: forwarding a client-supplied
 // x-pxc-entry/-path/-method would let a request forge the allowlist
 // decision that getPrincipal() trusts blindly. Two call sites: the demo-mode
@@ -148,7 +156,7 @@ function getLocale(request: NextRequest): string {
   return getLocaleFromHeader(request)
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isDemoMode = process.env.DEMO_MODE === 'true'
 
@@ -241,7 +249,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Gesture 2 (existing bypass, unchanged semantics, now AFTER the strip):
-  // skip middleware for large upload routes (auth handled in route handler
+  // skip the proxy for large upload routes (auth handled in route handler
   // via checkPermission)
   if (pathname.includes('/storage/') && pathname.endsWith('/upload')) {
     return NextResponse.next({ request: { headers: requestHeaders } })
@@ -304,9 +312,9 @@ export async function middleware(request: NextRequest) {
 
     // Absolute cap, checked here so it also holds for page navigation. getToken
     // only decodes the JWT (jwt/index.js:118) — no callbacks, so the read-path
-    // validation never runs for the middleware. authAt makes the one deadline
+    // validation never runs for the proxy. authAt makes the one deadline
     // that matters against a stolen cookie enforceable with pure arithmetic,
-    // keeping this file Prisma-free and Edge-valid. isPastAbsoluteCap is the
+    // keeping this file Prisma-free. isPastAbsoluteCap is the
     // same predicate lib/auth/sessions.ts:evaluateSession uses for the DB-backed
     // row's createdAt, so the two never drift into separately-worded copies of
     // one rule.
@@ -333,7 +341,7 @@ export async function middleware(request: NextRequest) {
 
   // Gesture 3: bounded API-token derogation, kept BEFORE the early return
   // below so the OPTIONS 405 and the header stamping always win over it. The
-  // middleware never validates the token (edge runtime, no DB): it only
+  // proxy never validates the token (no DB round-trip here, by design): it only
   // matches the path via the shared matcher and stamps the internal headers;
   // hash, license, tenant, scopes and quota live in getPrincipal().
   const hasApiTokenBearer =
@@ -342,7 +350,7 @@ export async function middleware(request: NextRequest) {
     const matched = matchPublicApiPath(pathname)
     if (matched.ok) {
       // Server-to-server only (spec section 8): explicit 405 to any OPTIONS
-      // on the exposed surface, answered by the middleware itself.
+      // on the exposed surface, answered by the proxy itself.
       if (request.method === 'OPTIONS') {
         return NextResponse.json(
           { error: 'API tokens are read-only', method: 'OPTIONS' },

@@ -16,7 +16,7 @@ import { NextRequest } from 'next/server'
 
 // Static instance: module-scope env constants (HA_ENABLED, VIP, ...) are baked
 // at file load, BEFORE any vi.stubEnv from the VIP describes below runs.
-import { middleware } from './middleware'
+import { proxy } from './proxy'
 
 function makeRequest(url: string, host: string) {
   return {
@@ -51,9 +51,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/home')
@@ -64,9 +64,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.100/home', '192.0.2.100')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -76,9 +76,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.100:3000/home', '192.0.2.100:3000')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -88,9 +88,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/api/health', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -100,9 +100,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/api/v1/ha/cluster', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -112,9 +112,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://localhost/home', 'localhost')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -125,9 +125,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('HA_REDIRECT_DISABLED', 'true')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -135,9 +135,9 @@ describe('VIP redirect', () => {
   it('does not redirect when HA_ENABLED is not set', async () => {
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -147,9 +147,9 @@ describe('VIP redirect', () => {
     vi.stubEnv('VIP', '192.0.2.100')
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/settings?tab=ha', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/settings?tab=ha')
@@ -172,9 +172,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('https://proxcenter.example.com/home', 'proxcenter.example.com')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -183,9 +183,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('https://proxcenter.example.com/home', 'ProxCenter.Example.com:443')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -194,9 +194,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/home')
@@ -206,9 +206,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('NEXTAUTH_URL', 'https://proxcenter.example.com')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.100:3000/home', '192.0.2.100:3000')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -217,9 +217,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('HA_REDIRECT_EXEMPT_HOSTS', ' proxy-a.internal , Proxy-B.internal ')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://proxy-b.internal/home', 'proxy-b.internal')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -228,9 +228,9 @@ describe('VIP redirect host exemptions', () => {
     stubHaEnv()
     vi.stubEnv('NEXTAUTH_URL', 'not a url at all')
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/home', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).toBe(302)
   })
@@ -238,9 +238,9 @@ describe('VIP redirect host exemptions', () => {
   it('exempts /api/health/live on a non-exempt host (liveness path)', async () => {
     stubHaEnv()
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/api/health/live', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -248,9 +248,9 @@ describe('VIP redirect host exemptions', () => {
   it('exempts /api/health?live=1 on a non-exempt host', async () => {
     stubHaEnv()
 
-    const { middleware } = await import('./middleware')
+    const { proxy } = await import('./proxy')
     const req = makeRequest('http://192.0.2.101/api/health?live=1', '192.0.2.101')
-    const res = await middleware(req as any)
+    const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
   })
@@ -258,7 +258,7 @@ describe('VIP redirect host exemptions', () => {
 
 describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
   it('strips forged x-pxc-* headers on the storage upload bypass path', async () => {
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/v1/connections/c1/nodes/n1/storage/local/upload', {
         method: 'POST',
         headers: { 'x-pxc-entry': 'vms-list', 'x-pxc-path': '/api/v1/vms', 'x-pxc-method': 'GET' },
@@ -277,7 +277,7 @@ describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
 
   it('strips forged x-pxc-* on an authenticated API pass-through', async () => {
     getTokenMock.mockResolvedValue({ sub: 'u1' })
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/v1/users', { headers: { cookie: 'x', 'x-pxc-entry': 'evil' } }),
     )
     const overridden = res.headers.get('x-middleware-override-headers')
@@ -289,7 +289,7 @@ describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
 describe('gesture 3: bounded derogation', () => {
   it('answers 405 Allow: GET, HEAD to OPTIONS on an allowlisted path, with or without Bearer', async () => {
     for (const headers of [{}, { authorization: 'Bearer pxc_x'.padEnd(50, 'a') }]) {
-      const res = await middleware(apiRequest('/api/v1/vms', { method: 'OPTIONS', headers }))
+      const res = await proxy(apiRequest('/api/v1/vms', { method: 'OPTIONS', headers }))
       expect(res.status).toBe(405)
       expect(res.headers.get('Allow')).toBe('GET, HEAD')
       expect(await res.json()).toEqual({ error: 'API tokens are read-only', method: 'OPTIONS' })
@@ -297,7 +297,7 @@ describe('gesture 3: bounded derogation', () => {
   })
 
   it('derogates a Bearer pxc_ on an allowlisted path and stamps the three internal headers', async () => {
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/v1/pbs/conn-9/backups', { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
     )
     expect(res.status).toBe(200) // NextResponse.next()
@@ -308,7 +308,7 @@ describe('gesture 3: bounded derogation', () => {
   })
 
   it('gives NO derogation to a Bearer on a non-allowlisted path: existing cookie 401', async () => {
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/v1/license/status', { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
     )
     expect(res.status).toBe(401)
@@ -316,14 +316,14 @@ describe('gesture 3: bounded derogation', () => {
   })
 
   it('gives NO derogation without a Bearer on an allowlisted path', async () => {
-    const res = await middleware(apiRequest('/api/v1/vms'))
+    const res = await proxy(apiRequest('/api/v1/vms'))
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'Not authenticated' })
   })
 
   it('rejected paths (trailing slash, dotdot, %2F) never derogate', async () => {
     for (const path of ['/api/v1/vms/', '/api/v1/pbs/..%2Fx/backups', '/api/v1/pbs/a%2Fb/backups']) {
-      const res = await middleware(
+      const res = await proxy(
         apiRequest(path, { headers: { authorization: 'Bearer pxc_abcdefgh123' } }),
       )
       expect(res.status).toBe(401)
@@ -331,12 +331,12 @@ describe('gesture 3: bounded derogation', () => {
   })
 
   it('keeps the existing behavior of public API routes', async () => {
-    const res = await middleware(apiRequest('/api/health'))
+    const res = await proxy(apiRequest('/api/health'))
     expect(res.status).toBe(200)
   })
 
   it('answers the existing cookie 401 to an OPTIONS preflight on a non-allowlisted path', async () => {
-    const res = await middleware(apiRequest('/api/v1/users', { method: 'OPTIONS' }))
+    const res = await proxy(apiRequest('/api/v1/users', { method: 'OPTIONS' }))
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'Not authenticated' })
   })
@@ -345,7 +345,7 @@ describe('gesture 3: bounded derogation', () => {
 describe('demo mode: x-pxc-* strip on the API pass-through', () => {
   it('strips forged x-pxc-* headers on a /api/v1/* path the demo interceptor has no mock for', async () => {
     process.env.DEMO_MODE = 'true'
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/v1/public/metrics', {
         headers: { 'x-pxc-entry': 'public-metrics', 'x-pxc-path': '/api/v1/public/metrics', 'x-pxc-method': 'GET' },
       }),
@@ -368,7 +368,7 @@ describe('demo mode: x-pxc-* strip on the API pass-through', () => {
 
   it('strips forged x-pxc-* headers on a non-v1 API path in demo mode', async () => {
     process.env.DEMO_MODE = 'true'
-    const res = await middleware(
+    const res = await proxy(
       apiRequest('/api/internal/some-route', { headers: { 'x-pxc-entry': 'evil' } }),
     )
     const overridden = res.headers.get('x-middleware-override-headers')
@@ -380,7 +380,7 @@ describe('demo mode: x-pxc-* strip on the API pass-through', () => {
 describe('cookie-authenticated behavior unchanged', () => {
   it('keeps the 2FA enrollment gate for cookie-authenticated API requests', async () => {
     getTokenMock.mockResolvedValue({ sub: 'u1', mustEnroll2fa: true })
-    const res = await middleware(apiRequest('/api/v1/users', { headers: { cookie: 'x' } }))
+    const res = await proxy(apiRequest('/api/v1/users', { headers: { cookie: 'x' } }))
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({
       error: 'ENROLLMENT_REQUIRED',

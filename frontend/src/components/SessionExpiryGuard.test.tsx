@@ -52,7 +52,7 @@ describe('SessionExpiryGuard', () => {
     expect(replaceMock).not.toHaveBeenCalled()
   })
 
-  it('encodes the current path in callbackUrl, matching middleware.ts', () => {
+  it('encodes the current path in callbackUrl, matching proxy.ts', () => {
     currentPathname = '/settings/security'
     useSessionMock.mockReturnValue({ status: 'unauthenticated' })
 

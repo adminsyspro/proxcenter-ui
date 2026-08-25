@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { constantTimeStringEqual } from "@/lib/crypto/constantTime"
 
 // Server-side caller authentication for /api/internal/* routes. These
-// routes are listed in publicApiRoutes in middleware.ts because they
+// routes are listed in publicApiRoutes in proxy.ts because they
 // have to be reachable by the ws-proxy process without a NextAuth
 // session, but that makes them reachable by anyone who can hit the
 // Next.js port. A plain x-internal-caller string header is trivially

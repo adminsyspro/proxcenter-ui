@@ -8,7 +8,7 @@ vi.mock('next-auth/jwt', () => ({ getToken: getTokenMock }))
 
 import { NextRequest } from 'next/server'
 
-import { middleware } from './middleware'
+import { proxy } from './proxy'
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -17,12 +17,12 @@ afterEach(() => {
 
 const req = (path: string) => new NextRequest(new URL(`http://h:3000${path}`))
 
-describe('middleware enforces the absolute cap from authAt, with no DB access', () => {
+describe('proxy enforces the absolute cap from authAt, with no DB access', () => {
   it('redirects to /login when authAt is past the cap', async () => {
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
-    const res = await middleware(req('/dashboard'))
+    const res = await proxy(req('/dashboard'))
 
     expect(res?.status).toBe(307)
     expect(res?.headers.get('location')).toContain('/login')
@@ -32,7 +32,7 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 60_000 })
 
-    const res = await middleware(req('/dashboard'))
+    const res = await proxy(req('/dashboard'))
 
     expect(res?.headers.get('location')).toBeNull()
   })
@@ -40,7 +40,7 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
   it('lets a token with no authAt through, leaving refusal to the read path', async () => {
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1' })
 
-    const res = await middleware(req('/dashboard'))
+    const res = await proxy(req('/dashboard'))
 
     expect(res?.headers.get('location')).toBeNull()
   })
@@ -49,7 +49,7 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
-    const res = await middleware(req('/login'))
+    const res = await proxy(req('/login'))
 
     expect(res?.headers.get('location')).toBeNull()
   })
@@ -66,7 +66,7 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
-    const res = await middleware(req('/api/auth/session'))
+    const res = await proxy(req('/api/auth/session'))
 
     expect(res?.headers.get('location')).toBeNull()
     expect(getTokenMock).not.toHaveBeenCalled()
@@ -76,7 +76,7 @@ describe('middleware enforces the absolute cap from authAt, with no DB access', 
     process.env.SESSION_ABSOLUTE_TIMEOUT = '3600'
     getTokenMock.mockResolvedValue({ id: 'u1', sid: 's1', authAt: Date.now() - 7200_000 })
 
-    const res = await middleware(req('/api/health'))
+    const res = await proxy(req('/api/health'))
 
     expect(res?.headers.get('location')).toBeNull()
     expect(getTokenMock).not.toHaveBeenCalled()

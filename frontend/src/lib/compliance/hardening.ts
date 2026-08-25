@@ -170,7 +170,9 @@ function checkNoEnterpriseRepoWithoutSub(data: HardeningData): HardeningCheck {
           if (isEnterprise) { hasEnterpriseRepo = true; break }
         }
       }
-      const stdList = Array.isArray((repos as any).standard) ? (repos as any).standard : []
+      // PVE sends `standard-repos`; `standard` never existed, so this list was
+      // always empty and only the file/URI scan above ever caught anything.
+      const stdList = Array.isArray((repos as any)['standard-repos']) ? (repos as any)['standard-repos'] : []
       for (const repo of stdList) {
         if (repo?.handle?.includes('enterprise') && repo?.status === 1) { hasEnterpriseRepo = true; break }
       }

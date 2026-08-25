@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { readRepoErrors, readStandardRepos } from "@/lib/proxmox/aptRepositories"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 
@@ -32,10 +33,13 @@ export async function GET(
       { method: "GET" }
     )
 
+    // PVE answers with the HYPHENATED key `standard-repos`; reading
+    // `standard_repos` here returned an empty list on every node, which
+    // silently disabled the enterprise-repository pre-flight check.
     return NextResponse.json({
       data: {
-        standard_repos: result?.standard_repos || [],
-        errors: result?.errors || [],
+        standard_repos: readStandardRepos(result),
+        errors: readRepoErrors(result),
       },
     })
   } catch (e: any) {

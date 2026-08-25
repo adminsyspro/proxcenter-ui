@@ -34,6 +34,7 @@ import {
 } from '@mui/material'
 
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
+import { computeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 
 interface RunningVmInfo {
   vmid: number
@@ -149,7 +150,7 @@ export default function NodeUpdateDialog({
   const [sshNotConfigured, setSshNotConfigured] = useState(false)
 
   // Repository check
-  const [repoIssues, setRepoIssues] = useState<string[]>([])
+  const [repoIssues, setRepoIssues] = useState<RepoIssue[]>([])
   const [repoChecking, setRepoChecking] = useState(false)
 
   // Cluster pre-flight state
@@ -316,36 +317,12 @@ export default function NodeUpdateDialog({
     fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/apt/repositories`)
       .then(res => res.json())
       .then(json => {
-        if (cancelled || !json.data?.standard_repos) return
+        // Guard on `data` itself, not on `standard_repos`: a node whose only
+        // problem is an unparsable file returns an empty repo list with a
+        // populated `errors[]`, and bailing here would hide it.
+        if (cancelled || !json.data) return
 
-        const repos = json.data.standard_repos as Array<{ handle: string; status: boolean | null; name: string }>
-        const status: Record<string, boolean | null> = {}
-        for (const r of repos) {
-          status[r.handle] = r.status
-        }
-
-        const issues: string[] = []
-
-        if (status['enterprise'] === true && status['no-subscription'] !== true) {
-          issues.push('PVE Enterprise repository is enabled without a no-subscription alternative. apt update will fail without a valid PVE subscription.')
-        }
-
-        for (const [handle, s] of Object.entries(status)) {
-          if (s === true && handle.endsWith('-enterprise') && handle !== 'enterprise') {
-            const base = handle.replace(/-enterprise$/, '')
-            if (status[`${base}-no-subscription`] !== true) {
-              issues.push(`${base} enterprise repository is enabled without a no-subscription alternative.`)
-            }
-          }
-        }
-
-        if (json.data.errors?.length) {
-          for (const e of json.data.errors) {
-            issues.push(`Repository error: ${e.message}`)
-          }
-        }
-
-        setRepoIssues(issues)
+        setRepoIssues(computeRepoIssues(json.data))
       })
       .catch(() => {})
       .finally(() => {
@@ -1011,12 +988,24 @@ export default function NodeUpdateDialog({
                 <Typography variant="body2" fontWeight={600}>
                   {t('updates.repoIssuesTitle', { count: repoIssues.length })}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                  {t('updates.repoIssuesDescription')}
-                </Typography>
+                {repoIssues.some(i => i.kind === 'enterprise') && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    {t('updates.repoIssuesDescription')}
+                  </Typography>
+                )}
+                {repoIssues.some(i => i.kind === 'parse') && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    {t('updates.repoParseErrorsDescription')}
+                  </Typography>
+                )}
                 {repoIssues.map((issue, i) => (
                   <Typography key={i} variant="caption" sx={{ display: 'block' }}>
-                    &bull; {issue}
+                    &bull;{' '}
+                    {issue.kind === 'parse'
+                      ? issue.detail
+                      : issue.component
+                        ? t('updates.repoEnterpriseComponent', { component: issue.component })
+                        : t('updates.repoEnterprisePve')}
                   </Typography>
                 ))}
               </Alert>

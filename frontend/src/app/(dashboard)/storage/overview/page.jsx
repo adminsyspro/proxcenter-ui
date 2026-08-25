@@ -515,12 +515,17 @@ return (
   }, [t, showTenantSelector])
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    // Page pleine hauteur, même recette que /operations/task-center : la racine
+    // remplit la zone de contenu (`flex: 1` + `minHeight: 0`), les blocs fixes
+    // au-dessus sont en `flexShrink: 0`, et seule la carte du tableau absorbe la
+    // hauteur restante. Sans le `minHeight: 0`, la racine refuse de rétrécir,
+    // déborde sous la taskbar et fait défiler toute la page.
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minHeight: 0 }}>
       {/* KPIs. Pendant le scan de flotte, les KPI calculés sur un tableau vide
           afficheraient 0 stockage / 0 B / 0 %, ce qui rejoue l'impression de
           page cassée de l'issue #609. */}
       {loading ? <CardsSkeleton count={4} columns={4} /> : (
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 2, flexShrink: 0 }}>
         <KpiCard
           title={t('storage.storages')}
           value={stats.total}
@@ -553,7 +558,7 @@ return (
       )}
 
       {/* Filtres */}
-      <Card variant='outlined'>
+      <Card variant='outlined' sx={{ flexShrink: 0 }}>
         <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             {/* Connexion */}
@@ -662,7 +667,7 @@ return (
       {/* Sans ça, une connexion injoignable ou refusée rétrécit la vue en
           silence, ce qui ferait mentir la vue agrégée (issue #609). */}
       {!loading && unavailable.length > 0 && (
-        <Alert severity='warning'>
+        <Alert severity='warning' sx={{ flexShrink: 0 }}>
           <Tooltip title={unavailable.map(u => u.connName).join(', ')}>
             <span>{t('storage.unreachableConnections', { count: unavailable.length })}</span>
           </Tooltip>
@@ -670,8 +675,15 @@ return (
       )}
 
       {/* DataGrid */}
-      <Card variant='outlined'>
-        <Box sx={{ height: 600 }}>
+      {/* Seul bloc extensible : il absorbe la hauteur restante. `overflow` caché
+          garde le DataGrid dans les coins arrondis de la carte, et son propre
+          défilement interne remplace celui de la page. */}
+      <Card variant='outlined' sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+        {/* Doublure absolue, comme le Task Center : elle donne au DataGrid une
+            hauteur définie sans dépendre de la résolution du flex, sinon la
+            grille pousse la carte et repasse sous la taskbar. */}
+        <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
           {loading ? (
             <Box sx={{ p: 2 }}>
               <TableSkeleton rows={6} columns={showTenantSelector ? 8 : 7} />
@@ -705,6 +717,7 @@ return (
               }}
             />
           )}
+          </Box>
         </Box>
       </Card>
 

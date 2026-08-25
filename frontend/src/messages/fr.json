@@ -7194,7 +7194,12 @@
     "samplingHigh": "⚡ Haute précision — adapté aux réseaux de moins de 1 Gbps",
     "samplingBalanced": "✓ Bon compromis précision/performance — recommandé pour la plupart des cas",
     "samplingLight": "✓ Léger — adapté aux réseaux 10 Gbps+",
-    "samplingVeryLight": "📉 Très léger — peut manquer des flux de faible volume"
+    "samplingVeryLight": "📉 Très léger — peut manquer des flux de faible volume",
+    "noAttributionTitle": "Des échantillons arrivent, mais aucun flux n'est attribué à une VM",
+    "noAttributionHelp": "Les agents fonctionnent, les données sFlow sont bien décodées. L'attribution exige que le trafic des invités soit visible là où l'échantillonnage a lieu : une carte d'invité doit atteindre un bridge OVS. Sur un VNet SDN, le trafic entre deux invités du même VNet reste sur le bridge Linux et n'est jamais échantillonné.",
+    "noNodeToConfigure": "Aucun nœud à configurer.",
+    "configureRequestFailed": "La requête de configuration a échoué.",
+    "configureOutcome": "sFlow configuré sur {configured} nœud(s) sur {total}"
   },
   "vdc": {
     "title": "Datacenters Virtuels",

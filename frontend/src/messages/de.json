@@ -7134,7 +7134,12 @@
     "samplingHigh": "⚡ Hohe Präzision — geeignet für Netzwerke unter 1 Gbit/s",
     "samplingBalanced": "✓ Gutes Verhältnis von Präzision und Leistung — für die meisten Fälle empfohlen",
     "samplingLight": "✓ Ressourcenschonend — geeignet für Netzwerke ab 10 Gbit/s",
-    "samplingVeryLight": "📉 Sehr ressourcenschonend — kann Datenströme mit geringem Volumen übersehen"
+    "samplingVeryLight": "📉 Sehr ressourcenschonend — kann Datenströme mit geringem Volumen übersehen",
+    "noAttributionTitle": "Samples treffen ein, aber kein Flow kann einer VM zugeordnet werden",
+    "noAttributionHelp": "Die Agents funktionieren, die sFlow-Daten werden dekodiert. Für die Zuordnung muss der Gastverkehr dort sichtbar sein, wo das Sampling erfolgt: Eine Gast-NIC muss eine OVS-Bridge erreichen. In einem SDN-VNet verbleibt der Verkehr zwischen zwei Gästen desselben VNets auf der Linux-Bridge und wird nie erfasst.",
+    "noNodeToConfigure": "Kein Node muss konfiguriert werden.",
+    "configureRequestFailed": "Die Konfigurationsanfrage ist fehlgeschlagen.",
+    "configureOutcome": "sFlow auf {configured} von {total} Nodes konfiguriert"
   },
   "myVdc": {
     "title": "Mein Datacenter",

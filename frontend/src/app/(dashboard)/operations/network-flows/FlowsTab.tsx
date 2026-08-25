@@ -100,6 +100,33 @@ function portToService(port: number, protocol: string): string {
   return services[port] || `${port}/${protocol}`
 }
 
+// Empty state for the flow panels.
+//
+// A spinner is only honest while nothing has arrived. Once samples are being
+// decoded and still no flow can be tied to a guest, waiting will not help: the
+// guest interfaces are not visible where the sampling happens. Saying so is the
+// difference between a user who adjusts their setup and one who watches a
+// spinner forever.
+function FlowPanelEmptyState({ totalFlows, activeVMs }: { totalFlows: number; activeVMs: number }) {
+  const t = useTranslations()
+
+  if (totalFlows > 0 && activeVMs === 0) {
+    return (
+      <Alert severity="warning" sx={{ my: 2 }}>
+        <AlertTitle sx={{ fontSize: '0.85rem' }}>{t('networkFlows.noAttributionTitle')}</AlertTitle>
+        <Typography variant="body2">{t('networkFlows.noAttributionHelp')}</Typography>
+      </Alert>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 4, opacity: 0.5 }}>
+      <CircularProgress size={16} />
+      <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
+    </Box>
+  )
+}
+
 export default function FlowsTab() {
   const t = useTranslations()
   const theme = useTheme()
@@ -116,7 +143,12 @@ export default function FlowsTab() {
   const [nodeAgents, setNodeAgents] = useState<Array<{
     node: string; ip: string; connectionId: string; connectionName: string;
     online: boolean; hasOvs: boolean; ovsVersion: string; sflowConfigured: boolean; sflowTarget: string; sflowSampling: number; bridges: string[]
+    portMapError?: string
   }>>([])
+  // Outcome of the last configure run, so a failure is visible instead of silent.
+  const [configResult, setConfigResult] = useState<{
+    configured: number; total: number; failures: Array<{ node: string; error?: string }>
+  } | null>(null)
   const [agentsLoading, setAgentsLoading] = useState(true)
   const [agentsExpanded, setAgentsExpanded] = useState(true)
   const [configuringNodes, setConfiguringNodes] = useState(false)
@@ -299,11 +331,16 @@ export default function FlowsTab() {
       ? [configSingleNode]
       : nodeAgents.filter(n => n.hasOvs && !n.sflowConfigured)
 
-    if (nodesToConfigure.length === 0) return
+    if (nodesToConfigure.length === 0) {
+      setConfigResult({ configured: 0, total: 0, failures: [{ node: '', error: t('networkFlows.noNodeToConfigure') }] })
+
+      return
+    }
 
     setConfigDialogOpen(false)
     setConfigSingleNode(null)
     setConfiguringNodes(true)
+    setConfigResult(null)
     try {
       const res = await fetch('/api/v1/orchestrator/sflow/agents', {
         method: 'POST',
@@ -314,11 +351,26 @@ export default function FlowsTab() {
           samplingRate,
         }),
       })
-      if (res.ok) {
-        // Refresh agent list
-        await loadAgents()
-      }
-    } catch {} finally {
+
+      // The response carries a per-node outcome. Reading it is the whole point:
+      // this action used to return 200 and say nothing when every node failed.
+      const payload = await res.json().catch(() => null)
+      const results: Array<{ node: string; success: boolean; error?: string }> = payload?.results ?? []
+
+      setConfigResult({
+        configured: payload?.configured ?? 0,
+        total: payload?.total ?? nodesToConfigure.length,
+        failures: results.filter(r => !r.success).map(r => ({ node: r.node, error: r.error })),
+      })
+
+      await loadAgents()
+    } catch (e: any) {
+      setConfigResult({
+        configured: 0,
+        total: nodesToConfigure.length,
+        failures: [{ node: '', error: e?.message || t('networkFlows.configureRequestFailed') }],
+      })
+    } finally {
       setConfiguringNodes(false)
     }
   }
@@ -468,6 +520,22 @@ export default function FlowsTab() {
                     </Button>
                   )}
                 </Box>
+                {configResult && (
+                  <Alert
+                    severity={configResult.failures.length === 0 ? 'success' : configResult.configured > 0 ? 'warning' : 'error'}
+                    onClose={() => setConfigResult(null)}
+                    sx={{ mx: 1, mb: 1 }}
+                  >
+                    <AlertTitle sx={{ fontSize: '0.85rem' }}>
+                      {t('networkFlows.configureOutcome', { configured: configResult.configured, total: configResult.total })}
+                    </AlertTitle>
+                    {configResult.failures.map((f, i) => (
+                      <Typography key={`${f.node}-${i}`} variant="body2">
+                        {f.node ? `${f.node}: ${f.error}` : f.error}
+                      </Typography>
+                    ))}
+                  </Alert>
+                )}
                 <Collapse in={agentsExpanded}>
                   <TableContainer sx={{ px: 1, pb: 1.5 }}>
                     <Table size="small">
@@ -530,6 +598,14 @@ export default function FlowsTab() {
                                     <Chip label={t('networkFlows.notConfigured')} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
                                   ) : (
                                     <Chip label="—" size="small" color="default" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                                  )}
+                                  {/* Only surfaced when the port map push actually failed. Before,
+                                      that failure was swallowed and a node that could never attribute
+                                      a flow looked identical to one simply waiting for traffic. */}
+                                  {agent.portMapError && (
+                                    <Typography variant="caption" display="block" sx={{ color: 'warning.main', fontSize: '0.65rem', mt: 0.25 }}>
+                                      {agent.portMapError}
+                                    </Typography>
                                   )}
                                 </TableCell>
                                 <TableCell sx={{ py: 0.75, fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>
@@ -648,10 +724,7 @@ export default function FlowsTab() {
                   }}
                 />
                 {topTalkers.length === 0 ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 4, opacity: 0.5 }}>
-                    <CircularProgress size={16} />
-                    <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
-                  </Box>
+                  <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
                 ) : (
                   <TableContainer sx={{ maxHeight: 400 }}>
                     <Table size="small" stickyHeader>
@@ -736,10 +809,7 @@ export default function FlowsTab() {
                   }}
                 />
                 {topPairs.length === 0 ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, py: 3, opacity: 0.5 }}>
-                    <CircularProgress size={16} />
-                    <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
-                  </Box>
+                  <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
                 ) : (
                   <TableContainer sx={{ maxHeight: 400 }}>
                     <Table size="small" stickyHeader>
@@ -792,9 +862,7 @@ export default function FlowsTab() {
                 </Typography>
               </Box>
               {topPorts.length === 0 ? (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4, opacity: 0.4 }}>
-                  <Typography variant="body2">{t('networkFlows.waitingForData')}</Typography>
-                </Box>
+                <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
               ) : (
                 <Box sx={{ height: Math.max(200, topPorts.length * 32 + 40) }}>
                   <ChartContainer>

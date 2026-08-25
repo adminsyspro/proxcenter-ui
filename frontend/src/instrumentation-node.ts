@@ -13,6 +13,7 @@ import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
+import { startSFlowReconciler } from '@/lib/sflow/reconciler'
 
 export async function registerNode(): Promise<void> {
   // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
@@ -55,5 +56,16 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the rows stay in place and the next
     // boot retries starting the sweeper.
     console.error('[startup] session sweeper failed to start (non-fatal):', err)
+  }
+
+  try {
+    // OVS forgets its sFlow configuration when a node's bridges are recreated,
+    // so a reboot silently stops the flow panels. Nothing used to notice.
+    // Idempotent, so it runs on every replica without leader election.
+    startSFlowReconciler()
+  } catch (err) {
+    // Boot must never depend on this: the nodes simply stay as they are and
+    // the next boot retries starting the reconciler.
+    console.error('[startup] sFlow reconciler failed to start (non-fatal):', err)
   }
 }

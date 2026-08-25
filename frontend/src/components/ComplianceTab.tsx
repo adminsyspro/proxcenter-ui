@@ -176,14 +176,17 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
             <Grid size={{ xs: 5, sm: 1 }}>
               <Card variant="outlined" sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 <Tooltip title={t('compliance.runScan')}>
-                  <IconButton
-                    size="small"
-                    onClick={() => mutate()}
-                    disabled={isLoading}
-                    sx={{ position: 'absolute', top: 4, left: 4 }}
-                  >
-                    {isLoading ? <CircularProgress size={16} /> : <i className="ri-refresh-line" style={{ fontSize: 16 }} />}
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      aria-label={t('compliance.runScan')}
+                      size="small"
+                      onClick={() => mutate()}
+                      disabled={isLoading}
+                      sx={{ position: 'absolute', top: 4, left: 4 }}
+                    >
+                      {isLoading ? <CircularProgress size={16} /> : <i className="ri-refresh-line" style={{ fontSize: 16 }} />}
+                    </IconButton>
+                  </span>
                 </Tooltip>
                 <CardContent sx={{ textAlign: 'center', py: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Box sx={{ position: 'relative', display: 'inline-flex', mb: 0.5 }}>

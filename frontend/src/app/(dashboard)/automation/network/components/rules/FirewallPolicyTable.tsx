@@ -301,9 +301,11 @@ export default function FirewallPolicyTable({
               </FormControl>
             </Box>
             <Tooltip title={t('networkPage.addRule')}>
-              <IconButton size="small" onClick={openAddRule} disabled={!selectedConnection}>
-                <i className="ri-add-line" style={{ fontSize: 18 }} />
-              </IconButton>
+              <span>
+                <IconButton aria-label={t('networkPage.addRule')} size="small" onClick={openAddRule} disabled={!selectedConnection}>
+                  <i className="ri-add-line" style={{ fontSize: 18 }} />
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
         </Box>

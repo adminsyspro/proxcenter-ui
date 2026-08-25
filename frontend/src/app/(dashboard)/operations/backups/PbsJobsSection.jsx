@@ -379,9 +379,11 @@ export default function PbsJobsSection({ pbsConnections = [] }) {
 
             {/* Refresh */}
             <Tooltip title={t('common.refresh')}>
-              <IconButton onClick={loadJobs} disabled={loading || !selectedPbs}>
-                <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} />
-              </IconButton>
+              <span>
+                <IconButton aria-label={t('common.refresh')} onClick={loadJobs} disabled={loading || !selectedPbs}>
+                  <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} />
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
         </Box>

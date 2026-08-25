@@ -395,9 +395,11 @@ return provider
         
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Tooltip title={t('ai.clearConversation')}>
-            <IconButton size="small" onClick={handleClear} disabled={loading}>
-              <i className='ri-delete-bin-line' style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton aria-label={t('ai.clearConversation')} size="small" onClick={handleClear} disabled={loading}>
+                <i className='ri-delete-bin-line' style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={t('common.close')}>
             <IconButton size="small" onClick={onClose}>

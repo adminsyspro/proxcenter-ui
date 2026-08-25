@@ -405,9 +405,11 @@ export default function VmFirewallTab({ connectionId, node, vmType, vmid, vmName
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={t('common.refresh')}>
-              <IconButton size="small" onClick={loadLogs} disabled={logsLoading}>
-                <i className={`ri-refresh-line ${logsLoading ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
-              </IconButton>
+              <span>
+                <IconButton aria-label={t('common.refresh')} size="small" onClick={loadLogs} disabled={logsLoading}>
+                  <i className={`ri-refresh-line ${logsLoading ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
+                </IconButton>
+              </span>
             </Tooltip>
             <IconButton onClick={() => setLogDialogOpen(false)} size="small"><i className="ri-close-line" /></IconButton>
           </Box>

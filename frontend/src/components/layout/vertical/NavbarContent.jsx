@@ -674,9 +674,11 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>
-            <IconButton size='small' onClick={e => setLangAnchor(e.currentTarget)} disabled={isPending}>
-              <i className='ri-translate-2' />
-            </IconButton>
+            <span>
+              <IconButton aria-label={t('navbar.language')} size='small' onClick={e => setLangAnchor(e.currentTarget)} disabled={isPending}>
+                <i className='ri-translate-2' />
+              </IconButton>
+            </span>
           </Tooltip>
 
           {/* HA Cluster Status */}

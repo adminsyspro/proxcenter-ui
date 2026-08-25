@@ -645,9 +645,11 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Tooltip title={t('networkPage.refresh')}>
-              <IconButton size="small" onClick={() => logDialog.vm && fetchLogs(logDialog.vm)} disabled={loadingLogs}>
-                <i className={`ri-refresh-line ${loadingLogs ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
-              </IconButton>
+              <span>
+                <IconButton aria-label={t('networkPage.refresh')} size="small" onClick={() => fetchLogs(logDialog.vm!)} disabled={loadingLogs || !logDialog.vm}>
+                  <i className={`ri-refresh-line ${loadingLogs ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
+                </IconButton>
+              </span>
             </Tooltip>
             <IconButton onClick={closeLogDialog} size="small"><i className="ri-close-line" /></IconButton>
           </Box>

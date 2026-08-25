@@ -836,9 +836,11 @@ function ProfilesTab() {
                     </TableCell>
                     <TableCell align="right">
                       <Tooltip title={t('compliance.activate')}>
-                        <IconButton size="small" onClick={() => handleActivateProfile(p.id)} disabled={p.is_active}>
-                          <i className="ri-check-line" style={{ fontSize: 18 }} />
-                        </IconButton>
+                        <span>
+                          <IconButton aria-label={t('compliance.activate')} size="small" onClick={() => handleActivateProfile(p.id)} disabled={p.is_active}>
+                            <i className="ri-check-line" style={{ fontSize: 18 }} />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       <Tooltip title={t('common.edit')}>
                         <IconButton size="small" onClick={() => handleEditProfile(p.id)}>

@@ -284,14 +284,16 @@ export default function SnapshotsTab({ connections, vmNamesByConn }: Props) {
             )}
             {selectedList.length === 0 && orphansInView.length > 0 && (
               <Tooltip title={t('siteRecovery.snapshots.cleanupOrphansHint')} arrow>
-                <Button
-                  size='small' variant='outlined' color='warning'
-                  startIcon={<i className='ri-sparkling-line' />}
-                  onClick={() => setConfirmDelete(orphansInView)}
-                  disabled={deleting}
-                >
-                  {t('siteRecovery.snapshots.cleanupOrphans', { count: orphansInView.length })}
-                </Button>
+                <span>
+                  <Button
+                    size='small' variant='outlined' color='warning'
+                    startIcon={<i className='ri-sparkling-line' />}
+                    onClick={() => setConfirmDelete(orphansInView)}
+                    disabled={deleting}
+                  >
+                    {t('siteRecovery.snapshots.cleanupOrphans', { count: orphansInView.length })}
+                  </Button>
+                </span>
               </Tooltip>
             )}
           </Box>

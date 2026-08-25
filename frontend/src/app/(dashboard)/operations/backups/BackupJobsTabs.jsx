@@ -613,9 +613,11 @@ return '—'
             {t('backups.createJob')}
           </Button>
           <Tooltip title={t('common.refresh')}>
-            <IconButton onClick={loadJobs} disabled={loading || !selectedConnection}>
-              <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} />
-            </IconButton>
+            <span>
+              <IconButton aria-label={t('common.refresh')} onClick={loadJobs} disabled={loading || !selectedConnection}>
+                <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </Box>
@@ -1348,6 +1350,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
             <Tooltip title={isRunning ? t('backups.running') + '...' : t('backups.runNow')}>
               <span>
                 <IconButton
+                  aria-label={isRunning ? t('backups.running') + '...' : t('backups.runNow')}
                   size="small"
                   onClick={() => handleRunNow(params.row)}
                   disabled={!canRun}
@@ -1427,50 +1430,64 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
           {/* Boutons de création par type */}
           <Tooltip title={t('backups.createSyncJob')}>
-            <IconButton
-              size="small"
-              onClick={() => handleCreate('sync')}
-              disabled={!selectedPbs}
-              sx={{ color: '#2196F3' }}
-            >
-              <i className="ri-refresh-line" style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton
+                aria-label={t('backups.createSyncJob')}
+                size="small"
+                onClick={() => handleCreate('sync')}
+                disabled={!selectedPbs}
+                sx={{ color: '#2196F3' }}
+              >
+                <i className="ri-refresh-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={t('backups.createVerifyJob')}>
-            <IconButton
-              size="small"
-              onClick={() => handleCreate('verify')}
-              disabled={!selectedPbs}
-              sx={{ color: '#4CAF50' }}
-            >
-              <i className="ri-shield-check-line" style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton
+                aria-label={t('backups.createVerifyJob')}
+                size="small"
+                onClick={() => handleCreate('verify')}
+                disabled={!selectedPbs}
+                sx={{ color: '#4CAF50' }}
+              >
+                <i className="ri-shield-check-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={t('backups.createPruneJob')}>
-            <IconButton
-              size="small"
-              onClick={() => handleCreate('prune')}
-              disabled={!selectedPbs}
-              sx={{ color: '#FF9800' }}
-            >
-              <i className="ri-scissors-cut-line" style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton
+                aria-label={t('backups.createPruneJob')}
+                size="small"
+                onClick={() => handleCreate('prune')}
+                disabled={!selectedPbs}
+                sx={{ color: '#FF9800' }}
+              >
+                <i className="ri-scissors-cut-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title={t('backups.createTapeJob')}>
-            <IconButton
-              size="small"
-              onClick={() => handleCreate('tape')}
-              disabled={!selectedPbs}
-              sx={{ color: '#795548' }}
-            >
-              <i className="ri-archive-drawer-line" style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton
+                aria-label={t('backups.createTapeJob')}
+                size="small"
+                onClick={() => handleCreate('tape')}
+                disabled={!selectedPbs}
+                sx={{ color: '#795548' }}
+              >
+                <i className="ri-archive-drawer-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
           <Tooltip title={t('common.refresh')}>
-            <IconButton onClick={loadJobs} disabled={loading || !selectedPbs} size="small">
-              <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} style={{ fontSize: 18 }} />
-            </IconButton>
+            <span>
+              <IconButton aria-label={t('common.refresh')} onClick={loadJobs} disabled={loading || !selectedPbs} size="small">
+                <i className={`ri-refresh-line ${loading ? 'ri-spin' : ''}`} style={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       </Box>

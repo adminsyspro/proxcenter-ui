@@ -157,9 +157,11 @@ export default function SecurityGroupMembersDialog({
                 key={guest.vmid}
                 secondaryAction={
                   <Tooltip title={t('firewall.membersDetach')}>
-                    <IconButton edge="end" size="small" disabled={busy} onClick={() => detach(guest)}>
-                      <i className="ri-link-unlink" style={{ fontSize: 16 }} />
-                    </IconButton>
+                    <span>
+                      <IconButton aria-label={t('firewall.membersDetach')} edge="end" size="small" disabled={busy} onClick={() => detach(guest)}>
+                        <i className="ri-link-unlink" style={{ fontSize: 16 }} />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                 }
               >

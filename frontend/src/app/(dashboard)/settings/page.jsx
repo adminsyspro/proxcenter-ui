@@ -802,14 +802,17 @@ function ConnectionsTab() {
               )}
               {params.row.type === 'pve' && (
                 <Tooltip title={t('settings.detectCeph')}>
-                  <IconButton
-                    size='small'
-                    disabled={isDetecting}
-                    onClick={(e) => { e.stopPropagation(); handleDetectCeph(params.row.id) }}
-                    sx={{ width: 24, height: 24 }}
-                  >
-                    <i className={isDetecting ? 'ri-loader-4-line' : 'ri-refresh-line'} style={{ fontSize: 14, animation: isDetecting ? 'spin 1s linear infinite' : 'none' }} />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      aria-label={t('settings.detectCeph')}
+                      size='small'
+                      disabled={isDetecting}
+                      onClick={(e) => { e.stopPropagation(); handleDetectCeph(params.row.id) }}
+                      sx={{ width: 24, height: 24 }}
+                    >
+                      <i className={isDetecting ? 'ri-loader-4-line' : 'ri-refresh-line'} style={{ fontSize: 14, animation: isDetecting ? 'spin 1s linear infinite' : 'none' }} />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               )}
             </Box>

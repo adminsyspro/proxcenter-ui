@@ -40,7 +40,7 @@ export function redirectToLoginOnce() {
   // Hard navigation (not next/navigation's router — this is a plain module,
   // not a component). replace(), not assign(), so the dead page doesn't
   // stay in history — consistent with SessionExpiryGuard's router.replace().
-  // callbackUrl mirrors SessionExpiryGuard's and middleware.ts's own
+  // callbackUrl mirrors SessionExpiryGuard's and proxy.ts's own
   // no-token redirect so re-authenticating returns the user where they were.
   const callbackUrl = encodeURIComponent(window.location.pathname)
   window.location.replace(`/login?callbackUrl=${callbackUrl}`)

@@ -67,7 +67,7 @@ function walkImportGraph(entryFile: string): Map<string, string> {
  * - `lib/storage/fleetScope.ts` (`canReadFleetStorage`) reads
  *   `getServerSession()` DIRECTLY, independent of `getPrincipal()`/the
  *   principal passed to the route. It WAS a genuine, if narrow, violation:
- *   `src/middleware.ts` only strips inbound `x-pxc-*` headers (spec D7) and
+ *   `src/proxy.ts` only strips inbound `x-pxc-*` headers (spec D7) and
  *   never touches `Cookie`, so a request carrying BOTH a live
  *   provider-tenant super-admin session cookie AND ANY valid `pxc_` bearer
  *   token reached the handler with `ctx.principal.kind === "token"` while

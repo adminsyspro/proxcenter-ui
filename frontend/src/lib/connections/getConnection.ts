@@ -45,7 +45,7 @@ async function assertProviderFleetViewFromSession(id: string, kind: "pve" | "pbs
   // 401 = no session at all: a background/internal caller (poller, detached
   // migration pipeline) rather than a scoped user, so trusted server code
   // passes. This cannot be reached by an unauthenticated HTTP caller: the
-  // global middleware (src/middleware.ts) returns 401 for any /api request
+  // global proxy (src/proxy.ts) returns 401 for any /api request
   // without a valid JWT before route handlers run, so sessionless execution
   // here can only be non-request server code. The guard bounds AUTHENTICATED
   // users (403 = authenticated but lacking the grant).

@@ -1,6 +1,6 @@
-// PURE data module: imported by BOTH the Edge middleware (D7) and
-// principal.ts (D8). NO DB access, NO Node-only import, ever.
-// Single source of truth for: the middleware derogation, the authorization
+// PURE data module: imported by BOTH the proxy (D7) and
+// principal.ts (D8). NO DB access, ever.
+// Single source of truth for: the proxy derogation, the authorization
 // (getPrincipal step 10), the OpenAPI generation and the contract tests.
 
 export type AllowlistQueryParam = {
@@ -130,7 +130,7 @@ export function getAllowlistEntryById(id: string): AllowlistEntry | null {
 /**
  * Pre-match rejections (spec section 8): encoded slash or backslash, empty
  * segment (double slash), '.' or '..' segments, trailing slash on a non-root
- * path. Rejection = no match = the existing middleware cookie 401, nothing
+ * path. Rejection = no match = the existing proxy cookie 401, nothing
  * is disclosed.
  */
 export function isRejectedPath(pathname: string): boolean {
@@ -162,7 +162,7 @@ function matchPattern(pattern: string, pathname: string): Record<string, string>
 
 export type AllowlistMatch = { ok: boolean; entryId?: string; params?: Record<string, string> }
 
-/** THE single shared matcher: the Edge middleware and getPrincipal both use it. */
+/** THE single shared matcher: the proxy and getPrincipal both use it. */
 export function matchPublicApiPath(pathname: string): AllowlistMatch {
   if (isRejectedPath(pathname)) return { ok: false }
   for (const entry of PUBLIC_API_ALLOWLIST) {

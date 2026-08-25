@@ -8,7 +8,7 @@ import type { Principal } from "@/lib/auth/principal"
 export const runtime = "nodejs"
 
 // Authenticated companion of the unauthenticated /api/health liveness probe
-// (frontend/src/middleware.ts), which stays the load-balancer probe. This
+// (frontend/src/proxy.ts), which stays the load-balancer probe. This
 // one adds the per-connection detail, filtered by tenant and token
 // perimeter.
 async function handler(_req: Request, ctx: { principal?: Principal }) {

@@ -37,7 +37,7 @@ import { getMode, getSystemMode } from '@core/utils/serverHelpers'
 const Layout = async props => {
   const { children } = props
 
-  // Authoritative 2FA enrollment gate. The Edge middleware only consults the
+  // Authoritative 2FA enrollment gate. The proxy only consults the
   // JWT hint, so sessions minted before the policy was turned on slip past
   // it. This DB check catches them on every protected page navigation.
   const session = await getServerSession(authOptions)

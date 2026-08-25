@@ -1,7 +1,7 @@
 // Single source of truth for NextAuth cookie names and the `secure` flag.
 //
 // The NAMES stay derived from NEXTAUTH_URL and static for the process
-// lifetime: three readers (middleware.ts twice, the 2FA verify route) must
+// lifetime: three readers (proxy.ts twice, the 2FA verify route) must
 // look up the same name the issuer wrote, and they have no per-request
 // agreement with it.
 //

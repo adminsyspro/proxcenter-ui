@@ -22,7 +22,7 @@ export default function SessionExpiryGuard({ children }) {
     // on "loading" would bounce every user on every page load.
     if (status !== 'unauthenticated') return
 
-    // callbackUrl matches middleware.ts's own no-token redirect
+    // callbackUrl matches proxy.ts's own no-token redirect
     // (`loginUrl.searchParams.set("callbackUrl", pathname)`) so
     // re-authenticating returns the user where they were.
     const loginUrl = `/login?callbackUrl=${encodeURIComponent(pathname)}`

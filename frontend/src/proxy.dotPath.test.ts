@@ -9,7 +9,7 @@ vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
 
 import { NextRequest } from 'next/server'
 
-import { middleware } from './middleware'
+import { proxy } from './proxy'
 
 function request(path: string, init: { method?: string; headers?: Record<string, string> } = {}) {
   return new NextRequest(`http://test.local${path}`, {
@@ -18,7 +18,7 @@ function request(path: string, init: { method?: string; headers?: Record<string,
   })
 }
 
-/** A middleware pass-through, i.e. the handler behind the path will run. */
+/** A proxy pass-through, i.e. the handler behind the path will run. */
 function passedThrough(res: Response): boolean {
   return res.headers.get('x-middleware-next') === '1'
 }
@@ -46,7 +46,7 @@ describe('dotted API paths never bypass authentication', () => {
 
   for (const path of dotted) {
     it(`answers 401 to an unauthenticated GET ${path}`, async () => {
-      const res = await middleware(request(path) as any)
+      const res = await proxy(request(path) as any)
 
       expect(res.status).toBe(401)
       expect(await res.json()).toEqual({ error: 'Not authenticated' })
@@ -54,7 +54,7 @@ describe('dotted API paths never bypass authentication', () => {
   }
 
   it('answers 401 to an unauthenticated write on a dotted API path', async () => {
-    const res = await middleware(
+    const res = await proxy(
       request('/api/v1/guests/conn1:qemu:pve1.internal:100/notes', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
@@ -67,7 +67,7 @@ describe('dotted API paths never bypass authentication', () => {
   it('lets an authenticated caller through a dotted API path', async () => {
     getTokenMock.mockResolvedValue({ sub: 'u1', authAt: Date.now() })
 
-    const res = await middleware(request('/api/v1/guests/conn1:qemu:pve1.internal:100/notes') as any)
+    const res = await proxy(request('/api/v1/guests/conn1:qemu:pve1.internal:100/notes') as any)
 
     expect(passedThrough(res)).toBe(true)
   })
@@ -80,7 +80,7 @@ describe('static assets and public routes keep passing', () => {
 
   for (const path of assets) {
     it(`passes ${path} through unauthenticated`, async () => {
-      const res = await middleware(request(path) as any)
+      const res = await proxy(request(path) as any)
 
       expect(passedThrough(res)).toBe(true)
     })
@@ -96,7 +96,7 @@ describe('static assets and public routes keep passing', () => {
 
   for (const path of publicApi) {
     it(`keeps the public API route ${path} reachable unauthenticated`, async () => {
-      const res = await middleware(request(path) as any)
+      const res = await proxy(request(path) as any)
 
       expect(passedThrough(res)).toBe(true)
     })

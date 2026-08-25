@@ -8,6 +8,20 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
+    # One PR for all patches, one for all minors, and one PR per major.
+    # Every npm bump touches the same lockfile, and main requires branches to
+    # be up to date, so N ungrouped PRs cost N rebases and N CI runs: merging
+    # the first one puts every other branch BEHIND. Majors stay ungrouped on
+    # purpose, they are reviewed and released one at a time. Security updates
+    # keep their own PR (applies-to: version-updates) so a CVE fix is never
+    # buried in a maintenance batch.
+    groups:
+      npm-patch:
+        applies-to: version-updates
+        update-types: ["patch"]
+      npm-minor:
+        applies-to: version-updates
+        update-types: ["minor"]
 
   - package-ecosystem: "docker"
     directory: "/frontend"

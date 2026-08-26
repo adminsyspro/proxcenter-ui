@@ -461,11 +461,13 @@ function ConnectionsTab() {
       // PVE/PBS: API token
       ...(!isExtHypervisor && formData.apiToken.trim() && { apiToken: formData.apiToken.trim() }),
       // VMware/XCP-ng: username + password
-      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? 'admin@admin.net' : addConnType === 'hyperv' ? 'Administrator' : addConnType === 'nutanix' ? 'admin' : 'root') }),
+      ...(isExtHypervisor && { vmwareUser: formData.vmwareUser?.trim() || (addConnType === 'xcpng' ? (formData.subType === 'xapi' ? 'root' : 'admin@admin.net') : addConnType === 'hyperv' ? 'Administrator' : addConnType === 'nutanix' ? 'admin' : 'root') }),
       ...(isExtHypervisor && formData.vmwarePassword && { vmwarePassword: formData.vmwarePassword }),
       // VMware sub-type and datacenter
       ...(addConnType === 'vmware' && { subType: formData.subType || 'esxi' }),
       ...(addConnType === 'vmware' && formData.vmwareDatacenter?.trim() && { vmwareDatacenter: formData.vmwareDatacenter.trim() }),
+      // XCP-ng connection mode: direct pool over XAPI, or through Xen Orchestra
+      ...(addConnType === 'xcpng' && { subType: formData.subType || 'xo' }),
       // Hyper-V SMB share name
       ...(addConnType === 'hyperv' && { hypervShareName: formData.hypervShareName?.trim() || 'VMs' }),
       // SSH fields (PVE + VMware — not XCP-ng)
@@ -1102,6 +1104,21 @@ function ConnectionsTab() {
             <Typography variant='body2' sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '0.8rem', opacity: 0.8 }}>
               {params.value}
             </Typography>
+          </Box>
+        )
+      },
+      {
+        field: 'subType',
+        headerName: t('settings.xcpngModeColumn'),
+        width: 100,
+        renderCell: params => (
+          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+            <Chip
+              size='small'
+              variant='outlined'
+              color={params.value === 'xapi' ? 'primary' : 'default'}
+              label={params.value === 'xapi' ? 'XAPI' : 'XO'}
+            />
           </Box>
         )
       },

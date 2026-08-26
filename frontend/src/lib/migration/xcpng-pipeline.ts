@@ -2,8 +2,8 @@
  * XCP-ng → Proxmox VE migration pipeline
  *
  * Flow:
- * 1. Pre-flight checks (XO reachable, PVE reachable, VM config, disk space)
- * 2. Retrieve full VM config from XO REST API
+ * 1. Pre-flight checks (source reachable, PVE reachable, VM config, disk space)
+ * 2. Retrieve full VM config from the source (Xen Orchestra REST or direct XAPI)
  * 3. Create empty VM shell on Proxmox via API
  * 4. For each disk:
  *    - Block storage (LVM, ZFS, RBD): download VHD → pvesm alloc → qemu-img convert directly to device
@@ -12,7 +12,8 @@
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
- * Data flows XO → Proxmox directly (not through ProxCenter).
+ * Data flows source → Proxmox directly (not through ProxCenter): curl on the PVE
+ * node pulls each VDI from XO or from the pool master export endpoint.
  * ProxCenter orchestrates via SSH commands + PVE API.
  */
 
@@ -22,7 +23,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH } from "@/lib/ssh/exec"
-import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl } from "@/lib/xcpng/client"
+import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
@@ -259,6 +260,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
    */
   let vmCreated = false
   let storageTempDir = ''
+  // Kept open for the whole job: cold downloads run for hours and an XAPI export
+  // URL is only valid while its session is.
+  let source: XcpngSource | null = null
 
   // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
   // runs so a long silent step (#606) is never mistaken for a dead process.
@@ -269,9 +273,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await updateJob(jobId, "preflight")
     await appendLog(jobId, "Starting pre-flight checks...")
 
-    // Get XO connection info
-    const xo = await getXoConnectionInfo(config.sourceConnectionId)
-    await appendLog(jobId, `Connecting to Xen Orchestra at ${xo.baseUrl}...`)
+    // Open the source (XO REST or direct XAPI session)
+    const src = await openXcpngSource(config.sourceConnectionId, prisma)
+    source = src
+    await appendLog(jobId, `Connecting to ${src.kind === "xapi" ? "XCP-ng pool" : "Xen Orchestra"} at ${src.displayUrl}...`)
 
     // Get XO connection name
     const xoConn = await prisma.connection.findUnique({
@@ -281,13 +286,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
-    await appendLog(jobId, "XO and PVE connections verified", "success")
+    await appendLog(jobId, `${src.kind === "xapi" ? "XCP-ng pool" : "XO"} and PVE connections verified`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-    // ── STEP 1: Get VM config from XO ──
+    // ── STEP 1: Get VM config from the source ──
     await appendLog(jobId, `Retrieving VM configuration for "${config.sourceVmId}"...`)
-    const vmConfig = await xoGetVmConfig(xo, config.sourceVmId)
+    const vmConfig = await src.getVmConfig(config.sourceVmId)
 
     await appendLog(
       jobId,
@@ -488,19 +493,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
 
-    // Build XO auth for curl (Basic auth)
-    const xoCreds = decryptSecret(
-      (await prisma.connection.findUnique({
-        where: { id: config.sourceConnectionId },
-        select: { apiTokenEnc: true },
-      }))!.apiTokenEnc
-    )
-    const curlAuth = Buffer.from(xoCreds).toString("base64")
-
-    // Helper: download a single VDI from XO via curl on PVE node
+    // Helper: download a single VDI from the source via curl on the PVE node.
+    // The source hands out the URL and the curl auth/TLS flags for its mode.
     async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
-      const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
+      const dl = await src.diskDownload(disk, "vhd")
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
@@ -613,7 +610,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         // stale code, declare failure and delete the .vhd from under a running curl.
         const startDl = await executeSSH(
           config.targetConnectionId, nodeIp,
-          `rm -f "${pidFile}.exit" "${statsFile}"; nohup bash -c 'curl -sS --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+          `rm -f "${pidFile}.exit" "${statsFile}"; nohup bash -c 'curl -sS --fail ${dl.curlArgs} -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${dl.url}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
         )
         if (!startDl.success || !startDl.output?.trim()) {
           throw new Error(`Failed to start download: ${startDl.error}`)
@@ -809,6 +806,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    await source?.close().catch(() => {})
     stopHeartbeat()
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)

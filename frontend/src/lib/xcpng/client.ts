@@ -100,6 +100,28 @@ export async function xoFetch<T = any>(xo: XoConnectionInfo, path: string): Prom
 }
 
 /**
+ * Hosts known to XO (connectivity and auth probe). A non array answer counts as no host.
+ */
+export async function xoListHosts(xo: XoConnectionInfo): Promise<{ name_label: string; address: string; version: string }[]> {
+  const hosts = await xoFetch<any>(xo, "/hosts?fields=name_label,address,version")
+  return (Array.isArray(hosts) ? hosts : []).map(h => ({ name_label: h?.name_label, address: h?.address, version: h?.version || "" }))
+}
+
+/**
+ * Raw VM objects from XO. The `filter=type:VM` form is tried first; older XO
+ * builds reject it, so the unfiltered query is the fallback.
+ */
+export async function xoListVms(xo: XoConnectionInfo): Promise<any[]> {
+  let raw: any
+  try {
+    raw = await xoFetch<any>(xo, "/vms?fields=uuid,name_label,power_state,CPUs,memory,os_version&filter=type:VM")
+  } catch {
+    raw = await xoFetch<any>(xo, "/vms?fields=uuid,name_label,power_state,CPUs,memory,os_version")
+  }
+  return Array.isArray(raw) ? raw : []
+}
+
+/**
  * Get full VM configuration including disks and networks
  */
 export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promise<XoVmConfig> {

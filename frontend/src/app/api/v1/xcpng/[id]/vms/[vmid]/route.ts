@@ -1,26 +1,22 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
-import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { openXcpngSource } from "@/lib/xcpng/source"
 
 export const runtime = "nodejs"
 
-/** Helper to make authenticated requests to XO REST API */
-async function xoFetch(baseUrl: string, path: string, authHeader: string, insecureTLS: boolean, timeout = 30000): Promise<Response> {
-  const opts: any = {
-    headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-    signal: AbortSignal.timeout(timeout),
-  }
-  if (insecureTLS) {
-    opts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
-  }
-  return fetch(`${baseUrl}${path}`, opts)
+/** XO answers 404 for an unknown uuid; XAPI's VM.get_by_uuid raises UUID_INVALID. */
+function isVmNotFound(e: any): boolean {
+  const msg = String(e?.message || e)
+  return /^XO API error: 404\b/.test(msg) || (e?.name === 'XapiError' && /^(UUID_INVALID|HANDLE_INVALID)\b/.test(msg))
 }
 
 /**
  * GET /api/v1/xcpng/[id]/vms/[vmid]
- * Get detailed info for a single VM from XO REST API
+ * Get detailed info for a single VM. The record is the raw XO REST object or the
+ * raw XAPI VM record (plus `_guest` metrics); both carry VIFs/VBDs as reference
+ * arrays, the field names differ only for CPU, memory and guest OS.
  */
 export async function GET(
   _req: Request,
@@ -34,39 +30,33 @@ export async function GET(
     const { id, vmid } = await params
     const conn = await prisma.connection.findUnique({
       where: { id },
-      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
+      select: { id: true, name: true, type: true },
     })
 
     if (!conn || conn.type !== 'xcpng') {
       return NextResponse.json({ error: "XCP-ng connection not found" }, { status: 404 })
     }
 
-    const creds = decryptSecret(conn.apiTokenEnc)
-    const colonIdx = creds.indexOf(':')
-    const username = colonIdx > 0 ? creds.substring(0, colonIdx) : 'admin@admin.net'
-    const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
-    const xoUrl = conn.baseUrl.replace(/\/$/, '')
-    const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
-
-    // Fetch VM details from XO REST API
-    const res = await xoFetch(xoUrl, `/rest/v0/vms/${encodeURIComponent(vmid)}`, authHeader, conn.insecureTLS)
-
-    if (res.status === 404) {
-      return NextResponse.json({ error: "VM not found" }, { status: 404 })
+    const src = await openXcpngSource(id)
+    let vm: any
+    try {
+      try {
+        vm = await src.getVm(vmid)
+      } catch (e: any) {
+        if (isVmNotFound(e)) return NextResponse.json({ error: "VM not found" }, { status: 404 })
+        throw e
+      }
+    } finally {
+      await src.close().catch(() => {})
     }
-
-    if (!res.ok) {
-      throw new Error(`XO API returned ${res.status}`)
-    }
-
-    const vm = await res.json()
 
     // Parse VM data
     const powerState = vm.power_state || 'Halted'
-    const cpuCount = vm.CPUs?.number || vm.CPUs?.max || 0
-    const memoryBytes = vm.memory?.size || vm.memory?.dynamic?.[1] || 0
+    const cpuCount = vm.CPUs?.number || vm.CPUs?.max || Number(vm.VCPUs_at_startup) || Number(vm.VCPUs_max) || 0
+    const memoryBytes = vm.memory?.size || vm.memory?.dynamic?.[1] || Number(vm.memory_static_max) || 0
     const memoryMB = memoryBytes ? Math.round(memoryBytes / (1024 * 1024)) : 0
-    const osVersion = vm.os_version?.name || vm.os_version?.distro || ''
+    const osVersion = vm.os_version?.name || vm.os_version?.distro
+      || vm._guest?.os_version?.name || vm._guest?.os_version?.distro || ''
 
     // Parse VIFs (network interfaces)
     const networks = (vm.VIFs || []).map((vifRef: string, idx: number) => ({
@@ -76,10 +66,10 @@ export async function GET(
       connected: true,
     }))
 
-    // Parse VBDs → disks
+    // Parse VBDs into disks
     const disks: any[] = []
     if (vm.VBDs && Array.isArray(vm.VBDs)) {
-      // VBDs are refs, we'd need to fetch each one — for now just count them
+      // VBDs are refs; resolving each one is the config mapper's job, here we only count them
       disks.push(...vm.VBDs.filter((vbd: any) => typeof vbd === 'string').map((vbd: string, idx: number) => ({
         label: `VBD ${idx}`,
         capacityBytes: 0,
@@ -97,12 +87,12 @@ export async function GET(
         numCoresPerSocket: 1,
         sockets: cpuCount,
         memoryMB,
-        firmware: vm.boot?.firmware || 'bios',
+        firmware: vm.boot?.firmware || vm.HVM_boot_params?.firmware || 'bios',
         annotation: vm.name_description || '',
         powerState,
         status: powerState === 'Running' ? 'running' : powerState === 'Suspended' ? 'suspended' : 'stopped',
         uuid: vm.uuid || vmid,
-        ipAddress: vm.mainIpAddress || vm.addresses?.['0/ipv4/0'] || '',
+        ipAddress: vm.mainIpAddress || vm.addresses?.['0/ipv4/0'] || vm._guest?.networks?.['0/ipv4/0'] || '',
         hostName: vm.name_label || '',
         committed: 0,
         uncommitted: 0,

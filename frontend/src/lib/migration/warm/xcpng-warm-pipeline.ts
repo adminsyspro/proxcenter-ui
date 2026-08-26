@@ -11,6 +11,7 @@ import {
   type XapiSession, type XapiSnapshot,
 } from "@/lib/xcpng/xapi-client"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
+import { splitCreds, xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { mapXoToPveConfig } from "../xcpngConfigMapper"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeIpForMigration } from "../pve-tasks"
@@ -33,20 +34,6 @@ import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
 import { startSessionKeepAlive } from "./session-keepalive"
-
-// Temporary local copies of the helpers that `@/lib/xcpng/source` will export
-// once that module lands; the coordinator swaps these for the shared ones.
-/** Split "user:password" on the first colon; a bare secret is the password of `defaultUser`. */
-function splitCreds(creds: string, defaultUser: string): { user: string; password: string } {
-  const i = creds.indexOf(":")
-  if (i <= 0) return { user: defaultUser, password: creds }
-  return { user: creds.slice(0, i), password: creds.slice(i + 1) }
-}
-
-/** An XCP-ng connection is either a direct pool ("xapi") or goes through Xen Orchestra ("xo", the legacy default). */
-function xcpngSubTypeOf(conn: { subType?: string | null }): "xapi" | "xo" {
-  return conn.subType === "xapi" ? "xapi" : "xo"
-}
 
 export const XCPNG_SNAPSHOT_PREFIX = "proxcenter-warm"
 // XAPI sessions expire after 24 h of inactivity by default; ping well within that.

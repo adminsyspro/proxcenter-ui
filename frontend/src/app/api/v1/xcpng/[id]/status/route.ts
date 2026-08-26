@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
-import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { openXcpngSource, xcpngSubTypeOf, isXcpngAuthError, type XcpngSource } from "@/lib/xcpng/source"
 
 export const runtime = "nodejs"
 
 /**
  * GET /api/v1/xcpng/[id]/status
- * Test connectivity to a Xen Orchestra (XO) instance managing XCP-ng hosts
+ * Test connectivity to an XCP-ng source: a Xen Orchestra instance (mode "xo")
+ * or the pool master itself over XAPI (mode "xapi").
  */
 export async function GET(
   _req: Request,
@@ -22,54 +23,55 @@ export async function GET(
     const { id } = await params
     const conn = await prisma.connection.findUnique({
       where: { id },
-      select: { id: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
+      select: { id: true, baseUrl: true, type: true, subType: true },
     })
 
     if (!conn || conn.type !== 'xcpng') {
       return NextResponse.json({ error: "XCP-ng connection not found" }, { status: 404 })
     }
 
-    const creds = decryptSecret(conn.apiTokenEnc)
-    const colonIdx = creds.indexOf(':')
-    const username = colonIdx > 0 ? creds.substring(0, colonIdx) : 'admin@admin.net'
-    const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
-    const xoUrl = conn.baseUrl.replace(/\/$/, '')
+    const mode = xcpngSubTypeOf(conn)
+    const host = conn.baseUrl.replace(/\/$/, '')
+    const backend = mode === 'xapi' ? 'XCP-ng pool' : 'XO server'
 
-    const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
-    const fetchOpts: any = {
-      headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    }
-    if (conn.insecureTLS) {
-      fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false } })
-    }
+    let src: XcpngSource | null = null
+    try {
+      // Opening an XAPI source logs in, so an auth failure surfaces here as well as on listHosts.
+      src = await openXcpngSource(id)
+      const hosts = await src.listHosts()
+      const version = mode === 'xapi'
+        ? (hosts[0]?.version ? `XCP-ng ${hosts[0].version}` : 'XCP-ng')
+        : 'XO/XOA'
 
-    // Try fetching hosts list as a connectivity + auth check
-    const res = await fetch(`${xoUrl}/rest/v0/hosts`, fetchOpts).catch(() => null)
-
-    if (!res) {
-      return NextResponse.json({ error: "XO server unreachable" }, { status: 502 })
-    }
-
-    if (res.status === 401) {
-      return NextResponse.json({ data: { status: 'auth_error', host: xoUrl, warning: 'Invalid credentials' } })
-    }
-
-    if (!res.ok) {
-      return NextResponse.json({ data: { status: 'error', host: xoUrl, warning: `XO returned HTTP ${res.status}` } })
-    }
-
-    const hosts = await res.json().catch(() => [])
-    const hostCount = Array.isArray(hosts) ? hosts.length : 0
-
-    return NextResponse.json({
-      data: {
-        status: 'online',
-        host: xoUrl,
-        hostCount,
-        version: 'XO/XOA',
+      return NextResponse.json({
+        data: {
+          status: 'online',
+          host: src.displayUrl,
+          mode,
+          hostCount: hosts.length,
+          version,
+        }
+      })
+    } catch (e: any) {
+      const msg = String(e?.message || e)
+      if (isXcpngAuthError(msg)) {
+        return NextResponse.json({ data: { status: 'auth_error', host, mode, warning: 'Invalid credentials' } })
       }
-    })
+      if (e?.name === 'AbortError' || e?.name === 'TimeoutError') {
+        return NextResponse.json({ error: "Connection timeout" }, { status: 504 })
+      }
+      const xoHttp = /^XO API error: (\d{3})/.exec(msg)
+      if (xoHttp) {
+        return NextResponse.json({ data: { status: 'error', host, mode, warning: `XO returned HTTP ${xoHttp[1]}` } })
+      }
+      if (e?.name === 'XapiError' || /^XAPI HTTP /.test(msg)) {
+        return NextResponse.json({ data: { status: 'error', host, mode, warning: msg } })
+      }
+      // Anything else is a transport failure (DNS, refused, TLS).
+      return NextResponse.json({ error: `${backend} unreachable` }, { status: 502 })
+    } finally {
+      await src?.close().catch(() => {})
+    }
   } catch (e: any) {
     if (e.name === 'AbortError') {
       return NextResponse.json({ error: "Connection timeout" }, { status: 504 })

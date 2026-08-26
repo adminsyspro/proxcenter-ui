@@ -428,6 +428,11 @@ export type DetailsPayload = {
     connectionId: string
     connectionName: string
     hostType: string  // 'vmware' | 'hyperv' | 'xcpng'
+    // Connection sub-type, promoted from the DB as-is: 'vcenter' for a vCenter,
+    // 'xapi' or 'xo' for XCP-ng, null when the connection has none. The migrate
+    // dialogs need it to tell an XCP-ng pool reached over XAPI (warm capable)
+    // from one behind Xen Orchestra (offline only).
+    connSubType?: string | null
     baseUrl: string
     version?: string
     licenseFull?: boolean
@@ -482,6 +487,9 @@ export type DetailsPayload = {
     snapshotCount: number
     licenseFull?: boolean
     hostType?: string
+    // Same connection sub-type as on esxiHostInfo above, carried per VM so the
+    // single-VM migrate dialog can gate warm without re-reading the connection.
+    connSubType?: string | null
   }
 }
 

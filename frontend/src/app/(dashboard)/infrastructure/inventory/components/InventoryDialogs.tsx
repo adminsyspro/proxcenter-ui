@@ -692,17 +692,22 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
 
   // Source connection subType, needed only to tell an XAPI (direct pool) XCP-ng
   // connection from an XO one: warm is offered for the first and refused for the
-  // second (see warmAllowedFor). The dialog is handed `esxiMigrateVm` field by
-  // field by the inventory panel, so the subType is not guaranteed to travel with
-  // it; when it does, it wins and no request is made. Only XCP-ng sources are
-  // probed, and the answer is keyed by connection id so a verdict taken for a
-  // previously opened VM is never read against another pool.
-  const migSourceHostType: string | undefined = esxiMigrateVm?.hostType ?? bulkMigHostInfo?.hostType
-  const migSourceConnId: string | null = esxiMigrateVm?.connId ?? bulkMigHostInfo?.connectionId ?? null
-  const migSourceSubTypeProp: string | null = (esxiMigrateVm?.connSubType ?? bulkMigHostInfo?.connSubType) ?? null
+  // second (see warmAllowedFor). Both callers forward it (`connSubType` on
+  // esxiMigrateVm, and on bulkMigHostInfo straight from the inventory payload),
+  // so the value below is normally the prop, `null` included: null is a real
+  // answer (the connection stores no subType) and needs no request. Only a
+  // caller that omits the field entirely leaves it `undefined`, and only then,
+  // and only for an XCP-ng source, is the connection read back. The answer is
+  // keyed by connection id so a verdict taken for a previously opened VM is
+  // never read against another pool.
+  // The two migrate dialogs never open together, so the single-VM source wins
+  // whenever its dialog is up and the bulk host info serves otherwise.
+  const migSourceHostType: string | undefined = esxiMigrateVm ? esxiMigrateVm.hostType : bulkMigHostInfo?.hostType
+  const migSourceConnId: string | null = (esxiMigrateVm ? esxiMigrateVm.connId : bulkMigHostInfo?.connectionId) ?? null
+  const migSourceSubTypeProp: string | null | undefined = esxiMigrateVm ? esxiMigrateVm.connSubType : bulkMigHostInfo?.connSubType
   const [migSourceSubTypeProbe, setMigSourceSubTypeProbe] = useState<{ connId: string; subType: string | null } | null>(null)
   React.useEffect(() => {
-    if (migSourceHostType !== 'xcpng' || !migSourceConnId || migSourceSubTypeProp) {
+    if (migSourceHostType !== 'xcpng' || !migSourceConnId || migSourceSubTypeProp !== undefined) {
       setMigSourceSubTypeProbe(null)
       return
     }
@@ -715,9 +720,9 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       .catch(() => { if (!cancelled) setMigSourceSubTypeProbe({ connId: migSourceConnId, subType: null }) })
     return () => { cancelled = true }
   }, [migSourceHostType, migSourceConnId, migSourceSubTypeProp])
-  const migSourceSubType: string | null = migSourceSubTypeProp
-    || (migSourceSubTypeProbe && migSourceSubTypeProbe.connId === migSourceConnId ? migSourceSubTypeProbe.subType : null)
-  // The two migrate dialogs never open together, so one resolved subType serves both.
+  const migSourceSubType: string | null = migSourceSubTypeProp !== undefined
+    ? migSourceSubTypeProp
+    : (migSourceSubTypeProbe && migSourceSubTypeProbe.connId === migSourceConnId ? migSourceSubTypeProbe.subType : null)
   const singleWarmAllowed = warmAllowedFor({ hostType: esxiMigrateVm?.hostType, connSubType: migSourceSubType })
   const bulkWarmAllowed = warmAllowedFor({ hostType: bulkMigHostInfo?.hostType, connSubType: migSourceSubType })
 

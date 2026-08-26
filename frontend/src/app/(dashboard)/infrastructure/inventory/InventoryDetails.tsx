@@ -312,7 +312,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -3980,6 +3980,9 @@ return vm?.isCluster ?? false
                                     connName: data.esxiHostInfo!.connectionName, cpu: vm.cpu, memoryMB: vm.memory_size_MiB,
                                     committed: vm.committed, guestOS: vm.guest_OS, licenseFull: data.esxiHostInfo!.licenseFull,
                                     hostType: ht,
+                                    // Connection sub-type: gates warm for an XCP-ng pool
+                                    // (XAPI yes, Xen Orchestra no) in the migrate dialog.
+                                    connSubType: data.esxiHostInfo!.connSubType ?? null,
                                     // Forwarded to the modal so cold-vs-running guards can
                                     // disable the migrate button when the VM isn't off.
                                     status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
@@ -4125,6 +4128,9 @@ return vm?.isCluster ?? false
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
                             hostType: ht, diskPaths: (vm as any).diskPaths,
+                            // Connection sub-type: gates warm for an XCP-ng pool
+                            // (XAPI yes, Xen Orchestra no) in the migrate dialog.
+                            connSubType: vm.connSubType ?? null,
                             // Power state for cold-migration guard (disable Start button + warn).
                             status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
                             // VMware Tools state for the Live-on-Windows guard.

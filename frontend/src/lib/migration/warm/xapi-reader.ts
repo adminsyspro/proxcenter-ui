@@ -1,0 +1,100 @@
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { buildNbdConnectCmd, buildReaderTeardownCmd, type PollOpts } from "./vddk-reader"
+import type { Extent } from "./extents"
+
+/** The xapi-nbd export to re-serve locally: unix socket to create, plus the
+ *  TLS NBD endpoint XAPI handed us (address, port, export name with session). */
+export interface XapiNbdTarget { sock: string; address: string; port: number; exportname: string }
+
+/** A running nbdkit-nbd reader: the kernel device it is attached to plus the
+ *  node-side resources (socket, log) that must be cleaned up. */
+export interface XapiReaderHandle { nbdDev: string; sock: string; logFile: string }
+
+/**
+ * nbdkit's nbd plugin re-exports the XCP-ng xapi-nbd export (TLS on 10809) on a
+ * local unix socket, exactly where the VDDK plugin sits for VMware, so nbd-client
+ * and the block applier are shared. -r: warm only reads the source. tls-verify=false:
+ * the host certificate is self signed and names the host while XAPI hands us its IP;
+ * the address itself comes from an authenticated XAPI call (same trust as the VDDK
+ * thumbprint fetched over the wire).
+ */
+export function buildNbdkitXapiCmd(t: XapiNbdTarget): string {
+  return ["nbdkit", "-r", "-U", shellEscape(t.sock), "nbd",
+    `hostname=${shellEscape(t.address)}`, `port=${shellEscape(String(t.port))}`,
+    `export=${shellEscape(t.exportname)}`, "tls=require", "tls-verify=false"].join(" ")
+}
+
+/**
+ * Start an nbdkit-nbd reader on the PVE node and attach it to a free NBD device:
+ *   1. clear any stale socket and launch `buildNbdkitXapiCmd(t)` backgrounded
+ *      with output to a log,
+ *   2. poll until the unix socket appears (the TLS handshake with xapi-nbd can
+ *      take a few seconds),
+ *   3. attach the socket to the first free kernel NBD device and record which
+ *      one was chosen in the returned handle.
+ * On socket timeout the nbdkit log is read back so the caller sees the real
+ * failure (expired session, TLS refused, VDI not attachable, ...) rather than a
+ * bare timeout.
+ */
+export async function startXapiReader(connectionId: string, nodeIp: string, t: XapiNbdTarget, poll: PollOpts = {}): Promise<XapiReaderHandle> {
+  const intervalMs = poll.intervalMs ?? 1000
+  const maxAttempts = poll.maxAttempts ?? 60
+  const logFile = `${t.sock}.log`
+  const launch = `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; nohup ${buildNbdkitXapiCmd(t)} > ${shellEscape(logFile)} 2>&1 & echo $!`
+  const launchRes = await executeSSH(connectionId, nodeIp, launch)
+  if (!launchRes.success) throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
+  let ready = false
+  for (let i = 0; i < maxAttempts; i++) {
+    const check = await executeSSH(connectionId, nodeIp, `test -S ${shellEscape(t.sock)} && echo EXISTS`)
+    if (check.output?.includes("EXISTS")) { ready = true; break }
+    if (intervalMs > 0) await new Promise(r => setTimeout(r, intervalMs))
+  }
+  if (!ready) {
+    const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 20`)
+    // No device was attached yet, so pass nbdDev:"" - teardown must not
+    // `nbd-client -d` a device this reader never owned.
+    await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile }).catch(() => {})
+    throw new Error(`nbdkit nbd socket never appeared. nbdkit log: ${log.output?.trim() || "(empty)"}`)
+  }
+  const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(t.sock))
+  const nbdDev = (connect.output ?? "").split("\n").map(l => l.trim()).find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
+  if (!connect.success || !nbdDev) {
+    const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
+    await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile }).catch(() => {})
+    throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${log.output?.trim() || "(empty)"}`)
+  }
+  return { nbdDev, sock: t.sock, logFile }
+}
+
+/**
+ * Tear down a reader started by startXapiReader. Best-effort; safe to call
+ * twice. There is no password file on this path, so pwFile is the empty string:
+ * buildReaderTeardownCmd filters falsy paths out of its `rm -f` list, so nothing
+ * unintended is removed.
+ */
+export async function stopXapiReader(connectionId: string, nodeIp: string, h: XapiReaderHandle): Promise<void> {
+  await executeSSH(connectionId, nodeIp, buildReaderTeardownCmd({ nbdDev: h.nbdDev, sock: h.sock, pwFile: "", logFile: h.logFile }))
+}
+
+/** nbdinfo --map --json entry; `type` bit 1 (value 2) is NBD_STATE_ZERO. */
+interface NbdMapEntry { offset: number; length: number; type: number }
+
+/**
+ * Keep only the extents that actually carry data: entries flagged
+ * NBD_STATE_ZERO are skipped (a HOLE without ZERO is still copied, it may read
+ * back as data), entries past EOF are dropped and a trailing entry is clamped
+ * to the disk length.
+ */
+export function parseAllocatedExtents(json: string, diskBytes: number): Extent[] {
+  const entries = JSON.parse(json) as NbdMapEntry[]
+  if (!Array.isArray(entries) || entries.length === 0) throw new Error("empty map")
+  return entries.filter(e => (Number(e.type) & 2) === 0 && e.offset < diskBytes)
+    .map(e => ({ offset: Number(e.offset), length: Math.min(Number(e.length), diskBytes - Number(e.offset)) }))
+}
+
+/** Allocated map of the export behind `sock`; falls back to the whole disk when the map is unavailable. */
+export async function readAllocatedExtents(connectionId: string, nodeIp: string, sock: string, diskBytes: number): Promise<Extent[]> {
+  const res = await executeSSH(connectionId, nodeIp, `nbdinfo --map --json ${shellEscape(`nbd+unix:///?socket=${sock}`)}`, 120_000)
+  try { if (!res.success) throw new Error(res.error || "nbdinfo failed"); return parseAllocatedExtents(res.output || "", diskBytes) }
+  catch { return [{ offset: 0, length: diskBytes }] }
+}

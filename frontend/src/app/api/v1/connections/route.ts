@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
-import { encryptSecret } from "@/lib/crypto/secret"
+import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
@@ -13,6 +13,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { captureFingerprint } from "@/lib/proxmox/pbsFingerprint"
+import { testXcpngConnection, xcpngDefaultUser, xcpngSubTypeOf, type XcpngSubType } from "@/lib/xcpng/source"
+import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
 
 export const runtime = "nodejs"
 
@@ -72,6 +74,7 @@ export async function GET(req: Request) {
       id: string
       name: string
       type: string
+      subType: string | null
       tenantId: string | null
       baseUrl: string
       behindProxy: boolean
@@ -87,6 +90,7 @@ export async function GET(req: Request) {
       sshUser: string
       sshAuthMethod: string | null
       sshUseSudo: boolean
+      apiTokenEnc: string | null
       sshKeyEnc: string | null
       sshPassEnc: string | null
       createdAt: Date
@@ -107,6 +111,7 @@ export async function GET(req: Request) {
         id: true,
         name: true,
         type: true,
+        subType: true,
         tenantId: true,
         baseUrl: true,
         behindProxy: true,
@@ -122,6 +127,7 @@ export async function GET(req: Request) {
         sshUser: true,
         sshAuthMethod: true,
         sshUseSudo: true,
+        apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
         createdAt: true,
@@ -153,11 +159,29 @@ export async function GET(req: Request) {
     const visibleConnections = connections.filter(c => visibleIds.has(c.id))
 
     // Calculer sshConfigured en mémoire sans N+1 queries
+    // External hypervisors keep their credentials as "user:password" inside
+    // apiTokenEnc. The edit dialog needs the user back, otherwise it prefills
+    // the type default and saving rewrites the stored user. Only the part
+    // before the first colon is ever exposed; the password never leaves here,
+    // and the encrypted columns stay out of the response.
+    const externalHypervisorTypes = new Set(['vmware', 'xcpng', 'hyperv', 'nutanix'])
     const connectionsWithSSHStatus = visibleConnections.map((conn) => {
-      const { sshKeyEnc, sshPassEnc, ...rest } = conn
+      const { apiTokenEnc, sshKeyEnc, sshPassEnc, ...rest } = conn
+
+      let apiUser: string | null = null
+      if (externalHypervisorTypes.has(conn.type) && apiTokenEnc) {
+        try {
+          const creds = decryptSecret(apiTokenEnc)
+          const colonIdx = creds.indexOf(':')
+          if (colonIdx > 0) apiUser = creds.substring(0, colonIdx)
+        } catch {
+          // Unreadable secret (rotated key): the dialog falls back to the default
+        }
+      }
 
       return {
         ...rest,
+        apiUser,
         sshConfigured: !!(sshKeyEnc || sshPassEnc),
         sshKeyConfigured: !!sshKeyEnc,
         sshPassConfigured: !!sshPassEnc,
@@ -259,13 +283,22 @@ export async function POST(req: Request) {
       country: country ?? null,
     }
 
+    // XCP-ng mode: "xapi" (direct pool master) or "xo" (Xen Orchestra, the legacy default).
+    // The schema types subType after the VMware enum, hence the widening.
+    const xcpngMode: XcpngSubType | null = type === 'xcpng' ? xcpngSubTypeOf({ subType: subType as string | undefined }) : null
+
     if (type === 'vmware' || type === 'xcpng' || type === 'hyperv' || type === 'nutanix') {
       // VMware/XCP-ng/Hyper-V/Nutanix: store "user:password" in apiTokenEnc
-      const defaultUser = type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root'
+      const defaultUser = xcpngMode ? xcpngDefaultUser(xcpngMode) : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root'
       data.apiTokenEnc = encryptSecret(`${vmwareUser || defaultUser}:${vmwarePassword || ''}`)
       if (type === 'vmware') {
         data.subType = subType || 'esxi'
         data.vmwareDatacenter = vmwareDatacenter || null
+      }
+      if (xcpngMode) {
+        data.subType = xcpngMode
+        // A pool master is entered as an IP or hostname; store the https URL XAPI is reached on.
+        if (xcpngMode === 'xapi') data.baseUrl = normalizeXapiBaseUrl(baseUrl)
       }
       if (type === 'hyperv') {
         data.hypervShareName = hypervShareName || 'VMs'
@@ -370,35 +403,26 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validate XCP-ng (XO) connectivity
-    if (type === 'xcpng') {
-      try {
-        const xoUrl = baseUrl.replace(/\/$/, '')
-        const xoAuth = Buffer.from(`${vmwareUser || 'admin@admin.net'}:${vmwarePassword || ''}`).toString('base64')
-        const fetchOpts: any = {
-          headers: { 'Authorization': `Basic ${xoAuth}`, 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(15000),
-        }
-        if (insecureTLS) {
-          fetchOpts.dispatcher = new (await import('undici')).Agent({ connect: { rejectUnauthorized: false }, allowH2: false })
-        }
-        const res = await fetch(`${xoUrl}/rest/v0/hosts`, fetchOpts).catch((err: any) => {
-          console.error(`[xcpng] Connection to ${xoUrl}/rest/v0/hosts failed:`, err?.message || err)
-          return null
-        })
-        if (!res) {
-          throw new Error('Unable to connect to XO server')
-        }
-        console.log(`[xcpng] XO responded with status ${res.status}`)
-        if (res.status === 401) {
-          throw new Error('Invalid credentials')
-        }
-        if (!res.ok) {
-          throw new Error(`XO returned HTTP ${res.status}`)
-        }
-      } catch (e: any) {
+    // Validate XCP-ng connectivity (XO REST or direct XAPI login + host listing)
+    if (xcpngMode) {
+      const backend = xcpngMode === 'xapi' ? 'the pool master' : 'XO server'
+      const t = await testXcpngConnection({
+        subType: xcpngMode,
+        baseUrl: data.baseUrl,
+        user: vmwareUser || xcpngDefaultUser(xcpngMode),
+        password: vmwarePassword || '',
+        insecureTLS,
+      })
+      if (t.ok === false) {
+        console.error(`[xcpng] ${xcpngMode} connection to ${data.baseUrl} failed:`, t.error)
+        const reason = /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|TimeoutError|aborted/i.test(t.error)
+          ? `Unable to connect to ${backend}`
+          : t.error
+        const hint = xcpngMode === 'xapi'
+          ? 'Verify the pool master address and the root credentials.'
+          : 'Verify the XO URL and credentials.'
         return NextResponse.json(
-          { error: `XCP-ng XO connection failed: ${e?.message || 'Unable to connect'}. Verify the XO URL and credentials.` },
+          { error: `XCP-ng ${xcpngMode === 'xapi' ? 'pool' : 'XO'} connection failed: ${reason}. ${hint}` },
           { status: 400 }
         )
       }

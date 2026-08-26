@@ -24,6 +24,7 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  FormHelperText,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -155,6 +156,13 @@ export default function ConnectionDialog({
   useEffect(() => {
     if (open) {
       if (initialData) {
+        // XCP-ng rows created before the direct-pool mode existed are XO connections,
+        // so an absent subType means "xo".
+        const editSubType = (initialData as any).subType || (type === 'xcpng' ? 'xo' : '')
+        // Default user of the mode, used only when the stored one is unavailable.
+        const defaultUser = type === 'xcpng'
+          ? (editSubType === 'xapi' ? 'root' : 'admin@admin.net')
+          : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root'
         setForm({
           ...defaultFormData,
           ...initialData,
@@ -165,8 +173,12 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
-          // VMware sub-type
-          subType: (initialData as any).subType || '',
+          subType: editSubType,
+          // External hypervisors keep "user:password" encrypted; the list payload
+          // hands the user back as apiUser (never the password). Without it the
+          // field would show the type default and saving would rewrite the real
+          // user of the connection.
+          vmwareUser: (initialData as any).apiUser || (initialData as any).vmwareUser || defaultUser,
           vmwareDatacenter: (initialData as any).vmwareDatacenter || '',
           hypervShareName: (initialData as any).hypervShareName || 'VMs',
           // Location: convert numbers to strings for text fields
@@ -178,7 +190,11 @@ export default function ConnectionDialog({
       } else {
         setForm({
           ...defaultFormData,
-          vmwareUser: type === 'xcpng' ? 'admin@admin.net' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root',
+          // A new XCP-ng connection targets the pool directly (XAPI): it is the
+          // only mode warm migration can use. XO stays available for edits and
+          // for anyone who prefers going through Xen Orchestra.
+          subType: type === 'xcpng' ? 'xapi' : '',
+          vmwareUser: type === 'xcpng' ? 'root' : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root',
         })
       }
       setError(null)
@@ -388,9 +404,15 @@ export default function ConnectionDialog({
     // Auto-append default port if not specified (PVE/PBS only, external hypervisors use 443)
     const defaultPort = isExternalHypervisor ? '443' : type === 'pbs' ? '8007' : '8006'
     let finalForm = { ...form }
-    // For VMware, auto-prefix https://; for XCP-ng, auto-prefix http:// (XO often runs on HTTP)
+    // For VMware, auto-prefix https://; for XCP-ng in XO mode, auto-prefix
+    // http:// (XO often runs on HTTP). A pool master reached over XAPI only
+    // answers on https, so that mode is prefixed and normalized to https.
+    const xapiTarget = isXcpng && finalForm.subType === 'xapi'
     if (isExternalHypervisor && finalForm.baseUrl && !finalForm.baseUrl.match(/^https?:\/\//)) {
-      finalForm.baseUrl = isXcpng ? `http://${finalForm.baseUrl}` : `https://${finalForm.baseUrl}`
+      finalForm.baseUrl = isXcpng && !xapiTarget ? `http://${finalForm.baseUrl}` : `https://${finalForm.baseUrl}`
+    }
+    if (xapiTarget && finalForm.baseUrl) {
+      finalForm.baseUrl = finalForm.baseUrl.replace(/^http:\/\//i, 'https://')
     }
     // Hyper-V: strip https:// prefix since we store just the hostname for virt-v2v
     if (isHyperv && finalForm.baseUrl) {
@@ -441,6 +463,9 @@ export default function ConnectionDialog({
   const isExternalHypervisor = isVmware || isXcpng || isHyperv || isNutanix
   const port = isExternalHypervisor ? '443' : isPbs ? '8007' : '8006'
   const isEdit = mode === 'edit'
+  // XCP-ng connection mode: through Xen Orchestra (legacy) or straight to the
+  // pool master over XAPI. Everything XCP-ng-specific below reads these.
+  const isXcpngXo = isXcpng && form.subType === 'xo'
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -467,9 +492,9 @@ export default function ConnectionDialog({
           </Alert>
         )}
 
-        {(isXcpng || isVmware) && (
+        {(isXcpngXo || isVmware) && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            {isXcpng
+            {isXcpngXo
               ? t.rich('settings.xcpngPortInfo', { b: (chunks: any) => <b>{chunks}</b> })
               : t.rich('settings.vmwarePortInfo', { b: (chunks: any) => <b>{chunks}</b> })
             }
@@ -561,6 +586,44 @@ export default function ConnectionDialog({
           </>
         )}
 
+        {isXcpng && (
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel id='xcpng-mode-label'>{t('settings.xcpngModeLabel')}</InputLabel>
+            <Select
+              labelId='xcpng-mode-label'
+              label={t('settings.xcpngModeLabel')}
+              value={form.subType || 'xapi'}
+              renderValue={value => (value === 'xo' ? t('settings.xcpngModeXo') : t('settings.xcpngModeXapi'))}
+              onChange={e => {
+                const value = String(e.target.value)
+                handleChange('subType', value)
+                // Carry the default user of the mode the field was left on.
+                if (value === 'xapi' && form.vmwareUser === 'admin@admin.net') handleChange('vmwareUser', 'root')
+                if (value === 'xo' && form.vmwareUser === 'root') handleChange('vmwareUser', 'admin@admin.net')
+              }}
+            >
+              <MenuItem value='xapi'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                  <span>{t('settings.xcpngModeXapi')}</span>
+                  <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                    <Chip size='small' variant='outlined' label={t('settings.migrationBadgeOffline')} />
+                    <Chip size='small' color='success' variant='outlined' label={t('settings.migrationBadgeWarm')} />
+                  </Box>
+                </Box>
+              </MenuItem>
+              <MenuItem value='xo'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                  <span>{t('settings.xcpngModeXo')}</span>
+                  <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                    <Chip size='small' variant='outlined' label={t('settings.migrationBadgeOffline')} />
+                  </Box>
+                </Box>
+              </MenuItem>
+            </Select>
+            <FormHelperText>{t('settings.xcpngModeHelper')}</FormHelperText>
+          </FormControl>
+        )}
+
         <TextField
           fullWidth
           label={t('settings.connectionNameLabel')}
@@ -641,14 +704,14 @@ export default function ConnectionDialog({
               : isHyperv
               ? 'Hyper-V Host'
               : isXcpng
-              ? t('settings.xcpngHostLabel')
+              ? (isXcpngXo ? t('settings.xcpngHostLabel') : t('settings.xcpngMasterLabel'))
               : (form.subType === 'vcenter' ? 'vCenter URL' : t('settings.esxiHostLabel')))
             : t('settings.baseUrlLabel', { port })
           }
           value={form.baseUrl}
           onChange={e => handleChange('baseUrl', e.target.value)}
-          placeholder={isNutanix ? 'prism-central.example.com' : isHyperv ? 'hyperv-host.local' : isXcpng ? 'http://10.99.99.196' : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : '192.168.1.100') : t('settings.baseUrlPlaceholder', { port })}
-          helperText={isNutanix ? 'Nutanix Prism Central hostname or IP (port 9440)' : isHyperv ? 'Hyper-V server hostname or IP' : isXcpng ? t('settings.xcpngHostHelper') : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
+          placeholder={isNutanix ? 'prism-central.example.com' : isHyperv ? 'hyperv-host.local' : isXcpng ? (isXcpngXo ? 'https://xo.example.com' : 'xcp-pool-master.example.com') : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : 'esxi-host.example.com') : t('settings.baseUrlPlaceholder', { port })}
+          helperText={isNutanix ? 'Nutanix Prism Central hostname or IP (port 9440)' : isHyperv ? 'Hyper-V server hostname or IP' : isXcpng ? (isXcpngXo ? t('settings.xcpngHostHelper') : t('settings.xcpngMasterHelper')) : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
           sx={{ mt: 2 }}
           required
         />
@@ -720,20 +783,20 @@ export default function ConnectionDialog({
           <>
             <TextField
               fullWidth
-              label={isNutanix ? 'Username' : isHyperv ? 'Username' : isXcpng ? t('settings.xcpngUsername') : t('settings.vmwareUsername')}
+              label={isNutanix ? 'Username' : isHyperv ? 'Username' : isXcpng ? (isXcpngXo ? t('settings.xcpngUsername') : t('settings.xapiUsername')) : t('settings.vmwareUsername')}
               value={form.vmwareUser}
               onChange={e => handleChange('vmwareUser', e.target.value)}
-              placeholder={isNutanix ? 'admin' : isHyperv ? 'Administrator' : isXcpng ? 'admin@admin.net' : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
+              placeholder={isNutanix ? 'admin' : isHyperv ? 'Administrator' : isXcpng ? (isXcpngXo ? 'admin@admin.net' : 'root') : (form.subType === 'vcenter' ? 'administrator@vsphere.local' : 'root')}
               sx={{ mt: 1 }}
               required
             />
             <TextField
               fullWidth
-              label={isHyperv ? 'Password' : isXcpng ? t('settings.xcpngPasswordLabel') : t('settings.vmwarePasswordLabel')}
+              label={isHyperv ? 'Password' : isXcpng ? (isXcpngXo ? t('settings.xcpngPasswordLabel') : t('settings.xapiPasswordLabel')) : t('settings.vmwarePasswordLabel')}
               value={form.vmwarePassword}
               onChange={e => handleChange('vmwarePassword', e.target.value)}
               type={showPassword ? 'text' : 'password'}
-              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isHyperv ? 'Hyper-V administrator password' : isNutanix ? 'Nutanix Prism password' : isXcpng ? t('settings.xcpngPasswordHelper') : t('settings.vmwarePasswordHelper'))}
+              helperText={isEdit ? t('settings.vmwarePasswordHelperEdit') : (isHyperv ? 'Hyper-V administrator password' : isNutanix ? 'Nutanix Prism password' : isXcpng ? (isXcpngXo ? t('settings.xcpngPasswordHelper') : t('settings.xapiPasswordHelper')) : t('settings.vmwarePasswordHelper'))}
               sx={{ mt: 1.5 }}
               required={!isEdit}
               slotProps={{

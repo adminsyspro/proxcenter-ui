@@ -35,6 +35,7 @@ import { waitForPveTask, getNodeIpForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
+import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -529,6 +530,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       let transferSpeed = ""
       const startTime = Date.now()
 
+      let pollFailures = 0
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${stderrFile}"`)
@@ -537,7 +539,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await new Promise(r => setTimeout(r, 3000))
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-        const isRunning = exitCheck.output?.trim() === "RUNNING"
+        const poll = interpretPollExit(exitCheck)
+        if (poll.state === "unknown") {
+          pollFailures++
+          if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${stderrFile}"`)
+            throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+          }
+          await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+          continue
+        }
+        pollFailures = 0
+        const isRunning = poll.state === "running"
 
         // Parse dd progress output: "123456789 bytes (123 MB, ...) copied, ..."
         const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
@@ -558,7 +571,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         if (!isRunning) {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          const exitCode = poll.state === "exited" ? poll.exitCode : 0
           // Read curl + dd diagnostic files BEFORE removing them so a
           // failure message can quote the actual upstream error. The
           // outer catch in runMigrationPipeline still receives the
@@ -643,6 +656,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           }
 
           const cloneStartTime = Date.now()
+          let pollFailures = 0
           while (true) {
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             if (Date.now() - cloneStartTime > 3600000) throw new Error("vmkfstools clone timed out (1h)")
@@ -668,9 +682,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             } catch {}
 
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
-            if (exitCheck.output?.trim() === "RUNNING") continue
+            const poll = interpretPollExit(exitCheck)
+            if (poll.state === "unknown") {
+              pollFailures++
+              if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+                await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${cloneScript}" "${cloneExitFile}" "${cloneErrFile}" "${cloneOutFile}" "${cloneTmpPrefix}.esxi-key"`)
+                throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+              }
+              await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+              continue
+            }
+            pollFailures = 0
+            if (poll.state === "running") continue
 
-            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = poll.exitCode
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
@@ -727,6 +752,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const startTime = Date.now()
 
       try {
+        let pollFailures = 0
         while (true) {
           if (isCancelled(jobId)) {
             await executeSSH(config.targetConnectionId, nodeIp, `kill ${ddPid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${ctrlPrefix}.esxi-key" "${errFile}"`)
@@ -735,7 +761,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await new Promise(r => setTimeout(r, 3000))
 
           const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-          const isRunning = exitCheck.output?.trim() === "RUNNING"
+          const poll = interpretPollExit(exitCheck)
+          if (poll.state === "unknown") {
+            pollFailures++
+            if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+              await executeSSH(config.targetConnectionId, nodeIp, `kill ${ddPid} 2>/dev/null; rm -f "${pidFile}" "${pidFile}.exit" "${dlScript}" "${progressFile}" "${ctrlPrefix}.esxi-key" "${errFile}"`)
+              throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+            }
+            await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+            continue
+          }
+          pollFailures = 0
+          const isRunning = poll.state === "running"
 
           // Parse dd progress output
           const progressResult = await executeSSH(config.targetConnectionId, nodeIp,
@@ -756,7 +793,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           })
 
           if (!isRunning) {
-            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = poll.state === "exited" ? poll.exitCode : 0
             const elapsed = (Date.now() - startTime) / 1000
 
             if (exitCode !== 0) {
@@ -838,6 +875,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       let downloadTime = 0
       const startTime = Date.now()
 
+      let pollFailures = 0
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
@@ -847,7 +885,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await new Promise(r => setTimeout(r, 3000))
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-        const isRunning = exitCheck.output?.trim() === "RUNNING"
+        const poll = interpretPollExit(exitCheck)
+        if (poll.state === "unknown") {
+          pollFailures++
+          if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
+            throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+          }
+          await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+          continue
+        }
+        pollFailures = 0
+        const isRunning = poll.state === "running"
 
         const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
         const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
@@ -867,7 +916,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         if (!isRunning) {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          const exitCode = poll.state === "exited" ? poll.exitCode : 0
           if (exitCode !== 0) {
             await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${dlScript}"`)
             throw new Error(`Download failed: curl exit code ${exitCode}`)
@@ -973,6 +1022,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
       // Poll for completion
       const startTime = Date.now()
+      let pollFailures = 0
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
@@ -986,9 +1036,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         await new Promise(r => setTimeout(r, 3000))
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
-        if (exitCheck.output?.trim() === "RUNNING") continue
+        const poll = interpretPollExit(exitCheck)
+        if (poll.state === "unknown") {
+          pollFailures++
+          if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
+            throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+          }
+          await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+          continue
+        }
+        pollFailures = 0
+        if (poll.state === "running") continue
 
-        const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+        const exitCode = poll.exitCode
         const outputContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${outFile}" 2>/dev/null`)
         const output = outputContent.output?.trim() || ""
 
@@ -1215,6 +1276,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
 
       const startTime = Date.now()
+      let pollFailures = 0
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${convertScript}" "${pidFile}" "${exitFile}" "${progressFile}" "${outputFile}"`)
@@ -1242,8 +1304,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
-        if (exitCheck.output?.trim() !== "RUNNING") {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+        const poll = interpretPollExit(exitCheck)
+        if (poll.state === "unknown") {
+          pollFailures++
+          if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${convertScript}" "${pidFile}" "${exitFile}" "${progressFile}" "${outputFile}"`)
+            throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+          }
+          await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+          continue
+        }
+        pollFailures = 0
+        if (poll.state === "exited") {
+          const exitCode = poll.exitCode
           // Capture the FULL stderr from qemu-img BEFORE deleting the progress file.
           // qemu-img writes both progress lines (carriage-return separated) and error
           // messages to stderr; on failure the last lines are usually the actual error.
@@ -1370,6 +1443,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       let transferredBytes = 0
       const startTime = Date.now()
 
+      let pollFailures = 0
       while (true) {
         if (isCancelled(jobId)) {
           await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
@@ -1404,8 +1478,19 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         })
 
         const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${exitFile}" 2>/dev/null || echo RUNNING`)
-        if (exitCheck.output?.trim() !== "RUNNING") {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+        const poll = interpretPollExit(exitCheck)
+        if (poll.state === "unknown") {
+          pollFailures++
+          if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${pid} 2>/dev/null; rm -f "${transferScript}" "${pidFile}" "${exitFile}" "${progressFile}"`)
+            throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+          }
+          await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+          continue
+        }
+        pollFailures = 0
+        if (poll.state === "exited") {
+          const exitCode = poll.exitCode
           // Capture stderr tail BEFORE deleting progressFile (same bug as transferDiskViaSshfs).
           let stderrTail = ""
           if (exitCode !== 0) {
@@ -1498,6 +1583,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
           // Poll for clone completion with progress tracking via clone file size on ESXi
           const cloneStartTime = Date.now()
+          let pollFailures = 0
           while (true) {
             if (isCancelled(jobId)) throw new Error("Migration cancelled")
             if (Date.now() - cloneStartTime > 3600000) throw new Error("vmkfstools clone timed out (1h)")
@@ -1528,9 +1614,20 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             }
 
             const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneExitFile}" 2>/dev/null || echo RUNNING`)
-            if (exitCheck.output?.trim() === "RUNNING") continue
+            const poll = interpretPollExit(exitCheck)
+            if (poll.state === "unknown") {
+              pollFailures++
+              if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+                await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${cloneScript}" "${cloneExitFile}" "${cloneErrFile}" "${cloneOutFile}" "${cloneTmpPrefix}.esxi-key"`)
+                throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+              }
+              await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+              continue
+            }
+            pollFailures = 0
+            if (poll.state === "running") continue
 
-            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = poll.exitCode
             if (exitCode !== 0) {
               const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${cloneErrFile}" 2>/dev/null | head -c 500`)
               const errMsg = stderrContent.output?.trim() || "(no output)"
@@ -1589,6 +1686,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const startTime = Date.now()
 
       try {
+        let pollFailures = 0
         while (true) {
           if (isCancelled(jobId)) {
             await executeSSH(config.targetConnectionId, nodeIp, `kill ${ddPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key" "${errFile}"`)
@@ -1598,7 +1696,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           await new Promise(r => setTimeout(r, 3000))
 
           const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-          const isRunning = exitCheck.output?.trim() === "RUNNING"
+          const poll = interpretPollExit(exitCheck)
+          if (poll.state === "unknown") {
+            pollFailures++
+            if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+              await executeSSH(config.targetConnectionId, nodeIp, `kill ${ddPid} 2>/dev/null; rm -f "${tmpFile}.vmdk" "${pidFile}" "${pidFile}.exit" "${dlScript}" "${tmpFile}.esxi-key" "${errFile}"`)
+              throw new Error(`Lost contact with the Proxmox node while monitoring the transfer (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+            }
+            await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+            continue
+          }
+          pollFailures = 0
+          const isRunning = poll.state === "running"
 
           const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vmdk" 2>/dev/null || echo 0`)
           const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
@@ -1618,7 +1727,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           })
 
           if (!isRunning) {
-            const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+            const exitCode = poll.state === "exited" ? poll.exitCode : 0
             downloadTime = elapsed
 
             if (exitCode !== 0) {

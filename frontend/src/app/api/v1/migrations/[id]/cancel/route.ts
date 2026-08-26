@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { cancelMigrationJob } from "@/lib/migration/pipeline"
 import { cancelWarmMigrationJob } from "@/lib/migration/warm/warm-pipeline"
 import { cancelV2vMigrationJob } from "@/lib/migration/v2v-pipeline"
+import { cancelXcpngMigrationJob } from "@/lib/migration/xcpng-pipeline"
 
 export const runtime = "nodejs"
 
@@ -33,14 +34,16 @@ export async function POST(
     }
 
     // Signal every job registry: the job may be running on the cold/live
-    // pipeline, the warm orchestrator or the virt-v2v pipeline, and each keeps
-    // its own cooperative cancel set. Signalling all three is harmless for the
-    // others. The virt-v2v one matters since #738: a job parked on the
-    // multi-boot gate polls that set, so without this the cancel would only
-    // change the row and leave the pipeline waiting until the gate expires.
+    // pipeline, the warm orchestrator, the virt-v2v pipeline or the offline
+    // XCP-ng pipeline, and each keeps its own cooperative cancel set.
+    // Signalling all four is harmless for the others. The virt-v2v one matters
+    // since #738: a job parked on the multi-boot gate polls that set, so without
+    // this the cancel would only change the row and leave the pipeline waiting
+    // until the gate expires.
     cancelMigrationJob(id)
     cancelWarmMigrationJob(id)
     cancelV2vMigrationJob(id)
+    cancelXcpngMigrationJob(id)
     await prisma.migrationJob.update({
       where: { id },
       data: { status: "cancelled", currentStep: "cancelled", completedAt: new Date() },

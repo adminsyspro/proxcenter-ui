@@ -57,7 +57,7 @@ export function useMigrationOptions({
   // only a genuine multi-boot guest needs the exact root device, copied from
   // the failed job's log.
   const [migV2vRoot, setMigV2vRoot] = useState<string>('')
-  const [migType, setMigType] = useState<'cold' | 'live' | 'sshfs_boot' | 'warm'>('cold')
+  const [migType, setMigType] = useState<'cold' | 'sshfs_boot' | 'warm'>('cold')
   // Transfer method is auto-detected by the backend (SSHFS when ESXi SSH is available, HTTPS otherwise).
   // Kept in state for the payload contract; no longer user-selectable in the UI.
   const [migTransferMode, setMigTransferMode] = useState<'https' | 'sshfs' | 'auto'>('auto')

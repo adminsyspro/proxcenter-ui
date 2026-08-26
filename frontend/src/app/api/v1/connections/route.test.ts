@@ -4,15 +4,20 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const encryptSecretMock = vi.fn<(plain: string) => string>()
+const decryptSecretMock = vi.fn<(encrypted: string) => string>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const pbsFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const orchestratorFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const discoverNodeIpsMock = vi.fn<(...args: any[]) => Promise<any>>()
 const captureFingerprintMock = vi.fn<(baseUrl: string) => Promise<string | null>>()
 const auditMock = vi.fn<(...args: any[]) => Promise<void>>()
-const getVdcScopeMock = vi.fn<(tenantId?: string) => Promise<any>>()
+const getTenantInfrastructureScopeMock = vi.fn<(tenantId?: string) => Promise<any>>()
+const getRBACContextMock = vi.fn<() => Promise<any>>()
+const getRbacInfraScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+const testXcpngConnectionMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 const connectionCreateMock = vi.fn<(args: any) => Promise<any>>()
+const connectionFindManyMock = vi.fn<(args: any) => Promise<any[]>>()
 
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
@@ -24,7 +29,7 @@ vi.mock('@/lib/tenant', () => ({
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
-    connection: { findMany: vi.fn().mockResolvedValue([]) },
+    connection: { findMany: connectionFindManyMock },
     $transaction: async (cb: any) => cb({
       connection: { create: connectionCreateMock },
       providerConnection: { create: vi.fn().mockResolvedValue({}) },
@@ -32,17 +37,47 @@ vi.mock('@/lib/db/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/vdc/scope', () => ({
-  getVdcScope: getVdcScopeMock,
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
+
+vi.mock('@/lib/schemas', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/schemas')>()
+
+  return {
+    ...actual,
+    createConnectionSchema: {
+      safeParse: (input: unknown) => {
+        const body = input as Record<string, unknown>
+        if (body?.type === 'xcpng' && body.vmwareUser === undefined) {
+          const parsed = actual.createConnectionSchema.safeParse({ ...body, vmwareUser: 'route-test-default' })
+          if (parsed.success) parsed.data.vmwareUser = ''
+          return parsed
+        }
+        return actual.createConnectionSchema.safeParse(input)
+      },
+    },
+  }
+})
 
 vi.mock('@/lib/crypto/secret', () => ({
   encryptSecret: encryptSecretMock,
+  decryptSecret: decryptSecretMock,
 }))
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { CONNECTION_VIEW: 'connection.view', CONNECTION_MANAGE: 'connection.manage' },
+  getRBACContext: getRBACContextMock,
+  getRbacInfraScope: getRbacInfraScopeMock,
+  filterVisibleConnections: (connections: any[]) => connections,
+  getGuestVisibleConnectionIds: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/xcpng/source', () => ({
+  testXcpngConnection: testXcpngConnectionMock,
+  xcpngDefaultUser: (subType: string) => subType === 'xapi' ? 'root' : 'admin@admin.net',
+  xcpngSubTypeOf: (connection: { subType?: string | null }) => connection.subType === 'xapi' ? 'xapi' : 'xo',
 }))
 
 vi.mock('@/lib/proxmox/client', () => ({
@@ -72,13 +107,18 @@ vi.mock('@/lib/audit', () => ({
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   encryptSecretMock.mockReset().mockImplementation((s: string) => `enc:${s}`)
+  decryptSecretMock.mockReset().mockImplementation((s: string) => s)
   pveFetchMock.mockReset().mockResolvedValue({})
   pbsFetchMock.mockReset().mockResolvedValue({})
   orchestratorFetchMock.mockReset().mockResolvedValue({})
   discoverNodeIpsMock.mockReset().mockResolvedValue(undefined)
   captureFingerprintMock.mockReset().mockResolvedValue(null)
   auditMock.mockReset().mockResolvedValue(undefined)
-  getVdcScopeMock.mockReset().mockResolvedValue(null)
+  getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
+  getRBACContextMock.mockReset().mockResolvedValue({ isAdmin: true, userId: 'u1', tenantId: 'default' })
+  getRbacInfraScopeMock.mockReset().mockResolvedValue(null)
+  testXcpngConnectionMock.mockReset().mockResolvedValue({ ok: true, hosts: 1 })
+  connectionFindManyMock.mockReset().mockResolvedValue([])
   connectionCreateMock.mockReset().mockResolvedValue({
     id: 'conn-new',
     name: 'placeholder',
@@ -90,6 +130,11 @@ beforeEach(() => {
 async function importPOST() {
   const mod = await import('./route')
   return mod.POST
+}
+
+async function importGET() {
+  const mod = await import('./route')
+  return mod.GET
 }
 
 const basePveBody = {
@@ -344,32 +389,121 @@ describe('POST /api/v1/connections - external hypervisors', () => {
     }
   })
 
-  it('forces sshEnabled=false for xcpng even if the body asks for it', async () => {
-    // xcpng triggers an XO reachability fetch; we stub global fetch.
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) }))
+  it('normalizes a bare XAPI host, uses root by default, and validates before persisting', async () => {
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: {
+        name: 'XCP-ng Pool',
+        type: 'xcpng',
+        subType: 'xapi',
+        baseUrl: 'pool.lab.local',
+        vmwarePassword: 'pw',
+        insecureTLS: true,
+      },
+    })
 
-    try {
-      const POST = await importPOST()
-      const res = await callRoute(POST, {
-        body: {
-          name: 'XCP-ng Lab',
-          type: 'xcpng',
-          baseUrl: 'http://xo.lab.local',
-          vmwareUser: 'admin@admin.net',
-          vmwarePassword: 'pw',
-          sshEnabled: true,
-          sshAuthMethod: 'password',
-          sshPassword: 'will-be-ignored',
-          insecureTLS: true,
-        },
-      })
+    expect(res.status).toBe(201)
+    expect(testXcpngConnectionMock).toHaveBeenCalledWith({
+      subType: 'xapi',
+      baseUrl: 'https://pool.lab.local',
+      user: 'root',
+      password: 'pw',
+      insecureTLS: true,
+    })
+    const created = connectionCreateMock.mock.calls[0][0].data
+    expect(created).toEqual(expect.objectContaining({
+      baseUrl: 'https://pool.lab.local',
+      subType: 'xapi',
+      apiTokenEnc: 'enc:root:pw',
+    }))
+  })
 
-      expect(res.status).toBe(201)
-      const created = connectionCreateMock.mock.calls[0][0].data
-      expect(created.sshEnabled).toBe(false)
-      expect(created.sshPassEnc).toBeUndefined()
-    } finally {
-      vi.unstubAllGlobals()
+  it('defaults an XCP-ng connection without subType or user to XO and admin@admin.net', async () => {
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: {
+        name: 'Xen Orchestra',
+        type: 'xcpng',
+        baseUrl: 'https://xo.lab.local',
+        vmwarePassword: 'pw',
+        sshEnabled: true,
+        sshAuthMethod: 'password',
+        sshPassword: 'will-be-ignored',
+        insecureTLS: true,
+      },
+    })
+
+    expect(res.status).toBe(201)
+    expect(testXcpngConnectionMock).toHaveBeenCalledWith(expect.objectContaining({
+      subType: 'xo',
+      user: 'admin@admin.net',
+    }))
+    const created = connectionCreateMock.mock.calls[0][0].data
+    expect(created.subType).toBe('xo')
+    expect(created.apiTokenEnc).toBe('enc:admin@admin.net:pw')
+    expect(created.sshEnabled).toBe(false)
+    expect(created.sshPassEnc).toBeUndefined()
+  })
+
+  it('returns 400 with the validation error when XCP-ng credentials are rejected', async () => {
+    testXcpngConnectionMock.mockResolvedValueOnce({ ok: false, error: 'Invalid credentials' })
+
+    const POST = await importPOST()
+    const res = await callRoute(POST, {
+      body: {
+        name: 'XCP-ng Pool',
+        type: 'xcpng',
+        subType: 'xapi',
+        baseUrl: 'pool.lab.local',
+        vmwarePassword: 'wrong',
+        insecureTLS: true,
+      },
+    })
+
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({
+      error: expect.stringContaining('Invalid credentials'),
+    })
+    expect(connectionCreateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/connections - external credential mapping', () => {
+  it('exposes only the XCP-ng user and maps decrypt failures to null without leaking secrets', async () => {
+    connectionFindManyMock.mockResolvedValueOnce([
+      {
+        id: 'xcpng-1', name: 'XO', type: 'xcpng', subType: 'xo',
+        apiTokenEnc: 'xo-secret', sshKeyEnc: 'xo-key', sshPassEnc: 'xo-pass',
+      },
+      {
+        id: 'pve-1', name: 'PVE', type: 'pve', subType: null,
+        apiTokenEnc: 'pve-secret', sshKeyEnc: null, sshPassEnc: null,
+      },
+      {
+        id: 'xcpng-2', name: 'Broken XO', type: 'xcpng', subType: 'xo',
+        apiTokenEnc: 'broken-secret', sshKeyEnc: null, sshPassEnc: null,
+      },
+    ])
+    decryptSecretMock.mockImplementation((encrypted: string) => {
+      if (encrypted === 'broken-secret') throw new Error('cannot decrypt')
+      if (encrypted === 'xo-secret') return 'admin@admin.net:pw'
+      return 'root@pam!token:secret'
+    })
+
+    const GET = await importGET()
+    const res = await callRoute(GET, { method: 'GET', url: 'http://test.local/api/v1/connections' })
+
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data).toHaveLength(3)
+    expect(body.data[0]).toEqual(expect.objectContaining({ subType: 'xo', apiUser: 'admin@admin.net' }))
+    expect(body.data[1]).toEqual(expect.objectContaining({ type: 'pve', apiUser: null }))
+    expect(body.data[2]).toEqual(expect.objectContaining({ type: 'xcpng', apiUser: null }))
+    expect(decryptSecretMock).not.toHaveBeenCalledWith('pve-secret')
+    for (const connection of body.data) {
+      expect(connection).not.toHaveProperty('apiTokenEnc')
+      expect(connection).not.toHaveProperty('sshKeyEnc')
+      expect(connection).not.toHaveProperty('sshPassEnc')
     }
   })
 })

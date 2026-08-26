@@ -2,8 +2,8 @@
  * XCP-ng → Proxmox VE migration pipeline
  *
  * Flow:
- * 1. Pre-flight checks (XO reachable, PVE reachable, VM config, disk space)
- * 2. Retrieve full VM config from XO REST API
+ * 1. Pre-flight checks (source reachable, PVE reachable, VM config, disk space)
+ * 2. Retrieve full VM config from the source (Xen Orchestra REST or direct XAPI)
  * 3. Create empty VM shell on Proxmox via API
  * 4. For each disk:
  *    - Block storage (LVM, ZFS, RBD): download VHD → pvesm alloc → qemu-img convert directly to device
@@ -12,14 +12,8 @@
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
- * Live mode:
- * 1. Create XO snapshot (VM keeps running — no downtime)
- * 2. Download snapshot VDIs (consistent point-in-time)
- * 3. Delete snapshot, shut down VM (downtime starts)
- * 4. Convert + import disks (downtime continues)
- * 5. Configure + optionally start
- *
- * Data flows XO → Proxmox directly (not through ProxCenter).
+ * Data flows source → Proxmox directly (not through ProxCenter): curl on the PVE
+ * node pulls each VDI from XO or from the pool master export endpoint.
  * ProxCenter orchestrates via SSH commands + PVE API.
  */
 
@@ -28,9 +22,8 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
-import { executeSSH } from "@/lib/ssh/exec"
-import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapshot, xoDeleteSnapshot } from "@/lib/xcpng/client"
-import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
@@ -38,6 +31,8 @@ import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
+import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
+import { startSessionKeepAlive } from "./warm/session-keepalive"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -62,7 +57,7 @@ interface MigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
-  migrationType?: "cold" | "live"
+  migrationType?: "cold"
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
   // the target storage's images dir (file-based) or /var/lib/vz/tmp (block).
@@ -80,6 +75,21 @@ interface LogEntry {
 
 let cancelledJobs = new Set<string>()
 const jobPrisma = new Map<string, any>()
+
+/**
+ * Attempts allowed for one VDI download. A transfer that fails (curl error, empty
+ * file) is restarted from scratch instead of failing the whole migration (#804).
+ */
+const DOWNLOAD_ATTEMPTS = 3
+
+/**
+ * Result of watching one curl download to completion. A string discriminant, not a
+ * boolean: this project compiles with `strict: false`, where `if (outcome.ok)` does
+ * NOT narrow a `true | false` union.
+ */
+type DownloadOutcome =
+  | { state: "done"; bytes: number; time: number; speed: string }
+  | { state: "failed"; message: string }
 
 function getPrismaForJob(jobId: string) {
   return jobPrisma.get(jobId)
@@ -251,6 +261,10 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
    */
   let vmCreated = false
   let storageTempDir = ''
+  // Kept open for the whole job: cold downloads run for hours and an XAPI export
+  // URL is only valid while its session is.
+  let source: XcpngSource | null = null
+  let stopSourceKeepAlive: () => void = () => {}
 
   // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
   // runs so a long silent step (#606) is never mistaken for a dead process.
@@ -261,9 +275,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     await updateJob(jobId, "preflight")
     await appendLog(jobId, "Starting pre-flight checks...")
 
-    // Get XO connection info
-    const xo = await getXoConnectionInfo(config.sourceConnectionId)
-    await appendLog(jobId, `Connecting to Xen Orchestra at ${xo.baseUrl}...`)
+    // Open the source (XO REST or direct XAPI session)
+    const src = await openXcpngSource(config.sourceConnectionId, prisma)
+    source = src
+    // An XAPI session idles out while curl streams for hours on the PVE node and the
+    // export URL dies with it: ping the pool every 5 minutes. XO needs nothing.
+    if (src.kind === "xapi") stopSourceKeepAlive = startSessionKeepAlive(() => src.keepAlive(), 5 * 60_000)
+    await appendLog(jobId, `Connecting to ${src.kind === "xapi" ? "XCP-ng pool" : "Xen Orchestra"} at ${src.displayUrl}...`)
 
     // Get XO connection name
     const xoConn = await prisma.connection.findUnique({
@@ -273,13 +291,13 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
-    await appendLog(jobId, "XO and PVE connections verified", "success")
+    await appendLog(jobId, `${src.kind === "xapi" ? "XCP-ng pool" : "XO"} and PVE connections verified`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-    // ── STEP 1: Get VM config from XO ──
+    // ── STEP 1: Get VM config from the source ──
     await appendLog(jobId, `Retrieving VM configuration for "${config.sourceVmId}"...`)
-    const vmConfig = await xoGetVmConfig(xo, config.sourceVmId)
+    const vmConfig = await src.getVmConfig(config.sourceVmId)
 
     await appendLog(
       jobId,
@@ -295,18 +313,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       totalBytes: BigInt(totalDiskBytes),
     })
 
-    // Handle VM power state based on migration type
-    const isLive = config.migrationType === "live"
-
+    // This pipeline is offline only: the VM must be powered off.
     if (vmConfig.powerState === "Running" || vmConfig.powerState === "running") {
-      if (isLive) {
-        await appendLog(jobId, "VM is running — live migration will snapshot + download disks while VM runs, then shut down for cutover", "info")
-      } else {
-        throw new Error(
-          "VM is powered on. Please power off the VM before migration. " +
-          "Offline migration requires the VM to be shut down."
-        )
-      }
+      throw new Error(
+        "VM is powered on. Please power off the VM before migration. " +
+        "Offline migration requires the VM to be shut down."
+      )
     }
 
     // Check snapshots
@@ -486,77 +498,77 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
 
-    // Build XO auth for curl (Basic auth)
-    const xoCreds = decryptSecret(
-      (await prisma.connection.findUnique({
-        where: { id: config.sourceConnectionId },
-        select: { apiTokenEnc: true },
-      }))!.apiTokenEnc
-    )
-    const curlAuth = Buffer.from(xoCreds).toString("base64")
-
-    // Helper: download a single VDI from XO via curl on PVE node
+    // Helper: download a single VDI from the source via curl on the PVE node.
+    // The source hands out the URL and the curl headers/TLS flag for its mode as a
+    // curl config file: the XO Basic auth header and the XAPI session ref must not
+    // be readable through `ps` on the node, so the command line carries neither.
     async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)...`)
-
-      const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
+      const dl = await src.diskDownload(disk, "vhd")
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
-
-      await updateJob(jobId, "transferring", {
-        currentStep: `downloading_disk_${i + 1}`,
-        currentDisk: i,
-        bytesTransferred: BigInt(0),
-        totalBytes: BigInt(disk.sizeBytes),
-      })
-
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
-      const startDl = await executeSSH(
-        config.targetConnectionId, nodeIp,
-        `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
-      )
-      if (!startDl.success || !startDl.output?.trim()) {
-        throw new Error(`Failed to start download: ${startDl.error}`)
-      }
-      const curlPid = startDl.output.trim()
-      await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+      const curlrcFile = `${tmpFile}.curlrc`
+      const cleanup = () =>
+        executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`).catch(() => {})
 
-      let downloadedBytes = 0
-      let downloadSpeed = ""
-      let downloadTime = 0
-      const startTime = Date.now()
+      // Watch one curl run to completion. An unreadable poll (orchestrator timeout,
+      // dropped SSH session) is NOT a curl failure: the remote download keeps going,
+      // so the poll is retried and the transfer is only declared lost after
+      // MAX_CONSECUTIVE_POLL_FAILURES in a row. Reading such a poll as "curl exit 1"
+      // is what deleted healthy downloads (#804).
+      async function monitorDownload(curlPid: string): Promise<DownloadOutcome> {
+        let downloadSpeed = ""
+        let downloadTime = 0
+        let pollFailures = 0
+        const startTime = Date.now()
 
-      while (true) {
-        if (isCancelled(jobId)) {
-          await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-          throw new Error("Migration cancelled")
-        }
+        while (true) {
+          if (isCancelled(jobId)) {
+            await executeSSH(config.targetConnectionId, nodeIp, `pkill -P ${curlPid} 2>/dev/null; kill ${curlPid} 2>/dev/null`).catch(() => {})
+            await cleanup()
+            throw new Error("Migration cancelled")
+          }
 
-        await new Promise(r => setTimeout(r, 3000))
+          await new Promise(r => setTimeout(r, 3000))
 
-        const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-        const isRunning = exitCheck.output?.trim() === "RUNNING"
+          const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
+          const poll = interpretPollExit(exitCheck)
+          if (poll.state === "unknown") {
+            pollFailures++
+            if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+              await executeSSH(config.targetConnectionId, nodeIp, `pkill -P ${curlPid} 2>/dev/null; kill ${curlPid} 2>/dev/null`).catch(() => {})
+              await cleanup()
+              throw new Error(`Lost contact with the Proxmox node while monitoring the download (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+            }
+            if (pollFailures === 1) {
+              // Only the first failure of a streak is logged: one poll every 3s over a flaky
+              // link would otherwise rewrite the job log hundreds of times per hour. The
+              // give-up throw above carries the final count and the last reason.
+              await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (up to ${MAX_CONSECUTIVE_POLL_FAILURES} times)`, "warn")
+            }
+            continue
+          }
+          pollFailures = 0
 
-        const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
-        const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
-        downloadedBytes = currentSize
+          const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
+          const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
 
-        const elapsed = (Date.now() - startTime) / 1000
-        const speedBps = elapsed > 0 ? currentSize / elapsed : 0
-        downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
+          const elapsed = (Date.now() - startTime) / 1000
+          const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+          downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
-        const diskProgress = disk.sizeBytes > 0 ? Math.min(Math.round((currentSize / disk.sizeBytes) * 100), 99) : 0
-        const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
+          const diskProgress = disk.sizeBytes > 0 ? Math.min(Math.round((currentSize / disk.sizeBytes) * 100), 99) : 0
+          const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
 
-        await updateJob(jobId, "transferring", {
-          bytesTransferred: BigInt(currentSize),
-          transferSpeed: downloadSpeed,
-          progress: isLive ? Math.round(overallProgress * 0.7) : overallProgress,
-        })
+          await updateJob(jobId, "transferring", {
+            bytesTransferred: BigInt(currentSize),
+            transferSpeed: downloadSpeed,
+            progress: overallProgress,
+          })
 
-        if (!isRunning) {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          if (poll.state === "running") continue
+          const exitCode = poll.exitCode
 
           // Parse curl stats before checking exit code (for http_code in error messages)
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
@@ -565,7 +577,6 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
-              downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
               httpCode = stats.http_code || 0
@@ -573,33 +584,67 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           } else {
             downloadTime = elapsed
           }
+          const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
 
           if (exitCode !== 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
-            throw new Error(`Download failed with exit code ${exitCode}${httpInfo}. Check XO connectivity and credentials.`)
+            // curl runs with -sS, so its own diagnostic sits in the stats file just
+            // before the -w JSON: surface its last lines instead of a bare code.
+            const statsTail = (statsContent.output || "").replace(/\{[^}]*\}/g, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
+            return { state: "failed", message: `Download failed (curl exit ${exitCode}${httpInfo})${statsTail ? `: ${statsTail}` : ""}` }
           }
 
           // Validate that the downloaded file is not empty
           const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
           const actualFileSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10) || 0
           if (actualFileSize === 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
-            throw new Error(`Downloaded VHD is empty (0 bytes)${httpInfo}. The XO REST API may have returned an error or the VDI is not accessible.`)
+            return { state: "failed", message: `Downloaded VHD is empty (0 bytes)${httpInfo}; the XO REST API may have returned an error or the VDI is not accessible` }
           }
-          downloadedBytes = actualFileSize
-
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-          break
+          return { state: "done", bytes: actualFileSize, time: downloadTime, speed: downloadSpeed }
         }
       }
 
-      await updateJob(jobId, "transferring", {
-        bytesTransferred: BigInt(downloadedBytes),
-        transferSpeed: downloadSpeed,
-      })
-      await appendLog(jobId, `Download complete: ${(downloadedBytes / 1073741824).toFixed(1)} GB in ${downloadTime.toFixed(0)}s (${downloadSpeed})`, "success")
+      for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+        await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)${attempt > 1 ? ` (attempt ${attempt}/${DOWNLOAD_ATTEMPTS})` : ""}...`)
+
+        await updateJob(jobId, "transferring", {
+          currentStep: `downloading_disk_${i + 1}`,
+          currentDisk: i,
+          bytesTransferred: BigInt(0),
+          totalBytes: BigInt(disk.sizeBytes),
+        })
+
+        // The leading rm is not cosmetic: a cleanup() whose SSH call failed would leave the
+        // previous attempt's exit file behind, and this attempt's first poll would read that
+        // stale code, declare failure and delete the .vhd from under a running curl.
+        const startDl = await executeSSH(
+          config.targetConnectionId, nodeIp,
+          `rm -f "${pidFile}.exit" "${statsFile}"; (umask 077; printf '%s\\n' ${shellEscape(dl.curlConfig)} > "${curlrcFile}"); nohup bash -c 'curl -sS --fail -K "${curlrcFile}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+        )
+        if (!startDl.success || !startDl.output?.trim()) {
+          throw new Error(`Failed to start download: ${startDl.error}`)
+        }
+        const curlPid = startDl.output.trim()
+        await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+
+        const outcome = await monitorDownload(curlPid)
+        if (outcome.state === "done") {
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`)
+          await updateJob(jobId, "transferring", {
+            bytesTransferred: BigInt(outcome.bytes),
+            transferSpeed: outcome.speed,
+          })
+          await appendLog(jobId, `Download complete: ${(outcome.bytes / 1073741824).toFixed(1)} GB in ${outcome.time.toFixed(0)}s (${outcome.speed})`, "success")
+          return
+        }
+
+        // The partial file is unusable: drop it before another attempt.
+        await cleanup()
+        if (attempt < DOWNLOAD_ATTEMPTS) {
+          await appendLog(jobId, `${outcome.message}; retrying the download (${attempt}/${DOWNLOAD_ATTEMPTS} attempts used)`, "warn")
+          continue
+        }
+        throw new Error(`${outcome.message} (after ${DOWNLOAD_ATTEMPTS} attempts)`)
+      }
     }
 
     // Helper: convert + import + attach a single disk
@@ -653,138 +698,25 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
     }
 
-    if (isLive) {
-      // ── Live mode: snapshot → download snapshot VDIs → delete snapshot → shut down → convert/import ──
-      let snapshotUuid: string | null = null
+    // ── Cold mode: sequential download → convert → import per disk ──
+    for (let i = 0; i < vmConfig.disks.length; i++) {
+      await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
+      await downloadDisk(i, vmConfig.disks[i])
+      if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-      let downloadSucceeded = false
-      try {
-        // Phase 1: Create snapshot (VM keeps running — no downtime)
-        const snapName = `proxcenter-mig-${jobId.substring(0, 8)}`
-        await appendLog(jobId, "Creating XO snapshot for consistent disk download (VM stays running)...")
-        snapshotUuid = await xoCreateSnapshot(xo, config.sourceVmId, snapName)
-        await appendLog(jobId, `Snapshot created: ${snapshotUuid}`, "success")
-
-        if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-        // Phase 2: Download original VM VDIs (snapshot freezes disk state, but
-        // snapshot VDIs themselves are not downloadable via XO REST API)
-        await appendLog(jobId, `Downloading ${vmConfig.disks.length} disk(s) from VM (snapshot ensures consistency)...`)
-
-        // Phase 3: Download all VM VDIs (VM still running, snapshot freezes blocks)
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          await updateJob(jobId, "transferring", { currentDisk: i })
-          await downloadDisk(i, vmConfig.disks[i])
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        }
-
-        await appendLog(jobId, "All snapshot disks downloaded", "success")
-        downloadSucceeded = true
-      } finally {
-        // Only delete snapshot if downloads succeeded — deleting a snapshot triggers
-        // VHD chain coalescing on XCP-ng which can cause SR_BACKEND_FAILURE if the
-        // storage is in a bad state. On failure, leave it for the user to clean up safely.
-        if (snapshotUuid && downloadSucceeded) {
-          try {
-            await appendLog(jobId, "Deleting migration snapshot...")
-            await xoDeleteSnapshot(xo, snapshotUuid)
-            await appendLog(jobId, "Snapshot deleted", "success")
-          } catch (snapErr: any) {
-            await appendLog(jobId, `Warning: failed to delete snapshot ${snapshotUuid}: ${snapErr?.message}. Please delete it manually in XO.`, "warn")
-          }
-        } else if (snapshotUuid) {
-          await appendLog(jobId, `Migration snapshot ${snapshotUuid} was NOT deleted to protect the source VM. Please delete it manually in XO once the VM is stable.`, "warn")
-        }
-      }
-
-      // Phase 4: Shut down source VM via XO (downtime starts here)
-      const downtimeStart = Date.now()
-      await appendLog(jobId, "Shutting down source VM for cutover (downtime starts now)...", "warn")
-      try {
-        const xoFetchInternal = (path: string, opts: RequestInit = {}) =>
-          fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
-            ...opts,
-            headers: { Authorization: xo.authHeader, "Content-Type": "application/json", ...opts.headers },
-            signal: AbortSignal.timeout(30000),
-            insecureTLS: xo.insecureTLS,
-          })
-
-        const shutRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/clean_shutdown`, { method: "POST" })
-        if (!shutRes.ok) {
-          const hardRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/hard_shutdown`, { method: "POST" })
-          if (!hardRes.ok) {
-            await appendLog(jobId, "Cannot shut down VM via XO API. Please shut down the VM manually now.", "warn")
-          }
-        }
-
-        // Wait for VM to be halted (poll every 5s, max 120s)
-        let halted = false
-        for (let attempt = 0; attempt < 24; attempt++) {
-          await new Promise(r => setTimeout(r, 5000))
-          try {
-            const refreshed = await xoGetVmConfig(xo, config.sourceVmId)
-            if (refreshed.powerState === "Halted" || refreshed.powerState === "halted") {
-              halted = true
-              break
-            }
-          } catch {}
-        }
-
-        if (halted) {
-          await appendLog(jobId, "Source VM shut down", "success")
-        } else {
-          await appendLog(jobId, "VM did not shut down within 120s — proceeding anyway", "warn")
-        }
-      } catch (e: any) {
-        await appendLog(jobId, `Shutdown attempt failed: ${e?.message || e}. Proceeding with conversion...`, "warn")
-      }
-
-      // Phase 5: Convert and import all disks (downtime continues)
       if (isFileBased) {
-        await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-          await convertAndImportDisk(i)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        }
+        await convertAndImportDisk(i)
       } else {
-        await appendLog(jobId, "Converting VHDs to block storage (downtime phase)...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
-          await convertToBlockDevice(i, vol.devicePath)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-          await attachBlockDisk(i, vol.volumeId)
-        }
-      }
-
-      const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
-      const downtimeMin = Math.floor(downtimeSec / 60)
-      const downtimeRemSec = downtimeSec % 60
-      await appendLog(jobId, `Downtime duration: ${downtimeMin > 0 ? `${downtimeMin}m ${downtimeRemSec}s` : `${downtimeSec}s`}`, "info")
-    } else {
-      // ── Cold mode: sequential download → convert → import per disk ──
-      for (let i = 0; i < vmConfig.disks.length; i++) {
-        await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-        await downloadDisk(i, vmConfig.disks[i])
+        // Block storage: allocate volume, convert VHD directly to device
+        const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+        await convertToBlockDevice(i, vol.devicePath)
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-        if (isFileBased) {
-          await convertAndImportDisk(i)
-        } else {
-          // Block storage: allocate volume, convert VHD directly to device
-          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
-          await convertToBlockDevice(i, vol.devicePath)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-          await attachBlockDisk(i, vol.volumeId)
-        }
-        await updateJob(jobId, "transferring", {
-          currentDisk: i + 1,
-          progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
-        })
+        await attachBlockDisk(i, vol.volumeId)
       }
+      await updateJob(jobId, "transferring", {
+        currentDisk: i + 1,
+        progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
+      })
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -863,7 +795,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,
-          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
+          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.curlrc`)
       }
     } catch {
       // Best effort cleanup
@@ -882,6 +814,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    stopSourceKeepAlive()
+    await source?.close().catch(() => {})
     stopHeartbeat()
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)

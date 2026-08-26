@@ -1873,6 +1873,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         hostType: (conn.type === 'vmware' && conn.subType === 'vcenter')
           ? 'vcenter'
           : (conn.type || 'vmware'),
+        // Kept raw next to the promoted hostType: the migrate dialogs read it to
+        // tell an XCP-ng pool reached over XAPI (warm capable) from one behind
+        // Xen Orchestra (offline only).
+        connSubType: conn.subType ?? null,
         baseUrl: conn.baseUrl || '',
         version,
         licenseFull: statusData?.data?.licenseFull ?? false,
@@ -1951,7 +1955,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         ...(vm.annotation ? [{ k: 'Notes', v: vm.annotation }] : []),
       ],
       lastUpdated,
-      esxiVmInfo: { ...vm, hostType: connType },
+      esxiVmInfo: { ...vm, hostType: connType, connSubType: rawConnSubType ?? null },
     }
   }
 

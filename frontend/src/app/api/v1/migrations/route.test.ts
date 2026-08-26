@@ -22,6 +22,7 @@ vi.mock("@/lib/tenant", () => ({
   getTenantPrisma: vi.fn(() => h.prisma),
 }))
 vi.mock("@/lib/migration/warm/warm-pipeline", () => ({ runWarmMigration: vi.fn() }))
+vi.mock("@/lib/migration/warm/xcpng-warm-pipeline", () => ({ runXcpngWarmMigration: vi.fn() }))
 vi.mock("@/lib/migration/pipeline", () => ({ runMigrationPipeline: vi.fn() }))
 vi.mock("@/lib/migration/v2v-pipeline", () => ({ runV2vMigrationPipeline: vi.fn() }))
 vi.mock("@/lib/migration/xcpng-pipeline", () => ({ runXcpngMigrationPipeline: vi.fn() }))
@@ -32,10 +33,12 @@ vi.mock("@/lib/migration/orphan-sweep", () => ({ resolveInstanceId: vi.fn(() => 
 import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 
 const warm = runWarmMigration as unknown as ReturnType<typeof vi.fn>
+const xcpngWarm = runXcpngWarmMigration as unknown as ReturnType<typeof vi.fn>
 const cold = runMigrationPipeline as unknown as ReturnType<typeof vi.fn>
 const v2v = runV2vMigrationPipeline as unknown as ReturnType<typeof vi.fn>
 
@@ -53,7 +56,7 @@ function createdJobData(): any {
 
 beforeEach(() => {
   h.afterCbs.length = 0
-  warm.mockReset(); cold.mockReset(); v2v.mockReset()
+  warm.mockReset(); xcpngWarm.mockReset(); cold.mockReset(); v2v.mockReset()
   h.prisma.connection.findUnique.mockReset()
   h.prisma.migrationJob.create.mockReset().mockResolvedValue({ id: "job-1" })
 })
@@ -219,6 +222,52 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(warm.mock.calls[0][0]).toBe("job-1")
     expect(warm.mock.calls[0][1]).toMatchObject({ sourceConnectionId: "src", targetStorage: "local-lvm" })
     expect(cold).not.toHaveBeenCalled()
+  })
+
+  it("dispatches a direct XAPI XCP-ng warm request to runXcpngWarmMigration", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "xcpng", subType: "xapi", name: "pool", baseUrl: "https://xcpng" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(200)
+    expect((await readJson<any>(res))?.data?.jobId).toBe("job-1")
+
+    await runAfters()
+    expect(xcpngWarm).toHaveBeenCalledTimes(1)
+    expect(xcpngWarm.mock.calls[0][0]).toBe("job-1")
+    expect(xcpngWarm.mock.calls[0][1]).toMatchObject({
+      sourceConnectionId: "src",
+      sourceVmId: "vm-1",
+      targetConnectionId: "tgt",
+      targetNode: "pve1",
+      targetStorage: "local-lvm",
+      networkBridge: "vmbr0",
+    })
+    expect(warm).not.toHaveBeenCalled()
+    expect(cold).not.toHaveBeenCalled()
+  })
+
+  it("rejects XCP-ng warm migration through Xen Orchestra", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "xcpng", subType: "xo", name: "xo", baseUrl: "https://xo" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toContain("Xen Orchestra")
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects XCP-ng live migration because it is no longer available", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "xcpng", subType: "xapi", name: "pool", baseUrl: "https://xcpng" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, migrationType: "live" } })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toContain("no longer available")
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
   })
 })
 

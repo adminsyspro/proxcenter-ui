@@ -9,10 +9,10 @@ import { isFileBasedStorage } from '@/lib/proxmox/storage'
 /**
  * Whether a vSAN-backed source blocks the selected migration type.
  *
- * Offline and Live read the datastore as files: on vSAN there is no `-flat.vmdk`
+ * Offline reads the datastore as files: on vSAN there is no `-flat.vmdk`
  * POSIX file, only a descriptor pointing at `vsan://` URIs that neither qemu-img
  * nor the HTTPS datastore endpoint resolves, and `vmkfstools -i` answers
- * "Function not implemented". Both are genuinely impossible over a direct ESXi
+ * "Function not implemented". That is genuinely impossible over a direct ESXi
  * connection.
  *
  * Warm is not: it reads through VDDK, the disk API, which serves vSAN objects on

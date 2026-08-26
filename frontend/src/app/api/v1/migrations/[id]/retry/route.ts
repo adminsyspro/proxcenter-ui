@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 
 export const runtime = "nodejs"
@@ -69,9 +70,24 @@ export async function POST(
     // Dispatch the retry to the same engine the original used. Warm jobs must
     // not fall back to the cold pipeline (it powers off the running source).
     const isWarm = (job.config as any)?.migrationType === "warm"
+    // Warm has one engine per source hypervisor (SOAP/VDDK for VMware, XAPI/NBD
+    // for XCP-ng). Resolve it from the source connection while the request-scoped
+    // Prisma client is still alive; it may be torn down inside after(). A deleted
+    // connection falls back to the sourceType persisted in the job config, so an
+    // XCP-ng retry is never handed to the VMware engine.
+    let warmSourceType: string | null = null
+    if (isWarm) {
+      const src = await prisma.connection.findUnique({ where: { id: job.sourceConnectionId }, select: { type: true } })
+      warmSourceType = src?.type ?? (job.config as any)?.sourceType ?? null
+    }
     after(async () => {
       if (isWarm) {
-        await runWarmMigration(newJob.id, config as unknown as Parameters<typeof runWarmMigration>[1], tenantId)
+        const warmConfig = config as unknown as Parameters<typeof runWarmMigration>[1]
+        if (warmSourceType === "xcpng") {
+          await runXcpngWarmMigration(newJob.id, warmConfig, tenantId)
+        } else {
+          await runWarmMigration(newJob.id, warmConfig, tenantId)
+        }
       } else {
         await runMigrationPipeline(newJob.id, config, tenantId)
       }

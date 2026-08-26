@@ -15,124 +15,31 @@ import {
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { mapEsxiToPveConfig } from "../configMapper"
-import {
-  allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree, volumesToKeep,
-  PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
-} from "../pvesm-alloc"
-import { pveSetVmConfig } from "../pve-vm-config"
-import { waitForPveTask, getNodeIpForMigration } from "../pve-tasks"
-import { convertDisksToQcow2 } from "../qcow2-convert"
+import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
+import { getNodeIpForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
 import { startVddkReader, stopVddkReader, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
-import { buildApplyScripts } from "./block-applier"
-import { parseDdProgress, createDdProgressAccumulator } from "./dd-progress"
-import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
+import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { parseSha1Thumbprint } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
-import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
-
-export type WarmStatus =
-  | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
-  | "awaiting_cutover" | "cutover" | "verify" | "converting_disks"
-  | "completed" | "failed" | "cancelled"
-
-export interface WarmMigrationConfig {
-  sourceConnectionId: string
-  sourceVmId: string
-  targetConnectionId: string
-  targetNode: string
-  targetStorage: string
-  networkBridge: string
-  vlanTag?: number
-  startAfterMigration: boolean
-  /**
-   * Convert the migrated data disks to qcow2 after the cutover (one `move_disk`
-   * per disk on the same storage), so they can take Proxmox snapshots on a
-   * snapshot-as-volume-chain LVM storage (#595). Opt-in, default false; the
-   * conversion can never fail the migration.
-   */
-  convertDisksToQcow2?: boolean
-  targetVmid?: number
-  /** Extracted VDDK distribution dir on the PVE node (libdir=). */
-  vddkLibdir?: string
-  /** Max cutover downtime before warm requires operator consent (default 300s). */
-  downtimeBudgetSec?: number
-  /** Safety cap on delta passes (default 5). */
-  maxPasses?: number
-  /**
-   * Who decides the switchover (default "auto"). "manual" keeps replicating and
-   * waits for the operator's cutover instead of ever deciding on its own, which
-   * is what a migration scheduled inside a maintenance window needs (#443).
-   */
-  cutoverMode?: "auto" | "manual"
-}
-
-// ── Job tracking (per-orchestrator, mirrors the other migration pipelines) ──
-interface LogEntry { ts: string; msg: string; level: "info" | "success" | "warn" | "error" }
-const cancelledJobs = new Set<string>()
-const cutoverRequests = new Set<string>()
-// Same shape as cutoverRequests: an operator decision the running pipeline polls
-// for. Set when the guest refuses to shut down and the operator chooses to stop
-// the source hard rather than wait the deadline out (#614).
-const forcePowerOffRequests = new Set<string>()
-const jobPrisma = new Map<string, any>()
-// At most one warm job per source VM in-flight. Concurrent warm runs against the
-// same VM would interleave snapshots and dd-seek writes (target corruption), so a
-// second run for a VM already migrating is rejected (design §12 concurrency lock).
-const activeWarmVms = new Set<string>()
-
-/** Cooperative cancel signal for a warm job (called by the cancel route). */
-export function cancelWarmMigrationJob(jobId: string) { cancelledJobs.add(jobId) }
-function isCancelled(jobId: string): boolean { return cancelledJobs.has(jobId) }
-
-/** Cooperative "cutover now" signal for a warm job (called by the cutover route). */
-export function requestWarmCutover(jobId: string) { cutoverRequests.add(jobId) }
-
-/** Operator asked to power the source off hard, from the awaiting_power_off wait. */
-export function requestWarmForcePowerOff(jobId: string) { forcePowerOffRequests.add(jobId) }
-
-function isForcePowerOffRequested(jobId: string): boolean { return forcePowerOffRequests.has(jobId) }
-
-/** Test seam, mirrors __isCutoverRequestedForTest. */
-export function __isForcePowerOffRequestedForTest(jobId: string): boolean { return isForcePowerOffRequested(jobId) }
-function isCutoverRequested(jobId: string): boolean { return cutoverRequests.has(jobId) }
-/** @internal test hook */
-export function __isCutoverRequestedForTest(jobId: string): boolean { return isCutoverRequested(jobId) }
-
-async function updateJob(id: string, status: WarmStatus, extra: Record<string, any> = {}) {
-  const prisma = jobPrisma.get(id)
-  await prisma.migrationJob.update({
-    where: { id },
-    data: { status, currentStep: status, ...(status === "completed" ? { completedAt: new Date() } : {}), ...extra },
-  })
-}
-
-/**
- * Throttled live-progress write, fired from an SSH onData callback that is not
- * awaited by the pipeline. updateMany scoped to a non-terminal status: a
- * straggler flush racing the terminal write in the catch must never resurrect a
- * completed/failed/cancelled row (#608 — same guard as the job heartbeat).
- */
-async function updateJobLive(id: string, status: WarmStatus, extra: Record<string, any> = {}) {
-  const prisma = jobPrisma.get(id)
-  await prisma.migrationJob.updateMany({
-    where: { id, status: { notIn: [...TERMINAL_STATUSES] } },
-    data: { status, currentStep: status, ...extra },
-  })
-}
-
-async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info") {
-  const prisma = jobPrisma.get(id)
-  const job = await prisma.migrationJob.findUnique({ where: { id }, select: { logs: true, progress: true } })
-  const logs: LogEntry[] = (job?.logs as LogEntry[] | null) ?? []
-  logs.push({ ts: new Date().toISOString(), msg, level, progress: job?.progress ?? 0 } as any)
-  await prisma.migrationJob.update({ where: { id }, data: { logs } })
-}
+import type { WarmMigrationConfig } from "./types"
+import {
+  registerJob, unregisterJob, acquireVmLock, releaseVmLock,
+  updateJob, updateJobLive, appendLog, isCancelled, isCutoverRequested,
+  sleepUnlessCutover, awaitOperatorCutover, HOLD_PASS_INTERVAL_MS,
+} from "./job-control"
+import {
+  applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress,
+  APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS, type PassWindow, type PassProgress,
+} from "./apply"
+import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
+import { cleanShutdownAndConfirm, type PowerOffOps } from "./power-off"
+import { attachDisksAndBoot, verifySampledFirstBlock } from "./finish"
 
 // ── Pure convergence planning (unit-tested) ──
 
@@ -153,106 +60,9 @@ export function planPasses(stats: PassStat[], cfg: ConvergenceConfig): Convergen
   return out
 }
 
-// Long-running SSH operations (block apply, checksum scan) need a generous timeout.
-const APPLY_TIMEOUT_MS = 12 * 60 * 60 * 1000
-// Inactivity guard for the block-apply dd (which runs with status=progress, ~1
-// line/s): if no output arrives for this long the transfer has genuinely stalled,
-// so fail fast instead of waiting out the 12h absolute cap. A healthy copy emits
-// progress continuously and never trips it (#445).
-const APPLY_INACTIVITY_MS = 10 * 60 * 1000
-// Throttle live throughput log lines so a multi-hour copy doesn't flood the job log.
-const PROGRESS_LOG_INTERVAL_MS = 30_000
 const SNAPSHOT_PREFIX = "proxcenter-warm"
 // Ping the SOAP session every 60 s to prevent idle-expiry during long dd copies (issue #394).
 const SOAP_KEEPALIVE_INTERVAL_MS = 60_000
-
-// Parallel ranges for the streamed zero fallback. One dd is queue depth 1: the
-// #606 field run sustained only 359 MiB/s on an FC array that reaches 1.9 GB/s
-// with concurrency, i.e. 2 h 30 min to zero 3.1 TiB. FC/iSCSI arrays scale with
-// outstanding I/O, so a handful of concurrent streams recovers most of it.
-export const ZERO_PARALLEL_CHUNKS = 4
-
-/**
- * Build the node-side command that zeroes a freshly-allocated *thick* block
- * device before the CBT copy. Unwritten regions on a thick LV are not
- * guaranteed to read as zero, and the CBT pass only writes the allocated/changed
- * map, so any gap left un-zeroed would surface a previous tenant's bytes (a
- * correctness AND information-leak bug). We prefer `blkdiscard -z` (offloaded
- * write-zeroes where the array supports it) and fall back to streaming zeros.
- * When the array refuses the offload, the script says so with a parseable
- * `blkdiscard-refused: <reason>` line — previously that reason was only visible
- * if the whole script failed, so the slow path ran with no explanation (#606).
- *
- * The fallback streams `head -c <bytes> /dev/zero | dd …` rather than the earlier
- * `dd if=/dev/zero of=DEV` (no count): a bare unbounded dd fills the device and
- * then issues one write *past* end-of-device, which returns ENOSPC and makes dd
- * exit 1 — even though every block was already zeroed — so the thick-zero step
- * could never succeed (this is what broke #445's disk 1 after a full 45-min
- * zero). The device is split into `chunks` equal 4 MiB-aligned ranges (the last
- * takes the remainder) and each range gets its own bounded stream, run in
- * parallel and reaped with `wait` (#606). Every stream is still bounded to its
- * exact range, so the #445 ENOSPC-past-EOF failure cannot come back.
- * `iflag=fullblock` reassembles 4 MiB blocks across the pipe so O_DIRECT
- * accepts every write, including a sub-4 MiB final block (still logical-block
- * aligned because a device size is always a sector multiple).
- *
- * The step used to run `status=none` — hours of total silence on a multi-TB LV,
- * indistinguishable from a hang (#606). Now each range dd writes
- * `status=progress` to its own temp file and a background poller sums the last
- * counter of every range every 10 s into ONE line in dd's own summary format
- * (`<bytes> bytes copied, <s> s`), so parseDdProgress consumes it unchanged,
- * the caller can drive the progress bar, and the SSH stream stays alive for the
- * same inactivity guard as the copy. On a range failure the dd error text (kept
- * in the temp files) is replayed to stdout so the caller surfaces the real cause.
- */
-export function buildThickZeroScript(dev: string, chunks: number = ZERO_PARALLEL_CHUNKS): string {
-  const d = shellEscape(dev)
-  const n = Math.max(1, Math.floor(chunks))
-  const lines = [
-    `sz=$(blockdev --getsize64 ${d})`,
-    `t=$(mktemp -d)`,
-    `start=$(date +%s)`,
-    `( while :; do sleep 10; b=0; for f in "$t"/z*; do [ -s "$f" ] || continue; v=$(tr '\\r' '\\n' < "$f" | awk '/ bytes /{n=$1} END{print n+0}'); b=$((b+v)); done; echo "$b bytes copied, $(($(date +%s)-start)) s"; done ) & poller=$!`,
-    `trap 'kill $poller 2>/dev/null; rm -rf "$t"' EXIT`,
-    `if out=$(blkdiscard -z ${d} 2>&1); then echo "$sz bytes copied, $(($(date +%s)-start)) s"; exit 0; fi`,
-    `echo "blkdiscard-refused: $out"`,
-    `per=$((sz / ${n} / 4194304 * 4194304))`,
-  ]
-  for (let i = 0; i < n; i++) {
-    const bound = i === n - 1 ? `"$((sz - ${i} * per))"` : `"$per"`
-    lines.push(`head -c ${bound} /dev/zero | dd of=${d} bs=4M iflag=fullblock oflag=seek_bytes,direct conv=notrunc status=progress seek=$((${i} * per)) 2>"$t/z${i}" & p${i}=$!`)
-  }
-  lines.push(`fail=0`)
-  for (let i = 0; i < n; i++) lines.push(`wait $p${i} || fail=1`)
-  lines.push(`if [ "$fail" -ne 0 ]; then for f in "$t"/z*; do tr '\\r' '\\n' < "$f" | grep -v ' bytes \\|records '; done; exit 1; fi`)
-  lines.push(`echo "$sz bytes copied, $(($(date +%s)-start)) s"`)
-  return lines.join("\n")
-}
-
-/**
- * Map a phase's byte counter onto its window of the warm run's locked progress
- * scale (#502/#606): preparing_disks 0→10, full_copy 10→80, delta passes 80→95,
- * cutover/verify/attach 95→100. Monotonic across the run as long as callers hand
- * it non-decreasing byte counts and contiguous windows. A total of zero means
- * the phase has nothing to do, i.e. it is already complete.
- */
-export function scaleWarmProgress(rangeStart: number, rangeEnd: number, doneBytes: number, totalBytes: number): number {
-  if (totalBytes <= 0) return Math.round(rangeEnd)
-  const fraction = Math.min(1, Math.max(0, doneBytes / totalBytes))
-  return Math.round(rangeStart + (rangeEnd - rangeStart) * fraction)
-}
-
-/**
- * Progress windows for one disk of the checksum fallback on the locked 10→80
- * full_copy scale. Each disk gets an equal slice (span = 70/diskCount); the
- * first 30% of the slice is the checksum scan (reads only, nothing copied yet),
- * the remaining 70% is the block apply. Pure — unit-tested like scaleWarmProgress.
- */
-export function checksumDiskWindows(diskIndex: number, diskCount: number): { scanStart: number; scanEnd: number; applyEnd: number } {
-  const span = 70 / diskCount
-  const scanStart = 10 + span * diskIndex
-  return { scanStart, scanEnd: scanStart + 0.3 * span, applyEnd: 10 + span * (diskIndex + 1) }
-}
 
 /**
  * Snapshot-removal budget for the LAST pass and for failure cleanup.
@@ -370,110 +180,6 @@ export async function sweepWarmSnapshots(
   return removed
 }
 
-/** One copy pass's slot on the locked progress scale (see scaleWarmProgress). */
-interface PassWindow {
-  status: WarmStatus
-  /** Persisted with each live update so a throttled flush never clobbers a
-   *  finer-grained step label (e.g. `delta_2`). */
-  currentStep: string
-  rangeStart: number
-  rangeEnd: number
-}
-
-/** Live byte bookkeeping for one pass, shared across its disks. */
-interface PassProgress extends PassWindow {
-  /** Denominator: changed-extent bytes across ALL disks of the pass. */
-  totalBytes: number
-  /** Exact bytes from disks already fully applied (corrected per disk). */
-  doneBytes: number
-  /** Monotonic floor so a conservative estimate never moves the bar backwards. */
-  lastPct: number
-}
-
-const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
-
-/**
- * Pacing between two delta passes of a manual hold. A converged source yields
- * empty passes in seconds; without this the hold would snapshot and consolidate
- * on vCenter in a tight loop for its whole duration, which is exactly the churn
- * that broke a 3 TB run (#678). Deliberately not configurable: it only changes
- * how fresh the projection is, and a minute is fresh enough to decide on.
- */
-const HOLD_PASS_INTERVAL_MS = 60 * 1000
-
-/**
- * Wait between two hold passes, in slices, so the operator's cutover request is
- * picked up within a second instead of after the full interval. Returns false
- * when a cutover was requested (the caller stops replicating and switches over),
- * true when the wait ran to the end. Throws on cancellation, like every other
- * wait in this pipeline.
- */
-async function sleepUnlessCutover(jobId: string, ms: number): Promise<boolean> {
-  const until = Date.now() + ms
-  while (Date.now() < until) {
-    if (isCancelled(jobId)) throw new Error("Migration cancelled")
-    if (isCutoverRequested(jobId)) return false
-    await new Promise(r => setTimeout(r, Math.max(1, Math.min(1000, until - Date.now()))))
-  }
-  return true
-}
-
-/** Test seam: the hold pacing is otherwise only reachable through a full run. */
-export function __sleepUnlessCutoverForTest(jobId: string, ms: number): Promise<boolean> {
-  return sleepUnlessCutover(jobId, ms)
-}
-
-/**
- * Why the gate was reached, stated from the numbers rather than assumed.
- *
- * Every projection carries a fixed floor (shutdown + boot) that no amount of
- * converging can shave off, so a budget set below that floor can never be met
- * and the run parks at the gate even when the deltas are empty. Blaming the
- * source there is simply false — a 0.0 MB delta pass is the opposite of "the
- * source is changing faster than it converges" — so say which of the two it is.
- *
- * Exported for the unit test; `floorSec` unknown (older callers) keeps the
- * historical wording.
- */
-export function gateReason(budgetSec: number, floorSec?: number): string {
-  return floorSec != null && budgetSec < floorSec
-    ? `The ${budgetSec}s budget is below the ~${floorSec}s floor every cutover carries (shutdown + boot), so no delta pass can ever meet it.`
-    : "The source is changing faster than it converges."
-}
-
-/**
- * Pause a warm job at the operator gate: persist the estimate, log an actionable
- * message, then wait until the operator requests cutover (resolve), cancels
- * (throw "Migration cancelled"), or the safety timeout elapses (throw). No delta
- * passes run while waiting; only the SOAP session stays alive (keepalive).
- */
-async function awaitOperatorCutover(
-  jobId: string, projectedDowntimeSec: number, budgetSec: number, maxPasses: number,
-  opts: { pollMs?: number; timeoutMs?: number; floorSec?: number } = {},
-): Promise<void> {
-  const pollMs = opts.pollMs ?? 3000
-  const timeoutMs = opts.timeoutMs ?? OPERATOR_GATE_TIMEOUT_MS
-  await updateJob(jobId, "awaiting_cutover", { currentStep: "awaiting_cutover", projectedDowntimeSec })
-  const mins = Math.round(projectedDowntimeSec / 60)
-  await appendLog(jobId, `Reached ${maxPasses} delta passes; projected cutover downtime ~${projectedDowntimeSec}s (~${mins} min) exceeds the ${budgetSec}s budget. ${gateReason(budgetSec, opts.floorSec)} Click "Cutover now" to proceed (VM offline ~${mins} min), or cancel and use a cold migration.`, "warn")
-  const start = Date.now()
-  while (true) {
-    if (isCancelled(jobId)) throw new Error("Migration cancelled")
-    if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover — proceeding to final delta", "info"); return }
-    if (Date.now() - start > timeoutMs) throw new Error(`Operator gate timed out after ${Math.round(timeoutMs / 3600000)}h with no cutover decision; the job was left paused too long`)
-    await new Promise(r => setTimeout(r, pollMs))
-  }
-}
-
-/** @internal test hook */
-export function __awaitOperatorCutoverForTest(
-  jobId: string, projectedDowntimeSec: number, budgetSec: number, maxPasses: number,
-  opts: { pollMs?: number; timeoutMs?: number },
-): Promise<void> {
-  jobPrisma.set(jobId, getTenantPrisma("default"))
-  return awaitOperatorCutover(jobId, projectedDowntimeSec, budgetSec, maxPasses, opts)
-}
-
 /**
  * Warm migration orchestrator (ESXi-direct source, Proxmox block target).
  * Keeps the source online through a full copy + N delta passes, then a short
@@ -484,9 +190,7 @@ export function __awaitOperatorCutoverForTest(
  */
 export async function runWarmMigration(jobId: string, config: WarmMigrationConfig, tenantId = "default"): Promise<void> {
   const prisma = getTenantPrisma(tenantId)
-  jobPrisma.set(jobId, prisma)
-  cutoverRequests.delete(jobId)
-  forcePowerOffRequests.delete(jobId)
+  registerJob(jobId, prisma)
 
   const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
   const budget = config.downtimeBudgetSec ?? 300
@@ -518,10 +222,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     await updateJob(jobId, "planning")
     await appendLog(jobId, "Warm migration: planning")
 
-    if (activeWarmVms.has(vmKey)) {
+    if (!acquireVmLock(vmKey)) {
       throw new Error("A warm migration is already running for this source VM. Wait for it to finish or cancel it before starting another.")
     }
-    activeWarmVms.add(vmKey); acquiredVmLock = true
+    acquiredVmLock = true
 
     const esxiConn = await prisma.connection.findUnique({
       where: { id: config.sourceConnectionId },
@@ -586,143 +290,20 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     if (targetVmid == null) targetVmid = Number(await pveFetch<number | string>(pveConn as any, "/cluster/nextid"))
     const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag)
-    const createBody = new URLSearchParams({
-      vmid: String(pveParams.vmid), name: pveParams.name, ostype: pveParams.ostype,
-      cores: String(pveParams.cores), sockets: String(pveParams.sockets), memory: String(pveParams.memory),
-      cpu: pveParams.cpu, scsihw: pveParams.scsihw, bios: pveParams.bios, machine: pveParams.machine,
-      net0: pveParams.net0, agent: pveParams.agent, serial0: "socket",
-    })
-    if (pveParams.efidisk0) createBody.set("efidisk0", pveParams.efidisk0)
-    const created = await pveFetch<any>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu`, { method: "POST", body: createBody })
-    if (created) await waitForPveTask(pveConn as any, config.targetNode, String(created))
+    const shellConf = await createTargetVmShell(pveConn, config.targetNode, pveParams)
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
 
-    // The VM shell may already own a disk: an OVMF/UEFI guest gets an efidisk0
-    // (vm-<vmid>-disk-0) created with `qm create`. Data disks must therefore start
-    // after the highest existing disk number, or `pvesm alloc` collides on the name.
-    const shellConf = await pveFetch<Record<string, any>>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/config`)
-
     // ── preparing_disks: allocate a raw block volume per disk, zero the thick ones ──
-    // A dedicated phase, not enabling_cbt: on thick LVM the mandatory pre-zero
-    // below can run for hours, and the badge must say what the job is doing (#606).
-    // Progress covers 0→10 of the locked scale, weighted by bytes zeroed across
-    // all disks (they share the target storage, so it is all-thick or none).
-    await updateJob(jobId, "preparing_disks")
-    const zeroTotalBytes = vmConfig.disks.reduce((s, d) => s + d.capacityBytes, 0)
-    let zeroedBytes = 0
-    let lastZeroPct = 0
-    for (let i = 0; i < vmConfig.disks.length; i++) {
-      const disk = vmConfig.disks[i]
-      const sizeKB = Math.ceil(disk.capacityBytes / 1024)
-      // Numbering walks forward as each disk registers itself in allocatedVolumes.
-      const volName = nextFreeDiskName(shellConf, allocatedVolumes, targetVmid)
-      // See allocateAndMapBlockVolume for the raw format and why the volume is
-      // registered for cleanup before the allocation runs (#587).
-      const vol = await allocateAndMapBlockVolume({
-        connectionId: config.targetConnectionId, nodeIp,
-        targetStorage: config.targetStorage, targetVmid, volName, sizeKB,
-        allocatedVolumes,
-      })
-      const dev = vol.devicePath
-      targetDev.set(disk.deviceKey, dev)
-      diskState.set(disk.deviceKey, initDiskState(disk.deviceKey))
-      // Unwritten regions MUST read as zero: the CBT pass writes only the
-      // allocated/changed map, so any block it skips is left as-is on the target.
-      // Thin pools (LVM-thin / ZFS / Ceph RBD) hand back pre-zeroed volumes, so a
-      // cheap discard suffices. Plain (thick) LVM does NOT — a bare DISCARD only
-      // *permits* zero reads, it does not guarantee them, so a freshly-alloc'd
-      // thick LV can surface a previous tenant's bytes (a correctness AND
-      // information-leak bug). Write-zero those (slow but mandatory); fail hard if
-      // it doesn't succeed rather than copy onto stale data.
-      const preZeroed = ["lvmthin", "zfspool", "zfs", "rbd"].includes(storageInfo?.type)
-      if (preZeroed) {
-        await executeSSH(config.targetConnectionId, nodeIp, `blkdiscard ${shellEscape(dev)} 2>/dev/null || true`)
-      } else {
-        // #606: this step used to be hours of total silence (no start line, no
-        // output, status stuck on enabling_cbt) — operators cancelled healthy
-        // runs. Announce it, stream the script's aggregated dd progress through
-        // the same inactivity guard as the copy, and surface why the blkdiscard
-        // offload was refused when the streamed slow path runs.
-        const capGB = (disk.capacityBytes / 1073741824).toFixed(1)
-        await appendLog(jobId, `Disk ${i}: zeroing thick target ${dev} (${capGB} GB) — mandatory on thick storage and can take a long time; live throughput follows`)
-        let headBuf = ""              // first KBs of output; carries the refusal marker
-        let refusalLogged = false
-        let lastFlush = 0
-        const onData = (chunk: string): void => {
-          if (!refusalLogged && headBuf.length < 8192) {
-            headBuf += chunk
-            const m = /blkdiscard-refused: ([^\r\n]*)/.exec(headBuf)
-            if (m) {
-              refusalLogged = true
-              void appendLog(jobId, `Disk ${i}: array refused the blkdiscard write-zeroes offload (${m[1].trim() || "no reason given"}) — streaming zeros in ${ZERO_PARALLEL_CHUNKS} parallel ranges instead`, "warn").catch(() => {})
-            }
-          }
-          const p = parseDdProgress(chunk)
-          if (!p) return
-          const now = Date.now()
-          if (now - lastFlush < PROGRESS_LOG_INTERVAL_MS) return
-          lastFlush = now
-          const diskBytes = Math.min(p.bytes, disk.capacityBytes)
-          const pct = Math.max(lastZeroPct, scaleWarmProgress(0, 10, zeroedBytes + diskBytes, zeroTotalBytes))
-          lastZeroPct = pct
-          // Progress first, then the log line — appendLog stamps each entry with
-          // the job's current progress, which is why the lines used to read 0 (#502).
-          void (async () => {
-            await updateJobLive(jobId, "preparing_disks", { progress: pct, transferSpeed: `Zeroing: ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
-            await appendLog(jobId, `Disk ${i}: zeroed ${(diskBytes / 1073741824).toFixed(1)} of ${capGB} GB`)
-          })().catch(() => {})
-        }
-        const z = await executeSSH(config.targetConnectionId, nodeIp, buildThickZeroScript(dev), APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
-        // Surface z.output first: the script replays the range dd errors to
-        // stdout, so the real cause (e.g. "No space left on device", an array
-        // I/O error) lands in output while error is just "Exit code N" on the
-        // ssh2 path.
-        if (!z.success) throw new Error(`Failed to zero thick target ${dev} before warm copy (unwritten regions would expose stale data): ${z.output || z.error}`)
-        await appendLog(jobId, `Disk ${i}: zeroed thick target ${dev}`)
-      }
-      zeroedBytes += disk.capacityBytes
-      await appendLog(jobId, `Disk ${i}: target ${vol.volumeId} → ${dev} (${(disk.capacityBytes / 1073741824).toFixed(1)} GB)`)
-    }
-
-    // Apply a disk's changed extents to its target. buildApplyScripts splits the
-    // dd batch into one or more commands, each bounded so no single command
-    // exceeds the OS argument-length limit (see MAX_APPLY_CMD_BYTES) — a large
-    // change set in one command was rejected at exec and surfaced as an opaque
-    // "EOF" (#445). We run the commands in order and stop on the first failure,
-    // so the original abort-on-first-error (`set -e`) semantics hold across the
-    // split. `label` distinguishes the delta/full path from the checksum path.
-    async function applyExtents(nbdDev: string, dev: string, extents: Extent[], capacityBytes: number, label: string, diskIndex: number, pass: PassProgress): Promise<void> {
-      // Live progress: accumulate dd's status=progress counters off the stream —
-      // the pass runs one dd per extent, so the raw counter restarts at 0 with
-      // every batch and the log read "copying 0.0 GB" for the whole run (#502).
-      // The cumulative figure drives the job's progress/bytesTransferred within
-      // the pass's window (throttled to one DB write per interval). Also feeds
-      // executeSSH's inactivity guard, which resets on every byte — so a moving
-      // copy is never cut off and a stalled one fails within APPLY_INACTIVITY_MS
-      // instead of hanging to the 12h cap.
-      const accumulate = createDdProgressAccumulator()
-      let lastFlush = 0
-      const onData = (chunk: string): void => {
-        const p = accumulate(chunk)
-        if (!p) return
-        const now = Date.now()
-        if (now - lastFlush < PROGRESS_LOG_INTERVAL_MS) return
-        lastFlush = now
-        const passBytes = Math.min(pass.doneBytes + p.bytes, pass.totalBytes)
-        const pct = Math.max(pass.lastPct, scaleWarmProgress(pass.rangeStart, pass.rangeEnd, passBytes, pass.totalBytes))
-        pass.lastPct = pct
-        // Progress first, then the log line — appendLog stamps each entry with
-        // the job's current progress, which is why the lines used to read 0 (#502).
-        void (async () => {
-          await updateJobLive(jobId, pass.status, { currentStep: pass.currentStep, currentDisk: diskIndex, progress: pct, bytesTransferred: BigInt(passBytes), transferSpeed: `${(p.bytesPerSec / 1048576).toFixed(0)} MB/s` })
-          await appendLog(jobId, `Disk ${diskIndex}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
-        })().catch(() => {})
-      }
-      for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
-        const res = await executeSSH(config.targetConnectionId, nodeIp, script, APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
-        if (!res.success) throw new Error(`${label} on disk ${diskIndex}: ${res.error || res.output}`)
-      }
+    const provisioned = await provisionBlockTargets({
+      jobId, connectionId: config.targetConnectionId, nodeIp,
+      targetStorage: config.targetStorage, storageType: storageInfo?.type, targetVmid, shellConf,
+      disks: vmConfig.disks.map(d => ({ key: d.deviceKey, capacityBytes: d.capacityBytes })),
+      allocatedVolumes,
+    })
+    for (const [deviceKey, dev] of provisioned) {
+      targetDev.set(deviceKey, dev)
+      diskState.set(deviceKey, initDiskState(deviceKey))
     }
 
     // Read one disk of a snapshot through VDDK and apply its extents to the target.
@@ -735,7 +316,10 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
       activeReaders.push(reader)
       try {
-        await applyExtents(reader.nbdDev, targetDev.get(disk.deviceKey)!, extents, disk.capacityBytes, "block apply failed", diskIndex, pass)
+        await applyExtentsWithProgress({
+          jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev: targetDev.get(disk.deviceKey)!,
+          extents, capacityBytes: disk.capacityBytes, label: "block apply failed", diskIndex, pass,
+        })
         return bytes
       } finally {
         await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -837,6 +421,13 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       return bytes
     }
 
+    // Source-side power operations for the confirmed power-off (see cleanShutdownAndConfirm).
+    const powerOffOps: PowerOffOps = {
+      requestShutdown: () => soapGuestShutdown(soapSession!, config.sourceVmId),
+      waitPoweredOff: ms => soapWaitPoweredOff(soapSession!, config.sourceVmId, ms),
+      hardPowerOff: () => soapPowerOffVm(soapSession!, config.sourceVmId),
+    }
+
     if (useCbt) {
       // ── full_copy: pass 0 with the "*" baseline (10→80 on the locked scale) ──
       await updateJob(jobId, "full_copy", { progress: 10 })
@@ -896,7 +487,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
       // ── cutover: confirmed power-off → final delta → verify → attach → boot ──
       await updateJob(jobId, "cutover", { progress: 95 })
-      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
+      await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Cutover: requesting clean guest shutdown (VMware Tools)…", "cutover")
       await appendLog(jobId, "Source powered off (confirmed) — applying final delta", "success")
       // Last pass, and the only one that runs on a powered-off source: every
@@ -916,7 +507,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       // was still ahead, and the generic shutdown line hid that the VM would stay
       // off for the entire transfer (#587 field feedback).
       await updateJob(jobId, "full_copy", { currentStep: "source_shutdown", progress: 10 })
-      await cleanShutdownAndConfirm(jobId, soapSession!, config.sourceVmId,
+      await cleanShutdownAndConfirm(jobId, powerOffOps,
         "Checksum fallback: requesting clean guest shutdown of the source BEFORE the copy — the VM stays powered off until the migration completes (CBT unavailable)…", "full_copy")
       await updateJob(jobId, "full_copy", { progress: 10 })
       const snapMor = await createWarmSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-checksum`, ourSnapshots,
@@ -958,11 +549,15 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
                 })().catch(() => {})
               },
             })
-            await applyExtents(reader.nbdDev, dev, extents, disk.capacityBytes, "checksum apply failed", i, {
-              status: "full_copy", currentStep: "full_copy",
-              rangeStart: win.scanEnd, rangeEnd: win.applyEnd,
-              totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0,
-              lastPct: Math.round(win.scanEnd),
+            await applyExtentsWithProgress({
+              jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev,
+              extents, capacityBytes: disk.capacityBytes, label: "checksum apply failed", diskIndex: i,
+              pass: {
+                status: "full_copy", currentStep: "full_copy",
+                rangeStart: win.scanEnd, rangeEnd: win.applyEnd,
+                totalBytes: extents.reduce((s, e) => s + e.length, 0), doneBytes: 0,
+                lastPct: Math.round(win.scanEnd),
+              },
             })
           } finally {
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -998,61 +593,20 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       const dev = targetDev.get(disk.deviceKey)!
       const sock = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-vrfy-${disk.deviceKey}.pw`
-      try {
-        const reader = await startVddkReader(config.targetConnectionId, nodeIp,
-          { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)
-        try {
-          const [src, dst] = await Promise.all([
-            scanBlockChecksums(config.targetConnectionId, nodeIp, reader.nbdDev, 256 * 1024 * 1024, 1),
-            scanBlockChecksums(config.targetConnectionId, nodeIp, dev, 256 * 1024 * 1024, 1),
-          ])
-          if (src[0] && dst[0] && src[0] !== dst[0]) {
-            await appendLog(jobId, `Verify: disk ${i} first-block checksum differs (source vs target) — investigate before relying on the copy`, "warn")
-          } else {
-            await appendLog(jobId, `Verify: disk ${i} sampled block matches`, "success")
-          }
-        } finally {
-          await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
-        }
-      } catch (e: any) {
-        await appendLog(jobId, `Verify (sampled) skipped on disk ${i}: ${e?.message || e}`, "warn")
-      }
+      await verifySampledFirstBlock({
+        jobId, connectionId: config.targetConnectionId, nodeIp, diskIndex: i, dev,
+        openReader: async () => {
+          const reader = await startVddkReader(config.targetConnectionId, nodeIp,
+            { sock, libdir, server: esxiHost, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName }, password)
+          return { nbdDev: reader.nbdDev, close: () => stopVddkReader(config.targetConnectionId, nodeIp, reader) }
+        },
+      })
     }
-    await appendLog(jobId, "Attaching target disks…")
-
-    const reconfig = new URLSearchParams()
-    const slots: string[] = []
-    for (let i = 0; i < vmConfig.disks.length; i++) {
-      const slot = i === 0 ? pveParams.bootDiskSlot : `scsi${i}`
-      slots.push(slot)
-      reconfig.set(slot, allocatedVolumes[i].volumeId)
-    }
-    reconfig.set("boot", `order=${slots[0]}`)
-    try {
-      await pveSetVmConfig(pveConn as any, config.targetNode, targetVmid, reconfig)
-    } catch (e: any) {
-      // Attach is fatal at cutover (section 8): do NOT start a VM with unattached disks.
-      throw new Error(`FATAL: could not attach target disks at cutover: ${e?.message || e}`)
-    }
-    for (const v of allocatedVolumes) v.attached = true
-    await appendLog(jobId, `Attached ${vmConfig.disks.length} disk(s); boot order ${slots[0]}`, "success")
-
-    if (config.startAfterMigration) {
-      await pveFetch<any>(pveConn as any, `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`, { method: "POST" })
-      await appendLog(jobId, "Target VM started", "success")
-    }
-
-    // Post-cutover qcow2 conversion (#595): runs after the disks are attached
-    // and after the optional start — on a running VM PVE does move_disk as a
-    // live drive-mirror, no extra downtime. The helper gates itself (opt-in,
-    // storage default format, free space) and NEVER throws: a conversion
-    // problem leaves the disks raw, not the migration failed.
-    await convertDisksToQcow2({
-      enabled: config.convertDisksToQcow2 === true,
-      conn: pveConn as any, node: config.targetNode, vmid: targetVmid,
-      targetStorage: config.targetStorage, volumes: allocatedVolumes,
-      log: (m, l) => appendLog(jobId, m, l),
-      setPhase: p => updateJob(jobId, "converting_disks", { progress: p }),
+    await attachDisksAndBoot({
+      jobId, pveConn, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length,
+      bootDiskSlot: pveParams.bootDiskSlot, allocatedVolumes,
+      startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true,
+      targetStorage: config.targetStorage,
     })
 
     await updateJob(jobId, "completed", { progress: 100 })
@@ -1071,106 +625,9 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     stopHeartbeat()
     stopKeepAlive?.()
     if (soapSession) await soapLogout(soapSession).catch(() => {})
-    jobPrisma.delete(jobId)
-    cancelledJobs.delete(jobId)
-    cutoverRequests.delete(jobId)
-    forcePowerOffRequests.delete(jobId)
-    if (acquiredVmLock) activeWarmVms.delete(vmKey)
+    unregisterJob(jobId)
+    if (acquiredVmLock) releaseVmLock(vmKey)
   }
-}
-
-/**
- * Clean guest shutdown then CONFIRM the source is powered off. Mandatory for a
- * valid final delta (section 9): a delta taken while the guest still writes is
- * invalid, so there is no proceed-anyway. Aborts if the source never stops.
- * `announce` is the log line for the shutdown request: the CBT path shuts down
- * at cutover (seconds of downtime left) while the checksum fallback shuts down
- * BEFORE the copy (VM off for the whole transfer) — one hardcoded "Cutover: …"
- * line misled operators on the fallback path (#587 field feedback).
- */
-/**
- * How long the pipeline waits for a confirmed powered-off source before giving up.
- *
- * This wait used to be five minutes and completely silent: no status change, no
- * notification, no action. A guest that refused the shutdown therefore burnt the
- * whole run, and on a job that had been copying for hours nobody was watching the
- * log pane (#587, #614). Now that the wait announces itself and offers a hard
- * power off, it is long enough for a human to notice and decide, and still
- * bounded so an unattended job fails cleanly instead of pinning a VDDK session
- * and a snapshot for ever.
- */
-const POWER_OFF_WAIT_MS = 30 * 60 * 1000
-/** How often the wait restates itself, with the time left, in the job log. */
-const POWER_OFF_HEARTBEAT_MS = 60 * 1000
-
-async function cleanShutdownAndConfirm(
-  jobId: string,
-  session: SoapSession,
-  vmid: string,
-  announce: string,
-  status: WarmStatus,
-  opts: { waitMs?: number; sliceMs?: number } = {},
-): Promise<void> {
-  await appendLog(jobId, announce)
-  let refused = false
-  await soapGuestShutdown(session, vmid).catch(async (e: any) => {
-    refused = true
-    await appendLog(jobId, `Guest shutdown could not be initiated (${e?.message || e})`, "warn")
-  })
-
-  const waitMs = opts.waitMs ?? POWER_OFF_WAIT_MS
-  const sliceMs = opts.sliceMs ?? 10000
-  const deadline = Date.now() + waitMs
-  // A step of its own, so the UI can say what is happening and offer the way out
-  // instead of showing a migration that looks stuck mid-cutover.
-  await updateJob(jobId, status, { currentStep: "awaiting_power_off" })
-  await appendLog(jobId,
-    `${refused ? "The guest refused the shutdown request. " : ""}Waiting up to ${Math.round(waitMs / 60000)} min for the source to reach a confirmed powered-off state. Shut it down from the guest, or use "Force power off" to stop it now.`,
-    refused ? "warn" : "info")
-
-  let forced = false
-  let nextHeartbeat = Date.now() + POWER_OFF_HEARTBEAT_MS
-  let off = false
-  while (Date.now() < deadline) {
-    if (isCancelled(jobId)) throw new Error("Migration cancelled")
-    if (!forced && isForcePowerOffRequested(jobId)) {
-      forced = true
-      await appendLog(jobId, "Operator requested a hard power off of the source", "warn")
-      // A hard power off makes the final delta crash-consistent, which is why it
-      // is never automatic. If the host refuses it too (an ESXi licence
-      // restriction does, as the cold path already documents), keep waiting: the
-      // operator can still shut the guest down from inside.
-      await soapPowerOffVm(session, vmid).catch(async (e: any) => {
-        await appendLog(jobId, `Hard power off was refused by the source host (${e?.message || e}); still waiting for a powered-off state`, "error")
-      })
-    }
-    if (await soapWaitPoweredOff(session, vmid, Math.max(1, Math.min(sliceMs, deadline - Date.now())))) {
-      off = true
-      break
-    }
-    if (Date.now() >= nextHeartbeat && Date.now() < deadline) {
-      const leftMin = Math.max(1, Math.round((deadline - Date.now()) / 60000))
-      await appendLog(jobId, `Still waiting for the source to power off; ${leftMin} min left before the migration gives up`)
-      nextHeartbeat = Date.now() + POWER_OFF_HEARTBEAT_MS
-    }
-  }
-  // Careful with the wording: the CBT path reaches this AFTER the full copy, so a
-  // completed copy is kept, but the checksum fallback shuts the source down BEFORE
-  // copying anything, and those unmarked volumes are still freed. State the rule,
-  // never promise a copy that may not exist (#612).
-  if (!off) throw new Error("Cutover aborted: source VM did not reach a confirmed powered-off state (no final delta taken; any target volume holding a completed copy is kept, not deleted)")
-}
-
-/**
- * Mark every allocated volume as holding a completed, snapshot-consistent copy of
- * its source disk. Called only once a copy pass has finished for ALL disks (the
- * CBT full pass, or the checksum fallback after its last disk): each pass applies
- * a VMware-snapshot-consistent image, so a completed pass leaves the target
- * bootable, and `volumesToFree` then keeps it out of failure cleanup (#612). A run
- * that fails mid pass never reaches this, so a half-written target is still freed.
- */
-export function markVolumesCopied(allocatedVolumes: AllocatedVolume[]): void {
-  for (const v of allocatedVolumes) v.copied = true
 }
 
 /**
@@ -1219,3 +676,9 @@ async function cleanupOnFailure(
     await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
   }
 }
+
+// Re-exports: the API routes and the unit tests keep importing these from this module.
+export { cancelWarmMigrationJob, requestWarmCutover, requestWarmForcePowerOff, gateReason, __isCutoverRequestedForTest, __isForcePowerOffRequestedForTest, __awaitOperatorCutoverForTest, __sleepUnlessCutoverForTest } from "./job-control"
+export { buildThickZeroScript, ZERO_PARALLEL_CHUNKS, markVolumesCopied } from "./target-provision"
+export { scaleWarmProgress, checksumDiskWindows } from "./apply"
+export type { WarmStatus, WarmMigrationConfig } from "./types"

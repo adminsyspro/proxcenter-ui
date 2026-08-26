@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { xoCreateSnapshot, buildVdiDownloadUrl, buildXoAuthHeader } from "./client"
+import { buildVdiDownloadUrl, xoFetch, xoGetVmConfig, xoListHosts, xoListVms } from "./client"
 import type { XoConnectionInfo } from "./client"
 
 describe("xcpng/client", () => {
@@ -41,59 +41,94 @@ describe("xcpng/client", () => {
     })
   })
 
-  describe("buildXoAuthHeader", () => {
-    it("builds a Basic auth header from user:password credentials", () => {
-      expect(buildXoAuthHeader("user:pass")).toBe("Basic dXNlcjpwYXNz")
+  describe("xoFetch", () => {
+    it("includes the HTTP status and status text in API errors", async () => {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 503, statusText: "Service Unavailable" }))
+
+      await expect(xoFetch(xo, "/hosts")).rejects.toThrow(
+        "XO API error: 503 Service Unavailable",
+      )
     })
   })
 
-  describe("xoCreateSnapshot (xoPost regression coverage)", () => {
-    it("parses a JSON body without depending on Content-Type", async () => {
-      // Regression: on Node 26 + undici 8.x with a custom dispatcher,
-      // res.headers.get('content-type') can return null even when the server
-      // sent it. The fix parses the body with JSON.parse + text fallback
-      // instead of branching on the header.
-      fetchMock.mockResolvedValueOnce(
-        new Response(JSON.stringify({ $id: "snap-uuid-1" }), { status: 200 })
-      )
+  describe("xoListHosts", () => {
+    it("maps hosts returned by the filtered fields URL", async () => {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([
+        { name_label: "xo-host", address: "10.0.0.30", version: "5.100" },
+        { name_label: "old-host", address: "10.0.0.31" },
+      ]), { status: 200 }))
 
-      const result = await xoCreateSnapshot(xo, "vm-uuid", "snap-name")
-      expect(result).toBe("snap-uuid-1")
+      await expect(xoListHosts(xo)).resolves.toEqual([
+        { name_label: "xo-host", address: "10.0.0.30", version: "5.100" },
+        { name_label: "old-host", address: "10.0.0.31", version: "" },
+      ])
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        "https://xo.test/rest/v0/hosts?fields=name_label,address,version",
+      )
     })
 
-    it("returns the plain-text UUID when XO returns a bare string", async () => {
-      const uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-      fetchMock.mockResolvedValueOnce(new Response(uuid, { status: 200 }))
+    it("returns an empty array for a non-array response", async () => {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ hosts: [] }), { status: 200 }))
+      await expect(xoListHosts(xo)).resolves.toEqual([])
+    })
+  })
 
-      const result = await xoCreateSnapshot(xo, "vm-uuid", "snap-name")
-      expect(result).toBe(uuid)
+  describe("xoListVms", () => {
+    const filteredUrl = "https://xo.test/rest/v0/vms?fields=uuid,name_label,power_state,CPUs,memory,os_version&filter=type:VM"
+    const unfilteredUrl = "https://xo.test/rest/v0/vms?fields=uuid,name_label,power_state,CPUs,memory,os_version"
+
+    it("returns VMs from the filtered URL when supported", async () => {
+      const vms = [{ uuid: "vm-1", name_label: "vm-one" }]
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(vms), { status: 200 }))
+
+      await expect(xoListVms(xo)).resolves.toEqual(vms)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock.mock.calls[0][0]).toBe(filteredUrl)
     })
 
-    it("posts to the snapshot endpoint with the right body and helper headers", async () => {
-      fetchMock.mockResolvedValueOnce(
-        new Response("a1b2c3d4-e5f6-7890-abcd-ef1234567890", { status: 200 })
-      )
+    it("falls back to the unfiltered URL when the filtered request fails", async () => {
+      const vms = [{ uuid: "vm-2", name_label: "vm-two" }]
+      fetchMock
+        .mockResolvedValueOnce(new Response(null, { status: 400, statusText: "Bad Request" }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(vms), { status: 200 }))
 
-      await xoCreateSnapshot(xo, "vm-source-uuid", "test-snap")
-
-      const [url, opts] = fetchMock.mock.calls[0]
-      expect(url).toBe("https://xo.test/rest/v0/vms/vm-source-uuid/actions/snapshot")
-      expect((opts as any).method).toBe("POST")
-      expect(JSON.parse((opts as any).body)).toEqual({ name: "test-snap" })
-      expect((opts as any).headers["Authorization"]).toBe("Basic dXNlcjpwYXNz")
-      // Defensive header injected by fetchWithInsecureTLS to defeat
-      // brotli/zstd regressions on Node 26 + undici 8.x.
-      expect((opts as any).headers["Accept-Encoding"]).toBe("identity")
+      await expect(xoListVms(xo)).resolves.toEqual(vms)
+      expect(fetchMock.mock.calls.map(call => call[0])).toEqual([filteredUrl, unfilteredUrl])
     })
 
-    it("surfaces the HTTP status and body when XO returns non-2xx", async () => {
+    it("returns an empty array for a non-array response", async () => {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+      await expect(xoListVms(xo)).resolves.toEqual([])
+    })
+  })
+
+  describe("xoGetVmConfig", () => {
+    it("maps the VM VIFs to network entries", async () => {
+      // XO answers `VIFs` on /vms/{uuid}; the client used to read only the
+      // `$VIFs` spelling, so every migrated VM came back with zero networks.
       fetchMock.mockResolvedValueOnce(
-        new Response("not authorized", { status: 401, statusText: "Unauthorized" })
+        new Response(
+          JSON.stringify({
+            uuid: "vm-1",
+            name_label: "vm-one",
+            power_state: "Halted",
+            $VBDs: [],
+            VIFs: ["vif-1"],
+          }),
+          { status: 200 }
+        )
+      )
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ device: "0", MAC: "aa:bb", $network: "net-1" }),
+          { status: 200 }
+        )
       )
 
-      await expect(xoCreateSnapshot(xo, "vm-uuid", "snap")).rejects.toThrow(
-        /XO API POST .* failed: 401 Unauthorized not authorized/
-      )
+      const config = await xoGetVmConfig(xo, "vm-1")
+
+      expect(config.networks).toEqual([{ device: "0", mac: "aa:bb", network: "net-1" }])
+      expect(fetchMock.mock.calls[1][0]).toBe("https://xo.test/rest/v0/vifs/vif-1")
     })
   })
 })

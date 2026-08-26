@@ -7,6 +7,7 @@ import {
   xapiCall,
   xapiCallAsync,
   xapiDestroySnapshot,
+  xapiFindSnapshotsByPrefix,
   xapiGetVmConfig,
   xapiListChangedBlocks,
   xapiLogin,
@@ -84,6 +85,29 @@ describe("xcpng/xapi-client", () => {
     expect(error).toMatchObject({ code: "HANDLE_INVALID", params: ["VM", "OpaqueRef:bad"] })
   })
 
+  it("turns non-2xx JSON-RPC errors into XapiError instances", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      error: { code: 1, message: "SESSION_INVALID", data: ["OpaqueRef:x"] },
+      id: 1,
+    }), { status: 401 }))
+
+    const error = await xapiCall(session, "VM.get_record", "OpaqueRef:vm").catch(value => value)
+
+    expect(error).toBeInstanceOf(XapiError)
+    expect(error).toMatchObject({ code: "SESSION_INVALID", params: ["OpaqueRef:x"] })
+  })
+
+  it("reports the HTTP status for a non-2xx non-JSON response", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<html>bad gateway</html>", {
+      status: 502,
+      statusText: "Bad Gateway",
+      headers: { "Content-Type": "text/html" },
+    }))
+
+    await expect(xapiCall(session, "VM.get_record", "OpaqueRef:vm")).rejects.toThrow("XAPI HTTP 502")
+  })
+
   it("prepends the session ref to xapiCall params", async () => {
     fetchMock.mockResolvedValueOnce(success("OpaqueRef:vm"))
 
@@ -111,6 +135,41 @@ describe("xcpng/xapi-client", () => {
       "Async.VM.snapshot",
       "task.get_record",
       "task.get_record",
+      "task.destroy",
+    ])
+  })
+
+  it("unwraps a nested XML-RPC string from an async task result", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:task"))
+      .mockResolvedValueOnce(success({
+        status: "success",
+        result: "<value><string>OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e</string></value>",
+      }))
+      .mockResolvedValueOnce(success(null))
+
+    await expect(xapiCallAsync(session, "VM.snapshot", [])).resolves.toBe(
+      "OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e",
+    )
+  })
+
+  it("cancels and destroys an async task when it times out", async () => {
+    vi.useFakeTimers()
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:task"))
+      .mockResolvedValueOnce(success({ status: "pending" }))
+      .mockResolvedValueOnce(success(null))
+      .mockResolvedValueOnce(success(null))
+
+    const pending = xapiCallAsync(session, "VM.snapshot", [], { timeoutMs: 5000, pollMs: 5000 })
+    const rejection = expect(pending).rejects.toThrow("timed out")
+    await vi.advanceTimersByTimeAsync(5000)
+
+    await rejection
+    expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual([
+      "Async.VM.snapshot",
+      "task.get_record",
+      "task.cancel",
       "task.destroy",
     ])
   })
@@ -164,6 +223,74 @@ describe("xcpng/xapi-client", () => {
     expect(methods).toContain("VBD.unplug")
     expect(methods).toContain("VBD.destroy")
     expect(methods.at(-1)).toBe("VM.destroy")
+  })
+
+  it("rethrows non-HANDLE_INVALID errors while describing a snapshot", async () => {
+    fetchMock.mockResolvedValueOnce(failure("SESSION_INVALID", [session.ref]))
+
+    const error = await xapiDestroySnapshot(session, "OpaqueRef:snapshot").catch(value => value)
+
+    expect(error).toBeInstanceOf(XapiError)
+    expect(error).toMatchObject({ code: "SESSION_INVALID", params: [session.ref] })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("returns silently when the snapshot VM record is already gone", async () => {
+    fetchMock.mockResolvedValueOnce(failure("HANDLE_INVALID", ["VM", "OpaqueRef:snapshot"]))
+
+    await expect(xapiDestroySnapshot(session, "OpaqueRef:snapshot")).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("continues destroying a snapshot after one VDI exhausts its retries", async () => {
+    vi.useFakeTimers()
+    fetchMock
+      .mockResolvedValueOnce(success({
+        uuid: "snap-uuid",
+        name_label: "snapshot",
+        VBDs: ["OpaqueRef:vbd-1", "OpaqueRef:vbd-2"],
+      }))
+      .mockResolvedValueOnce(success({ type: "Disk", empty: false, VDI: "OpaqueRef:vdi-1", userdevice: "0" }))
+      .mockResolvedValueOnce(success({ uuid: "vdi-uuid-1", snapshot_of: "OpaqueRef:source-1", virtual_size: 1024 }))
+      .mockResolvedValueOnce(success({ type: "Disk", empty: false, VDI: "OpaqueRef:vdi-2", userdevice: "1" }))
+      .mockResolvedValueOnce(success({ uuid: "vdi-uuid-2", snapshot_of: "OpaqueRef:source-2", virtual_size: 2048 }))
+      .mockResolvedValueOnce(failure("VDI_IN_USE", ["OpaqueRef:vdi-1"]))
+      .mockResolvedValueOnce(success([]))
+      .mockResolvedValueOnce(failure("VDI_IN_USE", ["OpaqueRef:vdi-1"]))
+      .mockResolvedValueOnce(success([]))
+      .mockResolvedValueOnce(failure("VDI_IN_USE", ["OpaqueRef:vdi-1"]))
+      .mockResolvedValueOnce(success([]))
+      .mockResolvedValueOnce(failure("VDI_IN_USE", ["OpaqueRef:vdi-1"]))
+      .mockResolvedValueOnce(success([]))
+      .mockResolvedValueOnce(failure("VDI_IN_USE", ["OpaqueRef:vdi-1"]))
+      .mockResolvedValueOnce(success(null))
+      .mockResolvedValueOnce(success(null))
+
+    const pending = xapiDestroySnapshot(session, "OpaqueRef:snapshot")
+    const rejection = expect(pending).rejects.toThrow("partially destroyed")
+    for (let retry = 0; retry < 4; retry++) await vi.advanceTimersByTimeAsync(2000)
+
+    await rejection
+    const calls = fetchMock.mock.calls.map((_, index) => requestAt(index))
+    expect(calls.filter(call => call.method === "VDI.destroy" && call.params.at(-1) === "OpaqueRef:vdi-1")).toHaveLength(5)
+    expect(calls).toContainEqual(expect.objectContaining({
+      method: "VDI.destroy",
+      params: [session.ref, "OpaqueRef:vdi-2"],
+    }))
+    expect(calls).toContainEqual(expect.objectContaining({
+      method: "VM.destroy",
+      params: [session.ref, "OpaqueRef:snapshot"],
+    }))
+  })
+
+  it("rejects when a snapshot name label cannot be read", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success(["OpaqueRef:snapshot"]))
+      .mockResolvedValueOnce(failure("SESSION_INVALID", [session.ref]))
+
+    await expect(xapiFindSnapshotsByPrefix(session, "OpaqueRef:vm", "backup-")).rejects.toMatchObject({
+      code: "SESSION_INVALID",
+    })
   })
 
   it("maps a VM record and skips CD VBDs", async () => {

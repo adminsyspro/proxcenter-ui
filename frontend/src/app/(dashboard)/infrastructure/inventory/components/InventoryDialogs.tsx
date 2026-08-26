@@ -647,10 +647,16 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       return
     }
     const isVcenterSource = esxiMigrateVm.hostType === 'vcenter'
+    // Cancellation flag: switching the dialog to a source that takes an early
+    // return above (Hyper-V, Nutanix, XCP-ng) leaves this request in flight, and
+    // a late answer would repopulate sourceVmDetail for a VM that is no longer
+    // selected, which would resurrect the VMware-only CBT-fallback warning.
+    let cancelled = false
     setSourceDatastoresLoading(true)
     fetch(`/api/v1/vmware/${esxiMigrateVm.connId}/vms/${esxiMigrateVm.vmid}`)
       .then(r => r.json())
       .then(d => {
+        if (cancelled) return
         const detail = d?.data
         const disks = (detail?.disks || []) as { fileName?: string; diskMode?: string; sharing?: string }[]
         if (isVcenterSource) {
@@ -667,8 +673,9 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
           disks,
         } : null)
       })
-      .catch(() => { setSourceDatastores([]); setSourceVmDetail(null) })
-      .finally(() => setSourceDatastoresLoading(false))
+      .catch(() => { if (!cancelled) { setSourceDatastores([]); setSourceVmDetail(null) } })
+      .finally(() => { if (!cancelled) setSourceDatastoresLoading(false) })
+    return () => { cancelled = true }
   }, [esxiMigrateVm?.connId, esxiMigrateVm?.vmid, esxiMigrateVm?.hostType])
   const sourceVsanDatastores = sourceDatastores.filter(n => n.toLowerCase().includes('vsan'))
   const vsanBlocksMigration = sourceVsanDatastores.length > 0
@@ -720,11 +727,22 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
       .catch(() => { if (!cancelled) setMigSourceSubTypeProbe({ connId: migSourceConnId, subType: null }) })
     return () => { cancelled = true }
   }, [migSourceHostType, migSourceConnId, migSourceSubTypeProp])
-  const migSourceSubType: string | null = migSourceSubTypeProp !== undefined
-    ? migSourceSubTypeProp
-    : (migSourceSubTypeProbe && migSourceSubTypeProbe.connId === migSourceConnId ? migSourceSubTypeProbe.subType : null)
-  const singleWarmAllowed = warmAllowedFor({ hostType: esxiMigrateVm?.hostType, connSubType: migSourceSubType })
-  const bulkWarmAllowed = warmAllowedFor({ hostType: bulkMigHostInfo?.hostType, connSubType: migSourceSubType })
+  // Each dialog resolves against its OWN connection: the prop when it is there,
+  // otherwise the probe, and only if the probe was taken for that same connection
+  // id. Sharing one resolved value would let a mounted single-VM dialog decide
+  // for the bulk one.
+  const resolveConnSubType = (connSubType: string | null | undefined, connId: string | null | undefined): string | null =>
+    connSubType !== undefined
+      ? connSubType
+      : (connId && migSourceSubTypeProbe?.connId === connId ? migSourceSubTypeProbe.subType : null)
+  const singleWarmAllowed = warmAllowedFor({
+    hostType: esxiMigrateVm?.hostType,
+    connSubType: resolveConnSubType(esxiMigrateVm?.connSubType, esxiMigrateVm?.connId),
+  })
+  const bulkWarmAllowed = warmAllowedFor({
+    hostType: bulkMigHostInfo?.hostType,
+    connSubType: resolveConnSubType(bulkMigHostInfo?.connSubType, bulkMigHostInfo?.connectionId),
+  })
 
   // Warm migration go/no-go. Probes the chosen target node for the runtime the
   // engine needs, which follows the source: nbdkit + vddk plugin + nbd-client +
@@ -3121,7 +3139,7 @@ return
                 <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
                   Offline migration requires the source VM to be powered off. Please stop{' '}
                   <strong>{esxiMigrateVm.name || esxiMigrateVm.vmid}</strong> before starting the migration
-                  {(esxiMigrateVm.hostType === 'vmware' || esxiMigrateVm.hostType === 'vcenter') ? ', or switch to Warm migration.' : '.'}
+                  {singleWarmAllowed ? ', or switch to Warm migration.' : '.'}
                 </Alert>
               )}
 
@@ -3137,6 +3155,8 @@ return
                     ? (migType === 'warm'
                         ? 'Warm migration: the source stays online while changed blocks are copied (CBT) over vCenter, then a short cutover does a clean guest shutdown before the final sync. No in-transit data loss. vSAN-backed disks are supported. Needs a block-storage target and the VDDK runtime on the Proxmox node.'
                         : 'Cold migration: the source VM must be powered off. virt-v2v handles disk conversion and virtio driver injection automatically.')
+                    : (esxiMigrateVm?.hostType === 'xcpng' && migType === 'warm')
+                    ? t('inventoryPage.esxiMigration.xcpngWarmMigrationInfo')
                     : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
                     : t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')
                   }

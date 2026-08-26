@@ -33,6 +33,11 @@ export function normalizeXapiBaseUrl(input: string): string {
   return `https://${t}`
 }
 
+function xapiErrorFromBody(body: any): XapiError {
+  const data = Array.isArray(body?.error?.data) ? body.error.data.map(String) : []
+  return new XapiError(String(body?.error?.message || "XAPI_ERROR"), data)
+}
+
 async function rpc<T>(baseUrl: string, insecureTLS: boolean, method: string, params: unknown[]): Promise<T> {
   const res = await fetchWithInsecureTLS(`${baseUrl}/jsonrpc`, {
     method: "POST",
@@ -41,12 +46,16 @@ async function rpc<T>(baseUrl: string, insecureTLS: boolean, method: string, par
     signal: AbortSignal.timeout(XAPI_CALL_TIMEOUT_MS),
     insecureTLS,
   })
-  if (!res.ok) throw new Error(`XAPI HTTP ${res.status} ${res.statusText} on ${method}`)
-  const body: any = await res.json()
-  if (body?.error) {
-    const data = Array.isArray(body.error.data) ? body.error.data.map(String) : []
-    throw new XapiError(String(body.error.message || "XAPI_ERROR"), data)
+  if (!res.ok) {
+    // xapi answers some faults (expired session, HOST_IS_SLAVE behind a proxy) with a
+    // JSON-RPC error object and a non 2xx status: prefer the XAPI code over the HTTP one.
+    let errBody: any = null
+    try { errBody = await res.json() } catch { errBody = null }
+    if (errBody?.error) throw xapiErrorFromBody(errBody)
+    throw new Error(`XAPI HTTP ${res.status} ${res.statusText} on ${method}`)
   }
+  const body: any = await res.json()
+  if (body?.error) throw xapiErrorFromBody(body)
   return body?.result as T
 }
 
@@ -78,15 +87,30 @@ export async function xapiKeepAlive(s: XapiSession): Promise<void> {
 
 export interface XapiAsyncOpts { timeoutMs?: number; pollMs?: number; shouldAbort?: () => boolean }
 
+const OPAQUE_REF_RE = /OpaqueRef:[0-9a-fA-F-]+/
+
+/**
+ * A task result comes back as an XML-RPC fragment, and the wrapping varies by xapi build:
+ * `<value>OpaqueRef:x</value>` or `<value><string>OpaqueRef:x</string></value>`. Pull the
+ * reference out when there is one, otherwise just strip the outer <value> tags.
+ */
+function unwrapTaskResult(raw: unknown): string {
+  const text = String(raw ?? "")
+  const ref = OPAQUE_REF_RE.exec(text)
+  if (ref) return ref[0]
+  return text.replace(/^<value>/, "").replace(/<\/value>$/, "")
+}
+
 /** Run `Async.<method>` and poll its task. Returns the task result with XML-RPC <value> wrapping removed. */
 export async function xapiCallAsync(s: XapiSession, method: string, params: unknown[], opts: XapiAsyncOpts = {}): Promise<string> {
   const taskRef = await xapiCall<string>(s, `Async.${method}`, ...params)
-  const deadline = Date.now() + (opts.timeoutMs ?? 30 * 60_000)
+  const timeoutMs = opts.timeoutMs ?? 30 * 60_000
+  const deadline = Date.now() + timeoutMs
   try {
     while (Date.now() < deadline) {
       if (opts.shouldAbort?.()) { await xapiCall(s, "task.cancel", taskRef).catch(() => {}); throw new Error(`XAPI task ${method} cancelled`) }
       const rec = await xapiCall<any>(s, "task.get_record", taskRef)
-      if (rec.status === "success") return String(rec.result ?? "").replace(/^<value>/, "").replace(/<\/value>$/, "")
+      if (rec.status === "success") return unwrapTaskResult(rec.result)
       if (rec.status === "failure") {
         const info: string[] = Array.isArray(rec.error_info) ? rec.error_info.map(String) : []
         throw new XapiError(info[0] || "TASK_FAILED", info.slice(1))
@@ -94,7 +118,10 @@ export async function xapiCallAsync(s: XapiSession, method: string, params: unkn
       if (rec.status === "cancelled" || rec.status === "cancelling") throw new XapiError("TASK_CANCELLED", [method])
       await new Promise(r => setTimeout(r, opts.pollMs ?? 2000))
     }
-    throw new Error(`XAPI task ${method} timed out after ${Math.round((opts.timeoutMs ?? 30 * 60_000) / 1000)}s`)
+    // Cancel before the finally block destroys the record, otherwise the snapshot or
+    // shutdown keeps running on the pool with nobody watching it.
+    await xapiCall(s, "task.cancel", taskRef).catch(() => {})
+    throw new Error(`XAPI task ${method} timed out after ${Math.round(timeoutMs / 1000)}s`)
   } finally {
     await xapiCall(s, "task.destroy", taskRef).catch(() => {})
   }
@@ -262,27 +289,40 @@ const VDI_DESTROY_RETRY_MS = 2000
 
 /** Destroy a snapshot VM and its disks. Retries VDI_IN_USE after detaching the VDI from dom0. */
 export async function xapiDestroySnapshot(s: XapiSession, snapshotRef: string): Promise<void> {
-  const snap = await xapiDescribeSnapshot(s, snapshotRef).catch(() => null)
-  if (!snap) return
+  let snap: XapiSnapshot
+  try {
+    snap = await xapiDescribeSnapshot(s, snapshotRef)
+  } catch (e) {
+    // Already gone: nothing left to clean up. Any other failure (auth, network, a broken
+    // pool) must reach the caller instead of leaving snapshot disks behind in silence.
+    if (e instanceof XapiError && e.code === "HANDLE_INVALID") return
+    throw e
+  }
+  const failures: string[] = []
   for (const d of snap.disks) {
     for (let attempt = 1; ; attempt++) {
       try { await xapiCall(s, "VDI.destroy", d.vdiRef); break } catch (e) {
         if (e instanceof XapiError && e.code === "HANDLE_INVALID") break
-        if (!(e instanceof XapiError && e.code === "VDI_IN_USE") || attempt >= VDI_DESTROY_RETRIES) throw e
+        if (!(e instanceof XapiError && e.code === "VDI_IN_USE") || attempt >= VDI_DESTROY_RETRIES) {
+          // Best effort: one stuck disk must not strand the others or the snapshot VM.
+          failures.push(`${d.vdiUuid || d.vdiRef}: ${e instanceof Error ? e.message : String(e)}`)
+          break
+        }
         await xapiDetachFromControlDomain(s, d.vdiRef).catch(() => {})
         await new Promise(r => setTimeout(r, VDI_DESTROY_RETRY_MS))
       }
     }
   }
   await xapiCall(s, "VM.destroy", snapshotRef).catch((e: any) => { if (!(e instanceof XapiError && e.code === "HANDLE_INVALID")) throw e })
+  if (failures.length) throw new Error(`snapshot ${snapshotRef} partially destroyed: ${failures.join("; ")}`)
 }
 
 export async function xapiFindSnapshotsByPrefix(s: XapiSession, vmRef: string, prefix: string): Promise<string[]> {
   const refs = await xapiCall<string[]>(s, "VM.get_snapshots", vmRef)
   const out: string[] = []
   for (const r of refs) {
-    const label = await xapiCall<string>(s, "VM.get_name_label", r).catch(() => "")
-    if (label.startsWith(prefix)) out.push(r)
+    const label = await xapiCall<string>(s, "VM.get_name_label", r)
+    if (label?.startsWith(prefix)) out.push(r)
   }
   return out
 }

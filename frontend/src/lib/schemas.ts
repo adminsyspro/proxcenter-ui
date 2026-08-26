@@ -25,7 +25,7 @@ export const createConnectionSchema = z.object({
   apiToken: z.string().transform(s => s.trim()).optional().default(''),
 
   // VMware ESXi fields
-  subType: z.enum(['esxi', 'vcenter']).optional(),
+  subType: z.enum(['esxi', 'vcenter', 'xo', 'xapi']).optional(),
   vmwareUser: z.string().transform(s => s.trim()).optional().default(''),
   vmwarePassword: z.string().optional().default(''),
   vmwareDatacenter: z.string().transform(s => s.trim()).optional().default(''),
@@ -119,7 +119,7 @@ export const updateConnectionSchema = z.object({
   apiToken: z.string().transform(s => s.trim()).optional(),
 
   // VMware ESXi fields
-  subType: z.enum(['esxi', 'vcenter']).nullable().optional(),
+  subType: z.enum(['esxi', 'vcenter', 'xo', 'xapi']).nullable().optional(),
   vmwareUser: z.string().transform(s => s.trim()).optional(),
   vmwarePassword: z.string().optional(),
   vmwareDatacenter: z.string().transform(s => s.trim()).nullable().optional(),

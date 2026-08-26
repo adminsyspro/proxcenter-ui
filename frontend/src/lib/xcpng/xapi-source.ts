@@ -28,10 +28,10 @@ export class XapiSource implements XcpngSource {
   /** The export URL carries the session reference: no auth header, but the URL itself is a secret. */
   async diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
     if (!disk.vdiRef) throw new Error(`disk ${disk.label} has no XAPI reference`)
-    return {
-      url: xapiVdiExportUrl(this.session, disk.vdiRef, format),
-      curlArgs: `${this.c.insecureTLS ? "-k " : ""}-H "Accept: application/octet-stream"`,
-    }
+    const url = xapiVdiExportUrl(this.session, disk.vdiRef, format)
+    const lines = [`url = "${url}"`, `header = "Accept: application/octet-stream"`]
+    if (this.c.insecureTLS) lines.push("insecure")
+    return { url, curlConfig: lines.join("\n") }
   }
 
   keepAlive() { return xapiKeepAlive(this.session) }

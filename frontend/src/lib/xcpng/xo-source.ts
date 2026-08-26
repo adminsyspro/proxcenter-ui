@@ -44,10 +44,14 @@ export class XoSource implements XcpngSource {
   getVmConfig(uuid: string): Promise<XoVmConfig> { return xoGetVmConfig(this.xo, uuid) }
 
   async diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
-    return {
-      url: buildVdiDownloadUrl(this.xo.baseUrl, disk.vdiUuid, format),
-      curlArgs: `${this.c.insecureTLS ? "-k " : ""}-H "Authorization: Basic ${this.authB64}" -H "Accept: application/octet-stream"`,
-    }
+    const url = buildVdiDownloadUrl(this.xo.baseUrl, disk.vdiUuid, format)
+    const lines = [
+      `url = "${url}"`,
+      `header = "Authorization: Basic ${this.authB64}"`,
+      `header = "Accept: application/octet-stream"`,
+    ]
+    if (this.c.insecureTLS) lines.push("insecure")
+    return { url, curlConfig: lines.join("\n") }
   }
 
   async keepAlive() {}

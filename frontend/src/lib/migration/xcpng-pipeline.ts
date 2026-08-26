@@ -22,7 +22,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
-import { executeSSH } from "@/lib/ssh/exec"
+import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
@@ -494,15 +494,18 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     }
 
     // Helper: download a single VDI from the source via curl on the PVE node.
-    // The source hands out the URL and the curl auth/TLS flags for its mode.
+    // The source hands out the URL and the curl headers/TLS flag for its mode as a
+    // curl config file: the XO Basic auth header and the XAPI session ref must not
+    // be readable through `ps` on the node, so the command line carries neither.
     async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
       const dl = await src.diskDownload(disk, "vhd")
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
+      const curlrcFile = `${tmpFile}.curlrc`
       const cleanup = () =>
-        executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`).catch(() => {})
+        executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`).catch(() => {})
 
       // Watch one curl run to completion. An unreadable poll (orchestrator timeout,
       // dropped SSH session) is NOT a curl failure: the remote download keeps going,
@@ -610,7 +613,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         // stale code, declare failure and delete the .vhd from under a running curl.
         const startDl = await executeSSH(
           config.targetConnectionId, nodeIp,
-          `rm -f "${pidFile}.exit" "${statsFile}"; nohup bash -c 'curl -sS --fail ${dl.curlArgs} -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${dl.url}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+          `rm -f "${pidFile}.exit" "${statsFile}"; (umask 077; printf '%s\\n' ${shellEscape(dl.curlConfig)} > "${curlrcFile}"); nohup bash -c 'curl -sS --fail -K "${curlrcFile}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
         )
         if (!startDl.success || !startDl.output?.trim()) {
           throw new Error(`Failed to start download: ${startDl.error}`)
@@ -620,7 +623,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
         const outcome = await monitorDownload(curlPid)
         if (outcome.state === "done") {
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`)
           await updateJob(jobId, "transferring", {
             bytesTransferred: BigInt(outcome.bytes),
             transferSpeed: outcome.speed,
@@ -787,7 +790,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,
-          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
+          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.curlrc`)
       }
     } catch {
       // Best effort cleanup

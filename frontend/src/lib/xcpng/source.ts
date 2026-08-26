@@ -18,8 +18,13 @@ export type XcpngSubType = "xo" | "xapi"
 
 export interface XcpngHostInfo { name_label: string; address: string; version: string }
 
-/** What the offline pipeline needs to run curl on the PVE node: the URL and its auth/TLS flags. */
-export interface XcpngDiskDownload { url: string; curlArgs: string }
+/**
+ * What the offline pipeline needs to run curl on the PVE node. `curlConfig` is the
+ * full content of a curl config file (`-K`): URL, headers and TLS flag live there so
+ * neither the XO Basic auth header nor the XAPI session ref ever appears on a command
+ * line readable through `ps`.
+ */
+export interface XcpngDiskDownload { url: string; curlConfig: string }
 
 export interface XcpngSource {
   readonly kind: XcpngSubType

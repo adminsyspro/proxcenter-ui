@@ -34,3 +34,9 @@ export function startSoapKeepAlive(ping: () => Promise<void>, intervalMs: number
     clearInterval(timer)
   }
 }
+
+/**
+ * Hypervisor-neutral name for the same ticker: the XCP-ng warm pipeline keeps an
+ * XAPI session alive with it, so "Soap" in the name would be misleading there.
+ */
+export const startSessionKeepAlive = startSoapKeepAlive

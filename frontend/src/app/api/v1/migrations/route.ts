@@ -8,6 +8,7 @@ import { runMigrationPipeline } from "@/lib/migration/pipeline"
 import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
 import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
@@ -152,10 +153,17 @@ export async function POST(req: Request) {
     }
 
     // Warm migration (CBT) is available for VMware sources (ESXi-direct and
-    // vCenter). Other hypervisors keep their existing paths; reject early with a
-    // clear message rather than silently falling through to a cold/lossy path.
-    if (migrationType === "warm" && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
-      return NextResponse.json({ error: "Warm migration is only available for VMware sources (ESXi or vCenter)." }, { status: 400 })
+    // vCenter) and for XCP-ng pools reached directly over XAPI (Xen Orchestra
+    // exposes no CBT/NBD surface, so an "xo" connection stays offline-only).
+    // Other hypervisors keep their existing paths; reject early with a clear
+    // message rather than silently falling through to a cold/lossy path.
+    const sourceSubType = sourceConn.subType ?? (sourceConn.type === "xcpng" ? "xo" : null)
+    const warmAllowed = effectiveSourceType === "vmware" || effectiveSourceType === "vcenter" || (effectiveSourceType === "xcpng" && sourceSubType === "xapi")
+    if (migrationType === "warm" && !warmAllowed) {
+      const error = effectiveSourceType === "xcpng"
+        ? "Warm migration needs a direct XCP-ng pool connection; this connection goes through Xen Orchestra, which only supports offline migration."
+        : "Warm migration is only available for VMware and XCP-ng sources."
+      return NextResponse.json({ error }, { status: 400 })
     }
 
     // Create job record
@@ -217,6 +225,19 @@ export async function POST(req: Request) {
           networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
           ...(targetVmid !== undefined && { targetVmid }),
           ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir as string }),
+          ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
+          ...(cutoverMode !== undefined && { cutoverMode }),
+        }, tenantId)
+        return
+      }
+      // XCP-ng warm (CBT over XAPI/NBD): same config as the VMware engine minus
+      // vddkLibdir, which has no meaning there. Gated to xapi sub-type above, so a
+      // "warm" request can never reach the offline XCP-ng pipeline below.
+      if (effectiveSourceType === "xcpng" && migrationType === "warm") {
+        await runXcpngWarmMigration(job.id, {
+          sourceConnectionId, sourceVmId, targetConnectionId, targetNode, targetStorage,
+          networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2,
+          ...(targetVmid !== undefined && { targetVmid }),
           ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }),
           ...(cutoverMode !== undefined && { cutoverMode }),
         }, tenantId)

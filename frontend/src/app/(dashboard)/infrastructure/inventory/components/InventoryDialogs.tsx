@@ -76,6 +76,18 @@ import { statusChipLabelKey, isWaitDisplayKey } from './migrationWaitDisplay'
 import { useToast } from '@/contexts/ToastContext'
 import { copyToClipboard } from '@/lib/clipboard'
 
+/**
+ * Which sources may be migrated warm. VMware (direct ESXi) and vCenter read
+ * through the VDDK; an XCP-ng pool qualifies only in the XAPI (direct pool)
+ * mode, the one that exposes changed block tracking and an NBD export. The XO
+ * mode has neither, and the migration route refuses warm there (it also treats
+ * a missing subType as XO), so the selector must not offer it.
+ */
+export const warmAllowedFor = (info?: { hostType?: string; connSubType?: string | null } | null) =>
+  info?.hostType === 'vmware' ||
+  info?.hostType === 'vcenter' ||
+  (info?.hostType === 'xcpng' && info?.connSubType === 'xapi')
+
 /* ------------------------------------------------------------------ */
 /* Props                                                               */
 /* ------------------------------------------------------------------ */
@@ -243,7 +255,7 @@ export interface InventoryDialogsProps {
   executeBulkAction: () => void
 
   // ESXi / External migration dialog
-  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; diskPaths?: string[]; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null
+  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null
   setEsxiMigrateVm: (v: any) => void
   migTargetConn: string
   setMigTargetConn: (v: string) => void
@@ -621,13 +633,15 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
   //   its datastores are deliberately NOT collected (vSAN never blocks vCenter).
   // - CBT-fallback inputs (direct ESXi AND vCenter): snapshotCount, vmxVersion and
   //   the per-disk diskMode/sharing feed the warm-migration fallback warning below.
-  // Hyper-V/Nutanix sources are not VMware — no fetch at all for them.
+  // Hyper-V/Nutanix/XCP-ng sources are not VMware, so no fetch at all for them
+  // (an XCP-ng connection id on the vmware route only ever fails), which also
+  // keeps the VMware-specific CBT-fallback warning below silent for them.
   const [sourceDatastores, setSourceDatastores] = useState<string[]>([])
   const [sourceDatastoresLoading, setSourceDatastoresLoading] = useState(false)
   const [sourceVmDetail, setSourceVmDetail] = useState<{ snapshotCount: number; vmxVersion: string; disks: { diskMode?: string; sharing?: string }[] } | null>(null)
   React.useEffect(() => {
     if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); return }
-    if (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix') {
+    if (esxiMigrateVm.hostType === 'hyperv' || esxiMigrateVm.hostType === 'nutanix' || esxiMigrateVm.hostType === 'xcpng') {
       setSourceDatastores([])
       setSourceVmDetail(null)
       return
@@ -676,41 +690,83 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
     return (elig.reason || '').startsWith('hardware version') ? 'HwVersion' : 'DiskMode'
   }, [sourceVmDetail])
 
-  // Warm migration go/no-go. Probes the chosen target node for the VDDK runtime
-  // the engine needs (nbdkit + vddk plugin + nbd-client + the Broadcom VDDK),
-  // resolving the node exactly as runWarmMigration does so the verdict matches the
+  // Source connection subType, needed only to tell an XAPI (direct pool) XCP-ng
+  // connection from an XO one: warm is offered for the first and refused for the
+  // second (see warmAllowedFor). The dialog is handed `esxiMigrateVm` field by
+  // field by the inventory panel, so the subType is not guaranteed to travel with
+  // it; when it does, it wins and no request is made. Only XCP-ng sources are
+  // probed, and the answer is keyed by connection id so a verdict taken for a
+  // previously opened VM is never read against another pool.
+  const migSourceHostType: string | undefined = esxiMigrateVm?.hostType ?? bulkMigHostInfo?.hostType
+  const migSourceConnId: string | null = esxiMigrateVm?.connId ?? bulkMigHostInfo?.connectionId ?? null
+  const migSourceSubTypeProp: string | null = (esxiMigrateVm?.connSubType ?? bulkMigHostInfo?.connSubType) ?? null
+  const [migSourceSubTypeProbe, setMigSourceSubTypeProbe] = useState<{ connId: string; subType: string | null } | null>(null)
+  React.useEffect(() => {
+    if (migSourceHostType !== 'xcpng' || !migSourceConnId || migSourceSubTypeProp) {
+      setMigSourceSubTypeProbe(null)
+      return
+    }
+    let cancelled = false
+    fetch(`/api/v1/connections/${encodeURIComponent(migSourceConnId)}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then((d: { data?: { subType?: string | null }; subType?: string | null }) => {
+        if (!cancelled) setMigSourceSubTypeProbe({ connId: migSourceConnId, subType: d?.data?.subType ?? d?.subType ?? null })
+      })
+      .catch(() => { if (!cancelled) setMigSourceSubTypeProbe({ connId: migSourceConnId, subType: null }) })
+    return () => { cancelled = true }
+  }, [migSourceHostType, migSourceConnId, migSourceSubTypeProp])
+  const migSourceSubType: string | null = migSourceSubTypeProp
+    || (migSourceSubTypeProbe && migSourceSubTypeProbe.connId === migSourceConnId ? migSourceSubTypeProbe.subType : null)
+  // The two migrate dialogs never open together, so one resolved subType serves both.
+  const singleWarmAllowed = warmAllowedFor({ hostType: esxiMigrateVm?.hostType, connSubType: migSourceSubType })
+  const bulkWarmAllowed = warmAllowedFor({ hostType: bulkMigHostInfo?.hostType, connSubType: migSourceSubType })
+
+  // Warm migration go/no-go. Probes the chosen target node for the runtime the
+  // engine needs, which follows the source: nbdkit + vddk plugin + nbd-client +
+  // the Broadcom VDDK for VMware, nbdkit + its nbd plugin + nbd-client for
+  // XCP-ng. It resolves the node exactly as runWarmMigration does so the verdict matches the
   // engine's planning-time backstop. Node prep is the operator's job (documented);
   // this only fast-fails a doomed launch. Cluster-auto ('__auto__') can't be probed
   // before the node is resolved, so it's skipped (the engine backstop still covers it).
   // The verdict carries the target it was taken for (`key`), so a stale result from a
   // previously selected node is never mistaken for the current selection.
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number } | null>(null)
+  // `kind` says which probe answered: 'vddk' for a VMware/vCenter source,
+  // 'nbd' for an XCP-ng one (nbdkit + its nbd plugin + nbd-client, no VDDK and
+  // nothing to install from the Enterprise repo). It drives which remediation
+  // the not-ready alert offers.
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
   React.useEffect(() => {
-    if ((esxiMigrateVm?.hostType !== 'vmware' && esxiMigrateVm?.hostType !== 'vcenter') || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
+    if (!singleWarmAllowed || migType !== 'warm' || !migTargetConn || !migTargetNode || migTargetNode === '__auto__') {
       setWarmPreflight(null)
       return
     }
     const key = `${migTargetConn}::${migTargetNode}`
+    // Which runtime the node needs follows the source, so the expected kind is
+    // known before the answer comes back: it keeps the loading and network-error
+    // states on the right remediation instead of defaulting to the VDDK one.
+    const expectedKind: 'nbd' | 'vddk' = esxiMigrateVm?.hostType === 'xcpng' ? 'nbd' : 'vddk'
     let cancelled = false
-    setWarmPreflight({ key, loading: true, ok: false, missing: [] })
+    setWarmPreflight({ key, loading: true, ok: false, missing: [], kind: expectedKind })
     fetch('/api/v1/migrations/preflight', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check' }),
+      // sourceConnectionId picks the probe: an XCP-ng source is checked for the
+      // NBD toolchain, everything else for the VDDK runtime.
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number }) => {
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number }) => {
         // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
         // package token exists, i.e. the automated "Prepare this node" action
         // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor })
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor })
       })
-      .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [] }) })
+      .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
-  }, [esxiMigrateVm?.hostType, migType, migTargetConn, migTargetNode, warmPreflightRefresh])
+  }, [singleWarmAllowed, esxiMigrateVm?.hostType, esxiMigrateVm?.connId, migType, migTargetConn, migTargetNode, warmPreflightRefresh])
   // Only trust the verdict when it belongs to the currently selected target. On a
   // node/connection switch the state briefly still holds the prior target's result
   // (the effect re-runs after render); ignoring a mismatched key stops a stale "ready"
@@ -2489,12 +2545,12 @@ return
                     <Stack direction="row" spacing={1}>
                       {([
                         { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                        // Warm (CBT, no in-transit data loss) covers both direct ESXi (hostType
-                        // 'vmware') and vCenter. Any other source that reaches this selector
-                        // (e.g. XCP-ng) is offline only: the backend rejects warm for
-                        // non-VMware sources.
-                        ...((esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter')
-                          ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }]
+                        // Warm (changed block tracking, no in-transit data loss) covers direct
+                        // ESXi (hostType 'vmware'), vCenter, and an XCP-ng pool in the XAPI
+                        // (direct pool) mode. Every other source that reaches this selector is
+                        // offline only, and the description names the source's own mechanism.
+                        ...(singleWarmAllowed
+                          ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: esxiMigrateVm?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc' }]
                           : []),
                       ]).map(opt => (
                         <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
@@ -2550,11 +2606,13 @@ return
                     </Alert>
                   )}
 
-                  {/* Warm migration note: source stays online; CBT enabled on it; cutover does a
-                      clean guest shutdown; needs a block-storage target + nbdkit-vddk on the node. */}
+                  {/* Warm migration note: source stays online; change tracking enabled on it;
+                      cutover does a clean guest shutdown; needs a block-storage target plus the
+                      node runtime, which is nbdkit-vddk for VMware and the NBD toolchain for
+                      XCP-ng, hence the per-source wording. */}
                   {migType === 'warm' && (
                     <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-flashlight-line" style={{ fontSize: 18 }} />}>
-                      {t('inventoryPage.esxiMigration.migrationTypeWarmNote')}
+                      {t(esxiMigrateVm?.hostType === 'xcpng' ? 'inventoryPage.esxiMigration.migrationTypeWarmNoteXcpng' : 'inventoryPage.esxiMigration.migrationTypeWarmNote')}
                     </Alert>
                   )}
 
@@ -2568,7 +2626,7 @@ return
                       </Alert>
                     ) : warmPreflightCurrent.ok ? (
                       <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
-                        {t('inventoryPage.esxiMigration.warmPreflightReady')}
+                        {t(warmPreflightCurrent.kind === 'nbd' ? 'inventoryPage.esxiMigration.warmPreflightReadyNbd' : 'inventoryPage.esxiMigration.warmPreflightReady')}
                       </Alert>
                     ) : (
                       <Alert severity="warning" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
@@ -2577,8 +2635,10 @@ return
                         </Typography>
                         {/* Debian < 13 cannot be prepared at all (nbdkit-plugin-vddk is only
                             packaged from Debian 13 / PVE 9 on), so the version verdict replaces
-                            the missing list and the automated action below stays hidden. */}
-                        {warmPreflightCurrent.osUnsupported ? (
+                            the missing list and the automated action below stays hidden. The
+                            NBD path carries no such floor (the nbd plugin ships with nbdkit),
+                            so it never shows the PVE 9 verdict. */}
+                        {warmPreflightCurrent.kind !== 'nbd' && warmPreflightCurrent.osUnsupported ? (
                           <Typography variant="body2" sx={{ mb: 0.5 }}>
                             {t('inventoryPage.esxiMigration.warmPrepNeedsPve9', {
                               debian: String(warmPreflightCurrent.debianMajor ?? ''),
@@ -2590,13 +2650,22 @@ return
                             {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflightCurrent.missing.join(', ') })}
                           </Typography>
                         )}
+                        {/* NBD path (XCP-ng source): everything missing is a plain Debian
+                            package, so the fix is one apt line the operator runs on the node.
+                            No Enterprise package, hence no automated action and no VDDK doc
+                            link below. */}
+                        {warmPreflightCurrent.kind === 'nbd' && (
+                          <Typography variant="body2">
+                            {t('inventoryPage.esxiMigration.warmPreflightNbdHint')}
+                          </Typography>
+                        )}
                         {/* Automated provisioning — offered only when the server holds the
                             Enterprise VDDK package token (boolean flag from the route; the
                             token itself never reaches the client). Confirm first: it installs
                             apt packages, adds a Debian non-free apt source, and writes ~96 MB
                             under /usr/lib on the hypervisor. The manual doc link below stays
                             visible as the fallback either way. */}
-                        {warmPreflightCurrent.tokenConfigured && !warmPreflightCurrent.osUnsupported && (
+                        {warmPreflightCurrent.kind !== 'nbd' && warmPreflightCurrent.tokenConfigured && !warmPreflightCurrent.osUnsupported && (
                           <Box sx={{ mb: 1 }}>
                             {warmSetupCurrent?.phase === 'running' ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2652,6 +2721,7 @@ return
                             )}
                           </Box>
                         )}
+                        {warmPreflightCurrent.kind !== 'nbd' && (
                         <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
                           {t.rich('inventoryPage.esxiMigration.warmPreflightDocsHint', {
                             link: (chunks) => (
@@ -2666,6 +2736,7 @@ return
                             ),
                           })}
                         </Typography>
+                        )}
                       </Alert>
                     )
                   )}
@@ -3798,10 +3869,10 @@ return
                   <Stack direction="row" spacing={1}>
                     {([
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
-                      // Warm (CBT, no in-transit loss) for direct ESXi AND vCenter (the engine
-                      // talks to the source endpoint generically); XCP-ng is offline only.
-                      ...((bulkMigHostInfo?.hostType === 'vmware' || bulkMigHostInfo?.hostType === 'vcenter')
-                        ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: 'migrationTypeWarmDesc' }]
+                      // Warm (no in-transit loss) for direct ESXi, vCenter and an XCP-ng pool
+                      // in the XAPI (direct pool) mode; every other source is offline only.
+                      ...(bulkWarmAllowed
+                        ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: bulkMigHostInfo?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc' }]
                         : []),
                     ]).map(opt => (
                       <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">

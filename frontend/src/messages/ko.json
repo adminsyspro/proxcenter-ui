@@ -2174,8 +2174,6 @@
       "migrationType": "마이그레이션 유형",
       "migrationTypeCold": "오프라인 마이그레이션",
       "migrationTypeColdDesc": "VM 전원이 꺼져 있어야 합니다. 가장 안정적인 방법으로, 일괄 마이그레이션에 적합합니다.",
-      "migrationTypeLive": "라이브 마이그레이션",
-      "migrationTypeLiveDesc": "디스크 전송 중에도 VM이 계속 실행됩니다. ESXi 호스트에 대한 SSH 액세스가 필요합니다.",
       "migrationTypeWarm": "웜 마이그레이션",
       "migrationTypeWarmDesc": "변경된 블록이 복사되는 동안(CBT) VM이 계속 실행되고, 이후 짧은 컷오버로 전송 중 데이터 손실 없이 전환됩니다. 블록 스토리지와 Proxmox 노드에 VDDK가 필요합니다.",
       "migrationTypeWarmNote": "소스는 온라인 상태를 유지합니다: 소스에서 변경 추적(CBT)이 활성화되고, 컷오버 시 최종 동기화 전에 게스트를 정상 종료합니다. 블록 스토리지 대상(LVM, ZFS, Ceph)과 Proxmox 노드에 nbdkit-vddk가 필요합니다.",

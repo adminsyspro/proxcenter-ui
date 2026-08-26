@@ -2158,8 +2158,6 @@
       "migrationType": "迁移类型",
       "migrationTypeCold": "离线迁移",
       "migrationTypeColdDesc": "虚拟机必须关机。最可靠的方法，适合批量迁移。",
-      "migrationTypeLive": "实时迁移",
-      "migrationTypeLiveDesc": "磁盘传输期间虚拟机保持运行。需要 ESXi 主机的 SSH 访问权限。",
       "migrationTypeWarm": "温迁移",
       "migrationTypeWarmDesc": "复制变更块（CBT）期间虚拟机保持运行，随后进行短暂切换，传输期间不丢失数据。需要块存储以及 Proxmox 节点上的 VDDK。",
       "migrationTypeWarmNote": "源虚拟机保持在线：在其上启用变更块跟踪（CBT），切换时先对客户机执行干净关机再做最终同步。需要块存储目标（LVM、ZFS、Ceph）以及在 Proxmox 节点上安装 nbdkit-vddk。",

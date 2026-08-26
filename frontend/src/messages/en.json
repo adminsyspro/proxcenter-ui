@@ -2174,8 +2174,6 @@
       "migrationType": "Migration Type",
       "migrationTypeCold": "Offline Migration",
       "migrationTypeColdDesc": "VM must be powered off. Most reliable method, ideal for batch migrations.",
-      "migrationTypeLive": "Live Migration",
-      "migrationTypeLiveDesc": "VM stays running during disk transfer. Requires SSH access to ESXi host.",
       "migrationTypeWarm": "Warm Migration",
       "migrationTypeWarmDesc": "VM stays running while changed blocks are copied (CBT), then a short cutover with no in-transit data loss. Needs block storage and the VDDK on the Proxmox node.",
       "migrationTypeWarmNote": "The source stays online: change tracking (CBT) is enabled on it, and cutover does a clean guest shutdown before the final sync. Requires a block-storage target (LVM, ZFS, Ceph) and nbdkit-vddk on the Proxmox node.",

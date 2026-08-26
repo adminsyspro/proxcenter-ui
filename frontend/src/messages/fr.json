@@ -2174,8 +2174,6 @@
       "migrationType": "Type de migration",
       "migrationTypeCold": "Migration hors ligne",
       "migrationTypeColdDesc": "La VM doit être éteinte. Méthode la plus fiable, idéale pour les migrations en masse.",
-      "migrationTypeLive": "Migration live",
-      "migrationTypeLiveDesc": "La VM reste active pendant le transfert des disques. Necessite un acces SSH a l'hote ESXi.",
       "migrationTypeWarm": "Migration a chaud",
       "migrationTypeWarmDesc": "La VM reste active pendant la copie des blocs modifies (CBT), puis une breve bascule sans perte de donnees en transit. Necessite un stockage bloc et le VDDK sur le noeud Proxmox.",
       "migrationTypeWarmNote": "La source reste en ligne : le suivi des blocs modifies (CBT) y est active, et la bascule effectue un arret propre de l'invite avant la synchronisation finale. Necessite une cible en stockage bloc (LVM, ZFS, Ceph) et nbdkit-vddk sur le noeud Proxmox.",

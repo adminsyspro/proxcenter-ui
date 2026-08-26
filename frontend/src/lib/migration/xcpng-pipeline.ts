@@ -12,13 +12,6 @@
  * 5. Attach disks, configure boot order
  * 6. Optionally start the VM
  *
- * Live mode:
- * 1. Create XO snapshot (VM keeps running — no downtime)
- * 2. Download snapshot VDIs (consistent point-in-time)
- * 3. Delete snapshot, shut down VM (downtime starts)
- * 4. Convert + import disks (downtime continues)
- * 5. Configure + optionally start
- *
  * Data flows XO → Proxmox directly (not through ProxCenter).
  * ProxCenter orchestrates via SSH commands + PVE API.
  */
@@ -29,8 +22,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH } from "@/lib/ssh/exec"
-import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl, xoCreateSnapshot, xoDeleteSnapshot } from "@/lib/xcpng/client"
-import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
+import { getXoConnectionInfo, xoGetVmConfig, buildVdiDownloadUrl } from "@/lib/xcpng/client"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
@@ -63,7 +55,7 @@ interface MigrationConfig {
    * conversion can never fail the migration.
    */
   convertDisksToQcow2?: boolean
-  migrationType?: "cold" | "live"
+  migrationType?: "cold"
   // User-selected scratch directory on the PVE node for VHD download +
   // qemu-img conversion. When set, overrides the default heuristic that picks
   // the target storage's images dir (file-based) or /var/lib/vz/tmp (block).
@@ -311,18 +303,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       totalBytes: BigInt(totalDiskBytes),
     })
 
-    // Handle VM power state based on migration type
-    const isLive = config.migrationType === "live"
-
+    // This pipeline is offline only: the VM must be powered off.
     if (vmConfig.powerState === "Running" || vmConfig.powerState === "running") {
-      if (isLive) {
-        await appendLog(jobId, "VM is running — live migration will snapshot + download disks while VM runs, then shut down for cutover", "info")
-      } else {
-        throw new Error(
-          "VM is powered on. Please power off the VM before migration. " +
-          "Offline migration requires the VM to be shut down."
-        )
-      }
+      throw new Error(
+        "VM is powered on. Please power off the VM before migration. " +
+        "Offline migration requires the VM to be shut down."
+      )
     }
 
     // Check snapshots
@@ -573,7 +559,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           await updateJob(jobId, "transferring", {
             bytesTransferred: BigInt(currentSize),
             transferSpeed: downloadSpeed,
-            progress: isLive ? Math.round(overallProgress * 0.7) : overallProgress,
+            progress: overallProgress,
           })
 
           if (poll.state === "running") continue
@@ -707,138 +693,25 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       if (adopted) adoptedVolumes.push({ volumeId: diskVolume, devicePath: "" })
     }
 
-    if (isLive) {
-      // ── Live mode: snapshot → download snapshot VDIs → delete snapshot → shut down → convert/import ──
-      let snapshotUuid: string | null = null
+    // ── Cold mode: sequential download → convert → import per disk ──
+    for (let i = 0; i < vmConfig.disks.length; i++) {
+      await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
+      await downloadDisk(i, vmConfig.disks[i])
+      if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
-      let downloadSucceeded = false
-      try {
-        // Phase 1: Create snapshot (VM keeps running — no downtime)
-        const snapName = `proxcenter-mig-${jobId.substring(0, 8)}`
-        await appendLog(jobId, "Creating XO snapshot for consistent disk download (VM stays running)...")
-        snapshotUuid = await xoCreateSnapshot(xo, config.sourceVmId, snapName)
-        await appendLog(jobId, `Snapshot created: ${snapshotUuid}`, "success")
-
-        if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-        // Phase 2: Download original VM VDIs (snapshot freezes disk state, but
-        // snapshot VDIs themselves are not downloadable via XO REST API)
-        await appendLog(jobId, `Downloading ${vmConfig.disks.length} disk(s) from VM (snapshot ensures consistency)...`)
-
-        // Phase 3: Download all VM VDIs (VM still running, snapshot freezes blocks)
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          await updateJob(jobId, "transferring", { currentDisk: i })
-          await downloadDisk(i, vmConfig.disks[i])
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        }
-
-        await appendLog(jobId, "All snapshot disks downloaded", "success")
-        downloadSucceeded = true
-      } finally {
-        // Only delete snapshot if downloads succeeded — deleting a snapshot triggers
-        // VHD chain coalescing on XCP-ng which can cause SR_BACKEND_FAILURE if the
-        // storage is in a bad state. On failure, leave it for the user to clean up safely.
-        if (snapshotUuid && downloadSucceeded) {
-          try {
-            await appendLog(jobId, "Deleting migration snapshot...")
-            await xoDeleteSnapshot(xo, snapshotUuid)
-            await appendLog(jobId, "Snapshot deleted", "success")
-          } catch (snapErr: any) {
-            await appendLog(jobId, `Warning: failed to delete snapshot ${snapshotUuid}: ${snapErr?.message}. Please delete it manually in XO.`, "warn")
-          }
-        } else if (snapshotUuid) {
-          await appendLog(jobId, `Migration snapshot ${snapshotUuid} was NOT deleted to protect the source VM. Please delete it manually in XO once the VM is stable.`, "warn")
-        }
-      }
-
-      // Phase 4: Shut down source VM via XO (downtime starts here)
-      const downtimeStart = Date.now()
-      await appendLog(jobId, "Shutting down source VM for cutover (downtime starts now)...", "warn")
-      try {
-        const xoFetchInternal = (path: string, opts: RequestInit = {}) =>
-          fetchWithInsecureTLS(`${xo.baseUrl}/rest/v0${path}`, {
-            ...opts,
-            headers: { Authorization: xo.authHeader, "Content-Type": "application/json", ...opts.headers },
-            signal: AbortSignal.timeout(30000),
-            insecureTLS: xo.insecureTLS,
-          })
-
-        const shutRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/clean_shutdown`, { method: "POST" })
-        if (!shutRes.ok) {
-          const hardRes = await xoFetchInternal(`/vms/${config.sourceVmId}/actions/hard_shutdown`, { method: "POST" })
-          if (!hardRes.ok) {
-            await appendLog(jobId, "Cannot shut down VM via XO API. Please shut down the VM manually now.", "warn")
-          }
-        }
-
-        // Wait for VM to be halted (poll every 5s, max 120s)
-        let halted = false
-        for (let attempt = 0; attempt < 24; attempt++) {
-          await new Promise(r => setTimeout(r, 5000))
-          try {
-            const refreshed = await xoGetVmConfig(xo, config.sourceVmId)
-            if (refreshed.powerState === "Halted" || refreshed.powerState === "halted") {
-              halted = true
-              break
-            }
-          } catch {}
-        }
-
-        if (halted) {
-          await appendLog(jobId, "Source VM shut down", "success")
-        } else {
-          await appendLog(jobId, "VM did not shut down within 120s — proceeding anyway", "warn")
-        }
-      } catch (e: any) {
-        await appendLog(jobId, `Shutdown attempt failed: ${e?.message || e}. Proceeding with conversion...`, "warn")
-      }
-
-      // Phase 5: Convert and import all disks (downtime continues)
       if (isFileBased) {
-        await appendLog(jobId, "Converting and importing disks to Proxmox (downtime phase)...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-          await convertAndImportDisk(i)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        }
+        await convertAndImportDisk(i)
       } else {
-        await appendLog(jobId, "Converting VHDs to block storage (downtime phase)...")
-        for (let i = 0; i < vmConfig.disks.length; i++) {
-          const progressBase = 70 + Math.round((i / vmConfig.disks.length) * 25)
-          await updateJob(jobId, "transferring", { currentDisk: i, progress: progressBase })
-          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
-          await convertToBlockDevice(i, vol.devicePath)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-          await attachBlockDisk(i, vol.volumeId)
-        }
-      }
-
-      const downtimeSec = Math.round((Date.now() - downtimeStart) / 1000)
-      const downtimeMin = Math.floor(downtimeSec / 60)
-      const downtimeRemSec = downtimeSec % 60
-      await appendLog(jobId, `Downtime duration: ${downtimeMin > 0 ? `${downtimeMin}m ${downtimeRemSec}s` : `${downtimeSec}s`}`, "info")
-    } else {
-      // ── Cold mode: sequential download → convert → import per disk ──
-      for (let i = 0; i < vmConfig.disks.length; i++) {
-        await updateJob(jobId, "transferring", { currentDisk: i, progress: Math.round((i / vmConfig.disks.length) * 100) })
-        await downloadDisk(i, vmConfig.disks[i])
+        // Block storage: allocate volume, convert VHD directly to device
+        const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
+        await convertToBlockDevice(i, vol.devicePath)
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
-
-        if (isFileBased) {
-          await convertAndImportDisk(i)
-        } else {
-          // Block storage: allocate volume, convert VHD directly to device
-          const vol = await allocateBlockVolume(vmConfig.disks[i].sizeBytes)
-          await convertToBlockDevice(i, vol.devicePath)
-          if (isCancelled(jobId)) throw new Error("Migration cancelled")
-          await attachBlockDisk(i, vol.volumeId)
-        }
-        await updateJob(jobId, "transferring", {
-          currentDisk: i + 1,
-          progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
-        })
+        await attachBlockDisk(i, vol.volumeId)
       }
+      await updateJob(jobId, "transferring", {
+        currentDisk: i + 1,
+        progress: Math.round(((i + 1) / vmConfig.disks.length) * 100),
+      })
     }
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")

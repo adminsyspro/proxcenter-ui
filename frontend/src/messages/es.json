@@ -2174,8 +2174,6 @@
       "migrationType": "Tipo de migración",
       "migrationTypeCold": "Migración offline",
       "migrationTypeColdDesc": "La VM debe estar apagada. Es el método más fiable, ideal para migraciones por lotes.",
-      "migrationTypeLive": "Migración en vivo",
-      "migrationTypeLiveDesc": "La VM permanece en ejecución durante la transferencia de discos. Requiere acceso SSH al host ESXi.",
       "migrationTypeWarm": "Migración warm",
       "migrationTypeWarmDesc": "La VM permanece en ejecución mientras se copian los bloques modificados (CBT), y después se realiza un breve cutover sin pérdida de datos en tránsito. Requiere almacenamiento de bloques y VDDK en el nodo Proxmox.",
       "migrationTypeWarmNote": "El origen permanece online: se habilita el seguimiento de cambios (CBT), y el cutover realiza un apagado limpio del guest antes de la sincronización final. Requiere un destino de almacenamiento de bloques (LVM, ZFS, Ceph) y nbdkit-vddk en el nodo Proxmox.",

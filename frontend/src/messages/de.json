@@ -2159,8 +2159,6 @@
       "migrationType": "Migrationstyp",
       "migrationTypeCold": "Offline-Migration",
       "migrationTypeColdDesc": "VM must be powered off. Most reliable method, ideal for batch Migrations.",
-      "migrationTypeLive": "Live-Migration",
-      "migrationTypeLiveDesc": "VM bleibt wahrend der Disk-Ubertragung aktiv. Erfordert SSH-Zugriff auf den ESXi-Host.",
       "migrationTypeWarm": "Warm-Migration",
       "migrationTypeWarmDesc": "VM bleibt wahrend des Kopierens geanderter Blocke (CBT) aktiv, danach kurze Umschaltung ohne Datenverlust wahrend der Ubertragung. Erfordert Block-Speicher und das VDDK auf dem Proxmox-Knoten.",
       "migrationTypeWarmNote": "Die Quelle bleibt online: Anderungsverfolgung (CBT) wird darauf aktiviert, und die Umschaltung fuhrt vor der finalen Synchronisierung ein sauberes Herunterfahren des Gasts durch. Erfordert ein Block-Speicherziel (LVM, ZFS, Ceph) und nbdkit-vddk auf dem Proxmox-Knoten.",

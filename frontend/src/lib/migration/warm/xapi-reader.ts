@@ -38,27 +38,42 @@ export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
  *      `<sock>.ca/ca-cert.pem` so nbdkit can pin the TLS server, clear any stale
  *      socket, and launch `buildNbdkitXapiCmd(t, caDir)` backgrounded with
  *      output to a log,
- *   2. poll until the unix socket appears (the TLS handshake with xapi-nbd can
- *      take a few seconds),
+ *   2. poll until the unix socket appears,
  *   3. attach the socket to the first free kernel NBD device and record which
  *      one was chosen in the returned handle.
- * On socket timeout the nbdkit log is read back so the caller sees the real
- * failure (expired session, TLS refused, VDI not attachable, ...) rather than a
- * bare timeout.
+ *
+ * Unlike the VDDK plugin, nbdkit's nbd plugin binds the unix socket BEFORE it
+ * dials xapi-nbd, so the socket appearing proves nothing about the remote side:
+ * an expired session, a refused TLS handshake or a VDI that cannot be attached
+ * all surface at step 3, when nbd-client asks for the export and gets nothing.
+ * A socket that never appears is therefore a local nbdkit problem (missing nbd
+ * plugin, unreadable CA directory, bad option). Both failure paths read the
+ * nbdkit log back before teardown removes it, so the real cause reaches the
+ * caller either way.
  */
 export async function startXapiReader(connectionId: string, nodeIp: string, t: XapiNbdTarget, poll: PollOpts = {}): Promise<XapiReaderHandle> {
+  // Fail here rather than pin nothing: with an empty ca-cert.pem nbdkit still
+  // binds the socket, so the missing certificate would only surface later as a
+  // puzzling "nbd-client failed to attach a free NBD device".
+  if (!t.cert || !t.cert.trim()) throw new Error("VDI.get_nbd_info returned no host certificate; cannot pin the NBD TLS connection")
   const intervalMs = poll.intervalMs ?? 1000
   const maxAttempts = poll.maxAttempts ?? 60
   const logFile = `${t.sock}.log`
-  // umask 077 in a subshell keeps the CA directory and the PEM private to root.
+  // umask 077 in a subshell keeps the CA directory, the PEM and the log private
+  // to root. The log is TRUNCATED here (`: >`) rather than by the nohup
+  // redirection, which runs outside the subshell and would leave it 0644 while
+  // nbdkit can echo the export name (and with it the XAPI session id) into it;
+  // the redirection is `>>` so it keeps the 0600 file created here. `rm -f`
+  // before the truncation because `: >` on a log left 0644 by an earlier run
+  // would keep that mode.
   // rm -rf first so a directory left by an aborted run cannot pin a stale (or
   // foreign) certificate for this session.
   const caDir = `${t.sock}.ca`
   const launch =
     `rm -rf ${shellEscape(caDir)}; ` +
-    `(umask 077; mkdir -p ${shellEscape(caDir)}; printf '%s\\n' ${shellEscape(t.cert)} > ${shellEscape(`${caDir}/ca-cert.pem`)}); ` +
+    `(umask 077; mkdir -p ${shellEscape(caDir)}; printf '%s\\n' ${shellEscape(t.cert)} > ${shellEscape(`${caDir}/ca-cert.pem`)}; rm -f ${shellEscape(logFile)}; : > ${shellEscape(logFile)}); ` +
     `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; ` +
-    `nohup ${buildNbdkitXapiCmd(t, caDir)} > ${shellEscape(logFile)} 2>&1 & echo $!`
+    `nohup ${buildNbdkitXapiCmd(t, caDir)} >> ${shellEscape(logFile)} 2>&1 & echo $!`
   const launchRes = await executeSSH(connectionId, nodeIp, launch)
   if (!launchRes.success) throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
   let ready = false

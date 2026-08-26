@@ -143,6 +143,34 @@ describe("startXapiReader", () => {
     const teardownCmd = mockSSH.mock.calls[4][2] as string
     expect(teardownCmd).toContain('pkill -f "[n]bdkit.*/tmp/xapi.sock"')
   })
+
+  it("redacts the session id when the nbdkit log tail is embedded in the error", async () => {
+    mockSSH
+      .mockResolvedValueOnce({ success: true, output: "12345" })
+      .mockResolvedValueOnce({ success: true, output: "" })
+      .mockResolvedValueOnce({ success: true, output: "nbdkit: nbd: export 'vdi/abc?session_id=OpaqueRef:session' refused" })
+      .mockResolvedValueOnce({ success: true, output: "" })
+
+    const error = await startXapiReader("conn", "10.0.0.7", TARGET, { intervalMs: 0, maxAttempts: 1 }).catch(e => e as Error)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain("session_id=<redacted>")
+    expect((error as Error).message).not.toContain("OpaqueRef:session")
+  })
+
+  it("tears down the CA directory and log when the launch command itself fails", async () => {
+    mockSSH
+      .mockResolvedValueOnce({ success: false, error: "ssh: connection reset" })
+      .mockResolvedValueOnce({ success: true, output: "" })
+
+    await expect(startXapiReader("conn", "10.0.0.7", TARGET, { intervalMs: 0 })).rejects.toThrow(/failed to launch nbdkit nbd reader/)
+
+    expect(mockSSH).toHaveBeenCalledTimes(2)
+    const teardownCmd = mockSSH.mock.calls[1][2] as string
+    expect(teardownCmd).toContain("rm -rf '/tmp/xapi.sock.ca'")
+    expect(teardownCmd).toContain("/tmp/xapi.sock.log")
+    expect(teardownCmd).not.toContain("nbd-client -d")
+  })
 })
 
 describe("stopXapiReader", () => {

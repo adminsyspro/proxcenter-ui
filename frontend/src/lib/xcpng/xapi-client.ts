@@ -207,9 +207,13 @@ export async function xapiGetVmConfig(s: XapiSession, vmUuid: string): Promise<X
   }
 }
 
-/** Offline download URL: the same XAPI endpoint Xen Orchestra streams from. No auth header, the session is in the URL. */
+/**
+ * Offline download URL: the same XAPI endpoint Xen Orchestra streams from. No auth
+ * header, the session is in the URL. Both OpaqueRefs are hex, dashes and one colon,
+ * so they go in raw: that is the form the lab verified against xapi.
+ */
 export function xapiVdiExportUrl(s: XapiSession, vdiRef: string, format: "vhd" | "raw"): string {
-  return `${s.baseUrl}/export_raw_vdi?session_id=${encodeURIComponent(s.ref)}&vdi=${encodeURIComponent(vdiRef)}&format=${format}`
+  return `${s.baseUrl}/export_raw_vdi?session_id=${s.ref}&vdi=${vdiRef}&format=${format}`
 }
 
 // ── warm: CBT and NBD ──
@@ -331,8 +335,38 @@ export type XapiPowerState = "Running" | "Halted" | "Suspended" | "Paused"
 export async function xapiPowerState(s: XapiSession, vmRef: string): Promise<XapiPowerState> {
   return xapiCall<XapiPowerState>(s, "VM.get_power_state", vmRef)
 }
-export async function xapiCleanShutdown(s: XapiSession, vmRef: string): Promise<void> {
-  await xapiCallAsync(s, "VM.clean_shutdown", [vmRef], { timeoutMs: 10 * 60_000 })
+/** How long a clean shutdown request is watched before the caller falls back to polling the power state. */
+export const CLEAN_SHUTDOWN_WATCH_MS = 30_000
+const CLEAN_SHUTDOWN_POLL_MS = 2000
+
+/**
+ * Ask the guest to shut down and watch the task for a short while only. A refusal
+ * (VM_LACKS_FEATURE_SHUTDOWN, no guest agent) fails within seconds and is thrown
+ * so the caller can log it. A guest that simply takes its time keeps shutting
+ * down server side while the caller moves on to polling the power state, where
+ * the operator has a force power off and a cancel; awaiting the task to
+ * completion here (up to 10 min, as before) hid both. The pending task is left
+ * alone: cancelling it would abort the shutdown, and it is not ours to destroy
+ * while it runs (xapi reaps completed tasks itself).
+ */
+export async function xapiCleanShutdown(s: XapiSession, vmRef: string, opts: { shouldAbort?: () => boolean } = {}): Promise<void> {
+  const taskRef = await xapiCall<string>(s, "Async.VM.clean_shutdown", vmRef)
+  const deadline = Date.now() + CLEAN_SHUTDOWN_WATCH_MS
+  while (Date.now() < deadline) {
+    if (opts.shouldAbort?.()) return
+    const rec = await xapiCall<any>(s, "task.get_record", taskRef)
+    if (rec.status === "success") { await xapiCall(s, "task.destroy", taskRef).catch(() => {}); return }
+    if (rec.status === "failure") {
+      const info: string[] = Array.isArray(rec.error_info) ? rec.error_info.map(String) : []
+      await xapiCall(s, "task.destroy", taskRef).catch(() => {})
+      throw new XapiError(info[0] || "TASK_FAILED", info.slice(1))
+    }
+    if (rec.status === "cancelled" || rec.status === "cancelling") {
+      await xapiCall(s, "task.destroy", taskRef).catch(() => {})
+      throw new XapiError("TASK_CANCELLED", ["VM.clean_shutdown"])
+    }
+    await new Promise(r => setTimeout(r, CLEAN_SHUTDOWN_POLL_MS))
+  }
 }
 export async function xapiHardShutdown(s: XapiSession, vmRef: string): Promise<void> {
   await xapiCallAsync(s, "VM.hard_shutdown", [vmRef], { timeoutMs: 5 * 60_000 })

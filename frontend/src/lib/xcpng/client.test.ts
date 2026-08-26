@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { xoGetVmConfig, buildVdiDownloadUrl, buildXoAuthHeader } from "./client"
+import { xoGetVmConfig, buildVdiDownloadUrl } from "./client"
 import type { XoConnectionInfo } from "./client"
 
 describe("xcpng/client", () => {
@@ -38,12 +38,6 @@ describe("xcpng/client", () => {
       expect(buildVdiDownloadUrl("https://xo.test/", "vdi-1")).toBe(
         "https://xo.test/rest/v0/vdis/vdi-1.raw"
       )
-    })
-  })
-
-  describe("buildXoAuthHeader", () => {
-    it("builds a Basic auth header from user:password credentials", () => {
-      expect(buildXoAuthHeader("user:pass")).toBe("Basic dXNlcjpwYXNz")
     })
   })
 

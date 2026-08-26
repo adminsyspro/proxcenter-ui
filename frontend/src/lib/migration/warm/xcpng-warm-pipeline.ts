@@ -237,7 +237,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     }
 
     const powerOps: PowerOffOps = {
-      requestShutdown: () => xapiCleanShutdown(session!, vmRef),
+      requestShutdown: () => xapiCleanShutdown(session!, vmRef, { shouldAbort: () => isCancelled(jobId) }),
       waitPoweredOff: async (sliceMs: number) => {
         const t0 = Date.now()
         while (Date.now() - t0 < sliceMs) {

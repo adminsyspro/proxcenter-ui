@@ -2,15 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import {
+  CLEAN_SHUTDOWN_WATCH_MS,
   XapiError,
   type XapiSession,
   xapiCall,
   xapiCallAsync,
+  xapiCleanShutdown,
   xapiDestroySnapshot,
   xapiFindSnapshotsByPrefix,
   xapiGetVmConfig,
   xapiListChangedBlocks,
   xapiLogin,
+  xapiVdiExportUrl,
 } from "./xapi-client"
 
 vi.mock("@/lib/http/insecure-fetch", () => ({
@@ -185,6 +188,59 @@ describe("xcpng/xapi-client", () => {
     expect(error).toBeInstanceOf(XapiError)
     expect(error).toMatchObject({ code: "SR_BACKEND_FAILURE", params: ["disk full"] })
     expect(requestAt(2)).toMatchObject({ method: "task.destroy", params: [session.ref, "OpaqueRef:task"] })
+  })
+
+  it("clean shutdown: returns without cancelling or destroying a task still pending after the watch window", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockResolvedValueOnce(success("OpaqueRef:task"))
+    fetchMock.mockImplementation(async () => success({ status: "pending" }))
+
+    const pending = xapiCleanShutdown(session, "OpaqueRef:vm")
+    await vi.advanceTimersByTimeAsync(CLEAN_SHUTDOWN_WATCH_MS + 2000)
+
+    await expect(pending).resolves.toBeUndefined()
+    const methods = fetchMock.mock.calls.map((_, index) => requestAt(index).method)
+    expect(methods[0]).toBe("Async.VM.clean_shutdown")
+    expect(methods.slice(1).every(m => m === "task.get_record")).toBe(true)
+    expect(methods.length).toBeGreaterThan(2)
+    expect(methods).not.toContain("task.cancel")
+    expect(methods).not.toContain("task.destroy")
+  })
+
+  it("clean shutdown: throws the task error_info as XapiError when the guest refuses", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:task"))
+      .mockResolvedValueOnce(success({ status: "failure", error_info: ["VM_LACKS_FEATURE_SHUTDOWN", "OpaqueRef:vm"] }))
+      .mockResolvedValueOnce(success(null))
+
+    const error = await xapiCleanShutdown(session, "OpaqueRef:vm").catch(value => value)
+
+    expect(error).toBeInstanceOf(XapiError)
+    expect(error).toMatchObject({ code: "VM_LACKS_FEATURE_SHUTDOWN", params: ["OpaqueRef:vm"] })
+  })
+
+  it("clean shutdown: destroys the task once it succeeds and stops early when asked to abort", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:task"))
+      .mockResolvedValueOnce(success({ status: "success", result: "<value></value>" }))
+      .mockResolvedValueOnce(success(null))
+    await expect(xapiCleanShutdown(session, "OpaqueRef:vm")).resolves.toBeUndefined()
+    expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual([
+      "Async.VM.clean_shutdown",
+      "task.get_record",
+      "task.destroy",
+    ])
+
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValueOnce(success("OpaqueRef:task"))
+    await expect(xapiCleanShutdown(session, "OpaqueRef:vm", { shouldAbort: () => true })).resolves.toBeUndefined()
+    expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual(["Async.VM.clean_shutdown"])
+  })
+
+  it("builds the VDI export URL with raw OpaqueRefs", () => {
+    expect(xapiVdiExportUrl(session, "OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e", "raw")).toBe(
+      "https://xcp.test/export_raw_vdi?session_id=OpaqueRef:session&vdi=OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e&format=raw",
+    )
   })
 
   it("decodes the bitmap returned by VDI.list_changed_blocks", async () => {

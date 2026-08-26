@@ -12,8 +12,6 @@
  * - GET /rest/v0/vdis/{uuid}.raw      → Download VDI as raw image
  */
 
-import { getSessionPrisma } from "@/lib/tenant"
-import { decryptSecret } from "@/lib/crypto/secret"
 import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 
 export interface XoConnectionInfo {
@@ -53,30 +51,6 @@ export interface XoNetworkInfo {
   device: string
   mac: string
   network: string
-}
-
-/**
- * Get XO connection info from a stored connection
- */
-export async function getXoConnectionInfo(connectionId: string): Promise<XoConnectionInfo> {
-  const prisma = await getSessionPrisma()
-  const conn = await prisma.connection.findUnique({
-    where: { id: connectionId },
-    select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
-  })
-
-  if (!conn || conn.type !== "xcpng") {
-    throw new Error("XCP-ng connection not found")
-  }
-
-  const creds = decryptSecret(conn.apiTokenEnc)
-  const authHeader = `Basic ${Buffer.from(creds).toString("base64")}`
-
-  return {
-    baseUrl: conn.baseUrl.replace(/\/$/, ""),
-    authHeader,
-    insecureTLS: conn.insecureTLS,
-  }
 }
 
 /**
@@ -205,11 +179,4 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
  */
 export function buildVdiDownloadUrl(baseUrl: string, vdiUuid: string, format: "vhd" | "raw" = "raw"): string {
   return `${baseUrl.replace(/\/$/, "")}/rest/v0/vdis/${vdiUuid}.${format}`
-}
-
-/**
- * Build Basic auth header value from user:password credentials
- */
-export function buildXoAuthHeader(creds: string): string {
-  return `Basic ${Buffer.from(creds).toString("base64")}`
 }

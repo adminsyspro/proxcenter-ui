@@ -3986,7 +3986,7 @@ return vm?.isCluster ?? false
                                     // Forwarded to the modal so cold-vs-running guards can
                                     // disable the migrate button when the VM isn't off.
                                     status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
-                                    // VMware Tools state, needed by the Live-on-Windows guard.
+                                    // VMware Tools state, part of the migrate dialog's VM shape; the Live-on-Windows guard that read it is gone and nothing consumes it today.
                                     toolsStatus: (vm as any).toolsStatus,
                                     toolsRunningStatus: (vm as any).toolsRunningStatus,
                                     // vCenter inventory path resolved server-side via SOAP
@@ -4133,7 +4133,7 @@ return vm?.isCluster ?? false
                             connSubType: vm.connSubType ?? null,
                             // Power state for cold-migration guard (disable Start button + warn).
                             status: (vm as any).status || (vm as any).power_state || (vm as any).powerState,
-                            // VMware Tools state for the Live-on-Windows guard.
+                            // VMware Tools state, part of the migrate dialog's VM shape; the Live-on-Windows guard that read it is gone and nothing consumes it today.
                             toolsStatus: (vm as any).toolsStatus,
                             toolsRunningStatus: (vm as any).toolsRunningStatus,
                             // Forward vCenter inventory path if the source endpoint resolved it.

@@ -11,6 +11,12 @@ export interface XapiNbdTarget { sock: string; address: string; port: number; ex
  *  node-side resources (socket, log, pinned-CA directory) to clean up. */
 export interface XapiReaderHandle { nbdDev: string; sock: string; logFile: string; caDir: string }
 
+/** The nbdkit log can echo the export name, which carries the XAPI session id: never let it reach an error message or a job log. */
+function redactLogTail(text: string | undefined): string {
+  const t = (text || "").trim()
+  return t ? t.replace(/session_id=[^&'"\s]+/g, "session_id=<redacted>") : "(empty)"
+}
+
 /**
  * nbdkit's nbd plugin re-exports the XCP-ng xapi-nbd export (TLS on 10809) on a
  * local unix socket, exactly where the VDDK plugin sits for VMware, so nbd-client
@@ -75,7 +81,12 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
     `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; ` +
     `nohup ${buildNbdkitXapiCmd(t, caDir)} >> ${shellEscape(logFile)} 2>&1 & echo $!`
   const launchRes = await executeSSH(connectionId, nodeIp, launch)
-  if (!launchRes.success) throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
+  if (!launchRes.success) {
+    // The same command may already have created the CA directory and the log:
+    // remove them like the two later failure paths do (nbdDev:"" for the same reason).
+    await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile, caDir }).catch(() => {})
+    throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
+  }
   let ready = false
   for (let i = 0; i < maxAttempts; i++) {
     const check = await executeSSH(connectionId, nodeIp, `test -S ${shellEscape(t.sock)} && echo EXISTS`)
@@ -87,14 +98,14 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
     // No device was attached yet, so pass nbdDev:"" - teardown must not
     // `nbd-client -d` a device this reader never owned.
     await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile, caDir }).catch(() => {})
-    throw new Error(`nbdkit nbd socket never appeared. nbdkit log: ${log.output?.trim() || "(empty)"}`)
+    throw new Error(`nbdkit nbd socket never appeared. nbdkit log: ${redactLogTail(log.output)}`)
   }
   const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(t.sock))
   const nbdDev = (connect.output ?? "").split("\n").map(l => l.trim()).find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
   if (!connect.success || !nbdDev) {
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile, caDir }).catch(() => {})
-    throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${log.output?.trim() || "(empty)"}`)
+    throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${redactLogTail(log.output)}`)
   }
   return { nbdDev, sock: t.sock, logFile, caDir }
 }

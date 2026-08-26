@@ -38,6 +38,7 @@ import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
+import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -80,6 +81,21 @@ interface LogEntry {
 
 let cancelledJobs = new Set<string>()
 const jobPrisma = new Map<string, any>()
+
+/**
+ * Attempts allowed for one VDI download. A transfer that fails (curl error, empty
+ * file) is restarted from scratch instead of failing the whole migration (#804).
+ */
+const DOWNLOAD_ATTEMPTS = 3
+
+/**
+ * Result of watching one curl download to completion. A string discriminant, not a
+ * boolean: this project compiles with `strict: false`, where `if (outcome.ok)` does
+ * NOT narrow a `true | false` union.
+ */
+type DownloadOutcome =
+  | { state: "done"; bytes: number; time: number; speed: string }
+  | { state: "failed"; message: string }
 
 function getPrismaForJob(jobId: string) {
   return jobPrisma.get(jobId)
@@ -498,65 +514,65 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Helper: download a single VDI from XO via curl on PVE node
     async function downloadDisk(i: number, disk: XoDiskInfo) {
       const diskSizeGB = (disk.sizeBytes / 1073741824).toFixed(1)
-      await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)...`)
-
       const downloadUrl = buildVdiDownloadUrl(xo.baseUrl, disk.vdiUuid, "vhd")
       const tmpFile = `${storageTempDir}/proxcenter-mig-${jobId}-disk${i}`
-
-      await updateJob(jobId, "transferring", {
-        currentStep: `downloading_disk_${i + 1}`,
-        currentDisk: i,
-        bytesTransferred: BigInt(0),
-        totalBytes: BigInt(disk.sizeBytes),
-      })
-
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
-      const startDl = await executeSSH(
-        config.targetConnectionId, nodeIp,
-        `nohup bash -c 'curl -s --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
-      )
-      if (!startDl.success || !startDl.output?.trim()) {
-        throw new Error(`Failed to start download: ${startDl.error}`)
-      }
-      const curlPid = startDl.output.trim()
-      await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+      const cleanup = () =>
+        executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`).catch(() => {})
 
-      let downloadedBytes = 0
-      let downloadSpeed = ""
-      let downloadTime = 0
-      const startTime = Date.now()
+      // Watch one curl run to completion. An unreadable poll (orchestrator timeout,
+      // dropped SSH session) is NOT a curl failure: the remote download keeps going,
+      // so the poll is retried and the transfer is only declared lost after
+      // MAX_CONSECUTIVE_POLL_FAILURES in a row. Reading such a poll as "curl exit 1"
+      // is what deleted healthy downloads (#804).
+      async function monitorDownload(curlPid: string): Promise<DownloadOutcome> {
+        let downloadSpeed = ""
+        let downloadTime = 0
+        let pollFailures = 0
+        const startTime = Date.now()
 
-      while (true) {
-        if (isCancelled(jobId)) {
-          await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null; rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-          throw new Error("Migration cancelled")
-        }
+        while (true) {
+          if (isCancelled(jobId)) {
+            await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null`).catch(() => {})
+            await cleanup()
+            throw new Error("Migration cancelled")
+          }
 
-        await new Promise(r => setTimeout(r, 3000))
+          await new Promise(r => setTimeout(r, 3000))
 
-        const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
-        const isRunning = exitCheck.output?.trim() === "RUNNING"
+          const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
+          const poll = interpretPollExit(exitCheck)
+          if (poll.state === "unknown") {
+            pollFailures++
+            if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+              await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null`).catch(() => {})
+              await cleanup()
+              throw new Error(`Lost contact with the Proxmox node while monitoring the download (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
+            }
+            await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+            continue
+          }
+          pollFailures = 0
 
-        const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
-        const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
-        downloadedBytes = currentSize
+          const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
+          const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
 
-        const elapsed = (Date.now() - startTime) / 1000
-        const speedBps = elapsed > 0 ? currentSize / elapsed : 0
-        downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
+          const elapsed = (Date.now() - startTime) / 1000
+          const speedBps = elapsed > 0 ? currentSize / elapsed : 0
+          downloadSpeed = speedBps > 1048576 ? `${(speedBps / 1048576).toFixed(1)} MB/s` : `${(speedBps / 1024).toFixed(0)} KB/s`
 
-        const diskProgress = disk.sizeBytes > 0 ? Math.min(Math.round((currentSize / disk.sizeBytes) * 100), 99) : 0
-        const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
+          const diskProgress = disk.sizeBytes > 0 ? Math.min(Math.round((currentSize / disk.sizeBytes) * 100), 99) : 0
+          const overallProgress = Math.round((i / vmConfig.disks.length) * 100 + (diskProgress / vmConfig.disks.length))
 
-        await updateJob(jobId, "transferring", {
-          bytesTransferred: BigInt(currentSize),
-          transferSpeed: downloadSpeed,
-          progress: isLive ? Math.round(overallProgress * 0.7) : overallProgress,
-        })
+          await updateJob(jobId, "transferring", {
+            bytesTransferred: BigInt(currentSize),
+            transferSpeed: downloadSpeed,
+            progress: isLive ? Math.round(overallProgress * 0.7) : overallProgress,
+          })
 
-        if (!isRunning) {
-          const exitCode = Number.parseInt(exitCheck.output?.trim() || "1", 10)
+          if (poll.state === "running") continue
+          const exitCode = poll.exitCode
 
           // Parse curl stats before checking exit code (for http_code in error messages)
           const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
@@ -565,7 +581,6 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (curlStats) {
             try {
               const stats = JSON.parse(curlStats[0])
-              downloadedBytes = stats.size || currentSize
               downloadSpeed = stats.speed > 1048576 ? `${(stats.speed / 1048576).toFixed(1)} MB/s` : `${(stats.speed / 1024).toFixed(0)} KB/s`
               downloadTime = stats.time || elapsed
               httpCode = stats.http_code || 0
@@ -573,33 +588,64 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           } else {
             downloadTime = elapsed
           }
+          const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
 
           if (exitCode !== 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
-            throw new Error(`Download failed with exit code ${exitCode}${httpInfo}. Check XO connectivity and credentials.`)
+            // curl runs with -sS, so its own diagnostic sits in the stats file just
+            // before the -w JSON: surface its last lines instead of a bare code.
+            const statsTail = (statsContent.output || "").replace(/\{[^}]*\}\s*$/, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
+            return { state: "failed", message: `Download failed (curl exit ${exitCode}${httpInfo})${statsTail ? `: ${statsTail}` : ""}` }
           }
 
           // Validate that the downloaded file is not empty
           const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
           const actualFileSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10) || 0
           if (actualFileSize === 0) {
-            await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-            const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
-            throw new Error(`Downloaded VHD is empty (0 bytes)${httpInfo}. The XO REST API may have returned an error or the VDI is not accessible.`)
+            return { state: "failed", message: `Downloaded VHD is empty (0 bytes)${httpInfo}; the XO REST API may have returned an error or the VDI is not accessible` }
           }
-          downloadedBytes = actualFileSize
-
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
-          break
+          return { state: "done", bytes: actualFileSize, time: downloadTime, speed: downloadSpeed }
         }
       }
 
-      await updateJob(jobId, "transferring", {
-        bytesTransferred: BigInt(downloadedBytes),
-        transferSpeed: downloadSpeed,
-      })
-      await appendLog(jobId, `Download complete: ${(downloadedBytes / 1073741824).toFixed(1)} GB in ${downloadTime.toFixed(0)}s (${downloadSpeed})`, "success")
+      for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+        await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Downloading "${disk.label}" (${diskSizeGB} GB, VHD format)${attempt > 1 ? ` (attempt ${attempt}/${DOWNLOAD_ATTEMPTS})` : ""}...`)
+
+        await updateJob(jobId, "transferring", {
+          currentStep: `downloading_disk_${i + 1}`,
+          currentDisk: i,
+          bytesTransferred: BigInt(0),
+          totalBytes: BigInt(disk.sizeBytes),
+        })
+
+        const startDl = await executeSSH(
+          config.targetConnectionId, nodeIp,
+          `nohup bash -c 'curl -sS --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+        )
+        if (!startDl.success || !startDl.output?.trim()) {
+          throw new Error(`Failed to start download: ${startDl.error}`)
+        }
+        const curlPid = startDl.output.trim()
+        await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+
+        const outcome = await monitorDownload(curlPid)
+        if (outcome.state === "done") {
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}"`)
+          await updateJob(jobId, "transferring", {
+            bytesTransferred: BigInt(outcome.bytes),
+            transferSpeed: outcome.speed,
+          })
+          await appendLog(jobId, `Download complete: ${(outcome.bytes / 1073741824).toFixed(1)} GB in ${outcome.time.toFixed(0)}s (${outcome.speed})`, "success")
+          return
+        }
+
+        // The partial file is unusable: drop it before another attempt.
+        await cleanup()
+        if (attempt < DOWNLOAD_ATTEMPTS) {
+          await appendLog(jobId, `${outcome.message}; retrying the download (${attempt}/${DOWNLOAD_ATTEMPTS} attempts used)`, "warn")
+          continue
+        }
+        throw new Error(`${outcome.message} (after ${DOWNLOAD_ATTEMPTS} attempts)`)
+      }
     }
 
     // Helper: convert + import + attach a single disk

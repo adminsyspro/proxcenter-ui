@@ -710,7 +710,7 @@ export default function ConnectionDialog({
           }
           value={form.baseUrl}
           onChange={e => handleChange('baseUrl', e.target.value)}
-          placeholder={isNutanix ? 'prism-central.example.com' : isHyperv ? 'hyperv-host.local' : isXcpng ? (isXcpngXo ? 'http://10.99.99.196' : '10.99.99.197') : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : '192.168.1.100') : t('settings.baseUrlPlaceholder', { port })}
+          placeholder={isNutanix ? 'prism-central.example.com' : isHyperv ? 'hyperv-host.local' : isXcpng ? (isXcpngXo ? 'https://xo.example.com' : 'xcp-pool-master.example.com') : isVmware ? (form.subType === 'vcenter' ? 'vcenter.example.com' : 'esxi-host.example.com') : t('settings.baseUrlPlaceholder', { port })}
           helperText={isNutanix ? 'Nutanix Prism Central hostname or IP (port 9440)' : isHyperv ? 'Hyper-V server hostname or IP' : isXcpng ? (isXcpngXo ? t('settings.xcpngHostHelper') : t('settings.xcpngMasterHelper')) : isVmware ? (form.subType === 'vcenter' ? 'vCenter server hostname or IP' : t('settings.esxiHostHelper')) : undefined}
           sx={{ mt: 2 }}
           required

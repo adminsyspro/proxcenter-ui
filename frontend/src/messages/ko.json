@@ -3042,7 +3042,7 @@
     "xcpngModeColumn": "모드",
     "xcpngServers": "Proxmox로 VM을 마이그레이션하기 위해 직접 또는 Xen Orchestra를 통해 연결된 XCP-ng 풀",
     "xcpngPortInfo": "Xen Orchestra (XO/XOA) 인스턴스에 연결 — 자격 증명은 암호화되어 저장됩니다",
-    "xcpngAuthentication": "XO 인증",
+    "xcpngAuthentication": "인증",
     "xcpngUsername": "XO 사용자 이름 (이메일)",
     "xcpngPasswordLabel": "XO 비밀번호",
     "xcpngPasswordHelper": "Xen Orchestra 인스턴스의 비밀번호",

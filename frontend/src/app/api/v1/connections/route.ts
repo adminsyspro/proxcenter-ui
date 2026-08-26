@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
-import { encryptSecret } from "@/lib/crypto/secret"
+import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
@@ -90,6 +90,7 @@ export async function GET(req: Request) {
       sshUser: string
       sshAuthMethod: string | null
       sshUseSudo: boolean
+      apiTokenEnc: string | null
       sshKeyEnc: string | null
       sshPassEnc: string | null
       createdAt: Date
@@ -126,6 +127,7 @@ export async function GET(req: Request) {
         sshUser: true,
         sshAuthMethod: true,
         sshUseSudo: true,
+        apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
         createdAt: true,
@@ -157,11 +159,29 @@ export async function GET(req: Request) {
     const visibleConnections = connections.filter(c => visibleIds.has(c.id))
 
     // Calculer sshConfigured en mémoire sans N+1 queries
+    // External hypervisors keep their credentials as "user:password" inside
+    // apiTokenEnc. The edit dialog needs the user back, otherwise it prefills
+    // the type default and saving rewrites the stored user. Only the part
+    // before the first colon is ever exposed; the password never leaves here,
+    // and the encrypted columns stay out of the response.
+    const externalHypervisorTypes = new Set(['vmware', 'xcpng', 'hyperv', 'nutanix'])
     const connectionsWithSSHStatus = visibleConnections.map((conn) => {
-      const { sshKeyEnc, sshPassEnc, ...rest } = conn
+      const { apiTokenEnc, sshKeyEnc, sshPassEnc, ...rest } = conn
+
+      let apiUser: string | null = null
+      if (externalHypervisorTypes.has(conn.type) && apiTokenEnc) {
+        try {
+          const creds = decryptSecret(apiTokenEnc)
+          const colonIdx = creds.indexOf(':')
+          if (colonIdx > 0) apiUser = creds.substring(0, colonIdx)
+        } catch {
+          // Unreadable secret (rotated key): the dialog falls back to the default
+        }
+      }
 
       return {
         ...rest,
+        apiUser,
         sshConfigured: !!(sshKeyEnc || sshPassEnc),
         sshKeyConfigured: !!sshKeyEnc,
         sshPassConfigured: !!sshPassEnc,

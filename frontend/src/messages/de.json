@@ -3027,7 +3027,7 @@
     "xcpngModeColumn": "Modus",
     "xcpngServers": "Direkt oder über Xen Orchestra verbundene XCP-ng-Pools für die VM-Migration zu Proxmox",
     "xcpngPortInfo": "Verbindung zu Ihrer Xen Orchestra (XO/XOA)-Instanz — Zugangsdaten werden verschlüsselt gespeichert",
-    "xcpngAuthentication": "XO-Authentifizierung",
+    "xcpngAuthentication": "Authentifizierung",
     "xcpngUsername": "XO Benutzername (E-Mail)",
     "xcpngPasswordLabel": "XO Passwort",
     "xcpngPasswordHelper": "Passwort für die Xen Orchestra Instanz",

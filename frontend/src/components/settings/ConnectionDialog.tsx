@@ -156,6 +156,13 @@ export default function ConnectionDialog({
   useEffect(() => {
     if (open) {
       if (initialData) {
+        // XCP-ng rows created before the direct-pool mode existed are XO connections,
+        // so an absent subType means "xo".
+        const editSubType = (initialData as any).subType || (type === 'xcpng' ? 'xo' : '')
+        // Default user of the mode, used only when the stored one is unavailable.
+        const defaultUser = type === 'xcpng'
+          ? (editSubType === 'xapi' ? 'root' : 'admin@admin.net')
+          : type === 'hyperv' ? 'Administrator' : type === 'nutanix' ? 'admin' : 'root'
         setForm({
           ...defaultFormData,
           ...initialData,
@@ -166,9 +173,12 @@ export default function ConnectionDialog({
           sshPassphrase: '',
           sshPassword: '',
           sshAuthMethod: initialData.sshAuthMethod || '',
-          // VMware sub-type. XCP-ng: rows created before the direct-pool mode
-          // existed are XO connections, so an absent subType means "xo".
-          subType: (initialData as any).subType || (type === 'xcpng' ? 'xo' : ''),
+          subType: editSubType,
+          // External hypervisors keep "user:password" encrypted; the list payload
+          // hands the user back as apiUser (never the password). Without it the
+          // field would show the type default and saving would rewrite the real
+          // user of the connection.
+          vmwareUser: (initialData as any).apiUser || (initialData as any).vmwareUser || defaultUser,
           vmwareDatacenter: (initialData as any).vmwareDatacenter || '',
           hypervShareName: (initialData as any).hypervShareName || 'VMs',
           // Location: convert numbers to strings for text fields

@@ -72,11 +72,13 @@ export async function POST(
     const isWarm = (job.config as any)?.migrationType === "warm"
     // Warm has one engine per source hypervisor (SOAP/VDDK for VMware, XAPI/NBD
     // for XCP-ng). Resolve it from the source connection while the request-scoped
-    // Prisma client is still alive; it may be torn down inside after().
+    // Prisma client is still alive; it may be torn down inside after(). A deleted
+    // connection falls back to the sourceType persisted in the job config, so an
+    // XCP-ng retry is never handed to the VMware engine.
     let warmSourceType: string | null = null
     if (isWarm) {
       const src = await prisma.connection.findUnique({ where: { id: job.sourceConnectionId }, select: { type: true } })
-      warmSourceType = src?.type ?? null
+      warmSourceType = src?.type ?? (job.config as any)?.sourceType ?? null
     }
     after(async () => {
       if (isWarm) {

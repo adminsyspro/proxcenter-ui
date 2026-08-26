@@ -166,22 +166,40 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       let bytes = 0
       const extentsByPos = new Map<number, Extent[]>()
       const readers = new Map<number, XapiReaderHandle>()
+      const snapDisk = (disk: XoDiskInfo) => {
+        const sd = snap.disks.find(x => x.position === disk.position)
+        if (!sd) throw new Error(`snapshot has no disk at position ${disk.position} ("${disk.label}")`)
+        return sd
+      }
       try {
         // Size the whole pass first so the progress bar has its denominator
         // before the first byte is written (all disks share one window).
+        // A reader is only started when something needs it: the full pass needs
+        // the socket for the allocated map, a delta pass gets its extents from
+        // CBT and opens the reader at apply time, so a disk with no change never
+        // starts one. That matters in the cutover pass (guest downtime) and on a
+        // manual hold that re-snapshots every minute.
         let passTotal = 0
         for (const disk of vmConfig.disks) {
           if (isCancelled(jobId)) throw new Error("Migration cancelled")
-          const sd = snap.disks.find(x => x.position === disk.position)
-          if (!sd) throw new Error(`snapshot has no disk at position ${disk.position} ("${disk.label}")`)
-          const reader = await readerFor(sd.vdiRef, `${label}-${disk.position}`)
-          readers.set(disk.position, reader)
-          let extents: Extent[]
+          const sd = snapDisk(disk)
+          let extents: Extent[] | null = null
           if (prev) {
             const pd = prev.disks.find(x => x.position === disk.position)
             if (!pd) throw new Error(`previous snapshot has no disk at position ${disk.position}`)
-            extents = await xapiListChangedBlocks(session!, pd.vdiRef, sd.vdiRef, disk.sizeBytes)
-          } else {
+            try {
+              extents = await xapiListChangedBlocks(session!, pd.vdiRef, sd.vdiRef, disk.sizeBytes)
+            } catch (e: any) {
+              // XAPI answers VDI_NO_CBT_METADATA or VDIS_NOT_IN_SAME_CHAIN when the
+              // CBT chain between the two snapshots is broken (SR coalesce, metadata
+              // dropped). The allocated map of the new snapshot is a superset of the
+              // changed blocks, so copying it is still correct, only larger.
+              await appendLog(jobId, `Disk ${disk.position} ("${disk.label}"): changed block list unavailable (${e?.message || e}); copying every allocated block of this snapshot instead`, "warn")
+            }
+          }
+          if (extents === null) {
+            const reader = await readerFor(sd.vdiRef, `${label}-${disk.position}`)
+            readers.set(disk.position, reader)
             extents = await readAllocatedExtents(config.targetConnectionId, nodeIp, reader.sock, disk.sizeBytes)
           }
           extentsByPos.set(disk.position, extents)
@@ -195,14 +213,21 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
           await updateJobLive(jobId, window.status, { currentStep: window.currentStep, currentDisk: i })
           const extents = extentsByPos.get(disk.position)!
           if (extents.length > 0) {
+            let reader = readers.get(disk.position)
+            if (!reader) {
+              reader = await readerFor(snapDisk(disk).vdiRef, `${label}-${disk.position}`)
+              readers.set(disk.position, reader)
+            }
             await applyExtentsWithProgress({
-              jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: readers.get(disk.position)!.nbdDev, dev: targetDev.get(disk.position)!,
+              jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev: targetDev.get(disk.position)!,
               extents, capacityBytes: disk.sizeBytes, label: "block apply failed", diskIndex: i, pass,
             })
             bytes += extents.reduce((s, e) => s + e.length, 0)
             pass.doneBytes = bytes
           }
-          await release(readers.get(disk.position)!)
+          // Release right after the apply: the next disk's reader must not stack on this one.
+          const reader = readers.get(disk.position)
+          if (reader) { await release(reader); readers.delete(disk.position) }
         }
       } finally {
         for (const r of readers.values()) if (activeReaders.includes(r)) await release(r)
@@ -326,11 +351,23 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
     for (const r of activeReaders) if (nodeIp) await stopXapiReader(config.targetConnectionId, nodeIp, r).catch(() => {})
     if (session) {
-      for (const ref of [...ourSnapshots]) await xapiDestroySnapshot(session, ref).catch(() => {})
+      // Every destroy that fails is named in the log: a snapshot left on the pool
+      // is the operator's problem to clean up, so it must not vanish in silence.
+      const notRemoved = new Set<string>()
+      const warnNotRemoved = async (ref: string, e: any) => {
+        notRemoved.add(ref)
+        await appendLog(jobId, `Warning: could not remove warm snapshot ${ref}: ${e?.message || e}; delete it on the XCP-ng pool`, "warn").catch(() => {})
+      }
+      for (const ref of [...ourSnapshots]) await xapiDestroySnapshot(session, ref).catch(e => warnNotRemoved(ref, e))
       // Belt and braces: anything with our prefix that an earlier aborted run left on the VM.
       if (vmRef) for (const ref of await xapiFindSnapshotsByPrefix(session, vmRef, `${XCPNG_SNAPSHOT_PREFIX}-`).catch(() => [] as string[])) {
-        await xapiDestroySnapshot(session, ref).catch(() => {})
-        await appendLog(jobId, `Removed leftover warm snapshot ${ref} from the source VM`, "warn").catch(() => {})
+        if (notRemoved.has(ref)) continue
+        try {
+          await xapiDestroySnapshot(session, ref)
+          await appendLog(jobId, `Removed leftover warm snapshot ${ref} from the source VM`, "warn").catch(() => {})
+        } catch (e: any) {
+          await warnNotRemoved(ref, e)
+        }
       }
     }
     // Free the target volumes that never held a complete copy; keep the ones that do (#612).

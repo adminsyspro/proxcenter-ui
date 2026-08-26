@@ -62,8 +62,14 @@ vi.mock("@/lib/crypto/secret", () => ({
 const xapiLoginMock = vi.mocked(xapiLogin)
 const xapiLogoutMock = vi.mocked(xapiLogout)
 const xapiHostsMock = vi.mocked(xapiHosts)
+const xapiGetVmRecordMock = vi.mocked(xapiGetVmRecord)
+const xapiKeepAliveMock = vi.mocked(xapiKeepAlive)
+const xapiListVmsMock = vi.mocked(xapiListVms)
 const xapiVdiExportUrlMock = vi.mocked(xapiVdiExportUrl)
 const buildVdiDownloadUrlMock = vi.mocked(buildVdiDownloadUrl)
+const xoFetchMock = vi.mocked(xoFetch)
+const xoListHostsMock = vi.mocked(xoListHosts)
+const xoListVmsMock = vi.mocked(xoListVms)
 const getSessionPrismaMock = vi.mocked(getSessionPrisma)
 const decryptSecretMock = vi.mocked(decryptSecret)
 
@@ -107,6 +113,10 @@ describe("xcpng source helpers", () => {
     xapiLoginMock.mockResolvedValue(session)
     xapiLogoutMock.mockResolvedValue(undefined)
     xapiHostsMock.mockResolvedValue([])
+    xapiKeepAliveMock.mockResolvedValue(undefined)
+    xapiListVmsMock.mockResolvedValue([])
+    xoListHostsMock.mockResolvedValue([])
+    xoListVmsMock.mockResolvedValue([])
     xapiVdiExportUrlMock.mockReturnValue("https://xcp.test/export/vdi")
     buildVdiDownloadUrlMock.mockReturnValue("https://xo.test/download/vdi.vhd")
     decryptSecretMock.mockReturnValue("secret")
@@ -213,6 +223,129 @@ describe("xcpng source helpers", () => {
         `header = "Authorization: Basic ${Buffer.from("admin@admin.net:bare-password").toString("base64")}"`,
       )
       expect(xapiLoginMock).not.toHaveBeenCalled()
+    })
+
+    it("uses the supplied database client without opening the session database", async () => {
+      const findUnique = vi.fn().mockResolvedValue(storedConnection())
+      const db = { connection: { findUnique } }
+
+      await openXcpngSource("connection-from-job", db)
+
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id: "connection-from-job" },
+        select: { type: true, subType: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+      })
+      expect(getSessionPrismaMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("XoSource inventory", () => {
+    const credentials: XcpngCredentials = {
+      subType: "xo",
+      baseUrl: "https://xo.test/",
+      user: "admin@admin.net",
+      password: "secret",
+      insecureTLS: true,
+    }
+
+    it("lists hosts through the XO client with normalized connection details", async () => {
+      const hosts = [{ name_label: "host-one", address: "10.0.0.40", version: "5.100" }]
+      xoListHostsMock.mockResolvedValue(hosts)
+      const source = new XoSource(credentials)
+
+      await expect(source.listHosts()).resolves.toEqual(hosts)
+      expect(xoListHostsMock).toHaveBeenCalledWith({
+        baseUrl: "https://xo.test",
+        authHeader: `Basic ${Buffer.from("admin@admin.net:secret").toString("base64")}`,
+        insecureTLS: true,
+      })
+    })
+
+    it("filters malformed rows and maps VM fields with dynamic memory fallback", async () => {
+      xoListVmsMock.mockResolvedValue([
+        {
+          uuid: "vm-1",
+          name_label: "vm-one",
+          power_state: "Running",
+          CPUs: { number: 2, max: 4 },
+          memory: { size: 2147483648 },
+          os_version: { name: "Ubuntu" },
+        },
+        {
+          uuid: "vm-2",
+          name_label: "vm-two",
+          CPUs: { max: 8 },
+          memory: { dynamic: [0, 4294967296] },
+        },
+        null,
+        { name_label: "missing uuid" },
+        { uuid: "missing-name" },
+      ])
+      const source = new XoSource(credentials)
+
+      await expect(source.listVms()).resolves.toEqual([
+        {
+          uuid: "vm-1",
+          name_label: "vm-one",
+          power_state: "Running",
+          CPUs: { number: 2, max: 4 },
+          memory: { size: 2147483648 },
+          os_version: { name: "Ubuntu" },
+        },
+        {
+          uuid: "vm-2",
+          name_label: "vm-two",
+          power_state: "Halted",
+          CPUs: { number: 0, max: 8 },
+          memory: { size: 4294967296 },
+          os_version: {},
+        },
+      ])
+      expect(xoListVmsMock).toHaveBeenCalledOnce()
+    })
+
+    it("gets a VM through the encoded XO URL", async () => {
+      xoFetchMock.mockResolvedValue({ uuid: "vm/one", name_label: "vm-one" })
+      const source = new XoSource(credentials)
+
+      await expect(source.getVm("vm/one")).resolves.toEqual({ uuid: "vm/one", name_label: "vm-one" })
+      expect(xoFetchMock).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: "https://xo.test" }), "/vms/vm%2Fone")
+    })
+  })
+
+  describe("XapiSource inventory and lifecycle", () => {
+    it("delegates VM and host operations to the active XAPI session", async () => {
+      const hosts = [{ uuid: "host-1", name_label: "host-one", address: "10.0.0.50", version: "8.3" }]
+      const vms = [{
+        uuid: "vm-1",
+        name_label: "vm-one",
+        power_state: "Running",
+        CPUs: { number: 2, max: 4 },
+        memory: { size: 1024 },
+        os_version: {},
+      }]
+      const vm = { uuid: "vm-1", _ref: "OpaqueRef:vm" }
+      xapiHostsMock.mockResolvedValue(hosts)
+      xapiListVmsMock.mockResolvedValue(vms)
+      xapiGetVmRecordMock.mockResolvedValue(vm)
+      const source = await XapiSource.open(xapiCredentials)
+
+      await expect(source.listHosts()).resolves.toEqual(hosts)
+      await expect(source.listVms()).resolves.toEqual(vms)
+      await expect(source.getVm("vm-1")).resolves.toEqual(vm)
+      expect(xapiHostsMock).toHaveBeenCalledWith(session)
+      expect(xapiListVmsMock).toHaveBeenCalledWith(session)
+      expect(xapiGetVmRecordMock).toHaveBeenCalledWith(session, "vm-1")
+    })
+
+    it("keeps the session alive and closes it", async () => {
+      const source = await XapiSource.open(xapiCredentials)
+
+      await source.keepAlive()
+      await source.close()
+
+      expect(xapiKeepAliveMock).toHaveBeenCalledWith(session)
+      expect(xapiLogoutMock).toHaveBeenCalledWith(session)
     })
   })
 

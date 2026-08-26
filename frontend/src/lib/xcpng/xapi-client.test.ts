@@ -5,14 +5,28 @@ import {
   CLEAN_SHUTDOWN_WATCH_MS,
   XapiError,
   type XapiSession,
+  normalizeXapiBaseUrl,
   xapiCall,
   xapiCallAsync,
   xapiCleanShutdown,
+  xapiDescribeSnapshot,
+  xapiDisableCbt,
   xapiDestroySnapshot,
+  xapiEnableCbt,
   xapiFindSnapshotsByPrefix,
+  xapiGetNbdInfo,
+  xapiGetVmRecord,
   xapiGetVmConfig,
+  xapiHardShutdown,
+  xapiHosts,
+  xapiKeepAlive,
   xapiListChangedBlocks,
+  xapiListVms,
   xapiLogin,
+  xapiManagementNetworkUuid,
+  xapiNbdEnabled,
+  xapiPowerState,
+  xapiSnapshotVm,
   xapiVdiExportUrl,
 } from "./xapi-client"
 
@@ -119,6 +133,134 @@ describe("xcpng/xapi-client", () => {
     expect(requestAt(0)).toMatchObject({
       method: "VM.get_by_uuid",
       params: ["OpaqueRef:session", "vm-uuid"],
+    })
+  })
+
+  describe("inventory", () => {
+    it("maps host product versions", async () => {
+      fetchMock.mockResolvedValueOnce(success({
+        "OpaqueRef:host-1": {
+          uuid: "host-uuid",
+          name_label: "pool-master",
+          address: "10.0.0.10",
+          software_version: { product_version: "8.3.0" },
+        },
+        "OpaqueRef:host-2": {
+          uuid: "host-uuid-2",
+          name_label: "pool-member",
+          address: "10.0.0.11",
+        },
+      }))
+
+      await expect(xapiHosts(session)).resolves.toEqual([
+        { uuid: "host-uuid", name_label: "pool-master", address: "10.0.0.10", version: "8.3.0" },
+        { uuid: "host-uuid-2", name_label: "pool-member", address: "10.0.0.11", version: "" },
+      ])
+      expect(requestAt(0).method).toBe("host.get_all_records")
+    })
+
+    it("filters non-VM records and maps CPUs, memory, and guest OS metrics", async () => {
+      fetchMock
+        .mockResolvedValueOnce(success({
+          vm: {
+            uuid: "vm-uuid",
+            name_label: "Zulu VM",
+            power_state: "Running",
+            VCPUs_at_startup: "2",
+            VCPUs_max: "4",
+            memory_static_max: "4294967296",
+            guest_metrics: "OpaqueRef:metrics",
+          },
+          vm2: {
+            uuid: "vm-uuid-2",
+            name_label: "Alpha VM",
+            power_state: "Halted",
+            VCPUs_at_startup: "0",
+            VCPUs_max: "0",
+            memory_static_max: "0",
+            guest_metrics: "OpaqueRef:missing",
+          },
+          template: { uuid: "template", name_label: "template", is_a_template: true },
+          snapshot: { uuid: "snapshot", name_label: "snapshot", is_a_snapshot: true },
+          control: { uuid: "control", name_label: "dom0", is_control_domain: true },
+        }))
+        .mockResolvedValueOnce(success({
+          "OpaqueRef:metrics": { os_version: { name: "Debian 12" } },
+        }))
+
+      await expect(xapiListVms(session)).resolves.toEqual([
+        {
+          uuid: "vm-uuid-2",
+          name_label: "Alpha VM",
+          power_state: "Halted",
+          CPUs: { number: 1, max: 1 },
+          memory: { size: 0 },
+          os_version: {},
+        },
+        {
+          uuid: "vm-uuid",
+          name_label: "Zulu VM",
+          power_state: "Running",
+          CPUs: { number: 2, max: 4 },
+          memory: { size: 4294967296 },
+          os_version: { name: "Debian 12" },
+        },
+      ])
+      expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual([
+        "VM.get_all_records",
+        "VM_guest_metrics.get_all_records",
+      ])
+    })
+
+    it("resolves non-null guest metrics on a VM record", async () => {
+      fetchMock
+        .mockResolvedValueOnce(success("OpaqueRef:vm"))
+        .mockResolvedValueOnce(success({ uuid: "vm-uuid", guest_metrics: "OpaqueRef:metrics" }))
+        .mockResolvedValueOnce(success({ os_version: { distro: "Alpine" } }))
+
+      await expect(xapiGetVmRecord(session, "vm-uuid")).resolves.toEqual({
+        uuid: "vm-uuid",
+        guest_metrics: "OpaqueRef:metrics",
+        _ref: "OpaqueRef:vm",
+        _guest: { os_version: { distro: "Alpine" } },
+      })
+      expect(requestAt(2)).toMatchObject({
+        method: "VM_guest_metrics.get_record",
+        params: [session.ref, "OpaqueRef:metrics"],
+      })
+    })
+  })
+
+  describe("pool capabilities", () => {
+    it.each(["nbd", "insecure_nbd"])("reports NBD enabled for the %s purpose", async purpose => {
+      fetchMock.mockResolvedValueOnce(success({ net: { purpose: ["other", purpose] } }))
+      await expect(xapiNbdEnabled(session)).resolves.toBe(true)
+    })
+
+    it("reports NBD disabled when no network has an NBD purpose", async () => {
+      fetchMock.mockResolvedValueOnce(success({ net: { purpose: ["other"] }, legacy: { purpose: null } }))
+      await expect(xapiNbdEnabled(session)).resolves.toBe(false)
+    })
+
+    it("resolves the management PIF network UUID", async () => {
+      fetchMock
+        .mockResolvedValueOnce(success({
+          pif1: { management: false, network: "OpaqueRef:other" },
+          pif2: { management: true, network: "OpaqueRef:management" },
+        }))
+        .mockResolvedValueOnce(success({ uuid: "management-network-uuid" }))
+
+      await expect(xapiManagementNetworkUuid(session)).resolves.toBe("management-network-uuid")
+      expect(requestAt(1)).toMatchObject({
+        method: "network.get_record",
+        params: [session.ref, "OpaqueRef:management"],
+      })
+    })
+
+    it("returns a placeholder when there is no management PIF", async () => {
+      fetchMock.mockResolvedValueOnce(success({ pif: { management: false } }))
+      await expect(xapiManagementNetworkUuid(session)).resolves.toBe("<network uuid>")
+      expect(fetchMock).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -241,6 +383,177 @@ describe("xcpng/xapi-client", () => {
     expect(xapiVdiExportUrl(session, "OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e", "raw")).toBe(
       "https://xcp.test/export_raw_vdi?session_id=OpaqueRef:session&vdi=OpaqueRef:0ca52163-07e8-8ce0-117b-75d58b9af95e&format=raw",
     )
+  })
+
+  it("creates and describes a snapshot, skips CDs, and sorts disks by position", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:abcdef"))
+      .mockResolvedValueOnce(success({ status: "success", result: "<value>OpaqueRef:123abc</value>" }))
+      .mockResolvedValueOnce(success(null))
+      .mockResolvedValueOnce(success({
+        uuid: "snapshot-uuid",
+        name_label: "backup-2026",
+        VBDs: ["OpaqueRef:vbd-2", "OpaqueRef:cd", "OpaqueRef:vbd-0"],
+      }))
+      .mockResolvedValueOnce(success({ type: "Disk", empty: false, VDI: "OpaqueRef:vdi-2", userdevice: "2" }))
+      .mockResolvedValueOnce(success({
+        uuid: "vdi-uuid-2",
+        snapshot_of: "OpaqueRef:source-2",
+        virtual_size: "2048",
+      }))
+      .mockResolvedValueOnce(success({ type: "CD", empty: false, VDI: "OpaqueRef:iso", userdevice: "3" }))
+      .mockResolvedValueOnce(success({ type: "Disk", empty: false, VDI: "OpaqueRef:vdi-0", userdevice: "0" }))
+      .mockResolvedValueOnce(success({
+        uuid: "vdi-uuid-0",
+        snapshot_of: "OpaqueRef:source-0",
+        virtual_size: "1024",
+      }))
+
+    await expect(xapiSnapshotVm(session, "OpaqueRef:vm", "backup-2026")).resolves.toEqual({
+      ref: "OpaqueRef:123abc",
+      uuid: "snapshot-uuid",
+      nameLabel: "backup-2026",
+      disks: [
+        {
+          position: 0,
+          vdiRef: "OpaqueRef:vdi-0",
+          vdiUuid: "vdi-uuid-0",
+          snapshotOfRef: "OpaqueRef:source-0",
+          sizeBytes: 1024,
+        },
+        {
+          position: 2,
+          vdiRef: "OpaqueRef:vdi-2",
+          vdiUuid: "vdi-uuid-2",
+          snapshotOfRef: "OpaqueRef:source-2",
+          sizeBytes: 2048,
+        },
+      ],
+    })
+    expect(requestAt(0)).toMatchObject({
+      method: "Async.VM.snapshot",
+      params: [session.ref, "OpaqueRef:vm", "backup-2026"],
+    })
+    expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual([
+      "Async.VM.snapshot",
+      "task.get_record",
+      "task.destroy",
+      "VM.get_record",
+      "VBD.get_record",
+      "VDI.get_record",
+      "VBD.get_record",
+      "VBD.get_record",
+      "VDI.get_record",
+    ])
+  })
+
+  it("describes an existing snapshot reference", async () => {
+    fetchMock.mockResolvedValueOnce(success({ uuid: "snapshot-uuid", name_label: "snapshot", VBDs: [] }))
+
+    await expect(xapiDescribeSnapshot(session, "OpaqueRef:snapshot")).resolves.toEqual({
+      ref: "OpaqueRef:snapshot",
+      uuid: "snapshot-uuid",
+      nameLabel: "snapshot",
+      disks: [],
+    })
+  })
+
+  it("maps the first NBD export and converts its port to a number", async () => {
+    fetchMock.mockResolvedValueOnce(success([
+      { address: "10.0.0.20", port: "10810", exportname: "vdi-export", cert: "cert", subject: "subject" },
+      { address: "10.0.0.21", port: "10811", exportname: "ignored" },
+    ]))
+
+    await expect(xapiGetNbdInfo(session, "OpaqueRef:vdi")).resolves.toEqual({
+      address: "10.0.0.20",
+      port: 10810,
+      exportname: "vdi-export",
+      cert: "cert",
+      subject: "subject",
+    })
+  })
+
+  it("throws when XAPI returns no NBD exports", async () => {
+    fetchMock.mockResolvedValueOnce(success([]))
+    await expect(xapiGetNbdInfo(session, "OpaqueRef:vdi")).rejects.toThrow("XAPI returned no NBD export")
+  })
+
+  it("finds only snapshots whose labels start with the prefix", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success(["OpaqueRef:one", "OpaqueRef:two", "OpaqueRef:three"]))
+      .mockResolvedValueOnce(success("backup-one"))
+      .mockResolvedValueOnce(success("manual"))
+      .mockResolvedValueOnce(success("backup-three"))
+
+    await expect(xapiFindSnapshotsByPrefix(session, "OpaqueRef:vm", "backup-")).resolves.toEqual([
+      "OpaqueRef:one",
+      "OpaqueRef:three",
+    ])
+  })
+
+  it("returns VM power state", async () => {
+    fetchMock.mockResolvedValueOnce(success("Running"))
+    await expect(xapiPowerState(session, "OpaqueRef:vm")).resolves.toBe("Running")
+    expect(requestAt(0)).toMatchObject({
+      method: "VM.get_power_state",
+      params: [session.ref, "OpaqueRef:vm"],
+    })
+  })
+
+  it("performs hard shutdown through an async task", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success("OpaqueRef:abcdef"))
+      .mockResolvedValueOnce(success({ status: "success", result: "<value></value>" }))
+      .mockResolvedValueOnce(success(null))
+
+    await expect(xapiHardShutdown(session, "OpaqueRef:vm")).resolves.toBeUndefined()
+    expect(fetchMock.mock.calls.map((_, index) => requestAt(index).method)).toEqual([
+      "Async.VM.hard_shutdown",
+      "task.get_record",
+      "task.destroy",
+    ])
+  })
+
+  it("does not enable CBT when it is already enabled", async () => {
+    fetchMock.mockResolvedValueOnce(success(true))
+
+    await expect(xapiEnableCbt(session, "OpaqueRef:vdi")).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(requestAt(0).method).toBe("VDI.get_cbt_enabled")
+  })
+
+  it("disables CBT", async () => {
+    fetchMock.mockResolvedValueOnce(success(null))
+
+    await expect(xapiDisableCbt(session, "OpaqueRef:vdi")).resolves.toBeUndefined()
+    expect(requestAt(0)).toMatchObject({
+      method: "VDI.disable_cbt",
+      params: [session.ref, "OpaqueRef:vdi"],
+    })
+  })
+
+  it("keeps the session alive with the session ref in both parameter positions", async () => {
+    fetchMock.mockResolvedValueOnce(success("OpaqueRef:host"))
+
+    await expect(xapiKeepAlive(session)).resolves.toBeUndefined()
+    expect(requestAt(0)).toMatchObject({
+      method: "session.get_this_host",
+      params: [session.ref, session.ref],
+    })
+  })
+
+  describe("normalizeXapiBaseUrl", () => {
+    it.each([
+      ["xcp.test", "https://xcp.test"],
+      ["http://xcp.test", "https://xcp.test"],
+      ["https://xcp.test///", "https://xcp.test"],
+    ])("normalizes %s", (input, expected) => {
+      expect(normalizeXapiBaseUrl(input)).toBe(expected)
+    })
+
+    it("rejects an empty address", () => {
+      expect(() => normalizeXapiBaseUrl("   ")).toThrow("pool master address is required")
+    })
   })
 
   it("decodes the bitmap returned by VDI.list_changed_blocks", async () => {

@@ -85,7 +85,7 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
     // The same command may already have created the CA directory and the log:
     // remove them like the two later failure paths do (nbdDev:"" for the same reason).
     await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile, caDir }).catch(() => {})
-    throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
+    throw new Error(`failed to launch nbdkit nbd reader: ${redactLogTail(launchRes.error || launchRes.output || "")}`)
   }
   let ready = false
   for (let i = 0; i < maxAttempts; i++) {
@@ -105,7 +105,7 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
   if (!connect.success || !nbdDev) {
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile, caDir }).catch(() => {})
-    throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${redactLogTail(log.output)}`)
+    throw new Error(`nbd-client failed to attach a free NBD device: ${redactLogTail((connect.output || connect.error || "").trim())} | nbdkit log: ${redactLogTail(log.output)}`)
   }
   return { nbdDev, sock: t.sock, logFile, caDir }
 }

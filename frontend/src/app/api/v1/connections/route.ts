@@ -74,6 +74,7 @@ export async function GET(req: Request) {
       id: string
       name: string
       type: string
+      subType: string | null
       tenantId: string | null
       baseUrl: string
       behindProxy: boolean
@@ -109,6 +110,7 @@ export async function GET(req: Request) {
         id: true,
         name: true,
         type: true,
+        subType: true,
         tenantId: true,
         baseUrl: true,
         behindProxy: true,

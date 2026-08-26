@@ -534,7 +534,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
         while (true) {
           if (isCancelled(jobId)) {
-            await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null`).catch(() => {})
+            await executeSSH(config.targetConnectionId, nodeIp, `pkill -P ${curlPid} 2>/dev/null; kill ${curlPid} 2>/dev/null`).catch(() => {})
             await cleanup()
             throw new Error("Migration cancelled")
           }
@@ -546,11 +546,16 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (poll.state === "unknown") {
             pollFailures++
             if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-              await executeSSH(config.targetConnectionId, nodeIp, `kill ${curlPid} 2>/dev/null`).catch(() => {})
+              await executeSSH(config.targetConnectionId, nodeIp, `pkill -P ${curlPid} 2>/dev/null; kill ${curlPid} 2>/dev/null`).catch(() => {})
               await cleanup()
               throw new Error(`Lost contact with the Proxmox node while monitoring the download (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
             }
-            await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (${pollFailures}/${MAX_CONSECUTIVE_POLL_FAILURES})`, "warn")
+            if (pollFailures === 1) {
+              // Only the first failure of a streak is logged: one poll every 3s over a flaky
+              // link would otherwise rewrite the job log hundreds of times per hour. The
+              // give-up throw above carries the final count and the last reason.
+              await appendLog(jobId, `Progress poll failed (${poll.reason}); retrying (up to ${MAX_CONSECUTIVE_POLL_FAILURES} times)`, "warn")
+            }
             continue
           }
           pollFailures = 0
@@ -593,7 +598,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           if (exitCode !== 0) {
             // curl runs with -sS, so its own diagnostic sits in the stats file just
             // before the -w JSON: surface its last lines instead of a bare code.
-            const statsTail = (statsContent.output || "").replace(/\{[^}]*\}\s*$/, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
+            const statsTail = (statsContent.output || "").replace(/\{[^}]*\}/g, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
             return { state: "failed", message: `Download failed (curl exit ${exitCode}${httpInfo})${statsTail ? `: ${statsTail}` : ""}` }
           }
 
@@ -617,9 +622,12 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           totalBytes: BigInt(disk.sizeBytes),
         })
 
+        // The leading rm is not cosmetic: a cleanup() whose SSH call failed would leave the
+        // previous attempt's exit file behind, and this attempt's first poll would read that
+        // stale code, declare failure and delete the .vhd from under a running curl.
         const startDl = await executeSSH(
           config.targetConnectionId, nodeIp,
-          `nohup bash -c 'curl -sS --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+          `rm -f "${pidFile}.exit" "${statsFile}"; nohup bash -c 'curl -sS --fail -H "Authorization: Basic ${curlAuth}" -H "Accept: application/octet-stream" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' "${downloadUrl}" > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
         )
         if (!startDl.success || !startDl.output?.trim()) {
           throw new Error(`Failed to start download: ${startDl.error}`)

@@ -28,6 +28,7 @@ var ConsoleUI = (() => {
     MIN_GUEST_HEIGHT: () => MIN_GUEST_HEIGHT,
     MIN_GUEST_WIDTH: () => MIN_GUEST_WIDTH,
     SCALING_MODES: () => SCALING_MODES,
+    VM_ACTIONS: () => VM_ACTIONS,
     computeFitScale: () => computeFitScale,
     computeGuestResolution: () => computeGuestResolution,
     debounce: () => debounce,
@@ -38,10 +39,12 @@ var ConsoleUI = (() => {
     keyComboSequence: () => keyComboSequence,
     loadScalingMode: () => loadScalingMode,
     parseScalingMode: () => parseScalingMode,
+    parseVmStatus: () => parseVmStatus,
     rfbFlagsForScalingMode: () => rfbFlagsForScalingMode,
     saveScalingMode: () => saveScalingMode,
     scalingStorageKey: () => scalingStorageKey,
-    toggleFullscreen: () => toggleFullscreen
+    toggleFullscreen: () => toggleFullscreen,
+    vmActionsEnabled: () => vmActionsEnabled
   });
   var SCALING_MODES = ["off", "scale", "remote"];
   var DEFAULT_SCALING_MODE = "scale";
@@ -156,6 +159,21 @@ var ConsoleUI = (() => {
     const down = found.strokes.map((s) => ({ ...s, down: true }));
     const up = [...found.strokes].reverse().map((s) => ({ ...s, down: false }));
     return [...down, ...up];
+  }
+  var VM_ACTIONS = ["start", "shutdown", "stop", "suspend"];
+  var VM_STATUSES = ["running", "stopped", "paused", "unknown"];
+  function parseVmStatus(raw) {
+    return VM_STATUSES.includes(raw) ? raw : "unknown";
+  }
+  function vmActionsEnabled(status) {
+    const parsed = parseVmStatus(status);
+    const running = parsed === "running";
+    return {
+      start: !running,
+      shutdown: running,
+      stop: parsed !== "stopped",
+      suspend: running
+    };
   }
   function debounce(fn, delayMs) {
     let timer = null;

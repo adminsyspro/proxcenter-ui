@@ -3,7 +3,7 @@
 // Shared viewport logic for the two graphical console pages
 // (public/novnc/console.html and public/spice/console.html): scaling mode
 // persistence, guest-resolution maths for an agent-driven resize, fit
-// scaling, fullscreen helpers and the send-key combos.
+// scaling, fullscreen helpers, the send-key combos and the VM power actions.
 //
 // Those pages are plain static HTML served outside Next (they must load the
 // noVNC / spice-html5 IIFE bundles), so they cannot import from src/. They
@@ -269,6 +269,45 @@ export function keyComboSequence(id: string): { keysym: number; code: string; do
   const up = [...found.strokes].reverse().map(s => ({ ...s, down: false }))
 
   return [...down, ...up]
+}
+
+// --- VM power actions -----------------------------------------------------
+// The toolbar of both consoles carries the four guest power actions, so an
+// operator can start a stopped VM or force it off without leaving the console
+// window. The rules live here so the two pages cannot drift apart again (the
+// SPICE page shipped without them, GIBZ report 2026-08-26).
+
+export type VmStatus = 'running' | 'stopped' | 'paused' | 'unknown'
+
+export type VmAction = 'start' | 'shutdown' | 'stop' | 'suspend'
+
+/** Display order of the toolbar buttons; also the API action names. */
+export const VM_ACTIONS: readonly VmAction[] = ['start', 'shutdown', 'stop', 'suspend']
+
+const VM_STATUSES: readonly VmStatus[] = ['running', 'stopped', 'paused', 'unknown']
+
+/** The guest status route answers `data.status`; anything unexpected is `unknown`. */
+export function parseVmStatus(raw: unknown): VmStatus {
+  return VM_STATUSES.includes(raw as VmStatus) ? (raw as VmStatus) : 'unknown'
+}
+
+/**
+ * Which actions make sense for a status. The graceful ones (shutdown, pause)
+ * need a running guest agent to talk to; start and the forced stop stay
+ * available whenever the status does not rule them out, including when it
+ * could not be fetched at all: the console must never lock the operator out
+ * of recovering the VM.
+ */
+export function vmActionsEnabled(status: VmStatus): Record<VmAction, boolean> {
+  const parsed = parseVmStatus(status)
+  const running = parsed === 'running'
+
+  return {
+    start: !running,
+    shutdown: running,
+    stop: parsed !== 'stopped',
+    suspend: running,
+  }
 }
 
 // --- Misc -----------------------------------------------------------------

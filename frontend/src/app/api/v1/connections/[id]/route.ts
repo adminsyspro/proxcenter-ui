@@ -12,6 +12,8 @@ import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { pveFetch } from "@/lib/proxmox/client"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
+import { xcpngSubTypeOf } from "@/lib/xcpng/source"
+import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
 
 export const runtime = "nodejs"
 
@@ -123,6 +125,19 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     if (body.subType !== undefined) data.subType = body.subType
     if (body.vmwareDatacenter !== undefined) data.vmwareDatacenter = body.vmwareDatacenter || null
+
+    // XCP-ng: the mode lives in subType ("xapi" direct pool, "xo" Xen Orchestra) and a
+    // pool master is entered as an IP or hostname, so a direct connection stores the
+    // https URL XAPI is reached on. The mode can change in the same request, hence the
+    // normalization against the effective mode, and a null subType is coerced to "xo".
+    if (body.subType !== undefined || body.baseUrl !== undefined) {
+      const row = await prisma.connection.findUnique({ where: { id }, select: { type: true, subType: true, baseUrl: true } })
+      if (row?.type === 'xcpng') {
+        const mode = xcpngSubTypeOf({ subType: body.subType ?? row.subType })
+        if (body.subType !== undefined) data.subType = mode
+        if (mode === 'xapi') data.baseUrl = normalizeXapiBaseUrl(body.baseUrl ?? row.baseUrl)
+      }
+    }
 
     if (body.apiToken !== undefined && body.apiToken) {
       data.apiTokenEnc = encryptSecret(body.apiToken)

@@ -32,6 +32,7 @@ import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
+import { startSessionKeepAlive } from "./warm/session-keepalive"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -263,6 +264,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
   // Kept open for the whole job: cold downloads run for hours and an XAPI export
   // URL is only valid while its session is.
   let source: XcpngSource | null = null
+  let stopSourceKeepAlive: () => void = () => {}
 
   // Liveness signal for the orphan sweep (#608): bump updatedAt while the job
   // runs so a long silent step (#606) is never mistaken for a dead process.
@@ -276,6 +278,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // Open the source (XO REST or direct XAPI session)
     const src = await openXcpngSource(config.sourceConnectionId, prisma)
     source = src
+    // An XAPI session idles out while curl streams for hours on the PVE node and the
+    // export URL dies with it: ping the pool every 5 minutes. XO needs nothing.
+    if (src.kind === "xapi") stopSourceKeepAlive = startSessionKeepAlive(() => src.keepAlive(), 5 * 60_000)
     await appendLog(jobId, `Connecting to ${src.kind === "xapi" ? "XCP-ng pool" : "Xen Orchestra"} at ${src.displayUrl}...`)
 
     // Get XO connection name
@@ -809,6 +814,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
     }
   } finally {
+    stopSourceKeepAlive()
     await source?.close().catch(() => {})
     stopHeartbeat()
     cancelledJobs.delete(jobId)

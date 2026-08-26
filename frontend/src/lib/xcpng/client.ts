@@ -43,6 +43,10 @@ export interface XoDiskInfo {
   sizeBytes: number
   position: number            // device position (0, 1, ...)
   srUuid: string
+  /** XAPI VDI reference, set when the config comes from a direct pool connection. */
+  vdiRef?: string
+  /** SR type (ext, nfs, lvm, ...), used for the CBT eligibility of a warm migration. */
+  srType?: string
 }
 
 export interface XoNetworkInfo {

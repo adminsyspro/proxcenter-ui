@@ -2204,7 +2204,6 @@
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS 부팅은 실험적 기능이며, 게스트가 드라이버 조정 없이 대상에서 올바르게 부팅되는 경우에만 작동합니다. EFI Windows, vCenter에서 가져온 VM, 프로덕션 크리티컬 워크로드에는 라이브 또는 오프라인을 선택하세요.",
       "sshfsBootMigrationInfo": "VM이 VMware에서 중지된 후 SSHFS/SSH를 통해 ESXi 데이터스토어에서 즉시 Proxmox로 부팅됩니다. VM이 실행되는 동안 drive-mirror를 사용하여 디스크가 로컬 스토리지로 실시간 복사됩니다. 총 다운타임: 수 초.",
       "xcpngWarmMigrationInfo": "XCP-ng NBD 내보내기를 통해 디스크를 복사하는 동안 VM은 계속 실행됩니다. 변경 블록 추적으로 변경된 블록을 다시 동기화한 후 짧은 컷오버 과정에서 게스트를 종료하고 마지막 델타를 적용한 다음 Proxmox에서 시작합니다. 블록 스토리지 대상이 필요하며 풀에서 NBD가 활성화되어 있어야 합니다.",
-      "liveMigrationInfo": "VM이 실행되는 동안 vmkfstools를 통해 ESXi에서 디스크가 복제된 후 Proxmox로 전송됩니다. 최종 컷오버를 위해 VM 전원이 자동으로 꺼집니다 (최소 다운타임).",
       "sshRequired": "대상 Proxmox 연결에 SSH가 구성되어 있지 않습니다. 디스크 전송 및 VM 구성에는 SSH 액세스가 필요합니다. 연결 설정에서 SSH를 활성화하세요.",
       "sshfsNotInstalled": "대상 Proxmox 노드에 sshfs가 설치되어 있지 않습니다. SSHFS 및 SSHFS 부팅 모드에는 sshfs가 필요합니다. 설치 방법: apt install sshfs",
       "installFailedTitle": "대상 노드에서 설치 실패",

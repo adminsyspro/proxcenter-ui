@@ -2204,7 +2204,6 @@
       "migrationTypeSshfsBootExperimentalWarning": "SSHFS Boot is experimental and only works when the guest boots correctly on the target without driver adaptation. For EFI Windows, vCenter-sourced VMs, or anything production-critical, choose Live or Offline.",
       "sshfsBootMigrationInfo": "VM is stopped on VMware and immediately booted on Proxmox from the ESXi datastore via SSHFS/SSH. Disks are live-copied to local storage using drive-mirror while the VM runs. Total downtime: seconds.",
       "xcpngWarmMigrationInfo": "The VM keeps running while its disks are copied through the XCP-ng NBD export; changed blocks are re-synced with changed block tracking, then a short cutover shuts the guest down, applies the last delta and starts it on Proxmox. Requires a block storage target and NBD enabled on the pool.",
-      "liveMigrationInfo": "Disks are cloned on ESXi via vmkfstools while the VM runs, then transferred to Proxmox. The VM is powered off automatically for final cutover (minimal downtime).",
       "sshRequired": "SSH is not configured on the target Proxmox connection. SSH access is required to transfer disks and configure the VM. Please enable SSH in the connection settings.",
       "sshfsNotInstalled": "sshfs is not installed on the target Proxmox node. SSHFS and SSHFS Boot modes require it. Install with: apt install sshfs",
       "installFailedTitle": "Install failed on the target node",

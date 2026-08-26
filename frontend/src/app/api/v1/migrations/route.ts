@@ -158,6 +158,11 @@ export async function POST(req: Request) {
     // Other hypervisors keep their existing paths; reject early with a clear
     // message rather than silently falling through to a cold/lossy path.
     const sourceSubType = sourceConn.subType ?? (sourceConn.type === "xcpng" ? "xo" : null)
+    // The XCP-ng "Live" mode (snapshot + full download while the VM runs) was removed:
+    // it never worked against Xen Orchestra and warm migration supersedes it.
+    if (migrationType === "live" && effectiveSourceType === "xcpng") {
+      return NextResponse.json({ error: "Live migration is no longer available for XCP-ng; use Offline or Warm." }, { status: 400 })
+    }
     const warmAllowed = effectiveSourceType === "vmware" || effectiveSourceType === "vcenter" || (effectiveSourceType === "xcpng" && sourceSubType === "xapi")
     if (migrationType === "warm" && !warmAllowed) {
       const error = effectiveSourceType === "xcpng"
@@ -260,7 +265,7 @@ export async function POST(req: Request) {
           ...(v2vRoot !== undefined && { v2vRoot }),
         }, tenantId)
       } else if (effectiveSourceType === "xcpng") {
-        await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: (migrationType === "sshfs_boot" ? "cold" : migrationType) as "cold" | "live" }, tenantId)
+        await runXcpngMigrationPipeline(job.id, { ...migrationConfig, migrationType: "cold" }, tenantId)
       } else if (effectiveSourceType === "vmware" && migrationType === "cold") {
         // Direct-ESXi Cold: Windows guests get routed through virt-v2v for automatic
         // driver injection (viostor registry + virtio-win-guest-tools firstboot).

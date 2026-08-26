@@ -3,31 +3,41 @@ import { buildNbdConnectCmd, buildReaderTeardownCmd, type PollOpts } from "./vdd
 import type { Extent } from "./extents"
 
 /** The xapi-nbd export to re-serve locally: unix socket to create, plus the
- *  TLS NBD endpoint XAPI handed us (address, port, export name with session). */
-export interface XapiNbdTarget { sock: string; address: string; port: number; exportname: string }
+ *  TLS NBD endpoint XAPI handed us (address, port, export name with session)
+ *  and the PEM certificate of that host, both from VDI.get_nbd_info. */
+export interface XapiNbdTarget { sock: string; address: string; port: number; exportname: string; cert: string }
 
 /** A running nbdkit-nbd reader: the kernel device it is attached to plus the
- *  node-side resources (socket, log) that must be cleaned up. */
-export interface XapiReaderHandle { nbdDev: string; sock: string; logFile: string }
+ *  node-side resources (socket, log, pinned-CA directory) to clean up. */
+export interface XapiReaderHandle { nbdDev: string; sock: string; logFile: string; caDir: string }
 
 /**
  * nbdkit's nbd plugin re-exports the XCP-ng xapi-nbd export (TLS on 10809) on a
  * local unix socket, exactly where the VDDK plugin sits for VMware, so nbd-client
- * and the block applier are shared. -r: warm only reads the source. tls-verify=false:
- * the host certificate is self signed and names the host while XAPI hands us its IP;
- * the address itself comes from an authenticated XAPI call (same trust as the VDDK
- * thumbprint fetched over the wire).
+ * and the block applier are shared. -r: warm only reads the source.
+ *
+ * The TLS server is VERIFIED, never trusted blindly: the export name carries the
+ * XAPI session id, so a TLS interceptor on the management LAN would walk away
+ * with a root session. `tls-certificates=<caDir>` points nbdkit at a directory
+ * whose ca-cert.pem is the certificate VDI.get_nbd_info returned for this very
+ * host, so the handshake is pinned to that self signed certificate and any other
+ * CA fails it. XCP-ng host certificates carry the management IP as CN, which is
+ * exactly the `address` the same authenticated XAPI call handed us, so
+ * `hostname=<address>` matches the certificate as well.
  */
-export function buildNbdkitXapiCmd(t: XapiNbdTarget): string {
+export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
   return ["nbdkit", "-r", "-U", shellEscape(t.sock), "nbd",
     `hostname=${shellEscape(t.address)}`, `port=${shellEscape(String(t.port))}`,
-    `export=${shellEscape(t.exportname)}`, "tls=require", "tls-verify=false"].join(" ")
+    `export=${shellEscape(t.exportname)}`, "tls=require",
+    `tls-certificates=${shellEscape(caDir)}`].join(" ")
 }
 
 /**
  * Start an nbdkit-nbd reader on the PVE node and attach it to a free NBD device:
- *   1. clear any stale socket and launch `buildNbdkitXapiCmd(t)` backgrounded
- *      with output to a log,
+ *   1. write the host certificate from VDI.get_nbd_info into a private
+ *      `<sock>.ca/ca-cert.pem` so nbdkit can pin the TLS server, clear any stale
+ *      socket, and launch `buildNbdkitXapiCmd(t, caDir)` backgrounded with
+ *      output to a log,
  *   2. poll until the unix socket appears (the TLS handshake with xapi-nbd can
  *      take a few seconds),
  *   3. attach the socket to the first free kernel NBD device and record which
@@ -40,7 +50,15 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
   const intervalMs = poll.intervalMs ?? 1000
   const maxAttempts = poll.maxAttempts ?? 60
   const logFile = `${t.sock}.log`
-  const launch = `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; nohup ${buildNbdkitXapiCmd(t)} > ${shellEscape(logFile)} 2>&1 & echo $!`
+  // umask 077 in a subshell keeps the CA directory and the PEM private to root.
+  // rm -rf first so a directory left by an aborted run cannot pin a stale (or
+  // foreign) certificate for this session.
+  const caDir = `${t.sock}.ca`
+  const launch =
+    `rm -rf ${shellEscape(caDir)}; ` +
+    `(umask 077; mkdir -p ${shellEscape(caDir)}; printf '%s\\n' ${shellEscape(t.cert)} > ${shellEscape(`${caDir}/ca-cert.pem`)}); ` +
+    `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; ` +
+    `nohup ${buildNbdkitXapiCmd(t, caDir)} > ${shellEscape(logFile)} 2>&1 & echo $!`
   const launchRes = await executeSSH(connectionId, nodeIp, launch)
   if (!launchRes.success) throw new Error(`failed to launch nbdkit nbd reader: ${launchRes.error || launchRes.output}`)
   let ready = false
@@ -53,27 +71,29 @@ export async function startXapiReader(connectionId: string, nodeIp: string, t: X
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 20`)
     // No device was attached yet, so pass nbdDev:"" - teardown must not
     // `nbd-client -d` a device this reader never owned.
-    await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile }).catch(() => {})
+    await stopXapiReader(connectionId, nodeIp, { nbdDev: "", sock: t.sock, logFile, caDir }).catch(() => {})
     throw new Error(`nbdkit nbd socket never appeared. nbdkit log: ${log.output?.trim() || "(empty)"}`)
   }
   const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(t.sock))
   const nbdDev = (connect.output ?? "").split("\n").map(l => l.trim()).find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
   if (!connect.success || !nbdDev) {
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
-    await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile }).catch(() => {})
+    await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile, caDir }).catch(() => {})
     throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${log.output?.trim() || "(empty)"}`)
   }
-  return { nbdDev, sock: t.sock, logFile }
+  return { nbdDev, sock: t.sock, logFile, caDir }
 }
 
 /**
  * Tear down a reader started by startXapiReader. Best-effort; safe to call
  * twice. There is no password file on this path, so pwFile is the empty string:
  * buildReaderTeardownCmd filters falsy paths out of its `rm -f` list, so nothing
- * unintended is removed.
+ * unintended is removed. The pinned-CA directory is removed in the same command
+ * (`rm -rf` needs a directory, which the shared `rm -f` file list cannot do).
  */
 export async function stopXapiReader(connectionId: string, nodeIp: string, h: XapiReaderHandle): Promise<void> {
-  await executeSSH(connectionId, nodeIp, buildReaderTeardownCmd({ nbdDev: h.nbdDev, sock: h.sock, pwFile: "", logFile: h.logFile }))
+  const teardown = buildReaderTeardownCmd({ nbdDev: h.nbdDev, sock: h.sock, pwFile: "", logFile: h.logFile })
+  await executeSSH(connectionId, nodeIp, `${teardown}; rm -rf ${shellEscape(h.caDir)}`)
 }
 
 /** nbdinfo --map --json entry; `type` bit 1 (value 2) is NBD_STATE_ZERO. */

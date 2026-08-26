@@ -3026,7 +3026,7 @@
     "xcpngModeColumn": "模式",
     "xcpngServers": "直接连接或通过 Xen Orchestra 连接的 XCP-ng 池，用于将虚拟机迁移到 Proxmox",
     "xcpngPortInfo": "连接到您的 Xen Orchestra (XO/XOA) 实例 — 凭据以加密方式存储",
-    "xcpngAuthentication": "身份验证",
+    "xcpngAuthentication": "认证",
     "xcpngUsername": "XO 用户名（邮箱）",
     "xcpngPasswordLabel": "XO 密码",
     "xcpngPasswordHelper": "Xen Orchestra 实例的密码",

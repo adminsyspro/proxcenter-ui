@@ -83,7 +83,10 @@ import { copyToClipboard } from '@/lib/clipboard'
  * mode has neither, and the migration route refuses warm there (it also treats
  * a missing subType as XO), so the selector must not offer it.
  */
-export const warmAllowedFor = (info?: { hostType?: string; connSubType?: string | null } | null) =>
+export /** Source power state as reported by the inventory routes (VMware: poweredOn, XCP-ng and others: running). */
+const isSourcePoweredOn = (status?: string) => status === 'running' || status === 'poweredOn'
+
+const warmAllowedFor = (info?: { hostType?: string; connSubType?: string | null } | null) =>
   info?.hostType === 'vmware' ||
   info?.hostType === 'vcenter' ||
   (info?.hostType === 'xcpng' && info?.connSubType === 'xapi')
@@ -2572,18 +2575,23 @@ return
                         // ESXi (hostType 'vmware'), vCenter, and an XCP-ng pool in the XAPI
                         // (direct pool) mode. Every other source that reaches this selector is
                         // offline only, and the description names the source's own mechanism.
+                        // A warm run needs a live source (its whole point is to copy while the
+                        // guest runs); on a powered off VM the card stays visible but disabled,
+                        // with the reason, and Offline is the mode to use.
                         ...(singleWarmAllowed
-                          ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: esxiMigrateVm?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc' }]
+                          ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: esxiMigrateVm?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc', disabled: !isSourcePoweredOn(esxiMigrateVm?.status), disabledKey: 'warmNeedsRunningVm' }]
                           : []),
-                      ]).map(opt => (
-                        <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
+                      ] as { value: 'cold' | 'warm'; icon: string; color: string; labelKey: string; descKey: string; disabled?: boolean; disabledKey?: string }[]).map(opt => (
+                        <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.disabled && opt.disabledKey ? opt.disabledKey : opt.descKey}`)} arrow placement="top">
                           <Box
-                            onClick={() => setMigType(opt.value)}
+                            onClick={() => { if (!opt.disabled) setMigType(opt.value) }}
+                            aria-disabled={opt.disabled || undefined}
                             sx={{
-                              flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: 'pointer', transition: 'all 0.15s',
+                              flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: opt.disabled ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+                              opacity: opt.disabled ? 0.45 : 1,
                               borderColor: migType === opt.value ? `${opt.color}` : 'divider',
                               bgcolor: migType === opt.value ? (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)') : 'transparent',
-                              '&:hover': { borderColor: `${opt.color}` },
+                              '&:hover': { borderColor: opt.disabled ? 'divider' : `${opt.color}` },
                               display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center',
                             }}
                           >
@@ -2996,13 +3004,14 @@ return
                         fullWidth
                         size="small"
                         label="Temporary Storage"
+                        required
                         value={migTempStorage}
                         onChange={(e) => setMigTempStorage(e.target.value)}
                         helperText={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
                           const vmDiskBytes = esxiMigrateVm?.committed || 0
                           const requiredBytes = vmDiskBytes * 2 // source + converted
-                          if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
+                          if (!sel) return 'Required: where the source disks are staged on the Proxmox node during the migration'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
                           if (sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required`
@@ -3011,7 +3020,7 @@ return
                         error={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
                           const vmDiskBytes = esxiMigrateVm?.committed || 0
-                          return sel ? sel.availableBytes < vmDiskBytes * 2 : false
+                          return sel ? sel.availableBytes < vmDiskBytes * 2 : !migTempStorage
                         })()}
                       >
                         {vcenterPreflight.tempStorages.map(s => {
@@ -3135,6 +3144,12 @@ return
               {/* Cold-on-running warning: Offline migration requires the VM to be off.
                   We ask the user to power it down first instead of auto-powering off,
                   which surprises users whose VM wasn't actually ready for shutdown. */}
+              {migType === 'warm' && !isSourcePoweredOn(esxiMigrateVm?.status) && (
+                <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
+                  {t('inventoryPage.esxiMigration.warmNeedsRunningVm')}
+                </Alert>
+              )}
+
               {migType === 'cold' && (esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn') && (
                 <Alert severity="warning" sx={{ fontSize: 12 }} icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
                   Offline migration requires the source VM to be powered off. Please stop{' '}
@@ -3347,6 +3362,7 @@ return
                   // shutdown never happens.
                   const isRunning = esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn'
                   if (migType === 'cold' && isRunning) return true
+                  if (migType === 'warm' && !isRunning) return true
                   if (needsV2vDeps) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
                     if (!vcenterPreflight.virtV2vInstalled) return true
@@ -3368,6 +3384,15 @@ return
                     // (virt-v2v -it ssh doesn't do password auth).
                     if (isDirectEsxiWinCold && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled) return true
                     return false
+                  }
+                  // Every offline path stages the source disks on the temporary storage
+                  // (XCP-ng VHD download, ESXi in-house pipeline). Without a choice the
+                  // engine falls back to the node's root filesystem when the target is
+                  // block storage, so the choice is mandatory whenever the picker is shown.
+                  if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0) {
+                    if (!migTempStorage) return true
+                    const tempSel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
+                    if (!tempSel || tempSel.availableBytes < requiredTempBytes(esxiMigrateVm?.committed || 0, migTargetStorageType)) return true
                   }
                   // ESXi-direct path: SSH must be configured on the target Proxmox
                   // connection and sshfs/pv must be available when those modes selected.
@@ -3896,18 +3921,23 @@ return
                       { value: 'cold' as const, icon: 'ri-shut-down-line', color: 'info.main', labelKey: 'migrationTypeCold', descKey: 'migrationTypeColdDesc' },
                       // Warm (no in-transit loss) for direct ESXi, vCenter and an XCP-ng pool
                       // in the XAPI (direct pool) mode; every other source is offline only.
+                      // Same rule as the single VM dialog: warm needs live sources, so the card
+                      // is disabled as soon as one selected VM is powered off (the Alert below
+                      // names them; deselect them or run them Offline).
                       ...(bulkWarmAllowed
-                        ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: bulkMigHostInfo?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc' }]
+                        ? [{ value: 'warm' as const, icon: 'ri-flashlight-line', color: 'success.main', labelKey: 'migrationTypeWarm', descKey: bulkMigHostInfo?.hostType === 'xcpng' ? 'migrationTypeWarmDescXcpng' : 'migrationTypeWarmDesc', disabled: (bulkMigHostInfo?.vms || []).some((vm: any) => bulkMigSelected.has(vm.vmid) && !isSourcePoweredOn(vm.status)), disabledKey: 'warmNeedsRunningVmsBulk' }]
                         : []),
-                    ]).map(opt => (
-                      <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.descKey}`)} arrow placement="top">
+                    ] as { value: 'cold' | 'warm'; icon: string; color: string; labelKey: string; descKey: string; disabled?: boolean; disabledKey?: string }[]).map(opt => (
+                      <MuiTooltip key={opt.value} title={t(`inventoryPage.esxiMigration.${opt.disabled && opt.disabledKey ? opt.disabledKey : opt.descKey}`)} arrow placement="top">
                         <Box
-                          onClick={() => setMigType(opt.value)}
+                          onClick={() => { if (!opt.disabled) setMigType(opt.value) }}
+                          aria-disabled={opt.disabled || undefined}
                           sx={{
-                            flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: 'pointer', transition: 'all 0.15s',
+                            flex: 1, py: 1, px: 1.5, borderRadius: 1.5, border: '2px solid', cursor: opt.disabled ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+                            opacity: opt.disabled ? 0.45 : 1,
                             borderColor: migType === opt.value ? `${opt.color}` : 'divider',
                             bgcolor: migType === opt.value ? (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)') : 'transparent',
-                            '&:hover': { borderColor: `${opt.color}` },
+                            '&:hover': { borderColor: opt.disabled ? 'divider' : `${opt.color}` },
                             display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'center',
                           }}
                         >
@@ -4114,11 +4144,12 @@ return
                         fullWidth
                         size="small"
                         label="Temporary Storage"
+                        required
                         value={migTempStorage}
                         onChange={(e) => setMigTempStorage(e.target.value)}
                         helperText={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
-                          if (!sel) return 'Select where virt-v2v writes temporary files during conversion'
+                          if (!sel) return 'Required: where the source disks are staged on the Proxmox node during the migration'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
                           if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for largest VM in batch`
@@ -4128,7 +4159,8 @@ return
                         })()}
                         error={(() => {
                           const sel = vcenterPreflight.tempStorages.find(s => s.path === migTempStorage)
-                          return sel && requiredBytes > 0 ? sel.availableBytes < requiredBytes : false
+                          if (!sel) return !migTempStorage
+                          return requiredBytes > 0 ? sel.availableBytes < requiredBytes : false
                         })()}
                       >
                         {vcenterPreflight.tempStorages.map(s => {
@@ -4193,6 +4225,20 @@ return
                 {bulkMigHostInfo?.hostType !== 'vcenter' && bulkMigHostInfo?.hostType !== 'hyperv' && bulkMigHostInfo?.hostType !== 'nutanix' && migTargetConn && !migPveConnections.find((c: any) => c.id === migTargetConn)?.sshEnabled && (
                   <Alert severity="error" sx={{ fontSize: 12 }} icon={<i className="ri-ssh-line" style={{ fontSize: 18 }} />}>{t('inventoryPage.esxiMigration.sshRequired')}</Alert>
                 )}
+
+                {migType === 'warm' && bulkMigHostInfo?.vms && (() => {
+                  const stoppedVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && !isSourcePoweredOn(vm.status))
+                  return stoppedVms.length > 0 ? (
+                    <Alert severity="error" sx={{ fontSize: 12 }}>
+                      {t('inventoryPage.esxiMigration.warmNeedsRunningVmsBulk')}
+                      <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2 }}>
+                        {stoppedVms.map((vm: any) => (
+                          <li key={vm.vmid}><strong>{vm.name || vm.vmid}</strong></li>
+                        ))}
+                      </Box>
+                    </Alert>
+                  ) : null
+                })()}
 
                 {migType === 'cold' && bulkMigHostInfo?.vms && (() => {
                   const runningVms = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))
@@ -4447,6 +4493,9 @@ return
                   // whenever the batch mixes the chosen migrationType with an incompatible
                   // VM state.
                   if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))) return true
+                  if (migType === 'warm' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && !isSourcePoweredOn(vm.status))) return true
+                  // Offline batches stage every source disk on the temporary storage: mandatory when offered.
+                  if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && !migTempStorage) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}

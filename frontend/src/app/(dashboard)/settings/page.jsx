@@ -1110,15 +1110,19 @@ function ConnectionsTab() {
       {
         field: 'subType',
         headerName: t('settings.xcpngModeColumn'),
-        width: 100,
+        width: 230,
         renderCell: params => (
-          <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: '100%' }}>
             <Chip
               size='small'
               variant='outlined'
               color={params.value === 'xapi' ? 'primary' : 'default'}
               label={params.value === 'xapi' ? 'XAPI' : 'XO'}
             />
+            <Chip size='small' variant='outlined' label={t('settings.migrationBadgeOffline')} />
+            {params.value === 'xapi' && (
+              <Chip size='small' variant='outlined' color='success' label={t('settings.migrationBadgeWarm')} />
+            )}
           </Box>
         )
       },

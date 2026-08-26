@@ -593,6 +593,7 @@ export default function ConnectionDialog({
               labelId='xcpng-mode-label'
               label={t('settings.xcpngModeLabel')}
               value={form.subType || 'xapi'}
+              renderValue={value => (value === 'xo' ? t('settings.xcpngModeXo') : t('settings.xcpngModeXapi'))}
               onChange={e => {
                 const value = String(e.target.value)
                 handleChange('subType', value)
@@ -601,8 +602,23 @@ export default function ConnectionDialog({
                 if (value === 'xo' && form.vmwareUser === 'root') handleChange('vmwareUser', 'admin@admin.net')
               }}
             >
-              <MenuItem value='xapi'>{t('settings.xcpngModeXapi')}</MenuItem>
-              <MenuItem value='xo'>{t('settings.xcpngModeXo')}</MenuItem>
+              <MenuItem value='xapi'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                  <span>{t('settings.xcpngModeXapi')}</span>
+                  <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                    <Chip size='small' variant='outlined' label={t('settings.migrationBadgeOffline')} />
+                    <Chip size='small' color='success' variant='outlined' label={t('settings.migrationBadgeWarm')} />
+                  </Box>
+                </Box>
+              </MenuItem>
+              <MenuItem value='xo'>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                  <span>{t('settings.xcpngModeXo')}</span>
+                  <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                    <Chip size='small' variant='outlined' label={t('settings.migrationBadgeOffline')} />
+                  </Box>
+                </Box>
+              </MenuItem>
             </Select>
             <FormHelperText>{t('settings.xcpngModeHelper')}</FormHelperText>
           </FormControl>

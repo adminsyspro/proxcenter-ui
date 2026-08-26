@@ -21,6 +21,9 @@ import {
   saveScalingMode,
   scalingStorageKey,
   toggleFullscreen,
+  VM_ACTIONS,
+  parseVmStatus,
+  vmActionsEnabled,
 } from './viewport'
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -294,5 +297,37 @@ describe('debounce', () => {
     expect(fn).not.toHaveBeenCalled()
     // Cancelling twice, or with nothing pending, is a no-op.
     d.cancel()
+  })
+})
+
+describe('VM power actions', () => {
+  it('exposes the four toolbar actions in display order', () => {
+    expect(VM_ACTIONS).toEqual(['start', 'shutdown', 'stop', 'suspend'])
+  })
+
+  it('normalises the status reported by the guest API', () => {
+    expect(parseVmStatus('running')).toBe('running')
+    expect(parseVmStatus('stopped')).toBe('stopped')
+    expect(parseVmStatus('paused')).toBe('paused')
+    expect(parseVmStatus('prelaunch')).toBe('unknown')
+    expect(parseVmStatus(undefined)).toBe('unknown')
+    expect(parseVmStatus(null)).toBe('unknown')
+    expect(parseVmStatus(42)).toBe('unknown')
+  })
+
+  it('offers shutdown and pause only while the guest runs, and start only while it does not', () => {
+    expect(vmActionsEnabled('running')).toEqual({ start: false, shutdown: true, stop: true, suspend: true })
+    expect(vmActionsEnabled('stopped')).toEqual({ start: true, shutdown: false, stop: false, suspend: false })
+  })
+
+  it('lets a paused guest be resumed with start or killed with stop', () => {
+    expect(vmActionsEnabled('paused')).toEqual({ start: true, shutdown: false, stop: true, suspend: false })
+  })
+
+  it('keeps the recovery actions reachable when the status is unknown', () => {
+    // A status fetch that failed must not lock the operator out of the
+    // console: start and stop stay available, the graceful ones do not.
+    expect(vmActionsEnabled('unknown')).toEqual({ start: true, shutdown: false, stop: true, suspend: false })
+    expect(vmActionsEnabled('whatever' as never)).toEqual(vmActionsEnabled('unknown'))
   })
 })

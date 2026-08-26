@@ -17,18 +17,23 @@
     #toolbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: 8px 16px; background: #111; border-bottom: 1px solid #333; flex-shrink: 0;
-      flex-wrap: wrap; row-gap: 6px;
+      flex-wrap: nowrap;
     }
-    /* Le nom de la VM cède la place avant les boutons: la barre porte assez de
-       contrôles pour dépasser la largeur d'une fenêtre de console 1024px. */
-    #toolbar .info { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
-    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; }
+    /* Une seule ligne, toujours. Ordre de compression quand la fenêtre se
+       resserre: d'abord le nom de la VM (ellipse, poids de flex-shrink élevé),
+       puis les deux sélecteurs (min-width 0, leur texte se tronque), et les
+       boutons ne bougent jamais. Sans ce poids, flex répartirait la
+       compression au prorata des largeurs et rognerait les sélecteurs alors
+       que le nom a encore de la place. */
+    #toolbar .info { display: flex; align-items: center; gap: 12px; min-width: 140px; flex: 1 100 auto; overflow: hidden; }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
     #status-dot.connected { background: #22c55e; }
     #status-dot.connecting { background: #f59e0b; }
     #status-dot.error { background: #ef4444; }
-    #vm-info { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #status-text { color: #666; font-size: 12px; }
-    #toolbar .vm-actions { display: flex; gap: 4px; margin: 0 16px; }
+    #vm-info { color: #fff; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    /* Le texte de statut cède avant le nom: la pastille dit déjà l'état. */
+    #status-text { color: #666; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 100; }
+    #toolbar .vm-actions { display: flex; gap: 4px; margin: 0 8px; flex-shrink: 0; }
     #toolbar .vm-actions button {
       padding: 6px 10px; font-size: 16px; background: transparent; border: none;
       color: #888; cursor: pointer; border-radius: 4px; display: flex; align-items: center;
@@ -44,7 +49,8 @@
     #toolbar .vm-actions button.btn-pause { color: #3b82f6; }
     #toolbar .vm-actions button.btn-pause:hover { background: #1e3a8a; }
     #toolbar .vm-actions button.loading { opacity: 0.5; pointer-events: none; }
-    #toolbar .buttons { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    #toolbar .buttons { display: flex; gap: 6px; align-items: center; min-width: 0; }
+    #toolbar .buttons button { flex-shrink: 0; }
     button {
       padding: 6px 12px; font-size: 12px; background: #333; color: #fff;
       border: 1px solid #444; border-radius: 4px; cursor: pointer;
@@ -72,8 +78,10 @@
     }
     #toolbar select {
       padding: 5px 8px; font-size: 12px; background: #333; color: #fff;
-      border: 1px solid #444; border-radius: 4px; cursor: pointer; max-width: 150px;
+      border: 1px solid #444; border-radius: 4px; cursor: pointer; max-width: 150px; min-width: 0;
     }
+    /* Un déclencheur, pas un état: son libellé court n'a pas besoin de la même largeur. */
+    #sendkey { max-width: 120px; }
     #toolbar select:disabled { background: #222; color: #666; cursor: not-allowed; }
     #toolbar .buttons button.icon { padding: 6px 9px; font-size: 14px; line-height: 1; }
     #toolbar .buttons button.active { background: #1e3a8a; border-color: #3b82f6; }
@@ -342,22 +350,16 @@ node bundle-novnc.js
       statusText.textContent = `• ${text}`;
     }
     
-    // Mettre à jour l'état des boutons selon le status de la VM
+    // Les règles vivent dans ConsoleUI, partagées avec la console SPICE pour
+    // que les deux barres offrent les mêmes actions dans les mêmes états.
     function updateVmButtons() {
-      const isRunning = vmStatus === 'running';
-      const isStopped = vmStatus === 'stopped';
-      const isPaused = vmStatus === 'paused';
-      
-      btnStart.disabled = isRunning;
-      btnShutdown.disabled = !isRunning;
-      btnStop.disabled = isStopped;
-      btnPause.disabled = !isRunning;
-      
-      // Opacité visuelle
-      btnStart.style.opacity = isRunning ? '0.3' : '1';
-      btnShutdown.style.opacity = !isRunning ? '0.3' : '1';
-      btnStop.style.opacity = isStopped ? '0.3' : '1';
-      btnPause.style.opacity = !isRunning ? '0.3' : '1';
+      const enabled = ConsoleUI.vmActionsEnabled(vmStatus);
+      const buttons = { start: btnStart, shutdown: btnShutdown, stop: btnStop, suspend: btnPause };
+
+      ConsoleUI.VM_ACTIONS.forEach(function(action) {
+        buttons[action].disabled = !enabled[action];
+        buttons[action].style.opacity = enabled[action] ? '1' : '0.3';
+      });
     }
     
     // Récupérer le status de la VM
@@ -367,7 +369,7 @@ node bundle-novnc.js
         const res = await fetch(apiUrl);
         if (res.ok) {
           const json = await res.json();
-          vmStatus = json?.data?.status || 'unknown';
+          vmStatus = ConsoleUI.parseVmStatus(json?.data?.status);
 
           const name = json?.data?.name;
 

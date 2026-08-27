@@ -27,6 +27,13 @@ import {
 } from '@mui/material'
 
 import NumericTextField from '@/components/ui/NumericTextField'
+import {
+  formatRecipients,
+  invalidRecipients,
+  isValidRecipient,
+  normalizeRecipients,
+  parseRecipients
+} from '@/lib/notifications/recipients'
 
 async function fetchJson(url, init) {
   const r = await fetch(url, init)
@@ -55,13 +62,24 @@ export default function NotificationsTab() {
   const [showPassword, setShowPassword] = useState(false)
   const [testEmail, setTestEmail] = useState('')
 
+  // The field owns its raw text. Deriving the displayed value from the parsed
+  // array instead would swallow every separator as it is typed, since a
+  // trailing comma parses to nothing and the re-render puts the old text back.
+  const [recipientsText, setRecipientsText] = useState('')
+
+  // Half-typed addresses are invalid by definition, so the warning waits for
+  // the field to lose focus instead of flashing red on every keystroke.
+  const [recipientsFocused, setRecipientsFocused] = useState(false)
+
   const loadSettings = async () => {
     setLoading(true)
 
     try {
       const data = await fetchJson('/api/v1/orchestrator/notifications/settings')
+      const recipients = normalizeRecipients(data?.email?.default_recipients)
 
-      setSettings(data)
+      setSettings(data?.email ? { ...data, email: { ...data.email, default_recipients: recipients } } : data)
+      setRecipientsText(formatRecipients(recipients))
       setCategoryMinSeverity(
         data?.category_min_severity && typeof data.category_min_severity === 'object'
           ? { ...data.category_min_severity }
@@ -158,6 +176,10 @@ return
   }
 
   const INHERIT = '__inherit__'
+
+  // Warned about, never blocking: a typo must not lock the user out of saving
+  // the rest of the notification settings.
+  const invalidEmails = recipientsFocused ? [] : invalidRecipients(settings.email?.default_recipients)
 
   // Per-category severity override. `typeKey` is the singular NotificationType
   // string the backend expects (alert/migration/backup/replication/maintenance).
@@ -466,16 +488,24 @@ return
             fullWidth
             label={t('notifications.emailAddresses')}
             placeholder='admin@example.com, ops@example.com'
-            value={(settings.email?.default_recipients || []).join(', ')}
+            value={recipientsText}
             onChange={e => {
-              const emails = e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+              const raw = e.target.value
 
+              setRecipientsText(raw)
               setSettings(s => ({
                 ...s,
-                email: { ...s.email, default_recipients: emails }
+                email: { ...s.email, default_recipients: parseRecipients(raw) }
               }))
             }}
-            helperText={t('notifications.separateByComma')}
+            onFocus={() => setRecipientsFocused(true)}
+            onBlur={() => setRecipientsFocused(false)}
+            error={invalidEmails.length > 0}
+            helperText={
+              invalidEmails.length > 0
+                ? t('notifications.invalidRecipients', { emails: invalidEmails.join(', ') })
+                : t('notifications.separateByComma')
+            }
           />
 
           {settings.email?.default_recipients?.length > 0 && (
@@ -485,10 +515,12 @@ return
                   key={idx}
                   label={email}
                   size='small'
+                  color={recipientsFocused || isValidRecipient(email) ? 'default' : 'warning'}
                   onDelete={() => {
                     const newRecipients = [...settings.email.default_recipients]
 
                     newRecipients.splice(idx, 1)
+                    setRecipientsText(formatRecipients(newRecipients))
                     setSettings(s => ({
                       ...s,
                       email: { ...s.email, default_recipients: newRecipients }

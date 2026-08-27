@@ -27,6 +27,8 @@ import {
 import { useTenant } from '@/contexts/TenantContext'
 import { usePVEConnections } from '@/hooks/useConnections'
 
+import { parseRecipients } from '@/lib/notifications/recipients'
+
 import ReportConnectionSelect from './ReportConnectionSelect'
 
 interface ReportType {
@@ -159,7 +161,7 @@ export default function ScheduleDialog({
         day_of_month: frequency === 'monthly' ? dayOfMonth : undefined,
         time_of_day: timeOfDay,
         language,
-        recipients: recipients.split(',').map(r => r.trim()).filter(r => r),
+        recipients: parseRecipients(recipients),
         sections: allSections ? [] : selectedSections,
         ...(isProvider && type !== 'vdc' ? { connection_ids: connectionIds } : {}),
       })

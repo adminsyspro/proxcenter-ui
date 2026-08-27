@@ -67,6 +67,17 @@ export function buildSudoersTemplate(categories: AllowlistCategoryShape[]): { bo
     lines.push('')
   }
 
+  // Rolling updates are driven by the orchestrator (internal/rolling), which
+  // wraps every privileged command in `sudo -n sh -c` / `sudo -n env` and
+  // probes with `sudo -n true`. No per-command rule can satisfy that, so the
+  // template says so instead of letting the pre-flight fail with "lacks
+  // passwordless sudo" on a user who followed this page (customer report).
+  lines.push('# Rolling updates are run by the orchestrator, which wraps every privileged')
+  lines.push('# command in `sudo -n sh -c` / `sudo -n env`. The allowlist above does NOT')
+  lines.push('# cover them: uncomment the next line on nodes updated through ProxCenter,')
+  lines.push('# or connect as root for those nodes.')
+  lines.push(`# ${SUDO_USER} ALL=(ALL) NOPASSWD: ALL`)
+
   return { body: lines.join('\n'), shellWrappedCount }
 }
 

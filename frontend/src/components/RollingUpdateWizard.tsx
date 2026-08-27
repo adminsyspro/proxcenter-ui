@@ -22,6 +22,7 @@ import {
   FormControlLabel,
   FormHelperText,
   IconButton,
+  InputAdornment,
   InputLabel,
   LinearProgress,
   List,
@@ -44,13 +45,107 @@ import {
   Typography,
 } from '@mui/material'
 
+import { alpha } from '@mui/material/styles'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
 const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
+
+// Small "i" carrying the explanation of a configuration parameter. Every
+// switch, slider and field of the Configuration step gets one so the user
+// knows what the orchestrator will actually do with the option.
+const HintIcon = ({ hint }: { hint: string }) => (
+  <Tooltip title={hint} arrow placement="top">
+    <Box component="span" sx={{ display: 'inline-flex', color: 'text.secondary', cursor: 'help' }}>
+      <InfoIcon sx={{ fontSize: 16 }} />
+    </Box>
+  </Tooltip>
+)
+
+const HintLabel = ({ label, hint }: { label: React.ReactNode; hint: string }) => (
+  <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+    {label}
+    <HintIcon hint={hint} />
+  </Box>
+)
+
+const hintAdornment = (hint: string) => (
+  <InputAdornment position="end">
+    <HintIcon hint={hint} />
+  </InputAdornment>
+)
+
+// Rich tooltip on the theme's surface, readable in both modes (a table in the
+// default dark-grey bubble is not).
+const richTooltipSlotProps = {
+  tooltip: {
+    sx: {
+      bgcolor: 'background.paper',
+      color: 'text.primary',
+      border: '1px solid',
+      borderColor: 'divider',
+      borderRadius: 1.5,
+      boxShadow: 3,
+      maxWidth: 480,
+    },
+  },
+  arrow: {
+    sx: { color: 'background.paper', '&::before': { border: '1px solid', borderColor: 'divider' } },
+  },
+}
+
+function EstimateBreakdownTable({ rows, t }: { rows: NodeEstimate[]; t: ReturnType<typeof useTranslations> }) {
+  return (
+    <Box sx={{ p: 0.5 }}>
+      <Typography variant="caption" fontWeight={700} color="text.primary" sx={{ display: 'block', mb: 0.75 }}>
+        {t('updates.estimateBreakdownTitle')}
+      </Typography>
+      {rows.length > 0 && (
+        <Box
+          component="table"
+          sx={{
+            borderCollapse: 'collapse',
+            width: '100%',
+            '& th, & td': { px: 0.75, py: 0.25, fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap', color: 'text.primary' },
+            '& th': { color: 'text.secondary', fontWeight: 500, borderBottom: '1px solid', borderColor: 'divider' },
+            '& th:first-of-type, & td:first-of-type': { textAlign: 'left' },
+            '& td:last-of-type': { fontWeight: 700 },
+          }}
+        >
+          <thead>
+            <tr>
+              <th>{t('updates.node')}</th>
+              <th>{t('updates.estimateColFixed')}</th>
+              <th>{t('updates.estimateColPackages')}</th>
+              <th>{t('updates.estimateColMigrations')}</th>
+              <th>{t('updates.estimateColReboot')}</th>
+              <th>{t('updates.estimateColTotal')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.node}>
+                <td>{r.node}</td>
+                <td>{r.fixed_minutes}</td>
+                <td>{r.packages_minutes} <Box component="span" sx={{ color: 'text.secondary' }}>({r.package_count})</Box></td>
+                <td>{r.migration_minutes} <Box component="span" sx={{ color: 'text.secondary' }}>({r.vm_count})</Box></td>
+                <td>{r.reboot_minutes}</td>
+                <td>{r.total_minutes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Box>
+      )}
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, whiteSpace: 'normal' }}>
+        {t('updates.estimateBreakdownNote')}
+      </Typography>
+    </Box>
+  )
+}
 const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -80,6 +175,19 @@ interface UpdateInfo {
   }>
 }
 
+// One line of the orchestrator's time estimate (see estimateTotalTime in the
+// backend): fixed allowances plus per-package, per-VM and reboot terms.
+interface NodeEstimate {
+  node: string
+  package_count: number
+  vm_count: number
+  fixed_minutes: number
+  packages_minutes: number
+  migration_minutes: number
+  reboot_minutes: number
+  total_minutes: number
+}
+
 interface PreflightResult {
   can_proceed: boolean
   warnings: string[]
@@ -107,6 +215,7 @@ interface PreflightResult {
     issues: string[]
   }>
   updates_available: UpdateInfo[]
+  estimate_breakdown?: NodeEstimate[]
   migration_plan: {
     total_vms: number
     vms_to_migrate: number
@@ -666,6 +775,8 @@ export default function RollingUpdateWizard({
                   {nodeOrder.map((node, index) => {
                     const isExcluded = excludedNodes.includes(node)
                     const updateCount = nodeUpdates[node]?.count || 0
+                    const nodeStatus = nodes.find(n => n.node === node)?.status
+                    const nodeVersion = nodeUpdates[node]?.version
                     
                     return (
                       <ListItem
@@ -708,29 +819,27 @@ export default function RollingUpdateWizard({
                             size="small"
                           />
                         </ListItemIcon>
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', mr: 1.5, flexShrink: 0 }}>
+                          <NodeIcon status={nodeStatus} size={18} />
+                        </Box>
                         <ListItemText
                           primary={
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {node}
+                              <span>{nodeVersion ? `${node} (${nodeVersion})` : node}</span>
                               {connectedNode === node && (
                                 <Chip label={t('updates.apiNode')} size="small" color="info" sx={{ height: 20, fontSize: 11 }} />
                               )}
                             </Box>
                           }
-                          secondary={
-                            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <span>{nodeUpdates[node]?.version || '—'}</span>
-                              {sshAddresses[node] && (
-                                <Chip
-                                  icon={<i className="ri-ssh-line" style={{ fontSize: 12 }} />}
-                                  label={sshAddresses[node]}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ height: 18, fontSize: 10, '& .MuiChip-icon': { fontSize: 12, ml: 0.5 } }}
-                                />
-                              )}
-                            </Box>
-                          }
+                          secondary={sshAddresses[node] ? (
+                            <Chip
+                              icon={<i className="ri-ssh-line" style={{ fontSize: 12 }} />}
+                              label={sshAddresses[node]}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: 18, fontSize: 10, mt: 0.25, '& .MuiChip-icon': { fontSize: 12, ml: 0.5 } }}
+                            />
+                          ) : undefined}
                           slotProps={{ secondary: { component: 'div' } }}
                         />
                       </ListItem>
@@ -848,7 +957,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, migrate_non_ha_vms: e.target.checked }))}
                       />
                     }
-                    label={t('updates.migrateNonHaVms')}
+                    label={<HintLabel label={t('updates.migrateNonHaVms')} hint={t('updates.migrateNonHaVmsHint')} />}
                   />
                   
                   <FormControlLabel
@@ -858,15 +967,8 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, auto_reboot: e.target.checked }))}
                       />
                     }
-                    label={t('updates.autoRebootIfKernel')}
+                    label={<HintLabel label={t('updates.autoRebootIfKernel')} hint={t('updates.autoRebootHint')} />}
                   />
-                  {config.auto_reboot && (
-                    <Alert severity="warning" icon={<i className="ri-information-line" style={{ fontSize: 18 }} />} sx={{ py: 0.5 }}>
-                      <Typography variant="caption">
-                        {t('updates.autoRebootHint')}
-                      </Typography>
-                    </Alert>
-                  )}
                   
                   {hasCeph && (
                     <FormControlLabel
@@ -876,7 +978,7 @@ export default function RollingUpdateWizard({
                           onChange={(e) => setConfig(c => ({ ...c, set_ceph_noout: e.target.checked }))}
                         />
                       }
-                      label={t('updates.setCephNoout')}
+                      label={<HintLabel label={t('updates.setCephNoout')} hint={t('updates.setCephNooutHint')} />}
                     />
                   )}
 
@@ -887,7 +989,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, abort_on_failure: e.target.checked }))}
                       />
                     }
-                    label={t('updates.abortOnFailure')}
+                    label={<HintLabel label={t('updates.abortOnFailure')} hint={t('updates.abortOnFailureHint')} />}
                   />
                   
                   <FormControlLabel
@@ -897,7 +999,7 @@ export default function RollingUpdateWizard({
                         onChange={(e) => setConfig(c => ({ ...c, require_manual_approval: e.target.checked }))}
                       />
                     }
-                    label={t('updates.manualApprovalBetweenNodes')}
+                    label={<HintLabel label={t('updates.manualApprovalBetweenNodes')} hint={t('updates.manualApprovalHint')} />}
                   />
                 </Stack>
               </CardContent>
@@ -919,7 +1021,7 @@ export default function RollingUpdateWizard({
                     <Stack spacing={3}>
                       <Box>
                         <Typography variant="caption" color="text.secondary">
-                          {t('updates.maxParallelMigrations')}
+                          <HintLabel label={t('updates.maxParallelMigrations')} hint={t('updates.maxParallelMigrationsHint')} />
                         </Typography>
                         <Slider
                           value={config.max_concurrent_migrations}
@@ -940,7 +1042,7 @@ export default function RollingUpdateWizard({
                         fallback={600}
                         min={60}
                         max={3600}
-                        InputProps={{ inputProps: { min: 60, max: 3600 } }}
+                        InputProps={{ inputProps: { min: 60, max: 3600 }, endAdornment: hintAdornment(t('updates.migrationTimeoutHint')) }}
                       />
 
                       <NumericTextField
@@ -952,7 +1054,7 @@ export default function RollingUpdateWizard({
                         fallback={300}
                         min={60}
                         max={1800}
-                        InputProps={{ inputProps: { min: 60, max: 1800 } }}
+                        InputProps={{ inputProps: { min: 60, max: 1800 }, endAdornment: hintAdornment(t('updates.rebootTimeoutHint')) }}
                       />
 
                       <NumericTextField
@@ -964,7 +1066,7 @@ export default function RollingUpdateWizard({
                         fallback={2}
                         min={1}
                         max={10}
-                        InputProps={{ inputProps: { min: 1, max: 10 } }}
+                        InputProps={{ inputProps: { min: 1, max: 10 }, endAdornment: hintAdornment(t('updates.minHealthyNodesHint')) }}
                         helperText={t('updates.minHealthyNodesHelper')}
                       />
                       
@@ -975,7 +1077,7 @@ export default function RollingUpdateWizard({
                             onChange={(e) => setConfig(c => ({ ...c, shutdown_local_vms: e.target.checked }))}
                           />
                         }
-                        label={t('updates.shutdownLocalVms')}
+                        label={<HintLabel label={t('updates.shutdownLocalVms')} hint={t('updates.shutdownLocalVmsRollingHint')} />}
                       />
                       
                       {hasCeph && (
@@ -986,7 +1088,7 @@ export default function RollingUpdateWizard({
                               onChange={(e) => setConfig(c => ({ ...c, wait_ceph_healthy: e.target.checked }))}
                             />
                           }
-                          label={t('updates.waitCephHealthy')}
+                          label={<HintLabel label={t('updates.waitCephHealthy')} hint={t('updates.waitCephHealthyHint')} />}
                         />
                       )}
                     </Stack>
@@ -1011,9 +1113,17 @@ export default function RollingUpdateWizard({
                   : t('updates.checksBlockingIssues')}
               </Typography>
               {preflightResult.estimated_time_minutes > 0 && (
-                <Typography variant="caption">
-                  {t('updates.estimatedTime', { time: formatTime(preflightResult.estimated_time_minutes) })}
-                </Typography>
+                <Tooltip
+                  arrow
+                  placement="bottom-start"
+                  slotProps={richTooltipSlotProps}
+                  title={<EstimateBreakdownTable rows={preflightResult.estimate_breakdown || []} t={t} />}
+                >
+                  <Typography variant="caption" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'help' }}>
+                    {t('updates.estimatedTime', { time: formatTime(preflightResult.estimated_time_minutes) })}
+                    <InfoIcon sx={{ fontSize: 14 }} />
+                  </Typography>
+                </Tooltip>
               )}
             </Alert>
             
@@ -1092,27 +1202,106 @@ export default function RollingUpdateWizard({
                     <i className="ri-heart-pulse-line" style={{ marginRight: 8 }} />
                     {t('updates.clusterHealth')}
                   </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
-                    <Chip 
-                      size="small"
-                      icon={preflightResult.cluster_health.quorum_ok ? <CheckCircleIcon /> : <ErrorIcon />}
-                      label={preflightResult.cluster_health.quorum_ok ? t('updates.quorumOk') : t('updates.quorumLost')}
-                      color={preflightResult.cluster_health.quorum_ok ? 'success' : 'error'}
-                    />
-                    <Chip 
-                      size="small"
-                      label={t('updates.nodesOnline', { online: preflightResult.cluster_health.online_nodes || 0, total: preflightResult.cluster_health.total_nodes || 0 })}
-                      color={preflightResult.cluster_health.online_nodes === preflightResult.cluster_health.total_nodes ? 'success' : 'warning'}
-                    />
-                    {preflightResult.cluster_health.ceph_healthy !== undefined && (
-                      <Chip 
-                        size="small"
-                        icon={preflightResult.cluster_health.ceph_healthy ? <CheckCircleIcon /> : <WarningIcon />}
-                        label={preflightResult.cluster_health.ceph_healthy ? t('updates.cephOk') : t('updates.cephDegraded')}
-                        color={preflightResult.cluster_health.ceph_healthy ? 'success' : 'warning'}
-                      />
-                    )}
-                  </Box>
+                  {(() => {
+                    const ch = preflightResult.cluster_health
+                    const online = ch.online_nodes || 0
+                    const total = ch.total_nodes || 0
+                    type Tone = 'success' | 'warning' | 'error'
+                    const tiles: Array<{ key: string; icon: string; tone: Tone; value: string; label: string }> = [
+                      {
+                        key: 'quorum',
+                        icon: ch.quorum_ok ? 'ri-shield-check-line' : 'ri-shield-cross-line',
+                        tone: ch.quorum_ok ? 'success' : 'error',
+                        value: ch.quorum_ok ? t('updates.healthOk') : t('updates.healthLost'),
+                        label: t('updates.healthQuorum'),
+                      },
+                      {
+                        key: 'nodes',
+                        icon: 'ri-server-line',
+                        tone: online === total ? 'success' : 'warning',
+                        value: `${online}/${total}`,
+                        label: t('updates.healthNodesOnline'),
+                      },
+                    ]
+                    if (ch.ceph_healthy !== undefined) {
+                      tiles.push({
+                        key: 'ceph',
+                        icon: 'ri-database-2-line',
+                        tone: ch.ceph_healthy ? 'success' : 'warning',
+                        value: ch.ceph_healthy ? 'HEALTH_OK' : t('updates.healthDegraded'),
+                        label: t('updates.healthCeph'),
+                      })
+                    }
+                    return (
+                      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: `repeat(${tiles.length}, minmax(0, 1fr))` }, gap: 1.5, mt: 1 }}>
+                        {tiles.map(tile => (
+                          <Box
+                            key={tile.key}
+                            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 1.5, border: '1px solid', borderColor: 'divider', bgcolor: 'action.hover' }}
+                          >
+                            <Box
+                              sx={{
+                                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: `${tile.tone}.main`,
+                                bgcolor: theme => alpha(theme.palette[tile.tone].main, 0.15),
+                              }}
+                            >
+                              <i className={tile.icon} style={{ fontSize: 20 }} />
+                            </Box>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} noWrap>{tile.value}</Typography>
+                              <Typography variant="caption" color="text.secondary">{tile.label}</Typography>
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    )
+                  })()}
+
+                  {/* Per-node health: the pre-flight already computes disk, memory, load and services per node */}
+                  {preflightResult.nodes_health && preflightResult.nodes_health.length > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      {preflightResult.nodes_health.map(nh => {
+                        const checks = [
+                          { key: 'disk', icon: 'ri-hard-drive-2-line', ok: nh.disk_space_ok, label: t('updates.nodeHealthDisk'), detail: nh.disk_space_free_bytes > 0 ? t('updates.nodeHealthFree', { free: formatBytes(nh.disk_space_free_bytes) }) : '' },
+                          { key: 'memory', icon: 'ri-ram-line', ok: nh.memory_ok, label: t('updates.nodeHealthMemory'), detail: '' },
+                          { key: 'load', icon: 'ri-speed-up-line', ok: nh.load_ok, label: t('updates.nodeHealthLoad'), detail: '' },
+                          { key: 'services', icon: 'ri-pulse-line', ok: nh.services_healthy, label: t('updates.nodeHealthServices'), detail: '' },
+                        ]
+                        const issues = (nh.issues || []).join(', ')
+                        return (
+                          <Box
+                            key={nh.node}
+                            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-of-type': { borderBottom: 0 } }}
+                          >
+                            <NodeIcon status={nh.online ? 'online' : 'offline'} size={18} />
+                            <Typography variant="body2" fontWeight={600} sx={{ flexGrow: 1 }}>{nh.node}</Typography>
+                            {nh.online ? (
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                {checks.map(c => (
+                                  <Tooltip key={c.key} title={`${c.label}: ${c.ok ? (c.detail || t('updates.healthOk')) : (issues || c.label)}`} arrow>
+                                    <Box
+                                      sx={{
+                                        width: 28, height: 28, borderRadius: 1,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: c.ok ? 'success.main' : 'error.main',
+                                        bgcolor: theme => alpha(theme.palette[c.ok ? 'success' : 'error'].main, 0.12),
+                                      }}
+                                    >
+                                      <i className={c.icon} style={{ fontSize: 15 }} />
+                                    </Box>
+                                  </Tooltip>
+                                ))}
+                              </Box>
+                            ) : (
+                              <Typography variant="caption" color="error.main">{t('updates.nodeHealthOffline')}</Typography>
+                            )}
+                          </Box>
+                        )
+                      })}
+                    </Box>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -1138,7 +1327,10 @@ export default function RollingUpdateWizard({
                           borderColor: 'divider',
                         }}
                       >
-                        <Typography variant="body2">{u.node}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <NodeIcon status={preflightResult.nodes_health?.find(nh => nh.node === u.node)?.online === false ? 'offline' : 'online'} size={18} />
+                          <Typography variant="body2" fontWeight={600}>{u.node}</Typography>
+                        </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Chip
                             size="small"

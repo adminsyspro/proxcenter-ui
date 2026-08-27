@@ -128,6 +128,10 @@ export default function SecurityRecommendationsCard() {
               </Alert>
             )}
 
+            <Alert severity='warning' sx={{ mt: 1.5 }} icon={<i className='ri-alert-line' />}>
+              {t('settings.sshCommands.recs.rollingUpdateWarning')}
+            </Alert>
+
             <Stack direction='row' spacing={1} sx={{ mt: 1.5, mb: 1 }}>
               <Button
                 variant='contained'

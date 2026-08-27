@@ -50,6 +50,34 @@ const RECEIVE_ACTION = "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/
 const SIGNAL_ACTION  = "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Signal"
 const SIGNAL_TERMINATE = "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/signal/terminate"
 
+/**
+ * WS-Management OperationTimeout sent in every header. A Receive blocks on the
+ * server until the command writes output or this elapses, in which case the
+ * server answers a wsman:TimedOut fault and the client simply asks again.
+ */
+const OPERATION_TIMEOUT_SEC = 60
+
+/**
+ * HTTP budget for a Receive request: it must outlive OperationTimeout, or a
+ * PowerShell script that stays silent for 30 s (Get-VM over a host with many
+ * guests) aborts on our side before the server had a chance to answer.
+ */
+const RECEIVE_TIMEOUT_MS = (OPERATION_TIMEOUT_SEC + 15) * 1000
+
+/**
+ * Overall cap on one command's output wait (two OperationTimeout rounds).
+ * Ordinary listings finish in a few seconds; the inventory's client budget
+ * for Hyper-V (lib/inventory/externalVmFetch.ts) sits above this cap plus the
+ * shell round trips, so the UI never gives up before the route does.
+ */
+export const MAX_RECEIVE_WAIT_MS = 2 * OPERATION_TIMEOUT_SEC * 1000
+
+/** True for the server-side wsman:TimedOut fault (no output yet, command still running). */
+function isOperationTimeoutFault(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /TimedOut|OperationTimeout/i.test(msg)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -58,6 +86,37 @@ const SIGNAL_TERMINATE = "http://schemas.microsoft.com/wbem/wsman/1/windows/shel
 function encodePSCommand(cmd: string): string {
   const buf = Buffer.from(cmd, "utf16le")
   return buf.toString("base64")
+}
+
+/**
+ * Turn PowerShell's stderr into the text of the real errors only.
+ *
+ * Over WinRM, powershell.exe serialises its error stream as CLIXML
+ * (`#< CLIXML` header followed by an <Objs> document). That stream also
+ * carries progress records ("Preparing modules for first use", pipeline
+ * progress) which are not errors at all, so a command with no stdout and a
+ * module import on a cold host looked like a failure. Keep the <S S="Error">
+ * strings, drop the rest; a plain-text stderr is returned unchanged.
+ */
+export function cleanPowerShellStderr(stderr: string): string {
+  const text = stderr.trim()
+  if (!text.startsWith("#< CLIXML")) return text
+
+  const errors: string[] = []
+  const re = /<S S="Error">([\s\S]*?)<\/S>/g
+  for (const m of text.matchAll(re)) {
+    const decoded = m[1]
+      .replaceAll(/_x000D__x000A_/g, "\n")
+      .replaceAll(/_x000A_/g, "\n")
+      .replaceAll(/&lt;/g, "<")
+      .replaceAll(/&gt;/g, ">")
+      .replaceAll(/&quot;/g, '"')
+      .replaceAll(/&apos;/g, "'")
+      .replaceAll(/&amp;/g, "&")
+      .trim()
+    if (decoded) errors.push(decoded)
+  }
+  return errors.join("\n").trim()
 }
 
 /** Extract the text content of the first XML tag matching a local name. */
@@ -115,13 +174,17 @@ export class WinRMClient {
     const shellId = await this.createShell()
 
     try {
-      const commandId = await this.runCommand(shellId, psCommand)
+      // Progress records would otherwise land on stderr as CLIXML; nobody
+      // watches a progress bar over WinRM, and they cost bandwidth per poll.
+      const script = `$ProgressPreference = 'SilentlyContinue'\n${psCommand}`
+      const commandId = await this.runCommand(shellId, script)
       const { stdout, stderr } = await this.receiveOutput(shellId, commandId)
       await this.signalTerminate(shellId, commandId)
 
-      // If we got nothing on stdout but have stderr, treat as error
-      if (!stdout.trim() && stderr.trim()) {
-        throw new Error(`PowerShell error: ${stderr.trim().slice(0, 2000)}`)
+      // If we got nothing on stdout but a real error on stderr, fail
+      const errorText = cleanPowerShellStderr(stderr)
+      if (!stdout.trim() && errorText) {
+        throw new Error(`PowerShell error: ${errorText.slice(0, 2000)}`)
       }
 
       return stdout
@@ -161,7 +224,7 @@ export class WinRMClient {
         </wsa:ReplyTo>
         <wsa:Action s:mustUnderstand="true">${action}</wsa:Action>
         <wsa:MessageID>${messageId}</wsa:MessageID>
-        <wsman:OperationTimeout>PT60S</wsman:OperationTimeout>
+        <wsman:OperationTimeout>PT${OPERATION_TIMEOUT_SEC}S</wsman:OperationTimeout>
         ${extras}
       </s:Header>`
   }
@@ -236,9 +299,9 @@ export class WinRMClient {
     const stdoutParts: string[] = []
     const stderrParts: string[] = []
 
-    const maxPolls = 60
+    const deadline = Date.now() + MAX_RECEIVE_WAIT_MS
 
-    for (let i = 0; i < maxPolls; i++) {
+    while (Date.now() < deadline) {
       const selectorHeader = `<wsman:SelectorSet><wsman:Selector Name="ShellId">${shellId}</wsman:Selector></wsman:SelectorSet>`
       const header = this.soapHeader(RECEIVE_ACTION, SHELL_URI, selectorHeader)
       const body = `
@@ -246,7 +309,15 @@ export class WinRMClient {
           <rsp:DesiredStream CommandId="${commandId}">stdout stderr</rsp:DesiredStream>
         </rsp:Receive>`
 
-      const xml = await this.post(this.soapEnvelope(header, body))
+      let xml: string
+      try {
+        xml = await this.post(this.soapEnvelope(header, body), RECEIVE_TIMEOUT_MS)
+      } catch (err) {
+        // The server waited OperationTimeout without output: the command is
+        // still running, ask again. Anything else is a real failure.
+        if (isOperationTimeoutFault(err)) continue
+        throw err
+      }
 
       // Extract Stream elements with Name="stdout" or Name="stderr"
       // containing base64-encoded output
@@ -311,7 +382,7 @@ export class WinRMClient {
   // HTTP transport
   // -----------------------------------------------------------------------
 
-  private async post(soapXml: string): Promise<string> {
+  private async post(soapXml: string, timeoutMs: number = this.timeout): Promise<string> {
     const fetchOpts: RequestInit & { dispatcher?: unknown } = {
       method: "POST",
       headers: {
@@ -322,7 +393,7 @@ export class WinRMClient {
         "Accept-Encoding": "identity",
       },
       body: soapXml,
-      signal: AbortSignal.timeout(this.timeout),
+      signal: AbortSignal.timeout(timeoutMs),
     }
 
     // For HTTPS with self-signed certs, disable TLS verification

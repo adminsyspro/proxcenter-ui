@@ -6,6 +6,7 @@
  */
 
 import { WinRMClient, type WinRMConnection } from "./winrm"
+import { hypervDiskMountPath } from "./diskPaths"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,8 +19,30 @@ export interface HyperVVm {
   cpuCount: number
   memoryMB: number
   diskSizeBytes: number
-  diskPaths: string[]   // VHDX / VHD file paths
+  diskPaths: string[]   // VHDX / VHD file paths (Windows paths on the host)
+  /**
+   * Same disks as seen from the Proxmox node once the connection's SMB share
+   * is mounted at /mnt/hyperv (see lib/hyperv/diskPaths.ts). Relative to the
+   * share's local path when it is known, basename otherwise.
+   */
+  diskMountPaths: string[]
   generation: number    // 1 or 2
+}
+
+export interface HyperVListOptions {
+  /** SMB share name of the connection: its local path is resolved on the host to map disk paths. */
+  shareName?: string | null
+}
+
+/** Facts the offline migration needs before copying a VM's disk files. */
+export interface HyperVVmReadiness {
+  state: string          // Running, Off, Saved, Paused, Other
+  checkpointCount: number
+}
+
+/** Single-quote a value for interpolation inside a PowerShell string literal. */
+function psQuote(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
 }
 
 // ---------------------------------------------------------------------------
@@ -43,96 +66,84 @@ export class HyperVClient {
   /**
    * List all VMs on the Hyper-V host, including disk paths and sizes.
    *
-   * Executes two PowerShell commands:
-   * 1. Get-VM for basic VM info
-   * 2. For each VM, Get-VMHardDiskDrive + Get-VHD for disk details
-   *
-   * The disk info is gathered in a single batched PS call to avoid
-   * N+1 round trips to the host.
+   * ONE PowerShell invocation. Every remote command pays a powershell.exe
+   * start plus the Hyper-V module import (several seconds each on Windows
+   * Server 2019), so the VM list and the disk list are gathered in the same
+   * script. Disk sizes come from the file size on disk (Get-Item), never from
+   * Get-VHD: that cmdlet opens every VHDX and walks its parent chain, which
+   * measured at 13 s for ~20 disks on a customer host and pushed the whole
+   * listing past the inventory's client-side timeout. getVM() keeps Get-VHD
+   * for the single VM about to be migrated, where the exact size matters.
    */
-  async listVMs(): Promise<HyperVVm[]> {
-    // Step 1: Get all VMs with basic info
-    const vmPs = `
-      $vms = Get-VM | Select-Object VMId, Name, State, ProcessorCount,
-        @{N='MemoryMB';E={[math]::Round($_.MemoryAssigned/1MB)}},
-        @{N='DynamicMemoryMaxMB';E={[math]::Round($_.MemoryMaximum/1MB)}},
-        Generation
-      if ($vms -eq $null) { '[]' } else { $vms | ConvertTo-Json -Compress }
-    `.trim()
-
-    const vmRaw = await this.winrm.execute(vmPs)
-    const vmData = this.parseJsonArray(vmRaw)
-
-    if (vmData.length === 0) return []
-
-    // Step 2: Get disk info for all VMs in a single call
-    // Build a PS script that collects disk paths + sizes per VM
-    const diskPs = `
-      $result = @{}
+  async listVMs(options: HyperVListOptions = {}): Promise<HyperVVm[]> {
+    const ps = `
+      ${this.sharePathSnippet(options.shareName)}
+      $out = @()
       foreach ($vm in Get-VM) {
         $disks = @()
-        $hdds = Get-VMHardDiskDrive -VM $vm
-        foreach ($hdd in $hdds) {
+        foreach ($hdd in Get-VMHardDiskDrive -VM $vm) {
           $size = 0
           try {
-            $vhd = Get-VHD -Path $hdd.Path -ErrorAction SilentlyContinue
-            if ($vhd) { $size = $vhd.FileSize }
+            $file = Get-Item -LiteralPath $hdd.Path -ErrorAction Stop
+            $size = $file.Length
           } catch {}
           $disks += @{Path=$hdd.Path; SizeBytes=$size}
         }
-        $result[$vm.VMId.ToString()] = $disks
+        $out += @{
+          VMId = $vm.VMId.ToString()
+          Name = $vm.Name
+          State = [int]$vm.State
+          ProcessorCount = $vm.ProcessorCount
+          MemoryMB = [math]::Round($vm.MemoryAssigned/1MB)
+          MemoryStartupMB = [math]::Round($vm.MemoryStartup/1MB)
+          DynamicMemoryMaxMB = [math]::Round($vm.MemoryMaximum/1MB)
+          Generation = $vm.Generation
+          Disks = $disks
+        }
       }
-      $result | ConvertTo-Json -Compress -Depth 4
+      @{ SharePath = $sharePath; VMs = @($out) } | ConvertTo-Json -Compress -Depth 5
     `.trim()
 
-    let diskMap: Record<string, Array<{ Path: string; SizeBytes: number }>> = {}
-    try {
-      const diskRaw = await this.winrm.execute(diskPs)
-      const parsed = JSON.parse(diskRaw.trim())
-      // PowerShell ConvertTo-Json wraps single-element arrays as objects,
-      // and nested arrays may be objects too. Normalize carefully.
-      diskMap = this.normalizeDiskMap(parsed)
-    } catch {
-      // If disk enumeration fails, we still return VMs without disk info
-      // rather than failing the entire listing
+    const raw = await this.winrm.execute(ps)
+    const data = JSON.parse(raw.trim())
+    const sharePath = typeof data?.SharePath === "string" ? data.SharePath : null
+
+    return this.normalizeArray(data?.VMs).map((vm: any) => this.mapVm(vm, sharePath))
+  }
+
+  /**
+   * Retrieve what decides whether the VM can be migrated offline: it must be
+   * powered off (the disk files are copied as they are) and carry no
+   * checkpoint (the active disk would be a differencing .avhdx whose parent
+   * chain only resolves on the Windows host).
+   */
+  async getVmReadiness(vmId: string): Promise<HyperVVmReadiness> {
+    this.assertVmId(vmId)
+    const ps = `
+      $vm = Get-VM -Id ${psQuote(vmId)}
+      if (-not $vm) { throw "VM not found: ${vmId}" }
+      @{
+        State = [int]$vm.State
+        CheckpointCount = @(Get-VMSnapshot -VM $vm -ErrorAction SilentlyContinue).Count
+      } | ConvertTo-Json -Compress
+    `.trim()
+
+    const raw = await this.winrm.execute(ps)
+    const data = JSON.parse(raw.trim())
+    return {
+      state: this.resolveVmState(data.State),
+      checkpointCount: typeof data.CheckpointCount === "number" ? data.CheckpointCount : 0,
     }
-
-    return vmData.map((vm: any) => {
-      const vmId = vm.VMId?.toString() || ""
-      const diskEntries = diskMap[vmId] || []
-      const diskPaths = diskEntries.map(d => d.Path).filter(Boolean)
-      const diskSizeBytes = diskEntries.reduce((sum, d) => sum + (d.SizeBytes || 0), 0)
-
-      // PowerShell State enum: Running=2, Off=3, Saved=6, Paused=9, etc.
-      // ConvertTo-Json serializes it as an integer, but sometimes as string
-      const state = this.resolveVmState(vm.State)
-
-      // MemoryMB may be 0 if VM is off (MemoryAssigned = 0); fall back to max
-      const memoryMB = (vm.MemoryMB || 0) > 0 ? vm.MemoryMB : (vm.DynamicMemoryMaxMB || 0)
-
-      return {
-        vmId,
-        name: vm.Name || "Unknown",
-        state,
-        cpuCount: vm.ProcessorCount || 0,
-        memoryMB,
-        diskSizeBytes,
-        diskPaths,
-        generation: vm.Generation || 1,
-      }
-    })
   }
 
   /**
    * Get a single VM by its GUID, including disk info.
    */
-  async getVM(vmId: string): Promise<HyperVVm> {
-    // Validate GUID format to prevent injection
-    if (!/^[0-9a-f-]{36}$/i.test(vmId)) {
-      throw new Error(`Invalid VM ID format: ${vmId}`)
-    }
+  async getVM(vmId: string, options: HyperVListOptions = {}): Promise<HyperVVm> {
+    this.assertVmId(vmId)
 
     const ps = `
+      ${this.sharePathSnippet(options.shareName)}
       $vm = Get-VM -Id '${vmId}'
       if (-not $vm) { throw "VM not found: ${vmId}" }
 
@@ -148,11 +159,13 @@ export class HyperVClient {
       }
 
       @{
+        SharePath = $sharePath
         VMId = $vm.VMId.ToString()
         Name = $vm.Name
         State = $vm.State
         ProcessorCount = $vm.ProcessorCount
         MemoryMB = [math]::Round($vm.MemoryAssigned/1MB)
+        MemoryStartupMB = [math]::Round($vm.MemoryStartup/1MB)
         DynamicMemoryMaxMB = [math]::Round($vm.MemoryMaximum/1MB)
         Generation = $vm.Generation
         Disks = $disks
@@ -161,38 +174,61 @@ export class HyperVClient {
 
     const raw = await this.winrm.execute(ps)
     const data = JSON.parse(raw.trim())
+    const sharePath = typeof data?.SharePath === "string" ? data.SharePath : null
 
-    const diskEntries = this.normalizeArray(data.Disks || [])
-    const diskPaths = diskEntries.map((d: any) => d.Path).filter(Boolean)
-    const diskSizeBytes = diskEntries.reduce((sum: number, d: any) => sum + (d.SizeBytes || 0), 0)
-    const memoryMB = (data.MemoryMB || 0) > 0 ? data.MemoryMB : (data.DynamicMemoryMaxMB || 0)
-
-    return {
-      vmId: data.VMId || vmId,
-      name: data.Name || "Unknown",
-      state: this.resolveVmState(data.State),
-      cpuCount: data.ProcessorCount || 0,
-      memoryMB,
-      diskSizeBytes,
-      diskPaths,
-      generation: data.Generation || 1,
-    }
+    return this.mapVm({ ...data, VMId: data.VMId || vmId }, sharePath)
   }
 
   // -----------------------------------------------------------------------
   // Internal helpers
   // -----------------------------------------------------------------------
 
-  /**
-   * Parse JSON that might be a single object (when PS has one result)
-   * or an array. Always returns an array.
-   */
-  private parseJsonArray(raw: string): any[] {
-    const trimmed = raw.trim()
-    if (!trimmed || trimmed === "[]") return []
+  /** Validate GUID format to prevent injection into the PowerShell script. */
+  private assertVmId(vmId: string): void {
+    if (!/^[0-9a-f-]{36}$/i.test(vmId)) {
+      throw new Error(`Invalid VM ID format: ${vmId}`)
+    }
+  }
 
-    const parsed = JSON.parse(trimmed)
-    return Array.isArray(parsed) ? parsed : [parsed]
+  /**
+   * PowerShell prologue setting $sharePath to the local folder behind the
+   * connection's SMB share (null when unknown). Resolved in the same remote
+   * command as the VM query: every extra command costs a powershell.exe start.
+   */
+  private sharePathSnippet(shareName?: string | null): string {
+    if (!shareName) return "$sharePath = $null"
+    return `$sharePath = $null
+      try { $sharePath = (Get-SmbShare -Name ${psQuote(shareName)} -ErrorAction Stop).Path } catch {}`
+  }
+
+  /** Map one VM object of the PowerShell output to HyperVVm. */
+  private mapVm(vm: any, sharePath: string | null): HyperVVm {
+    const vmId = vm?.VMId?.toString() || ""
+    const diskEntries = this.normalizeArray(vm?.Disks || [])
+    const diskPaths: string[] = diskEntries.map((d: any) => d?.Path).filter(Boolean)
+    const diskSizeBytes = diskEntries.reduce(
+      (sum: number, d: any) => sum + (typeof d?.SizeBytes === "number" ? d.SizeBytes : 0),
+      0
+    )
+
+    // MemoryAssigned is 0 while the VM is off. The startup memory is what the
+    // VM gets at boot and what a migration should size; the dynamic maximum
+    // is a ceiling (1 TB by default on Hyper-V) and only a last resort.
+    const memoryMB = (vm?.MemoryMB || 0) > 0
+      ? vm.MemoryMB
+      : (vm?.MemoryStartupMB || 0) > 0 ? vm.MemoryStartupMB : (vm?.DynamicMemoryMaxMB || 0)
+
+    return {
+      vmId,
+      name: vm?.Name || "Unknown",
+      state: this.resolveVmState(vm?.State),
+      cpuCount: vm?.ProcessorCount || 0,
+      memoryMB,
+      diskSizeBytes,
+      diskPaths,
+      diskMountPaths: diskPaths.map(p => hypervDiskMountPath(p, sharePath)),
+      generation: vm?.Generation || 1,
+    }
   }
 
   /**
@@ -201,26 +237,6 @@ export class HyperVClient {
   private normalizeArray(val: any): any[] {
     if (!val) return []
     return Array.isArray(val) ? val : [val]
-  }
-
-  /**
-   * Normalize the disk map from PowerShell.
-   * ConvertTo-Json may serialize single-element arrays as bare objects,
-   * so each value needs normalization.
-   */
-  private normalizeDiskMap(
-    parsed: any
-  ): Record<string, Array<{ Path: string; SizeBytes: number }>> {
-    if (!parsed || typeof parsed !== "object") return {}
-
-    const result: Record<string, Array<{ Path: string; SizeBytes: number }>> = {}
-    for (const [key, val] of Object.entries(parsed)) {
-      result[key] = this.normalizeArray(val).map((d: any) => ({
-        Path: d?.Path || "",
-        SizeBytes: typeof d?.SizeBytes === "number" ? d.SizeBytes : 0,
-      }))
-    }
-    return result
   }
 
   /**

@@ -4,6 +4,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { HyperVClient } from "@/lib/hyperv/client"
+import { logHypervFailure } from "@/lib/hyperv/log"
 
 export const runtime = "nodejs"
 
@@ -56,7 +57,7 @@ export async function GET(
         }
       })
     } catch (connErr: any) {
-      const msg = connErr?.message || String(connErr)
+      const msg = logHypervFailure("status probe", conn.name, host, connErr)
 
       if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("credentials")) {
         return NextResponse.json({

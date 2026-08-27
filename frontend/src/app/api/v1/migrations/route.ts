@@ -14,6 +14,7 @@ import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmw
 import { decryptSecret } from "@/lib/crypto/secret"
 import { assertStorageName } from "@/lib/ssh/validate"
 import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
+import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 
 export const runtime = "nodejs"
 
@@ -187,7 +188,11 @@ export async function POST(req: Request) {
         // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
         // retry — which rebuilds the config from job.config — keeps them instead of
         // silently reverting to the defaults.
-        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, sourceType: effectiveSourceType, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }) },
+        config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }),
+          // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
+          // storage, root override): persisted so a retry rebuilds the same job.
+          sourceType: effectiveSourceType,
+          ...persistedV2vInputs(body, v2vRoot) },
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),

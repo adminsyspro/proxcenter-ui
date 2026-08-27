@@ -312,7 +312,7 @@ export default function InventoryDetails({
   const [nodeActionLocalVms, setNodeActionLocalVms] = useState<Set<string>>(new Set())
   const [nodeActionStorageLoading, setNodeActionStorageLoading] = useState(false)
   const [nodeActionShutdownLocal, setNodeActionShutdownLocal] = useState(false)
-  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
+  const [esxiMigrateVm, setEsxiMigrateVm] = useState<{ vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; diskMountPaths?: string[]; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null>(null)
   const [migTargetConn, setMigTargetConn] = useState('')
   const [migTargetNode, setMigTargetNode] = useState('')
   const [migTargetStorage, setMigTargetStorage] = useState('')
@@ -333,7 +333,7 @@ export default function InventoryDetails({
   const [migStoragesLoading, setMigStoragesLoading] = useState(false)
   const [migStoragesError, setMigStoragesError] = useState<string | null>(null)
   const [migSshfsAvailable, setMigSshfsAvailable] = useState<boolean | null>(null) // null = not checked yet
-  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null>(null)
+  const [vcenterPreflight, setVcenterPreflight] = useState<{ checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null>(null)
   const [migStarting, setMigStarting] = useState(false)
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
@@ -820,7 +820,7 @@ export default function InventoryDetails({
       ? migNodeOptions.filter((o: any) => o.connId === migTargetConn && o.status === 'online').map((o: any) => o.node)
       : [migTargetNode]
     if (nodesToCheck.length === 0) {
-      setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] })
+      setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['No online nodes in the selected cluster'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, ntfsCompressionPluginInstalled: false, detectedDisks: [], tempStorages: [] })
       return
     }
     Promise.all(nodesToCheck.map(async (node: string) => {
@@ -842,6 +842,7 @@ export default function InventoryDetails({
       const allNbdcopy = results.every(r => !!r.nbdcopyInstalled)
       const allGuestfsTools = results.every(r => !!r.guestfsToolsInstalled)
       const allOvmf = results.every(r => !!r.ovmfInstalled)
+      const allNtfsPlugin = results.every(r => !!r.ntfsCompressionPluginInstalled)
       const allVirtioWin = results.every(r => !!r.virtioWinInstalled)
       // tempStorages: when targeting multiple nodes we take the INTERSECTION by
       // path (a temp dir is only useful if it exists on every node the batch
@@ -892,13 +893,14 @@ export default function InventoryDetails({
         nbdcopyInstalled: allNbdcopy,
         guestfsToolsInstalled: allGuestfsTools,
         ovmfInstalled: allOvmf,
+        ntfsCompressionPluginInstalled: allNtfsPlugin,
         detectedDisks,
         tempStorages: aggregatedTempStorages,
       })
       if (detectedDisks.length > 0) {
         setMigDiskPaths(detectedDisks.join('\n'))
       }
-    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, detectedDisks: [], tempStorages: [] }))
+    }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, ntfsCompressionPluginInstalled: false, detectedDisks: [], tempStorages: [] }))
     loadMigStorages(migTargetConn, fetchNode)
     // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),
     // merged into one selector list. A migrated NIC accepts a VNet name in its
@@ -4127,7 +4129,7 @@ return vm?.isCluster ?? false
                             vmid: vm.vmid, name: vm.name, connId: vm.connectionId,
                             connName: vm.connectionName, cpu: vm.numCPU, memoryMB: vm.memoryMB,
                             committed: vm.committed, guestOS: vm.guestOS, licenseFull: vm.licenseFull,
-                            hostType: ht, diskPaths: (vm as any).diskPaths,
+                            hostType: ht, diskPaths: (vm as any).diskPaths, diskMountPaths: (vm as any).diskMountPaths,
                             // Connection sub-type: gates warm for an XCP-ng pool
                             // (XAPI yes, Xen Orchestra no) in the migrate dialog.
                             connSubType: vm.connSubType ?? null,

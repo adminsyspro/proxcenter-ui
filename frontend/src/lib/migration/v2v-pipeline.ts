@@ -25,6 +25,7 @@ import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { HyperVClient } from "@/lib/hyperv/client"
 import { resolveHypervDiskPaths } from "./hyperv-disks"
+import { applySourceSizing, hypervSourceSizing, nutanixSourceSizing, type SourceSizing } from "./source-sizing"
 import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
@@ -1309,6 +1310,32 @@ async function processV2vOutput(jobId: string, output: string, progressOffset: n
   }
 }
 
+/** Prism Central client built from the stored source connection credentials. */
+async function nutanixClientForConnection(prisma: ReturnType<typeof getTenantPrisma>, sourceConnectionId: string) {
+  const sourceConn = await prisma.connection.findUnique({
+    where: { id: sourceConnectionId },
+    select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
+  })
+  if (!sourceConn?.apiTokenEnc) {
+    throw new Error("Nutanix source connection credentials not found")
+  }
+
+  const creds = decryptSecret(sourceConn.apiTokenEnc)
+  const colonIdx = creds.indexOf(":")
+  const ntxUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "admin"
+  const ntxPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
+
+  const { NutanixClient } = await import("@/lib/nutanix/client")
+  const ntxClient = new NutanixClient({
+    baseUrl: sourceConn.baseUrl,
+    username: ntxUser,
+    password: ntxPass,
+    insecureTLS: sourceConn.insecureTLS,
+  })
+
+  return { ntxClient, insecureTLS: sourceConn.insecureTLS }
+}
+
 /**
  * Main virt-v2v migration pipeline
  */
@@ -1378,6 +1405,9 @@ export async function runV2vMigrationPipeline(
   // We capture the parsed source config at vSAN detection time and use it later
   // in Phase 5 to override the sparse defaults virt-v2v would otherwise emit.
   let sourceVmwareConfig: EsxiVmConfig | null = null
+  // Same gap for the other -i disk sources: the Hyper-V host (WinRM) or Prism
+  // Central knows the real CPU count and memory, virt-v2v writes 1 vCPU / 2 GB.
+  let sourceSizing: SourceSizing | null = null
   // Live migration state. When migrationType=="live" and the source VM is
   // powered on, we snapshot before the NFC export so transfer happens while
   // the VM keeps serving traffic, then power off + remove the snapshot right
@@ -1537,6 +1567,11 @@ export async function runV2vMigrationPipeline(
             )
           }
           await appendLog(jobId, "Source VM is powered off with no checkpoint", "success")
+          try {
+            sourceSizing = hypervSourceSizing(await hyperv.getVM(config.sourceVmId))
+          } catch (sizingErr: any) {
+            await appendLog(jobId, `Could not read the source VM sizing over WinRM: ${sizingErr?.message || String(sizingErr)}`, "warn")
+          }
         } catch (probeErr: any) {
           const msg = probeErr?.message || String(probeErr)
           // Our own verdicts above are final; a failed probe (WinRM down) only warns,
@@ -1821,31 +1856,24 @@ export async function runV2vMigrationPipeline(
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
+    // ── PHASE 2.4: Nutanix source sizing ──
+    // Read once from Prism Central whatever the disk path: virt-v2v -i disk has
+    // no metadata, and without this every Nutanix VM lands with 1 vCPU / 2 GB.
+    if (config.sourceType === "nutanix") {
+      try {
+        const { ntxClient } = await nutanixClientForConnection(prisma, config.sourceConnectionId)
+        sourceSizing = nutanixSourceSizing(await ntxClient.getVM(config.sourceVmId))
+      } catch (sizingErr: any) {
+        await appendLog(jobId, `Could not read the source VM sizing from Prism Central: ${sizingErr?.message || String(sizingErr)}`, "warn")
+      }
+    }
+
     // ── PHASE 2.5: Nutanix disk download ──
     // If sourceType is nutanix and no diskPaths provided, download disks from Prism API
     if (config.sourceType === "nutanix" && (!config.diskPaths || config.diskPaths.length === 0)) {
       await appendLog(jobId, "Downloading disks from Nutanix Prism Central...")
 
-      const sourceConn = await prisma.connection.findUnique({
-        where: { id: config.sourceConnectionId },
-        select: { baseUrl: true, apiTokenEnc: true, insecureTLS: true },
-      })
-      if (!sourceConn?.apiTokenEnc) {
-        throw new Error("Nutanix source connection credentials not found")
-      }
-
-      const creds = decryptSecret(sourceConn.apiTokenEnc)
-      const colonIdx = creds.indexOf(":")
-      const ntxUser = colonIdx > 0 ? creds.substring(0, colonIdx) : "admin"
-      const ntxPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
-
-      const { NutanixClient } = await import("@/lib/nutanix/client")
-      const ntxClient = new NutanixClient({
-        baseUrl: sourceConn.baseUrl,
-        username: ntxUser,
-        password: ntxPass,
-        insecureTLS: sourceConn.insecureTLS,
-      })
+      const { ntxClient, insecureTLS } = await nutanixClientForConnection(prisma, config.sourceConnectionId)
 
       // List disks for this VM
       const disks = await ntxClient.listDisks(config.sourceVmId)
@@ -1887,7 +1915,7 @@ export async function runV2vMigrationPipeline(
         const downloadUrl = ntxClient.getDiskDownloadUrl(imageUuid)
         const authHeader = ntxClient.getAuthHeader()
         const diskPath = `${downloadDir}/disk-${i}.raw`
-        const insecureFlag = sourceConn.insecureTLS ? "-k" : ""
+        const insecureFlag = insecureTLS ? "-k" : ""
 
         // Launch curl in background via nohup
         // Credentials stored in a curl config file (chmod 600), deleted after download
@@ -1896,7 +1924,7 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, `Downloading disk ${i} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Write curl config file with auth header (restricted permissions)
-        const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${sourceConn.insecureTLS ? "insecure" : ""}`
+        const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${insecureTLS ? "insecure" : ""}`
         const writeCfg = await executeSSH(config.targetConnectionId, nodeIp,
           `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`)
         if (!writeCfg.success) {
@@ -2713,6 +2741,8 @@ export async function runV2vMigrationPipeline(
             mac: n.macAddress || undefined,
           }))
         }
+      } else if (sourceSizing) {
+        await appendLog(jobId, applySourceSizing(vmConfig, sourceSizing), "info")
       }
 
       createParams = buildPveCreateParams(vmConfig, targetVmid, config.networkBridge, config.vlanTag)

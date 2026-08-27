@@ -1,6 +1,7 @@
 import { executeSSH, shellEscape, type SSHResult } from "@/lib/ssh/exec"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getNodeIp } from "@/lib/ssh/node-ip"
+import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
 
 export interface TempStorageOption {
   path: string
@@ -41,6 +42,13 @@ export interface PreflightResult {
    * point cost-wise) with "cannot find firmware for UEFI guests".
    */
   ovmfInstalled: boolean
+  /**
+   * ntfs-3g system-compression plugin present on the node AND registered in
+   * libguestfs' supermin.d (see lib/migration/ntfs-compression-plugin.ts).
+   * Without it a Windows guest installed with "Compact OS" is not recognised
+   * by libguestfs and virt-v2v fails with "No root device found".
+   */
+  ntfsCompressionPluginInstalled: boolean
   diskSpaceAvailableBytes: number
   diskSpaceRequired: number
   diskSpaceSufficient: boolean
@@ -67,6 +75,7 @@ export async function runV2vPreflight(
   const result: PreflightResult = {
     ssh: false,
     virtioWinInstalled: false,
+    ntfsCompressionPluginInstalled: false,
     virtV2vInstalled: false,
     pvInstalled: false,
     nbdkitInstalled: false,
@@ -93,7 +102,7 @@ export async function runV2vPreflight(
   result.ssh = true
 
   // 2-4: Run remaining checks in parallel
-  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck, nbdkitCheck, nbdcopyCheck, guestfsCheck, ovmfCheck] = await Promise.all([
+  const [v2vCheck, pvCheck, dfCheck, virtioWinCheck, ntfsFixCheck, virtCustomizeCheck, nbdkitCheck, nbdcopyCheck, guestfsCheck, ovmfCheck, ntfsPluginCheck] = await Promise.all([
     executeSSH(targetConnectionId, nodeIp, "which virt-v2v"),
     executeSSH(targetConnectionId, nodeIp, "which pv"),
     executeSSH(targetConnectionId, nodeIp, "df -B1 /tmp | tail -1 | awk '{print $4}'"),
@@ -106,6 +115,8 @@ export async function runV2vPreflight(
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/virt-tools/rhsrvany.exe -o -f /usr/share/virt-tools/pvvxsvc.exe && echo yes || echo no"),
     // OVMF firmware: required for UEFI guests at "Creating output metadata"
     executeSSH(targetConnectionId, nodeIp, "test -f /usr/share/OVMF/OVMF_CODE_4M.fd -o -f /usr/share/OVMF/OVMF_CODE.fd && echo yes || echo no"),
+    // ntfs-3g system-compression plugin: Windows "Compact OS" guests are invisible to libguestfs without it
+    executeSSH(targetConnectionId, nodeIp, ntfsCompressionPluginCheckCommand()),
   ])
 
   // 2. Check virt-v2v installed
@@ -150,6 +161,13 @@ export async function runV2vPreflight(
     result.ovmfInstalled = true
   } else {
     errors.push("ovmf is not installed (required for UEFI guest migration — fails after disk copy with 'cannot find firmware for UEFI guests')")
+  }
+
+  // 3e. Check the ntfs-3g system-compression plugin (Compact OS Windows guests)
+  if (ntfsPluginCheck.success && ntfsPluginCheck.output?.trim().endsWith('yes')) {
+    result.ntfsCompressionPluginInstalled = true
+  } else {
+    errors.push("ntfs-3g system-compression plugin is not installed (Windows guests using Compact OS fail with 'No root device found')")
   }
 
   // 4. Check virtio-win drivers
@@ -282,6 +300,14 @@ const MINGW_SRVANY_RPM_URL =
  * ntfsfix + qemu-nbd (for NTFS dirty flag recovery) are installed lazily in
  * the pipeline only when a Windows NTFS error is actually hit.
  */
+/**
+ * Budget for the package installation. The default executeSSH budget is 30 s,
+ * which the orchestrator-rejected `bash -c` wrapper then inherits on the ssh2
+ * fallback: apt alone needs longer than that on a cold node, and building the
+ * ntfs-3g plugin adds a compile step. Twenty minutes covers a slow mirror.
+ */
+export const INSTALL_V2V_PACKAGES_TIMEOUT_MS = 20 * 60 * 1000
+
 export async function installV2vPackages(
   targetConnectionId: string,
   targetNode: string
@@ -296,7 +322,11 @@ export async function installV2vPackages(
   const script =
     // pipefail so a failing rpm2cpio can't be masked by a successful cpio
     "set -eo pipefail; " +
-    "apt-get update -qq; " +
+    // `|| true`: a node pointed at enterprise.proxmox.com without a
+    // subscription fails `apt-get update` with a 401 (exit 100) although every
+    // package below comes from the Debian repositories, which refreshed fine.
+    // The real gate stays `apt-get install`, which still fails loudly.
+    "apt-get update -qq || true; " +
     "apt-get install -y virt-v2v pv nbdkit libnbd-bin guestfs-tools ovmf rpm2cpio cpio wget; " +
     "if [ ! -f /usr/share/virt-tools/rhsrvany.exe ] && [ ! -f /usr/share/virt-tools/pvvxsvc.exe ]; then " +
     "  TMPDIR=$(mktemp -d); " +
@@ -306,11 +336,14 @@ export async function installV2vPackages(
     "  mkdir -p /usr/share/virt-tools; " +
     "  cp ./usr/i686-w64-mingw32/sys-root/mingw/bin/*.exe /usr/share/virt-tools/; " +
     "  cd /; rm -rf \"$TMPDIR\"; " +
-    "fi"
+    "fi; " +
+    // Compact OS support for libguestfs: plugin built from the pinned upstream
+    // release and registered with supermin (idempotent, see the module).
+    ntfsCompressionPluginInstallScript()
 
   // shellEscape wraps in single quotes — critical here so the remote shell
   // doesn't expand $(mktemp -d) / $TMPDIR before bash -c receives the script.
-  return executeSSH(targetConnectionId, nodeIp, `bash -c ${shellEscape(script)}`)
+  return executeSSH(targetConnectionId, nodeIp, `bash -c ${shellEscape(script)}`, INSTALL_V2V_PACKAGES_TIMEOUT_MS)
 }
 
 const VIRTIO_WIN_URL = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"

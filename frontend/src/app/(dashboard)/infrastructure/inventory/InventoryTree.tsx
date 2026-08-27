@@ -59,6 +59,7 @@ import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
+import { describeVmLoadFailure, describeVmLoadTimeout, externalVmFetchTimeoutMs } from '@/lib/inventory/externalVmFetch'
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -1675,10 +1676,10 @@ return next
               // each fetch independently and clear its own loading flag when it
               // resolves — the working connections pop their VMs immediately, the
               // broken ones stay spinning until their own timeout hits.
-              const VM_FETCH_TIMEOUT_MS = 15_000
               for (const conn of extConns) {
                 const controller = new AbortController()
-                const timeoutId = setTimeout(() => controller.abort(), VM_FETCH_TIMEOUT_MS)
+                const vmFetchTimeoutMs = externalVmFetchTimeoutMs(conn.type)
+                const timeoutId = setTimeout(() => controller.abort(), vmFetchTimeoutMs)
                 const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'hyperv' ? 'hyperv' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
                 ;(async () => {
                   let vms: any[] = []
@@ -1691,11 +1692,11 @@ return next
                       const vmJson = await vmRes.json()
                       vms = Array.isArray(vmJson?.data) ? vmJson.data : (vmJson?.data?.vms || [])
                     } else {
-                      loadError = `HTTP ${vmRes.status}`
+                      loadError = await describeVmLoadFailure(vmRes)
                     }
                   } catch (err: any) {
                     loadError = err?.name === 'AbortError'
-                      ? `timeout after ${VM_FETCH_TIMEOUT_MS / 1000}s`
+                      ? describeVmLoadTimeout(vmFetchTimeoutMs)
                       : err?.message || 'fetch failed'
                   } finally {
                     clearTimeout(timeoutId)

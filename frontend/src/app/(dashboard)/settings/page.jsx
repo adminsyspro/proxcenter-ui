@@ -46,6 +46,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import { CountryFlag } from '@/components/ui/CountryFlag'
+import { interpretConnectionStatusResponse } from '@/components/settings/connectionStatusResult'
 import { findCountry } from '@/lib/utils/countries'
 
 import { isMultiLicenseEnabled } from '@/lib/features'
@@ -202,15 +203,15 @@ function ConnectionStatus({ connection, autoTest = false, onNodesLoaded }) {
         : `/api/v1/connections/${connection.id}/nodes`
 
       const res = await fetch(endpoint)
+      const json = await res.json().catch(() => ({}))
+      const result = interpretConnectionStatusResponse(res, json)
 
-      if (res.ok) {
+      if (result.status === 'ok') {
         setStatus('ok')
         if (onNodesLoaded) onNodesLoaded()
       } else {
-        const json = await res.json().catch(() => ({}))
-
         setStatus('error')
-        setError(json?.error || `HTTP ${res.status}`)
+        setError(result.error)
       }
     } catch (e) {
       setStatus('error')

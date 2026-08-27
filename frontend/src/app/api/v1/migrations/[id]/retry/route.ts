@@ -5,7 +5,10 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { runMigrationPipeline } from "@/lib/migration/pipeline"
+import { runV2vMigrationPipeline } from "@/lib/migration/v2v-pipeline"
+import { runXcpngMigrationPipeline } from "@/lib/migration/xcpng-pipeline"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
+import { resolveRetryEngine, v2vConfigFromJobConfig } from "@/lib/migration/retry-dispatch"
 import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 
@@ -67,29 +70,36 @@ export async function POST(
     })
 
     const tenantId = await getCurrentTenantId()
-    // Dispatch the retry to the same engine the original used. Warm jobs must
-    // not fall back to the cold pipeline (it powers off the running source).
-    const isWarm = (job.config as any)?.migrationType === "warm"
-    // Warm has one engine per source hypervisor (SOAP/VDDK for VMware, XAPI/NBD
-    // for XCP-ng). Resolve it from the source connection while the request-scoped
-    // Prisma client is still alive; it may be torn down inside after(). A deleted
-    // connection falls back to the sourceType persisted in the job config, so an
-    // XCP-ng retry is never handed to the VMware engine.
-    let warmSourceType: string | null = null
-    if (isWarm) {
-      const src = await prisma.connection.findUnique({ where: { id: job.sourceConnectionId }, select: { type: true } })
-      warmSourceType = src?.type ?? (job.config as any)?.sourceType ?? null
-    }
+    // Dispatch the retry to the same engine the original used: warm must not
+    // fall back to a cold pipeline (it powers off the running source), and a
+    // Hyper-V / vCenter / Nutanix / XCP-ng job must not be handed to the
+    // direct-ESXi pipeline, which rejects any non-VMware source. The engine
+    // comes from the sourceType persisted in the job config; jobs created
+    // before that field existed fall back to the live source connection.
+    // Resolve it while the request-scoped Prisma client is still alive; it may
+    // be torn down inside after().
+    const jobConfig = (job.config ?? {}) as Record<string, any>
+    const sourceConn = await prisma.connection.findUnique({
+      where: { id: job.sourceConnectionId },
+      select: { type: true, subType: true },
+    })
+    const engine = resolveRetryEngine(jobConfig, sourceConn)
     after(async () => {
-      if (isWarm) {
-        const warmConfig = config as unknown as Parameters<typeof runWarmMigration>[1]
-        if (warmSourceType === "xcpng") {
-          await runXcpngWarmMigration(newJob.id, warmConfig, tenantId)
-        } else {
-          await runWarmMigration(newJob.id, warmConfig, tenantId)
-        }
-      } else {
-        await runMigrationPipeline(newJob.id, config, tenantId)
+      switch (engine) {
+        case "warm-xcpng":
+          await runXcpngWarmMigration(newJob.id, config as unknown as Parameters<typeof runXcpngWarmMigration>[1], tenantId)
+          return
+        case "warm-vmware":
+          await runWarmMigration(newJob.id, config as unknown as Parameters<typeof runWarmMigration>[1], tenantId)
+          return
+        case "v2v":
+          await runV2vMigrationPipeline(newJob.id, v2vConfigFromJobConfig(jobConfig, job, sourceConn), tenantId)
+          return
+        case "xcpng-cold":
+          await runXcpngMigrationPipeline(newJob.id, { ...config, migrationType: "cold" }, tenantId)
+          return
+        default:
+          await runMigrationPipeline(newJob.id, config, tenantId)
       }
     })
 

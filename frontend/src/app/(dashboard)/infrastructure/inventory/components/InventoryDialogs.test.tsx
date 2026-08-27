@@ -962,7 +962,7 @@ describe('migration dialog options', () => {
   const PREFLIGHT_TEMP_TOO_SMALL = {
     checked: true, ok: true, installing: false, errors: [] as string[],
     virtV2vInstalled: true, virtioWinInstalled: true, nbdkitInstalled: true,
-    nbdcopyInstalled: true, guestfsToolsInstalled: true, ovmfInstalled: true,
+    nbdcopyInstalled: true, guestfsToolsInstalled: true, ovmfInstalled: true, ntfsCompressionPluginInstalled: true,
     detectedDisks: [] as string[],
     tempStorages: [{ path: '/tmp', availableBytes: 150 * GIB, totalBytes: 200 * GIB, filesystem: 'ext4' }],
   }

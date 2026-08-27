@@ -4,6 +4,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { HyperVClient } from "@/lib/hyperv/client"
+import { withHypervLog } from "@/lib/hyperv/log"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export async function GET(
     const { id } = await params
     const conn = await prisma.connection.findUnique({
       where: { id },
-      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
+      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, hypervShareName: true },
     })
 
     if (!conn || conn.type !== 'hyperv') {
@@ -40,7 +41,7 @@ export async function GET(
     const useSSL = conn.insecureTLS ? false : conn.baseUrl.startsWith("https")
 
     const client = new HyperVClient({ host, username, password, useSSL })
-    const hypervVms = await client.listVMs()
+    const hypervVms = await withHypervLog("VM listing", conn.name, host, () => client.listVMs({ shareName: conn.hypervShareName }))
 
     // Map to the standard format expected by the frontend migration UI
     const vms = hypervVms.map(vm => ({
@@ -52,6 +53,7 @@ export async function GET(
       power_state: vm.state,
       committed: vm.diskSizeBytes || undefined,
       diskPaths: vm.diskPaths,
+      diskMountPaths: vm.diskMountPaths,
       generation: vm.generation,
     }))
 

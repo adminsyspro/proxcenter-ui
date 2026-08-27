@@ -258,7 +258,7 @@ export interface InventoryDialogsProps {
   executeBulkAction: () => void
 
   // ESXi / External migration dialog
-  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null
+  esxiMigrateVm: { vmid: string; name: string; connId: string; connName: string; cpu?: number; memoryMB?: number; committed?: number; guestOS?: string; licenseFull?: boolean; hostType?: string; connSubType?: string | null; diskPaths?: string[]; diskMountPaths?: string[]; status?: string; toolsStatus?: string; toolsRunningStatus?: string } | null
   setEsxiMigrateVm: (v: any) => void
   migTargetConn: string
   setMigTargetConn: (v: string) => void
@@ -302,7 +302,7 @@ export interface InventoryDialogsProps {
   migStoragesError: string | null
   retryMigStorages: () => void
   migSshfsAvailable: boolean | null
-  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null
+  vcenterPreflight: { checked: boolean; ok: boolean; installing: boolean; errors: string[]; virtV2vInstalled: boolean; virtioWinInstalled: boolean; nbdkitInstalled: boolean; nbdcopyInstalled: boolean; guestfsToolsInstalled: boolean; ovmfInstalled: boolean; ntfsCompressionPluginInstalled: boolean; detectedDisks: string[]; tempStorages: { path: string; availableBytes: number; totalBytes: number; filesystem: string }[]; installError?: { hintKey?: '401_enterprise'; output: string } } | null
   setVcenterPreflight: (v: any) => void
   migStarting: boolean
   setMigStarting: (v: boolean) => void
@@ -537,8 +537,9 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-all',
             }}
-          >{`sed -i "s|^deb https://enterprise.proxmox.com|# &|" /etc/apt/sources.list.d/pve-enterprise.list
-echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VERSION_CODENAME) pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list`}</Box>
+          >{`for f in /etc/apt/sources.list.d/*.sources; do grep -q "enterprise.proxmox.com" "$f" || continue; sed -i "/^Enabled:/d" "$f"; echo "Enabled: false" >> "$f"; done
+sed -i "s|^deb https://enterprise.proxmox.com|# &|" /etc/apt/sources.list.d/*.list 2>/dev/null
+printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\nComponents: pve-no-subscription\\nSigned-By: /usr/share/keyrings/proxmox-archive-keyring.gpg\\n' "$(. /etc/os-release && echo $VERSION_CODENAME)" > /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
         </>
       )}
       <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mb: 0.5 }}>
@@ -620,6 +621,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
         nbdcopyInstalled: results.every((r: any) => !!r.nbdcopyInstalled),
         guestfsToolsInstalled: results.every((r: any) => !!r.guestfsToolsInstalled),
         ovmfInstalled: results.every((r: any) => !!r.ovmfInstalled),
+        ntfsCompressionPluginInstalled: results.every((r: any) => !!r.ntfsCompressionPluginInstalled),
         detectedDisks: firstWithDisks?.detectedDisks || [],
         tempStorages: firstWithStorages?.tempStorages || [],
         installError,
@@ -1027,6 +1029,7 @@ echo "deb http://download.proxmox.com/debian/pve $(. /etc/os-release && echo $VE
             nbdcopyInstalled: results.every((r: any) => !!r.nbdcopyInstalled),
             guestfsToolsInstalled: results.every((r: any) => !!r.guestfsToolsInstalled),
             ovmfInstalled: results.every((r: any) => !!r.ovmfInstalled),
+        ntfsCompressionPluginInstalled: results.every((r: any) => !!r.ntfsCompressionPluginInstalled),
             detectedDisks: [],
             tempStorages: results[0]?.tempStorages || [],
           })
@@ -2843,6 +2846,7 @@ return
                       { label: 'libnbd-bin (nbdcopy)', installed: vcenterPreflight.nbdcopyInstalled, required: true, note: 'virt-v2v disk copy step' },
                       { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
                       { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
+                      { label: 'ntfs-3g system-compression plugin', installed: vcenterPreflight.ntfsCompressionPluginInstalled, required: true, note: 'Windows guests installed with Compact OS' },
                     ]
                     const virtioWinMissing = !vcenterPreflight.virtioWinInstalled
                     const virtioWinRequired = isWindowsGuest
@@ -3082,14 +3086,15 @@ return
                       <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>VHDX Disks</Typography>
                       {esxiMigrateVm.diskPaths && esxiMigrateVm.diskPaths.length > 0 ? (
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          {esxiMigrateVm.diskPaths.map((disk: string) => {
+                          {esxiMigrateVm.diskPaths.map((disk: string, diskIdx: number) => {
                             const fileName = disk.split('\\').pop() || disk.split('/').pop() || disk
+                            const mountPath = esxiMigrateVm.diskMountPaths?.[diskIdx] || `/mnt/hyperv/${fileName}`
                             return (
                               <Box key={disk} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1, bgcolor: 'action.hover' }}>
                                 <i className="ri-checkbox-circle-fill" style={{ fontSize: 16, color: theme.palette.success.main }} />
                                 <Box sx={{ flex: 1, minWidth: 0 }}>
                                   <Typography variant="body2" sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, wordBreak: 'break-all' }}>
-                                    /mnt/hyperv/{fileName}
+                                    {mountPath}
                                   </Typography>
                                   <Typography variant="caption" sx={{ opacity: 0.4, fontSize: 10 }}>
                                     {disk}
@@ -3370,6 +3375,7 @@ return
                     if (!vcenterPreflight.nbdcopyInstalled) return true
                     if (!vcenterPreflight.guestfsToolsInstalled) return true
                     if (!vcenterPreflight.ovmfInstalled) return true
+                    if (!vcenterPreflight.ntfsCompressionPluginInstalled) return true
                     // virtio-win is required for Windows guests — without it the
                     // VM will likely BSOD with INACCESSIBLE_BOOT_DEVICE.
                     if (isWindowsGuest && !vcenterPreflight.virtioWinInstalled) return true
@@ -4011,6 +4017,7 @@ return
                     { label: 'libnbd-bin (nbdcopy)', installed: vcenterPreflight.nbdcopyInstalled, required: true, note: 'virt-v2v disk copy step' },
                     { label: 'guestfs-tools (rhsrvany)', installed: vcenterPreflight.guestfsToolsInstalled, required: true, note: 'Windows firstboot scripts' },
                     { label: 'ovmf', installed: vcenterPreflight.ovmfInstalled, required: true, note: 'UEFI firmware for output metadata' },
+                      { label: 'ntfs-3g system-compression plugin', installed: vcenterPreflight.ntfsCompressionPluginInstalled, required: true, note: 'Windows guests installed with Compact OS' },
                   ]
                   const virtioWinMissingBulk = !vcenterPreflight.virtioWinInstalled && hasWindowsInBatch
                   const missingAptBulk = aptChecklistBulk.some(d => !d.installed)
@@ -4476,6 +4483,7 @@ return
                       if (!vcenterPreflight.nbdcopyInstalled) return true
                       if (!vcenterPreflight.guestfsToolsInstalled) return true
                       if (!vcenterPreflight.ovmfInstalled) return true
+                    if (!vcenterPreflight.ntfsCompressionPluginInstalled) return true
                       // In bulk, block if batch contains Windows VMs and virtio-win is missing
                       if (!vcenterPreflight.virtioWinInstalled) {
                         const hasWin = (bulkMigHostInfo?.vms || [])

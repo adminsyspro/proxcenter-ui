@@ -23,6 +23,9 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { HyperVClient } from "@/lib/hyperv/client"
+import { resolveHypervDiskPaths } from "./hyperv-disks"
+import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript } from "./ntfs-compression-plugin"
 import { getNodeIp } from "@/lib/ssh/node-ip"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
@@ -1404,6 +1407,32 @@ export async function runV2vMigrationPipeline(
     }
     await appendLog(jobId, "virt-v2v is available on target node", "success")
 
+    // Windows guests installed with "Compact OS" store their system files as
+    // WOF reparse points; libguestfs only sees them through the ntfs-3g
+    // system-compression plugin, which Debian does not ship. Nodes prepared
+    // before this check existed lack it, so make sure of it here rather than
+    // fail half an hour later with "No root device found".
+    const ntfsPluginCheck = await executeSSH(config.targetConnectionId, nodeIp, ntfsCompressionPluginCheckCommand())
+    if (!ntfsPluginCheck.output?.trim().endsWith("yes")) {
+      await appendLog(jobId, "Installing the ntfs-3g system-compression plugin for libguestfs (Compact OS Windows guests)...")
+      const pluginInstall = await executeSSH(
+        config.targetConnectionId,
+        nodeIp,
+        `bash -c ${shellEscape(ntfsCompressionPluginInstallScript())}`,
+        10 * 60 * 1000,
+      )
+      if (pluginInstall.success) {
+        await appendLog(jobId, "ntfs-3g system-compression plugin installed", "success")
+      } else {
+        await appendLog(
+          jobId,
+          `Could not install the ntfs-3g system-compression plugin (${(pluginInstall.error || pluginInstall.output || "unknown error").trim().slice(0, 300)}). ` +
+          `A Windows guest using Compact OS will not be recognised; run 'compact /compactos:never' in the guest or install the plugin manually.`,
+          "warn",
+        )
+      }
+    }
+
     // Probe virt-v2v capability for --block-driver (introduced in 2.2.0).
     // Debian 12 Bookworm (PVE 8 base) ships virt-v2v 2.0.x which lacks this flag.
     const blockDriverProbe = await executeSSH(
@@ -1471,7 +1500,7 @@ export async function runV2vMigrationPipeline(
     if (config.sourceType === "hyperv") {
       const sourceConn = await prisma.connection.findUnique({
         where: { id: config.sourceConnectionId },
-        select: { baseUrl: true, apiTokenEnc: true, hypervShareName: true },
+        select: { baseUrl: true, apiTokenEnc: true, hypervShareName: true, insecureTLS: true },
       })
       if (sourceConn?.apiTokenEnc) {
         const creds = decryptSecret(sourceConn.apiTokenEnc)
@@ -1480,6 +1509,41 @@ export async function runV2vMigrationPipeline(
         const smbPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
         const smbHost = (sourceConn.baseUrl || "").replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").replace(/\/.*$/, "")
         const shareName = (sourceConn as any).hypervShareName || "VMs"
+
+        // The offline path copies the disk files as they are: the VM must be
+        // powered off and carry no checkpoint (the active disk would be a
+        // differencing .avhdx whose parent chain only resolves on Windows).
+        // Without this gate virt-v2v inspects for half a minute and ends on
+        // "No root device found", which says nothing about the actual cause.
+        await appendLog(jobId, "Checking source VM state on the Hyper-V host...")
+        try {
+          const hyperv = new HyperVClient({
+            host: smbHost,
+            username: smbUser,
+            password: smbPass,
+            useSSL: sourceConn.insecureTLS ? false : (sourceConn.baseUrl || "").startsWith("https"),
+          })
+          const readiness = await hyperv.getVmReadiness(config.sourceVmId)
+          if (readiness.state !== "Off") {
+            throw new Error(
+              `Hyper-V VM "${config.sourceVmName || config.sourceVmId}" is ${readiness.state}. ` +
+              `Offline migration copies the virtual disk files, so the VM must be powered off first (Stop-VM).`,
+            )
+          }
+          if (readiness.checkpointCount > 0) {
+            throw new Error(
+              `Hyper-V VM "${config.sourceVmName || config.sourceVmId}" has ${readiness.checkpointCount} checkpoint(s). ` +
+              `Delete them (Remove-VMSnapshot merges the .avhdx chain into the base disk) before migrating.`,
+            )
+          }
+          await appendLog(jobId, "Source VM is powered off with no checkpoint", "success")
+        } catch (probeErr: any) {
+          const msg = probeErr?.message || String(probeErr)
+          // Our own verdicts above are final; a failed probe (WinRM down) only warns,
+          // the disk copy may still succeed and virt-v2v reports the rest.
+          if (msg.startsWith("Hyper-V VM ")) throw probeErr
+          await appendLog(jobId, `Could not verify the source VM state over WinRM: ${msg}`, "warn")
+        }
 
         // Check if already mounted
         const mountCheck = await executeSSH(config.targetConnectionId, nodeIp, "mountpoint -q /mnt/hyperv && echo mounted || echo not_mounted")
@@ -1490,7 +1554,7 @@ export async function runV2vMigrationPipeline(
           const cifsCheck = await executeSSH(config.targetConnectionId, nodeIp, "which mount.cifs")
           if (!cifsCheck.success || !cifsCheck.output?.trim()) {
             await appendLog(jobId, "Installing cifs-utils...")
-            await executeSSH(config.targetConnectionId, nodeIp, "apt-get update -qq && apt-get install -y cifs-utils")
+            await executeSSH(config.targetConnectionId, nodeIp, "apt-get update -qq || true; apt-get install -y cifs-utils")
           }
 
           // Mount the share
@@ -1503,6 +1567,19 @@ export async function runV2vMigrationPipeline(
           await appendLog(jobId, "Hyper-V SMB share mounted at /mnt/hyperv", "success")
         } else {
           await appendLog(jobId, "Hyper-V SMB share already mounted at /mnt/hyperv")
+        }
+
+        // Locate the configured disk files on the mounted share. The dialog
+        // derives these from the host's paths; a share rooted elsewhere, or a
+        // job created before relative paths were mapped, still resolves by
+        // file name as long as it is unambiguous.
+        if (config.diskPaths && config.diskPaths.length > 0) {
+          const resolution = await resolveHypervDiskPaths(
+            config.diskPaths,
+            (cmd) => executeSSH(config.targetConnectionId, nodeIp, cmd),
+          )
+          for (const note of resolution.notes) await appendLog(jobId, note, "warn")
+          config.diskPaths = resolution.paths
         }
 
         // Auto-detect disk paths if not provided
@@ -1958,7 +2035,9 @@ export async function runV2vMigrationPipeline(
         const install = await executeSSH(
           config.targetConnectionId,
           nodeIp,
-          "apt-get update -qq && apt-get install -y nbdkit libnbd-bin",
+          // `|| true`: the enterprise-repo 401 of an unsubscribed node must not
+          // block a package that lives in Debian main.
+          "apt-get update -qq || true; apt-get install -y nbdkit libnbd-bin",
         )
         if (!install.success) {
           throw new Error(

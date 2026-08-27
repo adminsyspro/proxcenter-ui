@@ -7,23 +7,27 @@ import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
  * fields the reset logic needs; InventoryDetails' richer esxiMigrateVm state
  * is structurally assignable to it.
  */
-type MigrationDialogVm = { hostType?: string; diskPaths?: string[] } | null | undefined
+type MigrationDialogVm = { hostType?: string; diskPaths?: string[]; diskMountPaths?: string[] } | null | undefined
 
 /**
- * Hyper-V sources with known VHDX paths get migDiskPaths pre-filled: the
- * Windows paths are mapped onto the /mnt/hyperv/ mount the migration pipeline
- * uses ("C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"). Every other source
- * starts blank. Derived here, inside the reset, because deriving it in the
- * dialog-open click handler would be wiped by the reset effect running right
- * after (state updates from the handler and the open both commit before the
- * effect fires).
+ * Hyper-V sources with known VHDX paths get migDiskPaths pre-filled with the
+ * paths under the /mnt/hyperv/ mount the migration pipeline uses. The API
+ * computes them relative to the SMB share's local folder (diskMountPaths, see
+ * lib/hyperv/diskPaths.ts); older payloads without that field fall back to the
+ * basename ("C:\VMs\TestVM.vhdx" -> "/mnt/hyperv/TestVM.vhdx"), which the
+ * pipeline then relocates by file name. Every other source starts blank.
+ * Derived here, inside the reset, because deriving it in the dialog-open click
+ * handler would be wiped by the reset effect running right after (state
+ * updates from the handler and the open both commit before the effect fires).
  */
-function deriveHypervDiskPaths(vm: MigrationDialogVm): string {
+export function deriveHypervDiskPaths(vm: MigrationDialogVm): string {
   if (!vm || vm.hostType !== 'hyperv' || !vm.diskPaths?.length) return ''
 
-  return vm.diskPaths
-    .map(p => `/mnt/hyperv/${p.split('\\').pop() || p.split('/').pop() || p}`)
-    .join('\n')
+  const mountPaths = vm.diskMountPaths?.length === vm.diskPaths.length
+    ? vm.diskMountPaths
+    : vm.diskPaths.map(p => `/mnt/hyperv/${p.split('\\').pop() || p.split('/').pop() || p}`)
+
+  return mountPaths.join('\n')
 }
 
 /**

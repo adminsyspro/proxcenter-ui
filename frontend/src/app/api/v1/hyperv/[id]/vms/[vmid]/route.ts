@@ -4,6 +4,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { HyperVClient } from "@/lib/hyperv/client"
+import { withHypervLog } from "@/lib/hyperv/log"
 
 export const runtime = "nodejs"
 
@@ -23,7 +24,7 @@ export async function GET(
     const prisma = await getSessionPrisma()
     const conn = await prisma.connection.findUnique({
       where: { id },
-      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true },
+      select: { id: true, name: true, baseUrl: true, apiTokenEnc: true, insecureTLS: true, type: true, hypervShareName: true },
     })
 
     if (!conn || conn.type !== 'hyperv') {
@@ -39,7 +40,7 @@ export async function GET(
     const useSSL = conn.insecureTLS ? false : conn.baseUrl.startsWith("https")
 
     const client = new HyperVClient({ host, username, password, useSSL })
-    const vm = await client.getVM(vmid)
+    const vm = await withHypervLog(`VM lookup ${vmid}`, conn.name, host, () => client.getVM(vmid, { shareName: conn.hypervShareName }))
 
     return NextResponse.json({
       data: {
@@ -53,6 +54,7 @@ export async function GET(
         guestOS: `Hyper-V Gen ${vm.generation}`,
         firmware: vm.generation === 2 ? 'efi' : 'bios',
         diskPaths: vm.diskPaths,
+        diskMountPaths: vm.diskMountPaths,
         connectionId: conn.id,
         connectionName: conn.name,
       }

@@ -39,6 +39,7 @@
     "@novnc/novnc": "^1.7.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@scalar/api-reference-react": "^0.9.66",
     "@tanstack/react-virtual": "^3.14.10",
     "@types/leaflet": "^1.9.22",
     "@xterm/addon-attach": "^0.12.0",

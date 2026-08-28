@@ -2690,6 +2690,14 @@
       "title": "API 토큰",
       "subtitle": "외부 모니터링 도구(Prometheus, Zabbix, PRTG, CI)를 위한 읽기 전용 서비스 계정입니다.",
       "newToken": "새 토큰",
+      "referenceButton": "API 레퍼런스",
+      "reference": {
+        "title": "API 레퍼런스",
+        "subtitle": "공개 읽기 전용 API의 대화형 문서",
+        "hint": "이 페이지에서 전송한 요청은 이 ProxCenter 인스턴스로 전달됩니다. 인증 패널을 열고 pxc_ 토큰을 붙여 넣으면 자신의 데이터로 엔드포인트를 사용해 볼 수 있습니다.",
+        "backToTokens": "API 토큰으로 돌아가기",
+        "thisInstance": "이 ProxCenter 인스턴스"
+      },
       "columns": {
         "prefix": "접두사",
         "name": "이름",
@@ -6781,6 +6789,7 @@
     "select": "선택",
     "close": "닫기",
     "goToSettings": "설정으로 이동",
+    "goToApiReference": "API 레퍼런스 열기",
     "viewBackups": "백업 보기",
     "viewEvents": "이벤트 보기",
     "viewAlerts": "알림 보기",

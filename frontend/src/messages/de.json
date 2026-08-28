@@ -2675,6 +2675,14 @@
       "title": "API-Token",
       "subtitle": "Schreibgeschützte Dienstkonten für externe Monitoring-Tools (Prometheus, Zabbix, PRTG, CI).",
       "newToken": "Neuer Token",
+      "referenceButton": "API-Referenz",
+      "reference": {
+        "title": "API-Referenz",
+        "subtitle": "Interaktive Dokumentation der öffentlichen schreibgeschützten API",
+        "hint": "Von dieser Seite gesendete Anfragen gehen an diese ProxCenter-Instanz. Öffnen Sie den Bereich Authentifizierung und fügen Sie ein pxc_-Token ein, um die Endpunkte mit Ihren eigenen Daten auszuprobieren.",
+        "backToTokens": "Zurück zu den API-Token",
+        "thisInstance": "Diese ProxCenter-Instanz"
+      },
       "columns": {
         "prefix": "Präfix",
         "name": "Name",
@@ -6723,6 +6731,7 @@
     "select": "Auswählen",
     "close": "Schließen",
     "goToSettings": "Go to Einstellungen",
+    "goToApiReference": "API-Referenz öffnen",
     "viewBackups": "Backups anzeigen",
     "viewEvents": "Ereignisse anzeigen",
     "viewAlerts": "View Warnmeldungen",

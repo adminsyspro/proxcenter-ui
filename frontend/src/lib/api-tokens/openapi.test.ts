@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { buildOpenApiDocument } from './openapi'
@@ -53,5 +56,15 @@ describe('buildOpenApiDocument', () => {
   it('uses text/plain for the Prometheus exposition and JSON elsewhere', () => {
     expect(doc.paths['/api/v1/public/metrics'].get.responses['200'].content).toHaveProperty('text/plain')
     expect(doc.paths['/api/v1/public/backups'].get.responses['200'].content).toHaveProperty('application/json')
+  })
+
+  // The in-product reference (#827) renders the committed file, not the
+  // builder. `generate:openapi` is a manual step, so without this check a new
+  // allowlist entry merged without regenerating ships a reference that silently
+  // disagrees with the API while CI stays green.
+  it('matches the committed public/openapi/proxcenter-public-api.json (run `npm run generate:openapi` to refresh it)', () => {
+    const file = path.resolve(__dirname, '..', '..', '..', 'public', 'openapi', 'proxcenter-public-api.json')
+    const committed = JSON.parse(readFileSync(file, 'utf8'))
+    expect(committed).toEqual(JSON.parse(JSON.stringify(doc)))
   })
 })

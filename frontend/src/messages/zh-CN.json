@@ -2674,6 +2674,14 @@
       "title": "API 令牌",
       "subtitle": "供外部监控工具(Prometheus、Zabbix、PRTG、CI)使用的只读服务账户。",
       "newToken": "新建令牌",
+      "referenceButton": "API 参考文档",
+      "reference": {
+        "title": "API 参考文档",
+        "subtitle": "公共只读 API 的交互式文档",
+        "hint": "从此页面发送的请求会转到此 ProxCenter 实例。打开身份验证面板并粘贴 pxc_ 令牌，即可使用您自己的数据试用这些端点。",
+        "backToTokens": "返回 API 令牌",
+        "thisInstance": "此 ProxCenter 实例"
+      },
       "columns": {
         "prefix": "前缀",
         "name": "名称",
@@ -6725,6 +6733,7 @@
     "select": "选择",
     "close": "关闭",
     "goToSettings": "前往设置",
+    "goToApiReference": "打开 API 参考文档",
     "viewBackups": "查看备份",
     "viewEvents": "查看事件",
     "viewAlerts": "查看告警",

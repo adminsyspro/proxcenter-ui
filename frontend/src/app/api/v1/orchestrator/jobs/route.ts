@@ -6,6 +6,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
+import { replicationJobStatus } from "@/lib/tasks/replicationJobStatus"
 
 export const runtime = "nodejs"
 
@@ -294,12 +295,8 @@ export async function GET(req: Request) {
         const replJobs: any[] = Array.isArray(replData) ? replData : (replData?.data || [])
 
         for (const rj of replJobs) {
-          // Map replication status → unified job status
-          let jobStatus = rj.status
-          if (rj.status === "synced") jobStatus = "success"
-          else if (rj.status === "syncing") jobStatus = "running"
-          else if (rj.status === "error") jobStatus = "failed"
-          // paused and pending stay as-is
+          // Map replication status → unified job status (paused and pending stay as-is)
+          const jobStatus = replicationJobStatus(rj.status)
 
           const vmLabel = (rj.vm_names || []).length > 0
             ? rj.vm_names.slice(0, 3).join(", ") + (rj.vm_names.length > 3 ? ` +${rj.vm_names.length - 3}` : "")

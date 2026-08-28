@@ -178,9 +178,10 @@ export default function EmergencyDRTab({
 
   const statusChip = (status: string) => {
     const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
-      synced: 'success', syncing: 'info', paused: 'warning', error: 'error', pending: 'default', no_match: 'warning',
+      synced: 'success', syncing: 'info', paused: 'warning', error: 'error', pending: 'default', no_match: 'warning', partial: 'warning',
     }
-    const label = status === 'no_match' ? t('status.noMatch') : status
+    const labelMap: Record<string, string> = { no_match: t('status.noMatch'), partial: t('status.partial') }
+    const label = labelMap[status] ?? status
     return <Chip size="small" label={label} color={colorMap[status] || 'default'} sx={{ textTransform: 'capitalize' }} />
   }
 

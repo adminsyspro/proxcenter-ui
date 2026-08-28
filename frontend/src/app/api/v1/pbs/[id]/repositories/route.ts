@@ -75,15 +75,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const payload: Record<string, any> = {
         path,
         index,
-        enabled: enabled ? 1 : 0,
+        // Schema PBS : `enabled` est un booleen, un 0/1 est rejete.
+        enabled,
       }
 
       if (typeof digest === "string" && digest.length > 0) {
         payload.digest = digest
       }
 
+      // Cote PBS, changer un depot existant est un POST (`change_repository`) ;
+      // le PUT du meme chemin est reserve a l'ajout d'un depot (`add_repository`).
       await pbsFetch(conn, "/nodes/localhost/apt/repositories", {
-        method: "PUT",
+        method: "POST",
         body: JSON.stringify(payload),
       })
 
@@ -103,6 +106,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       payload.digest = digest
     }
 
+    // `add_repository` cote PBS : PUT sur le meme chemin.
     await pbsFetch(conn, "/nodes/localhost/apt/repositories", {
       method: "PUT",
       body: JSON.stringify(payload),

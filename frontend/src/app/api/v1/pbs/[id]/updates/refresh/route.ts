@@ -25,9 +25,11 @@ export async function POST(
 
     const conn = await getPbsConnectionById(id)
 
+    // PBS attend de vrais booleens JSON pour `notify`/`quiet` : un 0/1 est
+    // rejete par le schema (« Expected boolean value. »).
     const upid = await pbsFetch<string>(conn, "/nodes/localhost/apt/update", {
       method: "POST",
-      body: JSON.stringify({ notify: 0, quiet: 1 }),
+      body: JSON.stringify({ notify: false, quiet: true }),
     })
 
     return NextResponse.json({ data: { upid } })

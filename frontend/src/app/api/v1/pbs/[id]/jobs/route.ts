@@ -72,11 +72,12 @@ export async function GET(req: Request, ctx: RouteContext) {
       ? await getPbsConnectionById(id)
       : await getPbsConnectionByIdUnscoped(id)
 
-    // Récupérer les datastores d'abord (nécessaire pour prune et GC jobs).
+    // Récupérer les datastores d'abord (nécessaire pour les GC jobs).
     // For a scoped tenant, narrow to their authorised datastores up-front so
-    // prune-job/gc calls are never even made against a datastore they have
-    // no binding on (and the returned `datastores` list never leaks names
-    // of datastores outside their scope).
+    // gc calls are never even made against a datastore they have no binding
+    // on (and the returned `datastores` list never leaks names of datastores
+    // outside their scope). Prune jobs come from the PBS-wide /admin/prune
+    // and are narrowed by the (datastore, namespace) check further down.
     const datastores = await pbsFetch<any[]>(conn, "/admin/datastore").catch(() => [])
     let datastoreNames = (datastores || []).map(ds => ds.store || ds.name).filter(Boolean)
     if (allowedDatastores) {
@@ -84,12 +85,16 @@ export async function GET(req: Request, ctx: RouteContext) {
     }
 
     // Récupérer tous les types de jobs en parallèle
-    const [syncJobs, verifyJobs] = await Promise.all([
+    const [syncJobs, verifyJobs, rawPruneJobs] = await Promise.all([
       // Sync Jobs
       pbsFetch<any[]>(conn, "/admin/sync").catch(() => []),
 
       // Verify Jobs
       pbsFetch<any[]>(conn, "/admin/verify").catch(() => []),
+
+      // Prune Jobs — endpoint global comme sync et verify, et non un appel par
+      // datastore : /admin/datastore/{store}/prune-job n'existe pas cote PBS.
+      pbsFetch<any[]>(conn, "/admin/prune").catch(() => []),
     ])
 
     // Tape Backup Jobs - essayer plusieurs endpoints selon la version PBS
@@ -113,18 +118,11 @@ export async function GET(req: Request, ctx: RouteContext) {
       }
     }
 
-    // Récupérer les prune jobs et GC config pour chaque datastore
-    const pruneJobsPromises = datastoreNames.map(async (store) => {
-      try {
-        const pruneJobs = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(store)}/prune-job`)
+    // Le prune job porte son datastore dans `store` ; on l'expose sous
+    // `datastore` comme le reste de la route.
+    const pruneJobs = (rawPruneJobs || []).map(job => ({ ...job, datastore: job.store }))
 
-        
-return (pruneJobs || []).map(job => ({ ...job, datastore: store }))
-      } catch {
-        return []
-      }
-    })
-
+    // Récupérer la GC config pour chaque datastore
     const gcConfigPromises = datastoreNames.map(async (store) => {
       try {
         const gcStatus = await pbsFetch<any>(conn, `/admin/datastore/${encodeURIComponent(store)}/gc`)
@@ -136,11 +134,7 @@ return { datastore: store, ...gcStatus }
       }
     })
 
-    const pruneJobsArrays = await Promise.all(pruneJobsPromises)
     const gcConfigs = (await Promise.all(gcConfigPromises)).filter(Boolean)
-
-    // Flatten prune jobs
-    const pruneJobs = pruneJobsArrays.flat()
 
     // Formater les Sync Jobs — /admin/sync is NOT datastore-scoped (returns
     // jobs across the whole PBS), so it needs an explicit (store, ns) check.
@@ -196,8 +190,8 @@ return { datastore: store, ...gcStatus }
       _raw: job
     }))
 
-    // Formater les Prune Jobs — fetched per (already datastore-narrowed)
-    // store, but each store can hold namespaces outside the tenant's scope.
+    // Formater les Prune Jobs — /admin/prune is PBS-wide, so the (datastore,
+    // namespace) check is what narrows a scoped tenant here.
     const formattedPruneJobs = pruneJobs.filter((job: any) => inScope(job.datastore, job.ns || '')).map((job: any) => ({
       id: job.id,
       type: 'prune',

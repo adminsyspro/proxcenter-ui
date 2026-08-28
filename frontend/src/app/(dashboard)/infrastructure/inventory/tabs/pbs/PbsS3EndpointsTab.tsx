@@ -24,6 +24,8 @@ interface PbsS3EndpointsTabProps {
 }
 
 type PbsS3Endpoint = {
+  // PBS nomme l'entree `id` ; `name` reste tolere pour les reponses anciennes.
+  id?: string
   name?: string
   endpoint?: string
   region?: string
@@ -171,10 +173,10 @@ export default function PbsS3EndpointsTab({ pbsId }: PbsS3EndpointsTabProps) {
                 {endpoints.map((ep, idx) => {
                   const accessKey = String(ep['access-key-id'] || ep['access-key'] || '')
                   return (
-                    <TableRow key={ep.name || `s3-${idx}`} hover>
+                    <TableRow key={ep.id || ep.name || `s3-${idx}`} hover>
                       <TableCell sx={{ fontSize: 12 }}>
                         <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                          {ep.name || '—'}
+                          {ep.id || ep.name || '—'}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ fontSize: 12 }}>

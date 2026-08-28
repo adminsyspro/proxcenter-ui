@@ -23,7 +23,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const conn = await getPbsConnectionById(id)
 
     try {
-      const endpoints = await pbsFetch<any[]>(conn, "/config/s3-endpoint")
+      // PBS expose la configuration des clients S3 sous /config/s3 ;
+      // /config/s3-endpoint n'existe pas et repondait 404, donc l'onglet
+      // affichait « non supporte » sur un PBS 4 qui les gere pourtant.
+      const endpoints = await pbsFetch<any[]>(conn, "/config/s3")
 
       return NextResponse.json({ data: Array.isArray(endpoints) ? endpoints : [] })
     } catch (inner: any) {

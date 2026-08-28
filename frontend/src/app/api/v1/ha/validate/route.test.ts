@@ -64,4 +64,32 @@ describe('POST /api/v1/ha/validate', () => {
 
     expect(res.status).toBe(503)
   })
+
+  it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as any, { method: 'POST', body: 'not json at all' })
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // #803: the preflight budgets 150s, the Go http.Server used to cut the
+  // response at api.write_timeout (30s). The socket dies with the same
+  // `TypeError: fetch failed` as a refused connection, and the wizard told the
+  // operator the orchestrator was down while it was still probing nodes.
+  it('reports a response cut mid-flight as 504, not as an unavailable orchestrator', async () => {
+    fetchMock.mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+      })
+    )
+
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as any, { body: {} })
+    const data = (await readJson(res)) as { error: string }
+
+    expect(res.status).toBe(504)
+    expect(data.error).toContain('closed the connection')
+    expect(data.error).not.toContain('unavailable')
+  })
 })

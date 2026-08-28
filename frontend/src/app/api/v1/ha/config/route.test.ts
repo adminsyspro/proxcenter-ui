@@ -122,6 +122,14 @@ describe('PUT /api/v1/ha/config', () => {
     )
   })
 
+  it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT as any, { method: 'PUT', body: 'not json at all' })
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('forwards orchestrator errors', async () => {
     fetchMock.mockResolvedValue({
       ok: false,

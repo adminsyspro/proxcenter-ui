@@ -39,6 +39,41 @@ describe('POST /api/v1/ha/switchover', () => {
       expect.objectContaining({ method: 'POST' })
     )
   })
+
+  it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
+    const { POST } = await import('../switchover/route')
+    const res = await callRoute(POST as any, { method: 'POST', body: 'not json at all' })
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('PUT /api/v1/ha/sync-mode', () => {
+  it('forwards the requested sync mode', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    })
+
+    const { PUT } = await import('../sync-mode/route')
+    const res = await callRoute(PUT as any, { method: 'PUT', body: { mode: 'synchronous_mode_strict' } })
+
+    expect(res.status).toBe(200)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/ha/sync-mode'),
+      expect.objectContaining({ method: 'PUT', body: '{"mode":"synchronous_mode_strict"}' })
+    )
+  })
+
+  it('rejects an unreadable body with 400 instead of blaming the orchestrator', async () => {
+    const { PUT } = await import('../sync-mode/route')
+    const res = await callRoute(PUT as any, { method: 'PUT', body: 'not json at all' })
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/v1/ha/pause', () => {

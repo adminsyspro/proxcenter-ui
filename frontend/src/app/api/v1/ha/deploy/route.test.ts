@@ -115,4 +115,19 @@ describe('GET /api/v1/ha/deploy/status', () => {
 
     expect(res.status).toBe(200)
   })
+
+  it('reports a stream cut mid-flight as 504, not as an unavailable orchestrator (#803)', async () => {
+    fetchMock.mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+      })
+    )
+
+    const { GET } = await import('./status/route')
+    const res = await callRoute(GET as any)
+    const data = (await readJson(res)) as { error: string }
+
+    expect(res.status).toBe(504)
+    expect(data.error).toContain('closed the connection')
+  })
 })

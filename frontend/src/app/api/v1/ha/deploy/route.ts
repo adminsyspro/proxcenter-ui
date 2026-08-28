@@ -1,32 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 
-import { orchestratorHeaders } from '@/lib/orchestrator/headers'
-import { requireFeature } from '@/lib/auth/requireEnterprise'
-import { Features } from '@/lib/license/features'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { proxyHaJson } from '@/lib/orchestrator/haProxy'
+import { haWriteGuard } from '@/lib/orchestrator/haRoute'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-
 export async function POST(request: NextRequest) {
-  const guard = await requireFeature(Features.HA)
+  const guard = await haWriteGuard()
   if (guard) return guard
-  const perm = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
-  if (perm) return perm
 
-  try {
-    let body: Record<string, unknown> = {}
-    try { body = await request.json() } catch { /* empty body is OK for retry */ }
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ha/deploy`, {
-      method: 'POST',
-      headers: orchestratorHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    return NextResponse.json(data, { status: res.status })
-  } catch {
-    return NextResponse.json({ error: 'Orchestrator unavailable' }, { status: 503 })
-  }
+  // Not haOperationWithBody: an empty body is legitimate here, it is how the
+  // wizard retries a deployment.
+  let body: Record<string, unknown> = {}
+  try { body = await request.json() } catch { /* empty body is OK for retry */ }
+
+  return proxyHaJson('/ha/deploy', { method: 'POST', body })
 }

@@ -1,21 +1,18 @@
+import { orchestratorBaseUrl, orchestratorFailure } from '@/lib/orchestrator/haProxy'
+import { haWriteGuard } from '@/lib/orchestrator/haRoute'
 import { orchestratorHeaders } from '@/lib/orchestrator/headers'
-import { requireFeature } from '@/lib/auth/requireEnterprise'
-import { Features } from '@/lib/license/features'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
-
 export async function GET() {
-  const guard = await requireFeature(Features.HA)
+  const guard = await haWriteGuard()
   if (guard) return guard
-  const perm = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
-  if (perm) return perm
 
+  // Not proxyHaJson: this one streams the orchestrator's SSE body straight
+  // through instead of parsing it.
   try {
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/ha/deploy/status`, {
+    const res = await fetch(`${orchestratorBaseUrl()}/api/v1/ha/deploy/status`, {
       headers: orchestratorHeaders(),
     })
 
@@ -34,9 +31,11 @@ export async function GET() {
         'X-Accel-Buffering': 'no',
       },
     })
-  } catch {
-    return new Response(JSON.stringify({ error: 'Orchestrator unavailable' }), {
-      status: 503,
+  } catch (cause) {
+    const failure = orchestratorFailure(cause)
+
+    return new Response(JSON.stringify({ error: failure.error }), {
+      status: failure.status,
       headers: { 'Content-Type': 'application/json' },
     })
   }

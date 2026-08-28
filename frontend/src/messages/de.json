@@ -58,6 +58,7 @@
     "none": "Keine",
     "all": "Alle",
     "type": "Typ",
+    "source": "Quelle",
     "description": "Beschreibung",
     "date": "Datum",
     "details": "Details",

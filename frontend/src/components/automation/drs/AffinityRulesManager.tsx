@@ -376,7 +376,7 @@ export default function AffinityRulesManager({
                   <TableCell width={60}>{t('common.active')}</TableCell>
                   <TableCell>{t('common.name')}</TableCell>
                   <TableCell width={130}>{t('common.type')}</TableCell>
-                  <TableCell>Guests</TableCell>
+                  <TableCell>{t('inventory.guests')}</TableCell>
                   <TableCell>{t('inventory.nodes')}</TableCell>
                   <TableCell width={80}>{t('common.source')}</TableCell>
                   <TableCell width={130} align="right">{t('common.actions')}</TableCell>

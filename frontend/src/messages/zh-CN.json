@@ -41,6 +41,7 @@
     "name": "名称",
     "description": "描述",
     "type": "类型",
+    "source": "来源",
     "date": "日期",
     "size": "大小",
     "notes": "备注",

@@ -344,3 +344,130 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     expect(ids).not.toContain("ru-none")
   })
 })
+
+/**
+ * #818: a DRS migration used to be published with a constant 50% progress
+ * whenever its status was "running". Combined with an orchestrator-side row
+ * that nothing reconciled, that displayed finished migrations as "In progress,
+ * 50%" forever in the shared task footer and the Task Center.
+ *
+ * These live in this file rather than a new one on purpose: they need the exact
+ * same harness (fetch, prisma, tenant scope and RBAC mocks) as the scoping
+ * tests above, and duplicating it would be the worse trade.
+ */
+describe("GET /api/v1/orchestrator/jobs — DRS migration progress", () => {
+  const asProvider = () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+  }
+
+  const isProgressUrl = (url: string) => url.includes("/drs/migrations/") && url.endsWith("/progress")
+
+  const drsFetch = (migrations: any[], progress: (url: string) => any) => async (url: string) => {
+    if (isProgressUrl(url)) return progress(url)
+    if (url.includes("/drs/migrations")) return { ok: true, json: async () => ({ data: migrations }) }
+    return { ok: true, json: async () => ({ data: [] }) }
+  }
+
+  const runningMigration = (over: Record<string, any> = {}) => ({
+    id: "dm-run",
+    connection_id: "c1",
+    vmid: 100,
+    vm_name: "vm1",
+    source_node: "node12",
+    target_node: "node11",
+    status: "running",
+    started_at: "2026-01-01T00:00:00Z",
+    ...over,
+  })
+
+  const drsJobs = (body: any) => body.data.filter((j: any) => j.type === "drs")
+
+  it("publishes the real PVE progress of a running migration, never a constant 50", async () => {
+    asProvider()
+    fetchMock.mockImplementation(drsFetch(
+      [runningMigration()],
+      async () => ({ ok: true, json: async () => ({ progress: 37, status: "running" }) }),
+    ))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await res.json()
+
+    const job = drsJobs(body).find((j: any) => j.id === "dm-run")
+    expect(job.status).toBe("running")
+    expect(job.progress).toBe(37)
+  })
+
+  it("leaves the progress unknown (0, an indeterminate bar) when the lookup fails", async () => {
+    asProvider()
+    fetchMock.mockImplementation(drsFetch(
+      [runningMigration()],
+      async () => ({ ok: false, json: async () => ({}) }),
+    ))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await res.json()
+
+    expect(drsJobs(body).find((j: any) => j.id === "dm-run").progress).toBe(0)
+  })
+
+  it("never asks for the progress of a migration that already ended", async () => {
+    asProvider()
+    fetchMock.mockImplementation(drsFetch(
+      [
+        runningMigration({ id: "dm-done", status: "completed", completed_at: "2026-01-01T00:10:00Z" }),
+        runningMigration({ id: "dm-ko", status: "failed", error: "timeout" }),
+      ],
+      async () => ({ ok: true, json: async () => ({ progress: 42 }) }),
+    ))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await res.json()
+
+    expect(fetchMock.mock.calls.filter(([url]: any[]) => isProgressUrl(url))).toHaveLength(0)
+    expect(drsJobs(body).find((j: any) => j.id === "dm-done").progress).toBe(100)
+    expect(drsJobs(body).find((j: any) => j.id === "dm-ko").progress).toBe(0)
+  })
+
+  it("bounds the fan-out: this route is polled from every page by the task footer", async () => {
+    asProvider()
+    const many = Array.from({ length: 12 }, (_, i) => runningMigration({ id: `dm-${i}`, vmid: 100 + i }))
+    fetchMock.mockImplementation(drsFetch(
+      many,
+      async () => ({ ok: true, json: async () => ({ progress: 12 }) }),
+    ))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await res.json()
+
+    const lookups = fetchMock.mock.calls.filter(([url]: any[]) => isProgressUrl(url))
+    expect(lookups.length).toBeGreaterThan(0)
+    expect(lookups.length).toBeLessThanOrEqual(8)
+    // Every row is still listed, the ones past the cap simply carry no
+    // progress rather than being dropped.
+    expect(drsJobs(body)).toHaveLength(12)
+  })
+
+  it("does not ask for the progress of a migration outside the caller's perimeter", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-a")
+    tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: { connectionIds: new Set(["c1"]) } })
+
+    fetchMock.mockImplementation(drsFetch(
+      [runningMigration({ id: "dm-foreign", connection_id: "c2" })],
+      async () => ({ ok: true, json: async () => ({ progress: 88 }) }),
+    ))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { method: "GET" })
+    const body = await res.json()
+
+    expect(fetchMock.mock.calls.filter(([url]: any[]) => isProgressUrl(url))).toHaveLength(0)
+    expect(body.data.map((j: any) => j.id)).not.toContain("dm-foreign")
+  })
+})

@@ -41,6 +41,7 @@
     "name": "Nombre",
     "description": "Descripción",
     "type": "Tipo",
+    "source": "Origen",
     "date": "Fecha",
     "size": "Tamaño",
     "notes": "Notas",

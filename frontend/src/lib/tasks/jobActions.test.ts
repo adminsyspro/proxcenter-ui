@@ -68,6 +68,10 @@ describe("jobActions", () => {
   it("offers pause/cancel on a running rolling update and resume/cancel when paused", () => {
     expect(jobActions({ id: "ru-1", type: "rolling_update", status: "running" })).toEqual(["pause", "cancel"])
     expect(jobActions({ id: "ru-1", type: "rolling_update", status: "paused" })).toEqual(["resume", "cancel"])
+    // Paused for a manual approval: the operator approves, they do not resume.
+    expect(
+      jobActions({ id: "ru-1", type: "rolling_update", status: "paused", metadata: { pendingApproval: "pve2" } }),
+    ).toEqual(["approve", "cancel"])
     expect(jobActions({ id: "ru-1", type: "rolling_update", status: "success" })).toEqual([])
   })
 
@@ -90,6 +94,9 @@ describe("jobActionUrl", () => {
   it("keeps rolling updates on the orchestrator route", () => {
     expect(jobActionUrl({ id: "ru-1", type: "rolling_update" }, "pause")).toBe(
       "/api/v1/orchestrator/rolling-updates/ru-1/pause",
+    )
+    expect(jobActionUrl({ id: "ru-1", type: "rolling_update" }, "approve")).toBe(
+      "/api/v1/orchestrator/rolling-updates/ru-1/approve",
     )
     expect(jobActionUrl({ id: "ru-1", type: "rolling_update" }, "cancel")).toBe(
       "/api/v1/orchestrator/rolling-updates/ru-1/cancel",

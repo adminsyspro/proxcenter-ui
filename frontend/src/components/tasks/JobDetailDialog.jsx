@@ -285,6 +285,17 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                   {t('jobsPage.resume')}
                 </Button>
               )}
+              {actions.includes('approve') && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="success"
+                  startIcon={<PlayArrowIcon />}
+                  onClick={() => onAction(job, 'approve')}
+                >
+                  {t('updates.approveNode', { node: job.metadata?.pendingApproval })}
+                </Button>
+              )}
               {actions.includes('cancel') && (
                 <Button
                   size="small"
@@ -420,7 +431,7 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                     {logError ? `${t('jobsPage.noLogs')} (${logError})` : t('jobsPage.noLogs')}
                   </Typography>
                 ) : (
-                  logs.slice(-100).map(normalizeLog).map((log, i) => (
+                  logs.slice(-1000).map(normalizeLog).map((log, i) => (
                     <Box
                       key={i}
                       sx={{

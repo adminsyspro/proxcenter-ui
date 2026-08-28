@@ -6451,7 +6451,17 @@
     "restartLocalVmsDescription": "VMs neu starten, die vor dem Update heruntergefahren wurden.",
     "restartLocalVmsBtn": "VMs neustarten",
     "restartingLocalVms": "VMs werden neugestartet...",
-    "localVmsRestarted": "All Lokal VMs restarted erfolgreich."
+    "localVmsRestarted": "All Lokal VMs restarted erfolgreich.",
+    "awaitingApproval": "Warten auf Genehmigung",
+    "approvalBanner": "Der Vorgang ist pausiert und wartet auf Ihre Genehmigung, bevor {node} aktualisiert wird. Genehmigen Sie, um fortzufahren, oder brechen Sie ab, um hier zu stoppen.",
+    "approveNode": "{node} genehmigen",
+    "showUpdateOutput": "apt-Ausgabe anzeigen",
+    "hideUpdateOutput": "apt-Ausgabe ausblenden",
+    "pkgWaitingLock": "Warten auf die apt-Sperre ({seconds} s)",
+    "pkgDownloading": "Pakete werden heruntergeladen: {count}",
+    "pkgUnpacking": "Pakete werden entpackt: {count}",
+    "pkgConfiguring": "Pakete werden konfiguriert: {count}",
+    "pkgDone": "{count} Paket(e) konfiguriert"
   },
   "replication": {
     "title": "Replikation",

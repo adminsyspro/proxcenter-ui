@@ -142,10 +142,11 @@ export async function GET(req: Request) {
 
         // Transform rolling updates to job format
         for (const ru of rollingUpdates) {
-          // Map rolling update status to job status
+          // Map rolling update status to job status. cancelled is kept as
+          // is: the page counts it as terminal and the Failed filter already
+          // matches it, so the operator sees what actually happened.
           let jobStatus = ru.status
           if (ru.status === "completed") jobStatus = "success"
-          if (ru.status === "cancelled") jobStatus = "failed"
 
           // Calculate progress
           const progress = ru.total_nodes > 0 
@@ -173,6 +174,9 @@ export async function GET(req: Request) {
               totalNodes: ru.total_nodes,
               completedNodes: ru.completed_nodes,
               currentNode: ru.current_node,
+              // Node waiting for the operator when the run is paused for a
+              // manual approval; drives the Approve action.
+              pendingApproval: ru.pending_approval || null,
               nodeStatuses: ru.node_statuses,
               error: ru.error,
             }

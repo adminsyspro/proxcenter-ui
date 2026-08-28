@@ -33,6 +33,7 @@ import {
   Typography,
 } from '@mui/material'
 
+import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { computeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 
@@ -596,12 +597,20 @@ export default function NodeUpdateDialog({
     setRestartVmsInProgress(false)
   }, [shutdownVms, connBaseUrl, nodeName])
 
+  // Closing while the upgrade runs asks first (themed dialog, not the
+  // browser's confirm box); finishClose does the actual reset.
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
+
   const handleClose = () => {
     if (upgradeStatus === 'RUNNING') {
-      if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
-        return
-      }
+      setConfirmCloseOpen(true)
+      return
     }
+    finishClose()
+  }
+
+  const finishClose = () => {
+    setConfirmCloseOpen(false)
 
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
@@ -1523,6 +1532,15 @@ export default function NodeUpdateDialog({
           </Button>
         )}
       </DialogActions>
+
+      <ConfirmCloseDialog
+        open={confirmCloseOpen}
+        title={t('updates.upgradeInProgress')}
+        message={t('updates.confirmCloseWhileRunning')}
+        confirmLabel={t('common.close')}
+        onConfirm={finishClose}
+        onCancel={() => setConfirmCloseOpen(false)}
+      />
     </Dialog>
   )
 }

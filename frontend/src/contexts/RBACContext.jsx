@@ -27,6 +27,12 @@ const RBACContext = createContext({
 
 export function RBACProvider({ children }) {
   const { data: session, status } = useSession()
+
+  // Reload permissions when the user changes, not when the session object is
+  // re-created: SessionProvider refetches /api/auth/session every 60 s and on
+  // every window focus, and each refetch used to drag a full
+  // /api/v1/rbac/effective round trip behind it.
+  const userId = session?.user?.id ?? session?.user?.email ?? null
   const [permissions, setPermissions] = useState([])
   const [roles, setRoles] = useState([])
   const [isAdmin, setIsAdmin] = useState(false)
@@ -36,7 +42,7 @@ export function RBACProvider({ children }) {
 
   // Charger les permissions de l'utilisateur
   const loadPermissions = useCallback(async () => {
-    if (status !== 'authenticated' || !session?.user) {
+    if (status !== 'authenticated' || !userId) {
       setPermissions([])
       setRoles([])
       setIsAdmin(false)
@@ -63,7 +69,7 @@ return
     } finally {
       setLoading(false)
     }
-  }, [session, status])
+  }, [userId, status])
 
   useEffect(() => {
     loadPermissions()

@@ -6506,7 +6506,17 @@
     "restartLocalVmsDescription": "Restart VMs that were shut down before the update.",
     "restartLocalVmsBtn": "Restart VMs",
     "restartingLocalVms": "Restarting VMs...",
-    "localVmsRestarted": "All local VMs restarted successfully."
+    "localVmsRestarted": "All local VMs restarted successfully.",
+    "awaitingApproval": "Awaiting approval",
+    "approvalBanner": "The run is paused and waits for your approval before updating {node}. Approve to continue, or cancel to stop here.",
+    "approveNode": "Approve {node}",
+    "showUpdateOutput": "Show apt output",
+    "hideUpdateOutput": "Hide apt output",
+    "pkgWaitingLock": "Waiting for the apt lock ({seconds}s)",
+    "pkgDownloading": "Downloading packages {count}",
+    "pkgUnpacking": "Unpacking packages {count}",
+    "pkgConfiguring": "Configuring packages {count}",
+    "pkgDone": "{count} package(s) configured"
   },
   "replication": {
     "title": "Replication",

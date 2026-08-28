@@ -6501,7 +6501,17 @@
     "restartLocalVmsDescription": "Redémarrer les VMs éteintes avant la mise à jour.",
     "restartLocalVmsBtn": "Redémarrer les VMs",
     "restartingLocalVms": "Redémarrage des VMs...",
-    "localVmsRestarted": "Toutes les VMs locales ont été redémarrées avec succès."
+    "localVmsRestarted": "Toutes les VMs locales ont été redémarrées avec succès.",
+    "awaitingApproval": "En attente d'approbation",
+    "approvalBanner": "L'exécution est suspendue et attend votre approbation avant la mise à jour de {node}. Approuvez pour continuer ou annulez pour vous arrêter ici.",
+    "approveNode": "Approuver {node}",
+    "showUpdateOutput": "Afficher la sortie apt",
+    "hideUpdateOutput": "Masquer la sortie apt",
+    "pkgWaitingLock": "En attente du verrou apt ({seconds} s)",
+    "pkgDownloading": "Téléchargement des paquets {count}",
+    "pkgUnpacking": "Décompression des paquets {count}",
+    "pkgConfiguring": "Configuration des paquets {count}",
+    "pkgDone": "{count} paquet(s) configuré(s)"
   },
   "replication": {
     "title": "Réplication",

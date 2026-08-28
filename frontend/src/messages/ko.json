@@ -6506,7 +6506,17 @@
     "restartLocalVmsDescription": "업데이트 전에 종료된 VM을 재시작합니다.",
     "restartLocalVmsBtn": "VM 재시작",
     "restartingLocalVms": "VM 재시작 중...",
-    "localVmsRestarted": "모든 로컬 VM이 성공적으로 재시작되었습니다."
+    "localVmsRestarted": "모든 로컬 VM이 성공적으로 재시작되었습니다.",
+    "awaitingApproval": "승인 대기 중",
+    "approvalBanner": "실행이 일시 중지되었으며 {node} 업데이트 전에 승인을 기다리고 있습니다. 계속하려면 승인하고 여기서 중지하려면 취소하세요.",
+    "approveNode": "{node} 승인",
+    "showUpdateOutput": "apt 출력 표시",
+    "hideUpdateOutput": "apt 출력 숨기기",
+    "pkgWaitingLock": "apt 잠금 대기 중 ({seconds}초)",
+    "pkgDownloading": "패키지 다운로드 중 {count}",
+    "pkgUnpacking": "패키지 압축 해제 중 {count}",
+    "pkgConfiguring": "패키지 구성 중 {count}",
+    "pkgDone": "패키지 {count}개 구성 완료"
   },
   "replication": {
     "title": "복제",

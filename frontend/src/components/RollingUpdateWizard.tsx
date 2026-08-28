@@ -2,6 +2,16 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+
+import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
+import NodeUpdateOutput from '@/components/rolling/NodeUpdateOutput'
+import {
+  isAwaitingApproval,
+  packageProgressLabel,
+  runProgressPercent,
+  shouldExpandOutput,
+  type PackageProgress
+} from '@/lib/rolling/updateProgress'
 import { formatBytes } from '@/utils/format'
 import {
   Alert,
@@ -265,6 +275,8 @@ interface RollingUpdate {
   total_nodes: number
   completed_nodes: number
   current_node: string
+  /** Node waiting to be approved when require_manual_approval is set; the run is then `paused`. */
+  pending_approval?: string
   node_statuses: Array<{
     node_name: string
     status: string
@@ -275,6 +287,10 @@ interface RollingUpdate {
     did_reboot: boolean
     version_before?: string
     version_after?: string
+    /** Full apt output of the node, also present when the upgrade failed. */
+    update_output?: string
+    /** Position inside the package upgrade while the node is `updating`. */
+    package_progress?: PackageProgress | null
   }>
   logs: Array<{
     timestamp: string
@@ -359,6 +375,9 @@ export default function RollingUpdateWizard({
   const [rollingUpdate, setRollingUpdate] = useState<RollingUpdate | null>(null)
   const [executionError, setExecutionError] = useState<string | null>(null)
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  // Closing while a run is live asks first; the native confirm() it replaced
+  // rendered as a bare browser box over the themed dialog.
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false)
   
   // Initialize node order from nodes — place connectedNode last
   useEffect(() => {
@@ -618,8 +637,10 @@ export default function RollingUpdateWizard({
     }
   }, [connectionId, config, nodeOrder, excludedNodes])
   
-  // Pause/Resume/Cancel actions
-  const executeAction = useCallback(async (action: 'pause' | 'resume' | 'cancel') => {
+  // Pause/Resume/Cancel/Approve actions. `approve` is what a run paused with
+  // pending_approval wants: Resume happened to work because the orchestrator
+  // maps both to the same signal, but nothing told the operator so.
+  const executeAction = useCallback(async (action: 'pause' | 'resume' | 'cancel' | 'approve') => {
     if (!rollingUpdate) return
     
     try {
@@ -644,6 +665,20 @@ export default function RollingUpdateWizard({
     return mins > 0 ? `~${hours}h ${mins}min` : `~${hours}h`
   }
   
+  // Proxmox logo with its status dot next to a node name in the monitor. The
+  // wizard has no PVE node list when opened from the tasks menu, so the dot
+  // follows the run phase: offline while the node reboots, maintenance while
+  // it sits in HA maintenance, the real PVE status (or online) otherwise.
+  const nodeIconFor = (ns: { node_name: string; status: string }) => {
+    if (ns.status === 'rebooting' || ns.status === 'waiting_return') {
+      return <NodeIcon status="offline" size={18} />
+    }
+    if (['entering_maintenance', 'migrating_vms', 'updating', 'verifying_health', 'exiting_maintenance'].includes(ns.status)) {
+      return <NodeIcon status="online" maintenance="maintenance" size={18} />
+    }
+    return <NodeIcon status={nodes.find(n => n.node === ns.node_name)?.status || 'online'} size={18} />
+  }
+
   // Get node status icon
   const getNodeStatusIcon = (status: string) => {
     switch (status) {
@@ -652,26 +687,34 @@ export default function RollingUpdateWizard({
       case 'failed':
         return <ErrorIcon sx={{ color: 'error.main' }} />
       case 'running':
+      case 'entering_maintenance':
       case 'migrating_vms':
       case 'updating':
       case 'rebooting':
+      case 'waiting_return':
+      case 'verifying_health':
+      case 'exiting_maintenance':
         return <CircularProgress size={20} />
       case 'pending':
+      case 'skipped':
         return <InfoIcon sx={{ color: 'text.secondary' }} />
       default:
         return <WarningIcon sx={{ color: 'warning.main' }} />
     }
   }
   
-  // Handle close
+  // Handle close: a live run asks for confirmation first, finishClose does the work.
   const handleClose = () => {
     if (rollingUpdate && ['running', 'paused'].includes(rollingUpdate.status)) {
-      // Confirm before closing during execution
-      if (!window.confirm(t('updates.confirmCloseWhileRunning'))) {
-        return
-      }
+      setConfirmCloseOpen(true)
+      return
     }
-    
+    finishClose()
+  }
+
+  const finishClose = () => {
+    setConfirmCloseOpen(false)
+
     if (pollingInterval) {
       clearInterval(pollingInterval)
       setPollingInterval(null)
@@ -721,11 +764,12 @@ export default function RollingUpdateWizard({
         {rollingUpdate && (
           <Chip 
             size="small" 
-            label={rollingUpdate.status}
+            label={isAwaitingApproval(rollingUpdate) ? t('updates.awaitingApproval') : rollingUpdate.status}
             color={
               rollingUpdate.status === 'completed' ? 'success' :
               rollingUpdate.status === 'failed' ? 'error' :
               rollingUpdate.status === 'running' ? 'primary' :
+              isAwaitingApproval(rollingUpdate) ? 'info' :
               rollingUpdate.status === 'paused' ? 'warning' :
               'default'
             }
@@ -881,9 +925,12 @@ export default function RollingUpdateWizard({
 
                       return (
                         <Box key={nodeName} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" sx={{ minWidth: 100, fontWeight: 600, fontSize: 13 }}>
-                            {nodeName}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 100 }}>
+                            <NodeIcon status={nodes.find(n => n.node === nodeName)?.status} size={18} />
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 13 }}>
+                              {nodeName}
+                            </Typography>
+                          </Box>
 
                           <FormControl size="small" sx={{ minWidth: 240 }}>
                             <Select
@@ -1409,22 +1456,38 @@ export default function RollingUpdateWizard({
         {/* Step 2: Execution */}
         {activeStep === 2 && rollingUpdate && (
           <Stack spacing={3}>
-            {/* Progress */}
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2">
-                  {t('updates.progressNodes', { completed: rollingUpdate.completed_nodes, total: rollingUpdate.total_nodes })}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {rollingUpdate.current_node && t('updates.inProgressNode', { node: rollingUpdate.current_node })}
-                </Typography>
-              </Box>
-              <LinearProgress 
-                variant="determinate" 
-                value={(rollingUpdate.completed_nodes / rollingUpdate.total_nodes) * 100}
-                sx={{ height: 8, borderRadius: 1 }}
-              />
-            </Box>
+            {/* Progress: advances inside the current node (its step, then apt's own
+                position) instead of jumping by a whole node at a time. */}
+            {(() => {
+              const current = rollingUpdate.node_statuses?.find(ns => ns.node_name === rollingUpdate.current_node)
+              const pkg = packageProgressLabel(current?.package_progress)
+
+              return (
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2">
+                      {t('updates.progressNodes', { completed: rollingUpdate.completed_nodes, total: rollingUpdate.total_nodes })}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {rollingUpdate.current_node && t('updates.inProgressNode', { node: rollingUpdate.current_node })}
+                      {pkg && ` • ${t(pkg.key as any, pkg.values)}`}
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={runProgressPercent(rollingUpdate)}
+                    aria-label={t('updates.progressNodes', { completed: rollingUpdate.completed_nodes, total: rollingUpdate.total_nodes })}
+                    sx={{ height: 8, borderRadius: 1 }}
+                  />
+                </Box>
+              )
+            })()}
+
+            {isAwaitingApproval(rollingUpdate) && (
+              <Alert severity="info" icon={<PauseIcon />}>
+                {t('updates.approvalBanner', { node: rollingUpdate.pending_approval })}
+              </Alert>
+            )}
             
             {/* Node statuses */}
             {rollingUpdate.node_statuses && rollingUpdate.node_statuses.length > 0 && (
@@ -1434,28 +1497,42 @@ export default function RollingUpdateWizard({
                     {t('updates.nodeStatuses')}
                   </Typography>
                   <List dense>
-                    {rollingUpdate.node_statuses.map((ns) => (
-                    <ListItem key={ns.node_name}>
-                      <ListItemIcon sx={{ minWidth: 40 }}>
-                        {getNodeStatusIcon(ns.status)}
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary={ns.node_name}
-                        secondary={
-                          <>
-                            {ns.status}
-                            {ns.version_before && ns.version_after && 
-                              ` • ${ns.version_before} → ${ns.version_after}`}
-                            {ns.did_reboot && ` • ${t('updates.rebooted')}`}
-                          </>
-                        }
-                      />
-                      {ns.error && (
-                        <Chip size="small" label={t('updates.errorChip')} color="error" />
-                      )}
-                    </ListItem>
-                  ))}
-                </List>
+                    {rollingUpdate.node_statuses.map((ns) => {
+                      const pkg = ns.status === 'updating' ? packageProgressLabel(ns.package_progress) : null
+
+                      return (
+                        <React.Fragment key={ns.node_name}>
+                          <ListItem>
+                            <ListItemIcon sx={{ minWidth: 40 }}>
+                              {getNodeStatusIcon(ns.status)}
+                            </ListItemIcon>
+                            <ListItemText 
+                              primary={
+                                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                                  {nodeIconFor(ns)}
+                                  {ns.node_name}
+                                </Box>
+                              }
+                              secondary={
+                                <>
+                                  {ns.status}
+                                  {pkg && ` • ${t(pkg.key as any, pkg.values)}`}
+                                  {ns.version_before && ns.version_after && 
+                                    ` • ${ns.version_before} → ${ns.version_after}`}
+                                  {ns.did_reboot && ` • ${t('updates.rebooted')}`}
+                                  {ns.error && <Typography component="span" variant="inherit" color="error"> • {ns.error}</Typography>}
+                                </>
+                              }
+                            />
+                            {ns.error && (
+                              <Chip size="small" label={t('updates.errorChip')} color="error" />
+                            )}
+                          </ListItem>
+                          <NodeUpdateOutput nodeName={ns.node_name} output={ns.update_output} defaultExpanded={shouldExpandOutput(ns)} />
+                        </React.Fragment>
+                      )
+                    })}
+                  </List>
               </CardContent>
             </Card>
             )}
@@ -1534,23 +1611,31 @@ export default function RollingUpdateWizard({
                   </Typography>
                   <List dense>
                     {rollingUpdate.node_statuses.map((ns) => (
-                      <ListItem key={ns.node_name}>
-                        <ListItemIcon sx={{ minWidth: 40 }}>
-                          {getNodeStatusIcon(ns.status)}
-                        </ListItemIcon>
-                        <ListItemText 
-                          primary={ns.node_name}
-                          secondary={
-                            <>
-                              {ns.version_before && ns.version_after && (
-                                <>{ns.version_before} → {ns.version_after}</>
-                              )}
-                              {ns.did_reboot && ` • ${t('updates.rebooted')}`}
-                              {ns.error && <Typography component="span" color="error"> • {ns.error}</Typography>}
-                            </>
-                          }
-                        />
-                      </ListItem>
+                      <React.Fragment key={ns.node_name}>
+                        <ListItem>
+                          <ListItemIcon sx={{ minWidth: 40 }}>
+                            {getNodeStatusIcon(ns.status)}
+                          </ListItemIcon>
+                          <ListItemText 
+                            primary={
+                              <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                                {nodeIconFor(ns)}
+                                {ns.node_name}
+                              </Box>
+                            }
+                            secondary={
+                              <>
+                                {ns.version_before && ns.version_after && (
+                                  <>{ns.version_before} → {ns.version_after}</>
+                                )}
+                                {ns.did_reboot && ` • ${t('updates.rebooted')}`}
+                                {ns.error && <Typography component="span" color="error"> • {ns.error}</Typography>}
+                              </>
+                            }
+                          />
+                        </ListItem>
+                        <NodeUpdateOutput nodeName={ns.node_name} output={ns.update_output} defaultExpanded={shouldExpandOutput(ns)} />
+                      </React.Fragment>
                     ))}
                   </List>
                 </CardContent>
@@ -1628,13 +1713,24 @@ export default function RollingUpdateWizard({
             )}
             {rollingUpdate.status === 'paused' && (
               <>
-                <Button
-                  onClick={() => executeAction('resume')}
-                  variant="contained"
-                  startIcon={<PlayArrowIcon />}
-                >
-                  {t('updates.resume')}
-                </Button>
+                {isAwaitingApproval(rollingUpdate) ? (
+                  <Button
+                    onClick={() => executeAction('approve')}
+                    variant="contained"
+                    color="success"
+                    startIcon={<CheckCircleIcon sx={{ fontSize: 18 }} />}
+                  >
+                    {t('updates.approveNode', { node: rollingUpdate.pending_approval })}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => executeAction('resume')}
+                    variant="contained"
+                    startIcon={<PlayArrowIcon />}
+                  >
+                    {t('updates.resume')}
+                  </Button>
+                )}
                 <Button
                   onClick={() => executeAction('cancel')}
                   color="error"
@@ -1653,6 +1749,15 @@ export default function RollingUpdateWizard({
           </Button>
         )}
       </DialogActions>
+
+      <ConfirmCloseDialog
+        open={confirmCloseOpen}
+        title={t('updates.upgradeInProgress')}
+        message={t('updates.confirmCloseWhileRunning')}
+        confirmLabel={t('common.close')}
+        onConfirm={finishClose}
+        onCancel={() => setConfirmCloseOpen(false)}
+      />
     </Dialog>
   )
 }

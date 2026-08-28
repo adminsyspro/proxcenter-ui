@@ -6506,7 +6506,17 @@
     "restartLocalVmsDescription": "Reiniciar VMs que se apagaron antes de la actualización.",
     "restartLocalVmsBtn": "Reiniciar VMs",
     "restartingLocalVms": "Reiniciando VMs...",
-    "localVmsRestarted": "Todas las VMs locales se reiniciaron correctamente."
+    "localVmsRestarted": "Todas las VMs locales se reiniciaron correctamente.",
+    "awaitingApproval": "En espera de aprobación",
+    "approvalBanner": "La ejecución está en pausa y espera su aprobación antes de actualizar {node}. Apruebe para continuar o cancele para detenerla aquí.",
+    "approveNode": "Aprobar {node}",
+    "showUpdateOutput": "Mostrar salida de apt",
+    "hideUpdateOutput": "Ocultar salida de apt",
+    "pkgWaitingLock": "Esperando el bloqueo de apt ({seconds} s)",
+    "pkgDownloading": "Descargando paquetes {count}",
+    "pkgUnpacking": "Desempaquetando paquetes {count}",
+    "pkgConfiguring": "Configurando paquetes {count}",
+    "pkgDone": "{count} paquete(s) configurado(s)"
   },
   "replication": {
     "title": "Replicación",

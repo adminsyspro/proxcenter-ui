@@ -17,7 +17,7 @@ export type JobLike = {
   metadata?: Record<string, any> | null
 } | null | undefined
 
-export type JobAction = 'pause' | 'resume' | 'cancel'
+export type JobAction = 'pause' | 'resume' | 'approve' | 'cancel'
 
 /** `UPID:pve1:0000ABCD:...` -> `pve1`. */
 function upidNode(upid: string): string | null {
@@ -73,7 +73,10 @@ export function jobActions(job: JobLike): JobAction[] {
 
   if (job.type === 'rolling_update') {
     if (job.status === 'running') return ['pause', 'cancel']
-    if (job.status === 'paused') return ['resume', 'cancel']
+    // A run paused for a manual approval wants an approval, not a resume:
+    // the orchestrator's approve action releases the gate without lifting
+    // an operator pause, resume would do both.
+    if (job.status === 'paused') return [job.metadata?.pendingApproval ? 'approve' : 'resume', 'cancel']
 
     return []
   }

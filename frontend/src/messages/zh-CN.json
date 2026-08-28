@@ -6453,7 +6453,17 @@
     "restartLocalVmsDescription": "重启更新前已关闭的虚拟机。",
     "restartLocalVmsBtn": "重启虚拟机",
     "restartingLocalVms": "正在重启虚拟机...",
-    "localVmsRestarted": "所有本地虚拟机已成功重启。"
+    "localVmsRestarted": "所有本地虚拟机已成功重启。",
+    "awaitingApproval": "等待批准",
+    "approvalBanner": "运行已暂停，正在等待您的批准，然后再更新 {node}。批准以继续，或取消以在此停止。",
+    "approveNode": "批准 {node}",
+    "showUpdateOutput": "显示 apt 输出",
+    "hideUpdateOutput": "隐藏 apt 输出",
+    "pkgWaitingLock": "正在等待 apt 锁（{seconds} 秒）",
+    "pkgDownloading": "正在下载软件包 {count}",
+    "pkgUnpacking": "正在解包软件包 {count}",
+    "pkgConfiguring": "正在配置软件包 {count}",
+    "pkgDone": "已配置 {count} 个软件包"
   },
   "replication": {
     "title": "复制",

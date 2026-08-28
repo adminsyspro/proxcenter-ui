@@ -2690,6 +2690,14 @@
       "title": "Jetons API",
       "subtitle": "Comptes de service en lecture seule pour les outils de supervision externes (Prometheus, Zabbix, PRTG, CI).",
       "newToken": "Nouveau jeton",
+      "referenceButton": "Référence de l'API",
+      "reference": {
+        "title": "Référence de l'API",
+        "subtitle": "Documentation interactive de l'API publique en lecture seule",
+        "hint": "Les requêtes envoyées depuis cette page sont adressées à cette instance ProxCenter. Ouvrez le panneau Authentification et collez un jeton pxc_ pour tester les points de terminaison avec vos propres données.",
+        "backToTokens": "Retour aux jetons API",
+        "thisInstance": "Cette instance ProxCenter"
+      },
       "columns": {
         "prefix": "Préfixe",
         "name": "Nom",
@@ -6782,6 +6790,7 @@
     "select": "sélectionner",
     "close": "fermer",
     "goToSettings": "Aller aux paramètres",
+    "goToApiReference": "Ouvrir la référence de l'API",
     "viewBackups": "Voir les sauvegardes",
     "viewEvents": "Voir les événements",
     "viewAlerts": "Voir les alertes",

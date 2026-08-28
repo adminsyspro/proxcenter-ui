@@ -2690,6 +2690,14 @@
       "title": "Tokens de API",
       "subtitle": "Cuentas de servicio de solo lectura para herramientas de monitorización externas (Prometheus, Zabbix, PRTG, CI).",
       "newToken": "Nuevo token",
+      "referenceButton": "Referencia de la API",
+      "reference": {
+        "title": "Referencia de la API",
+        "subtitle": "Documentación interactiva de la API pública de solo lectura",
+        "hint": "Las solicitudes enviadas desde esta página se dirigen a esta instancia de ProxCenter. Abra el panel Autenticación y pegue un token pxc_ para probar los endpoints con sus propios datos.",
+        "backToTokens": "Volver a los tokens de API",
+        "thisInstance": "Esta instancia de ProxCenter"
+      },
       "columns": {
         "prefix": "Prefijo",
         "name": "Nombre",
@@ -6781,6 +6789,7 @@
     "select": "seleccionar",
     "close": "cerrar",
     "goToSettings": "Ir a ajustes",
+    "goToApiReference": "Abrir la referencia de la API",
     "viewBackups": "Ver backups",
     "viewEvents": "Ver eventos",
     "viewAlerts": "Ver alertas",

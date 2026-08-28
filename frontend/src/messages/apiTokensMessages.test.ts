@@ -22,7 +22,9 @@ const reference = keyPaths((en as Messages).settings.apiTokens).sort()
 describe('settings.apiTokens i18n parity across the 6 served locales', () => {
   it('declares the required keys in en.json', () => {
     for (const key of [
-      'tabLabel', 'title', 'subtitle', 'newToken', 'columns.prefix', 'columns.name',
+      'tabLabel', 'title', 'subtitle', 'newToken', 'referenceButton', 'reference.title',
+      'reference.subtitle', 'reference.hint', 'reference.backToTokens', 'reference.thisInstance',
+      'columns.prefix', 'columns.name',
       'columns.tenant', 'columns.scopes', 'columns.expires', 'columns.lastUsed', 'never', 'delete',
       // `revoked` stays: nothing writes revoked_at any more, but the grid still
       // has to chip the legacy rows that existing databases carry.

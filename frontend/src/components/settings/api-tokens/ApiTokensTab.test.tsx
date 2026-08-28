@@ -194,6 +194,14 @@ describe('ApiTokensTab', () => {
     expect(screen.getByText(/203\.0\.113\.9/)).toBeInTheDocument()
   })
 
+  // #827: this tab is where an admin has just minted a token and wonders what
+  // it can call. A real link (not a router push) so it can open in a new tab.
+  it('links to the in-product API reference', async () => {
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    expect(screen.getByRole('link', { name: /api reference/i })).toHaveAttribute('href', '/settings/api-reference')
+  })
+
   // Owner feedback round: a Tenant column, showing the NAME the server joins
   // in (never the raw tenantId), and a key icon leading every row's identity
   // cell -- both plain, non-monospace text stays selectable.

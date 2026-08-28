@@ -227,6 +227,9 @@ const CommandPalette = ({ open, onClose }) => {
   const actions = useMemo(() => {
     const all = [
       { type: 'action', label: tCmd('goToSettings'), icon: 'ri-settings-3-line', href: '/settings', permission: 'connection.manage' },
+      // Same gate as the settings API tab it documents (#827): super admin in
+      // the provider tenant. Not license-gated, the reference is documentation.
+      { type: 'action', label: tCmd('goToApiReference'), icon: 'ri-book-2-line', href: '/settings/api-reference', superAdminProviderOnly: true },
       { type: 'action', label: tCmd('viewBackups'), icon: 'ri-file-copy-fill', href: '/operations/backups', permission: 'backup.view' },
       { type: 'action', label: tCmd('viewEvents'), icon: 'ri-calendar-event-line', href: '/operations/events' },
       { type: 'action', label: tCmd('viewAlerts'), icon: 'ri-notification-3-line', href: '/operations/alerts' }
@@ -235,10 +238,11 @@ const CommandPalette = ({ open, onClose }) => {
     return all.filter(a => {
       if (a.permission && !hasAnyPermission([a.permission])) return false
       if (a.requiredFeature && !hasFeature(a.requiredFeature)) return false
+      if (a.superAdminProviderOnly && !(isAdmin && isProviderTenant)) return false
 
       return true
     })
-  }, [tCmd, hasAnyPermission, hasFeature])
+  }, [tCmd, hasAnyPermission, hasFeature, isAdmin, isProviderTenant])
 
   // -----------------------------------------------------------------------
   // 3. Filtered results — fuzzy search across all 3 sources

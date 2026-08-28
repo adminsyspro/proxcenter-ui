@@ -2690,6 +2690,14 @@
       "title": "API tokens",
       "subtitle": "Read-only service accounts for external monitoring tools (Prometheus, Zabbix, PRTG, CI).",
       "newToken": "New token",
+      "referenceButton": "API reference",
+      "reference": {
+        "title": "API reference",
+        "subtitle": "Interactive documentation of the public read-only API",
+        "hint": "Requests sent from this page go to this ProxCenter instance. Open the Authentication panel and paste a pxc_ token to try the endpoints against your own data.",
+        "backToTokens": "Back to API tokens",
+        "thisInstance": "This ProxCenter instance"
+      },
       "columns": {
         "prefix": "Prefix",
         "name": "Name",
@@ -6781,6 +6789,7 @@
     "select": "select",
     "close": "close",
     "goToSettings": "Go to Settings",
+    "goToApiReference": "Open the API reference",
     "viewBackups": "View Backups",
     "viewEvents": "View Events",
     "viewAlerts": "View Alerts",

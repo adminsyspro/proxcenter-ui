@@ -7,6 +7,7 @@ import {
   DialogTitle, IconButton, LinearProgress, Stack, Tooltip, Typography,
 } from '@mui/material'
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
 import CreateTokenDialog from './CreateTokenDialog'
@@ -185,9 +186,21 @@ function ApiTokensPanel() {
               <Typography variant='h6'>{t('title')}</Typography>
               <Typography variant='body2' color='text.secondary'>{t('subtitle')}</Typography>
             </Box>
-            <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setCreateOpen(true)}>
-              {t('newToken')}
-            </Button>
+            <Stack direction='row' spacing={1}>
+              {/* Documentation of what a token can call, rendered in-product
+                  (#827): a real link so it opens in a new tab if wanted. */}
+              <Button
+                component={Link}
+                href='/settings/api-reference'
+                variant='outlined'
+                startIcon={<i className='ri-book-2-line' />}
+              >
+                {t('referenceButton')}
+              </Button>
+              <Button variant='contained' startIcon={<i className='ri-add-line' />} onClick={() => setCreateOpen(true)}>
+                {t('newToken')}
+              </Button>
+            </Stack>
           </Box>
 
           {loading ? (

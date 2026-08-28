@@ -22,7 +22,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     const conn = await getPbsConnectionById(id)
 
-    const users = await pbsFetch<any[]>(conn, "/access/users")
+    // Sans `include_tokens`, PBS ne renvoie que les utilisateurs : leurs
+    // jetons d'API manquent et l'onglet les affiche comme absents. Le nom du
+    // parametre porte bien un souligne, pas un tiret.
+    const users = await pbsFetch<any[]>(conn, "/access/users?include_tokens=1")
 
     return NextResponse.json({ data: Array.isArray(users) ? users : [] })
   } catch (e: any) {

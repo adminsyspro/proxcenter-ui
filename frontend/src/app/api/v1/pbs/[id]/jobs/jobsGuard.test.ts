@@ -63,10 +63,11 @@ function mockPbsData() {
     }
     if (path === "/admin/verify") return []
     if (path === "/config/tape-backup-job") return []
-    if (path.startsWith("/admin/datastore/") && path.endsWith("/prune-job")) {
-      if (path.includes("store1")) return [{ id: "prune-store1", ns: "ns-a" }]
-      if (path.includes("store2")) return [{ id: "prune-store2", ns: "" }]
-      return []
+    if (path === "/admin/prune") {
+      return [
+        { id: "prune-store1", store: "store1", ns: "ns-a" },
+        { id: "prune-store2", store: "store2", ns: "" },
+      ]
     }
     if (path.startsWith("/admin/datastore/") && path.endsWith("/gc")) {
       if (path.includes("store1")) return { schedule: "daily" }
@@ -110,6 +111,25 @@ describe("GET /api/v1/pbs/[id]/jobs — access verdict", () => {
       expect.arrayContaining(["sync1", "sync2", "sync3", "prune-store1", "prune-store2", "gc-store1", "gc-store2"])
     )
     expect(body.data.datastores).toEqual(["store1", "store2"])
+  })
+
+  it("admin: a /admin/prune failure leaves the other job types listed", async () => {
+    assertVdcPbsAccessMock.mockResolvedValue({ kind: "admin" })
+    const base = pbsFetchMock.getMockImplementation()!
+
+    pbsFetchMock.mockImplementation(async (conn: any, path: string) => {
+      if (path === "/admin/prune") throw new Error("PBS 403 /admin/prune")
+
+      return base(conn, path)
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET as any, { params: { id: "pbs-1" } })
+    expect(res.status).toBe(200)
+
+    const body = await res.json()
+    expect(body.data.jobs.prune).toEqual([])
+    expect(body.data.jobs.sync.map((j: any) => j.id)).toEqual(["sync1", "sync2", "sync3"])
   })
 
   it("iaas tenant: only jobs whose (datastore, namespace) is in the union ∩ narrowed scope are returned", async () => {

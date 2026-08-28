@@ -299,6 +299,7 @@ export async function GET(req: Request) {
           if (rj.status === "synced") jobStatus = "success"
           else if (rj.status === "syncing") jobStatus = "running"
           else if (rj.status === "error") jobStatus = "failed"
+          else if (rj.status === "partial") jobStatus = "failed" // one or more VMs in error, see error_message
           // paused and pending stay as-is
 
           const vmLabel = (rj.vm_names || []).length > 0

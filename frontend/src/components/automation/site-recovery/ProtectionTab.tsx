@@ -74,7 +74,8 @@ const StatusChip = ({ status, t }: { status: ReplicationJobStatus; t: any }) => 
     paused: { label: t('siteRecovery.status.paused'), color: 'default' },
     pending: { label: t('siteRecovery.status.pending'), color: 'warning' },
     failed_over: { label: t('siteRecovery.jobs.failedOver'), color: 'warning', icon: 'ri-shield-star-line' },
-    no_match: { label: t('siteRecovery.status.noMatch'), color: 'warning', icon: 'ri-price-tag-3-line' }
+    no_match: { label: t('siteRecovery.status.noMatch'), color: 'warning', icon: 'ri-price-tag-3-line' },
+    partial: { label: t('siteRecovery.status.partial'), color: 'warning', icon: 'ri-error-warning-line' }
   }
 
   const c = config[status] || config.paused
@@ -594,6 +595,7 @@ export default function ProtectionTab({
               <MenuItem value='paused'>{t('siteRecovery.status.paused')}</MenuItem>
               <MenuItem value='error'>{t('siteRecovery.status.error')}</MenuItem>
               <MenuItem value='no_match'>{t('siteRecovery.status.noMatch')}</MenuItem>
+              <MenuItem value='partial'>{t('siteRecovery.status.partial')}</MenuItem>
             </Select>
             {(q || statusFilter !== 'all') && (
               <Button size='small' onClick={() => { setQ(''); setStatusFilter('all') }} startIcon={<i className='ri-close-line' />}>
@@ -723,8 +725,8 @@ export default function ProtectionTab({
                 </Button>
               </Box>
 
-              {selected.status === 'error' && selected.error_message && (
-                <Alert severity='error' sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
+              {(selected.status === 'error' || selected.status === 'partial') && selected.error_message && (
+                <Alert severity={selected.status === 'partial' ? 'warning' : 'error'} sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
               )}
 
               <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'action.hover', mb: 2, textAlign: 'center' }}>

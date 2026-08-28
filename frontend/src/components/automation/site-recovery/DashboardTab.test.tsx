@@ -40,6 +40,7 @@ function health(overrides: Partial<ReplicationHealthStatus> = {}): ReplicationHe
       error: 0,
       paused: 0,
       no_match: 0,
+      partial: 0,
     },
     ...overrides,
   }
@@ -68,11 +69,44 @@ describe('DashboardTab job status distribution', () => {
         error: 0,
         paused: 0,
         no_match: 2,
+        partial: 0,
       },
     }))
 
     const label = screen.getByText(/No matching VMs/)
     expect(label).toHaveTextContent('No matching VMs: 2')
+  })
+
+  it('renders the partially synced segment and count', () => {
+    renderDashboard(health({
+      job_summary: {
+        synced: 1,
+        syncing: 0,
+        pending: 0,
+        error: 0,
+        paused: 0,
+        no_match: 0,
+        partial: 1,
+      },
+    }))
+
+    expect(screen.getByText(/Partially synced/)).toHaveTextContent('Partially synced: 1')
+  })
+
+  it('treats a missing partial count (older orchestrator) as zero', () => {
+    renderDashboard(health({
+      job_summary: {
+        synced: 1,
+        syncing: 0,
+        pending: 0,
+        error: 0,
+        paused: 0,
+        no_match: 0,
+      } as any,
+    }))
+
+    expect(screen.getByText(/Synced/)).toHaveTextContent('Synced: 1')
+    expect(screen.queryByText(/Partially synced/)).not.toBeInTheDocument()
   })
 
   it('treats a missing no_match count as zero', () => {

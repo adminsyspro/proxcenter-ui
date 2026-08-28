@@ -71,6 +71,15 @@ describe('EmergencyDRTab: job status chip', () => {
     expect(screen.queryByText('no_match')).not.toBeInTheDocument()
   })
 
+  it('renders a translated warning chip for a partial job instead of the raw value', () => {
+    renderTab([job({ status: 'partial' })])
+
+    const chip = screen.getByText('Partially synced').closest('.MuiChip-root')
+    expect(chip).toBeInTheDocument()
+    expect(chip).toHaveClass('MuiChip-colorWarning')
+    expect(screen.queryByText('partial')).not.toBeInTheDocument()
+  })
+
   it('keeps the existing raw labels for the other statuses', () => {
     renderTab([job({ status: 'synced' })])
 

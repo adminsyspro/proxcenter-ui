@@ -4177,7 +4177,8 @@
       "error": "Erreur",
       "paused": "En pause",
       "pending": "En attente",
-      "noMatch": "Aucune VM correspondante"
+      "noMatch": "Aucune VM correspondante",
+      "partial": "Partiellement synchronisé"
     },
     "planStatus": {
       "ready": "Prêt",

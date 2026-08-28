@@ -160,3 +160,42 @@ describe('ProtectionTab: no matching VMs status (issue #687)', () => {
     expect(screen.queryByText('201 - pending-vm')).not.toBeInTheDocument()
   })
 })
+
+describe('ProtectionTab: partially synced status', () => {
+  // A job where some VMs synced and one failed (for instance a VM whose
+  // Proxmox snapshot broke the mirror snapshot) is "partial": the healthy
+  // VMs are protected, the job stays scheduled, and the card must say so
+  // instead of showing a bare error or a raw status string.
+  it('shows the "Partially synced" warning chip for a partial job', () => {
+    renderTab([job({ status: 'partial', error_message: '1 of 6 VMs failed: VM 279: failed to create snapshot' })])
+
+    const chipLabel = screen.getByText('Partially synced')
+    const chip = chipLabel.closest('.MuiChip-root')
+    expect(chip).toBeInTheDocument()
+    expect(chip).toHaveClass('MuiChip-colorWarning')
+    expect(chip?.querySelector('.ri-error-warning-line')).toBeInTheDocument()
+    expect(screen.queryByText('partial')).not.toBeInTheDocument()
+  })
+
+  it('offers partial in the status filter and filters the job list to partial jobs', async () => {
+    renderTab([
+      job({ id: 'job-partial', status: 'partial', vm_ids: [279], vm_names: ['git-ia'] }),
+      job({ id: 'job-synced', status: 'synced', vm_ids: [221], vm_names: ['sarbacane'] }),
+    ])
+
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Partially synced' }))
+
+    expect(screen.getByText('279 - git-ia')).toBeInTheDocument()
+    expect(screen.queryByText('221 - sarbacane')).not.toBeInTheDocument()
+  })
+
+  it('shows the failure summary as a warning in the drawer of a partial job', async () => {
+    renderTab([job({ status: 'partial', error_message: '1 of 6 VMs failed: VM 279: failed to create snapshot' })])
+
+    await openDrawer('100 - web-01')
+
+    const alert = await screen.findByText('1 of 6 VMs failed: VM 279: failed to create snapshot')
+    expect(alert.closest('.MuiAlert-root')).toHaveClass('MuiAlert-colorWarning')
+  })
+})

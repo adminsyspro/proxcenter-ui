@@ -41,6 +41,7 @@
     "name": "이름",
     "description": "설명",
     "type": "유형",
+    "source": "출처",
     "date": "날짜",
     "size": "크기",
     "notes": "메모",

@@ -12,6 +12,17 @@ export const runtime = "nodejs"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
+/**
+ * How many DRS migrations may be asked for their real progress in one poll.
+ *
+ * The Task Center and the shared task footer both hit this route, the footer
+ * from every page, so the fan-out has to stay bounded: a fleet-wide rebalance
+ * must not turn one poll into dozens of orchestrator round trips. Rows beyond
+ * the cap keep an unknown progress, which the footer renders as an
+ * indeterminate bar.
+ */
+const MAX_DRS_PROGRESS_LOOKUPS = 8
+
 /** Extract hostname from a baseUrl like "https://pve1.example.com:8006" */
 function extractHostname(baseUrl: string): string {
   try {
@@ -184,6 +195,42 @@ export async function GET(req: Request) {
         const drsData = await drsRes.json()
         const migrations: any[] = Array.isArray(drsData) ? drsData : (drsData?.data || [])
 
+        // Real progress for the migrations still in flight (#818).
+        //
+        // The list endpoint carries no progress field, so this route used to
+        // publish a constant 50% for every running row. A migration whose
+        // orchestrator-side monitor goroutine died therefore stayed "In
+        // progress, 50%" for good, which is what the reporter saw. The
+        // per-migration progress endpoint has the real percentage, read from
+        // the PVE task, and asking it also gives the orchestrator its chance
+        // to self-heal a row whose task has in fact finished.
+        //
+        // Only running rows the caller will actually be shown are asked (the
+        // connection maps are already restricted to its perimeter), never more than
+        // MAX_DRS_PROGRESS_LOOKUPS of them. A lookup that fails leaves the
+        // progress unknown rather than inventing one.
+        const drsProgress = new Map<string, number>()
+        const inFlight = migrations
+          .filter((m: any) => m?.id && m.status === "running"
+            && (connById.has(m.connection_id) || connByName.has(m.connection_id)))
+          .slice(0, MAX_DRS_PROGRESS_LOOKUPS)
+
+        await Promise.all(inFlight.map(async (m: any) => {
+          try {
+            const progRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations/${m.id}/progress`, {
+              headers: orchestratorHeaders({ "Content-Type": "application/json" }),
+            })
+            if (!progRes.ok) return
+
+            const prog = await progRes.json()
+            if (typeof prog?.progress === "number" && Number.isFinite(prog.progress)) {
+              drsProgress.set(m.id, Math.max(0, Math.min(100, Math.round(prog.progress))))
+            }
+          } catch {
+            // Leave the row without a progress value.
+          }
+        }))
+
         for (let i = 0; i < migrations.length; i++) {
           const m = migrations[i]
           let jobStatus = m.status
@@ -197,7 +244,7 @@ export async function GET(req: Request) {
             name: `DRS Migration - ${vmLabel}`,
             type: "drs",
             status: jobStatus,
-            progress: jobStatus === "success" ? 100 : jobStatus === "running" ? 50 : 0,
+            progress: jobStatus === "success" ? 100 : (drsProgress.get(m.id) ?? 0),
             startedAt: m.started_at,
             endedAt: m.completed_at,
             createdAt: m.started_at,

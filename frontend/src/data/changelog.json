@@ -1,5 +1,40 @@
 [
   {
+    "version": "1.4.9",
+    "title": "In-app API reference, warm migration from XCP-ng and rolling update enhancements",
+    "items": [
+      { "type": "new", "text": "Rolling updates show live apt progress per node, with the apt output on screen when a step fails" },
+      { "type": "new", "text": "Rolling updates can require an explicit approval before each node, from the wizard or the Task Center" },
+      { "type": "fix", "text": "Rolling updates honour the parallel migrations setting and spread evacuated guests by projected load and affinity rules" },
+      { "type": "improved", "text": "Finished rolling updates stay in the Task Center with their full log, and a cancelled run reads cancelled" },
+      { "type": "fix", "text": "Rolling updates reach nodes on their management address and no longer wait on Ceph for our own noout flag or unrelated warnings" },
+      { "type": "fix", "text": "The node update preflight reads the Proxmox repository fields correctly, so the enterprise-without-free-alternative check finally fires" },
+      { "type": "new", "text": "XCP-ng pools can be connected directly through XAPI, next to Xen Orchestra" },
+      { "type": "new", "text": "Warm migration from XCP-ng with CBT: full copy of a live snapshot, then delta passes over NBD until the cutover" },
+      { "type": "breaking", "text": "XCP-ng Live mode is removed, it never worked. Use Offline or Warm" },
+      { "type": "fix", "text": "XCP-ng offline downloads survive a slow SSH poll and retry three times instead of deleting the partial file" },
+      { "type": "fix", "text": "Hyper-V: inventory in a single PowerShell call, wrong credentials shown as an authentication error, SMB disk paths resolved, retry on the right engine" },
+      { "type": "new", "text": "Windows guests installed with Compact OS convert: the ntfs-3g system-compression plugin is installed by the preflight" },
+      { "type": "fix", "text": "Hyper-V and Nutanix guests keep their source CPU count and memory instead of 1 vCPU and 2 GB" },
+      { "type": "improved", "text": "Cold migrations to file storage write the converted disk once and need half the temporary space" },
+      { "type": "fix", "text": "Warm node preparation states that it needs Proxmox VE 9 instead of dumping an apt transcript" },
+      { "type": "new", "text": "Consoles: fullscreen and scaling controls on VNC and SPICE, remembered per console kind" },
+      { "type": "new", "text": "SPICE console: start, shutdown, stop and pause the VM from the toolbar, with automatic reconnect" },
+      { "type": "fix", "text": "noVNC no longer logs the keystrokes typed into a guest to the browser console" },
+      { "type": "fix", "text": "HA: a single orchestrator leader at a time, elected on the Postgres primary only, and no more read-only transaction errors on a hot standby" },
+      { "type": "fix", "text": "HA: the DRS page is populated from any node, metrics and recommendations are routed to the leader" },
+      { "type": "fix", "text": "HA: a long preflight returns its verdict instead of a false Orchestrator unavailable" },
+      { "type": "fix", "text": "DRS migrations left running after an orchestrator restart are settled automatically, and the task footer shows their real progress instead of 50 %" },
+      { "type": "new", "text": "Site Recovery: a replication job continues past a failing VM and reports a Partially synced status with the failed VMs named" },
+      { "type": "fix", "text": "Site Recovery: a replicated VM carrying a Proxmox snapshot syncs again instead of failing on rbd File exists" },
+      { "type": "fix", "text": "PBS 4.x: package refresh, repository toggle, API token listing, S3 endpoints and prune jobs work again" },
+      { "type": "fix", "text": "Network Flows: configuring sFlow succeeds, reports per-node results and is re-applied after a node reboot; flows are attributed by guest MAC" },
+      { "type": "fix", "text": "Commas work in the default notification recipients, and a list saved glued by the semicolon workaround is repaired" },
+      { "type": "new", "text": "The public API reference is rendered inside the product, under Settings, with Try-it on your own instance" },
+      { "type": "fix", "text": "Tooltips stay reachable on disabled buttons, so the reason a button is unavailable is readable" }
+    ]
+  },
+  {
     "version": "1.4.8",
     "title": "vDC storage policies, tenant VLAN networks and a complete Task Center",
     "items": [

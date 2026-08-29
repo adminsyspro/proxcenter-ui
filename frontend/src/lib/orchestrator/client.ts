@@ -2,7 +2,21 @@
 // Client pour communiquer avec le backend Go d'orchestration
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
+// DRS metrics and recommendations live in the memory of the single leader
+// orchestrator. In HA, ORCHESTRATOR_LEADER_URL points at an HAProxy frontend
+// that forwards to whichever node currently holds leadership, so the DRS page
+// is populated no matter which node serves the request (e.g. the VIP holder is
+// not always the leader — ui#803, defect 2). Outside HA it is unset and falls
+// back to the local orchestrator, so behaviour is unchanged.
+const ORCHESTRATOR_LEADER_URL = process.env.ORCHESTRATOR_LEADER_URL || ORCHESTRATOR_URL
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
+
+// Leader-only endpoints: DRS (/drs/*) and metrics (/metrics/*) read or act on
+// state that only the leader holds. Everything else stays on the local
+// orchestrator (ORCHESTRATOR_URL).
+function orchestratorBaseUrlForPath(path: string): string {
+  return /^\/(metrics|drs)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
+}
 
 export interface OrchestratorRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
@@ -19,7 +33,7 @@ export async function orchestratorFetch<T>(
 ): Promise<T> {
   const { method = 'GET', body, timeout = 30000 } = options
 
-  const url = `${ORCHESTRATOR_URL}/api/v1${path}`
+  const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

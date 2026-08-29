@@ -321,3 +321,44 @@ describe('parseOrchestratorError', () => {
     expect(parseOrchestratorError(error)).toEqual({ status: 503, message: 'Orchestrator error 503' })
   })
 })
+
+describe('leader routing (ui#803 defect 2)', () => {
+  const ORIG = process.env.ORCHESTRATOR_LEADER_URL
+
+  afterEach(() => {
+    if (ORIG === undefined) delete process.env.ORCHESTRATOR_LEADER_URL
+    else process.env.ORCHESTRATOR_LEADER_URL = ORIG
+    vi.resetModules()
+  })
+
+  async function fetchPathWithLeaderUrl(path: string, leaderUrl?: string) {
+    if (leaderUrl === undefined) delete process.env.ORCHESTRATOR_LEADER_URL
+    else process.env.ORCHESTRATOR_LEADER_URL = leaderUrl
+    vi.resetModules()
+    const localFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', localFetch)
+    const { orchestratorFetch } = await import('./client')
+    await orchestratorFetch(path)
+    return localFetch.mock.calls[0][0] as string
+  }
+
+  it('routes /metrics and /drs to the leader URL when set', async () => {
+    const leader = 'http://127.0.0.1:8081'
+    expect(await fetchPathWithLeaderUrl('/metrics', leader)).toBe(`${leader}/api/v1/metrics`)
+    expect(await fetchPathWithLeaderUrl('/metrics/abc/history', leader)).toBe(`${leader}/api/v1/metrics/abc/history`)
+    expect(await fetchPathWithLeaderUrl('/drs/status', leader)).toBe(`${leader}/api/v1/drs/status`)
+    expect(await fetchPathWithLeaderUrl('/drs/recommendations?validate=true', leader)).toBe(`${leader}/api/v1/drs/recommendations?validate=true`)
+  })
+
+  it('keeps non-leader endpoints on the local orchestrator', async () => {
+    const leader = 'http://127.0.0.1:8081'
+    expect(await fetchPathWithLeaderUrl('/health', leader)).toBe('http://localhost:8080/api/v1/health')
+    expect(await fetchPathWithLeaderUrl('/rolling-updates', leader)).toBe('http://localhost:8080/api/v1/rolling-updates')
+    expect(await fetchPathWithLeaderUrl('/rules', leader)).toBe('http://localhost:8080/api/v1/rules')
+    expect(await fetchPathWithLeaderUrl('/ha/cluster', leader)).toBe('http://localhost:8080/api/v1/ha/cluster')
+  })
+
+  it('falls back to the local orchestrator for /drs when no leader URL is set (non-HA)', async () => {
+    expect(await fetchPathWithLeaderUrl('/drs/status', undefined)).toBe('http://localhost:8080/api/v1/drs/status')
+  })
+})

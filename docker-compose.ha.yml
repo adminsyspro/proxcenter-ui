@@ -97,6 +97,9 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       APP_SECRET: ${APP_SECRET}
       ORCHESTRATOR_URL: http://127.0.0.1:8080
+      # DRS metrics/recommendations go through HAProxy to the leader orchestrator
+      # (ui#803, defect 2); everything else stays on the local orchestrator above.
+      ORCHESTRATOR_LEADER_URL: http://127.0.0.1:8081
       ORCHESTRATOR_API_KEY: ${ORCHESTRATOR_API_KEY}
       PROXCENTER_REPORTING_URL: http://127.0.0.1:5000
       PG_POOL_MAX: ${PG_POOL_MAX:-}

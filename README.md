@@ -1,12 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/logo.svg">
-    <img src="docs/logo.svg" alt="ProxCenter Logo" width="120">
-  </picture>
+  <img src="docs/banner.png" alt="ProxCenter - The Proxmox Datacenter Management Platform" width="100%">
 </p>
-
-<h1 align="center">ProxCenter</h1>
 
 <p align="center">
   <a href="https://www.proxcenter.io/">www.proxcenter.io</a> · <a href="https://demo.proxcenter.io/">Live Demo</a> · <a href="https://docs.proxcenter.io/">Documentation</a>

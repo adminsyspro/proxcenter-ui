@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { AiSnapshot } from '@/lib/ai/context'
-import type { AiToolContext } from './types'
+import { ToolArgumentError, type AiToolContext } from './types'
 
 const pveFetch = vi.fn()
 
@@ -177,11 +177,11 @@ describe('the other views', () => {
     expect(res.deviceClassCounts).toBeDefined()
   })
 
-  it('falls back to the full payload for a focus value the model invented', async () => {
-    const res = await run({ focus: 'everything-please' })
-
-    expect(res.health).toBeDefined()
-    expect(res.capacity).toBeDefined()
+  it('rejects a focus value the model invented, naming the accepted ones', async () => {
+    // Falling back to the full payload silently used to hide the mistake from
+    // the model; naming the accepted values gets the next call right.
+    await expect(run({ focus: 'everything-please' })).rejects.toThrow(ToolArgumentError)
+    await expect(run({ focus: 'everything-please' })).rejects.toThrow('Accepted values: all, improvements, capacity, devices')
   })
 
   it('reports a cluster without Ceph rather than throwing, whatever the focus', async () => {

@@ -17,6 +17,7 @@ import type { AiGuest, AiNode, AiSnapshot } from '@/lib/ai/context'
 
 import {
   argEnum,
+  ToolArgumentError,
   argNumber,
   argString,
   resolveConnection,
@@ -97,16 +98,35 @@ describe('argument coercion', () => {
     expect(argNumber({}, 'limit', 10)).toBe(10)
   })
 
-  it('falls back to the default for an enum value outside the allowed set', () => {
+  it('accepts an enum value in any case and defaults only when it is absent', () => {
     const allowed = ['vcpus', 'memory', 'disk'] as const
 
     expect(argEnum({ metric: 'MEMORY' }, 'metric', allowed, 'vcpus')).toBe('memory')
-    expect(argEnum({ metric: 'gpu' }, 'metric', allowed, 'vcpus')).toBe('vcpus')
     expect(argEnum({}, 'metric', allowed, 'vcpus')).toBe('vcpus')
+    expect(argEnum({ metric: null }, 'metric', allowed, 'vcpus')).toBe('vcpus')
+  })
+
+  it('rejects an enum value outside the allowed set, naming the accepted ones', () => {
+    const allowed = ['vcpus', 'memory', 'disk'] as const
+
+    // Falling back silently returned the vCPU ranking to a model that asked
+    // for metric="cpu", which it then reported as CPU usage.
+    expect(() => argEnum({ metric: 'gpu' }, 'metric', allowed, 'vcpus')).toThrow(ToolArgumentError)
+    expect(() => argEnum({ metric: 'gpu' }, 'metric', allowed, 'vcpus')).toThrow('Accepted values: vcpus, memory, disk')
   })
 })
 
 describe('resolveConnection', () => {
+  it('names the argument to pass when several clusters are visible', () => {
+    const ctx: AiToolContext = {
+      snapshot: { ...snapshot(), clusters: [{ id: 'a', name: 'prod', nodeCount: 1, guestCount: 0 }, { id: 'b', name: 'lab', nodeCount: 1, guestCount: 0 }] },
+      tenantId: 't', locale: 'en',
+    }
+
+    // "Name one of" sent llama3.1:8b into an invented `clusterName` key.
+    expect(() => resolveConnection(ctx)).toThrow('pass the "cluster" argument with one of: prod, lab')
+  })
+
   it('uses the only visible cluster when the model named none', () => {
     expect(resolveConnection(ctx()).id).toBe('conn-1')
   })

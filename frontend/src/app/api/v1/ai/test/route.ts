@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
 import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 import { getRequestLocale, languageInstruction } from "@/lib/ai/locale"
+import { fetchOllamaCapabilities } from "@/lib/ai/ollama"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -50,12 +51,19 @@ export async function POST(request) {
       
       const json = await response.json()
 
+      // #459: the assistant needs tool calling. A model without it still
+      // answers this probe, so the operator would read "Connected" and never
+      // learn why the assistant only sees the live snapshot. null = unknown
+      // (older Ollama without a capability list, or the probe failed).
+      const { toolCalling } = await fetchOllamaCapabilities(ollamaBase, settings.ollamaModel)
+
       
 return NextResponse.json({ 
         success: true, 
         response: json.response,
         provider: 'ollama',
-        model: settings.ollamaModel
+        model: settings.ollamaModel,
+        toolCalling
       })
       
     } else if (settings.provider === 'openai') {

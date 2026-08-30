@@ -40,9 +40,17 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
 })
 
+/**
+ * Probe calls only: the Ollama branch also POSTs /api/show for the capability
+ * check (#459), which carries no prompt and must not shift the indexes below.
+ */
+function probeCalls() {
+  return fetchMock.mock.calls.filter(([url]) => !String(url).endsWith('/api/show'))
+}
+
 /** Prompt text actually sent upstream, whatever the provider's body shape. */
 function sentPrompt(callIndex = 0): string {
-  const body = JSON.parse(fetchMock.mock.calls[callIndex][1].body as string)
+  const body = JSON.parse(probeCalls()[callIndex][1].body as string)
 
   return body.prompt ?? body.messages[0].content
 }
@@ -132,6 +140,70 @@ describe('POST /api/v1/ai/test', () => {
       expect(res.status).toBe(500)
       expect((await readJson<any>(res)).error).toMatch(/Only http and https/i)
       expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    // #459: the assistant is agentic. A model without the "tools" capability
+    // still answers the probe, so "Connected" alone would hide the reason the
+    // assistant only sees the live snapshot.
+    describe('tool calling capability', () => {
+      /** /api/generate answers, then /api/show answers with `show` (or throws when it is an Error). */
+      function routeOllama(show: Response | Error) {
+        fetchMock.mockImplementation(async (url: string) => {
+          if (url.endsWith('/api/generate')) return jsonOk({ response: 'ok' })
+          if (url.endsWith('/api/show')) {
+            if (show instanceof Error) throw show
+
+            return show
+          }
+
+          throw new Error(`unexpected fetch ${url}`)
+        })
+      }
+
+      const body = { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'ministral:14b' }
+
+      it('reports toolCalling: false when /api/show lists capabilities without "tools"', async () => {
+        routeOllama(jsonOk({ capabilities: ['completion', 'vision'] }))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body })
+
+        expect(res.status).toBe(200)
+        expect(await readJson<any>(res)).toMatchObject({ success: true, response: 'ok', toolCalling: false })
+
+        const [showUrl, showInit] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/show'))!
+
+        expect(showUrl).toBe('http://localhost:11434/api/show')
+        expect(JSON.parse(showInit.body as string)).toEqual({ model: 'ministral:14b' })
+      })
+
+      it('reports toolCalling: true when the model lists the "tools" capability', async () => {
+        routeOllama(jsonOk({ capabilities: ['completion', 'tools', 'thinking'] }))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body })
+
+        expect(await readJson<any>(res)).toMatchObject({ success: true, toolCalling: true })
+      })
+
+      it('reports toolCalling: null and still succeeds when /api/show fails', async () => {
+        routeOllama(new TypeError('fetch failed'))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body })
+
+        expect(res.status).toBe(200)
+        expect(await readJson<any>(res)).toMatchObject({ success: true, response: 'ok', toolCalling: null })
+      })
+
+      it('reports toolCalling: null when the server has no capability list (older Ollama)', async () => {
+        routeOllama(jsonOk({ modelfile: 'FROM llama3' }))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body })
+
+        expect(await readJson<any>(res)).toMatchObject({ success: true, toolCalling: null })
+      })
     })
 
     it('propagates upstream Ollama errors as a 500 with the response body', async () => {
@@ -304,7 +376,7 @@ describe('POST /api/v1/ai/test', () => {
           body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' },
         })
 
-        expect(sentPrompt(fetchMock.mock.calls.length - 1)).toContain('written in English')
+        expect(sentPrompt(probeCalls().length - 1)).toContain('written in English')
       }
     })
   })

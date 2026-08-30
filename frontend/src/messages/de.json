@@ -4297,7 +4297,9 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> ermöglicht die lokale Ausführung von LLMs. Es werden keine Daten extern gesendet.",
     "ollamaUrlLabel": "Ollama-URL",
-    "ollamaToolModelHelp": "Der Assistent fragt Ihre Infrastruktur uber Werkzeuge ab und benotigt daher ein Modell mit Tool-Calling. llama3.1:8b kann das; mistral:7b nicht, und qwen2.5:7b antwortet aus dem Gedachtnis statt abzufragen.",
+    "ollamaToolModelHelp": "Der Assistent beantwortet Infrastrukturfragen über Tool-Aufrufe, das Modell muss Tool Calling also unterstützen. Auf Ollama gemessen: llama3.1:8b antwortet in allen Sprachen zuverlässig, qwen2.5:7b nur auf Englisch, mistral:7b meldet Tool-Unterstützung, ruft aber nie ein Tool auf. Modelle ohne Tool-Unterstützung sind in der Liste markiert.",
+    "modelNoToolCalling": "kein Tool-Calling",
+    "testNoToolCalling": "Verbunden, aber dieses Modell kann keine Werkzeuge aufrufen: Der Assistent sieht nur den Live-Snapshot und kann keine Details zu Hardware, Speicher oder Ceph nachschlagen.",
     "modelLabel": "Modell",
     "testingConnection": "Testen...",
     "testConnection": "Verbindung testen",
@@ -5653,7 +5655,20 @@
     "suggestStoppedVms": "List gestoppt VMs",
     "suggestInfraStatus": "Summarize my Infrastruktur status",
     "suggestHostStatus": "Status der Proxmox-Hosts",
-    "suggestAlerts": "Are there any Warnmeldungen?"
+    "suggestAlerts": "Are there any Warnmeldungen?",
+    "consulting": "Wird abgefragt: {tools}",
+    "consulted": "Herangezogen: {tools}",
+    "toolFailed": "fehlgeschlagen",
+    "tools": {
+      "listHosts": "Host-Liste",
+      "listGuests": "Gast-Liste",
+      "rankGuestHardware": "Hardware-Rangliste der Gäste",
+      "getGuestHardware": "Hardware-Datenblatt des Gasts",
+      "getNodeHardware": "Host-Hardware",
+      "rankStorage": "Speicher-Rangliste",
+      "getCephStatus": "Ceph-Status",
+      "listCephOsds": "Ceph-OSDs"
+    }
   },
   "jobs": {
     "title": "Task Ceingeben",

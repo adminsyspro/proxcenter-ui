@@ -4308,7 +4308,9 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> permet d'exécuter des LLM localement. Aucune donnée n'est envoyée à l'extérieur.",
     "ollamaUrlLabel": "URL Ollama",
-    "ollamaToolModelHelp": "L'assistant interroge votre infrastructure via des outils, il lui faut donc un modele capable d'appels d'outils. llama3.1:8b en est capable ; mistral:7b non, et qwen2.5:7b repond de memoire au lieu d'interroger.",
+    "ollamaToolModelHelp": "L'assistant répond aux questions d'infrastructure en appelant des outils, le modèle doit donc savoir appeler des outils. Mesuré sur Ollama : llama3.1:8b répond de façon fiable dans toutes les langues, qwen2.5:7b seulement en anglais, mistral:7b déclare le support des outils mais n'en appelle jamais. Les modèles sans appel d'outils sont signalés dans la liste.",
+    "modelNoToolCalling": "pas d'appel d'outils",
+    "testNoToolCalling": "Connecté, mais ce modèle ne peut pas appeler d'outils : l'assistant ne verra que l'instantané en direct et ne pourra pas consulter le détail du matériel, du stockage ou de Ceph.",
     "modelLabel": "Modèle",
     "testingConnection": "Test en cours...",
     "testConnection": "Tester la connexion",
@@ -5672,7 +5674,20 @@
     "suggestStoppedVms": "Liste les VMs arrêtées",
     "suggestInfraStatus": "Résume l'état de mon infrastructure",
     "suggestHostStatus": "État des hôtes Proxmox",
-    "suggestAlerts": "Y a-t-il des alertes ?"
+    "suggestAlerts": "Y a-t-il des alertes ?",
+    "consulting": "Recherche : {tools}",
+    "consulted": "Données consultées : {tools}",
+    "toolFailed": "échec",
+    "tools": {
+      "listHosts": "Liste des hôtes",
+      "listGuests": "Liste des invités",
+      "rankGuestHardware": "Classement matériel des invités",
+      "getGuestHardware": "Fiche matérielle de l'invité",
+      "getNodeHardware": "Matériel de l'hôte",
+      "rankStorage": "Classement du stockage",
+      "getCephStatus": "État Ceph",
+      "listCephOsds": "OSD Ceph"
+    }
   },
   "jobs": {
     "title": "Task Center",

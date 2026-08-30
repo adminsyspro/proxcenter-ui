@@ -4308,7 +4308,9 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows running LLMs locally. No data is sent externally.",
     "ollamaUrlLabel": "Ollama URL",
-    "ollamaToolModelHelp": "The assistant queries your infrastructure through tools, so it needs a model that supports tool calling. llama3.1:8b does; mistral:7b does not, and qwen2.5:7b answers from memory instead of querying.",
+    "ollamaToolModelHelp": "The assistant answers infrastructure questions by calling tools, so the model must support tool calling. Measured on Ollama: llama3.1:8b answers reliably in every language, qwen2.5:7b only in English, mistral:7b declares tool support but never calls a tool. Models without tool support are marked in the list.",
+    "modelNoToolCalling": "no tool calling",
+    "testNoToolCalling": "Connected, but this model cannot call tools: the assistant will only see the live snapshot and cannot look up hardware, storage or Ceph details.",
     "modelLabel": "Model",
     "testingConnection": "Testing...",
     "testConnection": "Test connection",
@@ -5672,7 +5674,20 @@
     "suggestStoppedVms": "List stopped VMs",
     "suggestInfraStatus": "Summarize my infrastructure status",
     "suggestHostStatus": "Proxmox hosts status",
-    "suggestAlerts": "Are there any alerts?"
+    "suggestAlerts": "Are there any alerts?",
+    "consulting": "Looking up: {tools}",
+    "consulted": "Consulted: {tools}",
+    "toolFailed": "failed",
+    "tools": {
+      "listHosts": "Host list",
+      "listGuests": "Guest list",
+      "rankGuestHardware": "Guest hardware ranking",
+      "getGuestHardware": "Guest hardware sheet",
+      "getNodeHardware": "Host hardware",
+      "rankStorage": "Storage ranking",
+      "getCephStatus": "Ceph status",
+      "listCephOsds": "Ceph OSDs"
+    }
   },
   "jobs": {
     "title": "Task Center",

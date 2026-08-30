@@ -12,6 +12,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
+import { OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
+import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/streamFrames'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
@@ -199,6 +201,20 @@ async function ask(body: Record<string, unknown> = {}) {
   })
 }
 
+/**
+ * Split the response into the prose the drawer prints and the activity frames
+ * it decodes (#459). `raw` is kept so a test can check where a frame sits
+ * relative to the text.
+ */
+async function decodeBody(res: Response): Promise<{ raw: string; text: string; frames: StreamFrame[] }> {
+  const raw = await res.text()
+  const decoder = createFrameDecoder()
+  const out = decoder.push(raw)
+  const tail = decoder.flush()
+
+  return { raw, text: out.text + tail.text, frames: [...out.frames, ...tail.frames] }
+}
+
 describe('POST /api/v1/ai/chat/stream', () => {
   it('honours an RBAC denial from checkPermission', async () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
@@ -233,6 +249,16 @@ describe('POST /api/v1/ai/chat/stream', () => {
     await ask()
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).stream).toBe(true)
+  })
+
+  it('asks Ollama for the shared context window size', async () => {
+    // Ollama defaults to a window far too small for the system prompt plus a
+    // tool result; the route sends `options: ollamaOptions()` and this pins it.
+    await ask()
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+    expect(body.options.num_ctx).toBe(OLLAMA_NUM_CTX)
   })
 
   it('reassembles an NDJSON object split across two network reads', async () => {
@@ -271,10 +297,20 @@ describe('POST /api/v1/ai/chat/stream', () => {
         .mockResolvedValueOnce(ollamaStream(['db-01', ' has 16 vCPUs']))
 
       const res = await ask()
+      const { raw, text, frames } = await decodeBody(res)
 
-      expect(await res.text()).toBe('db-01 has 16 vCPUs')
+      expect(text).toBe('db-01 has 16 vCPUs')
       expect(rankToolExecute).toHaveBeenCalledTimes(1)
       expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+
+      // The drawer learns what is being looked up BEFORE any answer text, and
+      // what was consulted once the answer is complete (#459).
+      expect(frames).toEqual([
+        { type: 'tool', names: ['rank_guest_hardware'] },
+        { type: 'trace', calls: [{ name: 'rank_guest_hardware', ok: true }] },
+      ])
+      expect(raw.indexOf('"tool"')).toBeLessThan(raw.indexOf('db-01'))
+      expect(raw.indexOf('db-01')).toBeLessThan(raw.indexOf('"trace"'))
 
       // The follow-up turn must carry the assistant turn and the tool result.
       const second = JSON.parse(fetchMock.mock.calls[1][1].body as string)
@@ -300,7 +336,7 @@ describe('POST /api/v1/ai/chat/stream', () => {
         .mockResolvedValueOnce(ollamaStream(['db-01, avec 16 vCPU.']))
 
       const res = await ask()
-      const body = await res.text()
+      const { text: body } = await decodeBody(res)
 
       expect(body).toBe('db-01, avec 16 vCPU.')
       expect(body).not.toContain('"name"')
@@ -348,12 +384,65 @@ describe('POST /api/v1/ai/chat/stream', () => {
       })
 
       const res = await ask()
+      const { text, frames } = await decodeBody(res)
 
-      expect(await res.text()).toBe('best effort answer')
+      expect(text).toBe('best effort answer')
 
       const lastBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)
 
       expect(lastBody.tools).toBeUndefined()
+
+      // One `tool` frame per round, then a single trace covering every round.
+      const toolFrames = frames.filter(f => f.type === 'tool')
+      const traceFrames = frames.filter(f => f.type === 'trace')
+
+      expect(toolFrames.length).toBe(rankToolExecute.mock.calls.length)
+      expect(traceFrames).toHaveLength(1)
+      expect(traceFrames[0]).toEqual({
+        type: 'trace',
+        calls: rankToolExecute.mock.calls.map(() => ({ name: 'rank_guest_hardware', ok: true })),
+      })
+    })
+
+    it('never relays a closing turn that is still a call written as text', async () => {
+      // Out of rounds, llama3.1:8b printed `{"name": "list_ceph_osds", ...}` to
+      // the user. The closing turn is buffered and a call becomes a sentence.
+      fetchMock.mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body as string)
+
+        return body.tools
+          ? ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' })
+          : ollamaStream(['Let me try again: {"name": "rank_guest_hardware", "parameters": {"metric": "memory"}}'])
+      })
+
+      const res = await ask()
+      const { text } = await decodeBody(res)
+
+      expect(text).not.toContain('{')
+      expect(text).toContain('I could not conclude')
+    })
+
+    it('emits no frame at all on a plain answer, so the stream stays as it was', async () => {
+      fetchMock.mockResolvedValueOnce(ollamaStream(['pve', '1 is busiest']))
+
+      const res = await ask()
+      const raw = await res.text()
+
+      expect(raw).toBe('pve1 is busiest')
+      expect(raw).not.toContain(FRAME_MARK)
+    })
+
+    it('reports a failed tool as consulted but not ok', async () => {
+      rankToolExecute.mockRejectedValueOnce(new Error('proxmox unreachable'))
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['I could not rank the guests.']))
+
+      const res = await ask()
+      const { text, frames } = await decodeBody(res)
+
+      expect(text).toBe('I could not rank the guests.')
+      expect(frames.at(-1)).toEqual({ type: 'trace', calls: [{ name: 'rank_guest_hardware', ok: false }] })
     })
   })
 

@@ -16,6 +16,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+import { OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
@@ -221,6 +223,15 @@ describe('POST /api/v1/ai/chat', () => {
   })
 
   describe('agentic tools (#459)', () => {
+    it('widens the Ollama context window past the 4096 default that truncated the tool instructions', async () => {
+      await ask()
+
+      // Ollama drops everything after the first five tokens of an over-long
+      // request, which with this prompt is the paragraph saying tools exist.
+      expect(sentBody().options.num_ctx).toBe(OLLAMA_NUM_CTX)
+      expect(OLLAMA_NUM_CTX).toBeGreaterThanOrEqual(8192)
+    })
+
     it('offers the read-only tools to the model', async () => {
       await ask()
 

@@ -60,7 +60,7 @@ function usedPercent(used: number, total: number): number {
 /* Tool 1: rank_guest_hardware                                        */
 /* ------------------------------------------------------------------ */
 
-const RANK_METRICS = ['vcpus', 'memory', 'disk'] as const
+const RANK_METRICS = ['vcpus', 'memory', 'disk', 'cpu_usage', 'memory_usage'] as const
 const STATUS_FILTERS = ['all', 'running', 'stopped'] as const
 
 type RankMetric = (typeof RANK_METRICS)[number]
@@ -69,6 +69,8 @@ const RANK_UNITS: Record<RankMetric, string> = {
   vcpus: 'vCPU',
   memory: 'GB',
   disk: 'GB',
+  cpu_usage: '%',
+  memory_usage: '%',
 }
 
 const DISK_RANK_NOTE =
@@ -82,6 +84,11 @@ const DISK_RANK_NOTE =
  * with no memory does not exist; a VM whose memory we never received does.
  */
 function rankedValue(guest: AiGuest, metric: RankMetric): number | undefined {
+  // Usage is a live percentage: zero is a real reading for an idle or stopped
+  // guest, so it stays in the ranking instead of being dropped as "missing".
+  if (metric === 'cpu_usage') return typeof guest.cpuPct === 'number' ? guest.cpuPct : undefined
+  if (metric === 'memory_usage') return typeof guest.memPct === 'number' ? guest.memPct : undefined
+
   let raw: number | undefined
 
   if (metric === 'vcpus') raw = guest.vcpus
@@ -94,13 +101,13 @@ function rankedValue(guest: AiGuest, metric: RankMetric): number | undefined {
 export const rankGuestHardwareTool: AiTool = {
   name: 'rank_guest_hardware',
   description:
-    'Rank the VMs and containers you can see by the hardware ASSIGNED to them: vCPUs, memory, or provisioned disk. Answers "which VM has the most vCPUs", "which VM has the most memory", "which VM has the biggest disk". Templates are excluded. Example: metric=\'vcpus\', limit=5 or metric=\'memory\', status=\'running\'.',
+    'Rank the VMs and containers you can see, either by the hardware ASSIGNED to them (metric vcpus, memory or disk) or by their CURRENT usage (metric cpu_usage or memory_usage, in percent). Answers "which VM has the most vCPUs", "which VM has the most memory", "which VM has the biggest disk", and "which VM is using the most CPU right now" when the top 10 of the snapshot is not enough. Templates are excluded. Example: metric=\'vcpus\', limit=5 or metric=\'cpu_usage\', status=\'running\'.',
   parameters: {
     type: 'object',
     properties: {
       metric: {
         type: 'string',
-        description: 'What to rank on: vcpus, memory (assigned RAM), or disk (provisioned disk).',
+        description: 'What to rank on: vcpus, memory (assigned RAM) or disk (provisioned disk) for sizing; cpu_usage or memory_usage (percent, right now) for load.',
         enum: [...RANK_METRICS],
         default: 'vcpus',
       },
@@ -177,6 +184,8 @@ export const rankGuestHardwareTool: AiTool = {
         vcpus: entry.guest.vcpus,
         memoryGb: entry.guest.memTotalGb,
         diskGb: entry.guest.diskTotalGb,
+        cpuUsagePct: entry.guest.cpuPct,
+        memoryUsagePct: entry.guest.memPct,
       })),
       note: metric === 'disk' ? DISK_RANK_NOTE : undefined,
     }

@@ -1821,6 +1821,7 @@ function AITab() {
     setTestResult,
     saving,
     availableModels,
+    modelToolCalling,
     loadingModels,
     saveSettings: hookSaveSettings,
     testConnection: hookTestConnection,
@@ -1841,7 +1842,15 @@ function AITab() {
     const result = await hookTestConnection()
 
     if (result.success) {
-      setTestResult({ type: 'success', message: `${t('settings.connectionOk')} "${result.response?.substring(0, 100)}..."` })
+      const message = `${t('settings.connectionOk')} "${result.response?.substring(0, 100)}..."`
+
+      // #459: connected, but the model cannot call tools, so the assistant will
+      // only see the live snapshot. Worth a warning, not an error: it still works.
+      if (result.toolCalling === false) {
+        setTestResult({ type: 'warning', message: `${message} ${t('settings.testNoToolCalling')}` })
+      } else {
+        setTestResult({ type: 'success', message })
+      }
     } else {
       setTestResult({ type: 'error', message: result.error || t('settings.connectionError') })
     }
@@ -1979,7 +1988,9 @@ function AITab() {
                     >
                       {availableModels.length > 0
                         ? availableModels.map(m => (
-                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                          <MenuItem key={m} value={m}>
+                            {m}{modelToolCalling[m] === false ? ` (${t('settings.modelNoToolCalling')})` : ''}
+                          </MenuItem>
                         ))
                         : [
                           <MenuItem key='llama3.1:8b' value='llama3.1:8b'>llama3.1:8b ({t('settings.recommended')})</MenuItem>,

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
 import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
+import { fetchOllamaCapabilities } from "@/lib/ai/ollama"
 
 const TIMEOUT_MS = 10_000
 
@@ -20,15 +21,33 @@ async function fetchWithTimeout(url: string, init?: RequestInit) {
   }
 }
 
-async function fetchOllamaModels(ollamaUrl: string): Promise<string[]> {
+type OllamaModelList = {
+  models: string[]
+  /** Per model: true / false when /api/show reports capabilities, null when unknown (#459). */
+  toolCalling: Record<string, boolean | null>
+}
+
+async function fetchOllamaModels(ollamaUrl: string): Promise<OllamaModelList> {
   const url = await validateAIUrl(ollamaUrl)
   const res = await fetchWithTimeout(`${url}/api/tags`)
 
   if (!res.ok) throw new Error(`Ollama error: ${res.status}`)
 
   const json = await res.json()
+  const models: string[] = (json?.models || []).map((m: any) => m.name)
 
-  return (json?.models || []).map((m: any) => m.name)
+  // The assistant is agentic: a model without the "tools" capability silently
+  // degrades to a snapshot-only answer, so the operator must see it in the
+  // list. Each probe has its own timeout and never rejects, so a slow or
+  // failing /api/show cannot fail the models call.
+  const probes = await Promise.all(models.map(name => fetchOllamaCapabilities(url, name, fetch)))
+  const toolCalling: Record<string, boolean | null> = {}
+
+  models.forEach((name, i) => {
+    toolCalling[name] = probes[i].toolCalling
+  })
+
+  return { models, toolCalling }
 }
 
 async function fetchOpenAIModels(key: string, baseUrl?: string): Promise<string[]> {
@@ -74,11 +93,15 @@ export async function POST(request: Request) {
     const body = await resolveMaskedAiSecrets(await request.json())
     const { provider, ollamaUrl, openaiKey, openaiBaseUrl, anthropicKey } = body
 
+    if (provider === 'ollama') {
+      const { models, toolCalling } = await fetchOllamaModels(ollamaUrl)
+
+      return NextResponse.json({ models, toolCalling })
+    }
+
     let models: string[] = []
 
-    if (provider === 'ollama') {
-      models = await fetchOllamaModels(ollamaUrl)
-    } else if (provider === 'openai') {
+    if (provider === 'openai') {
       models = await fetchOpenAIModels(openaiKey, openaiBaseUrl)
     } else if (provider === 'anthropic') {
       models = await fetchAnthropicModels(anthropicKey)

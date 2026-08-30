@@ -17,10 +17,10 @@ import {
   executeToolCalls,
   runToolRounds,
   MAX_TOOL_RESULT_CHARS,
-  MAX_TOOL_ROUNDS,
+  budgetFallbackText, MAX_TOOL_ROUNDS,
 } from './loop'
 import type { ToolCallRequest } from './adapters'
-import { ToolScopeError, type AiTool, type AiToolContext } from './types'
+import { ToolArgumentError, ToolScopeError, type AiTool, type AiToolContext } from './types'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                           */
@@ -140,6 +140,40 @@ describe('running the tool calls of one round', () => {
 
     expect(JSON.parse(results[0].content).error).toBe('Unknown cluster "prod". Visible clusters: lab.')
     expect(trace[0]).toMatchObject({ ok: false, error: 'out-of-scope' })
+  })
+
+  it('hands a rejected argument to the model with the accepted values, as a bad-argument entry', async () => {
+    const tools = [makeTool('rank_guest_hardware', async () => {
+      throw new ToolArgumentError('Invalid value "cpu" for "metric". Accepted values: vcpus, memory, disk.')
+    })]
+
+    const { results, trace } = await executeToolCalls([call('rank_guest_hardware', { metric: 'cpu' })], tools, makeCtx())
+
+    expect(JSON.parse(results[0].content).error).toContain('Accepted values: vcpus, memory, disk')
+    expect(trace[0]).toMatchObject({ ok: false, error: 'bad-argument' })
+  })
+
+  it('rejects an argument the schema does not declare, naming the accepted ones', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    const tool: AiTool = { ...makeTool('list_ceph_osds', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' }, limit: { type: 'integer', description: 'l' } } } }
+
+    const { results, trace } = await executeToolCalls([call('list_ceph_osds', { clusterName: 'prod' })], [tool], makeCtx())
+
+    // The invented key used to be skipped, so the model got the same refusal
+    // back and concluded the refusal was about something else.
+    expect(execute).not.toHaveBeenCalled()
+    expect(JSON.parse(results[0].content).error).toBe('Unknown argument "clusterName" for list_ceph_osds. Accepted arguments: cluster, limit.')
+    expect(trace[0]).toMatchObject({ ok: false, error: 'bad-argument' })
+  })
+
+  it('tolerates empty values on undeclared keys, which small models pad calls with', async () => {
+    const execute = vi.fn(async () => ({ ok: true }))
+    const tool: AiTool = { ...makeTool('list_hosts', execute), parameters: { type: 'object', properties: { cluster: { type: 'string', description: 'c' } } } }
+
+    const { trace } = await executeToolCalls([call('list_hosts', { cluster: 'prod', node: '', pool: null })], [tool], makeCtx())
+
+    expect(execute).toHaveBeenCalled()
+    expect(trace[0].ok).toBe(true)
   })
 
   it('reports a genuine tool failure without leaking a stack trace', async () => {
@@ -373,6 +407,31 @@ describe('driving the model until it answers', () => {
     expect(result.budgetExhausted).toBe(true)
     expect(result.rounds).toBe(MAX_TOOL_ROUNDS)
     expect(result.trace).toHaveLength(MAX_TOOL_ROUNDS)
+  })
+
+  it('replaces a closing turn that is still a call written as text with the last tool error', async () => {
+    // Out of rounds and still asking, llama3.1:8b printed the raw call to the
+    // user. The honest answer is the refusal the tools kept giving.
+    const refusing = makeTool('list_ceph_osds', async () => {
+      throw new ToolScopeError('Several clusters are visible: pass the "cluster" argument with one of: prod, lab.')
+    })
+    const bodies = Array.from({ length: MAX_TOOL_ROUNDS }, () => toolTurn('list_ceph_osds'))
+
+    bodies.push(answerTurn('I will try another cluster: {"name": "list_ceph_osds", "parameters": {"clusterName": "prod"}}'))
+
+    const { send } = makeSend(bodies)
+    const result = await runToolRounds({ provider: 'ollama', tools: [refusing], ctx: makeCtx(), messages: [{ role: 'user', content: 'osds?' }], send })
+
+    expect(result.budgetExhausted).toBe(true)
+    expect(result.text).not.toContain('{')
+    expect(result.text).toContain('I could not retrieve that data')
+    expect(result.text).toContain('pass the "cluster" argument')
+  })
+
+  it('answers in French when the caller does', () => {
+    expect(budgetFallbackText('fr', [])).toContain('Je n\'ai pas pu conclure')
+    expect(budgetFallbackText('fr', [{ name: 'x', args: {}, ok: false, error: 'failed', detail: 'boom', durationMs: 1, truncated: false }])).toBe('Je n\'ai pas pu obtenir cette donnée. Dernière erreur : boom')
+    expect(budgetFallbackText('de', [])).toContain('I could not conclude')
   })
 
   it('honours a tighter round budget than the default', async () => {

@@ -4308,7 +4308,9 @@
     "anthropicCloudOption": "Claude Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows en ejecución LLMs locally. Sin data is sent externally.",
     "ollamaUrlLabel": "URL URL",
-    "ollamaToolModelHelp": "El asistente consulta su infraestructura mediante herramientas, por lo que necesita un modelo compatible con llamadas a herramientas. llama3.1:8b lo admite; mistral:7b no, y qwen2.5:7b responde de memoria en lugar de consultar.",
+    "ollamaToolModelHelp": "El asistente responde a las preguntas de infraestructura llamando a herramientas, por lo que el modelo debe admitir la llamada a herramientas. Medido en Ollama: llama3.1:8b responde de forma fiable en todos los idiomas, qwen2.5:7b solo en inglés, mistral:7b declara soporte de herramientas pero nunca llama a ninguna. Los modelos sin soporte de herramientas se marcan en la lista.",
+    "modelNoToolCalling": "sin llamadas a herramientas",
+    "testNoToolCalling": "Conectado, pero este modelo no puede llamar a herramientas: el asistente solo verá la instantánea en vivo y no podrá consultar los detalles de hardware, almacenamiento o Ceph.",
     "modelLabel": "Modelo",
     "testingConnection": "Probando...",
     "testConnection": "Probar conexión",
@@ -5672,7 +5674,20 @@
     "suggestStoppedVms": "Listar VMs detenidas",
     "suggestInfraStatus": "Resume el estado de mi infraestructura",
     "suggestHostStatus": "Estado de hosts Proxmox",
-    "suggestAlerts": "¿Hay alguna alerta?"
+    "suggestAlerts": "¿Hay alguna alerta?",
+    "consulting": "Consultando: {tools}",
+    "consulted": "Datos consultados: {tools}",
+    "toolFailed": "fallido",
+    "tools": {
+      "listHosts": "Lista de hosts",
+      "listGuests": "Lista de invitados",
+      "rankGuestHardware": "Clasificación de hardware de invitados",
+      "getGuestHardware": "Ficha de hardware del invitado",
+      "getNodeHardware": "Hardware del host",
+      "rankStorage": "Clasificación de almacenamiento",
+      "getCephStatus": "Estado de Ceph",
+      "listCephOsds": "OSD de Ceph"
+    }
   },
   "jobs": {
     "title": "Centro de tareas",

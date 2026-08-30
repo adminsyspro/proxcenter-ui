@@ -335,6 +335,10 @@ export const promptStrings = {
     on: 'on',
     topCpu: 'Top 10 VMs/CTs by CPU usage',
     topRam: 'Top 10 VMs/CTs by RAM usage',
+    // The totals in parentheses above are what a small model reads as "assigned
+    // memory" and answers from, missing the guest with the most RAM assigned
+    // when it sits idle outside the top 10 (qwen2.5:7b and qwen3:8b, #459).
+    topListsCaveat: 'The two rankings above are by current USAGE only. They are not the list of the biggest guests: for the most vCPUs, memory or disk ASSIGNED to a guest, call the hardware ranking tool, even when a guest above shows a total.',
     stoppedHeader: (n: number) => `STOPPED VMs/CTs (${n} total)`,
     stoppedCluster: (name: string, n: number) => `[${name}] (${n} stopped)`,
     stoppedTruncated: (n: number) => `... and ${n} more stopped VMs/CTs (use the guest listing tool for the full list)`,
@@ -379,6 +383,7 @@ export const promptStrings = {
     on: 'sur',
     topCpu: 'Top 10 VMs/CTs par utilisation CPU',
     topRam: 'Top 10 VMs/CTs par utilisation RAM',
+    topListsCaveat: 'Les deux classements ci-dessus portent sur l\'UTILISATION courante uniquement. Ce ne sont pas les plus grosses VMs : pour le plus de vCPU, de mémoire ou de disque ASSIGNÉS à un invité, appelle l\'outil de classement matériel, même si un invité ci-dessus affiche un total.',
     stoppedHeader: (n: number) => `VMs/CTs ARRÊTÉES (${n} total)`,
     stoppedCluster: (name: string, n: number) => `[${name}] (${n} arrêtées)`,
     stoppedTruncated: (n: number) => `... et ${n} autres VMs/CTs arrêtées (utilise l'outil de liste des invités pour la liste complète)`,
@@ -486,6 +491,12 @@ ${topMemVMs.map((vm, i) => terse
   ? `${i + 1}. ${vm.name} (${vm.vmid}) - ${vm.memPct}%`
   : `${i + 1}. ${vm.name} (${vm.type} ${vm.vmid}) ${s.on} ${vm.node} - RAM: ${vm.memPct}% (${vm.memUsedGb}/${vm.memTotalGb} GB)`
 ).join('\n')}
+`
+  }
+
+  if (toolsEnabled && (topCpuVMs.length > 0 || topMemVMs.length > 0)) {
+    prompt += `
+${s.topListsCaveat}
 `
   }
 

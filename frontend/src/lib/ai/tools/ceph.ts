@@ -27,6 +27,7 @@ import {
   argString,
   resolveConnection,
   ToolScopeError,
+  visibleConnections,
   type AiTool,
   type AiToolContext,
   type ResolvedConnection,
@@ -662,6 +663,38 @@ function buildObservations(payload: CephPayload, topology: CephTopology): string
 /* Tool 1: get_ceph_status                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The cluster a Ceph question is about.
+ *
+ * With an explicit reference, the usual perimeter check. Without one, the
+ * snapshot already knows which visible clusters report a Ceph health, and on
+ * an estate where exactly one does, that is the cluster meant: asking the
+ * model to name it first sent llama3.1:8b into four rounds of guessing
+ * argument names and ended in a raw JSON call printed to the user.
+ */
+export function resolveCephConnection(ctx: AiToolContext, ref?: string): ResolvedConnection {
+  if (ref) return resolveConnection(ctx, ref)
+
+  const visible = visibleConnections(ctx.snapshot)
+  const withCeph = ctx.snapshot.clusters.filter(c => c.cephHealth).map(c => ({ id: c.id, name: c.name }))
+
+  if (withCeph.length === 1) return withCeph[0]
+
+  if (withCeph.length > 1) {
+    throw new ToolScopeError(
+      `Several visible clusters run Ceph: pass the "cluster" argument with one of: ${withCeph.map(c => c.name).join(', ')}.`
+    )
+  }
+
+  if (visible.length > 1) {
+    throw new ToolScopeError(
+      `No visible cluster reports Ceph. If one should, pass the "cluster" argument with one of: ${visible.map(c => c.name).join(', ')}.`
+    )
+  }
+
+  return resolveConnection(ctx)
+}
+
 export const getCephStatusTool: AiTool = {
   name: 'get_ceph_status',
   description:
@@ -688,7 +721,7 @@ export const getCephStatusTool: AiTool = {
     },
   },
   execute: async (args, ctx) => {
-    const connection = resolveConnection(ctx, argString(args, 'cluster'))
+    const connection = resolveCephConnection(ctx, argString(args, 'cluster'))
     const focus = argEnum(args, 'focus', ['all', 'improvements', 'capacity', 'devices'] as const, 'all')
     const loaded = await loadCeph(ctx, connection)
 
@@ -905,7 +938,7 @@ export const listCephOsdsTool: AiTool = {
     },
   },
   execute: async (args, ctx) => {
-    const connection = resolveConnection(ctx, argString(args, 'cluster'))
+    const connection = resolveCephConnection(ctx, argString(args, 'cluster'))
     const groupBy = argEnum<GroupBy>(args, 'groupBy', GROUP_BY, 'host')
     const sortBy = argEnum<SortBy>(args, 'sortBy', SORT_BY, 'latency')
     const limit = argNumber(args, 'limit', 30, { min: 1, max: 200 })

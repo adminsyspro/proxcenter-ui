@@ -7,11 +7,13 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
+import { ollamaOptions } from '@/lib/ai/ollama'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { AI_TOOLS, buildToolContext } from '@/lib/ai/tools/registry'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
-import { executeToolCalls, MAX_TOOL_ROUNDS } from '@/lib/ai/tools/loop'
+import { budgetFallbackText, executeToolCalls, MAX_TOOL_ROUNDS, type ToolTraceEntry } from '@/lib/ai/tools/loop'
 import type { AiToolContext } from '@/lib/ai/tools/types'
+import { encodeFrame } from '@/lib/ai/streamFrames'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -80,10 +82,7 @@ async function streamOllamaTurn(opts: {
       messages,
       stream: true,
       ...(tools ? { tools } : {}),
-      options: {
-        num_predict: 4096,
-        temperature: 0.3
-      }
+      options: ollamaOptions(),
     })
   })
 
@@ -172,6 +171,11 @@ async function streamOllamaTurn(opts: {
  * Mirrors `runToolRounds` from the shared loop but streams each turn instead of
  * buffering it, which is why it does not simply call it: the non-streaming loop
  * would cost one extra full generation per question on the common no-tool path.
+ *
+ * Tool activity is announced in-band (see `streamFrames.ts`): a `tool` frame
+ * before each round so the drawer can say what it is waiting on, and one
+ * `trace` frame at the very end listing what was consulted. A plain answer
+ * with no tool round emits no frame at all and stays byte-identical to before.
  */
 async function streamAgenticConversation(opts: {
   base: string
@@ -186,6 +190,7 @@ async function streamAgenticConversation(opts: {
   const messages = [...opts.messages]
 
   const toolNames = AI_TOOLS.map(t => t.name)
+  const trace: ToolTraceEntry[] = []
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const isLastRound = round === MAX_TOOL_ROUNDS
@@ -196,21 +201,40 @@ async function streamAgenticConversation(opts: {
       // Withhold the tools on the final round so the model concludes from what
       // it already gathered rather than asking for more it cannot get.
       tools: isLastRound ? null : wireTools,
-      // Only a turn with no tools attached can be relayed live: any other turn
-      // might still be a call the model wrote as text.
-      relay: isLastRound,
+      // No turn is relayed live: a tool-bearing turn might still be a call the
+      // model wrote as text, and so might the closing turn (llama3.1:8b, out of
+      // rounds, printed `{"name": "list_ceph_osds", ...}` to the user). The
+      // closing turn is rare (four rounds spent) and short, so buffering it is
+      // the right price for never showing a raw call.
+      relay: false,
       toolNames,
       controller,
       encoder,
     })
 
-    if (!turn.toolCalls.length) return
+    if (isLastRound && turn.toolCalls.length) {
+      controller.enqueue(encoder.encode(budgetFallbackText(ctx.locale, trace)))
+      break
+    }
+
+    if (!turn.toolCalls.length) break
 
     messages.push(turn.assistant)
 
-    const { results } = await executeToolCalls(turn.toolCalls, AI_TOOLS, ctx)
+    // Announce the round before it runs: this is what the drawer shows while
+    // the user waits, in place of the generic spinner.
+    controller.enqueue(encoder.encode(encodeFrame({ type: 'tool', names: turn.toolCalls.map(c => c.name) })))
 
+    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, AI_TOOLS, ctx)
+
+    trace.push(...roundTrace)
     messages.push(...toolResultTurns('ollama', results))
+  }
+
+  if (trace.length) {
+    controller.enqueue(
+      encoder.encode(encodeFrame({ type: 'trace', calls: trace.map(t => ({ name: t.name, ok: t.ok })) }))
+    )
   }
 }
 

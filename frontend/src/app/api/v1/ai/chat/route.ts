@@ -7,6 +7,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
+import { ollamaOptions } from '@/lib/ai/ollama'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { AI_TOOLS, buildToolContext } from '@/lib/ai/tools/registry'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
@@ -136,10 +137,7 @@ ${languageInstruction(uiLocale)}`
             messages: msgs,
             stream: false,
             ...toolFields(mode),
-            options: {
-              num_predict: 4096, // Permet des réponses plus longues
-              temperature: 0.3  // Plus déterministe pour les listes
-            }
+            options: ollamaOptions(),
           })
         })
 

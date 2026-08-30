@@ -18,7 +18,7 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
-import { ToolScopeError, type AiTool, type AiToolContext } from '@/lib/ai/tools/types'
+import { ToolArgumentError, ToolScopeError, type AiTool, type AiToolContext } from '@/lib/ai/tools/types'
 
 /**
  * How many times the model may come back for more data.
@@ -48,6 +48,8 @@ export type ToolTraceEntry = {
   ok: boolean
   /** Set when the tool refused or failed. Surfaced to the model, not the user. */
   error?: string
+  /** The refusal or failure text handed to the model, for the closing fallback. */
+  detail?: string
   durationMs: number
   truncated: boolean
 }
@@ -98,6 +100,51 @@ function serialiseResult(value: unknown): { content: string; truncated: boolean 
   }
 }
 
+/**
+ * An argument the schema does not declare is a mistake to report, not to skip.
+ *
+ * Skipping it is what turned a recoverable error into a dead end: asked to
+ * pass "cluster", llama3.1:8b sent `clusterName`, the tool ignored the key,
+ * answered with the very same refusal, and the model concluded the refusal
+ * was about something else. Empty values are tolerated: small models pad
+ * calls with `""` and `null` for the arguments they do not use.
+ */
+function rejectUnknownArguments(tool: AiTool, args: Record<string, unknown>) {
+  const known = Object.keys(tool.parameters.properties)
+
+  // A schema declaring nothing cannot say what it accepts; every registered
+  // tool declares its arguments, so this only ever concerns bare fixtures.
+  if (known.length === 0) return
+
+  const unknown = Object.keys(args).filter(key => !known.includes(key) && args[key] !== '' && args[key] !== null && args[key] !== undefined)
+
+  if (unknown.length === 0) return
+
+  throw new ToolArgumentError(
+    `Unknown argument${unknown.length > 1 ? 's' : ''} ${unknown.map(k => `"${k}"`).join(', ')} for ${tool.name}. Accepted arguments: ${known.join(', ')}.`
+  )
+}
+
+/**
+ * What the user reads when the round budget is spent and the closing turn is
+ * still a tool call written as text. A raw JSON call is never an answer; the
+ * last refusal or failure the tools gave is the honest one.
+ */
+export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): string {
+  const lastFailure = [...trace].reverse().find(t => !t.ok)
+  const fr = locale === 'fr'
+
+  if (lastFailure?.detail) {
+    return fr
+      ? `Je n'ai pas pu obtenir cette donnée. Dernière erreur : ${lastFailure.detail}`
+      : `I could not retrieve that data. Last error: ${lastFailure.detail}`
+  }
+
+  return fr
+    ? 'Je n\'ai pas pu conclure dans le nombre de consultations autorisé. Reformule la question ou précise le cluster.'
+    : 'I could not conclude within the allowed number of lookups. Rephrase the question or name the cluster.'
+}
+
 export async function executeToolCalls(
   calls: ToolCallRequest[],
   tools: AiTool[],
@@ -134,6 +181,8 @@ export async function executeToolCalls(
       }
 
       try {
+        rejectUnknownArguments(tool, call.args)
+
         const value = await tool.execute(call.args, ctx)
         const { content, truncated } = serialiseResult(value)
 
@@ -142,14 +191,17 @@ export async function executeToolCalls(
           result: { call, content },
         }
       } catch (e: any) {
-        // A scope refusal is a legitimate answer: the model asked for something
-        // outside the caller's perimeter and must be told so, in words it can
-        // act on. Anything else is a real failure and stays generic upstream.
+        // A scope refusal or a rejected argument is a legitimate answer: the
+        // model asked for something outside the caller's perimeter, or with a
+        // value the tool cannot take, and must be told so in words it can act
+        // on. Anything else is a real failure and stays generic upstream.
         const isScope = e instanceof ToolScopeError
+        const isArgument = e instanceof ToolArgumentError
+        const isExpected = isScope || isArgument
 
-        if (!isScope) console.error(`[ai-tools] ${call.name} failed:`, e)
+        if (!isExpected) console.error(`[ai-tools] ${call.name} failed:`, e)
 
-        const message = isScope
+        const message = isExpected
           ? String(e?.message || 'Out of scope.')
           : `The "${call.name}" lookup failed: ${String(e?.message || e).slice(0, 200)}`
 
@@ -158,7 +210,8 @@ export async function executeToolCalls(
             name: call.name,
             args: call.args,
             ok: false,
-            error: isScope ? 'out-of-scope' : 'failed',
+            error: isScope ? 'out-of-scope' : isArgument ? 'bad-argument' : 'failed',
+            detail: message,
             durationMs: Date.now() - startedAt,
             truncated: false,
           },
@@ -267,10 +320,13 @@ export async function runToolRounds(opts: {
       // holds tool blocks by now, and dropping the declaration entirely makes
       // the request invalid for Anthropic.
       const finalJson = await send([...messages], 'none')
+      const finalText = parseAssistantText(provider, finalJson)
+      // A closing turn that is still a call written as prose is not an answer.
+      const stillCalling = extractTextToolCall(finalText, tools.map(t => t.name))
 
       return {
         messages,
-        text: parseAssistantText(provider, finalJson),
+        text: stillCalling ? budgetFallbackText(ctx.locale, trace) : finalText,
         trace,
         rounds,
         toolsDisabled,

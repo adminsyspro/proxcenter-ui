@@ -55,6 +55,19 @@ export class ToolScopeError extends Error {
   }
 }
 
+/**
+ * Raised when the model passes a value a tool cannot interpret.
+ *
+ * Surfaced to the model verbatim, like a scope refusal: naming the accepted
+ * values is what gets the next call right.
+ */
+export class ToolArgumentError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ToolArgumentError'
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Argument coercion                                                  */
 /* ------------------------------------------------------------------ */
@@ -102,7 +115,14 @@ export function argEnum<T extends string>(
 
   if (!raw) return fallback
 
-  return (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback
+  if ((allowed as readonly string[]).includes(raw)) return raw as T
+
+  // An unknown value used to fall back silently. Measured on llama3.1:8b (#459):
+  // asked which VM uses the most CPU right now, it called the hardware ranking
+  // with metric="cpu", got the vCPU ranking back under that name, and answered
+  // that the busiest VM was the one with the most vCPUs. A wrong figure stated
+  // with confidence is worse than a refusal the model can act on.
+  throw new ToolArgumentError(`Invalid value "${raw}" for "${key}". Accepted values: ${allowed.join(', ')}.`)
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,8 +154,10 @@ export function resolveConnection(ctx: AiToolContext, ref?: string): ResolvedCon
   if (!ref) {
     if (available.length === 1) return available[0]
 
+    // Naming the argument matters: llama3.1:8b, told only to "name one",
+    // retried with an invented `clusterName` key and never got through.
     throw new ToolScopeError(
-      `Several clusters are visible, name one of: ${available.map(c => c.name).join(', ')}.`
+      `Several clusters are visible: pass the "cluster" argument with one of: ${available.map(c => c.name).join(', ')}.`
     )
   }
 

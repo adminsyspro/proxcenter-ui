@@ -21,6 +21,38 @@ import {
 import { useTheme } from '@mui/material/styles'
 
 import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
+import { createFrameDecoder } from '@/lib/ai/streamFrames'
+
+// Human labels for the assistant's read-only tools (#459). A name missing
+// here (a newer tool, or one the model invented) falls back to the raw name.
+const TOOL_LABEL_KEYS = {
+  list_hosts: 'ai.tools.listHosts',
+  list_guests: 'ai.tools.listGuests',
+  rank_guest_hardware: 'ai.tools.rankGuestHardware',
+  get_guest_hardware: 'ai.tools.getGuestHardware',
+  get_node_hardware: 'ai.tools.getNodeHardware',
+  rank_storage: 'ai.tools.rankStorage',
+  get_ceph_status: 'ai.tools.getCephStatus',
+  list_ceph_osds: 'ai.tools.listCephOsds'
+}
+
+const toolLabel = (t, name) => (TOOL_LABEL_KEYS[name] ? t(TOOL_LABEL_KEYS[name]) : name)
+
+/**
+ * "Guest hardware ranking, Ceph OSDs (failed)": one label per distinct tool.
+ * `calls` is either a list of names (a round starting) or a list of
+ * `{ name, ok }` entries (the finished trace).
+ */
+const toolLabels = (t, calls) => {
+  const labels = calls.map(call => {
+    const name = typeof call === 'string' ? call : call.name
+    const failed = typeof call !== 'string' && call.ok === false
+
+    return failed ? `${toolLabel(t, name)} (${t('ai.toolFailed')})` : toolLabel(t, name)
+  })
+
+  return [...new Set(labels)].join(', ')
+}
 
 // Formatage basique du texte (gras, listes)
 const formatText = (text) => {
@@ -40,9 +72,15 @@ const formatText = (text) => {
 }
 
 // Composant message
-const MessageBubble = ({ message, isUser, isStreaming, thinkingText }) => {
+const MessageBubble = ({ message, isUser, isStreaming, thinkingText, t }) => {
   const theme = useTheme()
-  
+
+  // While tools run the model has produced no text yet: name what is being
+  // looked up rather than showing the generic "Thinking..." (#459).
+  const waitingText = message.toolActivity?.length
+    ? t('ai.consulting', { tools: toolLabels(t, message.toolActivity) })
+    : thinkingText
+
   return (
     <Box
       sx={{
@@ -86,7 +124,7 @@ const MessageBubble = ({ message, isUser, isStreaming, thinkingText }) => {
         {isStreaming && !message.content ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CircularProgress size={16} color="inherit" />
-            <Typography variant="body2">{thinkingText}</Typography>
+            <Typography variant="body2">{waitingText}</Typography>
           </Box>
         ) : (
           <Typography 
@@ -123,11 +161,16 @@ const MessageBubble = ({ message, isUser, isStreaming, thinkingText }) => {
                 '0%, 50%': { opacity: 1 },
                 '51%, 100%': { opacity: 0 }
               }
-            }} 
+            }}
           />
         )}
+        {!isUser && !isStreaming && message.toolTrace?.length > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            {t('ai.consulted', { tools: toolLabels(t, message.toolTrace) })}
+          </Typography>
+        )}
       </Paper>
-      
+
       {isUser && (
         <Avatar
           sx={{
@@ -229,6 +272,10 @@ export default function AIChatDrawer({ open, onClose }) {
     
     const userMessage = { role: 'user', content: text.trim() }
 
+    // The stored messages also carry the tool activity shown in the bubbles
+    // (#459); the providers only ever get the conversation itself.
+    const history = [...messages, userMessage].map(({ role, content }) => ({ role, content }))
+
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
@@ -243,7 +290,7 @@ export default function AIChatDrawer({ open, onClose }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          messages: history,
           locale
         })
       })
@@ -257,32 +304,53 @@ export default function AIChatDrawer({ open, onClose }) {
       // Lire le stream
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
+      const frameDecoder = createFrameDecoder()
       let fullContent = ''
-      
+      let toolActivity = null
+      let toolTrace = null
+
+      // The stream mixes the answer text with activity frames (#459): a
+      // `tool` frame names the round being run, a `trace` frame lists what
+      // was consulted once the answer is complete.
+      const applyDecoded = ({ text, frames }) => {
+        fullContent += text
+
+        for (const frame of frames) {
+          if (frame.type === 'tool') toolActivity = frame.names
+          else if (frame.type === 'trace') toolTrace = frame.calls
+        }
+      }
+
+      // Mettre à jour le message en temps réel
+      const publish = () => {
+        setMessages(prev => {
+          const newMessages = [...prev]
+
+          newMessages[newMessages.length - 1] = {
+            role: 'assistant',
+            content: fullContent,
+            ...(toolActivity ? { toolActivity } : {}),
+            ...(toolTrace ? { toolTrace } : {})
+          }
+
+          return newMessages
+        })
+      }
+
       if (reader) {
         while (true) {
           const { done, value } = await reader.read()
 
           if (done) break
-          
-          const chunk = decoder.decode(value, { stream: true })
 
-          fullContent += chunk
-          
-          // Mettre à jour le message en temps réel
-          setMessages(prev => {
-            const newMessages = [...prev]
-
-            newMessages[newMessages.length - 1] = {
-              role: 'assistant',
-              content: fullContent
-            }
-            
-return newMessages
-          })
+          applyDecoded(frameDecoder.push(decoder.decode(value, { stream: true })))
+          publish()
         }
+
+        applyDecoded(frameDecoder.flush())
+        publish()
       }
-      
+
     } catch (e) {
       // Si le streaming échoue, essayer l'API normale
       try {
@@ -290,7 +358,7 @@ return newMessages
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: [...messages, userMessage],
+            messages: history,
             locale // #686: the fallback used to omit it and always answered in English
           })
         })
@@ -301,14 +369,20 @@ return newMessages
           throw new Error(json?.error || 'Communication error with AI')
         }
         
+        // The non-streaming route already reports what it consulted.
+        const toolTrace = Array.isArray(json.toolCalls)
+          ? json.toolCalls.map(c => ({ name: c.name, ok: c.ok !== false }))
+          : []
+
         setMessages(prev => {
           const newMessages = [...prev]
 
           newMessages[newMessages.length - 1] = {
             role: 'assistant',
-            content: json.response
+            content: json.response,
+            ...(toolTrace.length ? { toolTrace } : {})
           }
-          
+
 return newMessages
         })
         
@@ -467,6 +541,7 @@ return provider
             isUser={msg.role === 'user'}
             isStreaming={streaming && i === messages.length - 1 && msg.role === 'assistant'}
             thinkingText={t('ai.thinking')}
+            t={t}
           />
         ))}
 
@@ -477,6 +552,7 @@ return provider
             isUser={false}
             isStreaming={true}
             thinkingText={t('ai.thinking')}
+            t={t}
           />
         )}
         

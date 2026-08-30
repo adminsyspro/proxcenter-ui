@@ -4308,7 +4308,9 @@
     "anthropicCloudOption": "Anthropic Claude (클라우드)",
     "ollamaInfo": "<b>Ollama</b>를 사용하면 LLM을 로컬에서 실행할 수 있습니다. 데이터가 외부로 전송되지 않습니다.",
     "ollamaUrlLabel": "Ollama URL",
-    "ollamaToolModelHelp": "어시스턴트는 도구를 통해 인프라를 조회하므로 도구 호출을 지원하는 모델이 필요합니다. llama3.1:8b는 지원하지만 mistral:7b는 지원하지 않으며, qwen2.5:7b는 조회하지 않고 기억에 의존해 답합니다.",
+    "ollamaToolModelHelp": "어시스턴트는 도구를 호출하여 인프라 질문에 답하므로 모델이 도구 호출을 지원해야 합니다. Ollama에서 측정한 결과: llama3.1:8b는 모든 언어에서 안정적으로 답하고, qwen2.5:7b는 영어에서만 동작하며, mistral:7b는 도구 지원을 선언하지만 도구를 호출하지 않습니다. 도구를 지원하지 않는 모델은 목록에 표시됩니다.",
+    "modelNoToolCalling": "도구 호출 불가",
+    "testNoToolCalling": "연결되었지만 이 모델은 도구를 호출할 수 없습니다. 어시스턴트는 실시간 스냅샷만 볼 수 있으며 하드웨어, 스토리지 또는 Ceph 세부 정보를 조회할 수 없습니다.",
     "modelLabel": "모델",
     "testingConnection": "테스트 중...",
     "testConnection": "연결 테스트",
@@ -5672,7 +5674,20 @@
     "suggestStoppedVms": "중지된 VM 목록",
     "suggestInfraStatus": "인프라 상태를 요약해 주세요",
     "suggestHostStatus": "Proxmox 호스트 상태",
-    "suggestAlerts": "경고가 있나요?"
+    "suggestAlerts": "경고가 있나요?",
+    "consulting": "조회 중: {tools}",
+    "consulted": "참조한 데이터: {tools}",
+    "toolFailed": "실패",
+    "tools": {
+      "listHosts": "호스트 목록",
+      "listGuests": "게스트 목록",
+      "rankGuestHardware": "게스트 하드웨어 순위",
+      "getGuestHardware": "게스트 하드웨어 정보",
+      "getNodeHardware": "호스트 하드웨어",
+      "rankStorage": "스토리지 순위",
+      "getCephStatus": "Ceph 상태",
+      "listCephOsds": "Ceph OSD"
+    }
   },
   "jobs": {
     "title": "작업 센터",

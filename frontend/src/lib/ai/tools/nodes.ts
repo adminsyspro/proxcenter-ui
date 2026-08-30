@@ -186,7 +186,7 @@ export const getNodeHardwareTool: AiTool = {
   name: 'get_node_hardware',
 
   description:
-    'Physical hardware of one Proxmox host: CPU model and total cores, RAM, how many network interfaces it has, and how many physical disks with their size and SMART health. Answers "how many interfaces does host X have?" and "how many disks does this host have?". Example: node=\'pve1\'',
+    'Physical hardware of one Proxmox host: CPU model and total cores, RAM, how many network interfaces it has, and how many physical disks with their size and SMART health. Answers "how many interfaces does host X have?", "how many disks does this host have?" and "is any disk failing on host X?" (SMART health per disk). Example: node=\'pve1\'',
 
   parameters: {
     type: 'object',

@@ -179,6 +179,18 @@ describe('tool awareness (#459)', () => {
     expect(tail).toContain('never answer that improvements or problems merely exist')
   })
 
+  it('warns that the top lists rank usage, not assigned sizing, once tools are attached', () => {
+    // The RAM top 10 prints "(28.3/32 GB)" totals, which qwen2.5:7b and
+    // qwen3:8b read as the assigned-memory ranking and answered from, missing
+    // the idle guest with the most RAM assigned.
+    const withTools = render({ toolsEnabled: true })
+    const without = render()
+
+    expect(withTools).toContain('current USAGE only')
+    expect(withTools).toContain('call the hardware ranking tool')
+    expect(without).not.toContain('current USAGE only')
+  })
+
   it('keeps the tool rules out of the toolless prompt, which has no tool to hide', () => {
     const prompt = render({ toolsEnabled: false })
 

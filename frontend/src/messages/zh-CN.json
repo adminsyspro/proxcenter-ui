@@ -4308,7 +4308,9 @@
     "anthropicCloudOption": "Anthropic Claude（云端）",
     "ollamaInfo": "<b>Ollama</b> 允许在本地运行大语言模型。不会向外部发送任何数据。",
     "ollamaUrlLabel": "Ollama URL",
-    "ollamaToolModelHelp": "助手通过工具查询您的基础设施，因此需要支持工具调用的模型。llama3.1:8b 支持；mistral:7b 不支持，而 qwen2.5:7b 会凭记忆作答而不去查询。",
+    "ollamaToolModelHelp": "助手通过调用工具来回答基础设施问题，因此模型必须支持工具调用。在 Ollama 上的测量结果：llama3.1:8b 在所有语言下都能可靠回答，qwen2.5:7b 仅在英文下可用，mistral:7b 声明支持工具但从不调用。不支持工具的模型会在列表中标注。",
+    "modelNoToolCalling": "不支持工具调用",
+    "testNoToolCalling": "已连接，但此模型无法调用工具：助手只能看到实时快照，无法查询硬件、存储或 Ceph 的详细信息。",
     "modelLabel": "模型",
     "testingConnection": "测试中...",
     "testConnection": "测试连接",
@@ -5672,7 +5674,20 @@
     "suggestStoppedVms": "列出已停止的 VM",
     "suggestInfraStatus": "总结我的基础设施状态",
     "suggestHostStatus": "Proxmox 主机状态",
-    "suggestAlerts": "是否有告警？"
+    "suggestAlerts": "是否有告警？",
+    "consulting": "正在查询：{tools}",
+    "consulted": "已查阅：{tools}",
+    "toolFailed": "失败",
+    "tools": {
+      "listHosts": "主机列表",
+      "listGuests": "客户机列表",
+      "rankGuestHardware": "客户机硬件排名",
+      "getGuestHardware": "客户机硬件详情",
+      "getNodeHardware": "主机硬件",
+      "rankStorage": "存储排名",
+      "getCephStatus": "Ceph 状态",
+      "listCephOsds": "Ceph OSD"
+    }
   },
   "jobs": {
     "title": "任务中心",

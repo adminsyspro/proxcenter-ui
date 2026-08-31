@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Alert, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, InputLabel, MenuItem, Select, TextField, alpha
 } from '@mui/material'
 
@@ -31,27 +31,38 @@ interface RuleFormDialogProps {
   onClose: () => void
   onSubmit: () => void
   isNew: boolean
-  scope: { type: 'cluster' | 'security-group'; name?: string }
+  scope: { type: 'cluster' | 'security-group' | 'vm'; name?: string }
   rule: RuleFormData
   onRuleChange: (rule: RuleFormData) => void
   securityGroups: firewallAPI.SecurityGroup[]
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
+  /** Warning shown above the form (e.g. the rule belongs to a shared SG). */
+  notice?: string
 }
 
 const scopeColors: Record<string, string> = {
   cluster: '#06b6d4',
   'security-group': '#8b5cf6',
+  vm: '#22c55e',
+}
+
+const scopeIcons: Record<string, string> = {
+  cluster: 'ri-cloud-line',
+  'security-group': 'ri-shield-line',
+  vm: 'ri-computer-line',
 }
 
 export default function RuleFormDialog({
-  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets
+  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets, notice
 }: RuleFormDialogProps) {
   const t = useTranslations()
 
   const isGroup = rule.type === 'group'
   const scopeColor = scopeColors[scope.type] || '#3b82f6'
-  const scopeLabel = scope.type === 'cluster' ? t('firewall.cluster') : t('firewall.sgPrefix', { name: scope.name })
+  const scopeLabel = scope.type === 'cluster'
+    ? t('firewall.cluster')
+    : scope.type === 'vm' ? (scope.name ?? '') : t('firewall.sgPrefix', { name: scope.name })
   const showGroupType = scope.type === 'cluster' // only cluster rules can be of type 'group'
 
   const set = (field: keyof RuleFormData, value: string | number) => {
@@ -64,12 +75,13 @@ export default function RuleFormDialog({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <i className={scope.type === 'cluster' ? 'ri-cloud-line' : 'ri-shield-line'} style={{ fontSize: 20 }} />
+          <i className={scopeIcons[scope.type] || 'ri-shield-line'} style={{ fontSize: 20 }} />
           {isNew ? t('networkPage.addRuleTitle') : t('networkPage.editRuleTitle')}
           <Chip label={scopeLabel} size="small" sx={{ ml: 1, height: 22, fontSize: 11, fontWeight: 600, bgcolor: alpha(scopeColor, 0.15), color: scopeColor }} />
         </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
+        {notice && <Alert severity='warning' sx={{ mb: 2 }}>{notice}</Alert>}
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">

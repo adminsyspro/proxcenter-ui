@@ -24,9 +24,11 @@ import DashboardTab from './components/DashboardTab'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
+import MicrosegTab from './components/microseg/MicrosegTab'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 5 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups
+   MAIN PAGE: 6 tabs. Dashboard, Firewalling, Aliases, IP Sets, Security
+   Groups, Micro-segmentation
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -90,12 +92,13 @@ export default function NetworkAutomationPage() {
   }, [firewallMode, activeTab, rulesSubTab])
 
   // Load VM rules when on Dashboard (tab 0), Firewalling > Cluster/VMs (tab 1,
-  // subTab 0 or 2), or Security Groups (tab 4) — that last tab counts, per
-  // group, the guests whose rules reference it, so without this it showed 0 VMs
-  // everywhere while the data had simply never been fetched.
+  // subTab 0 or 2), Security Groups (tab 4) or Micro-segmentation (tab 5).
+  // The SG tab counts, per group, the guests whose rules reference it (it used
+  // to show 0 VMs everywhere while the data had simply never been fetched),
+  // and the east-west view resolves every guest's rules.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === 0 || activeTab === 4 || activeTab === 5 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
         loadVMFirewallData()
       }
     }
@@ -152,6 +155,7 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-arrow-left-right-line" />} iconPosition="start" label={t('networkPage.tabMicroseg')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
 
           {/* Tab 0: Dashboard */}
@@ -244,6 +248,21 @@ export default function NetworkAutomationPage() {
               ipsets={ipsets}
               reload={loadFirewallData}
               reloadVMFirewallRules={reloadVMFirewallRules}
+            />
+          )}
+
+          {/* Tab 5: Micro-segmentation (east-west view) */}
+          {activeTab === 5 && (
+            <MicrosegTab
+              vmFirewallData={vmFirewallData}
+              loadingVMRules={loadingVMRules}
+              guestsNotScanned={guestsNotScanned}
+              reloadVMFirewallRules={reloadVMFirewallRules}
+              securityGroups={securityGroups}
+              aliases={aliases}
+              ipsets={ipsets}
+              selectedConnection={selectedConnection}
+              reload={loadFirewallData}
             />
           )}
 

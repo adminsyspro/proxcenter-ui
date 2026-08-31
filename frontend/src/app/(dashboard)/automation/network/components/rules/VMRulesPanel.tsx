@@ -12,6 +12,8 @@ import {
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import { guestSegmentKey, UNTAGGED_KEY, vlanOfSegmentKey, type GuestSegment } from '@/lib/proxmox/guestSegment'
+import { sdnSegmentLabel } from '@/lib/proxmox/sdnVnetMap'
 import { useToast } from '@/contexts/ToastContext'
 import LogLevelSelect from '@/components/firewall/LogLevelSelect'
 import { LOG_LEVELS, DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
@@ -35,8 +37,46 @@ interface VMRulesPanelProps {
 
 const VLAN_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981', '#f97316', '#6366f1', '#14b8a6', '#e11d48']
 function getVlanColor(vlanKey: string, index: number): string {
-  if (vlanKey === '__untagged__') return '#94a3b8'
+  if (vlanKey === UNTAGGED_KEY) return '#94a3b8'
   return VLAN_COLORS[index % VLAN_COLORS.length]
+}
+
+/** A grouping bucket of the table: one VLAN, one SDN VNet, or the untagged guests. */
+type SegmentGroup = {
+  key: string
+  label: string
+  /** Segment identifier of a VNet group (VNI 42, VLAN 100, ...) with its tooltip. */
+  badge?: { text: string; title: string }
+  isVnet: boolean
+  vms: VMFirewallInfo[]
+}
+
+/** Bucket order: numbered VLANs first, then SDN VNets, then untagged. */
+function groupRank(group: SegmentGroup): number {
+  if (group.key === UNTAGGED_KEY) return 2
+
+  return group.isVnet ? 1 : 0
+}
+
+/** Numbered VLANs ascending, VNets by name, untagged last. */
+function compareGroups(a: SegmentGroup, b: SegmentGroup): number {
+  const rank = groupRank(a) - groupRank(b)
+  if (rank !== 0) return rank
+  if (a.isVnet) return a.label.localeCompare(b.label)
+
+  return (vlanOfSegmentKey(a.key) ?? 0) - (vlanOfSegmentKey(b.key) ?? 0)
+}
+
+/** Bucket icon: plug for untagged guests, node tree for a VNet, branch for a VLAN. */
+function groupIconOf(isUntagged: boolean, isVnet: boolean): string {
+  if (isUntagged) return 'ri-ethernet-line'
+
+  return isVnet ? 'ri-node-tree' : 'ri-git-branch-line'
+}
+
+/** The VNet a guest sits on, when its primary NIC is on one. */
+function vnetOf(segment: GuestSegment | undefined) {
+  return segment?.kind === 'vnet' ? segment.vnet : undefined
 }
 
 // ── Main Component ──
@@ -56,29 +96,54 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
 
   const [expandedVlans, setExpandedVlans] = useState<Set<string>>(new Set())
 
-  const filteredVMData = vmFirewallData.filter(vm =>
-    !vmSearchQuery ||
-    vm.name.toLowerCase().includes(vmSearchQuery.toLowerCase()) ||
-    vm.vmid.toString().includes(vmSearchQuery) ||
-    vm.node.toLowerCase().includes(vmSearchQuery.toLowerCase()) ||
-    vm.vlans.some(v => v.toString().includes(vmSearchQuery))
-  )
+  const filteredVMData = vmFirewallData.filter(vm => {
+    if (!vmSearchQuery) return true
 
-  // Group VMs by primary VLAN (first tag from net0)
+    const q = vmSearchQuery.toLowerCase()
+    const vnet = vnetOf(vm.segment)
+
+    // Every identifier the VNet group shows is searchable: its alias, its raw id
+    // (what the guest config carries) and its VNI/VLAN.
+    const matchesVnet = vnet !== undefined && (
+      vnet.vnet.toLowerCase().includes(q) ||
+      (vnet.alias ?? '').toLowerCase().includes(q) ||
+      (vnet.tag !== undefined && String(vnet.tag).includes(vmSearchQuery))
+    )
+
+    return vm.name.toLowerCase().includes(q) ||
+      vm.vmid.toString().includes(vmSearchQuery) ||
+      vm.node.toLowerCase().includes(q) ||
+      vm.vlans.some(v => v.toString().includes(vmSearchQuery)) ||
+      matchesVnet
+  })
+
+  // Group VMs by the segment their primary NIC rides: the SDN VNet when the NIC
+  // is on one (it carries the VLAN/VNI, never the NIC, so those guests used to
+  // all land under Untagged), else the per-NIC VLAN tag.
   const vlanGroups = useMemo(() => {
-    const map = new Map<string, VMFirewallInfo[]>()
+    const map = new Map<string, SegmentGroup>()
     for (const vm of filteredVMData) {
-      const key = vm.vlans.length > 0 ? String(vm.vlans[0]) : '__untagged__'
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(vm)
+      const key = guestSegmentKey(vm.segment, vm.vlans)
+      const group = map.get(key)
+      if (group) { group.vms.push(vm); continue }
+
+      const vnet = vnetOf(vm.segment)
+      let label: string
+      if (key === UNTAGGED_KEY) label = t('networkPage.untagged')
+      else if (vnet) label = vnet.alias || vnet.vnet
+      else label = `VLAN ${vlanOfSegmentKey(key)}`
+
+      map.set(key, {
+        key,
+        label,
+        isVnet: vnet !== undefined,
+        ...(vnet ? { badge: { text: sdnSegmentLabel(vnet) || 'VNet', title: `VNet ${vnet.vnet}${vnet.zone ? ` · zone ${vnet.zone}` : ''}` } } : {}),
+        vms: [vm],
+      })
     }
-    // Sort: numbered VLANs ascending, then untagged last
-    return Array.from(map.entries()).sort((a, b) => {
-      if (a[0] === '__untagged__') return 1
-      if (b[0] === '__untagged__') return -1
-      return Number.parseInt(a[0]) - Number.parseInt(b[0])
-    })
-  }, [filteredVMData])
+
+    return [...map.values()].sort(compareGroups)
+  }, [filteredVMData, t])
 
   const autocompleteOptions = useAliasIpsetOptions(aliases, ipsets)
 
@@ -284,7 +349,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
             }}
             sx={{ width: 200 }}
           />
-          <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set(vlanGroups.map(([k]) => k))); setExpandedVMs(new Set(filteredVMData.map(v => v.vmid))) }}>{t('common.expandAll')}</Button>
+          <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set(vlanGroups.map(g => g.key))); setExpandedVMs(new Set(filteredVMData.map(v => v.vmid))) }}>{t('common.expandAll')}</Button>
           <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set()); setExpandedVMs(new Set()) }}>{t('common.collapseAll')}</Button>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -305,9 +370,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
           <Table size="small">
             <RulesTableHead />
             <TableBody>
-              {vlanGroups.map(([vlanKey, vms], vlanIdx) => {
-                const isUntagged = vlanKey === '__untagged__'
-                const vlanLabel = isUntagged ? t('networkPage.untagged') : `VLAN ${vlanKey}`
+              {vlanGroups.map(({ key: vlanKey, label: vlanLabel, badge, isVnet, vms }, vlanIdx) => {
+                const isUntagged = vlanKey === UNTAGGED_KEY
                 const isVlanExpanded = expandedVlans.has(vlanKey)
                 const vlanVmCount = vms.length
                 const vlanRulesCount = vms.reduce((acc, v) => acc + v.rules.length, 0)
@@ -331,8 +395,13 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                             className={isVlanExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                             style={{ fontSize: 20, color: vlanColor }}
                           />
-                          <i className={isUntagged ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16, color: vlanColor }} />
+                          <i className={groupIconOf(isUntagged, isVnet)} style={{ fontSize: 16, color: vlanColor }} />
                           <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: vlanColor }}>{vlanLabel}</Typography>
+                          {badge && (
+                            <Tooltip title={badge.title}>
+                              <Chip label={badge.text} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }} />
+                            </Tooltip>
+                          )}
                           <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }} />
                           <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.12) }} />
                         </Box>

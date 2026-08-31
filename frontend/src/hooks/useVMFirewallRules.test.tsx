@@ -61,16 +61,36 @@ function vm(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewallIn
   }
 }
 
-/** Mock the inventory response and the config returned for each scanned guest. */
+/** The cluster SDN definitions the scan joins guest bridges against. */
+type SdnFixture = {
+  vnets?: Record<string, unknown>[]
+  zones?: Record<string, unknown>[]
+  /** Make both SDN routes reject, as a cluster without SDN or without rights does. */
+  fails?: boolean
+}
+
+/**
+ * Mock the inventory response, the cluster SDN definitions and the config
+ * returned for each scanned guest.
+ */
 function mockGuestScan(
   guests: Guest[],
   configs: Record<number, Record<string, unknown> | null> = {},
+  sdn: SdnFixture = {},
 ) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input)
 
     if (url.startsWith('/api/v1/vms?')) {
       return { json: async () => ({ data: { vms: guests } }) } as Response
+    }
+
+    if (url.includes('/sdn/')) {
+      if (sdn.fails) throw new Error('SDN unavailable')
+
+      const payload = url.endsWith('/sdn/vnets') ? { vnets: sdn.vnets ?? [] } : { zones: sdn.zones ?? [] }
+
+      return { json: async () => ({ data: payload }) } as Response
     }
 
     const vmid = Number(url.match(/\/(\d+)\/config$/)?.[1])
@@ -275,6 +295,82 @@ describe('useVMFirewallRules', () => {
       vlans: [10, 40],
     })
     expect(result.current.vmFirewallData[1]).toEqual(untouched)
+  })
+
+  it('groups a guest on an SDN VNet by that VNet instead of leaving it untagged', async () => {
+    mockGuestScan(
+      [guest(700), guest(701)],
+      {
+        700: { net0: 'virtio=AA:00,bridge=v42fc503,firewall=1' },
+        701: { net0: 'virtio=AA:01,bridge=vmbr0,tag=20' },
+      },
+      {
+        vnets: [{ vnet: 'v42fc503', alias: 'lan', zone: 'vxzone', tag: 42 }],
+        zones: [{ zone: 'vxzone', type: 'vxlan' }],
+      },
+    )
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    const onVnet = result.current.vmFirewallData.find(item => item.vmid === 700)
+
+    // The VNet carries the segment, so the guest has no VLAN tag of its own.
+    expect(onVnet).toMatchObject({ vlans: [], firewallEnabled: true })
+    expect(onVnet?.segment).toEqual({
+      kind: 'vnet',
+      vnet: { vnet: 'v42fc503', alias: 'lan', zone: 'vxzone', zoneType: 'vxlan', tag: 42 },
+    })
+
+    expect(result.current.vmFirewallData.find(item => item.vmid === 701)?.segment).toEqual({ kind: 'vlan', tag: 20 })
+  })
+
+  it('keeps scanning when the cluster exposes no SDN, leaving VNet guests untagged', async () => {
+    mockGuestScan(
+      [guest(710)],
+      { 710: { net0: 'virtio=AA:00,bridge=v42fc503' } },
+      { fails: true },
+    )
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    expect(result.current.vmFirewallData).toHaveLength(1)
+    expect(result.current.vmFirewallData[0].segment).toEqual({ kind: 'untagged' })
+  })
+
+  it('re-resolves the VNet of the single guest it reloads', async () => {
+    const onVnet = vm(720, { segment: { kind: 'untagged' } })
+
+    mockGuestScan(
+      [guest(720)],
+      { 720: { net0: 'virtio=AA:00,bridge=v42fc503,firewall=1' } },
+      {
+        vnets: [{ vnet: 'v42fc503', alias: 'lan', zone: 'vxzone', tag: 42 }],
+        zones: [{ zone: 'vxzone', type: 'vxlan' }],
+      },
+    )
+
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+
+    // The VNet map is filled by the scan, then reused by the single-guest reload.
+    await act(async () => {
+      await result.current.loadVMFirewallData()
+    })
+
+    act(() => result.current.setVMFirewallData([onVnet]))
+
+    await act(async () => {
+      await result.current.reloadVMFirewallRules(onVnet)
+    })
+
+    expect(result.current.vmFirewallData[0].segment).toMatchObject({ kind: 'vnet', vnet: { vnet: 'v42fc503' } })
   })
 
   it('makes a second load a no-op until resetting the data', async () => {

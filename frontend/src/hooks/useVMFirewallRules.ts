@@ -1,5 +1,15 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
+
 import * as firewallAPI from '@/lib/api/firewall'
+import { buildSdnVnets, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
+import {
+  hasNicFirewall,
+  nicVlanTags,
+  parseGuestNics,
+  resolveGuestSegment,
+  type GuestNic,
+  type GuestSegment,
+} from '@/lib/proxmox/guestSegment'
 
 export interface VMFirewallInfo {
   vmid: number
@@ -11,30 +21,33 @@ export interface VMFirewallInfo {
   rules: firewallAPI.FirewallRule[]
   options: firewallAPI.VMOptions | null
   vlans: number[]
+  /**
+   * Segment the guest is grouped under in the VM rules table: its primary NIC's
+   * SDN VNet when it sits on one, else its VLAN tag. Optional so a caller that
+   * builds this shape by hand still groups by `vlans`.
+   */
+  segment?: GuestSegment
+  /** Parsed NICs (net0, net1...), for rules scoped to one interface. */
+  nics?: GuestNic[]
 }
 
-// Helper: Check if firewall is enabled on any NIC from VM config
-function checkNICFirewallEnabled(config: Record<string, any>): boolean {
-  for (let i = 0; i < 10; i++) {
-    const netConfig = config[`net${i}`]
-    if (netConfig && typeof netConfig === 'string' && netConfig.includes('firewall=1')) {
-      return true
-    }
-  }
-  return false
-}
+/**
+ * The cluster's SDN VNets, keyed by id, so a guest whose NIC bridge is a VNet is
+ * grouped by that VNet instead of falling under "Untagged". Fault-tolerant on
+ * purpose: a cluster without SDN, or a user without the rights on it, yields an
+ * empty map and every guest keeps its per-NIC VLAN grouping.
+ */
+async function fetchSdnVnetsById(connectionId: string): Promise<Map<string, SdnVnet>> {
+  const readJson = (url: string) => fetch(url).then(r => r.json()).catch(() => null)
 
-// Helper: Extract unique VLAN tags from NIC config (tag=XXX)
-function extractVLANs(config: Record<string, any>): number[] {
-  const vlans = new Set<number>()
-  for (let i = 0; i < 10; i++) {
-    const netConfig = config[`net${i}`]
-    if (netConfig && typeof netConfig === 'string') {
-      const match = netConfig.match(/tag=(\d+)/)
-      if (match) vlans.add(Number.parseInt(match[1], 10))
-    }
-  }
-  return Array.from(vlans).sort((a, b) => a - b)
+  const [vnetsResp, zonesResp] = await Promise.all([
+    readJson(`/api/v1/connections/${connectionId}/sdn/vnets`),
+    readJson(`/api/v1/connections/${connectionId}/sdn/zones`),
+  ])
+
+  const vnets = buildSdnVnets(vnetsResp?.data?.vnets ?? [], zonesResp?.data?.zones ?? [])
+
+  return new Map(vnets.map(v => [v.vnet, v]))
 }
 
 interface UseVMFirewallRulesReturn {
@@ -63,6 +76,9 @@ const SCAN_CONCURRENCY = 8
 export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRulesReturn {
   const [vmFirewallData, setVMFirewallData] = useState<VMFirewallInfo[]>([])
   const [loadingVMRules, setLoadingVMRules] = useState(false)
+  // Kept across renders so a single-guest reload resolves its VNet without
+  // re-reading the cluster's SDN definitions.
+  const sdnVnetsRef = useRef<Map<string, SdnVnet>>(new Map())
   const [guestsNotScanned, setGuestsNotScanned] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
@@ -72,9 +88,15 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
     setLoadingVMRules(true)
 
     try {
-      // Get all VMs for this connection using the correct API
-      const vmsResp = await fetch(`/api/v1/vms?connId=${connectionId}`)
-      const vmsData = await vmsResp.json()
+      // Get all VMs for this connection using the correct API, along with the
+      // cluster's SDN VNets, needed to group guests whose NIC is on a VNet.
+      const [vmsData, sdnVnetsById] = await Promise.all([
+        fetch(`/api/v1/vms?connId=${connectionId}`).then(r => r.json()),
+        fetchSdnVnetsById(connectionId),
+      ])
+
+      sdnVnetsRef.current = sdnVnetsById
+
       const allGuests = vmsData?.data?.vms || []
       const guests = allGuests.filter((g: any) => !g.template)
 
@@ -99,19 +121,20 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
             fetch(`/api/v1/connections/${connectionId}/guests/${guest.type}/${guest.node}/${guest.vmid}/config`).then(r => r.json()).catch(() => null)
           ])
 
-          // Firewall is "active" if enabled on at least one NIC
-          const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
-          const vlans = configResp?.data ? extractVLANs(configResp.data) : []
+          const nics = parseGuestNics(configResp?.data)
 
           return {
             ...base,
-            firewallEnabled: nicFirewallEnabled,
+            // Firewall is "active" if enabled on at least one NIC
+            firewallEnabled: hasNicFirewall(nics),
             rules: Array.isArray(rulesData) ? rulesData : [],
             options: optionsData,
-            vlans,
+            vlans: nicVlanTags(nics),
+            segment: resolveGuestSegment(nics, sdnVnetsById),
+            nics,
           }
         } catch {
-          return { ...base, firewallEnabled: false, rules: [], options: null, vlans: [] }
+          return { ...base, firewallEnabled: false, rules: [], options: null, vlans: [], segment: { kind: 'untagged' }, nics: [] }
         }
       }
 
@@ -152,16 +175,17 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
         fetch(`/api/v1/connections/${connectionId}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`).then(r => r.json()).catch(() => null)
       ])
 
-      const nicFirewallEnabled = configResp?.data ? checkNICFirewallEnabled(configResp.data) : false
-      const vlans = configResp?.data ? extractVLANs(configResp.data) : []
+      const nics = parseGuestNics(configResp?.data)
 
       setVMFirewallData(prev => prev.map(v =>
         v.vmid === vm.vmid ? {
           ...v,
-          firewallEnabled: nicFirewallEnabled,
+          firewallEnabled: hasNicFirewall(nics),
           rules: Array.isArray(rulesData) ? rulesData : [],
           options: optionsData,
-          vlans,
+          vlans: nicVlanTags(nics),
+          segment: resolveGuestSegment(nics, sdnVnetsRef.current),
+          nics,
         } : v
       ))
     } catch (err) {

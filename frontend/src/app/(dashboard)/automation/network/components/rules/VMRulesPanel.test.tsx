@@ -2,11 +2,12 @@
  * Component tests for VMRulesPanel.tsx — the VM/CT firewall rules table.
  *
  * The panel nests two levels of grouping the other rules tables do not have:
- * guests are grouped by their primary VLAN, and each guest is itself a
- * collapsible section. Both must be open before a rule row is on screen,
- * which is what most of these tests walk through. The VLAN grouping order is
- * asserted too (numbered VLANs ascending, untagged last), since it is
- * computed rather than given by the caller.
+ * guests are grouped by the segment their primary NIC rides (its SDN VNet when
+ * it is on one, else its VLAN tag), and each guest is itself a collapsible
+ * section. Both must be open before a rule row is on screen, which is what most
+ * of these tests walk through. The grouping order is asserted too (numbered
+ * VLANs ascending, then VNets, untagged last), since it is computed rather than
+ * given by the caller.
  *
  * Everything else is prop-driven, so only the firewall API module is
  * stubbed, plus the raw `fetch` PUT used for reordering, which MSW serves.
@@ -84,6 +85,13 @@ const WEB: VMFirewallInfo = {
 const DB: VMFirewallInfo = {
   vmid: 101, name: 'db-01', node: 'pve2', type: 'lxc', status: 'running',
   firewallEnabled: false, rules: [], options: null, vlans: [],
+}
+
+/** A guest whose NIC is on an SDN VNet: no per-NIC tag, the VNet carries the VNI. */
+const SDN: VMFirewallInfo = {
+  vmid: 102, name: 'app-01', node: 'pve3', type: 'qemu', status: 'running',
+  firewallEnabled: true, rules: [], options: null, vlans: [],
+  segment: { kind: 'vnet', vnet: { vnet: 'v42fc503', alias: 'lan', zone: 'vxzone', zoneType: 'vxlan', tag: 42 } },
 }
 
 const ALIASES: firewallAPIType.Alias[] = [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }]
@@ -170,6 +178,49 @@ describe('VMRulesPanel', () => {
     expect(screen.getAllByText('1 VM')).toHaveLength(2)
     expect(screen.getByText('2 rules total')).toBeInTheDocument()
     expect(screen.getByText('2/2 VMs • 1 protected')).toBeInTheDocument()
+  })
+
+  it('groups a guest on an SDN VNet under its VNet, after the VLANs and before the untagged', () => {
+    renderPanel({ vmFirewallData: [WEB, DB, SDN] })
+
+    const groupLabels = screen.getAllByRole('row')
+      .map(r => r.textContent || '')
+      .filter(txt => txt.includes('VLAN 20') || txt.includes('VNI 42') || txt.includes('Untagged'))
+
+    expect(groupLabels[0]).toContain('VLAN 20')
+    expect(groupLabels[1]).toContain('VNI 42')
+    expect(groupLabels[2]).toContain('Untagged')
+
+    // The VNet alias names the group, not the raw VNet id.
+    expect(screen.getByText('lan')).toBeInTheDocument()
+    expect(screen.queryByText('v42fc503')).not.toBeInTheDocument()
+  })
+
+  it('reveals the guests of a VNet group', () => {
+    renderPanel({ vmFirewallData: [WEB, DB, SDN] })
+
+    expect(screen.queryByText('app-01')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('lan'))
+    expect(screen.getByText('app-01')).toBeInTheDocument()
+  })
+
+  it('searches guests by the alias, the id or the VNI of the VNet they are on', () => {
+    renderPanel({ vmFirewallData: [WEB, DB, SDN] })
+
+    const search = screen.getByPlaceholderText('Search VM...')
+
+    fireEvent.change(search, { target: { value: 'lan' } })
+    expect(screen.getByText('VNI 42')).toBeInTheDocument()
+    expect(screen.queryByText('VLAN 20')).not.toBeInTheDocument()
+    expect(screen.queryByText('Untagged')).not.toBeInTheDocument()
+
+    // The raw id is what the guest config carries, and what the tooltip shows.
+    fireEvent.change(search, { target: { value: 'v42fc503' } })
+    expect(screen.getByText('VNI 42')).toBeInTheDocument()
+
+    fireEvent.change(search, { target: { value: '42' } })
+    expect(screen.getByText('VNI 42')).toBeInTheDocument()
   })
 
   it('reveals a guest, then its rules with their log level', () => {

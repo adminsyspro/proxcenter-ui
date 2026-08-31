@@ -14,6 +14,7 @@ import { useTagColors } from '@/contexts/TagColorContext'
 import type { BandwidthWindow, CreateReplicationJobRequest } from '@/lib/orchestrator/site-recovery.types'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
+import { cadenceSeconds, formatWindow, retentionWindowSeconds } from './schedule/retentionWindow'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
 import NumericTextField from '@/components/ui/NumericTextField'
@@ -76,6 +77,22 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   const [bandwidthWindows, setBandwidthWindows] = useState<BandwidthWindow[]>([])
   const [keepSource, setKeepSource] = useState(3)
   const [keepTarget, setKeepTarget] = useState(3)
+
+  // Spell out the cadence the schedule will really produce and how far back the
+  // kept points reach. Without this the user has no way to know that an RPO of
+  // 30 minutes replicates every 10, and discovers the retention depth they
+  // actually got only once the job has been running for days.
+  const retentionCaption = useMemo(() => {
+    const cadence = cadenceSeconds(scheduleValue)
+    const covered = retentionWindowSeconds(cadence, keepTarget)
+
+    if (!cadence || !covered) return t('siteRecovery.createJob.retentionTargetHelp')
+
+    return t('siteRecovery.createJob.retentionCoverage', {
+      cadence: formatWindow(cadence),
+      window: formatWindow(covered),
+    })
+  }, [scheduleValue, keepTarget, t])
 
   // Ceph VM IDs for the source cluster (only VMs with disks on RBD storage)
   const { data: cephVMsData } = useSWR(
@@ -738,7 +755,7 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 label={t('siteRecovery.createJob.retentionTarget')}
                 value={keepTarget}
                 onChange={setKeepTarget}
-                helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+                helperText={retentionCaption}
               />
             </Stack>
           </Box>

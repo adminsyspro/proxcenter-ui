@@ -4353,17 +4353,20 @@
       "engineComingSoon": "Próximamente",
       "pvNote": "Instala el paquete <pv>pv</pv> en los nodos origen y destino para mostrar el progreso de la replicación.",
       "pvInstallLabel": "Instalar <pv>pv</pv> automáticamente en los nodos origen",
-      "pvInstallDesc": "Necesario para seguir el progreso de la replicación. Ejecutará apt-get install pv mediante SSH."
+      "pvInstallDesc": "Necesario para seguir el progreso de la replicación. Ejecutará apt-get install pv mediante SSH.",
+      "retentionCoverage": "Replica cada {cadence}, estos puntos cubren {window}"
     },
     "schedule": {
       "modeRpo": "Continuo (RPO)",
       "modeScheduled": "Programado",
       "freq": {
+        "interval": "Intervalo",
         "hourly": "Cada hora",
         "daily": "Diario",
         "weekly": "Semanal",
         "monthly": "Mensual"
       },
+      "interval": "Ejecutar cada",
       "everyNHours": "Cada N horas",
       "hourWindow": "Limitar a ventana horaria",
       "startHour": "Hora de inicio",
@@ -4384,6 +4387,10 @@
         "sat": "Sáb"
       },
       "labels": {
+        "intervalMinute": "Cada {n} minuto",
+        "intervalMinutes": "Cada {n} minutos",
+        "intervalHour": "Cada {n} hora",
+        "intervalHours": "Cada {n} horas",
         "dailyAllDays": "Todos los días a las {time}",
         "dailyWeekdays": "Días laborables a las {time}",
         "dailyCustom": "{days} a las {time}",

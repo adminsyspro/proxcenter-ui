@@ -4353,17 +4353,20 @@
       "engineComingSoon": "Bientôt disponible",
       "pvNote": "Installez le paquet <pv>pv</pv> sur les nœuds source et cible pour afficher la progression des réplications.",
       "pvInstallLabel": "Installer <pv>pv</pv> automatiquement sur les nœuds source",
-      "pvInstallDesc": "Nécessaire pour suivre la progression des réplications. Exécutera apt-get install pv via SSH."
+      "pvInstallDesc": "Nécessaire pour suivre la progression des réplications. Exécutera apt-get install pv via SSH.",
+      "retentionCoverage": "Réplique toutes les {cadence}, ces points couvrent {window}"
     },
     "schedule": {
       "modeRpo": "Continu (RPO)",
       "modeScheduled": "Planifié",
       "freq": {
+        "interval": "Intervalle",
         "hourly": "Horaire",
         "daily": "Quotidien",
         "weekly": "Hebdomadaire",
         "monthly": "Mensuel"
       },
+      "interval": "Exécuter toutes les",
       "everyNHours": "Toutes les N heures",
       "hourWindow": "Limiter à une plage horaire",
       "startHour": "Début",
@@ -4384,6 +4387,10 @@
         "sat": "Sam"
       },
       "labels": {
+        "intervalMinute": "Toutes les {n} minute",
+        "intervalMinutes": "Toutes les {n} minutes",
+        "intervalHour": "Toutes les {n} heure",
+        "intervalHours": "Toutes les {n} heures",
         "dailyAllDays": "Tous les jours à {time}",
         "dailyWeekdays": "Jours ouvrés à {time}",
         "dailyCustom": "{days} à {time}",

@@ -15,7 +15,7 @@ import { cleanup } from '@testing-library/react'
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
 
 import FrequencyPicker from './FrequencyPicker'
-import type { ScheduleSpec } from './types'
+import { ALLOWED_INTERVAL_MINUTES, type ScheduleSpec } from './types'
 
 afterEach(cleanup)
 
@@ -42,6 +42,25 @@ const blur = () => userEvent.click(screen.getByRole('button', { name: 'elsewhere
 async function enableWindow() {
   await userEvent.click(screen.getByRole('checkbox'))
 }
+
+describe('FrequencyPicker interval mode', () => {
+  it('selecting Interval yields a valid interval spec', async () => {
+    renderWithProviders(<Harness initial={hourly()} />)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Interval' }))
+
+    expect(spec()).toEqual({ mode: 'interval', everyMinutes: 30 })
+  })
+
+  it('offers exactly the allowed interval values', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('combobox'))
+    const offeredValues = screen.getAllByRole('option').map(option => Number(option.getAttribute('data-value')))
+
+    expect(offeredValues).toEqual([...ALLOWED_INTERVAL_MINUTES])
+  })
+})
 
 describe('FrequencyPicker numeric fields', () => {
   it('shows the interval it is given', () => {

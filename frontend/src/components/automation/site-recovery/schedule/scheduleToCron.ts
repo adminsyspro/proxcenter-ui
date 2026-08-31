@@ -1,8 +1,11 @@
-import type { ScheduleSpec } from './types'
+import { ALLOWED_INTERVAL_MINUTES, type ScheduleSpec } from './types'
 
 export function scheduleToCron(spec: ScheduleSpec, tz: string): string {
   let body: string
   switch (spec.mode) {
+    case 'interval':
+      body = intervalToCron(spec)
+      break
     case 'hourly':
       body = hourlyToCron(spec)
       break
@@ -19,6 +22,15 @@ export function scheduleToCron(spec: ScheduleSpec, tz: string): string {
       throw new Error(`unknown schedule mode`)
   }
   return tz ? `CRON_TZ=${tz} ${body}` : body
+}
+
+function intervalToCron(s: Extract<ScheduleSpec, { mode: 'interval' }>): string {
+  if (!(ALLOWED_INTERVAL_MINUTES as readonly number[]).includes(s.everyMinutes)) {
+    throw new Error('everyMinutes must be an allowed interval')
+  }
+  if (s.everyMinutes < 60) return `*/${s.everyMinutes} * * * *`
+  if (s.everyMinutes === 1440) return '0 0 * * *'
+  return `0 */${s.everyMinutes / 60} * * *`
 }
 
 function hourlyToCron(s: Extract<ScheduleSpec, { mode: 'hourly' }>): string {
@@ -96,6 +108,8 @@ function weekdaysField(days: number[]): string {
 
 export function deriveRPOSeconds(spec: ScheduleSpec): number {
   switch (spec.mode) {
+    case 'interval':
+      return spec.everyMinutes * 60
     case 'hourly':
       return spec.everyHours * 3600
     case 'daily': {

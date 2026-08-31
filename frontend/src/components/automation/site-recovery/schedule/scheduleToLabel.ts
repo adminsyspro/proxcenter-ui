@@ -12,6 +12,14 @@ export function scheduleToLabel(spec: ScheduleSpec, tz: string, t: TFn): string 
 
 function baseLabel(spec: ScheduleSpec, t: TFn): string {
   switch (spec.mode) {
+    case 'interval':
+      return spec.everyMinutes < 60
+        ? t(spec.everyMinutes === 1
+          ? 'siteRecovery.schedule.labels.intervalMinute'
+          : 'siteRecovery.schedule.labels.intervalMinutes', { n: spec.everyMinutes })
+        : t(spec.everyMinutes === 60
+          ? 'siteRecovery.schedule.labels.intervalHour'
+          : 'siteRecovery.schedule.labels.intervalHours', { n: spec.everyMinutes / 60 })
     case 'hourly': {
       if (spec.windowStart === undefined || spec.windowEnd === undefined) {
         return t('siteRecovery.schedule.labels.hourlyEvery', { n: spec.everyHours })

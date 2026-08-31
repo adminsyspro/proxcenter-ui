@@ -4353,17 +4353,20 @@
       "engineComingSoon": "출시 예정",
       "pvNote": "복제 진행률을 표시하려면 소스 및 대상 노드에 <pv>pv</pv> 패키지를 설치하세요.",
       "pvInstallLabel": "소스 노드에 <pv>pv</pv> 자동 설치",
-      "pvInstallDesc": "복제 진행률 추적에 필요합니다. SSH를 통해 apt-get install pv를 실행합니다."
+      "pvInstallDesc": "복제 진행률 추적에 필요합니다. SSH를 통해 apt-get install pv를 실행합니다.",
+      "retentionCoverage": "{cadence}마다 복제되며, 이 복원 지점들은 {window}를 포함합니다"
     },
     "schedule": {
       "modeRpo": "연속 (RPO)",
       "modeScheduled": "예약",
       "freq": {
+        "interval": "간격",
         "hourly": "매시간",
         "daily": "매일",
         "weekly": "매주",
         "monthly": "매월"
       },
+      "interval": "실행 간격",
       "everyNHours": "N시간마다",
       "hourWindow": "시간대 제한",
       "startHour": "시작 시각",
@@ -4384,6 +4387,10 @@
         "sat": "토"
       },
       "labels": {
+        "intervalMinute": "{n}분마다",
+        "intervalMinutes": "{n}분마다",
+        "intervalHour": "{n}시간마다",
+        "intervalHours": "{n}시간마다",
         "dailyAllDays": "매일 {time}에",
         "dailyWeekdays": "평일 {time}에",
         "dailyCustom": "{days} {time}에",

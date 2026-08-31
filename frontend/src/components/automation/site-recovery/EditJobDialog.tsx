@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
@@ -8,6 +8,7 @@ import {
 } from '@mui/material'
 import ScheduleBuilder from './schedule/ScheduleBuilder'
 import { defaultTimezone, type ScheduleBuilderValue } from './schedule/types'
+import { cadenceSeconds, formatWindow, retentionWindowSeconds } from './schedule/retentionWindow'
 import BandwidthWindowsEditor from './BandwidthWindowsEditor'
 import RetentionSlider from './RetentionSlider'
 import NumericTextField from '@/components/ui/NumericTextField'
@@ -39,6 +40,20 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [is409, setIs409] = useState(false)
+
+  // Same caption as the create dialog: the cadence the schedule really produces
+  // and how far back the kept points reach. See schedule/retentionWindow.ts.
+  const retentionCaption = useMemo(() => {
+    const cadence = cadenceSeconds(scheduleValue)
+    const covered = retentionWindowSeconds(cadence, keepTarget)
+
+    if (!cadence || !covered) return t('siteRecovery.createJob.retentionTargetHelp')
+
+    return t('siteRecovery.createJob.retentionCoverage', {
+      cadence: formatWindow(cadence),
+      window: formatWindow(covered),
+    })
+  }, [scheduleValue, keepTarget, t])
 
   useEffect(() => {
     if (!job) return
@@ -168,7 +183,7 @@ export default function EditJobDialog({ open, job, onClose, onSubmit, connection
                 label={t('siteRecovery.createJob.retentionTarget')}
                 value={keepTarget}
                 onChange={setKeepTarget}
-                helperText={t('siteRecovery.createJob.retentionTargetHelp')}
+                helperText={retentionCaption}
               />
             </Stack>
           </Box>

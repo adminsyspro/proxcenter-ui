@@ -473,8 +473,15 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     return this.delete<{ status: string; purged_snapshots?: number }>(`/replication/jobs/${id}`)
   }
 
-  listMirrorSnapshots() {
-    return this.get<any[]>('/replication/snapshots')
+  // The orchestrator applies these filters before touching any node, so passing
+  // them through is the difference between one `rbd ls` and a cluster-wide scan.
+  listMirrorSnapshots(filters: { clusterId?: string; vmid?: number } = {}) {
+    const q = new URLSearchParams()
+    if (filters.clusterId) q.set('cluster_id', filters.clusterId)
+    if (typeof filters.vmid === 'number') q.set('vmid', String(filters.vmid))
+    const suffix = q.toString() ? `?${q.toString()}` : ''
+
+    return this.get<any[]>(`/replication/snapshots${suffix}`)
   }
 
   getSnapshotUsage(cluster: string, pool: string, image: string, snap: string) {

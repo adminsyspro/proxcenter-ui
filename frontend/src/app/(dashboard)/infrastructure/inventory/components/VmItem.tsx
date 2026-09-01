@@ -96,6 +96,7 @@ export type VmItemProps = {
   lock?: string
   showNode?: boolean
   nodeStatus?: string
+  indent?: number  // niveaux d'indentation supplémentaires (pools imbriqués, variante grouped)
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,6 +132,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
     lock,
     showNode,
     nodeStatus,
+    indent,
   } = props
   const { getColor, getShape } = useTagColors(connId)
   const shape = getShape(connId)
@@ -426,7 +428,7 @@ export const VmItem = React.memo(function VmItem(props: VmItemProps) {
         alignItems: 'center',
         gap: 1,
         px: 1.5,
-        ...(isGrouped ? { pl: 3, py: 0.25 } : { py: 0.4 }),
+        ...(isGrouped ? { pl: 3 + (indent ?? 0) * 2.5, py: 0.25 } : { py: 0.4 }),
         cursor: isMigrating ? 'not-allowed' : 'pointer',
         ...(!isGrouped ? { borderRadius: 1 } : {}),
         bgcolor: isSelected

@@ -2315,6 +2315,138 @@ return a.pool.localeCompare(b.pool)
       })
   }, [displayVms])
 
+  // Arbre hiérarchique des pools : PVE 8.1+ imbrique les pools via '/' dans leur ID.
+  // Les pools intermédiaires sans VM directe sont synthétisés depuis les segments du chemin.
+  type PoolTreeVm = (typeof displayVms)[number]
+  type PoolTreeNode = { name: string; path: string; vms: PoolTreeVm[]; children: PoolTreeNode[]; totalCount: number }
+
+  const poolsTree = useMemo(() => {
+    const noneLabel = `(${t('common.none')})`
+    const roots: PoolTreeNode[] = []
+    const byPath = new Map<string, PoolTreeNode>()
+
+    const getOrCreate = (path: string): PoolTreeNode => {
+      const existing = byPath.get(path)
+
+      if (existing) return existing
+
+      const sep = path.lastIndexOf('/')
+      const node: PoolTreeNode = { name: sep === -1 ? path : path.slice(sep + 1), path, vms: [], children: [], totalCount: 0 }
+
+      byPath.set(path, node)
+
+      if (sep === -1) {
+        roots.push(node)
+      } else {
+        getOrCreate(path.slice(0, sep)).children.push(node)
+      }
+
+      return node
+    }
+
+    poolsList.forEach(({ pool, vms }) => {
+      // Parité avec la Pool View du GUI Proxmox : les VMs hors pool ne sont pas montrées
+      if (pool === noneLabel) return
+
+      getOrCreate(pool).vms = vms
+    })
+
+    // Tri des enfants + compteur cumulé (VMs directes + descendants)
+    const finalize = (node: PoolTreeNode): number => {
+      node.children.sort((a, b) => a.name.localeCompare(b.name))
+      node.totalCount = node.vms.length + node.children.reduce((sum, child) => sum + finalize(child), 0)
+
+      return node.totalCount
+    }
+
+    roots.forEach(finalize)
+    roots.sort((a, b) => a.name.localeCompare(b.name))
+
+    return { roots, allPaths: Array.from(byPath.keys()) }
+  }, [poolsList, t])
+
+  const poolSubtreeHasVm = (node: PoolTreeNode, vmId: string): boolean =>
+    node.vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === vmId) ||
+    node.children.some(child => poolSubtreeHasVm(child, vmId))
+
+  // Rendu récursif d'un pool : header, VMs directes, puis sous-pools indentés
+  const renderPoolNode = (node: PoolTreeNode, depth: number) => {
+    const isCollapsed = collapsedSections.has(`pool:${node.path}`)
+
+    return (
+      <Box key={node.path}>
+        {/* Header pool */}
+        <Box
+          onClick={() => {
+            const willCollapse = !isCollapsed
+
+            toggleSection(`pool:${node.path}`)
+
+            if (willCollapse && selected?.type === 'vm' && poolSubtreeHasVm(node, selected.id)) {
+              onSelect(null)
+            }
+          }}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            pl: 1.5 + depth * 2.5,
+            py: 0.75,
+            bgcolor: 'background.paper',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            cursor: 'pointer',
+            '&:hover': { bgcolor: 'action.hover' }
+          }}>
+          <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
+          <i className="ri-folder-fill" style={{ fontSize: 14, opacity: 0.7 }} />
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>{node.name}</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.5 }}>({node.totalCount})</Typography>
+        </Box>
+        {/* VMs directes du pool */}
+        {!isCollapsed && node.vms.map(vm => {
+          const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
+
+          return (
+            <VmItem
+              key={vmKey}
+              vmKey={vmKey}
+              connId={vm.connId}
+              connName={vm.connName}
+              node={vm.node}
+              vmType={vm.type}
+              vmid={vm.vmid}
+              name={vm.name}
+              status={vm.status}
+              cpu={vm.cpu}
+              mem={vm.mem}
+              maxmem={vm.maxmem}
+              template={vm.template}
+              isCluster={vm.isCluster}
+              isSelected={selected?.id === vmKey}
+              isMigrating={isVmMigrating(vm.connId, vm.vmid)}
+              isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
+              isFavorite={favorites.has(vmKey)}
+              onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
+              onClick={() => onSelect({ type: 'vm', id: vmKey })}
+              onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
+              onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
+              variant="grouped"
+              t={t}
+              tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
+              showVmId={showVmId}
+              indent={depth}
+              lock={vm.lock}
+            />
+          )
+        })}
+        {/* Sous-pools */}
+        {!isCollapsed && node.children.map(child => renderPoolNode(child, depth + 1))}
+      </Box>
+    )
+  }
+
   // Liste des tags uniques avec leurs VMs + entities (clusters/nodes)
   const tagsList = useMemo(() => {
     const tagsMap = new Map<string, { vms: typeof displayVms; entities: { type: 'cluster' | 'node'; connId: string; name: string; node?: string }[] }>()
@@ -3036,7 +3168,7 @@ return favorites.has(vmKey)
               <IconButton size='small' onClick={() => {
                 if (isSectionsAllExpanded) {
                   const keys = viewMode === 'hosts' ? hostsList.map(h => `host:${h.key}`)
-                    : viewMode === 'pools' ? poolsList.map(p => `pool:${p.pool}`)
+                    : viewMode === 'pools' ? poolsTree.allPaths.map(p => `pool:${p}`)
                     : tagsList.map(t => `tag:${t.tag}`)
                   collapseAllSections(keys)
                 } else {
@@ -3122,7 +3254,7 @@ return favorites.has(vmKey)
           )}
           {(!allowedViewModes || allowedViewModes.has('pools')) && (
             <ToggleButton value="pools">
-              <Tooltip title={`${t('storage.pools')} (${poolsList.length})`}>
+              <Tooltip title={`${t('storage.pools')} (${poolsTree.allPaths.length})`}>
                 <i className="ri-folder-line" style={{ fontSize: 16 }} />
               </Tooltip>
             </ToggleButton>
@@ -3151,7 +3283,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsList.length, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId]
   )
 
   return (
@@ -3473,83 +3605,14 @@ return (
         </Box>
       ) : viewMode === 'pools' ? (
 
-        /* Mode Pools : groupé par pool */
+        /* Mode Pools : hiérarchie de pools (imbrication PVE via '/') */
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          {poolsList.length === 0 ? (
+          {poolsTree.roots.length === 0 ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant='body2' sx={{ opacity: 0.6 }}>{t('common.noResults')}</Typography>
             </Box>
           ) : (
-            poolsList.map(({ pool, vms }) => {
-              const isCollapsed = collapsedSections.has(`pool:${pool}`)
-
-              
-return (
-              <Box key={pool}>
-                {/* Header pool */}
-                <Box
-                  onClick={() => {
-                    const willCollapse = !isCollapsed
-                    toggleSection(`pool:${pool}`)
-                    if (willCollapse && selected?.type === 'vm') {
-                      const isInPool = vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selected.id)
-                      if (isInPool) onSelect(null)
-                    }
-                  }}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    px: 1.5,
-                    py: 0.75,
-                    bgcolor: 'background.paper',
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: 'action.hover' }
-                  }}>
-                  <i className={isCollapsed ? "ri-add-line" : "ri-subtract-line"} style={{ fontSize: 14, opacity: 0.7 }} />
-                  <i className="ri-folder-fill" style={{ fontSize: 14, opacity: 0.7 }} />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{pool}</Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.5 }}>({vms.length})</Typography>
-                </Box>
-                {/* VMs du pool */}
-                {!isCollapsed && vms.map(vm => {
-                  const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                  return (
-                    <VmItem
-                      key={vmKey}
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={favorites.has(vmKey)}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
-                      variant="grouped"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
-                      lock={vm.lock}
-                    />
-                  )
-                })}
-              </Box>
-            )})
+            poolsTree.roots.map(node => renderPoolNode(node, 0))
           )}
         </Box>
       ) : viewMode === 'tags' ? (

@@ -2369,6 +2369,57 @@ return a.pool.localeCompare(b.pool)
     node.vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === vmId) ||
     node.children.some(child => poolSubtreeHasVm(child, vmId))
 
+  // Props communes aux six sites de rendu de VmItem (modes vms, favoris, hôtes, pools, tags, templates)
+  type VmRowSource = {
+    connId: string
+    connName: string
+    node: string
+    type: string
+    vmid: string
+    name: string
+    status?: string
+    cpu?: number
+    mem?: number
+    maxmem?: number
+    template?: boolean
+    isCluster?: boolean
+    tags?: unknown
+    lock?: string
+    sshEnabled?: boolean
+  }
+
+  const buildVmItemProps = (vm: VmRowSource) => {
+    const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
+
+    return {
+      vmKey,
+      connId: vm.connId,
+      connName: vm.connName,
+      node: vm.node,
+      vmType: vm.type,
+      vmid: vm.vmid,
+      name: vm.name,
+      status: vm.status,
+      cpu: vm.cpu,
+      mem: vm.mem,
+      maxmem: vm.maxmem,
+      template: vm.template,
+      isCluster: vm.isCluster,
+      isSelected: selected?.id === vmKey,
+      isMigrating: isVmMigrating(vm.connId, vm.vmid),
+      isPendingAction: isVmPendingAction(vm.connId, vm.vmid),
+      isFavorite: favorites.has(vmKey),
+      onFavoriteToggle: () => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name),
+      onClick: () => onSelect({ type: 'vm', id: vmKey }),
+      onDoubleClick: () => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid),
+      onContextMenu: (e: React.MouseEvent) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled),
+      t,
+      tags: vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined,
+      showVmId,
+      lock: vm.lock,
+    }
+  }
+
   // Rendu récursif d'un pool : header, VMs directes, puis sous-pools indentés
   const renderPoolNode = (node: PoolTreeNode, depth: number) => {
     const isCollapsed = collapsedSections.has(`pool:${node.path}`)
@@ -2405,42 +2456,9 @@ return a.pool.localeCompare(b.pool)
           <Typography variant="caption" sx={{ opacity: 0.5 }}>({node.totalCount})</Typography>
         </Box>
         {/* VMs directes du pool */}
-        {!isCollapsed && node.vms.map(vm => {
-          const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-
-          return (
-            <VmItem
-              key={vmKey}
-              vmKey={vmKey}
-              connId={vm.connId}
-              connName={vm.connName}
-              node={vm.node}
-              vmType={vm.type}
-              vmid={vm.vmid}
-              name={vm.name}
-              status={vm.status}
-              cpu={vm.cpu}
-              mem={vm.mem}
-              maxmem={vm.maxmem}
-              template={vm.template}
-              isCluster={vm.isCluster}
-              isSelected={selected?.id === vmKey}
-              isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-              isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-              isFavorite={favorites.has(vmKey)}
-              onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-              onClick={() => onSelect({ type: 'vm', id: vmKey })}
-              onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-              onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
-              variant="grouped"
-              t={t}
-              tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-              showVmId={showVmId}
-              indent={depth}
-              lock={vm.lock}
-            />
-          )
-        })}
+        {!isCollapsed && node.vms.map(vm => (
+          <VmItem key={`${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`} variant="grouped" indent={depth} {...buildVmItemProps(vm)} />
+        ))}
         {/* Sous-pools */}
         {!isCollapsed && node.children.map(child => renderPoolNode(child, depth + 1))}
       </Box>
@@ -3403,7 +3421,6 @@ return favorites.has(vmKey)
                 }
 
                 const vm = row
-                const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                 return (
                   <Box
                     key={virtualRow.key}
@@ -3418,34 +3435,10 @@ return favorites.has(vmKey)
                     }}
                   >
                     <VmItem
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={favorites.has(vmKey)}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="flat"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
                       showNode={showNodeCaption}
                       nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
-                      lock={vm.lock}
+                      {...buildVmItemProps(vm)}
                     />
                   </Box>
                 )
@@ -3471,7 +3464,6 @@ return favorites.has(vmKey)
             <Box sx={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualRow => {
                 const vm = flatItems![virtualRow.index]
-                const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                 return (
                   <Box
                     key={virtualRow.key}
@@ -3486,34 +3478,11 @@ return favorites.has(vmKey)
                     }}
                   >
                     <VmItem
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={true}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="favorite"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
                       showNode={showNodeCaption}
                       nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
-                      lock={vm.lock}
+                      {...buildVmItemProps(vm)}
+                      isFavorite
                     />
                   </Box>
                 )
@@ -3565,40 +3534,9 @@ return (
                   <Typography variant="caption" sx={{ opacity: 0.4, ml: 'auto' }}>{host.connName}</Typography>
                 </Box>
                 {/* VMs de l'hôte */}
-                {!isCollapsed && host.vms.map(vm => {
-                  const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                  return (
-                    <VmItem
-                      key={vmKey}
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={favorites.has(vmKey)}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
-                      variant="grouped"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
-                      lock={vm.lock}
-                    />
-                  )
-                })}
+                {!isCollapsed && host.vms.map(vm => (
+                  <VmItem key={`${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`} variant="grouped" {...buildVmItemProps(vm)} />
+                ))}
               </Box>
             )})
           )}
@@ -3698,41 +3636,9 @@ return (
                   )
                 })}
                 {/* VMs avec ce tag */}
-                {!isCollapsed && vms.map(vm => {
-                  const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
-                  const tagVmKey = `${vmKey}-${tag}`
-                  return (
-                    <VmItem
-                      key={tagVmKey}
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={favorites.has(vmKey)}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onDoubleClick={() => openConsoleWindow(vm.connId, vm.node, vm.type, vm.vmid)}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
-                      variant="grouped"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
-                      lock={vm.lock}
-                    />
-                  )
-                })}
+                {!isCollapsed && vms.map(vm => (
+                  <VmItem key={`${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}-${tag}`} variant="grouped" {...buildVmItemProps(vm)} />
+                ))}
               </Box>
             )})
           )}
@@ -3749,7 +3655,6 @@ return (
             <Box sx={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualRow => {
                 const vm = flatItems![virtualRow.index]
-                const vmKey = `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`
                 return (
                   <Box
                     key={virtualRow.key}
@@ -3764,33 +3669,11 @@ return (
                     }}
                   >
                     <VmItem
-                      vmKey={vmKey}
-                      connId={vm.connId}
-                      connName={vm.connName}
-                      node={vm.node}
-                      vmType={vm.type}
-                      vmid={vm.vmid}
-                      name={vm.name}
-                      status={vm.status}
-                      cpu={vm.cpu}
-                      mem={vm.mem}
-                      maxmem={vm.maxmem}
-                      template={vm.template}
-                      isCluster={vm.isCluster}
-                      isSelected={selected?.id === vmKey}
-                      isMigrating={isVmMigrating(vm.connId, vm.vmid)}
-                      isPendingAction={isVmPendingAction(vm.connId, vm.vmid)}
-                      isFavorite={favorites.has(vmKey)}
-                      onFavoriteToggle={() => toggleFavorite(vm.connId, vm.node, vm.type, vm.vmid, vm.name)}
-                      onClick={() => onSelect({ type: 'vm', id: vmKey })}
-                      onContextMenu={(e) => handleContextMenu(e, vm.connId, vm.node, vm.type, vm.vmid, vm.name, vm.status, vm.isCluster, vm.template, vm.sshEnabled)}
                       variant="template"
-                      t={t}
-                      tags={vm.tags ? String(vm.tags).split(';').filter(Boolean) : undefined}
-                      showVmId={showVmId}
                       showNode={showNodeCaption}
                       nodeStatus={nodeStatusByKey.get(`${vm.connId}:${vm.node}`)}
-                      lock={vm.lock}
+                      {...buildVmItemProps(vm)}
+                      onDoubleClick={undefined}
                     />
                   </Box>
                 )

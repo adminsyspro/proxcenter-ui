@@ -48,6 +48,10 @@ curl -fsSL https://proxcenter.io/install/community | sudo bash
 curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_TOKEN
 ```
 
+The installer sets up Docker, the Compose stack, PostgreSQL and the persistent volumes under `/opt/proxcenter`. When it finishes, open `http://your-server:3000` and create the first admin account.
+
+Running behind a reverse proxy? Enable the *"Behind reverse proxy"* toggle in the connection settings, to prevent failover from switching to the internal node IPs.
+
 ---
 
 ## Features
@@ -61,6 +65,7 @@ curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YO
 - **DRS workload balancing** *(Enterprise)*: automatic load distribution via the Go orchestrator
 - **Alerts, reports & notifications** *(Enterprise)*: email digests, severity routing, and scheduled reports
 - **MSP mode** *(Enterprise)*: multi-tenant fleet management with license stacking
+- **High availability** *(Enterprise)*: three-node control plane with a virtual IP, replicated PostgreSQL, and leader election
 
 See the [documentation](https://docs.proxcenter.io/) for the full feature list and the Community vs Enterprise breakdown.
 
@@ -92,39 +97,70 @@ See the [documentation](https://docs.proxcenter.io/) for the full feature list a
 ## Architecture
 
 <p align="center">
-  <img src="docs/screenshots/architecture.png" alt="Architecture" width="100%">
+  <img src="docs/architecture.png" alt="ProxCenter architecture: service topology for the Community and Enterprise deployments" width="100%">
 </p>
 
-- **Single port** (3000): HTTP + WebSocket from one process
-- **Nginx optional**: SSL termination and reverse proxy
-- **Enterprise** adds a Go orchestrator for DRS, alerts, reports, etc.
+- **Single exposed port** (3000): HTTP and WebSocket served by one process, with Nginx optional in front for TLS
+- **PostgreSQL** is the only source of truth, and schema migrations run at startup
+- **Enterprise** adds the Go orchestrator (DRS, jobs, alerts, reports, flow telemetry) and the WeasyPrint sidecar for PDF rendering, both kept on the internal network
+- Proxmox VE, Proxmox Backup Server, and the migration sources are reached outbound, with no agent to deploy
+
+### High Availability *(Enterprise)*
+
+<p align="center">
+  <img src="docs/architecture-ha.png" alt="ProxCenter HA architecture: three-node control plane with a virtual IP and replicated PostgreSQL" width="100%">
+</p>
+
+- Three nodes behind a **Keepalived VIP**, with quorum on 2 of the 3 nodes
+- PostgreSQL replicated by **Patroni**, which elects the single writable primary through etcd
+- A local **HAProxy** on every node routes database traffic to the current primary and leader-only traffic, DRS included, to the elected orchestrator
+- Converting an existing single-node install is driven by the wizard in *Settings > High Availability*, see the [HA prerequisites](https://docs.proxcenter.io/operations/ha-prerequisites)
 
 ---
 
-## Configuration
+## Upgrade
 
-After install, ProxCenter runs at `http://your-server:3000`.
-
-Files in `/opt/proxcenter/`:
-- `.env`: Environment variables
-- `config/orchestrator.yaml`: Backend config (Enterprise only)
-
-**Reverse proxy**: Enable the *"Behind reverse proxy"* toggle in connection settings to prevent failover from switching to internal node IPs.
+Pull the new images and restart the stack:
 
 ```bash
 cd /opt/proxcenter
-docker compose logs -f          # View logs
-docker compose pull && docker compose up -d  # Update
-docker compose restart          # Restart
+docker compose pull
+docker compose up -d
+```
+
+Schema migrations run automatically on startup. Nothing else is required for a Community install.
+
+**Enterprise, when a release adds a setting**: `docker compose pull` refreshes the images, never `docker-compose.yml`, and the shipped Compose files pass their environment through an explicit `environment:` list. A setting introduced by a newer release therefore never reaches the container on a pull-only update, whatever `/opt/proxcenter/.env` holds. Re-run the installer to refresh the Compose file:
+
+```bash
+curl -fsSL https://proxcenter.io/install/enterprise | sudo bash -s -- --token YOUR_TOKEN
+```
+
+It keeps your secrets, your customised `NEXTAUTH_URL` and `APP_URL`, and your license key, leaves the data untouched, then pulls and recreates only the containers whose environment changed. An install that pinned a version in `.env` has to pass it again with `--version`, since a re-run otherwise resets it to `latest`.
+
+**High availability**: the three nodes run the same Compose file, so the same two commands apply per node. Upgrade one node at a time and keep the version identical across the cluster.
+
+**Coming from v1.3.x or earlier**: SQLite support was removed in v1.4.0 and there is no in-place migration to PostgreSQL. Follow [Upgrade to v1.4](https://docs.proxcenter.io/getting-started/upgrade-v1-4) for the cutover.
+
+Checking the result:
+
+```bash
+cd /opt/proxcenter
+docker compose ps               # Service status
+docker compose logs -f          # Follow the logs
+docker compose restart          # Restart the stack
 ```
 
 ---
 
 ## Requirements
 
-- Docker & Docker Compose
-- Proxmox VE 8.x or 9.x
-- Network access to Proxmox API (port 8006)
+- **Host**: Linux with Docker Engine 24+ and Docker Compose v2
+- **Sizing**: 2 GB RAM and 10 GB disk minimum, more for database growth
+- **Ports**: 3000 inbound, outbound to Proxmox VE 8006 and Proxmox Backup Server 8007
+- **Proxmox**: Proxmox VE 8.x or 9.x
+
+High availability adds its own sizing and network prerequisites, listed in the [documentation](https://docs.proxcenter.io/operations/ha-prerequisites).
 
 ## Security
 

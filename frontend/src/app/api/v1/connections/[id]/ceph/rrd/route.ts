@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getDateLocale } from "@/lib/i18n/date"
 
 export const runtime = "nodejs"
 
@@ -20,9 +18,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
-
-    const cookieStore = await cookies()
-    const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
 
     const url = new URL(req.url)
     const timeframe = (url.searchParams.get('timeframe') || 'hour') as Timeframe
@@ -55,20 +50,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
       // RRD data not available
     }
 
-    // Parser et formater les données pour les graphiques
+    // Parser et formater les données pour les graphiques.
+    // `time` reste l'epoch UTC brut : l'étiquette d'axe est fabriquée par le
+    // navigateur, sinon elle sort dans le fuseau du conteneur (UTC) alors que
+    // les séries temps réel de la page sortent dans celui du visiteur (#843).
     const chartData = (Array.isArray(rrdData) ? rrdData : [])
       .filter(d => d && d.time)
       .map(d => {
-        const time = new Date(d.time * 1000)
-
-        
-return {
+        return {
           time: d.time,
-          timeFormatted: time.toLocaleTimeString(dateLocale, {
-            hour: '2-digit',
-            minute: '2-digit',
-            ...(timeframe !== 'hour' ? { day: '2-digit', month: '2-digit' } : {})
-          }),
 
           // CPU
           cpu: d.cpu ? Math.round(d.cpu * 100 * 10) / 10 : null,

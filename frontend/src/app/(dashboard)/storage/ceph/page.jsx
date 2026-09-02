@@ -13,6 +13,8 @@ import {
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogContent,
   Divider,
   FormControl,
   IconButton,
@@ -32,6 +34,8 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
+import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { CephOsdFlagsDialog, useCephOsdFlags } from '@/components/ceph/CephOsdFlags'
 
 import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
@@ -70,8 +74,32 @@ const formatRrdAxisTick = (tsSec, timeframe, locale) => {
 }
 
 /* -----------------------------
+  Vocabulaire d'icônes Ceph
+
+  Les cartes de synthèse de la page fixaient déjà le disque pour un OSD et
+  l'oeil pour un moniteur : les onglets, les lignes de tableau et le dialogue
+  de détails reprennent les mêmes glyphes, pour qu'un même objet se reconnaisse
+  partout sur l'écran.
+------------------------------ */
+
+const CEPH_ICONS = {
+  osd: 'ri-hard-drive-2-line',
+  pool: 'ri-database-2-line',
+  monitor: 'ri-eye-line',
+  mds: 'ri-folders-line',
+}
+
+/* -----------------------------
   Components
 ------------------------------ */
+
+// Première colonne des tableaux : l'icône du domaine, puis le nom.
+const NameCell = ({ kind, children }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+    <i className={CEPH_ICONS[kind]} style={{ fontSize: 18, opacity: 0.8 }} />
+    {children}
+  </Box>
+)
 
 // Health Status Badge
 const HealthBadge = ({ status, size = 'medium' }) => {
@@ -190,6 +218,174 @@ return '#9e9e9e'
   )
 }
 
+// Ligne « libellé / valeur » du dialogue de détails.
+const DetailRow = ({ label, children }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 3, py: 1 }}>
+    <Typography variant='caption' sx={{ opacity: 0.6 }}>{label}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>{children}</Box>
+  </Box>
+)
+
+const DetailValue = ({ children }) => (
+  <Typography variant='body2' sx={{ fontWeight: 600, textAlign: 'right' }}>{children}</Typography>
+)
+
+// Un octet à 0 vient presque toujours d'un champ que Proxmox n'a pas renvoyé,
+// pas d'un disque vide : le tiret est plus honnête que « 0 B ».
+const bytesOrDash = (n) => (n > 0 ? formatBytes(n) : '-')
+
+/**
+ * Détails d'une ligne des tableaux OSD / Pool / Moniteur / MDS, au clic sur la
+ * ligne. Les tableaux ne montrent que les colonnes qui tiennent à l'écran ;
+ * tout ce que l'API renvoie déjà en plus (version, reweight, PG cibles, mode
+ * d'autoscale, rang, taille du store) vit ici.
+ */
+const CephDetailDialog = ({ detail, open, onClose }) => {
+  const t = useTranslations()
+  const kind = detail?.kind
+  const row = detail?.row
+
+  // ⚠️ Un OSD éteint rapporte 0 ms, ce qui n'est PAS une bonne latence : un
+  // tiret, sinon la ligne se lit comme un disque parfait.
+  const latency = (ms) => (kind === 'osd' && !row?.up ? '-' : `${ms || 0} ms`)
+
+  // ⚠️ Le `percent_used` d'un pool est une fraction 0..1 quand celui d'un OSD
+  // est un pourcentage 0..100. Même heuristique que les onglets Ceph de
+  // l'inventaire, pour que les deux écrans citent le même chiffre.
+  const poolUsedPct = row?.percentUsed > 1 ? row.percentUsed : (row?.percentUsed || 0) * 100
+
+  // `usedBytes` dérive d'un `kb_used` que Proxmox ne renvoie pas toujours : le
+  // redériver du pourcentage, comme le fait déjà buildCrushTopology.
+  const osdUsed = row?.usedBytes || Math.round(((row?.totalBytes || 0) * (row?.usedPct || 0)) / 100)
+  const osdAvail = row?.availBytes || Math.max(0, (row?.totalBytes || 0) - osdUsed)
+
+  const usageHeader = (pct) => (
+    <Box sx={{ mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+        <Typography variant='caption' sx={{ opacity: 0.6 }}>{t('storage.usage')}</Typography>
+        <Typography variant='caption' sx={{ fontWeight: 700 }}>{Math.round(pct || 0)}%</Typography>
+      </Box>
+      <CapacityBar usedPct={pct} />
+    </Box>
+  )
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth>
+      <AppDialogTitle
+        onClose={onClose}
+        icon={<i className={CEPH_ICONS[kind]} style={{ fontSize: 20, opacity: 0.8 }} />}
+      >
+        {row?.name}
+      </AppDialogTitle>
+      <DialogContent dividers>
+        {kind === 'osd' && (
+          <>
+            {usageHeader(row.usedPct)}
+            <Stack divider={<Divider />}>
+              <DetailRow label={t('common.status')}>
+                <OsdStatusChip up={row.up} inCluster={row.in} status={row.status} />
+              </DetailRow>
+              <DetailRow label={t('cephPage.host')}><DetailValue>{row.host}</DetailValue></DetailRow>
+              <DetailRow label={t('cephPage.deviceClass')}>
+                <DeviceClassChip deviceClass={row.deviceClass} />
+              </DetailRow>
+              <DetailRow label={t('common.used')}><DetailValue>{bytesOrDash(osdUsed)}</DetailValue></DetailRow>
+              <DetailRow label={t('common.available')}><DetailValue>{bytesOrDash(osdAvail)}</DetailValue></DetailRow>
+              <DetailRow label={t('common.total')}><DetailValue>{bytesOrDash(row.totalBytes)}</DetailValue></DetailRow>
+              <DetailRow label={t('cephPage.commitLatency')}>
+                <DetailValue>{latency(row.commitLatencyMs)}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('cephPage.applyLatency')}>
+                <DetailValue>{latency(row.applyLatencyMs)}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('cephPage.pgs')}>
+                <DetailValue>{row.pgs ?? '-'}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('cephPage.reweight')}>
+                <DetailValue>{Number.isFinite(row.reweight) ? row.reweight.toFixed(2) : '-'}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('common.version')}><DetailValue>{row.version || '-'}</DetailValue></DetailRow>
+            </Stack>
+          </>
+        )}
+
+        {kind === 'pool' && (
+          <>
+            {usageHeader(poolUsedPct)}
+            <Stack divider={<Divider />}>
+              <DetailRow label={t('common.type')}>
+                <Chip size='small' label={row.type} variant='outlined' sx={{ fontSize: 11 }} />
+              </DetailRow>
+              <DetailRow label={t('cephPage.application')}>
+                <Chip size='small' label={row.application} variant='outlined' sx={{ fontSize: 11 }} />
+              </DetailRow>
+              <DetailRow label={t('cephPage.replication')}>
+                <DetailValue>{row.size} / {row.minSize}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('cephPage.pgs')}><DetailValue>{row.pgNum}</DetailValue></DetailRow>
+              <DetailRow label={t('cephPage.pgTarget')}><DetailValue>{row.pgNumTarget}</DetailValue></DetailRow>
+              <DetailRow label={t('cephPage.autoscale')}>
+                <Chip size='small' label={row.pgAutoscaleMode} variant='outlined' sx={{ fontSize: 11 }} />
+              </DetailRow>
+              <DetailRow label={t('cephPage.crushRule')}>
+                <DetailValue>{row.crushRuleName || row.crushRule}</DetailValue>
+              </DetailRow>
+              <DetailRow label={t('common.used')}><DetailValue>{row.bytesUsedFormatted}</DetailValue></DetailRow>
+              <DetailRow label={t('common.available')}><DetailValue>{row.maxAvailFormatted}</DetailValue></DetailRow>
+              <DetailRow label={t('cephPage.objects')}>
+                <DetailValue>{(row.objects || 0).toLocaleString()}</DetailValue>
+              </DetailRow>
+            </Stack>
+          </>
+        )}
+
+        {kind === 'monitor' && (
+          <Stack divider={<Divider />}>
+            <DetailRow label={t('cephPage.quorum')}>
+              {row.inQuorum ? (
+                <Chip size='small' label={t('cephPage.inQuorum')} color='success' sx={{ fontSize: 11 }} />
+              ) : (
+                <Chip size='small' label={t('cephPage.out')} color='error' sx={{ fontSize: 11 }} />
+              )}
+            </DetailRow>
+            <DetailRow label={t('cephPage.leader')}>
+              {row.leader ? (
+                <Chip size='small' label={t('cephPage.leader')} color='primary' sx={{ fontSize: 11 }} />
+              ) : (
+                <DetailValue>-</DetailValue>
+              )}
+            </DetailRow>
+            <DetailRow label={t('cephPage.host')}><DetailValue>{row.host}</DetailValue></DetailRow>
+            <DetailRow label={t('cephPage.address')}><DetailValue>{row.addr || '-'}</DetailValue></DetailRow>
+            <DetailRow label={t('cephPage.rank')}><DetailValue>{row.rank ?? '-'}</DetailValue></DetailRow>
+            {row.storeStats?.bytes_total > 0 && (
+              <DetailRow label={t('cephPage.storeSize')}>
+                <DetailValue>{formatBytes(row.storeStats.bytes_total)}</DetailValue>
+              </DetailRow>
+            )}
+          </Stack>
+        )}
+
+        {kind === 'mds' && (
+          <Stack divider={<Divider />}>
+            <DetailRow label={t('common.status')}>
+              <Chip
+                size='small'
+                label={row.state}
+                color={row.state === 'active' ? 'success' : 'default'}
+                sx={{ fontSize: 11 }}
+              />
+            </DetailRow>
+            <DetailRow label={t('cephPage.host')}><DetailValue>{row.host}</DetailValue></DetailRow>
+            <DetailRow label={t('cephPage.address')}><DetailValue>{row.addr || '-'}</DetailValue></DetailRow>
+            <DetailRow label={t('cephPage.rank')}><DetailValue>{row.rank ?? '-'}</DetailValue></DetailRow>
+          </Stack>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // KPI Card
 function KpiCard({ title, value, subtitle, icon, color, children }) {
   return (
@@ -261,6 +457,12 @@ export default function CephPage() {
   const [error, setError] = useState(null)
 
   const [activeTab, setActiveTab] = useState(0)
+
+  // Dernière ligne ouverte dans le dialogue de détails ({ kind, row }) et son
+  // ouverture, séparées pour que le contenu survive au fondu de fermeture.
+  const [detail, setDetail] = useState(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
   const [showHealthDetails, setShowHealthDetails] = useState(false)
 
   // RRD / Performance graphs
@@ -442,16 +644,47 @@ return updated.slice(-30)
     }
   }, [liveRrdData, liveMode])
 
+  /**
+   * Styles des infobulles Recharts.
+   *
+   * ⚠️ Le fond était codé en dur en `rgba(0,0,0,0.85)`, donc noir sur le thème
+   * clair aussi, avec par-dessus le libellé en gris foncé (le défaut de
+   * Recharts) : illisible. Tout vient maintenant du thème, et le libellé passe
+   * en `text.secondary` pour rester lisible sur les deux surfaces.
+   */
+  const chartTooltip = useMemo(() => ({
+    contentStyle: {
+      fontSize: 12,
+      borderRadius: 8,
+      backgroundColor: theme.palette.background.paper,
+      borderColor: theme.palette.divider,
+      color: theme.palette.text.primary,
+    },
+    itemStyle: { color: theme.palette.text.primary },
+    labelStyle: { color: theme.palette.text.secondary },
+  }), [theme])
+
+  // Flags OSD du cluster : l'état vit dans la rangée du haut, l'édition dans
+  // une modale. La route et les libellés existaient déjà, la page ne les
+  // exposait pas.
+  const osdFlags = useCephOsdFlags(connId, !!cephData)
+  const [flagsEditing, setFlagsEditing] = useState(false)
+
+  const openDetail = (kind, row) => {
+    setDetail({ kind, row })
+    setDetailOpen(true)
+  }
+
   // Colonnes OSDs
   const osdColumns = useMemo(() => [
     {
       field: 'name',
       headerName: t('cephPage.osd'),
-      width: 100,
+      width: 120,
       renderCell: params => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <NameCell kind='osd'>
           <Typography variant='body2' sx={{ fontWeight: 700 }}>{params.row.name}</Typography>
-        </Box>
+        </NameCell>
       )
     },
     {
@@ -522,9 +755,9 @@ return updated.slice(-30)
       flex: 1,
       minWidth: 150,
       renderCell: params => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+        <NameCell kind='pool'>
           <Typography variant='body2' sx={{ fontWeight: 700 }}>{params.row.name}</Typography>
-        </Box>
+        </NameCell>
       )
     },
     {
@@ -596,14 +829,14 @@ return updated.slice(-30)
     {
       field: 'name',
       headerName: t('cephPage.monitor'),
-      width: 120,
+      width: 150,
       renderCell: params => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: '100%' }}>
+        <NameCell kind='monitor'>
           <Typography variant='body2' sx={{ fontWeight: 700 }}>{params.row.name}</Typography>
           {params.row.leader && (
             <Chip size='small' label={t('cephPage.leader')} color='primary' sx={{ fontSize: 10, height: 18 }} />
           )}
-        </Box>
+        </NameCell>
       )
     },
     {
@@ -624,9 +857,7 @@ return updated.slice(-30)
       minWidth: 150,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          <Typography variant='body2' sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {params.row.addr}
-          </Typography>
+          <Typography variant='body2'>{params.row.addr}</Typography>
         </Box>
       )
     },
@@ -781,19 +1012,33 @@ return updated.slice(-30)
                     <Box sx={{ mt: 1 }}>
                       <HealthBadge status={cephData.health?.status} size='large' />
                     </Box>
-                    {cephData.health?.numChecks > 0 && (
-                      <Button
-                        size='small'
-                        sx={{ mt: 1, fontSize: 11 }}
-                        onClick={() => setShowHealthDetails(!showHealthDetails)}
-                        endIcon={<i className={showHealthDetails ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} />}
-                      >
-                        {cephData.health.numChecks > 1
-                          ? t('ceph.alertsCount', { count: cephData.health.numChecks })
-                          : t('ceph.alertCount', { count: cephData.health.numChecks })}
-                      </Button>
-                    )}
                   </Box>
+
+                  {/* ⚠️ Le compte d'alertes vit en haut à droite, hors de la
+                      colonne du badge, et JAMAIS en dessous : les cartes d'une
+                      même rangée de grille s'alignent sur la plus haute, donc un
+                      bouton posé sous le badge rallongeait les cinq cartes dès
+                      que le cluster passait en WARNING. Ici la hauteur de la
+                      carte reste celle du titre et du badge. */}
+                  {cephData.health?.numChecks > 0 && (
+                    <Tooltip
+                      title={cephData.health.numChecks > 1
+                        ? t('ceph.alertsCount', { count: cephData.health.numChecks })
+                        : t('ceph.alertCount', { count: cephData.health.numChecks })}
+                    >
+                      <Chip
+                        size='small'
+                        color='warning'
+                        label={cephData.health.numChecks}
+                        icon={<i
+                          className={showHealthDetails ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'}
+                          style={{ fontSize: 16 }}
+                        />}
+                        onClick={() => setShowHealthDetails(!showHealthDetails)}
+                        sx={{ alignSelf: 'flex-start', height: 22, fontSize: 11, fontWeight: 700 }}
+                      />
+                    </Tooltip>
+                  )}
                 </Box>
               </CardContent>
             </Card>
@@ -821,6 +1066,39 @@ return updated.slice(-30)
               icon='ri-upload-2-line'
               color='#ff9800'
             />
+
+            {/* Flags OSD : orange dès qu'un flag traîne, parce qu'un `noout`
+                oublié après une maintenance se paie plus tard. */}
+            {!osdFlags.forbidden && (
+              <KpiCard
+                title={t('ceph.osdFlags')}
+                value={osdFlags.flags.length}
+                subtitle={osdFlags.flags.length > 0 ? osdFlags.flags.join(', ') : t('ceph.noOsdFlagsActive')}
+                icon='ri-flag-line'
+                color={osdFlags.flags.length > 0 ? '#ff9800' : undefined}
+              >
+                <Tooltip title={t('common.edit')}>
+                  <IconButton size='small' aria-label={t('common.edit')} onClick={() => setFlagsEditing(true)}>
+                    <i className='ri-pencil-line' style={{ fontSize: 18 }} />
+                  </IconButton>
+                </Tooltip>
+              </KpiCard>
+            )}
+
+            {/* Reconstruction : le pgmap ne porte ces champs QUE pendant une
+                reprise, la carte n'apparaît donc que dans ce cas, qui est
+                justement celui où on ouvre cette page. */}
+            {(rrdData?.current?.recoveringBytesPerSec > 0 || rrdData?.current?.recoveringObjectsPerSec > 0) && (
+              <KpiCard
+                title={t('cephPage.recovery')}
+                value={`${formatBytes(rrdData.current.recoveringBytesPerSec || 0)}/s`}
+                subtitle={t('cephPage.recoveryObjects', {
+                  count: (rrdData.current.recoveringObjectsPerSec || 0).toLocaleString()
+                })}
+                icon='ri-loop-right-line'
+                color='#ff9800'
+              />
+            )}
           </Box>
 
           {/* Health Details */}
@@ -832,28 +1110,44 @@ return updated.slice(-30)
                   {t('ceph.healthAlerts')}
                 </Typography>
                 <Stack spacing={1}>
-                  {(cephData.health?.checks || []).map((check, idx) => (
-                    <Box 
-                      key={idx} 
-                      sx={{ 
-                        p: 1.5, 
-                        borderRadius: 1, 
-                        bgcolor: check.severity === 'HEALTH_ERR' ? 'error.dark' : 'warning.dark',
-                        opacity: 0.9
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Chip 
-                          size='small' 
-                          label={check.severity} 
-                          color={check.severity === 'HEALTH_ERR' ? 'error' : 'warning'}
-                          sx={{ fontSize: 10, height: 20 }}
-                        />
-                        <Typography variant='body2' sx={{ fontWeight: 700 }}>{check.name}</Typography>
+                  {(cephData.health?.checks || []).map((check, idx) => {
+                    const isError = check.severity === 'HEALTH_ERR'
+                    const severityColor = isError ? 'error.main' : 'warning.main'
+
+                    return (
+                      /* La sévérité tient dans le liseré et dans la pastille, pas
+                         dans un fond plein : le texte garde la couleur du
+                         thème, donc il est lisible en clair comme en sombre.
+                         ⚠️ `warning.dark` en aplati changeait de teinte d'un
+                         thème à l'autre et, avec l'`opacity: .9` par-dessus,
+                         ne se lisait ni en clair ni en sombre. Ne pas colorer
+                         le texte non plus : de l'ambre sur du blanc tombe sous
+                         le seuil de contraste en 14 px. */
+                      <Box
+                        key={idx}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 1,
+                          bgcolor: 'background.paper',
+                          borderLeft: '3px solid',
+                          borderColor: severityColor,
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          <Chip
+                            size='small'
+                            label={check.severity}
+                            color={isError ? 'error' : 'warning'}
+                            sx={{ fontSize: 10, height: 20, fontWeight: 700 }}
+                          />
+                          <Typography variant='body2' sx={{ fontWeight: 700 }}>
+                            {check.name}
+                          </Typography>
+                        </Box>
+                        <Typography variant='body2' sx={{ opacity: 0.75 }}>{check.summary}</Typography>
                       </Box>
-                      <Typography variant='body2' sx={{ opacity: 0.9 }}>{check.summary}</Typography>
-                    </Box>
-                  ))}
+                    )
+                  })}
                 </Stack>
               </CardContent>
             </Card>
@@ -1005,7 +1299,7 @@ return updated.slice(-30)
                             <XAxis dataKey='time' tickFormatter={(v) => formatLiveAxisTick(v, dateLocale)} tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} width={45} />
                             <RTooltip 
-                              contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
+                              {...chartTooltip}
                               formatter={(value, name) => [value.toLocaleString(), name === 'readIops' ? t('cephPage.readLabel') : t('cephPage.writeLabel')]}
                               labelFormatter={(v) => formatLiveAxisTick(v, dateLocale)}
                             />
@@ -1103,7 +1397,7 @@ return updated.slice(-30)
                             <XAxis dataKey='time' tickFormatter={(v) => formatLiveAxisTick(v, dateLocale)} tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={55} />
                             <RTooltip 
-                              contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
+                              {...chartTooltip}
                               formatter={(value) => [`${formatBytes(value)}/s`]}
                               labelFormatter={(v) => formatLiveAxisTick(v, dateLocale)}
                             />
@@ -1137,12 +1431,7 @@ return updated.slice(-30)
                             <XAxis dataKey='time' tickFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)} tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={60} />
                             <RTooltip 
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(0,0,0,0.85)', 
-                                border: 'none', 
-                                borderRadius: 8,
-                                fontSize: 12
-                              }}
+                              {...chartTooltip}
                               formatter={(value) => formatBytes(value)}
                               labelFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)}
                             />
@@ -1172,12 +1461,7 @@ return updated.slice(-30)
                           <XAxis dataKey='time' tickFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)} tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                           <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={40} />
                           <RTooltip 
-                            contentStyle={{ 
-                              backgroundColor: 'rgba(0,0,0,0.85)', 
-                              border: 'none', 
-                              borderRadius: 8,
-                              fontSize: 12
-                            }}
+                            {...chartTooltip}
                             formatter={(value) => `${value}%`}
                             labelFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)}
                           />
@@ -1210,13 +1494,14 @@ return updated.slice(-30)
                         <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
                         <XAxis dataKey='name' tick={{ fontSize: 9 }} interval={0} angle={-45} textAnchor='end' height={50} />
                         <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}ms`} width={45} />
+                        {/* ⚠️ Sur un BarChart, le `cursor` par défaut de Recharts est
+                            une bande gris clair CODÉE EN DUR, dessinée sur toute la
+                            largeur de la catégorie survolée : elle passe pour un
+                            carré blanc qui masque la barre. La teindre au thème est
+                            la convention du dépôt (FlowsTab, NetworkDashboard). */}
                         <RTooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'rgba(0,0,0,0.85)', 
-                            border: 'none', 
-                            borderRadius: 8,
-                            fontSize: 12
-                          }}
+                          {...chartTooltip}
+                          cursor={{ fill: theme.palette.action.hover }}
                           formatter={(value) => [`${value} ms`, t('ceph.latency')]}
                         />
                         <Bar 
@@ -1308,10 +1593,28 @@ return updated.slice(-30)
               onChange={(e, v) => setActiveTab(v)}
               sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
             >
-              <Tab label={`${t('cephPage.osdsTab')} (${cephData.osds?.total || 0})`} />
-              <Tab label={`${t('cephPage.poolsTab')} (${cephData.pools?.total || 0})`} />
-              <Tab label={`${t('cephPage.monitorsTab')} (${cephData.monitors?.total || 0})`} />
-              {cephData.mds?.total > 0 && <Tab label={`${t('cephPage.mdsTab')} (${cephData.mds.total})`} />}
+              <Tab
+                icon={<i className={CEPH_ICONS.osd} style={{ fontSize: 18 }} />}
+                iconPosition='start'
+                label={`${t('cephPage.osdsTab')} (${cephData.osds?.total || 0})`}
+              />
+              <Tab
+                icon={<i className={CEPH_ICONS.pool} style={{ fontSize: 18 }} />}
+                iconPosition='start'
+                label={`${t('cephPage.poolsTab')} (${cephData.pools?.total || 0})`}
+              />
+              <Tab
+                icon={<i className={CEPH_ICONS.monitor} style={{ fontSize: 18 }} />}
+                iconPosition='start'
+                label={`${t('cephPage.monitorsTab')} (${cephData.monitors?.total || 0})`}
+              />
+              {cephData.mds?.total > 0 && (
+                <Tab
+                  icon={<i className={CEPH_ICONS.mds} style={{ fontSize: 18 }} />}
+                  iconPosition='start'
+                  label={`${t('cephPage.mdsTab')} (${cephData.mds.total})`}
+                />
+              )}
             </Tabs>
 
             {/* OSDs Tab */}
@@ -1320,6 +1623,7 @@ return updated.slice(-30)
                 <DataGrid
                   rows={cephData.osds?.list || []}
                   columns={osdColumns}
+                  onRowClick={params => openDetail('osd', params.row)}
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
@@ -1327,7 +1631,7 @@ return updated.slice(-30)
                   }}
                   disableRowSelectionOnClick
                   getRowId={(row) => row.id}
-                  sx={{ border: 'none' }}
+                  sx={{ border: 'none', '& .MuiDataGrid-row': { cursor: 'pointer' } }}
                 />
               </Box>
             )}
@@ -1338,13 +1642,14 @@ return updated.slice(-30)
                 <DataGrid
                   rows={cephData.pools?.list || []}
                   columns={poolColumns}
+                  onRowClick={params => openDetail('pool', params.row)}
                   pageSizeOptions={[10, 25, 50]}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                   }}
                   disableRowSelectionOnClick
                   getRowId={(row) => row.id}
-                  sx={{ border: 'none' }}
+                  sx={{ border: 'none', '& .MuiDataGrid-row': { cursor: 'pointer' } }}
                 />
               </Box>
             )}
@@ -1355,13 +1660,14 @@ return updated.slice(-30)
                 <DataGrid
                   rows={cephData.monitors?.list || []}
                   columns={monColumns}
+                  onRowClick={params => openDetail('monitor', params.row)}
                   pageSizeOptions={[10, 25]}
                   initialState={{
                     pagination: { paginationModel: { pageSize: 10 } },
                   }}
                   disableRowSelectionOnClick
                   getRowId={(row) => row.name}
-                  sx={{ border: 'none' }}
+                  sx={{ border: 'none', '& .MuiDataGrid-row': { cursor: 'pointer' } }}
                 />
               </Box>
             )}
@@ -1376,18 +1682,24 @@ return updated.slice(-30)
                   {(cephData.mds?.list || []).map((mds, idx) => (
                     <Box 
                       key={idx}
+                      onClick={() => openDetail('mds', mds)}
                       sx={{ 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'space-between',
                         p: 1.5,
                         borderRadius: 1,
-                        bgcolor: 'action.hover'
+                        bgcolor: 'action.hover',
+                        cursor: 'pointer',
+                        '&:hover': { bgcolor: 'action.selected' }
                       }}
                     >
-                      <Box>
-                        <Typography variant='body2' sx={{ fontWeight: 700 }}>{mds.name}</Typography>
-                        <Typography variant='caption' sx={{ opacity: 0.6 }}>{mds.host}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <i className={CEPH_ICONS.mds} style={{ fontSize: 18, opacity: 0.8 }} />
+                        <Box>
+                          <Typography variant='body2' sx={{ fontWeight: 700 }}>{mds.name}</Typography>
+                          <Typography variant='caption' sx={{ opacity: 0.6 }}>{mds.host}</Typography>
+                        </Box>
                       </Box>
                       <Chip 
                         size='small' 
@@ -1403,6 +1715,17 @@ return updated.slice(-30)
           </Card>
         </>
       )}
+
+      <CephDetailDialog detail={detail} open={detailOpen} onClose={() => setDetailOpen(false)} />
+
+      <CephOsdFlagsDialog
+        open={flagsEditing}
+        onClose={() => setFlagsEditing(false)}
+        flags={osdFlags.flags}
+        loading={osdFlags.loading}
+        toggling={osdFlags.toggling}
+        onToggle={osdFlags.toggle}
+      />
     </Box>
   )
 }

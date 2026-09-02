@@ -1,6 +1,6 @@
 'use client'
 
-import React, { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import DOMPurify from 'dompurify'
 import { useBranding } from '@/contexts/BrandingContext'
@@ -24,7 +24,6 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
-  Grid,
   IconButton,
   InputLabel,
   LinearProgress,
@@ -43,7 +42,6 @@ import {
   Tabs,
   TextField,
   Tooltip as MuiTooltip,
-  Switch,
   Typography,
   alpha,
   useTheme,
@@ -61,6 +59,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import NodeFirewallTab from '@/components/NodeFirewallTab'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
+import { CephOsdFlagsPanel } from '@/components/ceph/CephOsdFlags'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { loadNodeAptUpdates } from '@/lib/proxmox/loadNodeAptUpdates'
 import { formatNodeLocalTime } from '@/lib/inventory/nodeTime'
@@ -316,9 +315,6 @@ export default function NodeTabs(props: any) {
   const [networkPendingChanges, setNetworkPendingChanges] = useState(false)
 
   // Ceph OSD Flags state for Node Ceph OSD sub-tab
-  const [nodeCephOsdFlags, setNodeCephOsdFlags] = useState<string[]>([])
-  const [nodeCephOsdFlagsLoading, setNodeCephOsdFlagsLoading] = useState(false)
-  const [nodeCephFlagToggling, setNodeCephFlagToggling] = useState<string | null>(null)
 
   // ZFS pool row expansion (Disks tab)
   const [expandedPool, setExpandedPool] = useState<string | null>(null)
@@ -406,48 +402,6 @@ export default function NodeTabs(props: any) {
     () => new Map<string, string | undefined>((hosts || []).map((h: any) => [h.key as string, h.status as string | undefined])),
     [hosts]
   )
-
-  // Fetch Ceph OSD flags when on OSD sub-tab
-  useEffect(() => {
-    if (nodeTab !== 8 || nodeCephSubTab !== 2 || !nodeConnId || !data.clusterName) return
-    let cancelled = false
-    setNodeCephOsdFlagsLoading(true)
-    fetch(`/api/v1/connections/${encodeURIComponent(nodeConnId)}/ceph/flags`)
-      .then(res => res.json())
-      .then(json => {
-        if (!cancelled) setNodeCephOsdFlags(json.data?.flags || [])
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setNodeCephOsdFlagsLoading(false) })
-    return () => { cancelled = true }
-  }, [nodeTab, nodeCephSubTab, nodeConnId, data.clusterName])
-
-  const handleToggleNodeCephFlag = useCallback(async (flag: string, enable: boolean) => {
-    if (!nodeConnId) return
-    setNodeCephFlagToggling(flag)
-    try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(nodeConnId)}/ceph/flags`, {
-        method: enable ? 'PUT' : 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flag }),
-      })
-      if (res.ok) {
-        setNodeCephOsdFlags(prev => enable ? [...new Set([...prev, flag])] : prev.filter(f => f !== flag))
-      }
-    } catch { /* ignore */ }
-    setNodeCephFlagToggling(null)
-  }, [nodeConnId])
-
-  const KNOWN_OSD_FLAGS: Array<{ flag: string; labelKey: string; descKey: string }> = [
-    { flag: 'noout', labelKey: 'ceph.flagNoout', descKey: 'ceph.flagNooutDesc' },
-    { flag: 'norebalance', labelKey: 'ceph.flagNorebalance', descKey: 'ceph.flagNorebalanceDesc' },
-    { flag: 'norecover', labelKey: 'ceph.flagNorecover', descKey: 'ceph.flagNorecoverDesc' },
-    { flag: 'noscrub', labelKey: 'ceph.flagNoscrub', descKey: 'ceph.flagNoscrubDesc' },
-    { flag: 'nodeep-scrub', labelKey: 'ceph.flagNodeepScrub', descKey: 'ceph.flagNodeepScrubDesc' },
-    { flag: 'nobackfill', labelKey: 'ceph.flagNobackfill', descKey: 'ceph.flagNobackfillDesc' },
-    { flag: 'noup', labelKey: 'ceph.flagNoup', descKey: 'ceph.flagNoupDesc' },
-    { flag: 'nodown', labelKey: 'ceph.flagNodown', descKey: 'ceph.flagNodownDesc' },
-  ]
 
   return (
     <>
@@ -2659,47 +2613,10 @@ export default function NodeTabs(props: any) {
                           {nodeCephSubTab === 2 && (
                             <Stack spacing={2}>
                             {/* OSD Flags Panel */}
-                            <Card variant="outlined">
-                              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <i className="ri-flag-line" style={{ fontSize: 18 }} />
-                                    <Typography variant="subtitle2" fontWeight={700}>{t('ceph.osdFlags')}</Typography>
-                                  </Box>
-                                  {nodeCephOsdFlagsLoading && <CircularProgress size={16} />}
-                                </Box>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                                  {t('ceph.osdFlagsDescription')}
-                                </Typography>
-                                <Grid container spacing={1}>
-                                  {KNOWN_OSD_FLAGS.map(({ flag, labelKey, descKey }) => (
-                                    <Grid size={{ xs: 12, sm: 6 }} key={flag}>
-                                      <FormControlLabel
-                                        control={
-                                          <Switch
-                                            checked={nodeCephOsdFlags.includes(flag)}
-                                            onChange={(e) => handleToggleNodeCephFlag(flag, e.target.checked)}
-                                            size="small"
-                                            disabled={nodeCephFlagToggling === flag || nodeCephOsdFlagsLoading}
-                                          />
-                                        }
-                                        label={
-                                          <Box>
-                                            <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12 }}>
-                                              {t(labelKey as any)}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                              {t(descKey as any)}
-                                            </Typography>
-                                          </Box>
-                                        }
-                                        sx={{ alignItems: 'flex-start', ml: 0, '& .MuiSwitch-root': { mt: 0.5 } }}
-                                      />
-                                    </Grid>
-                                  ))}
-                                </Grid>
-                              </CardContent>
-                            </Card>
+                            <CephOsdFlagsPanel
+                              connId={nodeConnId}
+                              enabled={nodeTab === 8 && nodeCephSubTab === 2 && !!data.clusterName}
+                            />
 
                             {/* OSD Table */}
                             <Card variant="outlined">

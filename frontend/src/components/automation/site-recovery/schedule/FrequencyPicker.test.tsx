@@ -15,7 +15,7 @@ import { cleanup } from '@testing-library/react'
 import { renderWithProviders, screen, userEvent } from '@/__tests__/setup/renderWithProviders'
 
 import FrequencyPicker from './FrequencyPicker'
-import type { ScheduleSpec } from './types'
+import { ALLOWED_INTERVAL_MINUTES, type ScheduleSpec } from './types'
 
 afterEach(cleanup)
 
@@ -42,6 +42,61 @@ const blur = () => userEvent.click(screen.getByRole('button', { name: 'elsewhere
 async function enableWindow() {
   await userEvent.click(screen.getByRole('checkbox'))
 }
+
+describe('FrequencyPicker interval mode', () => {
+  it('selecting Interval yields a valid interval spec', async () => {
+    renderWithProviders(<Harness initial={hourly()} />)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Interval' }))
+
+    expect(spec()).toEqual({ mode: 'interval', everyMinutes: 30 })
+  })
+
+  it('offers exactly the allowed interval values', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('combobox'))
+    const offeredValues = screen.getAllByRole('option').map(option => Number(option.getAttribute('data-value')))
+
+    expect(offeredValues).toEqual([...ALLOWED_INTERVAL_MINUTES])
+  })
+
+  it('switching from Interval to Hourly seeds the hourly default', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Hourly' }))
+
+    expect(spec()).toEqual({ mode: 'hourly', everyHours: 2 })
+  })
+
+  it('changing the interval value updates the spec', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('combobox'))
+    await userEvent.click(screen.getByRole('option', { name: 'Every 2 hours' }))
+
+    expect(spec()).toEqual({ mode: 'interval', everyMinutes: 120 })
+  })
+
+  it('labels the options in minutes below an hour and in hours from one hour', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('combobox'))
+    const labels = screen.getAllByRole('option').map(option => option.textContent)
+
+    expect(labels).toEqual(
+      expect.arrayContaining(['Every 1 minute', 'Every 30 minutes', 'Every 1 hour', 'Every 2 hours', 'Every 24 hours'])
+    )
+  })
+
+  it('re-selecting the current tab is a no-op', async () => {
+    renderWithProviders(<Harness initial={{ mode: 'interval', everyMinutes: 30 }} />)
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Interval' }))
+
+    expect(spec()).toEqual({ mode: 'interval', everyMinutes: 30 })
+  })
+})
 
 describe('FrequencyPicker numeric fields', () => {
   it('shows the interval it is given', () => {

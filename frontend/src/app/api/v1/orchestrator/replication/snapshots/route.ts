@@ -6,21 +6,39 @@ import { getTenantConnectionIds } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
     if (denied) return denied
 
+    // Forward the filters the orchestrator already applies before doing any SSH
+    // work. They were unreachable from the UI because this handler took no
+    // request, so every screen paid for a full cluster-wide inventory.
+    const params = request.nextUrl.searchParams
+    const clusterId = params.get("cluster_id") || undefined
+    const vmidRaw = params.get("vmid")
+    const vmid = vmidRaw && /^\d+$/.test(vmidRaw) ? Number.parseInt(vmidRaw, 10) : undefined
+
     const tenantConnectionIds = await getTenantConnectionIds()
     const client = getOrchestratorClient()
-    const response = await client.listMirrorSnapshots()
+    const response = await client.listMirrorSnapshots({ clusterId, vmid })
 
     const all = Array.isArray(response.data) ? response.data : []
     const filtered = all.filter((s: any) => !s.cluster_id || tenantConnectionIds.has(s.cluster_id))
 
     return NextResponse.json(filtered)
-  } catch {
-    return NextResponse.json([])
+  } catch (e: any) {
+    // Never answer an empty array here. The inventory has no pagination, so a
+    // large estate times out routinely, and returning [] told the operator they
+    // had no snapshots at all when they had tens of thousands.
+    if (e?.code !== "ORCHESTRATOR_UNAVAILABLE") {
+      console.error("Error listing mirror snapshots:", e)
+    }
+
+    return NextResponse.json(
+      { error: e?.message || "Failed to list snapshots" },
+      { status: 502 }
+    )
   }
 }
 

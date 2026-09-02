@@ -4329,17 +4329,20 @@
       "engineComingSoon": "即将推出",
       "pvNote": "在源和目标节点上安装 <pv>pv</pv> 包以显示复制进度。",
       "pvInstallLabel": "在源节点上自动安装 <pv>pv</pv>",
-      "pvInstallDesc": "跟踪复制进度所需。将通过 SSH 运行 apt-get install pv。"
+      "pvInstallDesc": "跟踪复制进度所需。将通过 SSH 运行 apt-get install pv。",
+      "retentionCoverage": "每 {cadence} 复制一次，这些还原点覆盖 {window}"
     },
     "schedule": {
       "modeRpo": "持续（RPO）",
       "modeScheduled": "计划",
       "freq": {
+        "interval": "间隔",
         "hourly": "每小时",
         "daily": "每日",
         "weekly": "每周",
         "monthly": "每月"
       },
+      "interval": "运行间隔",
       "everyNHours": "每 N 小时",
       "hourWindow": "限制在时间窗口",
       "startHour": "开始时间",
@@ -4360,6 +4363,10 @@
         "sat": "六"
       },
       "labels": {
+        "intervalMinute": "每 {n} 分钟",
+        "intervalMinutes": "每 {n} 分钟",
+        "intervalHour": "每 {n} 小时",
+        "intervalHours": "每 {n} 小时",
         "dailyAllDays": "每天 {time}",
         "dailyWeekdays": "工作日 {time}",
         "dailyCustom": "{days} {time}",

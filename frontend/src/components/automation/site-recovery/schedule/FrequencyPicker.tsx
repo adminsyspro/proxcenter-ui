@@ -5,7 +5,7 @@ import {
   Box, Checkbox, FormControlLabel, IconButton, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography
 } from '@mui/material'
 import NumericTextField from '@/components/ui/NumericTextField'
-import type { ScheduleSpec } from './types'
+import { ALLOWED_INTERVAL_MINUTES, type ScheduleSpec } from './types'
 
 interface Props {
   value: ScheduleSpec
@@ -20,7 +20,8 @@ export default function FrequencyPicker({ value, onChange, disabled }: Props) {
 
   const setMode = (mode: ScheduleSpec['mode']) => {
     if (mode === value.mode) return
-    if (mode === 'hourly') onChange({ mode: 'hourly', everyHours: 2 })
+    if (mode === 'interval') onChange({ mode: 'interval', everyMinutes: 30 })
+    else if (mode === 'hourly') onChange({ mode: 'hourly', everyHours: 2 })
     else if (mode === 'daily') onChange({ mode: 'daily', times: ['03:00'], weekdays: [0, 1, 2, 3, 4, 5, 6] })
     else if (mode === 'weekly') onChange({ mode: 'weekly', weekdays: [0], time: '03:00' })
     else if (mode === 'monthly') onChange({ mode: 'monthly', dayOfMonth: 1, time: '03:00' })
@@ -34,11 +35,36 @@ export default function FrequencyPicker({ value, onChange, disabled }: Props) {
         variant='fullWidth'
         sx={{ minHeight: 36, mb: 2, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
       >
+        <Tab value='interval' label={t('siteRecovery.schedule.freq.interval')} disabled={disabled} />
         <Tab value='hourly' label={t('siteRecovery.schedule.freq.hourly')} disabled={disabled} />
         <Tab value='daily' label={t('siteRecovery.schedule.freq.daily')} disabled={disabled} />
         <Tab value='weekly' label={t('siteRecovery.schedule.freq.weekly')} disabled={disabled} />
         <Tab value='monthly' label={t('siteRecovery.schedule.freq.monthly')} disabled={disabled} />
       </Tabs>
+
+      {value.mode === 'interval' && (
+        <Box>
+          <Typography variant='caption'>{t('siteRecovery.schedule.interval')}</Typography>
+          <Select
+            size='small' fullWidth
+            value={value.everyMinutes}
+            onChange={e => onChange({ ...value, everyMinutes: Number(e.target.value) })}
+            disabled={disabled}
+          >
+            {ALLOWED_INTERVAL_MINUTES.map(minutes => (
+              <MenuItem key={minutes} value={minutes}>
+                {minutes < 60
+                  ? t(minutes === 1
+                    ? 'siteRecovery.schedule.labels.intervalMinute'
+                    : 'siteRecovery.schedule.labels.intervalMinutes', { n: minutes })
+                  : t(minutes === 60
+                    ? 'siteRecovery.schedule.labels.intervalHour'
+                    : 'siteRecovery.schedule.labels.intervalHours', { n: minutes / 60 })}
+              </MenuItem>
+            ))}
+          </Select>
+        </Box>
+      )}
 
       {value.mode === 'hourly' && (
         <Stack spacing={1.5}>

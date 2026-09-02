@@ -4,6 +4,10 @@ import type { ScheduleSpec } from './types'
 
 const t = (key: string, params?: Record<string, string | number>): string => {
   const dict: Record<string, string> = {
+    'siteRecovery.schedule.labels.intervalMinute': 'Every {n} minute',
+    'siteRecovery.schedule.labels.intervalMinutes': 'Every {n} minutes',
+    'siteRecovery.schedule.labels.intervalHour': 'Every {n} hour',
+    'siteRecovery.schedule.labels.intervalHours': 'Every {n} hours',
     'siteRecovery.schedule.labels.dailyAllDays': 'Every day at {time}',
     'siteRecovery.schedule.labels.dailyWeekdays': 'Weekdays at {time}',
     'siteRecovery.schedule.labels.dailyCustom': '{days} at {time}',
@@ -26,6 +30,15 @@ const t = (key: string, params?: Record<string, string | number>): string => {
 }
 
 describe('scheduleToLabel', () => {
+  it.each<[ScheduleSpec, string]>([
+    [{ mode: 'interval', everyMinutes: 1 }, 'Every 1 minute'],
+    [{ mode: 'interval', everyMinutes: 30 }, 'Every 30 minutes'],
+    [{ mode: 'interval', everyMinutes: 60 }, 'Every 1 hour'],
+    [{ mode: 'interval', everyMinutes: 120 }, 'Every 2 hours'],
+  ])('interval singular and plural: %j', (spec, expected) => {
+    expect(scheduleToLabel(spec, '', t)).toBe(expected)
+  })
+
   it('daily all days', () => {
     const spec: ScheduleSpec = { mode: 'daily', times: ['03:00'], weekdays: [0, 1, 2, 3, 4, 5, 6] }
     expect(scheduleToLabel(spec, '', t)).toBe('Every day at 03:00')

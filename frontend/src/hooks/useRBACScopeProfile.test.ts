@@ -26,6 +26,8 @@ vi.mock("@/contexts/TenantContext", () => ({
   useTenant: () => mockUseTenant(),
 }))
 
+import { useRBACScopeProfile } from "./useRBACScopeProfile"
+
 const ALL_VIEWS = ["tree", "vms", "hosts", "pools", "tags", "favorites", "templates"]
 
 function makeRbac(overrides: Partial<{ roles: any[]; scopeTypes: string[]; isAdmin: boolean; loading: boolean }> = {}) {
@@ -46,8 +48,10 @@ function makeTenant(overrides: Partial<{ currentTenant: any; loading: boolean }>
   }
 }
 
-async function run() {
-  const { useRBACScopeProfile } = await import("./useRBACScopeProfile")
+// A custom-hook-shaped wrapper so react-hooks/rules-of-hooks accepts the
+// call: useMemo is mocked above, so this runs synchronously without a render
+// tree. vi.mock is hoisted, so the static import below already sees the mocks.
+function useProfileUnderTest() {
   return useRBACScopeProfile()
 }
 
@@ -56,11 +60,11 @@ describe("useRBACScopeProfile", () => {
     vi.clearAllMocks()
   })
 
-  it("admin → every view, default tree", async () => {
+  it("admin → every view, default tree", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ isAdmin: true }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tree")
     expect([...result.allowedViewModes].sort()).toEqual([...ALL_VIEWS].sort())
@@ -70,100 +74,120 @@ describe("useRBACScopeProfile", () => {
   // follows the role's default scope, which is "global" when the role has
   // none. /rbac/effective already resolves that into scope_types; the raw
   // role row still says "inherit" and must not drive the view profile.
-  it("inherit assignment resolved to global → every view, default tree", async () => {
+  it("inherit assignment resolved to global → every view, default tree", () => {
     mockUseRBAC.mockReturnValue(makeRbac({
       roles: [{ id: "role_custom", name: "Ops", scope_type: "inherit", scope_target: null }],
       scopeTypes: ["global"],
     }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tree")
     expect([...result.allowedViewModes].sort()).toEqual([...ALL_VIEWS].sort())
   })
 
-  it("inherit assignment resolved to a pool default scope → pools view, default pools", async () => {
+  it("inherit assignment resolved to a pool default scope → pools view, default pools", () => {
     mockUseRBAC.mockReturnValue(makeRbac({
       roles: [{ id: "role_custom", name: "Ops", scope_type: "inherit", scope_target: null }],
       scopeTypes: ["pool"],
     }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("pools")
     expect([...result.allowedViewModes].sort()).toEqual(["favorites", "pools", "templates", "vms"])
   })
 
-  it("direct connection grant without any role → every view, default tree", async () => {
+  it("direct connection grant without any role → every view, default tree", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ roles: [], scopeTypes: ["connection"] }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tree")
     expect([...result.allowedViewModes].sort()).toEqual([...ALL_VIEWS].sort())
   })
 
-  it("tag-only → tags + safe views, default tags", async () => {
+  it("tag-only → tags + safe views, default tags", () => {
     mockUseRBAC.mockReturnValue(makeRbac({
       roles: [{ id: "role_custom", scope_type: "tag", scope_target: "prod" }],
       scopeTypes: ["tag"],
     }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tags")
     expect([...result.allowedViewModes].sort()).toEqual(["favorites", "tags", "templates", "vms"])
   })
 
-  it("tag + pool → both views, default tags", async () => {
+  it("tag + pool → both views, default tags", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ scopeTypes: ["tag", "pool"] }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tags")
     expect([...result.allowedViewModes].sort()).toEqual(["favorites", "pools", "tags", "templates", "vms"])
   })
 
-  it("no scope at all → minimal views, default vms", async () => {
-    mockUseRBAC.mockReturnValue(makeRbac())
+  it("scopeTypes not yet an array (context default) → minimal views, default vms", () => {
+    mockUseRBAC.mockReturnValue(makeRbac({ scopeTypes: undefined as any }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("vms")
     expect([...result.allowedViewModes].sort()).toEqual(["favorites", "templates", "vms"])
   })
 
-  it("vDC tenant hides tree and hosts even with a global scope", async () => {
+  it("vDC tenant with a tag scope keeps tags as the default view", () => {
+    mockUseRBAC.mockReturnValue(makeRbac({ scopeTypes: ["tag"] }))
+    mockUseTenant.mockReturnValue(makeTenant({ currentTenant: { id: "t-acme", operatingModel: "vdc" } }))
+
+    const result = useProfileUnderTest()
+
+    expect(result.defaultViewMode).toBe("tags")
+    expect([...result.allowedViewModes].sort()).toEqual(["favorites", "tags", "templates", "vms"])
+  })
+
+  it("no scope at all → minimal views, default vms", () => {
+    mockUseRBAC.mockReturnValue(makeRbac())
+    mockUseTenant.mockReturnValue(makeTenant())
+
+    const result = useProfileUnderTest()
+
+    expect(result.defaultViewMode).toBe("vms")
+    expect([...result.allowedViewModes].sort()).toEqual(["favorites", "templates", "vms"])
+  })
+
+  it("vDC tenant hides tree and hosts even with a global scope", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ scopeTypes: ["global"] }))
     mockUseTenant.mockReturnValue(makeTenant({ currentTenant: { id: "t-acme", operatingModel: "vdc" } }))
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("vms")
     expect([...result.allowedViewModes].sort()).toEqual(["favorites", "pools", "tags", "templates", "vms"])
   })
 
-  it("MSP tenant keeps tree and hosts", async () => {
+  it("MSP tenant keeps tree and hosts", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ scopeTypes: ["connection"] }))
     mockUseTenant.mockReturnValue(makeTenant({ currentTenant: { id: "t-msp", operatingModel: "msp" } }))
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.defaultViewMode).toBe("tree")
     expect([...result.allowedViewModes].sort()).toEqual([...ALL_VIEWS].sort())
   })
 
-  it("returns loading=true with every view while RBAC is loading", async () => {
+  it("returns loading=true with every view while RBAC is loading", () => {
     mockUseRBAC.mockReturnValue(makeRbac({ loading: true }))
     mockUseTenant.mockReturnValue(makeTenant())
 
-    const result = await run()
+    const result = useProfileUnderTest()
 
     expect(result.loading).toBe(true)
     expect(result.defaultViewMode).toBe("tree")

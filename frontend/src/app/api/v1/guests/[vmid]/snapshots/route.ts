@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
-import { getDateLocale } from "@/lib/i18n/date"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 
@@ -50,9 +48,6 @@ export async function GET(
 
     if (denied) return denied
 
-    const cookieStore = await cookies()
-    const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
-
     const conn = await getConnectionByIdOrNull(connId)
 
     if (!conn) {
@@ -68,10 +63,10 @@ export async function GET(
       .map(s => ({
         name: s.name,
         description: s.description || '',
+        // `snaptime` reste l'epoch UTC brut, mis en forme par le navigateur :
+        // formater ici sortait l'heure du conteneur (UTC) au lieu de celle du
+        // visiteur (même cause que l'issue #843, cf. discussion #379).
         snaptime: s.snaptime || 0,
-        snaptimeFormatted: s.snaptime
-          ? new Date(s.snaptime * 1000).toLocaleString(dateLocale)
-          : '-',
         vmstate: s.vmstate || false,
         parent: s.parent || null,
       }))

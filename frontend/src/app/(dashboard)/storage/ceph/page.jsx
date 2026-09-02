@@ -40,6 +40,36 @@ import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* -----------------------------
+  Étiquettes d'axe temporel
+
+  Tous les points de graphique de la page portent un epoch UTC brut, et c'est
+  ici, dans le navigateur, que l'étiquette est fabriquée : le fuseau appliqué
+  est donc toujours celui du visiteur. Formater côté serveur mettait l'axe des
+  courbes RRD à l'heure du conteneur (UTC) pendant que les séries temps réel,
+  elles, étaient déjà à l'heure locale (issue #843).
+------------------------------ */
+
+/**
+ * Axe des séries temps réel : fenêtre glissante de 30 points espacés de ~5 s,
+ * les secondes sont donc nécessaires pour distinguer deux points voisins.
+ */
+const formatLiveAxisTick = (tsMs, locale) =>
+  new Date(tsMs).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+/**
+ * Axe des séries RRD (epoch en secondes) : l'heure seule suffit sur une
+ * fenêtre d'une heure ou d'un jour, au-delà il faut la date pour situer
+ * le point.
+ */
+const formatRrdAxisTick = (tsSec, timeframe, locale) => {
+  const options = timeframe === 'hour' || timeframe === 'day'
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
+
+  return new Date(tsSec * 1000).toLocaleString(locale, options)
+}
+
+/* -----------------------------
   Components
 ------------------------------ */
 
@@ -360,12 +390,10 @@ return
   useEffect(() => {
     if (cephData?.performance) {
       const now = new Date()
-      const timeFormatted = now.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      
+
       // Historique IOPS
       const newIopsPoint = {
         time: now.getTime(),
-        timeFormatted,
         readIops: cephData.performance.readOpsSec || 0,
         writeIops: cephData.performance.writeOpsSec || 0,
         totalIops: cephData.performance.totalIops || 0,
@@ -381,7 +409,6 @@ return updated.slice(-30)
       // Historique Throughput (bytes/sec)
       const newThroughputPoint = {
         time: now.getTime(),
-        timeFormatted,
         readBytes: cephData.performance.readBytesSec || 0,
         writeBytes: cephData.performance.writeBytesSec || 0,
       }
@@ -975,11 +1002,12 @@ return updated.slice(-30)
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
-                            <XAxis dataKey='timeFormatted' tick={{ fontSize: 9 }} interval='preserveStartEnd' />
+                            <XAxis dataKey='time' tickFormatter={(v) => formatLiveAxisTick(v, dateLocale)} tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} width={45} />
                             <RTooltip 
                               contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
                               formatter={(value, name) => [value.toLocaleString(), name === 'readIops' ? t('cephPage.readLabel') : t('cephPage.writeLabel')]}
+                              labelFormatter={(v) => formatLiveAxisTick(v, dateLocale)}
                             />
                             <Area type='monotone' dataKey='readIops' name='readIops' stroke='#2196f3' fill='url(#readIopsGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='writeIops' name='writeIops' stroke='#ff9800' fill='url(#writeIopsGrad)' strokeWidth={2} />
@@ -1072,11 +1100,12 @@ return updated.slice(-30)
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
-                            <XAxis dataKey='timeFormatted' tick={{ fontSize: 9 }} interval='preserveStartEnd' />
+                            <XAxis dataKey='time' tickFormatter={(v) => formatLiveAxisTick(v, dateLocale)} tick={{ fontSize: 9 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={55} />
                             <RTooltip 
                               contentStyle={{ backgroundColor: 'rgba(0,0,0,0.85)', border: 'none', borderRadius: 8, fontSize: 12 }}
                               formatter={(value) => [`${formatBytes(value)}/s`]}
+                              labelFormatter={(v) => formatLiveAxisTick(v, dateLocale)}
                             />
                             <Area type='monotone' dataKey='readBytes' name={t('ceph.read')} stroke='#2196f3' fill='url(#readBytesGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='writeBytes' name={t('ceph.write')} stroke='#ff9800' fill='url(#writeBytesGrad)' strokeWidth={2} />
@@ -1105,7 +1134,7 @@ return updated.slice(-30)
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
-                            <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
+                            <XAxis dataKey='time' tickFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)} tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                             <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => formatBytes(v)} width={60} />
                             <RTooltip 
                               contentStyle={{ 
@@ -1115,6 +1144,7 @@ return updated.slice(-30)
                                 fontSize: 12
                               }}
                               formatter={(value) => formatBytes(value)}
+                              labelFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)}
                             />
                             <Area type='monotone' dataKey='netIn' name={t('ceph.incoming')} stroke='#2196f3' fill='url(#ioInGrad)' strokeWidth={2} />
                             <Area type='monotone' dataKey='netOut' name={t('ceph.outgoing')} stroke='#ff9800' fill='url(#ioOutGrad)' strokeWidth={2} />
@@ -1139,7 +1169,7 @@ return updated.slice(-30)
                       <ChartContainer>
                         <LineChart data={rrdData.rrd} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                           <CartesianGrid strokeDasharray='3 3' opacity={0.2} />
-                          <XAxis dataKey='timeFormatted' tick={{ fontSize: 10 }} interval='preserveStartEnd' />
+                          <XAxis dataKey='time' tickFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)} tick={{ fontSize: 10 }} interval='preserveStartEnd' />
                           <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={40} />
                           <RTooltip 
                             contentStyle={{ 
@@ -1149,6 +1179,7 @@ return updated.slice(-30)
                               fontSize: 12
                             }}
                             formatter={(value) => `${value}%`}
+                            labelFormatter={(v) => formatRrdAxisTick(v, rrdTimeframe, dateLocale)}
                           />
                           <Line type='monotone' dataKey='cpu' name='CPU' stroke={primaryColor} strokeWidth={2} dot={false} />
                           <Line type='monotone' dataKey='memPct' name={t('ceph.memory')} stroke='#9c27b0' strokeWidth={2} dot={false} />

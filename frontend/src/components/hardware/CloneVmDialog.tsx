@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 
 import {
   Dialog,
@@ -28,6 +28,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { formatDateTime } from '@/lib/i18n/date'
 import { VM_DISK_FORMATS, vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { type NodeInfo, calculateNodeScore, formatMemory, fetchNextVmid } from './utils'
@@ -50,6 +51,7 @@ type CloneVmDialogProps = {
 
 export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmName, vmid, vmType, nextVmid, pools = [], existingVmids = [] }: CloneVmDialogProps) {
   const t = useTranslations()
+  const locale = useLocale()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   // Tenant admins get a single-field "name only" form. Placement,
@@ -119,7 +121,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
 
   // Snapshot source — clone from a snapshot restore point (PDM parity).
   // PVE's clone API accepts an optional `snapname`; empty = current state.
-  const [snapshots, setSnapshots] = useState<{ name: string; snaptimeFormatted: string; vmstate?: boolean }[]>([])
+  const [snapshots, setSnapshots] = useState<{ name: string; snaptime?: number; vmstate?: boolean }[]>([])
   const [snapname, setSnapname] = useState('')
   const [snapshotsLoading, setSnapshotsLoading] = useState(false)
 
@@ -272,7 +274,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
         if (!cancelled && Array.isArray(list)) {
           setSnapshots(list.map((s: any) => ({
             name: s.name,
-            snaptimeFormatted: s.snaptimeFormatted || '',
+            snaptime: s.snaptime,
             vmstate: s.vmstate,
           })))
         }
@@ -411,11 +413,11 @@ return currentScore > bestScore ? current : best
                       <i className="ri-camera-line" style={{ fontSize: 14, opacity: 0.7 }} />
                       <Box>
                         <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
-                        {s.snaptimeFormatted && (
+                        {s.snaptime ? (
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.65rem' }}>
-                            {s.snaptimeFormatted}
+                            {formatDateTime(s.snaptime * 1000, locale)}
                           </Typography>
-                        )}
+                        ) : null}
                       </Box>
                     </Box>
                   </MenuItem>

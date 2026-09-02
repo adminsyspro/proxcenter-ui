@@ -3746,7 +3746,7 @@ return (
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                                             <Typography variant="caption" sx={{ opacity: 0.6, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                               <i className="ri-time-line" style={{ fontSize: 12 }} />
-                                              {snap.snaptimeFormatted || new Date(snap.snaptime * 1000).toLocaleString()}
+                                              {snap.snaptime ? formatDateTime(snap.snaptime * 1000, locale) : '-'}
                                             </Typography>
                                             {snap.description && (
                                               <>

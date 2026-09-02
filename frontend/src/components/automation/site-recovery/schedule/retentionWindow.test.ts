@@ -80,6 +80,28 @@ describe('cadenceSeconds', () => {
     ).toBe(86400)
   })
 
+  // Only the hour matters to the gap computation, so two times in the same
+  // hour count as one and the schedule is still once a day.
+  it('collapses daily times that share an hour into a single run', () => {
+    expect(
+      cadenceSeconds(
+        value({ mode: 'scheduled', scheduleSpec: { mode: 'daily', times: ['03:00', '03:30'], weekdays: [1] } })
+      )
+    ).toBe(86400)
+  })
+
+  it('reads a weekly spec as a seven day gap', () => {
+    expect(
+      cadenceSeconds(value({ mode: 'scheduled', scheduleSpec: { mode: 'weekly', weekdays: [0], time: '03:00' } }))
+    ).toBe(7 * 86400)
+  })
+
+  it('reads a monthly spec as a thirty day gap', () => {
+    expect(
+      cadenceSeconds(value({ mode: 'scheduled', scheduleSpec: { mode: 'monthly', dayOfMonth: 1, time: '03:00' } }))
+    ).toBe(30 * 86400)
+  })
+
   it('returns 0 when a scheduled value carries no spec, so the caller can skip the caption', () => {
     expect(cadenceSeconds(value({ mode: 'scheduled', scheduleSpec: null }))).toBe(0)
   })

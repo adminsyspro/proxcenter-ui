@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scheduleToCron } from './scheduleToCron'
+import { deriveRPOSeconds, scheduleToCron } from './scheduleToCron'
 import { ALLOWED_INTERVAL_MINUTES, type ScheduleSpec } from './types'
 
 describe('scheduleToCron', () => {
@@ -54,6 +54,21 @@ describe('scheduleToCron', () => {
 
   it('throws on dayOfMonth out of range', () => {
     expect(() => scheduleToCron({ mode: 'monthly', dayOfMonth: 29, time: '03:00' }, '')).toThrow()
+  })
+})
+
+describe('deriveRPOSeconds', () => {
+  // The interval mode is the one whose RPO is the interval itself; the other
+  // modes derive theirs from the narrowest gap between two runs.
+  it.each<[ScheduleSpec, number]>([
+    [{ mode: 'interval', everyMinutes: 15 }, 900],
+    [{ mode: 'interval', everyMinutes: 120 }, 7200],
+    [{ mode: 'hourly', everyHours: 4 }, 4 * 3600],
+    [{ mode: 'daily', times: ['09:00', '17:00'], weekdays: [1] }, 8 * 3600],
+    [{ mode: 'weekly', weekdays: [0], time: '03:00' }, 7 * 86400],
+    [{ mode: 'monthly', dayOfMonth: 1, time: '03:00' }, 30 * 86400],
+  ])('%j → %i seconds', (spec, expected) => {
+    expect(deriveRPOSeconds(spec)).toBe(expected)
   })
 })
 

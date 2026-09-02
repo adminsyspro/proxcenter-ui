@@ -206,6 +206,57 @@ describe('OrchestratorClient axios-style wrapper', () => {
     expect(url).toBe('http://localhost:8080/api/v1/metrics/conn-1/history')
   })
 
+  it('listMirrorSnapshots hits /replication/snapshots with GET and no query string by default', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().listMirrorSnapshots()
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/snapshots')
+    expect(init.method).toBe('GET')
+  })
+
+  it('listMirrorSnapshots forwards the cluster_id filter', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().listMirrorSnapshots({ clusterId: 'conn-1' })
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/snapshots?cluster_id=conn-1')
+  })
+
+  it('listMirrorSnapshots forwards the vmid filter', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().listMirrorSnapshots({ vmid: 100 })
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/snapshots?vmid=100')
+  })
+
+  it('listMirrorSnapshots forwards both filters and keeps a zero vmid', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().listMirrorSnapshots({ clusterId: 'conn-1', vmid: 0 })
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/snapshots?cluster_id=conn-1&vmid=0')
+  })
+
+  it('listMirrorSnapshots omits the query string for an empty cluster_id', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]))
+
+    const { getOrchestratorClient } = await import('./client')
+    await getOrchestratorClient().listMirrorSnapshots({ clusterId: '' })
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/v1/replication/snapshots')
+  })
+
   it('getRecommendations toggles the validate query flag', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse([]))
 

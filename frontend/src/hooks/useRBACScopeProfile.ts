@@ -28,19 +28,19 @@ type ScopeProfile = {
 }
 
 /**
- * Analyzes the user's RBAC roles to determine which inventory view modes
- * are appropriate, and which one should be the default.
+ * Analyzes the user's effective RBAC scopes to determine which inventory
+ * view modes are appropriate, and which one should be the default.
  *
  * - Admin or infra-scoped → all views, default "tree"
- * - Tag-only → tags, vms, favorites, templates — default "tags"
- * - Pool-only → pools, vms, favorites, templates — default "pools"
- * - Tag + pool → tags, pools, vms, favorites, templates — default "tags"
- * - VM-only → vms, favorites, templates — default "vms"
+ * - Tag-only → tags, vms, favorites, templates, default "tags"
+ * - Pool-only → pools, vms, favorites, templates, default "pools"
+ * - Tag + pool → tags, pools, vms, favorites, templates, default "tags"
+ * - VM-only → vms, favorites, templates, default "vms"
  * - Mixed infra + non-infra → all views, default "tree"
- * - No roles → vms, favorites, templates — default "vms"
+ * - No scope → vms, favorites, templates, default "vms"
  */
 export function useRBACScopeProfile(): ScopeProfile {
-  const { roles, isAdmin, loading } = useRBAC()
+  const { scopeTypes: effectiveScopeTypes, isAdmin, loading } = useRBAC()
   const { currentTenant, loading: tenantLoading } = useTenant()
   // Tenants other than the provider get the cloud-style abstraction:
   // nodes / hosts / clusters are an implementation detail and never appear
@@ -81,12 +81,17 @@ export function useRBACScopeProfile(): ScopeProfile {
       })
     }
 
-    // Collect unique scope types from user's roles
+    // Use the aggregated scope_types from /rbac/effective: an assignment
+    // whose scope_type is the "inherit" sentinel is resolved there into the
+    // role's default scopes ("global" when the role has none), and direct
+    // permission grants are folded in too. Reading the raw roles[].scope_type
+    // left "inherit" unmatched and pushed the user to the minimal profile
+    // (issue #842).
     const scopeTypes = new Set<string>(
-      roles.map((r: any) => r.scope_type).filter(Boolean)
+      (Array.isArray(effectiveScopeTypes) ? effectiveScopeTypes : []).filter(Boolean),
     )
 
-    // No roles at all → minimal view
+    // No scope at all → minimal view
     if (scopeTypes.size === 0) {
       return restrict({
         defaultViewMode: 'vms' as ViewMode,
@@ -128,5 +133,5 @@ export function useRBACScopeProfile(): ScopeProfile {
       allowedViewModes: allowed,
       loading: false,
     })
-  }, [roles, isAdmin, loading, hideInfra])
+  }, [effectiveScopeTypes, isAdmin, loading, hideInfra])
 }

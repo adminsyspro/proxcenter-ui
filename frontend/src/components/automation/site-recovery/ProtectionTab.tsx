@@ -677,10 +677,14 @@ export default function ProtectionTab({
                 <StatusChip status={selected.status} t={t} />
               </Box>
 
-              {/* Actions — top placement for visibility, full-width equal split */}
+              {/* Actions: top placement for visibility, full-width equal split.
+                  The Tooltip wrappers are flex containers so the button inside
+                  stretches to the row height like its unwrapped siblings;
+                  "Sync Now" wrapping onto two lines otherwise left "Edit"
+                  visibly shorter than "Pause" and "Delete". */}
               <Box sx={{ display: 'flex', gap: 1, mb: 2, '& > *': { flex: 1, minWidth: 0 } }}>
                 <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'block' }}>
+                  <span style={{ display: 'flex' }}>
                     <Button
                       variant='contained' size='small' fullWidth
                       startIcon={<i className='ri-refresh-line' />}
@@ -693,7 +697,7 @@ export default function ProtectionTab({
                 </Tooltip>
                 {selected.status === 'failed_over' ? (
                   <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} arrow>
-                    <span style={{ display: 'block' }}>
+                    <span style={{ display: 'flex' }}>
                       <Button variant='outlined' size='small' fullWidth startIcon={<i className='ri-play-circle-line' />} disabled>
                         {t('siteRecovery.protection.resume')}
                       </Button>
@@ -709,7 +713,7 @@ export default function ProtectionTab({
                   </Button>
                 )}
                 <Tooltip title={t('siteRecovery.jobs.failedOverTooltip')} disableHoverListener={selected.status !== 'failed_over'} arrow>
-                  <span style={{ display: 'block' }}>
+                  <span style={{ display: 'flex' }}>
                     <Button
                       variant='outlined' size='small' fullWidth
                       startIcon={<i className='ri-edit-line' />}

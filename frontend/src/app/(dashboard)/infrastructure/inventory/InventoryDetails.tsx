@@ -91,7 +91,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
-import { TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
+import { humanizePveError, optionSaveBody, TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
@@ -642,12 +642,14 @@ export default function InventoryDetails({
     key: string; 
     label: string; 
     value: any; 
-    type: 'text' | 'boolean' | 'select' | 'hotplug';
+    type: 'text' | 'boolean' | 'select' | 'vga' | 'hotplug' | 'features';
     options?: { value: string; label: string }[];
+    unprivileged?: boolean;
   } | null>(null)
 
   const [editOptionValue, setEditOptionValue] = useState<any>('')
   const [editOptionSaving, setEditOptionSaving] = useState(false)
+  const [editOptionError, setEditOptionError] = useState<string | null>(null)
   
   // PBS storage backup panel states (search/pagination for storage view)
   const [pbsStorageSearch, setPbsStorageSearch] = useState('')
@@ -663,6 +665,7 @@ export default function InventoryDetails({
   useEffect(() => {
     if (editOptionDialog) {
       setEditOptionValue(editOptionDialog.value)
+      setEditOptionError(null)
     }
   }, [editOptionDialog])
 
@@ -675,9 +678,7 @@ export default function InventoryDetails({
     setEditOptionSaving(true)
 
     try {
-      const body: Record<string, any> = {}
-
-      body[editOptionDialog.key] = editOptionValue
+      const body = optionSaveBody(editOptionDialog.key, editOptionValue)
       
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`,
@@ -701,7 +702,8 @@ export default function InventoryDetails({
       setEditOptionDialog(null)
     } catch (e: any) {
       console.error('Error saving option:', e)
-      alert(`${t('common.error')}: ${e.message}`)
+      // Shown inside the dialog, in the app theme, so the user can adjust and retry.
+      setEditOptionError(humanizePveError(e))
     } finally {
       setEditOptionSaving(false)
     }
@@ -2363,7 +2365,7 @@ return (
 
   // Actions placeholders
   const handleNotImplemented = (action: string) => {
-    alert(`${action}: ${t('common.notAvailable')}`)
+    toast.warning(`${action}: ${t('common.notAvailable')}`)
   }
 
   const onUnlock = async () => {
@@ -2415,7 +2417,7 @@ return (
   const onConvertTemplate = () => {
     const status = data?.vmRealStatus || data?.status
     if (status === 'running') {
-      alert(t('inventory.vmRunningWarning'))
+      toast.warning(t('inventory.vmRunningWarning'))
       return
     }
     setConvertTemplateDialogOpen(true)
@@ -2457,7 +2459,7 @@ return (
         onRefresh?.()
       }
     } catch (e: any) {
-      alert(`${t('errors.genericError')}: ${e?.message || e}`)
+      toast.error(`${t('errors.genericError')}: ${humanizePveError(e)}`)
     } finally {
       setConvertingTemplate(false)
     }
@@ -4546,6 +4548,7 @@ return vm?.isCluster ?? false
         handleTableCloneVm={handleTableCloneVm}
         editOptionDialog={editOptionDialog}
         setEditOptionDialog={setEditOptionDialog}
+        editOptionError={editOptionError}
         editOptionValue={editOptionValue}
         setEditOptionValue={setEditOptionValue}
         editOptionSaving={editOptionSaving}

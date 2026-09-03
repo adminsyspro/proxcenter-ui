@@ -75,11 +75,13 @@ const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachCo
 const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow, hotplugDevice } from '../helpers'
+import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow, hotplugDevice, guestNameOptionEdit } from '../helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { useToast } from '@/contexts/ToastContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
+import LxcOptionRows from './LxcOptionRows'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
 import NumericTextField from '@/components/ui/NumericTextField'
@@ -87,6 +89,7 @@ import { extractCustomCpuModels, isKnownCpuType } from '@/lib/inventory/cpuModel
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
 
 export default function VmDetailTabs(props: any) {
+  const toast = useToast()
   const t = useTranslations()
   const locale = useLocale()
   const theme = useTheme()
@@ -2104,6 +2107,9 @@ export default function VmDetailTabs(props: any) {
                       const pendingChip = (key: string) => isPending(key)
                         ? <MuiTooltip title={t('inventory.pendingRestart')} arrow placement="top"><span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex', alignItems: 'center', cursor: 'default' }}><i className="ri-error-warning-fill" style={{ fontSize: 14, color: '#ed6c02' }}></i></span></MuiTooltip>
                         : null
+                      // Containers share this table with VMs: the rows below are
+                      // gated so a CT only shows what PVE exposes for it (#566).
+                      const isLxc = data.vmType === 'lxc'
                       return (
                     <Card variant="outlined" sx={{ borderRadius: 2 }}>
                       <CardContent sx={{ p: 0 }}>
@@ -2127,7 +2133,7 @@ export default function VmDetailTabs(props: any) {
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>{data.name || data.title || 'N/A'}</td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
                                   <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'name', label: t('common.name'), value: data.name || '', type: 'text' })}>
+                                    <IconButton size="small" onClick={() => setEditOptionDialog(guestNameOptionEdit(data.vmType, data.name, t))}>
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
@@ -2254,6 +2260,15 @@ return (
                                   {pendingChip('ostype')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {isLxc ? (
+                                    <MuiTooltip title={t('inventory.notEditable')}>
+                                      <span>
+                                        <IconButton size="small" disabled>
+                                          <i className="ri-lock-line" style={{ fontSize: 16 }} />
+                                        </IconButton>
+                                      </span>
+                                    </MuiTooltip>
+                                  ) : (
                                   <MuiTooltip title={t('common.edit')}>
                                     <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'ostype', label: t('inventory.osType'), value: data.optionsInfo?.ostype || 'other', type: 'select', options: [
                                       { value: 'l26', label: 'Linux 6.x - 2.6 Kernel' },
@@ -2272,8 +2287,10 @@ return (
                                       <i className="ri-pencil-line" style={{ fontSize: 16 }} />
                                     </IconButton>
                                   </MuiTooltip>
+                                  )}
                                 </td>
                               </tr>
+                              {!isLxc && (<>
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2533,6 +2550,7 @@ return (
                                   </MuiTooltip>
                                 </td>
                               </tr>
+                              </>)}
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2557,6 +2575,8 @@ return (
                                   </MuiTooltip>
                                 </td>
                               </tr>
+                              {isLxc && <LxcOptionRows optionsInfo={data.optionsInfo} pendingChip={pendingChip} onEdit={setEditOptionDialog} />}
+                              {!isLxc && (<>
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2619,6 +2639,7 @@ return (
                                   </MuiTooltip>
                                 </td>
                               </tr>
+                              </>)}
                             </tbody>
                           </table>
                         </Box>
@@ -4890,7 +4911,7 @@ return (
                 setBootOrderOpen(false)
                 if (refreshData) await refreshData()
               } catch (e: any) {
-                alert(`${t('common.error')}: ${e.message}`)
+                toast.error(`${t('common.error')}: ${e.message}`)
               } finally {
                 setBootSaving(false)
               }

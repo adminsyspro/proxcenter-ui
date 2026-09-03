@@ -142,6 +142,28 @@ export function humanizePveError(error: unknown): string {
 }
 
 /**
+ * Hardware-tab label of a usbN / hostpciN entry. A device attached through a
+ * datacenter resource mapping (#852) shows the mapping name, a raw one its
+ * hardware address, SPICE redirection stays SPICE.
+ */
+export function passthroughLabel(kind: 'USB' | 'PCI', value: string): string {
+  const mapping = /(?:^|,)mapping=([^,]+)/.exec(value)?.[1]
+
+  if (mapping) return `${kind} (mapping: ${mapping})`
+
+  if (kind === 'USB') {
+    if (value.includes('spice')) return 'USB (SPICE)'
+    const host = /host=([^,]+)/.exec(value)?.[1]
+
+    return host ? `USB (${host})` : 'USB'
+  }
+
+  const device = /^([^,]+)/.exec(value)?.[1]
+
+  return device ? `PCI (${device})` : 'PCI'
+}
+
+/**
  * Body of the option-dialog PUT. PVE refuses an empty `features` value:
  * clearing every toggle of a container is expressed by deleting the key,
  * as the PVE UI does (#566).
@@ -1554,20 +1576,17 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
         Object.keys(config).forEach(key => {
           const val = String(config[key])
           if (/^usb\d+$/.test(key)) {
-            const hostMatch = val.match(/host=([^,]+)/)
-            const isSpice = val.includes('spice')
             otherHardwareInfo.push({
               id: key,
               type: 'usb',
-              label: isSpice ? 'USB (SPICE)' : `USB${hostMatch ? ` (${hostMatch[1]})` : ''}`,
+              label: passthroughLabel('USB', val),
               rawValue: val,
             })
           } else if (/^hostpci\d+$/.test(key)) {
-            const deviceMatch = val.match(/^([^,]+)/)
             otherHardwareInfo.push({
               id: key,
               type: 'pci',
-              label: `PCI${deviceMatch ? ` (${deviceMatch[1]})` : ''}`,
+              label: passthroughLabel('PCI', val),
               rawValue: val,
             })
           } else if (/^serial\d+$/.test(key)) {

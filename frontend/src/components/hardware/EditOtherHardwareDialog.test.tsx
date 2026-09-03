@@ -14,8 +14,10 @@ import { cleanup } from '@testing-library/react'
 import {
   renderWithProviders,
   screen,
+  fireEvent,
   userEvent,
 } from '@/__tests__/setup/renderWithProviders'
+import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import { EditOtherHardwareDialog, type OtherHardwareItem } from './EditOtherHardwareDialog'
 
@@ -96,5 +98,136 @@ describe('EditOtherHardwareDialog — clearable RNG fields', () => {
     expect(props.onSave).toHaveBeenCalledWith({
       rng0: 'source=/dev/urandom,period=1000',
     })
+  })
+})
+
+/**
+ * USB / PCI passthrough through datacenter resource mappings (#852).
+ *
+ * PVE refuses a raw device (host=vendor:product, a PCI address) from any API
+ * token, on edit and on delete alike, so the dialog locks those and offers
+ * `mapping=<id>` values only. The mapping list comes from
+ * /cluster/mapping/{usb|pci}; MSW errors on any request that was not seeded,
+ * which is how the "locked" cases prove nothing is fetched.
+ */
+
+const mappingHandler = (kind: 'usb' | 'pci', data: unknown[]) =>
+  http.get(`*/api/v1/connections/conn-1/cluster/mapping/${kind}`, () => HttpResponse.json({ data }))
+
+const usbMappings = [
+  { id: 'tablet', map: ['node=pve1,id=0627:0001'] },
+  { id: 'dongle', map: ['node=pve1,id=1234:5678'] },
+]
+
+// The MUI Select shows the current option's content; climb back to the combobox.
+async function findMappingCombobox(current: string | RegExp) {
+  const display = await screen.findByText(current)
+  const combobox = display.closest('[role="combobox"]')
+  expect(combobox).not.toBeNull()
+  return combobox as HTMLElement
+}
+
+const saveButton = () => screen.getByRole('button', { name: 'Save' })
+const deleteButton = () => screen.getByRole('button', { name: 'Delete' })
+
+describe('EditOtherHardwareDialog — mapped USB/PCI passthrough (#852)', () => {
+  afterEach(cleanup)
+
+  it('locks a raw USB device and points to the Proxmox UI', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const hardware: OtherHardwareItem = { id: 'usb1', type: 'usb', rawValue: 'host=046d:c52b,usb3=1' }
+
+    renderWithProviders(<EditOtherHardwareDialog {...makeProps({ hardware })} />)
+
+    expect(screen.getByText(/Manage it from the Proxmox web UI/)).toBeVisible()
+    expect(screen.getByText('host=046d:c52b,usb3=1')).toBeVisible()
+    expect(saveButton()).toBeDisabled()
+    expect(deleteButton()).toBeDisabled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
+
+  it('locks a raw PCI device', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const hardware: OtherHardwareItem = { id: 'hostpci0', type: 'pci', rawValue: '0000:01:00.0,pcie=1' }
+
+    renderWithProviders(<EditOtherHardwareDialog {...makeProps({ hardware })} />)
+
+    expect(screen.getByText(/Manage it from the Proxmox web UI/)).toBeVisible()
+    expect(screen.getByText('0000:01:00.0,pcie=1')).toBeVisible()
+    expect(saveButton()).toBeDisabled()
+    expect(deleteButton()).toBeDisabled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
+
+  it('edits a mapped USB device', async () => {
+    server.use(mappingHandler('usb', usbMappings))
+    const props = makeProps({
+      hardware: { id: 'usb1', type: 'usb', rawValue: 'mapping=tablet,usb3=1' } satisfies OtherHardwareItem,
+    })
+
+    renderWithProviders(<EditOtherHardwareDialog {...props} />)
+
+    fireEvent.mouseDown(await findMappingCombobox('tablet'))
+    fireEvent.click(await screen.findByRole('option', { name: /dongle/i }))
+
+    const usb3 = screen.getByLabelText('USB 3.0 (xHCI)') as HTMLInputElement
+    expect(usb3.checked).toBe(true)
+    await userEvent.click(usb3)
+
+    await userEvent.click(saveButton())
+    expect(props.onSave).toHaveBeenCalledWith({ usb1: 'mapping=dongle' })
+  })
+
+  it('edits the options of a mapped PCI device', async () => {
+    server.use(mappingHandler('pci', [{ id: 'gpu', map: ['node=pve1,path=0000:01:00.0'] }]))
+    const props = makeProps({
+      hardware: { id: 'hostpci0', type: 'pci', rawValue: 'mapping=gpu,pcie=1,rombar=1' } satisfies OtherHardwareItem,
+    })
+
+    renderWithProviders(<EditOtherHardwareDialog {...props} />)
+
+    await findMappingCombobox('gpu')
+    await userEvent.click(screen.getByLabelText('Primary GPU'))
+
+    await userEvent.click(saveButton())
+    expect(props.onSave).toHaveBeenCalledWith({ hostpci0: 'mapping=gpu,pcie=1,rombar=1,x-vga=1' })
+  })
+
+  it('keeps a mapping that PVE no longer lists selectable as the current value', async () => {
+    server.use(mappingHandler('usb', []))
+    const props = makeProps({
+      hardware: { id: 'usb1', type: 'usb', rawValue: 'mapping=ghost' } satisfies OtherHardwareItem,
+    })
+
+    renderWithProviders(<EditOtherHardwareDialog {...props} />)
+
+    const combobox = await findMappingCombobox(/ghost/)
+    expect(combobox).toHaveTextContent('ghost')
+
+    await userEvent.click(saveButton())
+    expect(props.onSave).toHaveBeenCalledWith({ usb1: 'mapping=ghost' })
+  })
+
+  it('appends the mapping hint to a root-only PVE error on delete', async () => {
+    server.use(mappingHandler('usb', usbMappings))
+    const props = makeProps({
+      hardware: { id: 'usb1', type: 'usb', rawValue: 'mapping=tablet,usb3=1' } satisfies OtherHardwareItem,
+      onDelete: vi.fn().mockRejectedValue(new Error(
+        'PVE 500 /nodes/pve/qemu/100/config: {"message":"failed to update VM 100: only root can set \'usb1\' config for real devices\\n","data":null}',
+      )),
+    })
+
+    renderWithProviders(<EditOtherHardwareDialog {...props} />)
+    await findMappingCombobox('tablet')
+
+    await userEvent.click(deleteButton())
+    const confirmButtons = screen.getAllByRole('button', { name: 'Delete' })
+    await userEvent.click(confirmButtons[confirmButtons.length - 1])
+
+    const alert = await screen.findByText(/only root can set 'usb1' config for real devices/)
+    expect(alert).toHaveTextContent('Select a resource mapping instead')
+    expect(props.onDelete).toHaveBeenCalledWith('usb1')
   })
 })

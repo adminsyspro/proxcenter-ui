@@ -23,6 +23,7 @@ import {
   pickNumber,
   buildSeriesFromRrd,
   fetchDetails,
+  passthroughLabel,
   parseLxcFeatures,
   buildLxcFeatures,
   toggleLxcFeature,
@@ -1350,5 +1351,66 @@ describe('fetchDetails: container name and features (#566)', () => {
     expect(payload?.optionsInfo?.unprivileged).toBe(false)
     expect(payload?.optionsInfo?.features).toBe('')
     expect(payload?.optionsInfo?.hostname).toBeUndefined()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* passthroughLabel — mapped USB/PCI devices on the Hardware tab (#852) */
+/* ------------------------------------------------------------------ */
+
+describe('passthroughLabel', () => {
+  it('names a mapped device after its resource mapping', () => {
+    expect(passthroughLabel('USB', 'mapping=tablet,usb3=1')).toBe('USB (mapping: tablet)')
+    expect(passthroughLabel('PCI', 'mapping=gpu,pcie=1,rombar=1')).toBe('PCI (mapping: gpu)')
+  })
+
+  it('keeps the raw hardware address of a device added as root@pam', () => {
+    expect(passthroughLabel('USB', 'host=046d:c52b,usb3=1')).toBe('USB (046d:c52b)')
+    expect(passthroughLabel('PCI', '0000:01:00.0,pcie=1,x-vga=1')).toBe('PCI (0000:01:00.0)')
+  })
+
+  it('labels SPICE redirection and bare entries', () => {
+    expect(passthroughLabel('USB', 'spice,usb3=1')).toBe('USB (SPICE)')
+    expect(passthroughLabel('USB', '')).toBe('USB')
+    expect(passthroughLabel('PCI', '')).toBe('PCI')
+  })
+})
+
+describe('fetchDetails: mapped passthrough devices on the Hardware tab (#852)', () => {
+  const jsonRes = (body: any, ok = true) => ({ ok, json: async () => body }) as Response
+
+  function stubFetch(config: Record<string, any>) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+
+      if (url.includes('/config')) return Promise.resolve(jsonRes({ data: config }))
+      if (url.includes('/status')) return Promise.resolve(jsonRes({ data: {} }))
+      if (url.includes('/resources')) return Promise.resolve(jsonRes({ data: [
+        { node: 'pve1', vmid: '500', type: 'qemu', name: 'vm500', status: 'stopped' },
+      ] }))
+      if (url.includes('/nodes')) return Promise.resolve(jsonRes({ data: [{ node: 'pve1', status: 'online' }] }))
+
+      return Promise.resolve(jsonRes({ data: {} }))
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows the mapping name of mapped devices and the address of raw ones', async () => {
+    stubFetch({
+      name: 'vm500',
+      usb0: 'mapping=tablet,usb3=1',
+      usb1: 'host=046d:c52b',
+      hostpci0: 'mapping=gpu,pcie=1',
+    })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:qemu:500' } as any)
+    const labels = Object.fromEntries((payload?.otherHardwareInfo || []).map(h => [h.id, h.label]))
+
+    expect(labels.usb0).toBe('USB (mapping: tablet)')
+    expect(labels.usb1).toBe('USB (046d:c52b)')
+    expect(labels.hostpci0).toBe('PCI (mapping: gpu)')
   })
 })

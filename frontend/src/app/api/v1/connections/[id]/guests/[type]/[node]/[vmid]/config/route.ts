@@ -19,7 +19,7 @@ const ALLOWED_TYPES = new Set(["qemu", "lxc"])
 // Champs autorisés pour la modification (QEMU)
 const ALLOWED_QEMU_FIELDS = new Set([
   // Basic
-  'name', 'description', 'tags', 'onboot', 'protection',
+  'name', 'description', 'tags', 'onboot', 'protection', 'startup',
 
   // CPU
   'cores', 'sockets', 'cpu', 'vcpus', 'cpulimit', 'cpuunits', 'numa',
@@ -54,7 +54,7 @@ const ALLOWED_QEMU_FIELDS = new Set([
 
 // Champs autorisés pour LXC
 const ALLOWED_LXC_FIELDS = new Set([
-  'hostname', 'description', 'tags', 'onboot', 'protection',
+  'hostname', 'description', 'tags', 'onboot', 'protection', 'startup',
   'cores', 'cpulimit', 'cpuunits',
   'memory', 'swap',
   'unprivileged', 'features',

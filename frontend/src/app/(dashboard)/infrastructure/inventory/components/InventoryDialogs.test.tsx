@@ -507,6 +507,70 @@ describe('InventoryDialogs', () => {
     expect(calledWith).toContain('usb')
   })
 
+  // 7b. editOptionDialog - LXC features (#566)
+  const checkboxOf = (label: string) => {
+    const formLabel = screen.getByText(label).closest('.MuiFormControlLabel-root') as HTMLElement
+    return formLabel.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  it('editOptionDialog features: only nesting is editable on an unprivileged container; toggling rebuilds the PVE string', () => {
+    const setEditOptionValue = vi.fn()
+    const props = makeProps({
+      editOptionDialog: {
+        key: 'features',
+        label: 'Features',
+        value: 'nesting=1,mount=nfs',
+        type: 'features',
+        unprivileged: true,
+      },
+      editOptionValue: 'nesting=1,mount=nfs',
+      setEditOptionValue,
+    })
+    renderWithProviders(<InventoryDialogs {...props} />)
+
+    // One checkbox per toggle: nesting, keyctl, fuse, mknod, nfs, cifs
+    expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+
+    expect(checkboxOf('Nesting').checked).toBe(true)
+    expect(checkboxOf('Nesting').disabled).toBe(false)
+    expect(checkboxOf('NFS').checked).toBe(true)
+    // PVE reserves every other flag to root@pam, which an API token never is
+    for (const label of ['keyctl', 'FUSE', 'Create device nodes', 'NFS', 'SMB/CIFS']) {
+      expect(checkboxOf(label).disabled).toBe(true)
+    }
+
+    // A locked toggle does nothing
+    fireEvent.click(checkboxOf('keyctl'))
+    expect(setEditOptionValue).not.toHaveBeenCalled()
+
+    // Disabling nesting keeps the mount segment intact
+    fireEvent.click(checkboxOf('Nesting'))
+    expect(setEditOptionValue).toHaveBeenCalledWith('mount=nfs')
+  })
+
+  it('editOptionDialog features: every toggle is locked on a privileged container', () => {
+    const props = makeProps({
+      editOptionDialog: { key: 'features', label: 'Features', value: '', type: 'features', unprivileged: false },
+      editOptionValue: '',
+    })
+    renderWithProviders(<InventoryDialogs {...props} />)
+
+    for (const label of ['Nesting', 'keyctl', 'FUSE', 'Create device nodes', 'NFS', 'SMB/CIFS']) {
+      expect(checkboxOf(label).disabled).toBe(true)
+    }
+  })
+
+  it('editOptionDialog: a save failure is shown inline as a themed alert, not a native popup', () => {
+    const props = makeProps({
+      editOptionDialog: { key: 'hostname', label: 'Hostname', value: 'web-01', type: 'text' },
+      editOptionValue: 'web 01',
+      editOptionError: 'Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)',
+    })
+    renderWithProviders(<InventoryDialogs {...props} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Permission check failed')
+  })
+
   // 8. editOptionDialog - vga
   it('editOptionDialog vga: VGA select renders with options; changing type fires setEditOptionValue', () => {
     const setEditOptionValue = vi.fn()

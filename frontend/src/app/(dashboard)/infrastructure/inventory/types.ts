@@ -155,6 +155,10 @@ export type DetailsPayload = {
     vmStateStorage?: string
     amdSEV?: string
     scsihw?: string
+    /** LXC only (#566) */
+    hostname?: string
+    unprivileged?: boolean
+    features?: string
   }
   nodeCapacity?: {
     maxCpu: number

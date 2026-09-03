@@ -23,6 +23,13 @@ import {
   pickNumber,
   buildSeriesFromRrd,
   fetchDetails,
+  parseLxcFeatures,
+  buildLxcFeatures,
+  toggleLxcFeature,
+  canEditLxcFeature,
+  humanizePveError,
+  optionSaveBody,
+  guestNameOptionEdit,
   formatRrdTick,
   formatRrdTooltipTs,
   rrdTimeframeFromSeries,
@@ -1159,5 +1166,189 @@ describe('hotplug device vocabulary', () => {
     // A future PVE keyword must fall back to the raw string, not crash.
     expect(hotplugDevice('gpu')).toBeUndefined()
     expect(hotplugDevice('')).toBeUndefined()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* LXC features property string (#566)                                 */
+/* ------------------------------------------------------------------ */
+
+describe('parseLxcFeatures', () => {
+  it('reads the boolean toggles and splits the mount fstypes', () => {
+    const parsed = parseLxcFeatures('nesting=1,keyctl=1,mount=nfs;cifs')
+
+    expect(parsed.enabled).toEqual(['nesting', 'keyctl', 'nfs', 'cifs'])
+    expect(parsed.otherMounts).toEqual([])
+    expect(parsed.extra).toEqual([])
+  })
+
+  it('drops a toggle explicitly set to 0 (PVE default) and keeps unknown segments verbatim', () => {
+    const parsed = parseLxcFeatures('nesting=0,fuse=1,force_rw_sys=1,mount=ext4;nfs')
+
+    expect(parsed.enabled).toEqual(['fuse', 'nfs'])
+    expect(parsed.otherMounts).toEqual(['ext4'])
+    expect(parsed.extra).toEqual(['force_rw_sys=1'])
+  })
+
+  it('treats a bare key as enabled and is case-insensitive', () => {
+    expect(parseLxcFeatures('Nesting, MKNOD=1 ,mount=NFS').enabled).toEqual(['nesting', 'mknod', 'nfs'])
+  })
+
+  it('returns nothing enabled for an empty or missing value', () => {
+    expect(parseLxcFeatures('').enabled).toEqual([])
+    expect(parseLxcFeatures(undefined).enabled).toEqual([])
+    expect(parseLxcFeatures(null).enabled).toEqual([])
+  })
+})
+
+describe('buildLxcFeatures', () => {
+  it('serialises in a stable order with a single mount segment', () => {
+    expect(buildLxcFeatures({ enabled: ['cifs', 'nesting', 'nfs', 'mknod'], otherMounts: [], extra: [] }))
+      .toBe('nesting=1,mknod=1,mount=nfs;cifs')
+  })
+
+  it('keeps foreign mount fstypes and unknown segments', () => {
+    expect(buildLxcFeatures({ enabled: ['fuse'], otherMounts: ['ext4'], extra: ['force_rw_sys=1'] }))
+      .toBe('fuse=1,mount=ext4,force_rw_sys=1')
+  })
+
+  it('returns an empty string when nothing is enabled, the caller then deletes the key', () => {
+    expect(buildLxcFeatures({ enabled: [], otherMounts: [], extra: [] })).toBe('')
+  })
+
+  it('round-trips a parsed string', () => {
+    const raw = 'nesting=1,keyctl=1,mount=nfs;cifs'
+
+    expect(buildLxcFeatures(parseLxcFeatures(raw))).toBe(raw)
+  })
+})
+
+describe('toggleLxcFeature', () => {
+  it('adds a toggle that is off', () => {
+    expect(toggleLxcFeature('nesting=1', 'keyctl')).toBe('nesting=1,keyctl=1')
+  })
+
+  it('removes a toggle that is on without touching the rest', () => {
+    expect(toggleLxcFeature('nesting=1,keyctl=1,mount=nfs;cifs', 'nfs')).toBe('nesting=1,keyctl=1,mount=cifs')
+  })
+
+  it('removing the last toggle yields an empty string', () => {
+    expect(toggleLxcFeature('nesting=1', 'nesting')).toBe('')
+  })
+})
+
+describe('canEditLxcFeature', () => {
+  it('lets only nesting through on an unprivileged container (PVE: everything else is root@pam-only)', () => {
+    expect(canEditLxcFeature('nesting', true)).toBe(true)
+    expect(canEditLxcFeature('keyctl', true)).toBe(false)
+    expect(canEditLxcFeature('fuse', true)).toBe(false)
+    expect(canEditLxcFeature('nfs', true)).toBe(false)
+  })
+
+  it('locks every feature of a privileged container', () => {
+    expect(canEditLxcFeature('nesting', false)).toBe(false)
+    expect(canEditLxcFeature('mknod', false)).toBe(false)
+  })
+})
+
+describe('humanizePveError', () => {
+  it('extracts the message of the PVE JSON envelope', () => {
+    const raw = 'PVE 403 /nodes/pve1/lxc/101/config: {"data":null,"message":"Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)\\n"}'
+
+    expect(humanizePveError(raw)).toBe('Permission check failed (changing feature flags (except nesting) is only allowed for root@pam)')
+  })
+
+  it('keeps the text when the body is not JSON or has no message', () => {
+    expect(humanizePveError('PVE 500 /nodes/pve1/lxc/101/config: <html>gateway timeout</html>')).toBe('PVE 500 /nodes/pve1/lxc/101/config: <html>gateway timeout</html>')
+    expect(humanizePveError('PVE 400 /x: {"data":null}')).toBe('PVE 400 /x: {"data":null}')
+  })
+
+  it('leaves non-PVE errors untouched and accepts Error objects or anything thrown', () => {
+    expect(humanizePveError('HTTP 502')).toBe('HTTP 502')
+    expect(humanizePveError(new Error('PVE 400 /x: {"data":null,"message":"invalid hostname"}'))).toBe('invalid hostname')
+    expect(humanizePveError(42)).toBe('42')
+  })
+})
+
+describe('optionSaveBody', () => {
+  it('sends the edited key as is', () => {
+    expect(optionSaveBody('hostname', 'web-01')).toEqual({ hostname: 'web-01' })
+    expect(optionSaveBody('features', 'nesting=1')).toEqual({ features: 'nesting=1' })
+  })
+
+  it('turns an emptied features string into a delete, which PVE accepts', () => {
+    expect(optionSaveBody('features', '')).toEqual({ delete: 'features' })
+  })
+})
+
+describe('guestNameOptionEdit', () => {
+  const t = (key: string) => key
+
+  it('binds a container to hostname with the Hostname label', () => {
+    expect(guestNameOptionEdit('lxc', 'ct-01', t)).toEqual({ key: 'hostname', label: 'inventory.createLxc.hostname', value: 'ct-01', type: 'text' })
+  })
+
+  it('keeps the QEMU name key for a VM and tolerates a missing name on both guest types', () => {
+    expect(guestNameOptionEdit('qemu', 'vm-01', t)).toEqual({ key: 'name', label: 'common.name', value: 'vm-01', type: 'text' })
+    expect(guestNameOptionEdit('qemu', undefined, t)).toEqual({ key: 'name', label: 'common.name', value: '', type: 'text' })
+    expect(guestNameOptionEdit('lxc', undefined, t).value).toBe('')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails: container Options (#566)                              */
+/* ------------------------------------------------------------------ */
+
+describe('fetchDetails: container name and features (#566)', () => {
+  const jsonRes = (body: any, ok = true) => ({ ok, json: async () => body }) as Response
+
+  function stubFetch(config: Record<string, any>) {
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+
+      if (url.includes('/config')) return Promise.resolve(jsonRes({ data: config }))
+      if (url.includes('/status')) return Promise.resolve(jsonRes({ data: {} }))
+      if (url.includes('/resources')) return Promise.resolve(jsonRes({ data: [
+        { node: 'pve1', vmid: '101', type: 'lxc', name: 'stale-name', status: 'running' },
+      ] }))
+      if (url.includes('/nodes')) return Promise.resolve(jsonRes({ data: [{ node: 'pve1', status: 'online' }] }))
+
+      return Promise.resolve(jsonRes({ data: {} }))
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reads the display name from hostname and exposes the raw features with their pending state', async () => {
+    stubFetch({
+      hostname: 'ct-101',
+      unprivileged: 1,
+      features: 'nesting=1,keyctl=1',
+      ostype: 'debian',
+      pending: { features: 'keyctl=1' },
+    })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:lxc:101' } as any)
+
+    expect(payload?.vmType).toBe('lxc')
+    expect(payload?.name).toBe('ct-101')
+    expect(payload?.optionsInfo?.hostname).toBe('ct-101')
+    expect(payload?.optionsInfo?.unprivileged).toBe(true)
+    expect(payload?.optionsInfo?.features).toBe('nesting=1,keyctl=1')
+    expect((payload?.optionsInfo as any)?.pendingKeys).toContain('features')
+    expect((payload?.optionsInfo as any)?.pendingValues?.features).toBe('keyctl=1')
+  })
+
+  it('leaves the container name to the inventory when the config carries no hostname', async () => {
+    stubFetch({ unprivileged: 0 })
+
+    const payload = await fetchDetails({ type: 'vm', id: 'conn1:pve1:lxc:101' } as any)
+
+    expect(payload?.name).toBe('stale-name')
+    expect(payload?.optionsInfo?.unprivileged).toBe(false)
+    expect(payload?.optionsInfo?.features).toBe('')
+    expect(payload?.optionsInfo?.hostname).toBeUndefined()
   })
 })

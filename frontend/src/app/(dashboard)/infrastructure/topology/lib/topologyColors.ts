@@ -1,3 +1,5 @@
+import { NO_SEGMENT_KEY } from '@/lib/proxmox/nicSegment'
+
 import type { NodeStatus } from '../types'
 
 export function getResourceStatus(usage: number, isOnline: boolean): NodeStatus {
@@ -47,4 +49,28 @@ export function getVmStatusColor(status: string): string {
     default:
       return '#9e9e9e'
   }
+}
+
+const SEGMENT_COLORS = ['#1976d2', '#7b1fa2', '#00838f', '#c62828', '#2e7d32', '#f57c00']
+
+/**
+ * Colour of a network segment bucket, keyed by its segment id (a VLAN id, or a
+ * VXLAN VNI). Grey when the bucket names no segment, so the "No VLAN" bucket
+ * stays visually neutral. Both VLAN bucket node types share this palette.
+ */
+export function getSegmentColor(tag: number | null | undefined): string {
+  if (tag == null) return '#9e9e9e'
+
+  return SEGMENT_COLORS[Math.abs(tag) % SEGMENT_COLORS.length]
+}
+
+/**
+ * Icon of a segment bucket, following the inventory Network view: an SDN VNet
+ * is a branch, a plain VLAN a router, and no segment a broken link.
+ */
+export function segmentIcon(segmentKey: string, vnet?: string): string {
+  if (vnet) return 'ri-git-branch-line'
+  if (segmentKey === NO_SEGMENT_KEY) return 'ri-link-unlink'
+
+  return 'ri-router-line'
 }

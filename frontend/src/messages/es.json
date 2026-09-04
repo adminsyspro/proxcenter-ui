@@ -6890,6 +6890,8 @@
     "vlan": "VLAN",
     "noVlan": "Sin VLAN",
     "bridge": "Puente",
+    "vnet": "VNet",
+    "sdnZone": "Zona SDN",
     "proxcenterRoot": "ProxCenter",
     "totalClusters": "Total de clusters",
     "infraView": "Infraestructura",

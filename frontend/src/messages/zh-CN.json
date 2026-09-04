@@ -6834,6 +6834,8 @@
     "vlan": "VLAN",
     "noVlan": "无 VLAN",
     "bridge": "网桥",
+    "vnet": "VNet",
+    "sdnZone": "SDN 区域",
     "proxcenterRoot": "ProxCenter",
     "totalClusters": "集群总数",
     "infraView": "基础设施",

@@ -5,20 +5,16 @@ import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Box, Typography } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import type { VlanGroupNodeData } from '../../types'
-
-const VLAN_COLORS = ['#1976d2', '#7b1fa2', '#00838f', '#c62828', '#2e7d32', '#f57c00']
-
-function getVlanColor(tag: number | null): string {
-  if (tag == null) return '#9e9e9e'
-
-  return VLAN_COLORS[tag % VLAN_COLORS.length]
-}
+import { getSegmentColor, segmentIcon } from '../../lib/topologyColors'
+import { NO_SEGMENT_KEY } from '@/lib/proxmox/nicSegment'
 
 function VlanGroupNodeComponent({ data }: NodeProps) {
+  const t = useTranslations('topology')
   const d = data as unknown as VlanGroupNodeData
-  const color = getVlanColor(d.vlanTag)
+  const color = getSegmentColor(d.segmentTag)
 
   return (
     <Box
@@ -44,9 +40,9 @@ function VlanGroupNodeComponent({ data }: NodeProps) {
       <Handle type='target' position={Position.Top} style={{ background: color }} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-        <i className='ri-router-line' style={{ fontSize: 15, color }} />
+        <i className={segmentIcon(d.segmentKey, d.vnet)} style={{ fontSize: 15, color }} />
         <Typography variant='caption' fontWeight={700} noWrap sx={{ flex: 1 }}>
-          {d.vlanTag != null ? `VLAN ${d.vlanTag}` : 'No VLAN'}
+          {d.segmentKey === NO_SEGMENT_KEY ? t('noVlan') : d.label}
         </Typography>
         <Typography
           variant='caption'

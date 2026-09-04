@@ -16,8 +16,38 @@ import type {
   PbsServerNodeData,
   NodeStatus,
 } from '../types'
-import type { NetworkMap } from '../hooks/useTopologyNetworks'
+import type { NetworkMap, VmNetworkInfo } from '../hooks/useTopologyNetworks'
 import { getResourceStatus, getStatusColor, getVmStatusColor } from './topologyColors'
+import { NO_SEGMENT_KEY, NO_SEGMENT_LABEL, type NicSegment } from '@/lib/proxmox/nicSegment'
+
+/** Bucket a guest with no readable NIC at all falls into. */
+const UNKNOWN_SEGMENT: NicSegment = {
+  key: NO_SEGMENT_KEY,
+  label: NO_SEGMENT_LABEL,
+  vlan: null,
+  tag: null,
+  bridgeLabel: 'unknown',
+}
+
+/**
+ * Segment a NIC is bucketed under. Resolution happens server-side (SDN VNet >
+ * per-NIC tag > host bridge VLAN, see lib/proxmox/nicSegment.ts); this only
+ * covers the NIC being absent.
+ */
+function segmentOf(nic: VmNetworkInfo | undefined): NicSegment {
+  return nic?.segment ?? UNKNOWN_SEGMENT
+}
+
+/** The segment fields both VLAN bucket nodes carry, from a resolved segment. */
+function segmentFields(segment: NicSegment) {
+  return {
+    segmentKey: segment.key,
+    segmentTag: segment.tag,
+    ...(segment.vnet !== undefined ? { vnet: segment.vnet } : {}),
+    ...(segment.zone !== undefined ? { zone: segment.zone } : {}),
+    ...(segment.zoneType !== undefined ? { zoneType: segment.zoneType } : {}),
+  }
+}
 
 function buildVmNode(
   conn: { id: string },
@@ -77,6 +107,9 @@ function buildVmEdge(sourceId: string, vmId: string, status: string): Edge {
 /* Network (VLAN-only) view                                           */
 /* ------------------------------------------------------------------ */
 
+/** One segment bucket of the network view: its identity plus its guests. */
+type VlanBucket = { segment: NicSegment; cidrs: number[]; vms: VlanContainerVm[] }
+
 function buildNetworkView(
   data: InventoryData,
   filters: TopologyFilters,
@@ -94,15 +127,13 @@ function buildNetworkView(
   let grandTotalVms = 0
   let grandTotalNodes = 0
 
-  // Per-cluster: collect VMs into VLAN buckets
-  const clusterVlanMap = new Map<
-    string,
-    Map<string, { vlanTag: number | null; bridge: string; cidrs: number[]; vms: VlanContainerVm[] }>
-  >()
+  // Per-cluster: collect VMs into segment buckets (one SDN VNet, one VLAN id,
+  // or the segment-less catch-all)
+  const clusterVlanMap = new Map<string, Map<string, VlanBucket>>()
 
   for (const conn of clusters) {
     grandTotalNodes += conn.nodes.length
-    const buckets = new Map<string, { vlanTag: number | null; bridge: string; cidrs: number[]; vms: VlanContainerVm[] }>()
+    const buckets = new Map<string, VlanBucket>()
 
     for (const node of conn.nodes) {
       let guests = node.guests || []
@@ -120,13 +151,13 @@ function buildNetworkView(
         const nics = networkMap?.get(netKey) || []
 
         if (nics.length === 0) {
-          const groupKey = 'no-vlan'
+          const segment = UNKNOWN_SEGMENT
 
-          if (!buckets.has(groupKey)) {
-            buckets.set(groupKey, { vlanTag: null, bridge: 'unknown', cidrs: [], vms: [] })
+          if (!buckets.has(segment.key)) {
+            buckets.set(segment.key, { segment, cidrs: [], vms: [] })
           }
 
-          buckets.get(groupKey)!.vms.push({
+          buckets.get(segment.key)!.vms.push({
             vmid,
             name: guest.name || `VM ${vmid}`,
             vmType: type,
@@ -136,15 +167,13 @@ function buildNetworkView(
           })
         } else {
           for (const nic of nics) {
-            const vlanTag = nic.vlanTag ?? null
-            const bridge = nic.bridge ?? 'unknown'
-            const groupKey = vlanTag != null ? `vlan-${vlanTag}` : 'no-vlan'
+            const segment = segmentOf(nic)
 
-            if (!buckets.has(groupKey)) {
-              buckets.set(groupKey, { vlanTag, bridge, cidrs: [], vms: [] })
+            if (!buckets.has(segment.key)) {
+              buckets.set(segment.key, { segment, cidrs: [], vms: [] })
             }
 
-            const bucket = buckets.get(groupKey)!
+            const bucket = buckets.get(segment.key)!
 
             if (nic.cidr != null && !bucket.cidrs.includes(nic.cidr)) {
               bucket.cidrs.push(nic.cidr)
@@ -273,9 +302,10 @@ function buildNetworkView(
         }
 
         const containerData: VlanContainerNodeData = {
-          label: bucket.vlanTag != null ? `VLAN ${bucket.vlanTag}` : 'No VLAN',
-          vlanTag: bucket.vlanTag,
-          bridge: bucket.bridge,
+          label: bucket.segment.label,
+          vlanTag: bucket.segment.vlan,
+          bridge: bucket.segment.bridgeLabel,
+          ...segmentFields(bucket.segment),
           subnet,
           vms: bucket.vms,
           width: 240,
@@ -437,8 +467,8 @@ function buildInfraView(
         if (guests.length <= filters.vmThreshold) {
           // Check if VLAN grouping is enabled and data is available
           if (filters.groupByVlan && networkMap && networkMap.size > 0) {
-            // Group VMs by VLAN tag
-            const vlanGroups = new Map<string, { vlanTag: number | null; bridge: string; guests: InventoryGuest[] }>()
+            // Group VMs by the segment of their primary NIC
+            const vlanGroups = new Map<string, { segment: NicSegment; guests: InventoryGuest[] }>()
 
             for (const guest of guests) {
               const vmid = typeof guest.vmid === 'string' ? guest.vmid : String(guest.vmid)
@@ -446,17 +476,14 @@ function buildInfraView(
               const key = `${conn.id}:${type}:${node.node}:${vmid}`
               const netInfo = networkMap.get(key)
 
-              // Use first NIC's VLAN info
-              const firstNic = netInfo?.[0]
-              const vlanTag = firstNic?.vlanTag ?? null
-              const bridge = firstNic?.bridge ?? 'unknown'
-              const groupKey = vlanTag != null ? `vlan-${vlanTag}` : 'no-vlan'
+              // Use the first NIC's segment
+              const segment = segmentOf(netInfo?.[0])
 
-              if (!vlanGroups.has(groupKey)) {
-                vlanGroups.set(groupKey, { vlanTag, bridge, guests: [] })
+              if (!vlanGroups.has(segment.key)) {
+                vlanGroups.set(segment.key, { segment, guests: [] })
               }
 
-              vlanGroups.get(groupKey)!.guests.push(guest)
+              vlanGroups.get(segment.key)!.guests.push(guest)
             }
 
             // Create VLAN group nodes and edges
@@ -464,11 +491,12 @@ function buildInfraView(
               const vlanNodeId = `vlan-${conn.id}-${node.node}-${groupKey}`
 
               const vlanData: VlanGroupNodeData = {
-                label: group.vlanTag != null ? `VLAN ${group.vlanTag}` : 'No VLAN',
+                label: group.segment.label,
                 connectionId: conn.id,
                 nodeName: node.node,
-                vlanTag: group.vlanTag,
-                bridge: group.bridge,
+                vlanTag: group.segment.vlan,
+                bridge: group.segment.bridgeLabel,
+                ...segmentFields(group.segment),
                 vmCount: group.guests.length,
                 width: 170,
                 height: 50,

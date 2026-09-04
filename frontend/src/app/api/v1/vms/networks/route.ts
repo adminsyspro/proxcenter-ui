@@ -1,25 +1,47 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
+import { getConnectionById, type PveConn } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { buildBridgeVlanMap } from "@/lib/proxmox/hostVlanMap"
+import { buildSdnVnets, type SdnVnet } from "@/lib/proxmox/sdnVnetMap"
+import { buildVnetIndex, resolveNicSegment, type NicSegment } from "@/lib/proxmox/nicSegment"
 
 export const runtime = "nodejs"
+
+type VmNic = {
+  iface: string
+  bridge: string
+  vlanTag: number | null
+  ip: string | null
+  cidr: number | null
+  /**
+   * Resolved segment: the SDN VNet the bridge names, else the per-NIC tag, else
+   * the VLAN of the host bridge. Added because the topology used to read
+   * `vlanTag` alone, which sent every SDN-attached guest to the "No VLAN"
+   * bucket. See lib/proxmox/nicSegment.ts.
+   */
+  segment: NicSegment
+}
 
 /**
  * POST /api/v1/vms/networks
  *
- * Bulk-fetch network config (bridge + VLAN tag) for a list of VMs.
+ * Bulk-fetch network config (bridge + VLAN tag + resolved segment) for a list of VMs.
  *
  * Body: { vms: [{ connId, type, node, vmid }] }
- * Response: { data: { "connId:type:node:vmid": { networks: [{ iface, bridge, vlanTag }] } } }
+ * Response: { data: { "connId:type:node:vmid": { networks: [{ iface, bridge, vlanTag, segment }] } } }
  */
 
-function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ iface: string; bridge: string; vlanTag: number | null; ip: string | null; cidr: number | null }> {
-  const networks: Array<{ iface: string; bridge: string; vlanTag: number | null; ip: string | null; cidr: number | null }> = []
+export function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ iface: string; bridge: string; vlanTag: number | null; ip: string | null; cidr: number | null }> {
+  const networks: Array<{ index: number; iface: string; bridge: string; vlanTag: number | null; ip: string | null; cidr: number | null }> = []
 
   for (const [key, value] of Object.entries(config)) {
-    if (!/^net\d+$/.test(key) || typeof value !== 'string') continue
+    const match = /^net(\d+)$/.exec(key)
+
+    if (!match || typeof value !== 'string') continue
 
     let bridge = ''
     let vlanTag: number | null = null
@@ -77,17 +99,81 @@ function parseNetKeys(config: Record<string, unknown>, vmType: string): Array<{ 
     }
 
     if (bridge) {
-      networks.push({ iface: key, bridge, vlanTag, ip, cidr })
+      networks.push({ index: Number.parseInt(match[1], 10), iface: key, bridge, vlanTag, ip, cidr })
     }
   }
 
-  return networks
+  // PVE serializes a guest config from a Perl hash, whose iteration order is
+  // randomized per process (Perl >= 5.18), so `net0` is NOT reliably the first
+  // key returned. Callers treat the head of this list as the primary NIC (the
+  // topology groups a guest by it), so the order has to be restored here.
+  networks.sort((a, b) => a.index - b.index)
+
+  return networks.map(({ index: _index, ...nic }) => nic)
+}
+
+/**
+ * Resolve a connection's SDN VNets, joined with their zones so a VNet-backed
+ * NIC can name its real segment. Fault-tolerant on purpose: a cluster without
+ * SDN, or an SDN endpoint the token cannot read, yields an empty index and
+ * resolution simply degrades to per-NIC tags.
+ */
+async function fetchSdnVnets(conn: PveConn): Promise<SdnVnet[]> {
+  let vnetsRaw: any[] = []
+  let zonesRaw: any[] = []
+
+  try {
+    const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets")
+    if (Array.isArray(vnets)) vnetsRaw = vnets
+  } catch {
+    // SDN unavailable — no VNet grouping, raw bridge names stay.
+    return []
+  }
+
+  // Zones are independent: without them a VNet keeps zoneType '' and is still
+  // grouped on its own, it just cannot say "VLAN" vs "VNI".
+  try {
+    const zones = await pveFetch<any[]>(conn, "/cluster/sdn/zones")
+    if (Array.isArray(zones)) zonesRaw = zones
+  } catch { /* zone metadata unavailable */ }
+
+  return buildSdnVnets(vnetsRaw, zonesRaw)
+}
+
+/**
+ * Per-node `bridge -> VLAN` maps for the nodes actually hosting the requested
+ * guests. Resolves the traditional layout (a `bondX.N` sub-interface feeding a
+ * dedicated bridge), whose guests carry no per-NIC tag.
+ */
+async function fetchBridgeVlanMaps(conn: PveConn, nodes: string[]): Promise<Map<string, Map<string, number>>> {
+  const byNode = new Map<string, Map<string, number>>()
+
+  await Promise.all(
+    nodes.map(async (node) => {
+      try {
+        const ifaces = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/network`)
+
+        byNode.set(node, buildBridgeVlanMap(Array.isArray(ifaces) ? ifaces : []))
+      } catch {
+        // Host network unreadable for this node — per-NIC tags only.
+        byNode.set(node, new Map())
+      }
+    })
+  )
+
+  return byNode
 }
 
 export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
+
+    // SDN VNets are provider-scope data, exactly as in the inventory Network
+    // view: an iaas tenant gets no VNet grouping, so its guests on a VNet keep
+    // the "No VLAN" bucket rather than learning the provider's segment names.
+    const vdcScope = maskingScope(await getTenantInfrastructureScope(await getCurrentTenantId()))
+    const isProviderScope = !vdcScope
 
     const body = await req.json()
     const vms = body.vms || []
@@ -109,12 +195,20 @@ export async function POST(req: Request) {
       byConnection.get(vm.connId)!.push({ type: vm.type, node: vm.node, vmid: vm.vmid })
     }
 
-    const data: Record<string, { networks: Array<{ iface: string; bridge: string; vlanTag: number | null; ip: string | null; cidr: number | null }> }> = {}
+    const data: Record<string, { networks: VmNic[] }> = {}
 
     await Promise.all(
       Array.from(byConnection.entries()).map(async ([connId, connVms]) => {
         try {
           const connData = await getConnectionById(connId)
+
+          // Segment context, fetched once per connection rather than per guest.
+          const nodeNames = [...new Set(connVms.map((vm) => vm.node))]
+          const [sdnVnets, bridgeVlanByNode] = await Promise.all([
+            isProviderScope ? fetchSdnVnets(connData) : Promise.resolve([] as SdnVnet[]),
+            fetchBridgeVlanMaps(connData, nodeNames),
+          ])
+          const vnetById = buildVnetIndex(sdnVnets)
 
           const results = await Promise.allSettled(
             connVms.map(async (vm) => {
@@ -123,7 +217,11 @@ export async function POST(req: Request) {
                 `/nodes/${encodeURIComponent(vm.node)}/${vm.type}/${vm.vmid}/config`
               )
 
-              const networks = parseNetKeys(config || {}, vm.type)
+              const bridgeVlanMap = bridgeVlanByNode.get(vm.node) ?? new Map<string, number>()
+              const networks: VmNic[] = parseNetKeys(config || {}, vm.type).map((nic) => ({
+                ...nic,
+                segment: resolveNicSegment({ bridge: nic.bridge, tag: nic.vlanTag }, vnetById, bridgeVlanMap),
+              }))
               const key = `${connId}:${vm.type}:${vm.node}:${vm.vmid}`
 
               return { key, networks }

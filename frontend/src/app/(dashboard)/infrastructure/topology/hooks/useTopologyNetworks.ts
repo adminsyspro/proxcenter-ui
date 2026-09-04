@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 
+import { NO_SEGMENT_KEY, NO_SEGMENT_LABEL, type NicSegment } from '@/lib/proxmox/nicSegment'
+
 import type { InventoryCluster } from '../types'
 
 export interface VmNetworkInfo {
@@ -9,6 +11,21 @@ export interface VmNetworkInfo {
   vlanTag: number | null
   ip: string | null
   cidr: number | null
+  /**
+   * Segment resolved server-side (SDN VNet > per-NIC tag > host bridge VLAN).
+   * `vlanTag` alone cannot group SDN-attached guests: a VNet carries its tag on
+   * the VNet, never on the guest NIC.
+   */
+  segment: NicSegment
+}
+
+/** Segment of a payload that predates server-side resolution, from its tag. */
+function fallbackSegment(vlanTag: number | null, bridge: string): NicSegment {
+  if (vlanTag != null) {
+    return { key: `vlan-${vlanTag}`, label: `VLAN ${vlanTag}`, vlan: vlanTag, tag: vlanTag, bridgeLabel: bridge }
+  }
+
+  return { key: NO_SEGMENT_KEY, label: NO_SEGMENT_LABEL, vlan: null, tag: null, bridgeLabel: bridge }
 }
 
 export type NetworkMap = Map<string, VmNetworkInfo[]>
@@ -66,7 +83,18 @@ export function useTopologyNetworks(connections: InventoryCluster[], enabled: bo
         for (const [key, value] of Object.entries(data)) {
           const networks = (value as any)?.networks || []
 
-          map.set(key, networks.map((n: any) => ({ bridge: n.bridge, vlanTag: n.vlanTag, ip: n.ip || null, cidr: n.cidr ?? null })))
+          map.set(key, networks.map((n: any) => {
+            const bridge = n.bridge || 'unknown'
+            const vlanTag = n.vlanTag ?? null
+
+            return {
+              bridge,
+              vlanTag,
+              ip: n.ip || null,
+              cidr: n.cidr ?? null,
+              segment: (n.segment as NicSegment | undefined) ?? fallbackSegment(vlanTag, bridge),
+            }
+          }))
         }
 
         setNetworkMap(map)

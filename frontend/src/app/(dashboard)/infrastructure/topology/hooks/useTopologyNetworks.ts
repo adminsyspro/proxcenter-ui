@@ -37,7 +37,10 @@ export function useTopologyNetworks(connections: InventoryCluster[], enabled: bo
 
   useEffect(() => {
     if (!enabled || connections.length === 0) {
-      setNetworkMap(new Map())
+      // Keep an already empty map's identity: this branch runs on every effect
+      // pass, and handing back a fresh Map re-renders the caller, which would
+      // loop forever for a caller passing an inline `[]` as its connections.
+      setNetworkMap(prev => (prev.size === 0 ? prev : new Map()))
       fetchedRef.current = false
 
       return

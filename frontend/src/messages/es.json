@@ -6452,7 +6452,7 @@
     "sshNotConfiguredTitle": "SSH no configurado",
     "sshNotConfiguredDescription": "El acceso SSH no está habilitado para esta conexión. Configure credenciales SSH en Configuración → Conexiones para usar actualizaciones de nodo.",
     "repoIssuesTitle": "Problemas de repositorio ({count})",
-    "repoIssuesDescription": "Los repositorios Enterprise están habilitados sin una alternativa no-subscription. Los comandos de actualización fallarán sin una suscripción válida de Proxmox. Habilite el repositorio no-subscription o deshabilite el repositorio Enterprise en los nodos afectados.",
+    "repoIssuesDescription": "Hay repositorios Enterprise habilitados sin una alternativa no-subscription en nodos sin una suscripción Proxmox activa, por lo que apt update fallará en ellos. Habilite el repositorio no-subscription, deshabilite el repositorio Enterprise o active la suscripción en los nodos afectados.",
     "repoEnterprisePve": "El repositorio PVE Enterprise está habilitado sin una alternativa no-subscription.",
     "repoEnterpriseComponent": "El repositorio enterprise {component} está habilitado sin una alternativa no-subscription.",
     "repoParseErrorsDescription": "APT no puede leer uno o varios archivos de repositorio en este nodo. Solo se analizan los archivos que terminan en .list o .sources, por lo que una copia renombrada como pve-enterprise.sources.BAK rompe cualquier actualización. Mueva esos archivos fuera de /etc/apt/sources.list.d/ y vuelva a cargar los repositorios.",

@@ -35,7 +35,7 @@ import {
 
 import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
-import { computeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
+import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 
 interface RunningVmInfo {
   vmid: number
@@ -315,17 +315,15 @@ export default function NodeUpdateDialog({
       })
       .catch(() => {})
 
-    fetch(`/api/v1/connections/${connectionId}/nodes/${encodeURIComponent(nodeName)}/apt/repositories`)
-      .then(res => res.json())
-      .then(json => {
-        // Guard on `data` itself, not on `standard_repos`: a node whose only
-        // problem is an unparsable file returns an empty repo list with a
-        // populated `errors[]`, and bailing here would hide it.
-        if (cancelled || !json.data) return
+    // Repositories and subscription status read together: enterprise-only
+    // repositories are only a problem without an active subscription. A null
+    // answer means the repositories could not be read, keep the previous verdict.
+    loadNodeRepoIssues(connectionId, nodeName)
+      .then(issues => {
+        if (cancelled || !issues) return
 
-        setRepoIssues(computeRepoIssues(json.data))
+        setRepoIssues(issues)
       })
-      .catch(() => {})
       .finally(() => {
         if (!cancelled) setRepoChecking(false)
       })

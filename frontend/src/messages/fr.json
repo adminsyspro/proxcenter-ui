@@ -6447,7 +6447,7 @@
     "sshNotConfiguredTitle": "SSH non configuré",
     "sshNotConfiguredDescription": "L'accès SSH n'est pas activé pour cette connexion. Configurez les identifiants SSH dans Paramètres → Connexions pour utiliser les mises à jour de nœuds.",
     "repoIssuesTitle": "Problèmes de dépôts ({count})",
-    "repoIssuesDescription": "Des dépôts enterprise sont activés sans alternative no-subscription. Les commandes de mise à jour échoueront sans un abonnement Proxmox valide. Activez le dépôt no-subscription ou désactivez le dépôt enterprise sur les nœuds concernés.",
+    "repoIssuesDescription": "Des dépôts enterprise sont activés sans alternative no-subscription sur des nœuds sans abonnement Proxmox actif : apt update y échouera. Activez le dépôt no-subscription, désactivez le dépôt enterprise ou activez l'abonnement sur les nœuds concernés.",
     "repoEnterprisePve": "Le dépôt PVE Enterprise est activé sans alternative no-subscription.",
     "repoEnterpriseComponent": "Le dépôt enterprise {component} est activé sans alternative no-subscription.",
     "repoParseErrorsDescription": "APT ne parvient pas à lire un ou plusieurs fichiers de dépôt sur ce nœud. Seuls les fichiers en .list ou .sources sont analysés : une sauvegarde renommée comme pve-enterprise.sources.BAK casse toutes les mises à jour. Déplacez ces fichiers hors de /etc/apt/sources.list.d/ puis rechargez les dépôts.",

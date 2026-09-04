@@ -6399,7 +6399,7 @@
     "sshNotConfiguredTitle": "SSH 未配置",
     "sshNotConfiguredDescription": "此连接未启用 SSH 访问。请在设置 → 连接中配置 SSH 凭据以使用节点更新功能。",
     "repoIssuesTitle": "仓库问题 ({count})",
-    "repoIssuesDescription": "已启用企业仓库但没有免费订阅替代源。没有有效的 Proxmox 订阅，更新命令将失败。请在受影响的节点上启用免费订阅仓库或禁用企业仓库。",
+    "repoIssuesDescription": "在没有有效 Proxmox 订阅的节点上启用了企业仓库且没有免费订阅替代源，apt update 将在这些节点上失败。请在受影响的节点上启用免费订阅仓库、禁用企业仓库或激活订阅。",
     "repoEnterprisePve": "已启用 PVE 企业仓库但没有免费订阅替代源。",
     "repoEnterpriseComponent": "已启用 {component} 企业仓库但没有免费订阅替代源。",
     "repoParseErrorsDescription": "APT 无法读取该节点上的一个或多个仓库文件。只有以 .list 或 .sources 结尾的文件才会被解析，因此像 pve-enterprise.sources.BAK 这样重命名的备份会导致所有更新失败。请将这些文件移出 /etc/apt/sources.list.d/ 并重新加载仓库。",

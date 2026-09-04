@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "../../../../__tests__/setup/route-test"
+import { vmScope } from "@/__tests__/setup/rbacScope"
 
 // Hoist mocks so they can be referenced in vi.mock factories
-const { globalFindMany, sessionFindMany, getInfraMock, mockGetServerSession, mockListSnapshotsInNamespace, mockPbsFetch } = vi.hoisted(() => ({
+const { globalFindMany, sessionFindMany, alertFindUniqueMock, alertUpdateManyMock, getInfraMock, mockGetServerSession, mockListSnapshotsInNamespace, mockPbsFetch, rbacScopeMock } = vi.hoisted(() => ({
   globalFindMany: vi.fn(),
   sessionFindMany: vi.fn(),
+  alertFindUniqueMock: vi.fn().mockResolvedValue(null),
+  alertUpdateManyMock: vi.fn().mockResolvedValue({}),
   getInfraMock: vi.fn(),
   mockGetServerSession: vi.fn(),
   mockListSnapshotsInNamespace: vi.fn(),
   mockPbsFetch: vi.fn(),
+  rbacScopeMock: vi.fn(),
 }))
 
 // Keep REAL inventoryConnectionPlan + maskingScope; only mock getTenantInfrastructureScope
@@ -23,10 +27,10 @@ vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: async () => ({
     connection: { findMany: sessionFindMany },
     alert: {
-      findUnique: vi.fn().mockResolvedValue(null),
+      findUnique: alertFindUniqueMock,
       create: vi.fn().mockResolvedValue({}),
       update: vi.fn().mockResolvedValue({}),
-      updateMany: vi.fn().mockResolvedValue({}),
+      updateMany: alertUpdateManyMock,
     },
   }),
   getCurrentTenantId: async () => "default",
@@ -77,7 +81,11 @@ vi.mock("@/lib/rbac", () => ({
   filterVmsByPermission: (_uid: any, list: any[]) => Promise.resolve(list),
   filterNodesByPermission: (_uid: any, list: any[]) => Promise.resolve(list),
   checkPermission: vi.fn().mockResolvedValue(null),
-  PERMISSIONS: {},
+  getCurrentRbacInfraScope: rbacScopeMock,
+  PERMISSIONS: { VM_VIEW: "vm.view", NODE_VIEW: "node.view" },
+}))
+vi.mock("@/lib/alerts/visibility", () => ({
+  isAlertInRbacScope: vi.fn().mockReturnValue(true),
 }))
 
 // Stub orchestrator + alert helpers
@@ -103,12 +111,108 @@ beforeEach(() => {
   // Reset finders to return empty lists
   globalFindMany.mockResolvedValue([])
   sessionFindMany.mockResolvedValue([])
+  rbacScopeMock.mockResolvedValue(null)
+  getConnByIdMock.mockResolvedValue({ baseUrl: "", apiToken: "" })
+  getPbsConnByIdMock.mockResolvedValue({ baseUrl: "", apiToken: "" })
   // Default session: provider tenant
   mockGetServerSession.mockResolvedValue({ user: { id: "u1", tenantId: "default" } })
   // Default PBS fetch: return empty arrays (no-op)
   mockPbsFetch.mockResolvedValue([])
   // Default namespace snapshot fetch: return empty
   mockListSnapshotsInNamespace.mockResolvedValue([])
+})
+
+describe("RBAC infra scope (issue #525)", () => {
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    globalFindMany.mockResolvedValue([
+      { id: "p1", name: "PVE 1", type: "pve", hasCeph: false, tenantId: "default" },
+      { id: "p2", name: "PVE 2", type: "pve", hasCeph: false, tenantId: "default" },
+      { id: "pbs-1", name: "PBS 1", type: "pbs", hasCeph: false, tenantId: "default" },
+      { id: "pbs-2", name: "PBS 2", type: "pbs", hasCeph: false, tenantId: "default" },
+    ])
+  })
+
+  it("loads only the granted PVE connection for a node scope", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(),
+      nodesByConnection: new Map([["p1", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await res.json()
+    const clusterIds = (body.data.clusters ?? []).map((cluster: any) => cluster.id)
+
+    expect(getConnByIdMock).toHaveBeenCalledWith("p1", "default")
+    expect(getConnByIdMock).not.toHaveBeenCalledWith("p2", expect.anything())
+    expect(getPbsConnByIdMock).not.toHaveBeenCalled()
+    expect(clusterIds).not.toContain("p2")
+    expect(body.data.summary.standalones + body.data.summary.clusters).toBe(1)
+  })
+
+  it("loads only fully granted PVE and PBS connections", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(["p1", "pbs-1"]),
+      nodesByConnection: new Map(),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(getConnByIdMock).toHaveBeenCalledWith("p1", "default")
+    expect(getPbsConnByIdMock).toHaveBeenCalledWith("pbs-1", "default")
+    expect(getPbsConnByIdMock).not.toHaveBeenCalledWith("pbs-2", expect.anything())
+  })
+
+  it("opens every provider connection for an admin", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+
+    expect(res.status).toBe(200)
+    expect(getConnByIdMock).toHaveBeenCalledWith("p1", "default")
+    expect(getConnByIdMock).toHaveBeenCalledWith("p2", "default")
+    expect(getPbsConnByIdMock).toHaveBeenCalledWith("pbs-1", "default")
+    expect(getPbsConnByIdMock).toHaveBeenCalledWith("pbs-2", "default")
+    expect(rbacScopeMock).toHaveBeenCalledWith(["vm.view", "node.view"])
+  })
+
+  it("fetches only guests and omits infrastructure aggregates for a VM-only user", async () => {
+    rbacScopeMock.mockResolvedValue(vmScope("p1", "n1", "100"))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await res.json()
+
+    expect(getConnByIdMock).toHaveBeenCalledWith("p1", "default")
+    expect(getConnByIdMock).not.toHaveBeenCalledWith("p2", expect.anything())
+    expect(body.data.clusters).toEqual([])
+    expect(body.data.summary.clusters + body.data.summary.standalones).toBe(0)
+    expect(getPbsConnByIdMock).not.toHaveBeenCalled()
+  })
+
+  it("skips alert synchronization for a scoped caller", async () => {
+    rbacScopeMock.mockResolvedValue(vmScope("p1", "n1", "100"))
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    await res.json()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(alertUpdateManyMock).not.toHaveBeenCalled()
+    expect(alertFindUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it("runs alert synchronization for an unrestricted admin", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+
+    await vi.waitFor(() => expect(alertUpdateManyMock).toHaveBeenCalled())
+  })
 })
 
 describe("GET /api/v1/dashboard scope routing", () => {

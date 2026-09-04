@@ -47,7 +47,7 @@ describe('vmMetaCache — context-keyed cache coverage (issue #633)', () => {
     setCachedInventory(inventory([guest(100, 'prod;web', 'pool-a')]), 'tA', 'vA')
     // The union key ('tA::all') was never warmed — only 'tA::vA' exists.
     const meta = resolveVmMeta('conn-1:n1:qemu:100', 'tA')
-    expect(meta).toEqual({ tags: ['prod', 'web'], pool: 'pool-a' })
+    expect(meta).toEqual({ tags: ['prod', 'web'], pool: 'pool-a', node: 'n1' })
   })
 
   it('merges guests across contexts and the freshest entry wins a per-VM conflict', async () => {
@@ -55,8 +55,8 @@ describe('vmMetaCache — context-keyed cache coverage (issue #633)', () => {
     await new Promise(resolve => setTimeout(resolve, 5))
     setCachedInventory(inventory([guest(100, 'fresh-tag'), guest(200, 'only-in-vA')]), 'tB', 'vA')
 
-    expect(resolveVmMeta('conn-1:n1:qemu:100', 'tB')).toEqual({ tags: ['fresh-tag'], pool: undefined })
-    expect(resolveVmMeta('conn-1:n1:qemu:200', 'tB')).toEqual({ tags: ['only-in-vA'], pool: undefined })
+    expect(resolveVmMeta('conn-1:n1:qemu:100', 'tB')).toEqual({ tags: ['fresh-tag'], pool: undefined, node: 'n1' })
+    expect(resolveVmMeta('conn-1:n1:qemu:200', 'tB')).toEqual({ tags: ['only-in-vA'], pool: undefined, node: 'n1' })
   })
 
   it('returns null when no context is warm for the tenant (cold cache, safe denial)', () => {

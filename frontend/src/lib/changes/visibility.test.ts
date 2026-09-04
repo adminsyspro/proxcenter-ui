@@ -67,3 +67,85 @@ describe("isChangeVisibleToTenant", () => {
     expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: undefined }, iaasCtx())).toBe(false)
   })
 })
+
+describe("isChangeVisibleToTenant with ctx.rbacScope (issue #525)", () => {
+  const providerCtx = (rbacScope: ChangeVisibilityCtx["rbacScope"]): ChangeVisibilityCtx => ({
+    infraKind: "provider",
+    tenantConnectionIds: new Set(["c1", "c2"]),
+    vdcScope: null,
+    rbacScope,
+  })
+  const nodeScope = { fullConnections: new Set<string>(), nodesByConnection: new Map([["c1", new Set(["n1"])]]), guestDerived: false }
+  const connScope = { fullConnections: new Set(["c1"]), nodesByConnection: new Map<string, Set<string>>(), guestDerived: false }
+  const CLUSTER_LESS = { node: "n1", resourceType: "vm", resourceId: "100" }
+  const VM_N1 = { connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "100" }
+  const CT_N2 = { connectionId: "c1", node: "n2", resourceType: "ct", resourceId: "101" }
+  const NODE_N2 = { connectionId: "c1", node: "n2", resourceType: "node", resourceId: "n2" }
+  const VM_NO_NODE = { connectionId: "c1", resourceType: "vm", resourceId: "102" }
+  const STORAGE = { connectionId: "c1", resourceType: "storage", resourceId: "local-lvm" }
+  const POOL = { connectionId: "c1", resourceType: "pool", resourceId: "pool-a" }
+  const VM_C2 = { connectionId: "c2", node: "n1", resourceType: "vm", resourceId: "100" }
+
+  it("absent or null scope: the provider verdict is untouched, cluster-less record included", () => {
+    expect(isChangeVisibleToTenant(CLUSTER_LESS, providerCtx(undefined))).toBe(true)
+    expect(isChangeVisibleToTenant(CLUSTER_LESS, providerCtx(null))).toBe(true)
+    expect(isChangeVisibleToTenant(VM_C2, providerCtx(null))).toBe(true)
+  })
+
+  it("connection scope: keeps every c1 record, drops c2 and cluster-less records", () => {
+    const ctx = providerCtx(connScope)
+    expect(isChangeVisibleToTenant(VM_N1, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(CT_N2, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(VM_NO_NODE, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(VM_C2, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(CLUSTER_LESS, ctx)).toBe(false)
+  })
+
+  it("node scope: keeps guest and node records on the granted node, drops the other node and unattributed guests", () => {
+    const ctx = providerCtx(nodeScope)
+    expect(isChangeVisibleToTenant(VM_N1, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(CT_N2, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(NODE_N2, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(VM_NO_NODE, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(VM_C2, ctx)).toBe(false)
+  })
+
+  it("node scope: storage and pool records of the granted connection are cluster-level facts and stay", () => {
+    const ctx = providerCtx(nodeScope)
+    expect(isChangeVisibleToTenant(STORAGE, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(POOL, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant({ ...STORAGE, connectionId: "c2" }, ctx)).toBe(false)
+  })
+
+  it("guest-derived scope: the tenant-level perimeter is kept, cluster-less records excepted", () => {
+    const ctx = providerCtx({ fullConnections: new Set<string>(), nodesByConnection: new Map<string, Set<string>>(), guestDerived: true })
+    expect(isChangeVisibleToTenant(CT_N2, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(VM_C2, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant(CLUSTER_LESS, ctx)).toBe(false)
+  })
+
+  it("RBAC and the vDC mask compose: a record must pass both", () => {
+    const ctx = iaasCtx({ rbacScope: connScope })
+    expect(isChangeVisibleToTenant(VM_OWNED, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: "999" }, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ rbacScope: nodeScope }))).toBe(true)
+    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ rbacScope: { ...connScope, fullConnections: new Set(["c2"]) } }))).toBe(false)
+  })
+
+  it("vm scope: only the granted guest's records pass; host and cluster rows are denied", () => {
+    const vmScope = {
+      fullConnections: new Set<string>(),
+      nodesByConnection: new Map([["c1", new Set(["n1"])]]),
+      nodeGrantsByConnection: new Map<string, Set<string>>(),
+      guestGrantsByConnection: new Map([["c1", new Set(["100"])]]),
+      guestDerived: false,
+    }
+    const ctx = providerCtx(vmScope)
+    expect(isChangeVisibleToTenant(VM_N1, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant({ ...VM_N1, node: "n2" }, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant({ ...VM_N1, resourceId: "101" }, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(NODE_N2, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant({ connectionId: "c1", node: "n1", resourceType: "node", resourceId: "n1" }, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant(STORAGE, ctx)).toBe(false)
+  })
+})

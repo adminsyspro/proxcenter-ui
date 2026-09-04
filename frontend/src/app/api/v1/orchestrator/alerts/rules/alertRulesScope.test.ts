@@ -12,6 +12,7 @@ const {
   orchestratorFetchMock,
   getSessionPrismaMock,
   connectionFindManyMock,
+  rbacScopeMock,
 } = vi.hoisted(() => {
   const connectionFindManyMock = vi.fn()
   const getSessionPrismaMock = vi.fn().mockResolvedValue({
@@ -24,6 +25,7 @@ const {
     orchestratorFetchMock: vi.fn(),
     getSessionPrismaMock,
     connectionFindManyMock,
+    rbacScopeMock: vi.fn(),
   }
 })
 
@@ -46,6 +48,7 @@ vi.mock("@/lib/orchestrator/client", () => ({
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: (...a: any[]) => rbacScopeMock(...a),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
 }))
 
@@ -90,6 +93,7 @@ beforeEach(() => {
   })
   // Default: orchestrator creates the rule successfully
   orchestratorFetchMock.mockResolvedValue({ id: "rule-1", name: "Test rule" })
+  rbacScopeMock.mockReset().mockResolvedValue(null)
 })
 
 // ---------------------------------------------------------------------------
@@ -275,5 +279,60 @@ describe("GET /api/v1/orchestrator/alerts/rules -- vDC view context filtering", 
     expect(ids).toContain("r-global")
     expect(ids).toContain("r-c1")
     expect(ids).not.toContain("r-c2")
+  })
+})
+
+describe("GET /api/v1/orchestrator/alerts/rules -- RBAC infra scope filtering", () => {
+  const RULES = [
+    { id: "r1", connection_id: "c1" },
+    { id: "r2", connection_id: "c2" },
+    { id: "r3" },
+  ]
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    getTenantConnectionIdsMock.mockResolvedValue(new Set(["c1", "c2"]))
+    orchestratorFetchMock.mockResolvedValue(RULES)
+  })
+
+  it("returns every rule for an unrestricted admin", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    expect(res.status).toBe(200)
+    expect(body.map((rule) => rule.id)).toEqual(["r1", "r2", "r3"])
+    expect(rbacScopeMock).toHaveBeenCalledWith("connection.view")
+  })
+
+  it("keeps connection-level and global rules for a node-scoped user", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(),
+      nodesByConnection: new Map([["c1", new Set(["n1"])]]),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    expect(res.status).toBe(200)
+    expect(body.map((rule) => rule.id)).toEqual(["r1", "r3"])
+  })
+
+  it("keeps granted connection and global rules for a connection-scoped user", async () => {
+    rbacScopeMock.mockResolvedValue({
+      fullConnections: new Set(["c2"]),
+      nodesByConnection: new Map(),
+      guestDerived: false,
+    })
+
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    const body = await readJson<any[]>(res)
+
+    expect(res.status).toBe(200)
+    expect(body.map((rule) => rule.id)).toEqual(["r2", "r3"])
   })
 })

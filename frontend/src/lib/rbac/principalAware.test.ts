@@ -28,6 +28,7 @@ import {
   filterVmsByPermission,
   filterNodesByPermission,
   getRbacInfraScope,
+  getCurrentRbacInfraScope,
   PERMISSIONS,
 } from './index'
 import { tokenInfraScope } from './infraScope'
@@ -424,5 +425,33 @@ describe('module hygiene (contract assertion (b) precondition)', () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync('src/lib/rbac/index.ts', 'utf8')
     expect(source.includes('getServerSession')).toBe(false)
+  })
+})
+
+describe('getCurrentRbacInfraScope: the caller scope in one call (issue #525)', () => {
+  it('returns null without any principal (the route already rejected that caller)', async () => {
+    expect(await getCurrentRbacInfraScope()).toBeNull()
+  })
+
+  it('maps a connection-scoped token to a full-connection scope, a fleet-wide token to null', async () => {
+    const scoped = await seedApiToken({ scopes: ['vms:read'], connectionIds: ['conn-1'] })
+    headersMock.mockResolvedValue(tokenHeaders(scoped.secret, 'vms-list', '/api/v1/vms'))
+    const scope = await getCurrentRbacInfraScope()
+    expect(scope?.fullConnections).toEqual(new Set(['conn-1']))
+    expect(scope?.nodesByConnection.size).toBe(0)
+    expect(scope?.guestDerived).toBe(false)
+
+    const fleet = await seedApiToken({ scopes: ['vms:read'], connectionIds: null })
+    headersMock.mockResolvedValue(tokenHeaders(fleet.secret, 'vms-list', '/api/v1/vms'))
+    expect(await getCurrentRbacInfraScope()).toBeNull()
+  })
+
+  it('a grantless session user gets an empty, restricting scope rather than null', async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: 'user-norant', tenantId: 'default' } })
+    const scope = await getCurrentRbacInfraScope()
+    expect(scope).not.toBeNull()
+    expect(scope?.fullConnections.size).toBe(0)
+    expect(scope?.nodesByConnection.size).toBe(0)
+    expect(scope?.guestDerived).toBe(false)
   })
 })

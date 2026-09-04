@@ -1,5 +1,7 @@
 {
   "common": {
+    "expandAll": "Alle aufklappen",
+    "collapseAll": "Alle zuklappen",
     "delete": "Löschen",
     "cancel": "Abbrechen",
     "save": "Speichern",
@@ -476,6 +478,7 @@
       "infraGlobalChart": "Infra CPU/RAM",
       "zfsArc": "ZFS ARC",
       "vmHeatmap": "Guest-Heatmap",
+      "nodeGuests": "Guests pro Node",
       "drsStatus": "DRS-Status",
       "siteRecovery": "Site Recovery",
       "themeLogo": "Theme-Logo"
@@ -506,6 +509,7 @@
       "infraGlobalChart": "CPU/RAM pro Node über die gesamte Infrastruktur",
       "zfsArc": "ZFS-ARC-Speichernutzung pro Node (PVE 9+)",
       "vmHeatmap": "CPU/RAM-Heatmap aller Guests",
+      "nodeGuests": "Guests jedes Nodes mit aktueller CPU- und RAM-Auslastung",
       "drsStatus": "DRS-Status, aktive Migrationen und Empfehlungen",
       "siteRecovery": "VM-Schutz, RPO-Compliance und Replikationsstatus",
       "backupCalendar": "Backup-Verlauf über 30 Tage",
@@ -547,6 +551,11 @@
     },
     "widgetArc": {
       "noData": "Keine ZFS-ARC-Daten. Erfordert PVE 9 oder neuer auf einem Node mit ZFS."
+    },
+    "nodeGuests": {
+      "guests": "{count} Guests",
+      "running": "{count} aktiv",
+      "nodes": "{count} Nodes"
     }
   },
   "alerts": {

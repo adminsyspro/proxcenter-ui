@@ -35,6 +35,9 @@ const ZfsArcWidget = dynamic(() => import('./widgets/ZfsArcWidget'), { ssr: fals
 // VM Heatmap (CPU/RAM utilization grid)
 const VmHeatmapWidget = dynamic(() => import('./widgets/VmHeatmapWidget'), { ssr: false })
 
+// Node Guests (collapsible per-node guest list with CPU and RAM bars)
+const NodeGuestsWidget = dynamic(() => import('./widgets/NodeGuestsWidget'), { ssr: false })
+
 // Backup Calendar
 const BackupCalendarWidget = dynamic(() => import('./widgets/BackupCalendarWidget'), { ssr: false })
 
@@ -340,6 +343,18 @@ export const WIDGET_REGISTRY = {
     maxSize: { w: 12, h: 20 },
     noContainer: true,
     component: VmHeatmapWidget,
+  },
+  'node-guests': {
+    type: 'node-guests',
+    name: 'Guests per Node',
+    description: 'Guests of each node with their live CPU and RAM',
+    icon: 'ri-node-tree',
+    category: 'infrastructure',
+    defaultSize: { w: 6, h: 6 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 20 },
+    noContainer: true,
+    component: NodeGuestsWidget,
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

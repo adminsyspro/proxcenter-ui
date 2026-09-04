@@ -486,6 +486,7 @@
       "infraGlobalChart": "인프라 CPU/RAM",
       "zfsArc": "ZFS ARC",
       "vmHeatmap": "게스트 히트맵",
+      "nodeGuests": "노드별 게스트",
       "drsStatus": "DRS 상태",
       "siteRecovery": "사이트 복구",
       "sectionHeader": "섹션",
@@ -519,6 +520,7 @@
       "infraGlobalChart": "전체 인프라의 노드별 CPU/RAM",
       "zfsArc": "노드별 ZFS ARC 메모리 사용량 (PVE 9 이상)",
       "vmHeatmap": "모든 게스트의 CPU/RAM 히트맵",
+      "nodeGuests": "각 노드의 게스트와 실시간 CPU/RAM 사용량",
       "drsStatus": "DRS 상태, 진행 중인 마이그레이션 및 권장 사항",
       "siteRecovery": "VM 보호, RPO 준수 및 복제 상태",
       "backupCalendar": "최근 30일간의 백업 이력",
@@ -560,6 +562,11 @@
     },
     "widgetArc": {
       "noData": "ZFS ARC 데이터가 없습니다. ZFS를 사용하는 노드에서 PVE 9 이상이 필요합니다."
+    },
+    "nodeGuests": {
+      "guests": "게스트 {count}개",
+      "running": "실행 중 {count}개",
+      "nodes": "노드 {count}개"
     }
   },
   "alerts": {

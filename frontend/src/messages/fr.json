@@ -486,6 +486,7 @@
       "infraGlobalChart": "Infra CPU/RAM",
       "zfsArc": "ZFS ARC",
       "vmHeatmap": "Heatmap guests",
+      "nodeGuests": "Guests par nœud",
       "drsStatus": "État DRS",
       "siteRecovery": "Reprise d'activité",
       "sectionHeader": "Section",
@@ -519,6 +520,7 @@
       "infraGlobalChart": "CPU/RAM par nœud sur toute l'infrastructure",
       "zfsArc": "Utilisation mémoire du cache ZFS ARC par nœud (PVE 9+)",
       "vmHeatmap": "Heatmap CPU/RAM de tous les guests",
+      "nodeGuests": "Guests de chaque nœud avec leur CPU et RAM en direct",
       "drsStatus": "Status DRS, migrations actives et recommandations",
       "siteRecovery": "Protection VMs, conformité RPO et status réplication",
       "backupCalendar": "Historique backups sur 30 jours",
@@ -560,6 +562,11 @@
     },
     "widgetArc": {
       "noData": "Aucune donnée ZFS ARC. Nécessite PVE 9 ou supérieur sur un nœud utilisant ZFS."
+    },
+    "nodeGuests": {
+      "guests": "{count} guests",
+      "running": "{count} en cours",
+      "nodes": "{count} nœuds"
     }
   },
   "alerts": {

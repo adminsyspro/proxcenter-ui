@@ -476,6 +476,7 @@
       "infraGlobalChart": "基础设施 CPU/RAM",
       "zfsArc": "ZFS ARC",
       "vmHeatmap": "客户机热力图",
+      "nodeGuests": "按节点的客户机",
       "drsStatus": "DRS 状态",
       "siteRecovery": "站点恢复",
       "themeLogo": "主题标志"
@@ -506,6 +507,7 @@
       "infraGlobalChart": "所有基础设施中每个节点的 CPU/RAM",
       "zfsArc": "各节点的 ZFS ARC 内存占用（PVE 9+）",
       "vmHeatmap": "所有客户机的 CPU/RAM 热力图",
+      "nodeGuests": "每个节点的客户机及其实时 CPU/RAM 使用率",
       "drsStatus": "DRS 状态、活跃迁移和建议",
       "siteRecovery": "虚拟机保护、RPO 合规性和复制状态",
       "backupCalendar": "30天备份历史",
@@ -547,6 +549,11 @@
     },
     "widgetArc": {
       "noData": "无 ZFS ARC 数据。需要 PVE 9 或更高版本，且节点使用 ZFS。"
+    },
+    "nodeGuests": {
+      "guests": "{count} 个客户机",
+      "running": "{count} 个运行中",
+      "nodes": "{count} 个节点"
     }
   },
   "alerts": {

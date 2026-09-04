@@ -22,8 +22,11 @@ import {
   filterVisibleConnections,
   filterCandidateConnections,
   pruneEmptyConnections,
+  isFlatRecordVisible,
+  hasInfraGrant,
   tokenInfraScope,
   type RbacInfraScope,
+  type ScopePermissionFilter,
 } from './infraScope'
 
 export {
@@ -33,7 +36,10 @@ export {
   filterVisibleConnections,
   filterCandidateConnections,
   pruneEmptyConnections,
+  isFlatRecordVisible,
+  hasInfraGrant,
   type RbacInfraScope,
+  type ScopePermissionFilter,
 }
 
 export interface PermissionCheck {
@@ -796,15 +802,36 @@ export async function filterNodesByPermission<T extends { connId: string; node: 
 export async function getRbacInfraScope(
   principalOrUserId: string | Principal,
   tenantId?: string,
+  permission?: ScopePermissionFilter,
 ): Promise<RbacInfraScope | null> {
   const token = asTokenPrincipal(principalOrUserId)
   if (token) {
+    // A token's permission set is flat (checkTokenPermission gates it); its
+    // perimeter is the connection allow-list whatever the permission.
     return tokenInfraScope(token.connectionIds ?? null)
   }
   const userId = toUserId(principalOrUserId)
   const tid = resolveGrantTenantId(principalOrUserId, tenantId)
   const grants = await loadUserGrants(userId, tid)
-  return deriveRbacInfraScope(grants)
+  return deriveRbacInfraScope(grants, permission)
+}
+
+/**
+ * The caller's RBAC infra scope, resolved from the request principal in one
+ * call: null when unrestricted (super admin, a global grant of `permission`,
+ * token without a connection allow-list) or when no principal resolves at
+ * all, which the route's checkPermission has already rejected. Pass the
+ * permission the route checked so the perimeter is where THAT permission was
+ * granted, not the union of every assignment. Aggregate read routes resolve
+ * this once and feed it to isFlatRecordVisible / the alert visibility ctx
+ * (issue #525).
+ */
+export async function getCurrentRbacInfraScope(permission?: ScopePermissionFilter): Promise<RbacInfraScope | null> {
+  const ctx = await getRBACContext()
+  if (!ctx || ctx.isAdmin) return null
+  const principal = ctx.principal ?? ctx.userId
+  if (!principal) return null
+  return getRbacInfraScope(principal, ctx.tenantId, permission)
 }
 
 export type GuestVisibilityCheck = (guest: {

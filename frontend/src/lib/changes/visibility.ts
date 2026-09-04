@@ -20,11 +20,16 @@
  *                               (VMID resolved in the vDC pools) survive.
  *                               node / storage / pool records are provider
  *                               infra concerns. Missing key = deny.
+ *  - caller RBAC infra scope   → ANDed on top of all of the above: a
+ *                               connection / node scoped user only sees the
+ *                               records attributable to their grants (#525).
  */
 
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
+import { getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
+import { isFlatRecordVisible, type RbacInfraScope } from "@/lib/rbac/infraScope"
 
 const GUEST_RESOURCE_TYPES = new Set(["vm", "ct"])
 
@@ -33,6 +38,8 @@ export interface ChangeVisibilityCtx {
   tenantConnectionIds: Set<string>
   vdcScope: ReturnType<typeof maskingScope>
   vdcVmids?: Map<string, Set<string>>
+  /** Caller's RBAC infra scope; absent or null = unrestricted (issue #525). */
+  rbacScope?: RbacInfraScope | null
 }
 
 export async function buildChangeVisibilityCtx(): Promise<ChangeVisibilityCtx> {
@@ -45,10 +52,25 @@ export async function buildChangeVisibilityCtx(): Promise<ChangeVisibilityCtx> {
     tenantConnectionIds: await getTenantConnectionIds(),
     vdcScope,
     vdcVmids: vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined,
+    rbacScope: await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW),
   }
 }
 
 export function isChangeVisibleToTenant(c: any, ctx: ChangeVisibilityCtx): boolean {
+  // Caller's RBAC infra scope first (sync, cheap). Guest records carry their
+  // VMID so a vm grant matches them; guest and node records are node-bound;
+  // storage / pool records are cluster-level facts.
+  if (ctx.rbacScope) {
+    const guest = GUEST_RESOURCE_TYPES.has(c.resourceType)
+    const visible = isFlatRecordVisible(ctx.rbacScope, {
+      connId: c.connectionId,
+      node: c.node,
+      vmid: guest ? c.resourceId : undefined,
+      nodeBound: guest || c.resourceType === "node",
+    })
+    if (!visible) return false
+  }
+
   if (!c.connectionId) return ctx.infraKind === "provider"
 
   if (!ctx.vdcScope) return ctx.tenantConnectionIds.has(c.connectionId)

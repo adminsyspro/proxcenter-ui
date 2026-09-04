@@ -4,7 +4,8 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { getSessionPrisma } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
+import { filterCandidateConnections, isFlatRecordVisible } from '@/lib/rbac/infraScope'
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
 import { extractTaskVmid } from "@/lib/tasks/scope"
@@ -81,6 +82,12 @@ export async function GET(req: Request) {
     // node).
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : null
 
+    // Caller's RBAC infra scope (issue #525): null = unrestricted. Connections
+    // the user holds no grant on are not even queried; tasks and logs are then
+    // gated per node. A guest-derived (tag / pool) scope keeps the tenant-level
+    // perimeter here, only the per-guest filter could narrow it.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
+
     const { searchParams } = new URL(req.url)
     const limit = Math.min(Number.parseInt(searchParams.get('limit') || '100'), 500)
     const source = searchParams.get('source') || 'all' // 'tasks', 'logs', 'all'
@@ -91,7 +98,10 @@ export async function GET(req: Request) {
     const connPrisma = plan.pveClient === 'global' ? globalPrisma : sessionPrisma
     const connWhere: any = { type: 'pve' }
     if (plan.pveConnectionIds) connWhere.id = { in: plan.pveConnectionIds }
-    const connections = await connPrisma.connection.findMany({ where: connWhere })
+    const connections = filterCandidateConnections(
+      await connPrisma.connection.findMany({ where: connWhere }),
+      rbacScope,
+    )
     
     if (connections.length === 0) {
       return NextResponse.json({ data: [] })
@@ -174,6 +184,13 @@ export async function GET(req: Request) {
                 return allowedVmids.has(vmid)
               })
             }
+            // RBAC infra scope: only tasks that ran on a granted node, or that
+            // target a directly granted guest, survive.
+            if (rbacScope) {
+              tasks = tasks.filter(t =>
+                isFlatRecordVisible(rbacScope, { connId: conn.id, node: t.node, vmid: extractTaskVmid(t.id) }),
+              )
+            }
 
             // Traiter les tâches - trier par date décroissante d'abord
             tasks.sort((a, b) => (b.starttime || 0) - (a.starttime || 0))
@@ -238,6 +255,9 @@ export async function GET(req: Request) {
             const allowedNodesLogs = vdcScope?.nodesByConnection.get(conn.id)
             if (allowedNodesLogs) {
               logs = logs.filter(l => !l.node || allowedNodesLogs.has(l.node))
+            }
+            if (rbacScope) {
+              logs = logs.filter(l => isFlatRecordVisible(rbacScope, { connId: conn.id, node: l.node }))
             }
 
             for (const log of logs) {

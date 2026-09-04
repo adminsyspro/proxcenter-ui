@@ -15,7 +15,11 @@
 export type RbacInfraScope = {
   /** Connections granted whole (connection scope) -> ALL their nodes are visible. */
   fullConnections: Set<string>
-  /** Per-connection node names granted (node / vm scope) -> only those nodes. */
+  /**
+   * Per-connection node names the TREE may show: node grants plus the node of
+   * every vm grant (a vm-scoped user still sees their host in the tree, with
+   * the guests pruned by filterVmsByPermission).
+   */
   nodesByConnection: Map<string, Set<string>>
   /**
    * True when the user holds a tag or pool grant. The perimeter is then whatever
@@ -23,7 +27,19 @@ export type RbacInfraScope = {
    * token principal.
    */
   guestDerived: boolean
+  /**
+   * Per-connection node names granted OUTRIGHT (node scope). Flat feeds gate on
+   * this rather than on nodesByConnection so a vm grant does not open its whole
+   * node (issue #525). Absent on a hand-built scope = every node listed in
+   * nodesByConnection is an outright grant.
+   */
+  nodeGrantsByConnection?: Map<string, Set<string>>
+  /** Per-connection VMIDs granted directly (vm scope). Absent = none. */
+  guestGrantsByConnection?: Map<string, Set<string>>
 }
+
+/** Permission(s) a grant must carry to count; `undefined` = every grant counts. */
+export type ScopePermissionFilter = string | readonly string[] | undefined
 
 const TREE_SCOPE_TYPES = new Set(['connection', 'node', 'vm'])
 const FLAT_SCOPE_TYPES = new Set(['tag', 'pool'])
@@ -33,19 +49,43 @@ const FLAT_SCOPE_TYPES = new Set(['tag', 'pool'])
  * unrestricted (super admin or holds a `global` scope); callers must then skip
  * RBAC tree pruning. A non-null scope with empty sets and `guestDerived: false`
  * restricts the tree to nothing (no infra and no flat grants).
+ *
+ * `permission` narrows the derivation to the grants that carry the permission
+ * the route checked (any of them when a list is given): the perimeter is where
+ * that permission was granted, and only a global grant OF that permission makes
+ * the user unrestricted. Without it every grant counts, whatever it allows,
+ * which is the #524 tree semantics.
  */
-export function deriveRbacInfraScope(grants: {
-  superAdmin: boolean
-  byScope: ReadonlyArray<{ scopeType: string; scopeTarget: string | null }>
-}): RbacInfraScope | null {
+export function deriveRbacInfraScope(
+  grants: {
+    superAdmin: boolean
+    byScope: ReadonlyArray<{ scopeType: string; scopeTarget: string | null; permissions?: ReadonlySet<string> }>
+  },
+  permission?: ScopePermissionFilter,
+): RbacInfraScope | null {
   if (grants.superAdmin) return null
-  if (grants.byScope.some(g => g.scopeType === 'global')) return null
+  const wanted = permission === undefined ? null : new Set(typeof permission === 'string' ? [permission] : permission)
+  const carries = (g: { permissions?: ReadonlySet<string> }): boolean =>
+    wanted === null || (g.permissions !== undefined && [...wanted].some(p => g.permissions!.has(p)))
+  const relevant = grants.byScope.filter(carries)
+  if (relevant.some(g => g.scopeType === 'global')) return null
 
   const fullConnections = new Set<string>()
   const nodesByConnection = new Map<string, Set<string>>()
+  const nodeGrantsByConnection = new Map<string, Set<string>>()
+  const guestGrantsByConnection = new Map<string, Set<string>>()
   let guestDerived = false
 
-  for (const g of grants.byScope) {
+  const addTo = (map: Map<string, Set<string>>, connId: string, value: string) => {
+    let set = map.get(connId)
+    if (!set) {
+      set = new Set<string>()
+      map.set(connId, set)
+    }
+    set.add(value)
+  }
+
+  for (const g of relevant) {
     if (FLAT_SCOPE_TYPES.has(g.scopeType) && g.scopeTarget) {
       guestDerived = true
       continue
@@ -61,15 +101,15 @@ export function deriveRbacInfraScope(grants: {
     // node => connId:nodeName ; vm => connId:nodeName:type:vmid
     const nodeName = parts[1]
     if (!nodeName) continue
-    let set = nodesByConnection.get(connId)
-    if (!set) {
-      set = new Set<string>()
-      nodesByConnection.set(connId, set)
+    addTo(nodesByConnection, connId, nodeName)
+    if (g.scopeType === 'node') {
+      addTo(nodeGrantsByConnection, connId, nodeName)
+    } else if (parts[3]) {
+      addTo(guestGrantsByConnection, connId, parts[3])
     }
-    set.add(nodeName)
   }
 
-  return { fullConnections, nodesByConnection, guestDerived }
+  return { fullConnections, nodesByConnection, guestDerived, nodeGrantsByConnection, guestGrantsByConnection }
 }
 
 /** Whether a whole connection is granted outright (infra scopes only). */
@@ -158,5 +198,62 @@ export function pruneEmptyConnections<C extends { id: string; nodes: ReadonlyArr
  */
 export function tokenInfraScope(connectionIds: string[] | null): RbacInfraScope | null {
   if (connectionIds === null) return null
-  return { fullConnections: new Set(connectionIds), nodesByConnection: new Map(), guestDerived: false }
+  return {
+    fullConnections: new Set(connectionIds),
+    nodesByConnection: new Map(),
+    guestDerived: false,
+    nodeGrantsByConnection: new Map(),
+    guestGrantsByConnection: new Map(),
+  }
+}
+
+/** Node names granted outright on a connection (see RbacInfraScope.nodeGrantsByConnection). */
+function outrightNodes(scope: RbacInfraScope, connId: string): Set<string> | undefined {
+  return scope.nodeGrantsByConnection ? scope.nodeGrantsByConnection.get(connId) : scope.nodesByConnection.get(connId)
+}
+
+/**
+ * Whether the user holds an INFRA grant on a connection: the whole connection
+ * or at least one node outright. A vm-only or tag / pool grant does not count,
+ * those users are resource-flat and get no cluster or node facts (quorum, Ceph,
+ * storage capacity, cluster cards). Null scope = admin, always true.
+ */
+export function hasInfraGrant(scope: RbacInfraScope | null, connId: string): boolean {
+  if (scope === null) return true
+  if (scope.fullConnections.has(connId)) return true
+  return (outrightNodes(scope, connId)?.size ?? 0) > 0
+}
+
+/**
+ * Row-level gate for FLAT feeds (change events, PVE tasks and logs, alerts,
+ * alert rules): records that name a connection and maybe a node or a guest,
+ * with no tree to prune. Null scope = admin / unrestricted. A guest-derived
+ * (tag / pool) scope cannot be decided here, only the per-guest predicate can,
+ * so it keeps every connection-bound row and the feed stays at its tenant-level
+ * perimeter for such users.
+ *
+ * A row is visible when it sits on a node granted outright, or names a VMID
+ * granted directly (vm scope, wherever the guest runs now). A row that names
+ * a node or a guest matching neither is denied. A row naming neither is a
+ * cluster-level fact (storage, quorum, a rule) kept only for a user holding a
+ * node grant on that connection and only when `nodeBound` is false; a
+ * node-bound row that could not be attributed (a VM alert on a cold index) is
+ * denied. A row with no connection at all is provider-internal state and never
+ * reaches a scoped user.
+ */
+export function isFlatRecordVisible(
+  scope: RbacInfraScope | null,
+  record: { connId?: string | null; node?: string | null; vmid?: string | number | null; nodeBound?: boolean },
+): boolean {
+  if (scope === null) return true
+  const connId = record.connId
+  if (!connId) return false
+  if (scope.fullConnections.has(connId) || scope.guestDerived) return true
+  const nodeGrants = outrightNodes(scope, connId)
+  if (record.node && nodeGrants?.has(record.node)) return true
+  const vmid = record.vmid === undefined || record.vmid === null ? undefined : String(record.vmid)
+  if (vmid !== undefined && scope.guestGrantsByConnection?.get(connId)?.has(vmid)) return true
+  if (record.node || vmid !== undefined) return false
+  if (!nodeGrants || nodeGrants.size === 0) return false
+  return record.nodeBound === false
 }

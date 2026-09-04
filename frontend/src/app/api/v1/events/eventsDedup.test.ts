@@ -40,6 +40,8 @@ vi.mock("@/lib/proxmox/client", () => ({
 
 // RBAC -- pass everything through
 vi.mock("@/lib/rbac", () => ({
+  // The route now resolves the caller's RBAC infra scope (issue #525); null = unrestricted.
+  getCurrentRbacInfraScope: vi.fn().mockResolvedValue(null),
   checkPermission: vi.fn().mockResolvedValue(null),
   PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
 }))

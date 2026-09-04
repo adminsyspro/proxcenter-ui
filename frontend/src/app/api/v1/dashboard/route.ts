@@ -15,7 +15,9 @@ import { generateFingerprint } from "@/lib/alerts/fingerprint"
 import { loadActiveSilenceFingerprints } from "@/lib/alerts/silenceFilter"
 import { mergeAndFilterDashboardAlerts } from "@/lib/alerts/dashboardAlertMerge"
 import { authOptions } from "@/lib/auth/config"
-import { filterVmsByPermission, filterNodesByPermission } from "@/lib/rbac"
+import { filterVmsByPermission, filterNodesByPermission, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
+import { filterCandidateConnections, filterVisibleConnections, hasInfraGrant } from "@/lib/rbac/infraScope"
+import { isAlertInRbacScope } from "@/lib/alerts/visibility"
 import { alertsApi } from "@/lib/orchestrator/client"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getSetting } from "@/lib/db/settings"
@@ -180,6 +182,20 @@ export async function GET(req: Request) {
       const allowedPbs = infra.vdcScope.pbsConnectionIds
       pbsConnections = pbsConnections.filter(c => allowedPbs.has(c.id))
     }
+
+    // Caller's RBAC infra scope (issue #525), derived from the grants that
+    // carry what this page shows. Null = unrestricted. Clusters the user holds
+    // no grant on are not queried at all; cluster cards, Ceph, storage capacity
+    // and the locally evaluated alerts then follow the INFRA grants only (see
+    // hasInfraGrant in the aggregation loop), while a node-scoped user keeps
+    // their whole cluster's capacity (storage pools are cluster-wide, pruning
+    // them per node would under-count). PBS servers need an outright grant,
+    // like the inventory tree. A guest-derived (tag / pool) scope keeps every
+    // candidate cluster: only the per-guest filters below can decide for it.
+    const rbacScope = await getCurrentRbacInfraScope([PERMISSIONS.VM_VIEW, PERMISSIONS.NODE_VIEW])
+    pveConnections = filterCandidateConnections(pveConnections, rbacScope)
+    pbsConnections = filterVisibleConnections(pbsConnections, rbacScope)
+    const infraPveConnections = pveConnections.filter(c => hasInfraGrant(rbacScope, c.id)).length
 
     // ============================================
     // CHARGER PVE ET PBS EN PARALLÈLE
@@ -435,7 +451,10 @@ return null
     let globalStorageUsed = 0, globalStorageMax = 0
 
     for (const data of validPve) {
-      if (data.isCluster) totalClusters++
+      // A vm-only (or tag / pool) grant on this connection yields its guests
+      // and nothing else: no node, cluster card, Ceph or capacity figures.
+      const infraGranted = hasInfraGrant(rbacScope, data.conn.id)
+      if (data.isCluster && infraGranted) totalClusters++
 
       // vDC filtering: restrict nodes and guests to what the tenant's vDCs allow
       const allowedNodes = vdcScope?.nodesByConnection.get(data.conn.id)
@@ -463,10 +482,12 @@ return null
         : data.lxcs
 
       // Aggregate real storage per connection
-      globalStorageUsed += data.connStorageUsed || 0
-      globalStorageMax += data.connStorageMax || 0
+      if (infraGranted) {
+        globalStorageUsed += data.connStorageUsed || 0
+        globalStorageMax += data.connStorageMax || 0
+      }
 
-      for (const node of scopedNodes) {
+      for (const node of infraGranted ? scopedNodes : []) {
         allNodes.push({
           connId: data.conn.id, node: node.node,
           name: node.node, connection: data.conn.name || data.conn.id, connectionId: data.conn.id,
@@ -478,6 +499,8 @@ return null
 
       for (const vm of scopedVms) allVms.push({ ...vm, connId: data.conn.id, connection: data.conn.name, connectionId: data.conn.id })
       for (const lxc of scopedLxcs) allLxcs.push({ ...lxc, connId: data.conn.id, connection: data.conn.name, connectionId: data.conn.id })
+
+      if (!infraGranted) continue
 
       clusterInfos.push({
         id: data.conn.id, name: data.clusterName, isCluster: data.isCluster, nodes: scopedNodes.length,
@@ -735,7 +758,12 @@ return null
     // ============================================
     // SYNCHRONISER LES ALERTES EN BASE (async, non-bloquant)
     // ============================================
-    syncAlertsToDatabase(alerts).catch(err => console.error('[dashboard] Alert sync error:', err))
+    // Only an unrestricted read may drive the tenant-wide alert store: the
+    // sync auto-resolves every active alert missing from `alerts`, and a scoped
+    // caller's list is a subset of the tenant's (issue #525 review finding).
+    if (rbacScope === null) {
+      syncAlertsToDatabase(alerts).catch(err => console.error('[dashboard] Alert sync error:', err))
+    }
 
     // ============================================
     // RBAC FILTERING — scope data to user's permissions
@@ -842,6 +870,11 @@ return null
         const orchResponse = await alertsApi.getAlerts({ status: 'active', limit: 100 })
         const orchData = orchResponse.data as any
         orchAlerts = orchData?.data || (Array.isArray(orchData) ? orchData : [])
+        // Same RBAC gate as /api/v1/orchestrator/alerts: the merge below only
+        // knows node NAMES, which cannot tell two clusters apart.
+        if (rbacScope && Array.isArray(orchAlerts)) {
+          orchAlerts = orchAlerts.filter((a: any) => isAlertInRbacScope(a, rbacScope, tenantId))
+        }
       } catch {
         // Silently ignore orchestrator errors — not critical for dashboard
       }
@@ -859,7 +892,7 @@ return null
     return NextResponse.json({
       data: {
         summary: {
-          clusters: totalClusters, standalones: pveConnections.length - totalClusters,
+          clusters: totalClusters, standalones: infraPveConnections - totalClusters,
           nodes: filteredNodes.length, nodesOnline: fOnlineNodes, nodesOffline: filteredNodes.length - fOnlineNodes,
           vmsRunning: fVmsRunning, vmsTotal: filteredVms.length - fVmsTemplates, lxcRunning: fLxcRunning, lxcTotal: filteredLxcs.length,
           cpuPct: fCpuPct, ramPct: fRamPct,

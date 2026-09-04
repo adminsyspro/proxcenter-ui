@@ -4,7 +4,7 @@ import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { DEFAULT_TENANT_ID, getCurrentTenantId, getSessionPrisma, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
@@ -60,7 +60,9 @@ export async function GET(req: Request) {
     // (orchestrator is not tenant-aware) would otherwise leak through.
     const allAlerts = response.data?.data || response.data || []
     const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
-    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }
+    // Caller's RBAC infra scope (issue #525), honoured inside isAlertVisibleToTenant.
+    const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
+    const visibilityCtx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind, rbacScope }
     // isAlertVisibleToTenant became async in the Postgres cutover; resolve
     // each alert's visibility up-front before filtering, otherwise the
     // filter sees a Promise (truthy) and lets every alert through.

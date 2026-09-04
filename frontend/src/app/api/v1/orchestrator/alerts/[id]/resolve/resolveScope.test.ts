@@ -12,6 +12,9 @@ const resolveMock = vi.fn()
 const isAlertVisibleToTenantMock = vi.fn()
 const getInfraMock = vi.fn()
 const vdcVmidsMock = vi.fn()
+const { rbacScopeMock } = vi.hoisted(() => ({ rbacScopeMock: vi.fn() }))
+
+import { FAKE_RBAC_SCOPE, forwardedRbacScope } from '@/__tests__/setup/rbacScope'
 
 vi.mock('@/lib/orchestrator/client', () => ({
   alertsApi: {
@@ -34,6 +37,7 @@ vi.mock('@/lib/tenant/infraScope', async (orig) => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
+  getCurrentRbacInfraScope: (...args: unknown[]) => rbacScopeMock(...args),
   PERMISSIONS: { ALERTS_MANAGE: 'alerts.manage' },
 }))
 
@@ -54,6 +58,7 @@ beforeEach(() => {
   isAlertVisibleToTenantMock.mockResolvedValue(true)
   getInfraMock.mockResolvedValue({ kind: 'iaas', vdcScope: { connectionIds: new Set(['conn-1']) } })
   vdcVmidsMock.mockResolvedValue(new Map())
+  rbacScopeMock.mockReset().mockResolvedValue(null)
 })
 
 describe('POST /api/v1/orchestrator/alerts/[id]/resolve', () => {
@@ -104,5 +109,27 @@ describe('POST /api/v1/orchestrator/alerts/[id]/resolve', () => {
 
     expect(res.status).toBe(500)
     expect((await res.json()).error).toBe('orchestrator down')
+  })
+})
+
+describe('RBAC infra scope forwarding (issue #525)', () => {
+  it('forwards the caller scope into the visibility ctx', async () => {
+    rbacScopeMock.mockResolvedValue(FAKE_RBAC_SCOPE)
+    const resolveRes = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      params: { id: 'alert-abc' },
+    })
+    expect(resolveRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBe(FAKE_RBAC_SCOPE)
+    expect(rbacScopeMock).toHaveBeenCalledWith('alerts.manage')
+  })
+
+  it('forwards null for an unrestricted caller', async () => {
+    const resolveRes = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      params: { id: 'alert-abc' },
+    })
+    expect(resolveRes.status).toBe(200)
+    expect(forwardedRbacScope(isAlertVisibleToTenantMock)).toBeNull()
   })
 })

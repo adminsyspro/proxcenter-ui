@@ -16,6 +16,7 @@ import { isAlertVisibleToTenant } from "@/lib/alerts/visibility"
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 
 /** Returns the number of alerts actually cleared. */
 export async function clearVisibleTenantAlerts(connectionId?: string): Promise<number> {
@@ -24,7 +25,9 @@ export async function clearVisibleTenantAlerts(connectionId?: string): Promise<n
   const infra = await getTenantInfrastructureScope(tenantId)
   const vdcScope = maskingScope(infra)
   const vdcVmids = vdcScope ? await getVdcVmidsByConnection(tenantId) : undefined
-  const ctx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind }
+  // Caller's RBAC infra scope (issue #525): "clear all" clears what the list shows.
+  const rbacScope = await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_MANAGE)
+  const ctx = { tenantId, tenantConnectionIds, vdcScope, vdcVmids, infraKind: infra.kind, rbacScope }
 
   // Same fetch shape as the GET list route (500-cap mirrors its page size).
   const response = await alertsApi.getAlerts({

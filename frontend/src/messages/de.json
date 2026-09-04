@@ -6834,6 +6834,8 @@
     "vlan": "VLAN",
     "noVlan": "Kein VLAN",
     "bridge": "Bridge",
+    "vnet": "VNet",
+    "sdnZone": "SDN-Zone",
     "proxcenterRoot": "ProxCeingeben",
     "totalClusters": "gesamt Cluster",
     "infraView": "Infrastruktur",

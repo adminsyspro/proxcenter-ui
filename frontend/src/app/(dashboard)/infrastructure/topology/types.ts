@@ -129,11 +129,31 @@ export interface VmSummaryNodeData {
   height: number
 }
 
-export interface VlanGroupNodeData {
+/**
+ * Segment identity shared by the two VLAN bucket nodes. A bucket is one SDN
+ * VNet, one VLAN id, or the segment-less catch-all: `vlanTag` alone cannot say
+ * which, because a VXLAN VNet has no VLAN id and two VNets of different zones
+ * may carry the same one.
+ */
+export interface TopologySegmentFields {
+  /** Bucket key: `vnet-<id>`, `vlan-<n>`, or `no-vlan`. */
+  segmentKey: string
+  /** Segment id whatever its kind: a VLAN id, or a VXLAN VNI. */
+  segmentTag: number | null
+  /** SDN VNet id, only when the bucket is a VNet. */
+  vnet?: string
+  /** Zone id of that VNet. */
+  zone?: string
+  /** Zone type of that VNet: 'vlan' | 'vxlan' | 'qinq' | 'evpn' | 'simple' | ''. */
+  zoneType?: string
+}
+
+export interface VlanGroupNodeData extends TopologySegmentFields {
   [key: string]: unknown
   label: string
   connectionId: string
   nodeName: string
+  /** The 802.1Q VLAN id, null for a VXLAN/EVPN/simple VNet or no segment. */
   vlanTag: number | null
   bridge: string
   vmCount: number
@@ -161,9 +181,10 @@ export interface VlanContainerVm {
   ip: string | null
 }
 
-export interface VlanContainerNodeData {
+export interface VlanContainerNodeData extends TopologySegmentFields {
   [key: string]: unknown
   label: string
+  /** The 802.1Q VLAN id, null for a VXLAN/EVPN/simple VNet or no segment. */
   vlanTag: number | null
   bridge: string
   subnet: string | null

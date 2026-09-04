@@ -6890,6 +6890,8 @@
     "vlan": "VLAN",
     "noVlan": "VLAN 없음",
     "bridge": "브리지",
+    "vnet": "VNet",
+    "sdnZone": "SDN 존",
     "proxcenterRoot": "ProxCenter",
     "totalClusters": "총 클러스터",
     "infraView": "인프라",

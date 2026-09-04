@@ -6891,6 +6891,8 @@
     "vlan": "VLAN",
     "noVlan": "Sans VLAN",
     "bridge": "Bridge",
+    "vnet": "VNet",
+    "sdnZone": "Zone SDN",
     "proxcenterRoot": "ProxCenter",
     "totalClusters": "Clusters totaux",
     "infraView": "Infrastructure",

@@ -16,12 +16,14 @@ import type {
   VmSummaryNodeData,
   VlanGroupNodeData,
   VlanContainerNodeData,
+  TopologySegmentFields,
   TagGroupNodeData,
   ProxCenterNodeData,
   InventoryCluster,
   InventoryGuest,
 } from '../types'
-import { getStatusColor, getVmStatusColor, getResourceStatus } from '../lib/topologyColors'
+import { getStatusColor, getVmStatusColor, getResourceStatus, getSegmentColor, segmentIcon } from '../lib/topologyColors'
+import { NO_SEGMENT_KEY } from '@/lib/proxmox/nicSegment'
 import { AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 
@@ -646,38 +648,53 @@ function VmSummaryDetails({ data }: { data: VmSummaryNodeData }) {
 /* VLAN Group details                                                 */
 /* ------------------------------------------------------------------ */
 
-function VlanGroupDetails({ data }: { data: VlanGroupNodeData }) {
+/** One label/value pair of the segment header. */
+function SegmentField({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Box>
+      <Typography variant='caption' color='text.secondary'>
+        {label}
+      </Typography>
+      <Typography variant='body1' fontWeight={600}>
+        {value}
+      </Typography>
+    </Box>
+  )
+}
+
+/**
+ * Title and identity rows shared by the two segment buckets. An SDN VNet is
+ * named as such, with its zone, because a VNet-backed guest carries no per-NIC
+ * VLAN: reading `bridge` alone would show a raw id like `v42fc503`.
+ */
+function SegmentHeader({ data, vmCount }: { data: TopologySegmentFields & { label: string; vlanTag: number | null; bridge: string }; vmCount: number }) {
   const t = useTranslations('topology')
+  const color = getSegmentColor(data.segmentTag)
+  const isVnet = Boolean(data.vnet)
 
   return (
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <i className='ri-router-line' style={{ fontSize: 20, color: '#1976d2' }} />
+        <i className={segmentIcon(data.segmentKey, data.vnet)} style={{ fontSize: 20, color }} />
         <Typography variant='subtitle1' fontWeight={700}>
-          {data.vlanTag != null ? `${t('vlan')} ${data.vlanTag}` : t('noVlan')}
+          {data.segmentKey === NO_SEGMENT_KEY ? t('noVlan') : data.label}
         </Typography>
       </Box>
       <Divider sx={{ mb: 1.5 }} />
-      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
-        <Box>
-          <Typography variant='caption' color='text.secondary'>
-            {t('bridge')}
-          </Typography>
-          <Typography variant='body1' fontWeight={600}>
-            {data.bridge}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant='caption' color='text.secondary'>
-            {t('vms')}
-          </Typography>
-          <Typography variant='body1' fontWeight={600}>
-            {data.vmCount}
-          </Typography>
-        </Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 1.5 }}>
+        <SegmentField label={isVnet ? t('vnet') : t('bridge')} value={data.bridge} />
+        {isVnet && data.vlanTag != null && <SegmentField label={t('vlan')} value={data.vlanTag} />}
+        {isVnet && data.zone && (
+          <SegmentField label={t('sdnZone')} value={data.zoneType ? `${data.zone} (${data.zoneType})` : data.zone} />
+        )}
+        <SegmentField label={t('vms')} value={vmCount} />
       </Box>
     </>
   )
+}
+
+function VlanGroupDetails({ data }: { data: VlanGroupNodeData }) {
+  return <SegmentHeader data={data} vmCount={data.vmCount} />
 }
 
 /* ------------------------------------------------------------------ */
@@ -689,31 +706,7 @@ function VlanContainerDetails({ data }: { data: VlanContainerNodeData }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <i className='ri-router-line' style={{ fontSize: 20, color: '#1976d2' }} />
-        <Typography variant='subtitle1' fontWeight={700}>
-          {data.vlanTag != null ? `${t('vlan')} ${data.vlanTag}` : t('noVlan')}
-        </Typography>
-      </Box>
-      <Divider sx={{ mb: 1.5 }} />
-      <Box sx={{ display: 'flex', gap: 3, mb: 1.5 }}>
-        <Box>
-          <Typography variant='caption' color='text.secondary'>
-            {t('bridge')}
-          </Typography>
-          <Typography variant='body1' fontWeight={600}>
-            {data.bridge}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant='caption' color='text.secondary'>
-            {t('vms')}
-          </Typography>
-          <Typography variant='body1' fontWeight={600}>
-            {data.vms.length}
-          </Typography>
-        </Box>
-      </Box>
+      <SegmentHeader data={data} vmCount={data.vms.length} />
       {data.subnet && (
         <Box sx={{ mb: 1.5 }}>
           <Typography variant='caption' color='text.secondary'>

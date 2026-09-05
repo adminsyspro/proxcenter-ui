@@ -5791,7 +5791,20 @@
     "helpPreventOverprov": "Cuando está habilitado, DRS no migrará una VM a un nodo si eso haría que el nodo supere su capacidad (asignado > disponible). Evita el sobrecompromiso de recursos.",
     "helpResourceWeights": "Cuánto influye cada tipo de recurso en la puntuación de equilibrado.",
     "helpResourceWeightsDesc": "Establezca 0 para ignorar un recurso. Establezca 2 para prioridad máxima. Por ejemplo, Memoria=1 CPU=0.3 Almacenamiento=0 significa que DRS se centra principalmente en el equilibrio de memoria.",
-    "excludedFromDRS": "Excluido de DRS"
+    "excludedFromDRS": "Excluido de DRS",
+    "placementConstraints": "Restricciones de ubicación",
+    "placementConstraintsDesc": "Estos clústeres no pueden equilibrarse libremente: un puente, una VNet SDN o un almacenamiento que necesita un invitado no llega a todos los nodos.",
+    "balancingDomainsTitle": "Dominios de equilibrado",
+    "domainGuests": "{count, plural, one {# invitado} other {# invitados}}",
+    "domainSpread": "diferencia {value} pts",
+    "pinnedGuestsTitle": "Invitados que no se pueden mover",
+    "pinnedGuestOn": "en {node}",
+    "someGuestsCannotMove": "Nada que equilibrar por ahora. Algunos invitados no se pueden mover en absoluto, consulte las restricciones de ubicación arriba.",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "Almacenamiento",
+    "placementConstrainedBoth": "SDN + almacenamiento",
+    "placementConstrainedTooltip": "{count, plural, one {# dominio de equilibrado} other {# dominios de equilibrado}} en este clúster: un invitado solo puede moverse dentro del suyo. La diferencia de memoria y la puntuación de salud de abajo se calculan sobre todos los nodos, así que no pueden bajar a cero aquí.",
+    "domainNoTarget": "sin destino posible"
   },
   "usersPage": {
     "rbacRoles": "Roles RBAC",

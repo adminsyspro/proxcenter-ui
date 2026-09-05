@@ -5791,7 +5791,20 @@
     "helpPreventOverprov": "Lorsqu'activé, DRS ne migrera pas une VM vers un nœud si cela causerait un dépassement de capacité (alloué > disponible). Empêche le surprovisionnement.",
     "helpResourceWeights": "L'influence de chaque type de ressource sur le score d'équilibrage.",
     "helpResourceWeightsDesc": "Mettre à 0 pour ignorer une ressource. Mettre à 2 pour priorité maximale. Exemple : Mémoire=1 CPU=0.3 Stockage=0 signifie que DRS se concentre principalement sur l'équilibre mémoire.",
-    "excludedFromDRS": "Exclu du DRS"
+    "excludedFromDRS": "Exclu du DRS",
+    "placementConstraints": "Contraintes de placement",
+    "placementConstraintsDesc": "Ces clusters ne peuvent pas s'équilibrer librement : un bridge, un VNet SDN ou un stockage dont un invité a besoin n'atteint pas tous les nœuds.",
+    "balancingDomainsTitle": "Domaines d'équilibrage",
+    "domainGuests": "{count, plural, one {# invité} other {# invités}}",
+    "domainSpread": "écart {value} pts",
+    "pinnedGuestsTitle": "Invités non déplaçables",
+    "pinnedGuestOn": "sur {node}",
+    "someGuestsCannotMove": "Rien à équilibrer pour le moment. Certains invités ne peuvent pas être déplacés du tout, voir les contraintes de placement ci-dessus.",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "Stockage",
+    "placementConstrainedBoth": "SDN + stockage",
+    "placementConstrainedTooltip": "{count, plural, one {# domaine d'équilibrage} other {# domaines d'équilibrage}} sur ce cluster : un invité ne peut se déplacer qu'à l'intérieur du sien. L'écart mémoire et le score de santé ci-dessous sont calculés sur tous les nœuds, ils ne peuvent donc pas descendre à zéro ici.",
+    "domainNoTarget": "aucune cible possible"
   },
   "usersPage": {
     "rbacRoles": "Rôles RBAC",

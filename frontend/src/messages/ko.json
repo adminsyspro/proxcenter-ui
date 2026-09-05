@@ -5791,7 +5791,20 @@
     "helpPreventOverprov": "활성화하면 DRS는 노드의 용량을 초과하게 되는 경우(할당량 > 가용량) 해당 노드로 VM을 마이그레이션하지 않습니다. 리소스 오버커밋을 방지합니다.",
     "helpResourceWeights": "각 리소스 유형이 밸런싱 점수에 미치는 영향의 정도입니다.",
     "helpResourceWeightsDesc": "리소스를 무시하려면 0으로 설정하세요. 최대 우선순위는 2로 설정하세요. 예를 들어 메모리=1 CPU=0.3 스토리지=0은 DRS가 주로 메모리 균형에 집중함을 의미합니다.",
-    "excludedFromDRS": "DRS에서 제외됨"
+    "excludedFromDRS": "DRS에서 제외됨",
+    "placementConstraints": "배치 제약",
+    "placementConstraintsDesc": "이 클러스터는 자유롭게 균형을 맞출 수 없습니다. 게스트에 필요한 브리지, SDN VNet 또는 스토리지가 모든 노드에 도달하지 않습니다.",
+    "balancingDomainsTitle": "균형 도메인",
+    "domainGuests": "{count, plural, other {게스트 #개}}",
+    "domainSpread": "편차 {value} pts",
+    "pinnedGuestsTitle": "이동할 수 없는 게스트",
+    "pinnedGuestOn": "{node} 노드",
+    "someGuestsCannotMove": "지금은 균형을 맞출 것이 없습니다. 일부 게스트는 전혀 이동할 수 없습니다. 위의 배치 제약을 확인하세요.",
+    "placementConstrainedSdn": "SDN",
+    "placementConstrainedStorage": "스토리지",
+    "placementConstrainedBoth": "SDN + 스토리지",
+    "placementConstrainedTooltip": "{count, plural, other {이 클러스터의 균형 도메인 #개}}: 게스트는 자신의 도메인 안에서만 이동할 수 있습니다. 아래의 메모리 편차와 상태 점수는 모든 노드를 기준으로 계산되므로 여기서는 0이 될 수 없습니다.",
+    "domainNoTarget": "이동할 대상 없음"
   },
   "usersPage": {
     "rbacRoles": "RBAC 역할",

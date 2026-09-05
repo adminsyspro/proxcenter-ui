@@ -84,8 +84,8 @@ export function getGuestIpInflight(connId: string): Promise<void> | null {
 }
 
 export function setGuestIpInflight(connId: string, p: Promise<void> | null): void {
-  if (p) getInflightStore().set(connId, p)
-  else getInflightStore().delete(connId)
+  if (p === null) getInflightStore().delete(connId)
+  else getInflightStore().set(connId, p)
 }
 
 /**

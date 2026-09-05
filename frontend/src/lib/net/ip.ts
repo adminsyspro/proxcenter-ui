@@ -79,7 +79,7 @@ export function isSearchableIp(ip: string): boolean {
     return !(a === 127 || a === 0 || a >= 224 || (a === 169 && b === 254))
   }
   if (v === 6) {
-    return !(h === "::1" || h === "::" || /^ff/.test(h) || /^fe[89ab]/.test(h))
+    return !(h === "::1" || h === "::" || h.startsWith("ff") || /^fe[89ab]/.test(h))
   }
   return false
 }

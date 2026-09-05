@@ -113,7 +113,7 @@ export async function refreshGuestIpIndex(
  */
 export function scheduleGuestIpRefresh(connId: string, connData: any, guests: IndexableGuest[]): boolean {
   const firstBuild = getGuestIpIndex(connId) === null
-  if (getGuestIpInflight(connId)) return firstBuild
+  if (getGuestIpInflight(connId) !== null) return firstBuild
   if (!isGuestIpIndexDue(connId)) return false
 
   const run = refreshGuestIpIndex(connId, connData, guests)

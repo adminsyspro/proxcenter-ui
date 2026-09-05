@@ -57,6 +57,31 @@ function staticIp(value: string): string | null {
   return isSearchableIp(ip) ? ip : null
 }
 
+function addMac(target: Set<string>, raw: unknown): void {
+  const mac = normalizeMac(raw)
+  if (mac) target.add(mac)
+}
+
+function addStaticIp(target: Set<string>, raw: string): void {
+  const ip = staticIp(raw)
+  if (ip) target.add(ip)
+}
+
+/** One `netN` line: the MAC under any of its three spellings, plus the LXC static ip=/ip6=. */
+function collectNetLine(line: string, isLxc: boolean, macs: Set<string>, ips: Set<string>): void {
+  for (const [k, v] of splitProps(line)) {
+    if (k === "macaddr" || k === "hwaddr" || (!isLxc && QEMU_NIC_MODELS.has(k))) addMac(macs, v)
+    else if (isLxc && (k === "ip" || k === "ip6")) addStaticIp(ips, v)
+  }
+}
+
+/** One cloud-init `ipconfigN` line: static ip=/ip6= only. */
+function collectIpconfigLine(line: string, ips: Set<string>): void {
+  for (const [k, v] of splitProps(line)) {
+    if (k === "ip" || k === "ip6") addStaticIp(ips, v)
+  }
+}
+
 export function parseGuestNetIdentity(config: Record<string, unknown> | null, type: string): GuestNetIdentity {
   if (!config) return { ...EMPTY_GUEST_NET_IDENTITY }
   const isLxc = type === "lxc"
@@ -65,27 +90,33 @@ export function parseGuestNetIdentity(config: Record<string, unknown> | null, ty
 
   for (const [key, value] of Object.entries(config)) {
     if (typeof value !== "string") continue
-    if (NET_KEY.test(key)) {
-      for (const [k, v] of splitProps(value)) {
-        if (k === "macaddr" || k === "hwaddr" || (!isLxc && QEMU_NIC_MODELS.has(k))) {
-          const mac = normalizeMac(v)
-          if (mac) macs.add(mac)
-        } else if (isLxc && (k === "ip" || k === "ip6")) {
-          const ip = staticIp(v)
-          if (ip) ips.add(ip)
-        }
-      }
-    } else if (!isLxc && IPCONFIG_KEY.test(key)) {
-      for (const [k, v] of splitProps(value)) {
-        if (k !== "ip" && k !== "ip6") continue
-        const ip = staticIp(v)
-        if (ip) ips.add(ip)
-      }
-    }
+    if (NET_KEY.test(key)) collectNetLine(value, isLxc, macs, ips)
+    else if (!isLxc && IPCONFIG_KEY.test(key)) collectIpconfigLine(value, ips)
   }
 
   const description = typeof config.description === "string" && config.description.trim() ? config.description : null
   return { macs: [...macs], configIps: [...ips], description }
+}
+
+/** The agent answers `{ result: [...] }`, the LXC endpoint a bare array. */
+function interfaceList(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  const result = (payload as { result?: unknown } | null)?.result
+  return Array.isArray(result) ? result : []
+}
+
+function addLiveIp(target: Set<string>, raw: unknown): void {
+  if (typeof raw !== "string") return
+  const ip = stripPrefix(raw)
+  if (isSearchableIp(ip)) target.add(ip)
+}
+
+function collectInterface(iface: Record<string, unknown>, ips: Set<string>, macs: Set<string>): void {
+  addMac(macs, iface["hardware-address"] ?? iface.hwaddr)
+  const addresses = Array.isArray(iface["ip-addresses"]) ? iface["ip-addresses"] as Array<Record<string, unknown>> : []
+  for (const a of addresses) addLiveIp(ips, a?.["ip-address"])
+  addLiveIp(ips, iface.inet)
+  addLiveIp(ips, iface.inet6)
 }
 
 /**
@@ -96,28 +127,11 @@ export function parseGuestNetIdentity(config: Record<string, unknown> | null, ty
  * (DHCP still pending) yields no IP and keeps its last known one.
  */
 export function extractLiveAddresses(payload: unknown): LiveGuestAddresses {
-  const list: unknown[] = Array.isArray(payload)
-    ? payload
-    : Array.isArray((payload as { result?: unknown })?.result) ? (payload as { result: unknown[] }).result : []
   const ips = new Set<string>()
   const macs = new Set<string>()
 
-  for (const entry of list) {
-    if (!entry || typeof entry !== "object") continue
-    const iface = entry as Record<string, unknown>
-    const mac = normalizeMac(iface["hardware-address"] ?? iface.hwaddr)
-    if (mac) macs.add(mac)
-    const addresses = Array.isArray(iface["ip-addresses"]) ? iface["ip-addresses"] as Array<Record<string, unknown>> : []
-    for (const a of addresses) {
-      const ip = typeof a?.["ip-address"] === "string" ? a["ip-address"] : ""
-      if (isSearchableIp(ip)) ips.add(ip)
-    }
-    for (const key of ["inet", "inet6"]) {
-      const raw = iface[key]
-      if (typeof raw !== "string") continue
-      const ip = stripPrefix(raw)
-      if (isSearchableIp(ip)) ips.add(ip)
-    }
+  for (const entry of interfaceList(payload)) {
+    if (entry && typeof entry === "object") collectInterface(entry as Record<string, unknown>, ips, macs)
   }
 
   return { ips: [...ips], macs: [...macs] }

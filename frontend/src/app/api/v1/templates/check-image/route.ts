@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
-import { getImageBySlug } from "@/lib/templates/cloudImages"
+import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const image = getImageBySlug(imageSlug)
+    const image = await resolveBuiltInImage(imageSlug)
     if (!image) {
       return NextResponse.json({ error: "Unknown image slug" }, { status: 400 })
     }

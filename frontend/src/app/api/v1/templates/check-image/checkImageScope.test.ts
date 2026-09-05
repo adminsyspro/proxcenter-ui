@@ -21,14 +21,14 @@ vi.mock("@/lib/rbac", () => ({
 }))
 vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: pveFetchMock }))
-vi.mock("@/lib/templates/cloudImages", () => ({
-  getImageBySlug: (slug: string) =>
+vi.mock("@/lib/templates/catalogStore", () => ({
+  resolveBuiltInImage: async (slug: string) =>
     slug === "ubuntu-2404"
       ? {
           slug: "ubuntu-2404",
           downloadUrl: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
         }
-      : null,
+      : undefined,
 }))
 vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: () => getCurrentTenantIdMock() }))
 vi.mock("@/lib/tenant/infraScope", () => ({

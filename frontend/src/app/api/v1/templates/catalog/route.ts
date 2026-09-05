@@ -4,7 +4,8 @@ import { NextResponse } from "next/server"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { CLOUD_IMAGES, VENDORS, getImagesByVendor, customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { customImageToCloudImage } from "@/lib/templates/cloudImages"
+import { getEffectiveCatalog } from "@/lib/templates/catalogStore"
 
 export const runtime = "nodejs"
 
@@ -18,8 +19,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const vendor = searchParams.get("vendor")
 
-    // Built-in images: hard-coded, treated as always shared.
-    const builtIn = vendor ? getImagesByVendor(vendor) : CLOUD_IMAGES
+    // Built-in images: the remote catalog when a valid one is stored, the
+    // embedded document otherwise. Always shared with every tenant.
+    const effective = await getEffectiveCatalog()
+    const builtIn = vendor ? effective.images.filter(img => img.vendor === vendor) : effective.images
     const builtInWithFlag = builtIn.map(img => ({ ...img, isCustom: false, isShared: true }))
 
     // Custom images visible to the caller:
@@ -52,13 +55,14 @@ export async function GET(req: Request) {
     // Build vendor list: built-in vendors + any custom vendors
     const customVendorIds = new Set(customRows.map(r => r.vendor))
     const extraVendors = [...customVendorIds]
-      .filter(v => !VENDORS.some(bv => bv.id === v))
+      .filter(v => !effective.vendors.some(bv => bv.id === v))
       .map(v => ({ id: v, name: v.charAt(0).toUpperCase() + v.slice(1), icon: 'ri-image-line' }))
 
     return NextResponse.json({
       data: {
         images,
-        vendors: [...VENDORS, ...extraVendors],
+        vendors: [...effective.vendors, ...extraVendors],
+        meta: effective.meta,
       },
     })
   } catch (e: any) {

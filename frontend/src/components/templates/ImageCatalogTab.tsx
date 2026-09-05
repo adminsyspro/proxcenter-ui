@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   Box,
   Button,
@@ -9,16 +9,20 @@ import {
   InputAdornment,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { VENDORS } from '@/lib/templates/cloudImages'
+import type { CatalogMeta } from '@/lib/templates/catalogSchema'
 import ImageCard from './ImageCard'
 import VendorLogo from './VendorLogo'
 import EmptyState from '@/components/EmptyState'
 import CustomImageDialog from './CustomImageDialog'
 import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
+import { useToast } from '@/contexts/ToastContext'
 
 interface ImageCatalogTabProps {
   onDeploy: (image: CloudImage) => void
@@ -26,6 +30,9 @@ interface ImageCatalogTabProps {
 
 export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const t = useTranslations()
+  const locale = useLocale()
+  const rbac = useRBAC()
+  const { showToast } = useToast()
   // Anyone can add their own private custom image (kept tenant-scoped via
   // the prisma extension on the API). Edit/Delete on a card is per-image:
   // available on images that belong to the caller, hidden on shared
@@ -44,6 +51,10 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editImage, setEditImage] = useState<any>(null)
+  // Where the built-in list comes from (remote JSON or the embedded copy)
+  // and when it was last checked. Null until the first catalog response.
+  const [meta, setMeta] = useState<CatalogMeta | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const fetchCatalog = () => {
     fetch('/api/v1/templates/catalog')
@@ -51,6 +62,7 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
       .then(res => {
         setImages(res.data?.images || [])
         if (res.data?.vendors) setVendors(res.data.vendors)
+        setMeta(res.data?.meta ?? null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -109,6 +121,43 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
     if (!match) return
     await fetch(`/api/v1/templates/custom-images/${match.id}`, { method: 'DELETE' })
     fetchCatalog()
+  }
+
+  // Provider admin only: the catalog is global, so a tenant never sees the
+  // button, and a provider user needs admin.settings (the same gate the
+  // route enforces server-side).
+  const canRefresh = isProviderTenant && rbac.hasPermission('admin.settings')
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const res = await fetch('/api/v1/templates/catalog/refresh', { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      const out = json?.data
+      if (!res.ok || !out) {
+        showToast(t('templates.catalog.refreshFailed', { error: json?.error || `HTTP ${res.status}` }), 'error')
+      } else if (out.result === 'error') {
+        showToast(t('templates.catalog.refreshFailed', { error: out.error || '' }), 'error')
+      } else if (out.result === 'updated') {
+        showToast(t('templates.catalog.refreshUpdated', {
+          added: out.added?.length ?? 0,
+          updated: out.updated?.length ?? 0,
+          removed: out.removed?.length ?? 0,
+        }), 'success')
+      } else {
+        showToast(t('templates.catalog.refreshUpToDate'), 'info')
+      }
+    } catch (e: any) {
+      showToast(t('templates.catalog.refreshFailed', { error: e?.message || String(e) }), 'error')
+    } finally {
+      setRefreshing(false)
+      fetchCatalog()
+    }
+  }
+
+  const formatCheckedAt = (iso: string) => {
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale)
   }
 
   if (loading) {
@@ -179,7 +228,44 @@ export default function ImageCatalogTab({ onDeploy }: ImageCatalogTabProps) {
             <Typography variant="caption">{t('templates.catalog.formatIsoChip')}</Typography>
           </ToggleButton>
         </ToggleButtonGroup>
-        <Box sx={{ ml: 'auto' }}>
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          {meta && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+            >
+              {meta.source === 'embedded' && meta.lastError && (
+                <Tooltip title={t('templates.catalog.embeddedFallback', { error: meta.lastError })}>
+                  <Box
+                    component="i"
+                    className="ri-alert-line"
+                    aria-label={t('templates.catalog.embeddedFallback', { error: meta.lastError })}
+                    sx={{ fontSize: 16, color: 'warning.main', display: 'inline-flex' }}
+                  />
+                </Tooltip>
+              )}
+              <span>
+                {t('templates.catalog.catalogFrom', { date: meta.catalogUpdatedAt })}
+                {', '}
+                {meta.lastCheckedAt
+                  ? t('templates.catalog.lastChecked', { date: formatCheckedAt(meta.lastCheckedAt) })
+                  : t('templates.catalog.neverChecked')}
+              </span>
+            </Typography>
+          )}
+          {canRefresh && (
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={refreshing}
+              startIcon={<i className="ri-refresh-line" style={{ fontSize: 16 }} />}
+              onClick={handleRefresh}
+            >
+              {t('templates.catalog.checkUpdates')}
+            </Button>
+          )}
           <Button
             variant="outlined"
             size="small"

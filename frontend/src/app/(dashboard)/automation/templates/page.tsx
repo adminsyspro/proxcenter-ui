@@ -11,15 +11,20 @@ import { ImageCatalogTab, BlueprintsTab, DeploymentsTab, DeployWizard } from '@/
 import { TableSkeleton } from '@/components/skeletons'
 import { getImageBySlug } from '@/lib/templates/cloudImages'
 
-/** Resolve image slug: built-in or fetch from catalog API (custom images) */
+/**
+ * Resolve an image slug for a blueprint or a retry. The catalog API knows the
+ * remote catalog (images added since this release) and the custom images; the
+ * embedded list is the offline fallback and still resolves a slug the remote
+ * catalog retired.
+ */
 async function resolveImage(slug: string): Promise<CloudImage | null> {
-  const builtIn = getImageBySlug(slug)
-  if (builtIn) return builtIn
   try {
     const res = await fetch('/api/v1/templates/catalog')
     const data = await res.json()
-    return (data.data?.images || []).find((img: any) => img.slug === slug) || null
-  } catch { return null }
+    const fromApi = (data.data?.images || []).find((img: any) => img.slug === slug)
+    if (fromApi) return fromApi
+  } catch { /* fall through to the embedded list */ }
+  return getImageBySlug(slug) || null
 }
 
 export default function TemplatesPage() {
